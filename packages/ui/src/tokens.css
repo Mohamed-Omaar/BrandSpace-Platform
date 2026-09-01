@@ -4,8 +4,13 @@
  * so Arabic RTL mirrors correctly without a separate stylesheet — CLAUDE.md §4.
  */
 :root {
+  /* Identity blue — logos, large graphics, accents. NOT for text (2.56:1). */
   --bs-brand-blue: #00adee;
   --bs-brand-blue-hover: #0098d1;
+  /* Text on a light background — 6.50:1 against white. */
+  --bs-brand-blue-text: #00658a;
+  /* Filled surface for controls; pairs with --bs-brand-blue-ink. */
+  --bs-brand-blue-surface: #00658a;
   --bs-brand-blue-ink: #ffffff;
   --bs-brand-yellow: #ffdd15;
   --bs-brand-yellow-ink: #1a1a1a;
@@ -52,6 +57,33 @@ body {
 
 /* Visible focus is a WCAG 2.2 AA requirement — never remove it. */
 :focus-visible {
-  outline: 2px solid var(--bs-brand-blue);
+  outline: 2px solid var(--bs-brand-blue-text);
   outline-offset: 2px;
+}
+
+/*
+ * Skip link — the first tab stop on every page (WCAG 2.2 "Bypass Blocks").
+ * Off-screen until focused, then clearly visible. Uses logical inset properties
+ * so it lands correctly in both RTL and LTR.
+ */
+.skip-link {
+  position: absolute;
+  inset-inline-start: var(--bs-space-sm);
+  inset-block-start: -4rem;
+  z-index: 100;
+  padding: var(--bs-space-sm) var(--bs-space-md);
+  background: var(--bs-brand-blue-surface);
+  color: var(--bs-brand-blue-ink);
+  border-radius: var(--bs-radius-md);
+  text-decoration: none;
+  transition: inset-block-start 0.15s ease-in-out;
+}
+
+.skip-link:focus {
+  inset-block-start: var(--bs-space-sm);
+}
+
+/* Links must remain distinguishable without relying on colour alone. */
+a {
+  color: var(--bs-brand-blue-text);
 }

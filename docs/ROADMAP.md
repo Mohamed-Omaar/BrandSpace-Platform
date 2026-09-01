@@ -91,13 +91,18 @@ bilingual UI — are proven before any feature exists.
 
 ### Exit criteria
 
-- [ ] A user can sign up, verify email, log in, and enable MFA
-- [ ] A platform user can log in to Admin; a customer session is rejected there
-- [ ] Two workspaces exist and the isolation suite passes for every seeded model
-- [ ] The route/permission report shows zero unprotected routes
-- [ ] Both locales render correctly in RTL and LTR, verified in E2E snapshots
-- [ ] CI runs typecheck, lint, unit, integration, isolation, and a11y checks — all blocking
-- [ ] Staging deploys automatically from the main branch
+> **Status after the Phase 1 hardening PR:** the tenancy, isolation, boundary,
+> bilingual and accessibility criteria are met. Authentication flows (Phase 2) and
+> OTLP span export (F-05) remain outstanding, so **Phase 1 is not yet fully
+> complete** — see `docs/DECISIONS.md` §7.
+
+- [ ] A user can sign up, verify email, log in, and enable MFA — **outstanding (Phase 2)**
+- [ ] A platform user can log in to Admin; a customer session is rejected there — **outstanding (Phase 2)**; realm separation is in place and tested, login flows are not
+- [x] Two workspaces exist and the isolation suite passes for every seeded model — **done** (88 isolation tests, incl. the two-pool model)
+- [x] The route/permission report shows zero unprotected routes — **done** (registration throws without a scope)
+- [x] Both locales render correctly in RTL and LTR, verified in E2E — **done** (114 Playwright tests across all three interfaces)
+- [x] CI runs typecheck, lint, unit, isolation, E2E and a11y checks — all blocking — **done** (7 jobs)
+- [ ] Staging deploys automatically from the main branch — **outstanding**; nothing is deployed yet (D-02)
 
 ---
 

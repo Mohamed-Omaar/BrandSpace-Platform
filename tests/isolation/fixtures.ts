@@ -26,6 +26,8 @@ export interface IsolationFixtures {
   readonly platformAuditEventId: string;
 }
 
+const FIXTURE_REQUEST_ID = 'test-fixture-request';
+
 const SEED_ACTOR = {
   platformUserId: '00000000-0000-4000-8000-0000000000ff',
   roleKey: 'platform_owner',
@@ -39,17 +41,25 @@ export function appRoleClient(): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-/** A client on the OWNER role, used only to build fixtures. */
-export function ownerRoleClient(): PrismaClient {
-  const connectionString = process.env['DATABASE_MIGRATION_URL'];
-  if (!connectionString) throw new Error('DATABASE_MIGRATION_URL is required.');
+/**
+ * A client on the PLATFORM role. Fixtures provision data across tenants, which
+ * is a platform operation, so they use the platform identity exactly as
+ * production platform code does. Nothing gets a private door.
+ */
+export function platformRoleClient(): PrismaClient {
+  const connectionString = process.env['DATABASE_PLATFORM_URL'];
+  if (!connectionString) throw new Error('DATABASE_PLATFORM_URL is required for fixtures.');
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
 async function ensurePlatformRole(prisma: PrismaClient): Promise<string> {
   return asPlatform(
     SEED_ACTOR,
-    { action: 'test.fixture.role', reason: 'Isolation test fixture bootstrap' },
+    {
+      action: 'test.fixture.role',
+      reason: 'Isolation test fixture bootstrap',
+      requestId: FIXTURE_REQUEST_ID,
+    },
     async (db) => {
       const existing = await db.role.findFirst({
         where: { key: 'platform_owner', workspaceId: null },
@@ -74,7 +84,11 @@ async function ensurePlatformRole(prisma: PrismaClient): Promise<string> {
 async function ensureWorkspaceRole(prisma: PrismaClient): Promise<string> {
   return asPlatform(
     SEED_ACTOR,
-    { action: 'test.fixture.role', reason: 'Isolation test fixture bootstrap' },
+    {
+      action: 'test.fixture.role',
+      reason: 'Isolation test fixture bootstrap',
+      requestId: FIXTURE_REQUEST_ID,
+    },
     async (db) => {
       const existing = await db.role.findFirst({
         where: { key: 'workspace_owner', workspaceId: null },
@@ -112,6 +126,7 @@ async function createTenant(
     {
       action: 'test.fixture.workspace',
       reason: `Isolation test fixture: provision ${slug}`,
+      requestId: FIXTURE_REQUEST_ID,
     },
     async (db) => {
       const id = crypto.randomUUID();
@@ -181,7 +196,12 @@ async function createTenant(
 }
 
 /** Build a fresh pair of tenants with unique identifiers for one test run. */
-export async function createIsolationFixtures(prisma: PrismaClient): Promise<IsolationFixtures> {
+export async function createIsolationFixtures(
+  _appPrisma: PrismaClient,
+): Promise<IsolationFixtures> {
+  // Fixtures are provisioned on the PLATFORM pool. The app pool cannot create
+  // data for two different tenants — which is the property under test.
+  const prisma = platformRoleClient();
   const run = crypto.randomUUID().slice(0, 8);
   const platformRoleId = await ensurePlatformRole(prisma);
   const workspaceRoleId = await ensureWorkspaceRole(prisma);
@@ -213,7 +233,11 @@ export async function createIsolationFixtures(prisma: PrismaClient): Promise<Iso
   // A platform-only audit event (workspaceId = null).
   const platformAuditEventId = await asPlatform(
     SEED_ACTOR,
-    { action: 'test.fixture.audit', reason: 'Isolation test fixture: platform-only event' },
+    {
+      action: 'test.fixture.audit',
+      reason: 'Isolation test fixture: platform-only event',
+      requestId: FIXTURE_REQUEST_ID,
+    },
     async (db) => {
       const created = await db.auditEvent.create({
         data: {
@@ -229,5 +253,6 @@ export async function createIsolationFixtures(prisma: PrismaClient): Promise<Iso
     { prisma, bootstrap: true },
   );
 
+  await prisma.$disconnect();
   return { a, b, platformUserId: platformUser.id, platformAuditEventId };
 }

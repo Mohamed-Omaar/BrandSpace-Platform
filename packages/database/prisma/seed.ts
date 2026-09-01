@@ -40,18 +40,27 @@ const SEED_ACTOR = {
 const DEV_PASSWORD_PLACEHOLDER = null;
 
 function client(): PrismaClient {
-  // Load the env file rather than relying on variables leaking from the developer's
-  // shell — `pnpm db:seed` must work on a clean checkout. Fails closed with a
-  // redacted error when no URL is configured.
+  // The seed performs PLATFORM operations — it provisions workspaces across
+  // tenants — so it connects as the platform role, exactly like production
+  // platform code. It gets no private door: `FORCE ROW LEVEL SECURITY` means
+  // even the schema owner is subject to policy, and only brandspace_platform is
+  // named by a cross-tenant policy.
+  //
+  // Loads the env file rather than relying on variables leaking from the
+  // developer's shell, so `pnpm db:seed` works on a clean checkout. Fails closed
+  // with a redacted error when no URL is configured.
   loadRepoEnv(path.resolve(import.meta.dirname, '..', '..', '..'));
   const connectionString = requireDatabaseUrl(
-    ['DATABASE_MIGRATION_URL', 'DATABASE_URL'],
-    'the seed writes directly to the database',
+    ['DATABASE_PLATFORM_URL'],
+    'the seed provisions workspaces across tenants and needs the platform role',
   );
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
 async function main(): Promise<void> {
+  // One correlation id for the whole seed run.
+  const seedRequestId = `seed-${crypto.randomUUID()}`;
+
   // Fail fast if the role/permission model is internally inconsistent.
   assertRealmsAreDisjoint();
   assertRolePermissionsAreValid();
@@ -86,7 +95,11 @@ async function main(): Promise<void> {
     const roleIdsByKey = new Map<string, string>();
     await asPlatform(
       SEED_ACTOR,
-      { action: 'platform.seed.roles', reason: 'Development seed: create system roles' },
+      {
+        action: 'platform.seed.roles',
+        reason: 'Development seed: create system roles',
+        requestId: seedRequestId,
+      },
       async (db) => {
         for (const definition of ROLE_DEFINITIONS) {
           const existing = await db.role.findFirst({
@@ -196,6 +209,7 @@ async function main(): Promise<void> {
         {
           action: 'platform.workspace.create',
           reason: `Development seed: provision workspace ${tenant.slug}`,
+          requestId: seedRequestId,
           resourceType: 'workspace',
         },
         async (db) => {

@@ -1,5 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "types": ["node"] },
-  "include": ["**/*.ts"]
+  "include": ["unit/**/*.ts", "isolation/**/*.ts"],
+  "//": "E2E specs run code inside the browser and need DOM types; they have their own config."
 }

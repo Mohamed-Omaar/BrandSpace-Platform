@@ -69,6 +69,9 @@ export async function withWorkspace<T>(
  * known. Under this context the `user` RLS policy allows lookup, while every
  * strictly tenant-owned table returns zero rows — `workspace_id = NULL` is never
  * true. Do not use this for anything but authentication.
+ *
+ * This runs on the TENANT pool. It grants no cross-tenant access: the tenant
+ * role is not named by any platform policy, so there is nothing to escalate to.
  */
 export async function withoutTenantContext<T>(
   fn: (db: TenantScopedClient) => Promise<T>,
@@ -78,7 +81,6 @@ export async function withoutTenantContext<T>(
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.workspace_id', '', true)`;
-      await tx.$executeRaw`SELECT set_config('app.platform_mode', 'off', true)`;
       return fn(tx as unknown as TenantScopedClient);
     },
     { timeout: options.timeoutMs ?? 15_000 },
