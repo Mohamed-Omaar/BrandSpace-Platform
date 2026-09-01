@@ -19,20 +19,20 @@
 
 ## 1. Conventions
 
-| Convention | Rule |
-|---|---|
-| Primary keys | UUID v7 (time-ordered) — index locality without exposing sequence counts |
-| Timestamps | `createdAt`, `updatedAt` (UTC, `timestamptz`); `deletedAt` where soft delete applies |
-| Tenant column | `workspaceId uuid NOT NULL` on every tenant-owned table |
-| Brand column | `brandId uuid` where brand-scoped, with a constraint that the brand belongs to `workspaceId` |
-| Actor columns | `createdByUserId`, `updatedByUserId` where attribution matters |
-| Money | `amountMinor bigint` + `currency char(3)` — never floats |
-| Credits | `integer` in whole credits (or `bigint` in milli-credits — see DECISIONS D-14) |
-| Enums | PostgreSQL enums for closed sets; text + config validation for owner-extensible sets |
-| Localized text | `jsonb` shaped `{"ar": "...", "en": "..."}` for content the owner edits |
-| Soft delete | Applies to `Brand`, `ContentItem`, `Asset`, `Campaign`, `AutomationRule`. Never to ledgers or audit |
-| Immutable | `AIUsageLedger`, `CreditTransaction`, `AuditEvent`, `ConfigurationVersion`, `PublishAttempt`, `Invoice` (post-issue) |
-| Indexes | Every tenant query path has an index whose **leading column is `workspaceId`** |
+| Convention     | Rule                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Primary keys   | UUID v7 (time-ordered) — index locality without exposing sequence counts                                             |
+| Timestamps     | `createdAt`, `updatedAt` (UTC, `timestamptz`); `deletedAt` where soft delete applies                                 |
+| Tenant column  | `workspaceId uuid NOT NULL` on every tenant-owned table                                                              |
+| Brand column   | `brandId uuid` where brand-scoped, with a constraint that the brand belongs to `workspaceId`                         |
+| Actor columns  | `createdByUserId`, `updatedByUserId` where attribution matters                                                       |
+| Money          | `amountMinor bigint` + `currency char(3)` — never floats                                                             |
+| Credits        | `integer` in whole credits (or `bigint` in milli-credits — see DECISIONS D-14)                                       |
+| Enums          | PostgreSQL enums for closed sets; text + config validation for owner-extensible sets                                 |
+| Localized text | `jsonb` shaped `{"ar": "...", "en": "..."}` for content the owner edits                                              |
+| Soft delete    | Applies to `Brand`, `ContentItem`, `Asset`, `Campaign`, `AutomationRule`. Never to ledgers or audit                  |
+| Immutable      | `AIUsageLedger`, `CreditTransaction`, `AuditEvent`, `ConfigurationVersion`, `PublishAttempt`, `Invoice` (post-issue) |
+| Indexes        | Every tenant query path has an index whose **leading column is `workspaceId`**                                       |
 
 **Naming:** tables are singular PascalCase in Prisma, snake_case in Postgres.
 
@@ -99,41 +99,44 @@ erDiagram
 ## 3. Identity and Access
 
 ### 3.1 `User`
+
 Global identity. **Not** tenant-owned — a user may belong to several workspaces.
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | uuid | PK |
-| `email` | citext | unique, case-insensitive |
-| `emailVerifiedAt` | timestamptz | null until confirmed |
-| `passwordHash` | text | Argon2id; null for SSO-only users |
-| `name`, `avatarAssetId` | text/uuid | |
-| `locale` | enum(`ar`,`en`) | default from signup |
-| `timezone` | text | IANA |
-| `mfaEnabled`, `mfaSecretRef` | bool/text | secret stored via Secret Service, never inline |
-| `status` | enum | `pending`, `active`, `suspended`, `deleted` |
-| `lastLoginAt`, `failedLoginCount`, `lockedUntil` | | brute-force protection |
+| Field                                            | Type            | Notes                                          |
+| ------------------------------------------------ | --------------- | ---------------------------------------------- |
+| `id`                                             | uuid            | PK                                             |
+| `email`                                          | citext          | unique, case-insensitive                       |
+| `emailVerifiedAt`                                | timestamptz     | null until confirmed                           |
+| `passwordHash`                                   | text            | Argon2id; null for SSO-only users              |
+| `name`, `avatarAssetId`                          | text/uuid       |                                                |
+| `locale`                                         | enum(`ar`,`en`) | default from signup                            |
+| `timezone`                                       | text            | IANA                                           |
+| `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline |
+| `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`    |
+| `lastLoginAt`, `failedLoginCount`, `lockedUntil` |                 | brute-force protection                         |
 
 Indexes: `unique(email)`, `(status)`.
 Lifecycle: `pending → active → suspended → deleted` (soft, then purge after retention window).
 
 ### 3.2 `Workspace`
+
 The isolation boundary.
 
-| Field | Type | Notes |
-|---|---|---|
-| `id`, `slug` | uuid / citext unique | slug used in URLs |
-| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency` | | |
-| `type` | enum | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise` |
-| `status` | enum | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted` |
-| `ownerUserId` | uuid | current Workspace Owner |
-| `parentWorkspaceId` | uuid null | reserved for agency grouping (no data access implication) |
-| `dataRetentionDays`, `analyticsRetentionDays` | int | from plan, overridable |
-| `suspendedAt`, `suspendedReason`, `trialEndsAt` | | |
+| Field                                                                   | Type                 | Notes                                                                 |
+| ----------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- |
+| `id`, `slug`                                                            | uuid / citext unique | slug used in URLs                                                     |
+| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency` |                      |                                                                       |
+| `type`                                                                  | enum                 | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise` |
+| `status`                                                                | enum                 | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted` |
+| `ownerUserId`                                                           | uuid                 | current Workspace Owner                                               |
+| `parentWorkspaceId`                                                     | uuid null            | reserved for agency grouping (no data access implication)             |
+| `dataRetentionDays`, `analyticsRetentionDays`                           | int                  | from plan, overridable                                                |
+| `suspendedAt`, `suspendedReason`, `trialEndsAt`                         |                      |                                                                       |
 
 Indexes: `unique(slug)`, `(status)`, `(ownerUserId)`.
 
 **Lifecycle**
+
 ```mermaid
 stateDiagram-v2
   [*] --> Trialing
@@ -148,14 +151,15 @@ stateDiagram-v2
 ```
 
 ### 3.3 `Membership`
+
 User ↔ Workspace with role and optional brand restriction.
 
-| Field | Type | Notes |
-|---|---|---|
-| `id`, `workspaceId`, `userId`, `roleId` | uuid | |
-| `brandScope` | uuid[] null | null = all brands; array = restricted set |
-| `status` | enum | `invited`, `active`, `suspended`, `removed` |
-| `invitedByUserId`, `invitationTokenHash`, `invitationExpiresAt`, `acceptedAt` | | token stored hashed only |
+| Field                                                                         | Type        | Notes                                       |
+| ----------------------------------------------------------------------------- | ----------- | ------------------------------------------- |
+| `id`, `workspaceId`, `userId`, `roleId`                                       | uuid        |                                             |
+| `brandScope`                                                                  | uuid[] null | null = all brands; array = restricted set   |
+| `status`                                                                      | enum        | `invited`, `active`, `suspended`, `removed` |
+| `invitedByUserId`, `invitationTokenHash`, `invitationExpiresAt`, `acceptedAt` |             | token stored hashed only                    |
 
 Constraints: `unique(workspaceId, userId)` where `status <> 'removed'`.
 Indexes: `(workspaceId, status)`, `(userId, status)`.
@@ -180,34 +184,37 @@ Indexes: `unique(role.workspaceId, role.key)`, `unique(permission.key)`, `unique
 ## 4. Brand and Content
 
 ### 4.1 `Brand`
-| Field | Notes |
-|---|---|
-| `id`, `workspaceId`, `slug`, `name` | `unique(workspaceId, slug)` |
-| `industry`, `description`, `websiteUrl`, `defaultLocale`, `supportedLocales[]` | |
-| `logoAssetId`, `colorPalette jsonb`, `typography jsonb`, `voiceProfile jsonb` | brand kit |
-| `status` | `draft`, `active`, `archived` |
-| `deletedAt` | soft delete |
+
+| Field                                                                          | Notes                         |
+| ------------------------------------------------------------------------------ | ----------------------------- |
+| `id`, `workspaceId`, `slug`, `name`                                            | `unique(workspaceId, slug)`   |
+| `industry`, `description`, `websiteUrl`, `defaultLocale`, `supportedLocales[]` |                               |
+| `logoAssetId`, `colorPalette jsonb`, `typography jsonb`, `voiceProfile jsonb`  | brand kit                     |
+| `status`                                                                       | `draft`, `active`, `archived` |
+| `deletedAt`                                                                    | soft delete                   |
 
 Indexes: `(workspaceId, status)`, `unique(workspaceId, slug)`.
 
 ### 4.2 `BrandKnowledge`
+
 Structured brand facts and uploaded documents, chunked and embedded for retrieval.
 
-| Field | Notes |
-|---|---|
-| `id`, `workspaceId`, `brandId` | |
-| `type` | `identity`, `audience`, `tone`, `offer`, `proof`, `objection`, `rule_do`, `rule_dont`, `glossary`, `competitor`, `faq`, `document` |
-| `title`, `content jsonb` | localized `{ar, en}` |
-| `sourceAssetId` | for uploaded documents |
-| `chunkIndex`, `chunkText`, `embedding vector(N)` | one row per chunk for `document` type |
-| `embeddingModelKey`, `embeddedAt` | so re-embedding on model change is detectable |
-| `status` | `draft`, `active`, `stale`, `archived` |
-| `version` | incremented on edit; retrieval cites version |
+| Field                                            | Notes                                                                                                                              |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `workspaceId`, `brandId`                   |                                                                                                                                    |
+| `type`                                           | `identity`, `audience`, `tone`, `offer`, `proof`, `objection`, `rule_do`, `rule_dont`, `glossary`, `competitor`, `faq`, `document` |
+| `title`, `content jsonb`                         | localized `{ar, en}`                                                                                                               |
+| `sourceAssetId`                                  | for uploaded documents                                                                                                             |
+| `chunkIndex`, `chunkText`, `embedding vector(N)` | one row per chunk for `document` type                                                                                              |
+| `embeddingModelKey`, `embeddedAt`                | so re-embedding on model change is detectable                                                                                      |
+| `status`                                         | `draft`, `active`, `stale`, `archived`                                                                                             |
+| `version`                                        | incremented on edit; retrieval cites version                                                                                       |
 
 Indexes: `(workspaceId, brandId, type)`, `(workspaceId, brandId, status)`,
 HNSW/IVFFlat on `embedding` **partitioned or filtered by `workspaceId`** so ANN search never scans other tenants.
 
 ### 4.3 `Campaign`
+
 `id`, `workspaceId`, `brandId`, `name`, `objective`, `description`, `startDate`, `endDate`,
 `channels text[]`, `budgetMinor`, `currency`, `kpis jsonb`, `strategyInsightId`, `ownerUserId`,
 `status` (`draft`, `planned`, `active`, `paused`, `completed`, `archived`), `deletedAt`.
@@ -215,19 +222,21 @@ HNSW/IVFFlat on `embedding` **partitioned or filtered by `workspaceId`** so ANN 
 Indexes: `(workspaceId, brandId, status)`, `(workspaceId, startDate, endDate)`.
 
 ### 4.4 `ContentItem`
+
 The canonical content object (channel-agnostic).
 
-| Field | Notes |
-|---|---|
-| `id`, `workspaceId`, `brandId`, `campaignId` (null) | |
-| `title`, `contentType` (`post`,`carousel`,`story`,`reel`,`video`,`article`,`thread`) | |
-| `primaryLocale`, `pillar`, `tags text[]` | |
-| `status` | see lifecycle below |
-| `createdByUserId`, `aiRequestId` (null) | provenance: which AI request produced it |
-| `approvalRequired bool`, `currentApprovalId` | |
-| `deletedAt` | |
+| Field                                                                                | Notes                                    |
+| ------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `id`, `workspaceId`, `brandId`, `campaignId` (null)                                  |                                          |
+| `title`, `contentType` (`post`,`carousel`,`story`,`reel`,`video`,`article`,`thread`) |                                          |
+| `primaryLocale`, `pillar`, `tags text[]`                                             |                                          |
+| `status`                                                                             | see lifecycle below                      |
+| `createdByUserId`, `aiRequestId` (null)                                              | provenance: which AI request produced it |
+| `approvalRequired bool`, `currentApprovalId`                                         |                                          |
+| `deletedAt`                                                                          |                                          |
 
 **Lifecycle**
+
 ```mermaid
 stateDiagram-v2
   [*] --> Draft
@@ -249,6 +258,7 @@ stateDiagram-v2
 Indexes: `(workspaceId, brandId, status)`, `(workspaceId, campaignId)`, `(workspaceId, brandId, createdAt desc)`.
 
 ### 4.5 `ContentVariant`
+
 Per-platform, per-locale rendering of a content item.
 
 `id`, `workspaceId`, `contentItemId`, `platformKey`, `locale`, `body text`, `hashtags text[]`,
@@ -261,6 +271,7 @@ Constraints: `unique(contentItemId, platformKey, locale)`.
 Indexes: `(workspaceId, contentItemId)`.
 
 ### 4.6 `Asset`
+
 `id`, `workspaceId`, `brandId` (null = workspace-level), `folderId`, `name`, `kind`
 (`image`,`video`,`audio`,`document`,`font`), `mimeType`, `sizeBytes`, `width`, `height`,
 `durationMs`, `storageKey`, `checksumSha256`, `derivatives jsonb`, `source`
@@ -274,6 +285,7 @@ GIN on `tags`.
 Rule: an asset is usable only when `status='ready' AND scanStatus='clean'`.
 
 ### 4.7 `CalendarSlot`
+
 `id`, `workspaceId`, `brandId`, `contentItemId`, `socialConnectionIds uuid[]`,
 `scheduledAtUtc timestamptz`, `scheduledLocalTime`, `timezone`, `recurrenceRule` (null),
 `status` (`planned`,`scheduled`,`locked`,`publishing`,`published`,`failed`,`cancelled`),
@@ -300,12 +312,14 @@ Indexes: `(workspaceId, subjectType, subjectId)`, `(workspaceId, assignedToUserI
 ## 5. Social
 
 ### 5.1 `SocialProvider` (configuration-backed registry)
+
 `id`, `key` (`facebook`,`instagram`,`tiktok`,`linkedin`,`youtube`,`x`,…), `name`, `status`
 (`available`,`beta`,`disabled`), `capabilities jsonb` (publish kinds, media limits, character limits,
 scheduling support, analytics support), `authType` (`oauth2`), `requiredScopes text[]`,
 `apiVersion`, `docsUrl`. **Platform-level, not tenant-owned.**
 
 ### 5.2 `SocialAppConfiguration`
+
 The BrandSpace-owned application credentials per provider per environment.
 
 `id`, `providerId`, `environment` (`development`,`staging`,`production`), `appId`,
@@ -317,23 +331,25 @@ Constraint: `unique(providerId, environment)` where `status='active'`. **No secr
 only references resolved by the Secret Service.
 
 ### 5.3 `SocialConnection` (tenant-owned)
+
 A customer's connected account.
 
-| Field | Notes |
-|---|---|
-| `id`, `workspaceId`, `brandId` (null = workspace-level), `providerId` | |
-| `externalAccountId`, `externalAccountName`, `accountType` (`page`,`profile`,`business`,`channel`), `avatarUrl` | |
-| `accessTokenRef`, `refreshTokenRef` | encrypted via Secret Service; **never returned by API** |
-| `tokenExpiresAt`, `refreshExpiresAt`, `scopesGranted text[]`, `scopesMissing text[]` | |
-| `status` | `connecting`, `active`, `needs_reauth`, `expired`, `revoked`, `disabled`, `error` |
-| `healthStatus`, `lastHealthCheckAt`, `lastErrorCode`, `lastErrorAt`, `consecutiveFailures` | |
-| `connectedByUserId`, `connectedAt`, `disconnectedAt`, `disconnectedByUserId` | |
-| `rateLimitState jsonb` | provider-reported quota state |
+| Field                                                                                                          | Notes                                                                             |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `id`, `workspaceId`, `brandId` (null = workspace-level), `providerId`                                          |                                                                                   |
+| `externalAccountId`, `externalAccountName`, `accountType` (`page`,`profile`,`business`,`channel`), `avatarUrl` |                                                                                   |
+| `accessTokenRef`, `refreshTokenRef`                                                                            | encrypted via Secret Service; **never returned by API**                           |
+| `tokenExpiresAt`, `refreshExpiresAt`, `scopesGranted text[]`, `scopesMissing text[]`                           |                                                                                   |
+| `status`                                                                                                       | `connecting`, `active`, `needs_reauth`, `expired`, `revoked`, `disabled`, `error` |
+| `healthStatus`, `lastHealthCheckAt`, `lastErrorCode`, `lastErrorAt`, `consecutiveFailures`                     |                                                                                   |
+| `connectedByUserId`, `connectedAt`, `disconnectedAt`, `disconnectedByUserId`                                   |                                                                                   |
+| `rateLimitState jsonb`                                                                                         | provider-reported quota state                                                     |
 
 Constraints: `unique(workspaceId, providerId, externalAccountId)` where not revoked.
 Indexes: `(workspaceId, status)`, `(status, tokenExpiresAt)` for proactive refresh.
 
 **Lifecycle**
+
 ```mermaid
 stateDiagram-v2
   [*] --> Connecting
@@ -392,11 +408,13 @@ Indexes: `(workspaceId, brandId, type, createdAt desc)`.
 ## 6. AI
 
 ### 6.1 `AIProvider`
+
 `id`, `key` (`openai`,`anthropic`,`google`,`mock`,…), `name`, `baseUrl`, `authScheme`,
 `status` (`draft`,`validated`,`active`,`disabled`), `defaultTimeoutMs`, `maxConcurrency`,
 `rateLimitConfig jsonb`, `healthStatus`, `lastHealthCheckAt`, `notes`. **Platform-level.**
 
 ### 6.2 `AIProviderCredential`
+
 `id`, `providerId`, `environment`, `label`, `secretRef`, `maskedHint` (e.g. `…a91f`),
 `fingerprint` (hash for equality checks without the value), `status`
 (`active`,`rotating`,`disabled`,`revoked`), `createdByPlatformUserId`, `activatedAt`,
@@ -406,6 +424,7 @@ Indexes: `(workspaceId, brandId, type, createdAt desc)`.
 Constraint: at most one `active` credential per `(providerId, environment)` unless rotation is in progress.
 
 ### 6.3 `AIModel`
+
 `id`, `providerId`, `key` (provider's model id), `displayName`,
 `modality` (`text`,`image`,`video`,`voice`,`embedding`,`moderation`),
 `capabilities jsonb` (context window, max output, streaming, tools, JSON mode, languages, image sizes),
@@ -417,6 +436,7 @@ Constraint: `unique(providerId, key, environment)`.
 Rule: a disabled model is immediately unusable by routing, even for in-flight rules.
 
 ### 6.4 `AIRoutingRule`
+
 Maps a **task** to a model chain.
 
 `id`, `taskKey` (`caption.generate`, `ideas.generate`, `plan.monthly`, `strategy.generate`,
@@ -430,26 +450,28 @@ Resolution order: workspace rule → plan rule → global rule. Highest `priorit
 Indexes: `(taskKey, scope, priority desc)`, `(workspaceId, taskKey)`.
 
 ### 6.5 `AIRequest`
+
 One logical AI action.
 
-| Field | Notes |
-|---|---|
-| `id`, `workspaceId`, `brandId` (null), `userId` (null for system) | |
-| `taskKey`, `idempotencyKey` (unique) | |
-| `routingRuleId`, `resolvedModelId`, `attemptedModelIds uuid[]` | |
-| `status` | `pending`, `reserved`, `running`, `succeeded`, `failed`, `cancelled`, `timeout`, `moderation_blocked` |
-| `inputSummary jsonb` | **audit-safe**: token/asset counts, language, brand refs, prompt template id — never raw customer content unless retention policy allows |
-| `outputRefType`, `outputRefId` | points at ContentItem / Asset / Insight |
-| `promptTokens`, `completionTokens`, `imageCount`, `durationSeconds` | usage units |
-| `providerCostMinor`, `currency` | actual provider cost |
-| `creditsReserved`, `creditsCharged` | credits |
-| `latencyMs`, `retryCount`, `failureCode`, `failureMessage` | |
-| `byok bool`, `byokCredentialId` | customer-supplied key path |
+| Field                                                               | Notes                                                                                                                                    |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `workspaceId`, `brandId` (null), `userId` (null for system)   |                                                                                                                                          |
+| `taskKey`, `idempotencyKey` (unique)                                |                                                                                                                                          |
+| `routingRuleId`, `resolvedModelId`, `attemptedModelIds uuid[]`      |                                                                                                                                          |
+| `status`                                                            | `pending`, `reserved`, `running`, `succeeded`, `failed`, `cancelled`, `timeout`, `moderation_blocked`                                    |
+| `inputSummary jsonb`                                                | **audit-safe**: token/asset counts, language, brand refs, prompt template id — never raw customer content unless retention policy allows |
+| `outputRefType`, `outputRefId`                                      | points at ContentItem / Asset / Insight                                                                                                  |
+| `promptTokens`, `completionTokens`, `imageCount`, `durationSeconds` | usage units                                                                                                                              |
+| `providerCostMinor`, `currency`                                     | actual provider cost                                                                                                                     |
+| `creditsReserved`, `creditsCharged`                                 | credits                                                                                                                                  |
+| `latencyMs`, `retryCount`, `failureCode`, `failureMessage`          |                                                                                                                                          |
+| `byok bool`, `byokCredentialId`                                     | customer-supplied key path                                                                                                               |
 
 Indexes: `unique(idempotencyKey)`, `(workspaceId, createdAt desc)`, `(workspaceId, taskKey, status)`,
 `(status, createdAt)` for stuck-request sweeps.
 
 **Lifecycle**
+
 ```mermaid
 stateDiagram-v2
   [*] --> Pending
@@ -465,6 +487,7 @@ stateDiagram-v2
 ```
 
 ### 6.6 `AIUsageLedger` (immutable)
+
 `id`, `workspaceId`, `aiRequestId`, `occurredAt`, `taskKey`, `providerId`, `modelId`,
 `usageUnits jsonb`, `providerCostMinor`, `currency`, `creditsCharged`,
 `creditTransactionId`, `userId`, `brandId`, `environment`.
@@ -478,6 +501,7 @@ This table is the source for admin cost/margin reporting.
 ## 7. Credits
 
 ### 7.1 `CreditWallet`
+
 `id`, `workspaceId` (unique), `currentBalance`, `reservedBalance`, `lifetimeGranted`,
 `lifetimeConsumed`, `lowBalanceThreshold`, `lowBalanceNotifiedAt`, `hardLimitEnabled`,
 `overageEnabled`, `overageCapCredits`, `lastResetAt`, `nextResetAt`, `version` (optimistic lock).
@@ -489,6 +513,7 @@ alerts on drift.
 Constraints: `CHECK (currentBalance >= 0)`, `CHECK (reservedBalance >= 0)`.
 
 ### 7.2 `CreditTransaction` (immutable)
+
 `id`, `workspaceId`, `walletId`, `type`
 (`plan_grant`,`addon_purchase`,`promotional_grant`,`admin_adjustment`,`reservation`,`reservation_release`,
 `usage_charge`,`refund`,`expiry`,`reset`), `amount` (signed), `balanceAfter`, `reason`,
@@ -508,6 +533,7 @@ the unique idempotency key, this makes negative balances, lost updates, and dupl
 ## 8. Plans, Entitlements, Billing
 
 ### 8.1 `Plan`
+
 `id`, `key`, `name jsonb` (localized), `description jsonb`, `tier`, `visibility`
 (`public`,`private`,`legacy`), `status` (`draft`,`active`,`grandfathered`,`retired`),
 `monthlyPriceMinor`, `annualPriceMinor`, `currency`, `supportedCurrencies jsonb` (per-currency prices),
@@ -517,11 +543,13 @@ the unique idempotency key, this makes negative balances, lost updates, and dupl
 Retired plans remain readable so existing subscriptions still resolve.
 
 ### 8.2 `Feature`
+
 `id`, `key` (`ai.image_generation`, `social.publish`, `automations`, `byok`, …), `name jsonb`,
 `category`, `valueType` (`boolean`,`quota`,`enum`), `defaultValue jsonb`,
 `dependsOnFeatureKeys text[]`, `status`.
 
 ### 8.3 `PlanEntitlement`
+
 `id`, `planId`, `featureId`, `enabled`, `limitValue` (null = unlimited), `limitPeriod`
 (`day`,`month`,`billing_cycle`,`total`), `metadata jsonb`.
 Constraint: `unique(planId, featureId)`.
@@ -530,6 +558,7 @@ Standard quota features: users, brands, social accounts, scheduled posts/month, 
 analytics retention days, AI credits/month, per-feature AI limits.
 
 ### 8.4 `WorkspaceOverride`
+
 Owner-granted, per-customer deviation.
 
 `id`, `workspaceId`, `featureId`, `enabled`, `limitValue`, `reason`, `grantedByPlatformUserId`,
@@ -540,6 +569,7 @@ Constraint: `unique(workspaceId, featureId, effectiveFrom)`.
 entitlement → feature default. Full rules in `docs/ADMIN-CONTROL-CENTER.md` §Feature Flags.
 
 ### 8.5 `Subscription`
+
 `id`, `workspaceId`, `planId`, `status` (`trialing`,`active`,`past_due`,`paused`,`cancelled`,`expired`),
 `billingInterval` (`month`,`year`), `currency`, `quantitySeats`, `addOns jsonb`,
 `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `cancelAtPeriodEnd`, `cancelledAt`,
@@ -550,6 +580,7 @@ Indexes: `(workspaceId, status)`, `unique(providerKey, providerSubscriptionId)`,
 `(status, currentPeriodEnd)` for renewal sweeps.
 
 **Lifecycle**
+
 ```mermaid
 stateDiagram-v2
   [*] --> Trialing
@@ -565,6 +596,7 @@ stateDiagram-v2
 ```
 
 ### 8.6 `Invoice`
+
 `id`, `workspaceId`, `subscriptionId`, `number` (unique, sequential per workspace/tenant),
 `status` (`draft`,`open`,`paid`,`void`,`uncollectible`,`refunded`,`partially_refunded`),
 `currency`, `subtotalMinor`, `discountMinor`, `taxMinor`, `totalMinor`, `amountPaidMinor`,
@@ -579,6 +611,7 @@ Indexes: `(workspaceId, issuedAt desc)`, `unique(providerKey, providerInvoiceId)
 ## 9. Automation, Notifications, Platform Ops
 
 ### 9.1 `AutomationRule`
+
 `id`, `workspaceId`, `brandId` (null), `name`, `trigger jsonb`
 (`content.approved`, `publish.failed`, `metric.threshold`, `schedule.cron`, `connection.needs_reauth`…),
 `conditions jsonb`, `actions jsonb` (`schedule_content`, `notify`, `create_approval`, `generate_content`,
@@ -589,6 +622,7 @@ Rule: an automation may **never** perform an external publish without either an 
 authorization recorded on the rule or a human approval step.
 
 ### 9.2 `AutomationRun`
+
 `id`, `workspaceId`, `ruleId`, `triggeredBy jsonb`, `startedAt`, `finishedAt`,
 `status` (`running`,`succeeded`,`failed`,`skipped`,`blocked_by_policy`),
 `actionsExecuted jsonb`, `errorCode`, `errorMessage`, `idempotencyKey` (unique).
@@ -596,6 +630,7 @@ authorization recorded on the rule or a human approval step.
 Indexes: `(workspaceId, ruleId, startedAt desc)`.
 
 ### 9.3 `Notification`
+
 `id`, `workspaceId`, `userId` (null = workspace-wide), `templateKey`, `locale`,
 `channel` (`in_app`,`email`,`sms`,`whatsapp`,`push`), `payload jsonb`, `renderedSubject`,
 `renderedBodyRef`, `status` (`queued`,`sent`,`delivered`,`failed`,`bounced`,`suppressed`),
@@ -608,18 +643,19 @@ Notification **templates** live in the Configuration Service (versioned, bilingu
 test-sendable, rollback-able), not in this table.
 
 ### 9.4 `AuditEvent` (immutable)
-| Field | Notes |
-|---|---|
-| `id`, `occurredAt` | |
-| `workspaceId` | null for platform-only events |
-| `actorType` (`user`,`platform_user`,`system`,`automation`,`copilot`), `actorId`, `actorEmailHash` | |
-| `action` | e.g. `content.published`, `plan.activated`, `secret.rotated`, `support_mode.entered` |
-| `resourceType`, `resourceId`, `brandId` | |
-| `severity` (`info`,`notice`,`warning`,`critical`) | |
-| `before jsonb`, `after jsonb` | **redacted**; secrets and tokens never included |
-| `ip`, `userAgent`, `requestId`, `traceId`, `sessionId` | |
-| `supportModeSessionId` | set when the action occurred under support mode |
-| `outcome` (`success`,`denied`,`error`), `reason` | |
+
+| Field                                                                                             | Notes                                                                                |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `id`, `occurredAt`                                                                                |                                                                                      |
+| `workspaceId`                                                                                     | null for platform-only events                                                        |
+| `actorType` (`user`,`platform_user`,`system`,`automation`,`copilot`), `actorId`, `actorEmailHash` |                                                                                      |
+| `action`                                                                                          | e.g. `content.published`, `plan.activated`, `secret.rotated`, `support_mode.entered` |
+| `resourceType`, `resourceId`, `brandId`                                                           |                                                                                      |
+| `severity` (`info`,`notice`,`warning`,`critical`)                                                 |                                                                                      |
+| `before jsonb`, `after jsonb`                                                                     | **redacted**; secrets and tokens never included                                      |
+| `ip`, `userAgent`, `requestId`, `traceId`, `sessionId`                                            |                                                                                      |
+| `supportModeSessionId`                                                                            | set when the action occurred under support mode                                      |
+| `outcome` (`success`,`denied`,`error`), `reason`                                                  |                                                                                      |
 
 Indexes: `(workspaceId, occurredAt desc)`, `(actorId, occurredAt desc)`,
 `(resourceType, resourceId, occurredAt desc)`, `(action, occurredAt desc)`.
@@ -627,6 +663,7 @@ Append-only, enforced by revoking UPDATE/DELETE from the application role. Reten
 (default 24 months, configurable), and export is supported.
 
 ### 9.5 `ConfigurationVersion` (immutable)
+
 `id`, `domain`, `environment`, `versionNumber`, `schemaVersion`, `payload jsonb`,
 `payloadChecksum`, `status` (`draft`,`validated`,`active`,`superseded`,`discarded`),
 `previousVersionId`, `validationReport jsonb`, `impactPreview jsonb`,
@@ -641,18 +678,18 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 
 ## 10. Supporting Tables (not enumerated in the brief but required)
 
-| Table | Purpose |
-|---|---|
-| `Session` / `PlatformSession` | separate session stores per realm, with device metadata and revocation |
-| `Invitation` | if modelled separately from `Membership` for platform-initiated invites |
-| `SecretRecord` | vault metadata: `ref`, `scope`, `environment`, `version`, `maskedHint`, `fingerprint`, `rotatedAt`, `status` — never the value |
-| `IdempotencyKey` | `key`, `scope`, `workspaceId`, `requestHash`, `responseSnapshot`, `status`, `expiresAt` |
-| `WebhookEvent` | inbound provider events: `providerKey`, `externalEventId` (unique), `signatureValid`, `payload`, `status`, `processedAt`, `attempts` |
-| `OutboxEvent` | transactional outbox so domain events are never lost between DB commit and queue enqueue |
-| `AssetFolder` | asset library hierarchy |
-| `SupportModeSession` | `platformUserId`, `workspaceId`, `reason`, `ticketRef`, `grantedAt`, `expiresAt`, `endedAt`, `permissionsSnapshot` |
-| `DataExportRequest` / `DataDeletionRequest` | GDPR-style lifecycle with status and artifacts |
-| `RateLimitCounter` | if persisted beyond Redis for auditability |
+| Table                                       | Purpose                                                                                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `Session` / `PlatformSession`               | separate session stores per realm, with device metadata and revocation                                                               |
+| `Invitation`                                | if modelled separately from `Membership` for platform-initiated invites                                                              |
+| `SecretRecord`                              | vault metadata: `ref`, `scope`, `environment`, `version`, `maskedHint`, `fingerprint`, `rotatedAt`, `status` — never the value       |
+| `IdempotencyKey`                            | `key`, `scope`, `workspaceId`, `requestHash`, `responseSnapshot`, `status`, `expiresAt`                                              |
+| `WebhookEvent`                              | inbound provider events: `providerKey`, `externalEventId` (unique), `signatureValid`, `payload`, `status`, `processedAt`, `attempts` |
+| `OutboxEvent`                               | transactional outbox so domain events are never lost between DB commit and queue enqueue                                             |
+| `AssetFolder`                               | asset library hierarchy                                                                                                              |
+| `SupportModeSession`                        | `platformUserId`, `workspaceId`, `reason`, `ticketRef`, `grantedAt`, `expiresAt`, `endedAt`, `permissionsSnapshot`                   |
+| `DataExportRequest` / `DataDeletionRequest` | GDPR-style lifecycle with status and artifacts                                                                                       |
+| `RateLimitCounter`                          | if persisted beyond Redis for auditability                                                                                           |
 
 ---
 
@@ -674,31 +711,31 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 
 ## 12. Constraints That Encode Business Rules
 
-| Rule | Enforcement |
-|---|---|
-| Credit balance never negative | `CHECK (currentBalance >= 0)` + `FOR UPDATE` lock |
-| No duplicate AI charge | `unique(AIRequest.idempotencyKey)` + `unique(CreditTransaction.idempotencyKey)` |
-| No double publish | `unique(PublishJob.idempotencyKey)` and `unique(variant, connection, slot)` |
-| One active config per domain/env | partial unique index on `status='active'` |
-| One active credential per provider/env | partial unique index |
-| Brand belongs to workspace | composite FK `(workspaceId, brandId)` referencing `Brand(workspaceId, id)` |
-| Workspace keeps an owner | transactional guard on membership/role change |
-| Only approved content publishes | guard on `CalendarSlot` transition + re-check at job execution time |
-| Analytics ingestion is idempotent | natural unique key + upsert |
-| Ledgers are append-only | `REVOKE UPDATE, DELETE` from the application role |
+| Rule                                   | Enforcement                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| Credit balance never negative          | `CHECK (currentBalance >= 0)` + `FOR UPDATE` lock                               |
+| No duplicate AI charge                 | `unique(AIRequest.idempotencyKey)` + `unique(CreditTransaction.idempotencyKey)` |
+| No double publish                      | `unique(PublishJob.idempotencyKey)` and `unique(variant, connection, slot)`     |
+| One active config per domain/env       | partial unique index on `status='active'`                                       |
+| One active credential per provider/env | partial unique index                                                            |
+| Brand belongs to workspace             | composite FK `(workspaceId, brandId)` referencing `Brand(workspaceId, id)`      |
+| Workspace keeps an owner               | transactional guard on membership/role change                                   |
+| Only approved content publishes        | guard on `CalendarSlot` transition + re-check at job execution time             |
+| Analytics ingestion is idempotent      | natural unique key + upsert                                                     |
+| Ledgers are append-only                | `REVOKE UPDATE, DELETE` from the application role                               |
 
 ---
 
 ## 13. Data Lifecycle and Retention
 
-| Data | Default retention | Notes |
-|---|---|---|
-| Audit events | 24 months | configurable per plan; exportable |
-| Metric snapshots | per plan (`analyticsRetentionDays`) | pruned by a scheduled job |
-| AI request input summaries | 90 days | raw prompt/response bodies are **not** stored by default (R-23) |
-| AI usage ledger | 7 years | financial record |
-| Credit transactions / invoices | 7 years | financial record |
-| Soft-deleted content | 30 days, then purge | restorable within the window |
-| Deleted workspace | 30-day grace, then irreversible purge | export offered first |
-| Publish attempts | 12 months | provider responses redacted |
-| Backups | 30 days PITR + 12 monthly snapshots | restore tested quarterly |
+| Data                           | Default retention                     | Notes                                                           |
+| ------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
+| Audit events                   | 24 months                             | configurable per plan; exportable                               |
+| Metric snapshots               | per plan (`analyticsRetentionDays`)   | pruned by a scheduled job                                       |
+| AI request input summaries     | 90 days                               | raw prompt/response bodies are **not** stored by default (R-23) |
+| AI usage ledger                | 7 years                               | financial record                                                |
+| Credit transactions / invoices | 7 years                               | financial record                                                |
+| Soft-deleted content           | 30 days, then purge                   | restorable within the window                                    |
+| Deleted workspace              | 30-day grace, then irreversible purge | export offered first                                            |
+| Publish attempts               | 12 months                             | provider responses redacted                                     |
+| Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                        |

@@ -1,0 +1,247 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fast feedback: formatting, lint (incl. module boundaries), types.
+  # ---------------------------------------------------------------------------
+  static:
+    name: Format, lint, typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @brandspace/database exec prisma generate
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint (includes module boundary rules)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  # ---------------------------------------------------------------------------
+  # D-29: a tenant-owned model without isolation coverage FAILS the build.
+  # Runs as its own job so the failure is unmistakable in the checks list.
+  # ---------------------------------------------------------------------------
+  isolation-gate:
+    name: Tenant-isolation gate (D-29)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Every tenant-owned model must have RLS and isolation coverage
+        run: pnpm gate:isolation
+
+  # ---------------------------------------------------------------------------
+  # Unit tests. No database required.
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test:unit
+
+  # ---------------------------------------------------------------------------
+  # Isolation + RLS tests against a REAL PostgreSQL.
+  #
+  # These deliberately do not use a mocked database. The application role is
+  # created with NOBYPASSRLS and owns no table, exactly as in production — running
+  # them as a superuser would make every assertion vacuous, and the suite asserts
+  # that it is not privileged before it does anything else.
+  # ---------------------------------------------------------------------------
+  isolation:
+    name: Tenant isolation and RLS (real PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          # Throwaway credential for an ephemeral CI container that is never
+          # reachable outside this job. No production secret is used in CI.
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Create least-privilege database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          -- Owner/migrator: owns the schema, never serves a request.
+          CREATE ROLE brandspace_migrator LOGIN PASSWORD 'ci_migrator' NOBYPASSRLS CREATEDB;
+          -- Application role: what production uses. NOBYPASSRLS, owns nothing.
+          CREATE ROLE brandspace_app LOGIN PASSWORD 'ci_app' NOBYPASSRLS;
+          CREATE DATABASE brandspace_test OWNER brandspace_migrator;
+          SQL
+
+      - name: Assert the app role really cannot bypass RLS
+        env:
+          PGPASSWORD: postgres
+        run: |
+          result=$(psql -h localhost -U postgres -d postgres -Atc \
+            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='brandspace_app';")
+          if [ "$result" != "f" ]; then
+            echo "::error::brandspace_app can bypass RLS; the isolation suite would prove nothing."
+            exit 1
+          fi
+          echo "brandspace_app: rolsuper=false, rolbypassrls=false"
+
+      - name: Write test environment
+        run: |
+          cat > .env.test <<'ENVEOF'
+          NODE_ENV=test
+          APP_ENV=development
+          LOG_LEVEL=error
+          DATA_REGION=local
+          DATABASE_URL=postgresql://brandspace_app:ci_app@localhost:5432/brandspace_test?schema=public
+          DATABASE_MIGRATION_URL=postgresql://brandspace_migrator:ci_migrator@localhost:5432/brandspace_test?schema=public
+          REDIS_URL=redis://localhost:6379/1
+          CUSTOMER_SESSION_SECRET=ci-only-customer-session-secret-0000000000000
+          PLATFORM_SESSION_SECRET=ci-only-platform-session-secret-1111111111111
+          SECRET_VAULT_KEK=ci-only-vault-key-encryption-key-22222222222222
+          ENVEOF
+
+      - name: Generate Prisma client
+        run: pnpm --filter @brandspace/database exec prisma generate
+
+      - name: Run isolation and RLS suites
+        run: pnpm test:isolation
+
+  # ---------------------------------------------------------------------------
+  # Nothing resembling a credential may enter the repository.
+  # ---------------------------------------------------------------------------
+  secrets-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject committed .env files
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.(local|development|staging|production|test)$'; then
+            echo "::error::A .env file is tracked. Only .env.example and .env.test.example may be committed."
+            exit 1
+          fi
+          echo "No tracked .env files."
+
+      - name: Scan for credential-shaped strings
+        run: |
+          pattern='(sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+          # Test fixtures deliberately contain sample-shaped strings to prove the
+          # redaction layer catches them, so the scan skips the redaction tests.
+          if git grep -nIE "$pattern" -- . \
+               ':!tests/unit/redaction.test.ts' \
+               ':!packages/shared/src/redaction.ts' \
+               ':!pnpm-lock.yaml'; then
+            echo "::error::A credential-shaped string was found in tracked files."
+            exit 1
+          fi
+          echo "No credential-shaped strings found."
+
+  # ---------------------------------------------------------------------------
+  # Application builds must succeed.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build applications
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @brandspace/database exec prisma generate
+
+      - name: Build Next.js applications
+        env:
+          # Build-time only; no real infrastructure is contacted.
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: |
+          pnpm --filter @brandspace/web build
+          pnpm --filter @brandspace/dashboard build
+          pnpm --filter @brandspace/admin build

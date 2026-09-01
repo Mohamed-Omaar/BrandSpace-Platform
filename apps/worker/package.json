@@ -1,0 +1,21 @@
+{
+  "name": "@brandspace/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@brandspace/database": "workspace:*",
+    "@brandspace/shared": "workspace:*",
+    "bullmq": "5.81.4",
+    "ioredis": "5.11.1"
+  },
+  "devDependencies": {
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

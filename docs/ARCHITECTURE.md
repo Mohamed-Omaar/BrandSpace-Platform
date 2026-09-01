@@ -20,15 +20,15 @@
 
 ## 1. Architectural Goals and Constraints
 
-| Goal | Consequence |
-|---|---|
-| Ship a credible MVP fast with a small team | Modular monolith, one deployable API, one worker |
-| Never leak data between tenants | Two-layer isolation: app-level scoping + PostgreSQL RLS |
-| Let the owner run the business without releases | Versioned Configuration Service as a first-class subsystem |
-| Survive provider churn (AI + social + payments) | Adapter interfaces + registries, no provider names in business logic |
-| Be splittable into services later | Explicit module boundaries, async messaging via queues, no cross-module DB reads |
-| Bilingual, accessible, fast public surface | Separate statically-rendered marketing app |
-| Predictable AI economics | Central AI Gateway with ledger, budgets, and credit accounting |
+| Goal                                            | Consequence                                                                      |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| Ship a credible MVP fast with a small team      | Modular monolith, one deployable API, one worker                                 |
+| Never leak data between tenants                 | Two-layer isolation: app-level scoping + PostgreSQL RLS                          |
+| Let the owner run the business without releases | Versioned Configuration Service as a first-class subsystem                       |
+| Survive provider churn (AI + social + payments) | Adapter interfaces + registries, no provider names in business logic             |
+| Be splittable into services later               | Explicit module boundaries, async messaging via queues, no cross-module DB reads |
+| Bilingual, accessible, fast public surface      | Separate statically-rendered marketing app                                       |
+| Predictable AI economics                        | Central AI Gateway with ledger, budgets, and credit accounting                   |
 
 **Anti-goals for MVP:** microservices, event sourcing everywhere, multi-region active-active, custom
 identity provider, self-hosted model serving.
@@ -105,18 +105,18 @@ tradeoffs are stated so alternatives can be chosen deliberately.
 
 **Recommendation: Next.js (App Router) + React + TypeScript + Tailwind CSS + Radix UI primitives.**
 
-- *Why Next.js:* one framework covers the three very different rendering needs — static/ISR marketing pages
+- _Why Next.js:_ one framework covers the three very different rendering needs — static/ISR marketing pages
   for SEO, authenticated dynamic dashboard, and internal admin. Built-in i18n routing, image optimization,
   server components reduce client JS, and it deploys well on multiple hosts.
-- *Why Tailwind + Radix:* Tailwind has native RTL support via logical properties and `rtl:` variants, which
+- _Why Tailwind + Radix:_ Tailwind has native RTL support via logical properties and `rtl:` variants, which
   matters enormously for Arabic. Radix gives accessible, unstyled primitives so WCAG 2.2 AA is achievable
   without fighting a component library's opinions.
-- *Design system:* `packages/ui` owns tokens (colors incl. `#00ADEE` / `#FFDD15`, spacing, typography with an
+- _Design system:_ `packages/ui` owns tokens (colors incl. `#00ADEE` / `#FFDD15`, spacing, typography with an
   Arabic-capable font pairing), primitives, and composed patterns. Direction-agnostic by construction.
-- *State/data:* TanStack Query for server state; minimal client state. Forms via React Hook Form + Zod resolvers.
-- *Tradeoff:* Next.js couples us to its rendering model and upgrade cadence. Accepted — the alternative
+- _State/data:_ TanStack Query for server state; minimal client state. Forms via React Hook Form + Zod resolvers.
+- _Tradeoff:_ Next.js couples us to its rendering model and upgrade cadence. Accepted — the alternative
   (Vite SPA + separate static site generator) means maintaining two frontends and losing SSR SEO for free.
-- *Rejected:* Nuxt/Vue (smaller hiring pool for this stack), Remix (smaller ecosystem for our needs),
+- _Rejected:_ Nuxt/Vue (smaller hiring pool for this stack), Remix (smaller ecosystem for our needs),
   pure SPA (SEO loss on the marketing surface).
 
 ### 3.2 Backend / API
@@ -125,13 +125,13 @@ tradeoffs are stated so alternatives can be chosen deliberately.
 Fastify/Nest-style HTTP layer in `apps/api` for the core domain; tRPC for typed internal calls from
 dashboard/admin; REST + OpenAPI for public/partner and webhook surfaces.**
 
-- *Why one language end-to-end:* shared types, shared validation schemas, shared domain packages between
+- _Why one language end-to-end:_ shared types, shared validation schemas, shared domain packages between
   web, api, and worker. For a small team this is the single largest velocity multiplier.
-- *Why tRPC internally:* end-to-end type safety with zero codegen for our own first-party clients.
-- *Why REST/OpenAPI externally:* webhooks, future partner API, and non-TS consumers need a stable contract.
-- *Tradeoff:* Node is not the best fit for CPU-heavy media processing. Mitigated by pushing media work to a
+- _Why tRPC internally:_ end-to-end type safety with zero codegen for our own first-party clients.
+- _Why REST/OpenAPI externally:_ webhooks, future partner API, and non-TS consumers need a stable contract.
+- _Tradeoff:_ Node is not the best fit for CPU-heavy media processing. Mitigated by pushing media work to a
   dedicated queue that can later move to a separate service or a managed transcoding provider.
-- *Rejected:* Go or Python API (loses type sharing and doubles the toolchain), GraphQL (schema and caching
+- _Rejected:_ Go or Python API (loses type sharing and doubles the toolchain), GraphQL (schema and caching
   complexity not justified at MVP; tRPC covers first-party needs).
 
 ### 3.3 Database
@@ -139,51 +139,51 @@ dashboard/admin; REST + OpenAPI for public/partner and webhook surfaces.**
 **Recommendation: PostgreSQL 16+ (managed), single primary + read replica, `pgvector` extension for
 embeddings, logical schemas per bounded context inside one database.**
 
-- *Why Postgres:* relational integrity for billing/credits, strong transactional guarantees, JSONB for
+- _Why Postgres:_ relational integrity for billing/credits, strong transactional guarantees, JSONB for
   flexible config payloads, and **Row-Level Security** — which is the mechanism that makes tenant isolation
   defensible rather than aspirational.
-- *Why `pgvector` instead of a separate vector DB:* Brand Brain retrieval volumes at MVP are small (thousands
+- _Why `pgvector` instead of a separate vector DB:_ Brand Brain retrieval volumes at MVP are small (thousands
   of chunks per brand). Keeping vectors in Postgres means embeddings inherit the same RLS tenant isolation as
   everything else — a dedicated vector store would create a second, weaker isolation boundary.
-- *Tenancy model:* **shared database, shared schema, `workspaceId` column + RLS.** Chosen over
+- _Tenancy model:_ **shared database, shared schema, `workspaceId` column + RLS.** Chosen over
   schema-per-tenant (migration cost explodes past a few hundred tenants) and database-per-tenant (operationally
   heavy, and wrong for self-serve sign-up). Enterprise-dedicated instances remain possible later without
   changing the code, because the isolation predicate is identical.
-- *Tradeoff:* a single noisy tenant can affect others. Mitigated by per-workspace rate limits, queue
+- _Tradeoff:_ a single noisy tenant can affect others. Mitigated by per-workspace rate limits, queue
   concurrency caps, and statement timeouts.
 
 ### 3.4 ORM
 
 **Recommendation: Prisma, wrapped in a tenant-scoped client.**
 
-- *Why:* excellent TypeScript ergonomics, a first-class migration workflow, and a client-extension mechanism
+- _Why:_ excellent TypeScript ergonomics, a first-class migration workflow, and a client-extension mechanism
   we use to make tenant scoping automatic rather than remembered.
-- *How isolation is enforced:* `packages/database` exports `forWorkspace(workspaceId)` which returns a client
+- _How isolation is enforced:_ `packages/database` exports `forWorkspace(workspaceId)` which returns a client
   extension that (a) injects the workspace predicate into every query on a tenant-owned model, (b) sets the
   Postgres session variable `app.workspace_id` used by RLS policies, and (c) throws at runtime if a
   tenant-owned model is queried through an unscoped client outside an explicit `asPlatform()` escape hatch.
-- *Escape hatch:* `asPlatform(actor, reason)` is the only way to run cross-tenant queries. It requires a
+- _Escape hatch:_ `asPlatform(actor, reason)` is the only way to run cross-tenant queries. It requires a
   platform actor, writes an `AuditEvent`, and is unavailable in customer-facing code paths by lint rule.
-- *Tradeoff:* Prisma's raw-SQL story is weaker than Drizzle/Kysely and its query planner control is limited.
+- _Tradeoff:_ Prisma's raw-SQL story is weaker than Drizzle/Kysely and its query planner control is limited.
   Mitigated by using `$queryRaw` with explicit tenant predicates for the few analytics aggregates that need it.
-- *Rejected:* Drizzle (better SQL control, less mature migration/tooling story for a team this size),
+- _Rejected:_ Drizzle (better SQL control, less mature migration/tooling story for a team this size),
   TypeORM (weaker types), raw SQL (unacceptable isolation risk from human error).
 
 ### 3.5 Cache, Queue, Coordination
 
 **Recommendation: Redis (managed) for cache, distributed locks, and rate limiting; BullMQ for job queues.**
 
-- *Why BullMQ:* mature Redis-backed queues with delayed jobs (essential for scheduled publishing), repeatable
+- _Why BullMQ:_ mature Redis-backed queues with delayed jobs (essential for scheduled publishing), repeatable
   jobs (analytics polling, credit resets), retries with backoff, priorities, concurrency limits per queue, and
   dead-letter handling. It runs in-process today and behind a separate worker deployment tomorrow with no code
   change.
-- *Scheduled publishing:* a `CalendarSlot` produces a delayed job at its UTC time, plus a **sweeper** that
+- _Scheduled publishing:_ a `CalendarSlot` produces a delayed job at its UTC time, plus a **sweeper** that
   reconciles slots whose jobs are missing (defense against Redis loss). The database is the source of truth;
   the queue is an accelerator.
-- *Locks:* Redis locks guard non-transactional critical sections; anything touching money or credits uses
+- _Locks:_ Redis locks guard non-transactional critical sections; anything touching money or credits uses
   **PostgreSQL** row locks instead, never Redis.
-- *Tradeoff:* Redis persistence is not a durability guarantee. Accepted because Postgres holds all truth.
-- *Rejected:* SQS/Cloud Tasks (cloud lock-in at MVP; harder local dev), Temporal (excellent for long workflows,
+- _Tradeoff:_ Redis persistence is not a durability guarantee. Accepted because Postgres holds all truth.
+- _Rejected:_ SQS/Cloud Tasks (cloud lock-in at MVP; harder local dev), Temporal (excellent for long workflows,
   but a heavy operational addition — revisit at Phase 6 for publishing sagas), pg-boss (fewer features).
 
 ### 3.6 Object Storage
@@ -223,7 +223,7 @@ custom RBAC layer.**
   `Membership`.
 - **SSO/SAML/SCIM:** deliberately deferred to Enterprise (post-MVP), but the identity model (User separate
   from Membership) is designed so it can be added without migration.
-- *Tradeoff:* Auth.js is convenient but opinionated; complex enterprise flows may later justify a dedicated
+- _Tradeoff:_ Auth.js is convenient but opinionated; complex enterprise flows may later justify a dedicated
   IdP. The abstraction in `packages/auth` keeps that option open.
 
 ### 3.9 Testing
@@ -256,7 +256,7 @@ Isolation tests are a **first-class, non-skippable suite** — see §8.4.
   migration check → deploy.
 - Migrations run as a separate, gated step; expand/contract pattern so deploys are backward-compatible.
 - Blue/green or rolling deploys; workers drain gracefully and jobs are idempotent so restarts are safe.
-- *Tradeoff:* a managed platform costs more than raw VMs but removes an entire category of operational work
+- _Tradeoff:_ a managed platform costs more than raw VMs but removes an entire category of operational work
   from a small team.
 
 ---
@@ -272,37 +272,37 @@ packages/config · packages/shared
 
 ### 4.1 Dependency rules (lint-enforced)
 
-| Package | May import | Must never import |
-|---|---|---|
-| `shared` | — | anything |
-| `database` | `shared` | any domain package |
-| `config` | `shared`, `database` | `billing`, `ai-gateway`, `social-connectors` |
-| `auth` | `shared`, `database` | domain packages |
-| `entitlements` | `shared`, `database`, `config` | `ai-gateway`, `billing`, `social-connectors` |
-| `ai-gateway` | `shared`, `database`, `config`, `entitlements` | `social-connectors`, `billing` |
-| `social-connectors` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `billing` |
-| `billing` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `social-connectors` |
-| `ui` | `shared` | everything else |
-| apps | any package | another app |
+| Package             | May import                                     | Must never import                            |
+| ------------------- | ---------------------------------------------- | -------------------------------------------- |
+| `shared`            | —                                              | anything                                     |
+| `database`          | `shared`                                       | any domain package                           |
+| `config`            | `shared`, `database`                           | `billing`, `ai-gateway`, `social-connectors` |
+| `auth`              | `shared`, `database`                           | domain packages                              |
+| `entitlements`      | `shared`, `database`, `config`                 | `ai-gateway`, `billing`, `social-connectors` |
+| `ai-gateway`        | `shared`, `database`, `config`, `entitlements` | `social-connectors`, `billing`               |
+| `social-connectors` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `billing`                      |
+| `billing`           | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `social-connectors`            |
+| `ui`                | `shared`                                       | everything else                              |
+| apps                | any package                                    | another app                                  |
 
 **No package imports an app. No package reads another package's tables directly** — cross-module access goes
 through the owning package's exported service functions or through queue events.
 
 ### 4.2 Bounded contexts and their tables
 
-| Context | Owns | Split-out candidate |
-|---|---|---|
-| Identity & Access | `User`, `Membership`, `Role`, `Permission`, sessions, invitations | later |
-| Tenancy | `Workspace`, `Brand` | no (core) |
-| Brand & Content | `BrandKnowledge`, `Campaign`, `ContentItem`, `ContentVariant`, `Asset`, `CalendarSlot`, `Approval`, `Comment` | no (core) |
-| Social | `SocialProvider`, `SocialAppConfiguration`, `SocialConnection`, `PublishJob`, `PublishAttempt` | **yes — publishing workers** |
-| Analytics | `MetricSnapshot`, `Insight` | **yes — analytics ingestion** |
-| AI | `AIProvider`, `AIProviderCredential`, `AIModel`, `AIRoutingRule`, `AIRequest`, `AIUsageLedger` | **yes — AI workers** |
-| Commerce | `Plan`, `Feature`, `PlanEntitlement`, `WorkspaceOverride`, `Subscription`, `Invoice`, `CreditWallet`, `CreditTransaction` | **yes — billing** |
-| Automation | `AutomationRule`, `AutomationRun` | later |
-| Messaging | `Notification`, templates | **yes — notifications** |
-| Platform Ops | `AuditEvent`, `ConfigurationVersion` | no (core) |
-| Media | asset derivatives, scanning | **yes — media processing** |
+| Context           | Owns                                                                                                                      | Split-out candidate           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Identity & Access | `User`, `Membership`, `Role`, `Permission`, sessions, invitations                                                         | later                         |
+| Tenancy           | `Workspace`, `Brand`                                                                                                      | no (core)                     |
+| Brand & Content   | `BrandKnowledge`, `Campaign`, `ContentItem`, `ContentVariant`, `Asset`, `CalendarSlot`, `Approval`, `Comment`             | no (core)                     |
+| Social            | `SocialProvider`, `SocialAppConfiguration`, `SocialConnection`, `PublishJob`, `PublishAttempt`                            | **yes — publishing workers**  |
+| Analytics         | `MetricSnapshot`, `Insight`                                                                                               | **yes — analytics ingestion** |
+| AI                | `AIProvider`, `AIProviderCredential`, `AIModel`, `AIRoutingRule`, `AIRequest`, `AIUsageLedger`                            | **yes — AI workers**          |
+| Commerce          | `Plan`, `Feature`, `PlanEntitlement`, `WorkspaceOverride`, `Subscription`, `Invoice`, `CreditWallet`, `CreditTransaction` | **yes — billing**             |
+| Automation        | `AutomationRule`, `AutomationRun`                                                                                         | later                         |
+| Messaging         | `Notification`, templates                                                                                                 | **yes — notifications**       |
+| Platform Ops      | `AuditEvent`, `ConfigurationVersion`                                                                                      | no (core)                     |
+| Media             | asset derivatives, scanning                                                                                               | **yes — media processing**    |
 
 ### 4.3 How a module becomes a service later
 
@@ -367,6 +367,7 @@ A **configuration domain** is a named, schema-backed document set. Domains at MV
 `currencies` · `trial` · `limits` · `policies` · `cms` (website content).
 
 Each domain has:
+
 - a **Zod schema** with a `schemaVersion`,
 - a chain of **`ConfigurationVersion`** rows (immutable),
 - exactly one **active** version per environment,
@@ -403,14 +404,14 @@ stateDiagram-v2
 
 ### 7.4 What is code vs. configuration
 
-| Code | Configuration |
-|---|---|
-| Adapter implementations (how to call a provider) | Which providers exist, base URLs, which models, routing |
-| Credit *calculation algorithm* | Credit *costs* per task/model |
-| Entitlement *precedence engine* | Plans, features, limits, overrides, flags |
-| Publishing *pipeline* | Per-platform limits and enabled capabilities |
-| Notification *delivery* | Templates, subjects, bodies, locales |
-| Payment *abstraction* | Active provider, currencies, tax settings, dunning windows |
+| Code                                             | Configuration                                              |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| Adapter implementations (how to call a provider) | Which providers exist, base URLs, which models, routing    |
+| Credit _calculation algorithm_                   | Credit _costs_ per task/model                              |
+| Entitlement _precedence engine_                  | Plans, features, limits, overrides, flags                  |
+| Publishing _pipeline_                            | Per-platform limits and enabled capabilities               |
+| Notification _delivery_                          | Templates, subjects, bodies, locales                       |
+| Payment _abstraction_                            | Active provider, currencies, tax settings, dunning windows |
 
 ---
 
@@ -453,6 +454,7 @@ erDiagram
 10. Caches are keyed by `workspaceId`; no shared cache key may span tenants.
 
 ### 8.3 Agency and multi-workspace UX
+
 A user with memberships in several workspaces gets a workspace switcher. Switching issues a new tenant context;
 it never widens a query. There is no "all workspaces" view for customers — only for platform actors.
 
@@ -460,19 +462,19 @@ it never widens a query. There is no "all workspaces" view for customers — onl
 
 The suite creates two workspaces with overlapping data shapes and asserts, for **every tenant-owned resource**:
 
-| Test | Assertion |
-|---|---|
-| Direct read by ID | Workspace A actor requesting B's record → 404 |
-| List/index | A's listing never contains B's rows, at any page or filter |
-| Search | Full-text and vector search from A never surfaces B content |
-| Mutation | Update/delete of B's record from A → 404, and B's row is unchanged |
-| Create with foreign parent | Creating a child under B's parent from A → rejected |
-| Export | Export from A contains zero B rows |
-| Aggregate | Counts/metrics from A exclude B entirely |
-| Storage | A cannot obtain a signed URL for B's object |
-| Queue | A job with a forged `workspaceId` fails authorization, not silently succeeds |
-| RLS direct | Raw SQL with the app role and A's context cannot see B's rows |
-| Copilot | Copilot in A cannot retrieve or reference B's Brand Brain |
+| Test                       | Assertion                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| Direct read by ID          | Workspace A actor requesting B's record → 404                                |
+| List/index                 | A's listing never contains B's rows, at any page or filter                   |
+| Search                     | Full-text and vector search from A never surfaces B content                  |
+| Mutation                   | Update/delete of B's record from A → 404, and B's row is unchanged           |
+| Create with foreign parent | Creating a child under B's parent from A → rejected                          |
+| Export                     | Export from A contains zero B rows                                           |
+| Aggregate                  | Counts/metrics from A exclude B entirely                                     |
+| Storage                    | A cannot obtain a signed URL for B's object                                  |
+| Queue                      | A job with a forged `workspaceId` fails authorization, not silently succeeds |
+| RLS direct                 | Raw SQL with the app role and A's context cannot see B's rows                |
+| Copilot                    | Copilot in A cannot retrieve or reference B's Brand Brain                    |
 
 A generic, schema-driven test walks the Prisma model list and **fails CI if a tenant-owned model has no
 isolation coverage** — so new models cannot be added without tests.
@@ -481,14 +483,14 @@ isolation coverage** — so new models cannot be added without tests.
 
 ## 9. Background Processing
 
-| Queue | Jobs | Concurrency | Retry | Failure path |
-|---|---|---|---|---|
-| `ai-jobs` | generation, embeddings, moderation, insights | per-provider cap + per-workspace cap | exponential, provider-aware | credit reservation released, `AIRequest` = failed |
-| `publish-jobs` | publish, verify, retry, token refresh | per-platform cap | exponential + jitter | `PublishAttempt` recorded, DLQ after N, user notified |
-| `analytics-ingest` | scheduled metric pulls, backfills | per-platform cap | exponential | partial-window retry, no duplicates (upsert on natural key) |
-| `notifications` | email/SMS/WhatsApp/in-app dispatch | high | exponential | DLQ + admin alert |
-| `billing-events` | webhook processing, dunning, resets | low, ordered per subscription | exponential | DLQ + manual replay tool |
-| `media-processing` | thumbnails, crops, transcode, virus scan | CPU-bound cap | limited | asset stays `processing_failed` |
+| Queue              | Jobs                                         | Concurrency                          | Retry                       | Failure path                                                |
+| ------------------ | -------------------------------------------- | ------------------------------------ | --------------------------- | ----------------------------------------------------------- |
+| `ai-jobs`          | generation, embeddings, moderation, insights | per-provider cap + per-workspace cap | exponential, provider-aware | credit reservation released, `AIRequest` = failed           |
+| `publish-jobs`     | publish, verify, retry, token refresh        | per-platform cap                     | exponential + jitter        | `PublishAttempt` recorded, DLQ after N, user notified       |
+| `analytics-ingest` | scheduled metric pulls, backfills            | per-platform cap                     | exponential                 | partial-window retry, no duplicates (upsert on natural key) |
+| `notifications`    | email/SMS/WhatsApp/in-app dispatch           | high                                 | exponential                 | DLQ + admin alert                                           |
+| `billing-events`   | webhook processing, dunning, resets          | low, ordered per subscription        | exponential                 | DLQ + manual replay tool                                    |
+| `media-processing` | thumbnails, crops, transcode, virus scan     | CPU-bound cap                        | limited                     | asset stays `processing_failed`                             |
 
 **Cross-cutting job rules:** every job is idempotent (natural idempotency key), carries tenant context,
 declares a timeout, is observable as a trace span, and lands in a dead-letter queue with a replay tool rather
@@ -530,15 +532,15 @@ than disappearing.
 
 ## 12. Environments and Data Separation
 
-| Concern | Development | Staging | Production |
-|---|---|---|---|
-| Database | local/container | isolated managed instance | isolated managed instance |
-| Redis / Storage | local | isolated | isolated |
-| AI providers | **mock provider only** | sandbox keys | production keys |
-| Social apps | mock connectors | platform sandbox apps | production apps |
-| Payments | mock | provider test mode | provider live mode |
-| Config store | seeded bootstrap | independent versions | independent versions |
-| Customer data | synthetic only | synthetic only | real |
+| Concern         | Development            | Staging                   | Production                |
+| --------------- | ---------------------- | ------------------------- | ------------------------- |
+| Database        | local/container        | isolated managed instance | isolated managed instance |
+| Redis / Storage | local                  | isolated                  | isolated                  |
+| AI providers    | **mock provider only** | sandbox keys              | production keys           |
+| Social apps     | mock connectors        | platform sandbox apps     | production apps           |
+| Payments        | mock                   | provider test mode        | provider live mode        |
+| Config store    | seeded bootstrap       | independent versions      | independent versions      |
+| Customer data   | synthetic only         | synthetic only            | real                      |
 
 **Production data is never copied to lower environments.** Staging is seeded with generated fixtures.
 
@@ -546,15 +548,15 @@ than disappearing.
 
 ## 13. Key Architectural Decisions (summary)
 
-| # | Decision | Alternative considered | Why |
-|---|---|---|---|
-| A1 | Modular monolith + monorepo | Microservices | Team size, velocity, transactional integrity; boundaries preserved for later split |
-| A2 | Shared DB + RLS tenancy | Schema/DB per tenant | Scales to self-serve; RLS gives defense in depth; dedicated instances still possible |
-| A3 | TypeScript everywhere | Polyglot | Shared types/schemas across web, api, worker |
-| A4 | Prisma + tenant-scoped client | Raw SQL, Drizzle | Ergonomics + enforced scoping; escape hatch is explicit and audited |
-| A5 | BullMQ on Redis | Managed cloud queues, Temporal | Delayed jobs, local dev parity, no cloud lock-in; Temporal revisited at Phase 6 |
-| A6 | pgvector for Brand Brain | Dedicated vector DB | Embeddings inherit tenant isolation; volume is small |
-| A7 | Versioned Configuration Service | Env vars + code constants | The core product requirement: owner-operated platform |
-| A8 | Separate `apps/admin` | Admin routes in dashboard | Hard separation of session realm, permissions, and blast radius |
-| A9 | Credits abstraction over tokens | Pass-through token billing | Predictable pricing, provider independence, margin control |
-| A10 | Adapter + registry for AI, social, payments | Direct SDK calls | Provider churn is certain; swaps must be configuration, not releases |
+| #   | Decision                                    | Alternative considered         | Why                                                                                  |
+| --- | ------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| A1  | Modular monolith + monorepo                 | Microservices                  | Team size, velocity, transactional integrity; boundaries preserved for later split   |
+| A2  | Shared DB + RLS tenancy                     | Schema/DB per tenant           | Scales to self-serve; RLS gives defense in depth; dedicated instances still possible |
+| A3  | TypeScript everywhere                       | Polyglot                       | Shared types/schemas across web, api, worker                                         |
+| A4  | Prisma + tenant-scoped client               | Raw SQL, Drizzle               | Ergonomics + enforced scoping; escape hatch is explicit and audited                  |
+| A5  | BullMQ on Redis                             | Managed cloud queues, Temporal | Delayed jobs, local dev parity, no cloud lock-in; Temporal revisited at Phase 6      |
+| A6  | pgvector for Brand Brain                    | Dedicated vector DB            | Embeddings inherit tenant isolation; volume is small                                 |
+| A7  | Versioned Configuration Service             | Env vars + code constants      | The core product requirement: owner-operated platform                                |
+| A8  | Separate `apps/admin`                       | Admin routes in dashboard      | Hard separation of session realm, permissions, and blast radius                      |
+| A9  | Credits abstraction over tokens             | Pass-through token billing     | Predictable pricing, provider independence, margin control                           |
+| A10 | Adapter + registry for AI, social, payments | Direct SDK calls               | Provider churn is certain; swaps must be configuration, not releases                 |

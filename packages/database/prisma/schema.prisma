@@ -1,0 +1,357 @@
+// BrandSpace — identity and tenancy core (Phase 1).
+//
+// Conventions (docs/DATABASE.md §1):
+//   - Every tenant-owned model carries `workspaceId` and is protected by RLS.
+//   - Ledger and audit tables are immutable: the application role has no UPDATE/DELETE.
+//   - Timestamps are timestamptz (UTC). Money and credits arrive in later phases.
+//
+// TENANCY MARKER: a model is "tenant-owned" if and only if it has a `workspaceId`
+// field. scripts/isolation-gate.ts parses this file and fails CI when a tenant-owned
+// model lacks an RLS policy or isolation-test coverage (D-29).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum WorkspaceStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  DELETED
+}
+
+enum WorkspaceType {
+  INDIVIDUAL
+  STARTUP
+  COMPANY
+  CREATOR
+  AGENCY
+  ENTERPRISE
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum RoleRealm {
+  WORKSPACE
+  PLATFORM
+}
+
+enum Locale {
+  AR
+  EN
+}
+
+enum ActorType {
+  USER
+  PLATFORM_USER
+  SYSTEM
+  AUTOMATION
+  COPILOT
+}
+
+enum AuditSeverity {
+  INFO
+  NOTICE
+  WARNING
+  CRITICAL
+}
+
+enum AuditOutcome {
+  SUCCESS
+  DENIED
+  ERROR
+}
+
+// ---------------------------------------------------------------------------
+// Identity — NOT tenant-owned. A User is a global identity that may hold
+// memberships in several workspaces. Access is constrained by Membership.
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String     @unique
+  emailVerifiedAt DateTime?  @db.Timestamptz(6)
+  passwordHash    String?
+  name            String?
+  locale          Locale     @default(EN)
+  timezone        String     @default("Asia/Riyadh")
+  status          UserStatus @default(PENDING)
+
+  // MFA. The secret itself lives in the vault; only its reference is stored here.
+  mfaEnabled   Boolean @default(false)
+  mfaSecretRef String?
+
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.Timestamptz(6)
+  lastLoginAt      DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  memberships     Membership[]
+  ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  invitesSent     Membership[] @relation("MembershipInviter")
+
+  @@index([status])
+  @@map("user")
+}
+
+// A platform staff account. Separate table, separate session realm, separate
+// permission set — docs/SECURITY.md §3. A person may hold both a User and a
+// PlatformUser account; the two never share a session.
+model PlatformUser {
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String     @unique
+  emailVerifiedAt DateTime?  @db.Timestamptz(6)
+  passwordHash    String?
+  name            String?
+  status          UserStatus @default(PENDING)
+
+  // D-27: 2FA is mandatory for platform roles. Enforced at login, not optional.
+  mfaEnabled   Boolean @default(false)
+  mfaSecretRef String?
+
+  roleId String @db.Uuid
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime? @db.Timestamptz(6)
+  lastLoginAt      DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  supportSessions SupportModeSession[]
+
+  @@index([status])
+  @@map("platform_user")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// TENANT-OWNED. The isolation boundary itself: RLS restricts a Workspace row to
+/// the workspace in the current request context.
+model Workspace {
+  id            String          @id @default(uuid()) @db.Uuid
+  /// Self-referential tenant key so every tenant-owned table — including this one —
+  /// is filtered by the same predicate. Always equal to `id`; enforced by a CHECK.
+  workspaceId   String          @unique @db.Uuid
+  slug          String          @unique
+  name          String
+  legalName     String?
+  type          WorkspaceType   @default(STARTUP)
+  status        WorkspaceStatus @default(TRIALING)
+  country       String          @default("SA")
+  defaultLocale Locale          @default(AR)
+  timezone      String          @default("Asia/Riyadh")
+  currency      String          @default("SAR") @db.Char(3)
+
+  ownerUserId String @db.Uuid
+  owner       User   @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+
+  trialEndsAt     DateTime? @db.Timestamptz(6)
+  suspendedAt     DateTime? @db.Timestamptz(6)
+  suspendedReason String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  memberships     Membership[]
+  roles           Role[]
+  auditEvents     AuditEvent[]
+  supportSessions SupportModeSession[]
+
+  @@index([status])
+  @@index([ownerUserId])
+  @@map("workspace")
+}
+
+/// TENANT-OWNED. Links a User to a Workspace with a role and optional brand scope.
+model Membership {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  /// null = all brands in the workspace; a non-empty array restricts the member.
+  brandScope String[] @db.Uuid
+
+  status MembershipStatus @default(INVITED)
+
+  invitedByUserId       String?   @db.Uuid
+  /// Only the hash is stored — the raw invitation token exists solely in the emailed link.
+  invitationTokenHash   String?   @unique
+  invitationExpiresAt   DateTime? @db.Timestamptz(6)
+  acceptedAt            DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  invitedBy User?     @relation("MembershipInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, status])
+  @@index([userId, status])
+  @@index([roleId])
+  @@map("membership")
+}
+
+/// TENANT-OWNED (nullable tenant key).
+/// `workspaceId = null` denotes a system role that every workspace may resolve.
+/// A non-null value denotes a workspace-defined custom role.
+model Role {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String?   @db.Uuid
+  key         String
+  realm       RoleRealm @default(WORKSPACE)
+  nameEn      String
+  nameAr      String
+  description String?
+  isSystem    Boolean   @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace     Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  permissions   RolePermission[]
+  memberships   Membership[]
+  platformUsers PlatformUser[]
+
+  @@unique([workspaceId, key])
+  @@index([realm])
+  @@map("role")
+}
+
+// Global permission catalogue. Not tenant-owned — the same permission keys exist
+// for every tenant, and the catalogue leaks no customer data.
+model Permission {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique
+  resource    String
+  action      String
+  minScope    String
+  description String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  roles RolePermission[]
+
+  @@index([resource])
+  @@map("permission")
+}
+
+model RolePermission {
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permission")
+}
+
+// ---------------------------------------------------------------------------
+// Audit — immutable
+// ---------------------------------------------------------------------------
+
+/// TENANT-OWNED (nullable tenant key).
+/// `workspaceId = null` denotes a platform-only event. Because RLS compares with
+/// `=`, a NULL never matches a workspace context, so platform events are invisible
+/// to tenants without needing a special-case policy.
+model AuditEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String?  @db.Uuid
+  occurredAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  actorType     ActorType
+  actorId       String?   @db.Uuid
+  actorEmailHash String?
+
+  action       String
+  resourceType String?
+  resourceId   String?  @db.Uuid
+  brandId      String?  @db.Uuid
+
+  severity AuditSeverity @default(INFO)
+  outcome  AuditOutcome  @default(SUCCESS)
+  reason   String?
+
+  /// Redacted before write — never contains secrets or tokens.
+  before Json?
+  after  Json?
+
+  ip        String?
+  userAgent String?
+  requestId String?
+  traceId   String?
+
+  /// Set when the action occurred inside a support-mode session (D-28).
+  supportModeSessionId String? @db.Uuid
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, occurredAt(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([resourceType, resourceId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@map("audit_event")
+}
+
+/// TENANT-OWNED. A time-boxed, reason-tagged, read-only-by-default platform access
+/// grant over one workspace — D-28. True impersonation is prohibited.
+model SupportModeSession {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  platformUserId String @db.Uuid
+  reason         String
+  ticketRef      String?
+
+  /// Read-only unless a separate elevated grant was issued and justified.
+  writeEnabled Boolean @default(false)
+
+  grantedAt DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt DateTime  @db.Timestamptz(6)
+  endedAt   DateTime? @db.Timestamptz(6)
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, grantedAt(sort: Desc)])
+  @@index([platformUserId, grantedAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("support_mode_session")
+}

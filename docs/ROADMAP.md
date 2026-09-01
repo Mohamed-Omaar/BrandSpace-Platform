@@ -26,31 +26,33 @@
 - Every phase ends with: tests green (including isolation tests), documentation updated, and a demo.
 - Anything marked **[Owner decision]** requires product-owner input before that phase can start.
 
-| Phase | Theme | Rough effort |
-|---|---|---|
-| 0 | Architecture | 1–2 weeks |
-| 1 | Foundations | 3–4 weeks |
-| 2 | Platform Admin | 3–4 weeks |
-| 3 | Plans, Entitlements, Credits | 2–3 weeks |
-| 4 | AI Gateway | 3–4 weeks |
-| 5 | Customer Brand & Content Journey | 4–5 weeks |
-| 6 | Social Connections & Publishing | 5–7 weeks |
-| 7 | Analytics & Copilot | 4–5 weeks |
-| 8 | Billing & Launch | 4–5 weeks |
+| Phase | Theme                            | Rough effort |
+| ----- | -------------------------------- | ------------ |
+| 0     | Architecture                     | 1–2 weeks    |
+| 1     | Foundations                      | 3–4 weeks    |
+| 2     | Platform Admin                   | 3–4 weeks    |
+| 3     | Plans, Entitlements, Credits     | 2–3 weeks    |
+| 4     | AI Gateway                       | 3–4 weeks    |
+| 5     | Customer Brand & Content Journey | 4–5 weeks    |
+| 6     | Social Connections & Publishing  | 5–7 weeks    |
+| 7     | Analytics & Copilot              | 4–5 weeks    |
+| 8     | Billing & Launch                 | 4–5 weeks    |
 
 ---
 
-## Phase 0 — Architecture *(current phase)*
+## Phase 0 — Architecture _(current phase)_
 
 **Goal:** a reviewed, approved blueprint so implementation never guesses.
 
 ### Deliverables
+
 - `CLAUDE.md` — permanent project rules
 - `docs/PRODUCT.md`, `ARCHITECTURE.md`, `DATABASE.md`, `SECURITY.md`
 - `docs/ADMIN-CONTROL-CENTER.md`, `AI-GATEWAY.md`, `SOCIAL-INTEGRATIONS.md`, `BILLING-AND-CREDITS.md`
 - `docs/ROADMAP.md`, `MVP-ACCEPTANCE-CRITERIA.md`, `DECISIONS.md`
 
 ### Exit criteria
+
 - [ ] Product owner has read every document (Arabic executive summaries provided for this purpose)
 - [ ] Every item in `DECISIONS.md` §4 ("Requires owner approval") has a recorded decision
 - [ ] Tech stack recommendations approved or amended
@@ -68,6 +70,7 @@
 bilingual UI — are proven before any feature exists.
 
 ### Scope
+
 1. **Monorepo** — workspace tooling, TypeScript strict config, ESLint with import-boundary rules,
    Prettier, commit hooks, CI pipeline.
 2. **Database** — Prisma schema for the identity and tenancy core (`User`, `Workspace`, `Membership`,
@@ -87,6 +90,7 @@ bilingual UI — are proven before any feature exists.
 11. **Environments** — dev/staging/production separation, IaC skeleton, deployment pipeline.
 
 ### Exit criteria
+
 - [ ] A user can sign up, verify email, log in, and enable MFA
 - [ ] A platform user can log in to Admin; a customer session is rejected there
 - [ ] Two workspaces exist and the isolation suite passes for every seeded model
@@ -102,6 +106,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** the owner can operate the platform's structure without code.
 
 ### Scope
+
 1. **Admin shell** — navigation, platform roles, mandatory MFA, step-up auth, environment banner.
 2. **Configuration Service** — `ConfigurationVersion`, domain schemas, validation, activation, rollback,
    diff view, impact preview, change history, cache invalidation.
@@ -116,6 +121,7 @@ bilingual UI — are proven before any feature exists.
 8. **System health** — queue dashboards, dead-letter queue with replay, kill switches.
 
 ### Exit criteria
+
 - [ ] Owner creates a workspace and invites a user entirely from Admin
 - [ ] A configuration version can be drafted, validated, activated, and rolled back — with history
 - [ ] A secret can be stored and rotated; **no interface anywhere reveals its value**
@@ -130,6 +136,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** commercial rules are data, and credit accounting is provably correct — before any AI exists.
 
 ### Scope
+
 1. **Plan management** — plan editor, per-currency pricing, trial settings, quotas, feature grants, add-ons,
    overage policy, upgrade/downgrade behavior, plan lifecycle and impact preview.
 2. **Feature registry** — features, value types, dependencies, defaults.
@@ -143,6 +150,7 @@ bilingual UI — are proven before any feature exists.
 6. **Usage limits** — quota enforcement middleware and per-plan rate limits.
 
 ### Exit criteria
+
 - [ ] Owner creates a plan with prices, limits, features, and credits — with no code change
 - [ ] Assigning a plan to a workspace changes what that workspace can do, immediately
 - [ ] The entitlement trace explains every effective value
@@ -157,6 +165,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** provider-agnostic AI with correct economics, proven end-to-end with a mock provider.
 
 ### Scope
+
 1. **Gateway core** — request pipeline, authorization, idempotency, status model, timeout sweeper.
 2. **Adapter interface** and the **mock adapter** (deterministic, latency- and cost-simulated).
 3. **First real adapters** — text and image, behind configuration. **[Owner decision D-13: which providers]**
@@ -171,6 +180,7 @@ bilingual UI — are proven before any feature exists.
    request inspector, cost alerts.
 
 ### Exit criteria
+
 - [ ] Owner adds a provider, tests the connection, activates it, and routes a task — all from Admin
 - [ ] Disabling a model takes effect immediately for all traffic
 - [ ] A successful request charges exactly the right credits and writes one ledger row
@@ -187,6 +197,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** the customer-facing value loop, completing the **first MVP vertical slice**.
 
 ### Scope
+
 1. **Brand Center** — create/edit brands, brand kit, logos, palette, typography, voice.
 2. **Brand Brain** — structured sections (bilingual), document upload, chunking, embeddings via
    `brand.retrieve`, retrieval with citations, staleness handling.
@@ -200,6 +211,7 @@ bilingual UI — are proven before any feature exists.
 8. **Activity Log** and **Notifications** (in-app + email) for the customer.
 
 ### Exit criteria — the vertical slice is demonstrable end to end
+
 - [ ] Every acceptance criterion in `docs/MVP-ACCEPTANCE-CRITERIA.md` passes
 - [ ] The full 16-step journey (owner configures a mock provider → customer places an AI draft on the calendar)
       runs as an automated E2E test in both Arabic and English
@@ -215,6 +227,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** real external publishing, reliably.
 
 ### Scope
+
 1. **Connector framework** — adapter interface, provider registry, capability declarations.
 2. **Platform app configuration** — per provider per environment, in Admin.
 3. **OAuth flows** — authorization, callback, PKCE, state, target selection, scope verification.
@@ -229,6 +242,7 @@ bilingual UI — are proven before any feature exists.
 9. **Social Media Hub UI** — connections, health, scopes, publish results.
 
 ### Exit criteria
+
 - [ ] A customer connects an account by OAuth; **no password is ever requested**
 - [ ] Scheduled content publishes at the correct time in the workspace timezone
 - [ ] Unapproved content cannot publish, even via a directly enqueued job
@@ -247,6 +261,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** the loop closes — performance data becomes insight becomes better strategy.
 
 ### Scope
+
 1. **Analytics ingestion** — scheduled pulls, backoff windows, idempotent upserts, backfill, freshness
    indicators, retention pruning, rate-limit sharing with publishing.
 2. **Smart Analytics** — dashboards per brand, campaign, platform, and post; comparisons and trends;
@@ -260,6 +275,7 @@ bilingual UI — are proven before any feature exists.
 7. **Automations** — trigger → condition → action rules, run history, policy limits on external actions.
 
 ### Exit criteria
+
 - [ ] Metrics ingest idempotently and are visible per post, account, campaign, and brand
 - [ ] Analytics explanations cite the actual metric values they reference
 - [ ] The Copilot can create a campaign, draft content, and place it on the calendar — with a preview and
@@ -276,6 +292,7 @@ bilingual UI — are proven before any feature exists.
 **Goal:** take real money and open the doors.
 
 ### Scope
+
 1. **Payment provider adapter** — hosted checkout and portal, subscriptions, one-time charges, refunds.
    **[Owner decision D-21: provider(s) and markets]**
 2. **Subscription lifecycle** — trials, upgrades with proration, downgrades with impact checks,
@@ -291,6 +308,7 @@ bilingual UI — are proven before any feature exists.
    monitoring and alerting verified, incident runbooks written.
 
 ### Exit criteria
+
 - [ ] A customer subscribes, is charged, receives an invoice, and gets the right entitlements
 - [ ] Payment failure moves through dunning to suspension and recovers correctly
 - [ ] Upgrade and downgrade behave exactly as specified, including credit handling
@@ -306,17 +324,17 @@ bilingual UI — are proven before any feature exists.
 
 ## Future Expansion (post-launch, unordered)
 
-| Area | Items |
-|---|---|
-| **AI** | Voice generation, video editing, brand-tuned models, multi-agent workflows, AI-generated ad variants, image editing/inpainting |
-| **Social** | Threads, Pinterest, Snapchat, Telegram, WhatsApp Business, Google Business Profile; unified social inbox; comment moderation with AI; social listening and sentiment |
-| **Collaboration** | Real-time co-editing, richer approval chains, client review portals, white-label agency portals |
-| **Analytics** | Competitor benchmarking, attribution, custom dashboards, scheduled report delivery, data warehouse export |
-| **Enterprise** | SSO (SAML/OIDC), SCIM provisioning, custom roles, data residency options, dedicated instances, contractual SLAs, audit export API |
-| **Commerce** | Marketplace of templates and strategies, partner/reseller program, affiliate program, usage-based enterprise pricing |
-| **Platform** | Public API + SDKs, outbound webhooks, Zapier/Make connectors, CRM integrations (HubSpot, Salesforce), mobile apps, browser extension |
-| **Content** | Advanced creative editor, brand-compliance auto-checking, UGC management, content repurposing pipelines, localization beyond ar/en |
-| **Operations** | Multi-region deployment, service extraction (AI, publishing, analytics workers), advanced cost optimization, self-hosted model options |
+| Area              | Items                                                                                                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AI**            | Voice generation, video editing, brand-tuned models, multi-agent workflows, AI-generated ad variants, image editing/inpainting                                       |
+| **Social**        | Threads, Pinterest, Snapchat, Telegram, WhatsApp Business, Google Business Profile; unified social inbox; comment moderation with AI; social listening and sentiment |
+| **Collaboration** | Real-time co-editing, richer approval chains, client review portals, white-label agency portals                                                                      |
+| **Analytics**     | Competitor benchmarking, attribution, custom dashboards, scheduled report delivery, data warehouse export                                                            |
+| **Enterprise**    | SSO (SAML/OIDC), SCIM provisioning, custom roles, data residency options, dedicated instances, contractual SLAs, audit export API                                    |
+| **Commerce**      | Marketplace of templates and strategies, partner/reseller program, affiliate program, usage-based enterprise pricing                                                 |
+| **Platform**      | Public API + SDKs, outbound webhooks, Zapier/Make connectors, CRM integrations (HubSpot, Salesforce), mobile apps, browser extension                                 |
+| **Content**       | Advanced creative editor, brand-compliance auto-checking, UGC management, content repurposing pipelines, localization beyond ar/en                                   |
+| **Operations**    | Multi-region deployment, service extraction (AI, publishing, analytics workers), advanced cost optimization, self-hosted model options                               |
 
 ---
 
@@ -324,14 +342,14 @@ bilingual UI — are proven before any feature exists.
 
 Present in **every** phase, not deferred:
 
-| Track | Commitment |
-|---|---|
-| Tenant isolation tests | Every new tenant-owned model, same pull request — CI-enforced |
-| Bilingual support | Every user-facing string in `ar` and `en`, RTL verified |
-| Accessibility | WCAG 2.2 AA checks in CI on every new screen |
-| Audit events | Every state change |
-| Configuration over code | No hard-coded plans, prices, limits, models, or providers |
-| Documentation | `docs/` updated in the same change as the behavior |
-| Security | Dependency, secret, and static scanning on every CI run |
-| Performance | Budgets enforced per route |
-| Observability | Traces and metrics for every new subsystem |
+| Track                   | Commitment                                                    |
+| ----------------------- | ------------------------------------------------------------- |
+| Tenant isolation tests  | Every new tenant-owned model, same pull request — CI-enforced |
+| Bilingual support       | Every user-facing string in `ar` and `en`, RTL verified       |
+| Accessibility           | WCAG 2.2 AA checks in CI on every new screen                  |
+| Audit events            | Every state change                                            |
+| Configuration over code | No hard-coded plans, prices, limits, models, or providers     |
+| Documentation           | `docs/` updated in the same change as the behavior            |
+| Security                | Dependency, secret, and static scanning on every CI run       |
+| Performance             | Budgets enforced per route                                    |
+| Observability           | Traces and metrics for every new subsystem                    |

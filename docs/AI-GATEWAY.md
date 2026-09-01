@@ -71,7 +71,7 @@ configuration — no changes anywhere else.
 ```ts
 interface AIProviderAdapter {
   readonly key: string;
-  readonly supportedModalities: Modality[];   // text | image | video | voice | embedding | moderation
+  readonly supportedModalities: Modality[]; // text | image | video | voice | embedding | moderation
 
   validateConfig(config: ProviderConfig): Promise<ValidationResult>;
   testConnection(ctx: AdapterContext): Promise<ConnectionTestResult>;
@@ -102,11 +102,13 @@ trace context, and the request ID. It never carries customer identity beyond wha
 derived from this class, not from provider-specific strings.
 
 ### 3.1 Configurable base URL
+
 Every provider has a configurable `baseUrl`. This supports self-hosted gateways, regional endpoints, proxies,
 and Azure/Bedrock-style deployments without a code change. The URL is validated (HTTPS, allowlisted host
 pattern) before activation.
 
 ### 3.2 The Mock adapter
+
 A first-class, always-present adapter used in development, tests, and the first vertical slice. It returns
 deterministic, latency-simulated, cost-simulated responses so the entire credit and ledger pipeline can be
 proven end-to-end **before any real provider credential exists**.
@@ -117,15 +119,15 @@ proven end-to-end **before any real provider credential exists**.
 
 Models are configuration, not constants.
 
-| Field | Purpose |
-|---|---|
-| `providerId`, `key`, `displayName` | Identity |
-| `modality` | text / image / video / voice / embedding / moderation |
-| `capabilities` | context window, max output, streaming, tool use, JSON mode, languages, image sizes, video length |
-| `inputCostPerUnitMinor`, `outputCostPerUnitMinor`, `unit`, `currency` | Cost basis for margin |
-| `qualityTier` | `fast` \| `balanced` \| `premium` — lets routing express intent, not model names |
-| `status` | `available` \| `beta` \| `deprecated` \| `disabled` |
-| `disableSwitch` | Immediate kill switch — a disabled model is unusable by any rule, instantly |
+| Field                                                                 | Purpose                                                                                          |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `providerId`, `key`, `displayName`                                    | Identity                                                                                         |
+| `modality`                                                            | text / image / video / voice / embedding / moderation                                            |
+| `capabilities`                                                        | context window, max output, streaming, tool use, JSON mode, languages, image sizes, video length |
+| `inputCostPerUnitMinor`, `outputCostPerUnitMinor`, `unit`, `currency` | Cost basis for margin                                                                            |
+| `qualityTier`                                                         | `fast` \| `balanced` \| `premium` — lets routing express intent, not model names                 |
+| `status`                                                              | `available` \| `beta` \| `deprecated` \| `disabled`                                              |
+| `disableSwitch`                                                       | Immediate kill switch — a disabled model is unusable by any rule, instantly                      |
 
 Registry changes are validated: routing rules may not reference a disabled or missing model, and cost fields
 must be present before a model can be activated.
@@ -136,20 +138,20 @@ must be present before a model can be activated.
 
 ### 5.1 Task catalogue
 
-| Task key | Modality | Typical tier | Notes |
-|---|---|---|---|
-| `caption.generate` | text | fast/balanced | High volume, latency-sensitive, per-platform constraints |
-| `ideas.generate` | text | fast | Short outputs, brainstorming |
-| `plan.monthly` | text | premium | Long, structured JSON output; high value |
-| `strategy.generate` | text | premium | Longest context (Brand Brain + market context) |
-| `analytics.explain` | text | balanced | Grounded in metric data; must not hallucinate numbers |
-| `copilot.chat` | text | balanced/premium | Tool-calling, streaming, multi-turn |
-| `image.generate` | image | balanced | Per-image cost; brand palette guidance |
-| `video.generate` | video | premium | Long-running, async, high cost — always queued |
-| `moderation.check` | moderation | fast | Cheap, mandatory on ingest and pre-publish |
-| `brand.retrieve` | embedding | fast | Brand Brain chunk embedding + query embedding |
-| `content.translate` | text | balanced | ar↔en with brand glossary preservation |
-| `voice.synthesize` | voice | balanced | Optional, post-MVP |
+| Task key            | Modality   | Typical tier     | Notes                                                    |
+| ------------------- | ---------- | ---------------- | -------------------------------------------------------- |
+| `caption.generate`  | text       | fast/balanced    | High volume, latency-sensitive, per-platform constraints |
+| `ideas.generate`    | text       | fast             | Short outputs, brainstorming                             |
+| `plan.monthly`      | text       | premium          | Long, structured JSON output; high value                 |
+| `strategy.generate` | text       | premium          | Longest context (Brand Brain + market context)           |
+| `analytics.explain` | text       | balanced         | Grounded in metric data; must not hallucinate numbers    |
+| `copilot.chat`      | text       | balanced/premium | Tool-calling, streaming, multi-turn                      |
+| `image.generate`    | image      | balanced         | Per-image cost; brand palette guidance                   |
+| `video.generate`    | video      | premium          | Long-running, async, high cost — always queued           |
+| `moderation.check`  | moderation | fast             | Cheap, mandatory on ingest and pre-publish               |
+| `brand.retrieve`    | embedding  | fast             | Brand Brain chunk embedding + query embedding            |
+| `content.translate` | text       | balanced         | ar↔en with brand glossary preservation                   |
+| `voice.synthesize`  | voice      | balanced         | Optional, post-MVP                                       |
 
 **Each task can use a different model.** That mapping lives entirely in `AIRoutingRule`.
 
@@ -157,10 +159,10 @@ must be present before a model can be activated.
 
 ```yaml
 taskKey: caption.generate
-scope: global                 # global | plan | workspace
+scope: global # global | plan | workspace
 qualityTier: balanced
 primaryModel: <modelId>
-fallbackModels: [<modelId>, <modelId>]   # ordered
+fallbackModels: [<modelId>, <modelId>] # ordered
 parameters:
   temperature: 0.7
   maxOutputTokens: 800
@@ -179,6 +181,7 @@ If no rule resolves, the request fails with a clear configuration error and an o
 never silently guesses a model.
 
 ### 5.3 Fallback semantics
+
 1. Try the primary model.
 2. On a **fallback-eligible** error class (`provider_unavailable`, `rate_limited`, `model_unavailable`,
    `timeout`), try the next model in the chain.
@@ -191,6 +194,7 @@ never silently guesses a model.
    error.
 
 ### 5.4 BYOK (Bring Your Own Key)
+
 Available on higher plans as a feature entitlement (`ai.byok`).
 
 - The customer supplies a provider key, stored via the same vault mechanism, workspace-scoped, and **never
@@ -240,6 +244,7 @@ sequenceDiagram
 ```
 
 ### 6.1 Status model
+
 `pending → reserved → running → (succeeded | failed | timeout | cancelled | moderation_blocked)`
 
 A sweeper reconciles requests stuck in `running` past their timeout: the reservation is released and the
@@ -250,6 +255,7 @@ request is marked `timeout`. **No reservation can outlive its request.**
 ## 7. Credit Accounting
 
 ### 7.1 Why credits
+
 Customers should not reason about tokens, per-model pricing, or provider changes. A **credit** is a stable
 internal unit. The platform absorbs provider price volatility and controls margin centrally.
 
@@ -266,12 +272,12 @@ and warns when a change would drive margin below a configured floor.
 
 ### 7.3 Reserve → confirm → settle
 
-| Phase | Action | Guarantee |
-|---|---|---|
+| Phase       | Action                                                                                                                           | Guarantee                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | **Reserve** | Estimate credits generously; `SELECT … FOR UPDATE` on the wallet; write a `reservation` transaction; increment `reservedBalance` | Prevents concurrent overspend; `CHECK (balance >= 0)` makes negative impossible |
-| **Confirm** | Provider succeeded and output validated | Only now is a charge possible |
-| **Settle** | Replace the reservation with a `usage_charge` for the **actual** amount; release any excess | Customer never pays for an over-estimate |
-| **Release** | On any failure, cancel the reservation in full | **Zero charge for failed requests** |
+| **Confirm** | Provider succeeded and output validated                                                                                          | Only now is a charge possible                                                   |
+| **Settle**  | Replace the reservation with a `usage_charge` for the **actual** amount; release any excess                                      | Customer never pays for an over-estimate                                        |
+| **Release** | On any failure, cancel the reservation in full                                                                                   | **Zero charge for failed requests**                                             |
 
 All four phases are idempotent on `AIRequest.idempotencyKey` and `CreditTransaction.idempotencyKey`.
 
@@ -286,12 +292,12 @@ All four phases are idempotent on `AIRequest.idempotencyKey` and `CreditTransact
 
 ### 7.5 Grant types and consumption order
 
-| Type | Behavior |
-|---|---|
-| `plan_grant` | Monthly, on billing-cycle reset; rollover per plan policy |
-| `addon_purchase` | Purchased packs; typically no expiry or a long one |
-| `promotional_grant` | Campaign/goodwill credits; usually expiring |
-| `admin_adjustment` | Manual, reason-required, audited |
+| Type                | Behavior                                                  |
+| ------------------- | --------------------------------------------------------- |
+| `plan_grant`        | Monthly, on billing-cycle reset; rollover per plan policy |
+| `addon_purchase`    | Purchased packs; typically no expiry or a long one        |
+| `promotional_grant` | Campaign/goodwill credits; usually expiring               |
+| `admin_adjustment`  | Manual, reason-required, audited                          |
 
 Consumption is **FIFO by expiry date** (soonest-expiring first), so customers are never surprised by expiring
 credits they could have used. Each `usage_charge` records the `sourceBucketId` it drew from.
@@ -309,6 +315,7 @@ credits they could have used. Each `usage_charge` records the `sourceBucketId` i
   customer opt-in and a visible running total.
 
 ### 7.7 Refunds
+
 A confirmed charge can be reversed (support decision, provider incident, or a defective result) with a
 `refund` transaction referencing the original `usage_charge`. Ledger rows are never edited or deleted.
 
@@ -316,14 +323,14 @@ A confirmed charge can be reversed (support decision, provider incident, or a de
 
 ## 8. Budgets and Limits
 
-| Level | Control | Behavior on breach |
-|---|---|---|
-| Per request | `maxCostPerRequestMinor` | Reject before calling the provider |
-| Per user | requests/minute, credits/day | `429` with retry guidance |
-| Per workspace | credits/day, credits/month, concurrent requests | Warn at threshold, block at hard limit |
-| Per plan | aggregate ceilings | Applied as defaults to member workspaces |
-| Per provider | concurrency and RPM caps | Queue and shed to fallback |
-| Platform-wide | daily and monthly provider spend caps | Alert, then degrade to cheaper tiers, then block non-critical tasks |
+| Level         | Control                                         | Behavior on breach                                                  |
+| ------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| Per request   | `maxCostPerRequestMinor`                        | Reject before calling the provider                                  |
+| Per user      | requests/minute, credits/day                    | `429` with retry guidance                                           |
+| Per workspace | credits/day, credits/month, concurrent requests | Warn at threshold, block at hard limit                              |
+| Per plan      | aggregate ceilings                              | Applied as defaults to member workspaces                            |
+| Per provider  | concurrency and RPM caps                        | Queue and shed to fallback                                          |
+| Platform-wide | daily and monthly provider spend caps           | Alert, then degrade to cheaper tiers, then block non-critical tasks |
 
 **Cost alerts:** daily and monthly thresholds per provider and platform-wide, with configurable recipients.
 A projected-overrun alert fires when the current burn rate would exceed the monthly cap.
@@ -332,16 +339,16 @@ A projected-overrun alert fires when the current burn rate would exceed the mont
 
 ## 9. Reliability
 
-| Control | Behavior |
-|---|---|
-| **Timeouts** | Per task and per model; the abort signal reaches the HTTP layer so no request outlives its deadline |
-| **Retries** | Exponential backoff with jitter, only for retryable classes, capped by attempt count and total deadline |
-| **Circuit breaker** | Per provider; opens on sustained failure, half-opens to probe, closes on recovery. While open, routing skips straight to fallback |
-| **Health checks** | Periodic lightweight probes; results feed Admin, the Status page, and the breaker |
-| **Rate limit handling** | Honor `Retry-After`; internal token buckets keep us under provider quotas |
-| **Long-running tasks** | Video and batch tasks are async jobs with polling/callbacks; the client sees a request status, not a hung connection |
+| Control                  | Behavior                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Timeouts**             | Per task and per model; the abort signal reaches the HTTP layer so no request outlives its deadline                                               |
+| **Retries**              | Exponential backoff with jitter, only for retryable classes, capped by attempt count and total deadline                                           |
+| **Circuit breaker**      | Per provider; opens on sustained failure, half-opens to probe, closes on recovery. While open, routing skips straight to fallback                 |
+| **Health checks**        | Periodic lightweight probes; results feed Admin, the Status page, and the breaker                                                                 |
+| **Rate limit handling**  | Honor `Retry-After`; internal token buckets keep us under provider quotas                                                                         |
+| **Long-running tasks**   | Video and batch tasks are async jobs with polling/callbacks; the client sees a request status, not a hung connection                              |
 | **Graceful degradation** | If all providers for a task are down, queue the request (where semantics allow) or fail fast with a clear message — never a silent partial result |
-| **Idempotency** | Same key ⇒ same result, no re-execution, no re-charge |
+| **Idempotency**          | Same key ⇒ same result, no re-execution, no re-charge                                                                                             |
 
 ---
 
@@ -350,7 +357,7 @@ A projected-overrun alert fires when the current burn rate would exceed the mont
 1. **Input moderation** on user-supplied prompts and on uploaded content used as context.
 2. **Output moderation** before any generated content is persisted or scheduled for publishing.
 3. **Prompt-injection containment:** retrieved Brand Brain content, uploaded documents, and social content are
-   inserted as clearly delimited *untrusted data*. System instructions are immutable and are never
+   inserted as clearly delimited _untrusted data_. System instructions are immutable and are never
    reconstructed from retrieved text. Instructions found inside retrieved content are ignored by policy and
    flagged.
 4. **Brand rule enforcement:** the brand's do/don't rules are applied both as prompt guidance and as a
@@ -364,14 +371,14 @@ A projected-overrun alert fires when the current burn rate would exceed the mont
 
 ## 11. Data Handling and Privacy
 
-| Rule | Detail |
-|---|---|
+| Rule                  | Detail                                                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Raw prompts/responses | **Not persisted by default.** `AIRequest.inputSummary` holds audit-safe metadata: task, language, token counts, Brand Brain citation IDs, template version |
-| Opt-in retention | A workspace may enable short-term retention for debugging, with a visible notice and a fixed TTL |
-| Provider training | Only providers configured with no-training / zero-retention terms are eligible for production; this is recorded per provider in configuration |
-| Tenant scoping | Retrieval is workspace- and brand-scoped at query level; one tenant's context can never enter another's request |
-| PII | Detected PII in prompts may be redacted per policy before leaving the platform |
-| Sub-processors | Active AI providers are published on the Security page |
+| Opt-in retention      | A workspace may enable short-term retention for debugging, with a visible notice and a fixed TTL                                                           |
+| Provider training     | Only providers configured with no-training / zero-retention terms are eligible for production; this is recorded per provider in configuration              |
+| Tenant scoping        | Retrieval is workspace- and brand-scoped at query level; one tenant's context can never enter another's request                                            |
+| PII                   | Detected PII in prompts may be redacted per policy before leaving the platform                                                                             |
+| Sub-processors        | Active AI providers are published on the Security page                                                                                                     |
 
 ---
 
@@ -400,26 +407,26 @@ and execute multi-step internal actions on the user's behalf.
 
 ### 13.1 Capabilities
 
-| Capability | Class |
-|---|---|
-| Read Brand Brain and cite it | read |
-| Explain analytics with real numbers | read |
-| Create a campaign | internal write |
-| Create content drafts | internal write |
-| Suggest schedules | read / proposal |
-| Add drafts to the calendar | internal write |
-| Prepare approval requests | internal write |
-| Propose automations | proposal (creation requires confirmation) |
-| Execute allowed internal actions | internal write |
+| Capability                          | Class                                     |
+| ----------------------------------- | ----------------------------------------- |
+| Read Brand Brain and cite it        | read                                      |
+| Explain analytics with real numbers | read                                      |
+| Create a campaign                   | internal write                            |
+| Create content drafts               | internal write                            |
+| Suggest schedules                   | read / proposal                           |
+| Add drafts to the calendar          | internal write                            |
+| Prepare approval requests           | internal write                            |
+| Propose automations                 | proposal (creation requires confirmation) |
+| Execute allowed internal actions    | internal write                            |
 
 ### 13.2 Action classes and policy
 
-| Class | Examples | Policy |
-|---|---|---|
-| **Read** | retrieve Brand Brain, read metrics, list content | Allowed if the user may read it. Never returns data the user cannot see |
-| **Internal write** | create draft, create campaign, add to calendar, request approval | Allowed if the user has the permission and entitlement. Shows what was done, and is undoable |
-| **High-impact** | publish, delete, disconnect, bulk changes, spending credits above a threshold | **Preview + explicit confirmation required.** Never executed on the model's own decision |
-| **Forbidden** | pay, refund, change plan, send external communications, change roles/permissions, touch secrets, cross-workspace anything | Not exposed as tools at all |
+| Class              | Examples                                                                                                                  | Policy                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Read**           | retrieve Brand Brain, read metrics, list content                                                                          | Allowed if the user may read it. Never returns data the user cannot see                      |
+| **Internal write** | create draft, create campaign, add to calendar, request approval                                                          | Allowed if the user has the permission and entitlement. Shows what was done, and is undoable |
+| **High-impact**    | publish, delete, disconnect, bulk changes, spending credits above a threshold                                             | **Preview + explicit confirmation required.** Never executed on the model's own decision     |
+| **Forbidden**      | pay, refund, change plan, send external communications, change roles/permissions, touch secrets, cross-workspace anything | Not exposed as tools at all                                                                  |
 
 ### 13.3 Execution contract
 
@@ -440,6 +447,7 @@ sequenceDiagram
 ```
 
 **Guarantees**
+
 1. Every tool call is authorized **server-side** against the user's real permissions. The model's assertions
    about what it may do are ignored.
 2. Workspace scope is bound to the session and cannot be changed by the conversation.
@@ -470,19 +478,19 @@ sequenceDiagram
 
 ## 15. Testing the Gateway
 
-| Test | Assertion |
-|---|---|
-| Mock end-to-end | Full reserve → execute → settle path produces a correct ledger and balance |
-| Failure | Provider error ⇒ reservation released, balance unchanged, request `failed` |
-| Timeout | Deadline exceeded ⇒ released, request `timeout`, no charge |
-| Retry idempotency | Same idempotency key twice ⇒ one charge, one ledger row, same result |
-| Concurrency | N parallel requests against a wallet with capacity for N−1 ⇒ exactly N−1 succeed, no negative balance |
-| Fallback | Primary unavailable ⇒ fallback used, one charge, both models recorded |
-| Non-fallback errors | `invalid_request` does not trigger fallback |
-| Budget | Workspace daily cap reached ⇒ blocked before the provider is called |
-| Model disable | Disabling a model makes routing to it fail immediately, even mid-session |
-| Isolation | Workspace A's request can never retrieve B's Brand Brain chunks |
-| Copilot authorization | A Content Creator's Copilot cannot invoke a publish tool |
-| Ledger integrity | Replaying all transactions reproduces the wallet balance exactly |
-| Moderation | Blocked input/output ⇒ no charge, clear status |
-| BYOK | BYOK request uses the customer credential, records zero platform provider cost, charges the reduced fee |
+| Test                  | Assertion                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| Mock end-to-end       | Full reserve → execute → settle path produces a correct ledger and balance                              |
+| Failure               | Provider error ⇒ reservation released, balance unchanged, request `failed`                              |
+| Timeout               | Deadline exceeded ⇒ released, request `timeout`, no charge                                              |
+| Retry idempotency     | Same idempotency key twice ⇒ one charge, one ledger row, same result                                    |
+| Concurrency           | N parallel requests against a wallet with capacity for N−1 ⇒ exactly N−1 succeed, no negative balance   |
+| Fallback              | Primary unavailable ⇒ fallback used, one charge, both models recorded                                   |
+| Non-fallback errors   | `invalid_request` does not trigger fallback                                                             |
+| Budget                | Workspace daily cap reached ⇒ blocked before the provider is called                                     |
+| Model disable         | Disabling a model makes routing to it fail immediately, even mid-session                                |
+| Isolation             | Workspace A's request can never retrieve B's Brand Brain chunks                                         |
+| Copilot authorization | A Content Creator's Copilot cannot invoke a publish tool                                                |
+| Ledger integrity      | Replaying all transactions reproduces the wallet balance exactly                                        |
+| Moderation            | Blocked input/output ⇒ no charge, clear status                                                          |
+| BYOK                  | BYOK request uses the customer credential, records zero platform provider cost, charges the reduced fee |

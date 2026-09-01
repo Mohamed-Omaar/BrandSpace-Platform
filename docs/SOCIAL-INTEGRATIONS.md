@@ -63,15 +63,15 @@ flowchart TB
 
 ```ts
 interface SocialConnectorAdapter {
-  readonly key: string;                         // 'instagram', 'tiktok', ...
-  readonly capabilities: PlatformCapabilities;  // declared, config-overridable
+  readonly key: string; // 'instagram', 'tiktok', ...
+  readonly capabilities: PlatformCapabilities; // declared, config-overridable
 
   // Connection
   buildAuthorizationUrl(p: AuthStartParams): string;
   exchangeCode(p: AuthCallbackParams): Promise<TokenBundle>;
   refreshToken(p: RefreshParams): Promise<TokenBundle>;
   revoke(p: RevokeParams): Promise<void>;
-  listTargets(ctx: ConnCtx): Promise<PublishTarget[]>;   // pages, channels, business accounts
+  listTargets(ctx: ConnCtx): Promise<PublishTarget[]>; // pages, channels, business accounts
   checkHealth(ctx: ConnCtx): Promise<ConnectionHealth>;
 
   // Publishing
@@ -98,18 +98,18 @@ interface SocialConnectorAdapter {
 
 ### 2.2 Capability declaration (per platform, configuration)
 
-| Capability | Description |
-|---|---|
-| Post kinds | text, image, carousel, video, reel, story, short, article, thread |
-| Media limits | count, size, dimensions, aspect ratios, duration, codecs |
-| Text limits | max characters, hashtag count, mention rules, link handling |
-| Scheduling | native scheduling vs. BrandSpace-side scheduling |
-| First comment | supported or not |
-| Delete | supported or not |
-| Analytics | metrics available, granularity, historical window, delay |
-| Webhooks | supported events |
-| Required scopes | per capability |
-| Rate limits | documented quotas used to shape our own throttling |
+| Capability      | Description                                                       |
+| --------------- | ----------------------------------------------------------------- |
+| Post kinds      | text, image, carousel, video, reel, story, short, article, thread |
+| Media limits    | count, size, dimensions, aspect ratios, duration, codecs          |
+| Text limits     | max characters, hashtag count, mention rules, link handling       |
+| Scheduling      | native scheduling vs. BrandSpace-side scheduling                  |
+| First comment   | supported or not                                                  |
+| Delete          | supported or not                                                  |
+| Analytics       | metrics available, granularity, historical window, delay          |
+| Webhooks        | supported events                                                  |
+| Required scopes | per capability                                                    |
+| Rate limits     | documented quotas used to shape our own throttling                |
 
 The UI is generated from these declarations — so if a platform does not support stories, the option never
 appears, rather than failing at publish time.
@@ -118,14 +118,14 @@ appears, rather than failing at publish time.
 
 ## 3. Platform Notes (MVP set)
 
-| Platform | Connection target | Notable constraints |
-|---|---|---|
-| **Facebook** | Page (via Business login) | Page access tokens derived from a user token; page roles matter; link previews; long-lived token exchange |
+| Platform      | Connection target                         | Notable constraints                                                                                                                                             |
+| ------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Facebook**  | Page (via Business login)                 | Page access tokens derived from a user token; page roles matter; link previews; long-lived token exchange                                                       |
 | **Instagram** | Business/Creator account linked to a Page | Container-then-publish two-step flow; media must be publicly reachable at publish time; carousel and reel rules; strict aspect ratios; publishing quota per 24h |
-| **TikTok** | Creator/business account | Chunked video upload; async processing with a status poll; content review delay; strict duration/codec rules |
-| **LinkedIn** | Personal profile and/or Organization page | Different endpoints and permissions per author type; asset upload registration step |
-| **YouTube** | Channel | Resumable upload; quota units are the real limit, not request counts; processing time before availability; metadata (title, description, category, visibility) |
-| **X** | Account | Tier-dependent API access and posting limits; media upload is a separate step; thread posting is sequential and must be idempotent per tweet |
+| **TikTok**    | Creator/business account                  | Chunked video upload; async processing with a status poll; content review delay; strict duration/codec rules                                                    |
+| **LinkedIn**  | Personal profile and/or Organization page | Different endpoints and permissions per author type; asset upload registration step                                                                             |
+| **YouTube**   | Channel                                   | Resumable upload; quota units are the real limit, not request counts; processing time before availability; metadata (title, description, category, visibility)  |
+| **X**         | Account                                   | Tier-dependent API access and posting limits; media upload is a separate step; thread posting is sequential and must be idempotent per tweet                    |
 
 **Assumption recorded in DECISIONS (D-18, D-19):** exact API versions, scopes, and app-review requirements are
 confirmed during Phase 6 implementation, when app review submissions are prepared. Each platform requires
@@ -172,17 +172,17 @@ supported; exact redirect-URI matching; scope verification after callback (a mis
 
 ## 5. Token Management
 
-| Concern | Behavior |
-|---|---|
-| Storage | Encrypted via the Secret Service; only `tokenRef` in the database |
-| Exposure | Never in API responses, logs, traces, error messages, exports, or support mode |
-| Proactive refresh | A scheduled job refreshes tokens **before** expiry (e.g. at 75% of lifetime); failures set `needs_reauth` |
-| Reactive refresh | On `auth_expired`, refresh once and retry the operation transparently |
-| Rotation | Refresh-token rotation is honored where the platform supports it; the old token is retired after success |
-| Revocation | Customer disconnect and admin disable both revoke at the provider where supported, then mark the connection `revoked`/`disabled` |
-| Expiry recovery | On `needs_reauth`: pause scheduled jobs for that connection, notify the workspace with a reconnect link, keep queued jobs pending until the deadline, then fail them with a clear reason |
-| Scope changes | Detected at refresh and health check; missing scopes disable the affected capabilities only, not the whole connection |
-| Health | Periodic lightweight probe; rolling status, consecutive failure count, last error, circuit-breaker state |
+| Concern           | Behavior                                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Storage           | Encrypted via the Secret Service; only `tokenRef` in the database                                                                                                                        |
+| Exposure          | Never in API responses, logs, traces, error messages, exports, or support mode                                                                                                           |
+| Proactive refresh | A scheduled job refreshes tokens **before** expiry (e.g. at 75% of lifetime); failures set `needs_reauth`                                                                                |
+| Reactive refresh  | On `auth_expired`, refresh once and retry the operation transparently                                                                                                                    |
+| Rotation          | Refresh-token rotation is honored where the platform supports it; the old token is retired after success                                                                                 |
+| Revocation        | Customer disconnect and admin disable both revoke at the provider where supported, then mark the connection `revoked`/`disabled`                                                         |
+| Expiry recovery   | On `needs_reauth`: pause scheduled jobs for that connection, notify the workspace with a reconnect link, keep queued jobs pending until the deadline, then fail them with a clear reason |
+| Scope changes     | Detected at refresh and health check; missing scopes disable the affected capabilities only, not the whole connection                                                                    |
+| Health            | Periodic lightweight probe; rolling status, consecutive failure count, last error, circuit-breaker state                                                                                 |
 
 ---
 
@@ -206,28 +206,30 @@ flowchart LR
 
 ### 6.1 Stage gates
 
-| Stage | Entry condition | Produces |
-|---|---|---|
-| Strategy | Brand Brain has minimum viable content | `Insight` (strategy) |
-| Campaign | Strategy accepted or created manually | `Campaign` |
-| Content creation | Brand + campaign context available | `ContentItem` + `ContentVariant`s |
-| Creative asset | Variant needs media | `Asset` (`ready` + `clean` scan) |
-| Review | Variants validated against platform rules | comments, change requests |
-| Approval | Workspace policy requires it | `Approval` (`approved`) |
-| Calendar | **Approved** (when approval is required) | `CalendarSlot` |
-| Scheduling | Slot has a valid time, connection, and target | delayed job + sweeper coverage |
-| Publish job | Slot is due; pre-flight checks pass | `PublishJob` |
-| Result | Provider responded | `PublishAttempt`, external post ID |
-| Analytics | Post exists and the platform's metric delay has elapsed | `MetricSnapshot` |
-| Insight | Enough data accumulated | `Insight` |
+| Stage            | Entry condition                                         | Produces                           |
+| ---------------- | ------------------------------------------------------- | ---------------------------------- |
+| Strategy         | Brand Brain has minimum viable content                  | `Insight` (strategy)               |
+| Campaign         | Strategy accepted or created manually                   | `Campaign`                         |
+| Content creation | Brand + campaign context available                      | `ContentItem` + `ContentVariant`s  |
+| Creative asset   | Variant needs media                                     | `Asset` (`ready` + `clean` scan)   |
+| Review           | Variants validated against platform rules               | comments, change requests          |
+| Approval         | Workspace policy requires it                            | `Approval` (`approved`)            |
+| Calendar         | **Approved** (when approval is required)                | `CalendarSlot`                     |
+| Scheduling       | Slot has a valid time, connection, and target           | delayed job + sweeper coverage     |
+| Publish job      | Slot is due; pre-flight checks pass                     | `PublishJob`                       |
+| Result           | Provider responded                                      | `PublishAttempt`, external post ID |
+| Analytics        | Post exists and the platform's metric delay has elapsed | `MetricSnapshot`                   |
+| Insight          | Enough data accumulated                                 | `Insight`                          |
 
 ### 6.2 Approval enforcement
+
 The approval requirement is checked **twice**: when a slot is scheduled, and again inside the publish job
 immediately before the external call. If approval was revoked in between, the job aborts with
 `approval_revoked` and the user is notified. **Content that requires approval and lacks it can never be
 published** — this is enforced in the job, not only in the UI.
 
 ### 6.3 Content validation
+
 Before scheduling, each variant is validated against the target platform's declared capabilities:
 character count, hashtag and mention rules, link policy, media count, aspect ratio, file size, duration,
 codec, and required fields. Results are `valid` / `warnings` / `invalid`. **Invalid variants cannot be
@@ -252,6 +254,7 @@ stateDiagram-v2
 ```
 
 ### 7.1 Pre-flight checks (inside the job, before any external call)
+
 1. Workspace is active, not suspended.
 2. Entitlement allows publishing; monthly scheduled-post quota not exceeded.
 3. Content is approved if approval is required.
@@ -264,6 +267,7 @@ stateDiagram-v2
 Any failure ends the job **before** contacting the platform, with a precise status the customer can act on.
 
 ### 7.2 Idempotency
+
 `PublishJob.idempotencyKey = hash(contentVariantId, socialConnectionId, calendarSlotId, targetId)` with a
 unique constraint. A worker claims a job with a conditional status transition, so two workers cannot process
 the same job. Where the platform supports a client-side idempotency token, it is passed through.
@@ -274,37 +278,39 @@ landed. Only a confirmed non-publish is retried. This is the single most importa
 duplicate posts.
 
 ### 7.3 Retry policy
+
 Exponential backoff with jitter, per error class:
 
-| Class | Retry | Notes |
-|---|---|---|
-| `rate_limited` | yes | honor `Retry-After`; may exceed the scheduled time |
-| `platform_unavailable`, `timeout` | yes | with verification step first |
-| `auth_expired` | yes, once | after a token refresh |
-| `auth_revoked`, `insufficient_scope` | no | connection → `needs_reauth`, customer notified |
-| `content_rejected`, `media_invalid` | no | actionable error shown to the customer |
-| `duplicate_content` | no | treated as success if the external post is found |
+| Class                                | Retry     | Notes                                              |
+| ------------------------------------ | --------- | -------------------------------------------------- |
+| `rate_limited`                       | yes       | honor `Retry-After`; may exceed the scheduled time |
+| `platform_unavailable`, `timeout`    | yes       | with verification step first                       |
+| `auth_expired`                       | yes, once | after a token refresh                              |
+| `auth_revoked`, `insufficient_scope` | no        | connection → `needs_reauth`, customer notified     |
+| `content_rejected`, `media_invalid`  | no        | actionable error shown to the customer             |
+| `duplicate_content`                  | no        | treated as success if the external post is found   |
 
 Max attempts and windows are configuration. Exhausted jobs land in the **dead-letter queue** with full
 context and an admin replay tool.
 
 ### 7.4 Provider response storage
+
 Every attempt stores a `PublishAttempt` with HTTP status, provider error code, timing, and the raw response
 **with tokens and secrets redacted**. This is the evidence trail for support and for platform disputes.
 
 ### 7.5 Publishing statuses shown to the customer
 
-| Status | Meaning |
-|---|---|
-| `scheduled` | Placed on the calendar, waiting for its time |
-| `queued` | Due, waiting for a worker |
-| `publishing` | Being sent to the platform |
-| `published` | Live, with a link to the post |
+| Status                | Meaning                                                         |
+| --------------------- | --------------------------------------------------------------- |
+| `scheduled`           | Placed on the calendar, waiting for its time                    |
+| `queued`              | Due, waiting for a worker                                       |
+| `publishing`          | Being sent to the platform                                      |
+| `published`           | Live, with a link to the post                                   |
 | `partially_published` | Some targets succeeded, others failed — per-target detail shown |
-| `failed` | Did not publish; reason and suggested fix shown |
-| `needs_reconnection` | Blocked by an expired or revoked connection |
-| `cancelled` | Cancelled before sending |
-| `pending_approval` | Blocked because approval is missing |
+| `failed`              | Did not publish; reason and suggested fix shown                 |
+| `needs_reconnection`  | Blocked by an expired or revoked connection                     |
+| `cancelled`           | Cancelled before sending                                        |
+| `pending_approval`    | Blocked because approval is missing                             |
 
 ---
 
@@ -323,17 +329,17 @@ Every attempt stores a `PublishAttempt` with HTTP status, provider error code, t
 
 ## 9. Analytics Ingestion
 
-| Aspect | Design |
-|---|---|
-| Trigger | Scheduled per connection and per platform, respecting each platform's metric availability delay |
-| Windows | Recent posts polled more frequently, then backing off (e.g. 1h, 6h, 24h, 3d, 7d, 30d) |
-| Idempotency | Upsert on `(workspace, connection, subjectExternalId, granularity, periodStart)` |
-| Backfill | On new connection, fetch history as far as the platform and plan allow |
-| Rate limits | Ingestion shares the platform's quota budget with publishing; **publishing has priority** |
-| Gaps | Missing windows are tracked and retried; the UI shows data freshness rather than pretending completeness |
+| Aspect        | Design                                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------------------------- |
+| Trigger       | Scheduled per connection and per platform, respecting each platform's metric availability delay             |
+| Windows       | Recent posts polled more frequently, then backing off (e.g. 1h, 6h, 24h, 3d, 7d, 30d)                       |
+| Idempotency   | Upsert on `(workspace, connection, subjectExternalId, granularity, periodStart)`                            |
+| Backfill      | On new connection, fetch history as far as the platform and plan allow                                      |
+| Rate limits   | Ingestion shares the platform's quota budget with publishing; **publishing has priority**                   |
+| Gaps          | Missing windows are tracked and retried; the UI shows data freshness rather than pretending completeness    |
 | Normalization | Platform-specific metrics are mapped to a common vocabulary, with platform-native values retained alongside |
-| Retention | Pruned per the plan's `analyticsRetentionDays` |
-| Failure | Ingestion failures never affect publishing; they surface as a freshness warning |
+| Retention     | Pruned per the plan's `analyticsRetentionDays`                                                              |
+| Failure       | Ingestion failures never affect publishing; they surface as a freshness warning                             |
 
 Normalized core metrics: impressions, reach, engagements, likes, comments, shares, saves, clicks, video views,
 watch time, completion rate, follower count and delta, profile visits. Platform-only metrics are preserved in
@@ -355,16 +361,16 @@ the raw `metrics` JSON.
 
 ## 11. Confirmation and Audit Policy for External Actions
 
-| Action | Confirmation | Audit |
-|---|---|---|
-| Publish now | Explicit confirm dialog naming the accounts and content | `content.published` |
-| Schedule | Implicit (the scheduling action is itself explicit) | `content.scheduled` |
-| Cancel a scheduled post | Simple confirm | `content.schedule_cancelled` |
-| Delete an external post | **Typed confirmation** (irreversible on most platforms) | `content.external_deleted` |
-| Disconnect an account | Typed confirmation + impact list (N scheduled posts affected) | `social.disconnected` |
-| Bulk publish / bulk reschedule / bulk delete | Preview of every affected item + typed confirmation + dry-run option | `bulk.*` with item manifest |
-| Reconnect / re-auth | Standard OAuth consent | `social.reconnected` |
-| Copilot-initiated publish | **Always** preview + explicit human confirmation | `content.published` with `actorType=copilot` |
+| Action                                       | Confirmation                                                         | Audit                                        |
+| -------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- |
+| Publish now                                  | Explicit confirm dialog naming the accounts and content              | `content.published`                          |
+| Schedule                                     | Implicit (the scheduling action is itself explicit)                  | `content.scheduled`                          |
+| Cancel a scheduled post                      | Simple confirm                                                       | `content.schedule_cancelled`                 |
+| Delete an external post                      | **Typed confirmation** (irreversible on most platforms)              | `content.external_deleted`                   |
+| Disconnect an account                        | Typed confirmation + impact list (N scheduled posts affected)        | `social.disconnected`                        |
+| Bulk publish / bulk reschedule / bulk delete | Preview of every affected item + typed confirmation + dry-run option | `bulk.*` with item manifest                  |
+| Reconnect / re-auth                          | Standard OAuth consent                                               | `social.reconnected`                         |
+| Copilot-initiated publish                    | **Always** preview + explicit human confirmation                     | `content.published` with `actorType=copilot` |
 
 Every audit record captures actor, workspace, brand, targets, content reference, and outcome.
 
@@ -372,17 +378,17 @@ Every audit record captures actor, workspace, brand, targets, content reference,
 
 ## 12. Failure Handling and Customer Communication
 
-| Situation | System behavior | Customer sees |
-|---|---|---|
-| Token expired | Auto-refresh; if it fails, pause the connection's jobs | "Reconnect Instagram" with one-click re-auth |
-| Scope removed | Disable affected capabilities only | Clear notice of what stopped working and why |
-| Platform outage | Circuit breaker opens; jobs retry within the tolerance window | "Instagram is experiencing issues — we'll keep trying until 14:30" |
-| Content rejected | No retry; job fails | The platform's reason, mapped to plain language, plus a fix suggestion |
-| Media invalid | No retry | Which rule was violated (aspect ratio, duration, size) |
-| Rate limited | Backoff and retry | "Delayed by Instagram's rate limit — publishing shortly" |
-| Quota exceeded (plan) | Job blocked pre-flight | Upgrade prompt with current usage |
-| Approval missing | Job blocked pre-flight | "Waiting for approval from …" |
-| Dead letter | Admin alerted; job replayable | "Publishing failed — we're looking into it", with support reference |
+| Situation             | System behavior                                               | Customer sees                                                          |
+| --------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Token expired         | Auto-refresh; if it fails, pause the connection's jobs        | "Reconnect Instagram" with one-click re-auth                           |
+| Scope removed         | Disable affected capabilities only                            | Clear notice of what stopped working and why                           |
+| Platform outage       | Circuit breaker opens; jobs retry within the tolerance window | "Instagram is experiencing issues — we'll keep trying until 14:30"     |
+| Content rejected      | No retry; job fails                                           | The platform's reason, mapped to plain language, plus a fix suggestion |
+| Media invalid         | No retry                                                      | Which rule was violated (aspect ratio, duration, size)                 |
+| Rate limited          | Backoff and retry                                             | "Delayed by Instagram's rate limit — publishing shortly"               |
+| Quota exceeded (plan) | Job blocked pre-flight                                        | Upgrade prompt with current usage                                      |
+| Approval missing      | Job blocked pre-flight                                        | "Waiting for approval from …"                                          |
+| Dead letter           | Admin alerted; job replayable                                 | "Publishing failed — we're looking into it", with support reference    |
 
 Notifications for publish success and failure are configurable, bilingual templates
 (`docs/ADMIN-CONTROL-CENTER.md` §11).
@@ -391,22 +397,22 @@ Notifications for publish success and failure are configurable, bilingual templa
 
 ## 13. Testing Strategy
 
-| Test | Assertion |
-|---|---|
-| Mock connector end-to-end | Full workflow from draft to published with a simulated platform |
-| Idempotency | Duplicate job execution produces exactly one external post |
-| Timeout verification | A send that times out is verified, not blindly retried |
-| Approval gate | An unapproved item can never publish, even via a directly enqueued job |
-| Token expiry | Expired token triggers refresh; failed refresh sets `needs_reauth` and pauses jobs |
-| Scope loss | Missing scope disables only the affected capability |
-| Retry classification | Each error class retries or fails exactly as specified |
-| Dead letter | Exhausted jobs are recoverable and replayable |
-| Isolation | Workspace A cannot see, target, or publish through B's connections |
-| Validation | Over-limit content cannot be scheduled |
-| Analytics idempotency | Re-ingesting a window creates no duplicate rows |
-| Webhook security | Invalid signatures are rejected; replays are ignored |
-| Rate-limit sharing | Analytics ingestion never starves publishing |
-| Contract tests | Recorded provider fixtures detect breaking API changes per platform |
+| Test                      | Assertion                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| Mock connector end-to-end | Full workflow from draft to published with a simulated platform                    |
+| Idempotency               | Duplicate job execution produces exactly one external post                         |
+| Timeout verification      | A send that times out is verified, not blindly retried                             |
+| Approval gate             | An unapproved item can never publish, even via a directly enqueued job             |
+| Token expiry              | Expired token triggers refresh; failed refresh sets `needs_reauth` and pauses jobs |
+| Scope loss                | Missing scope disables only the affected capability                                |
+| Retry classification      | Each error class retries or fails exactly as specified                             |
+| Dead letter               | Exhausted jobs are recoverable and replayable                                      |
+| Isolation                 | Workspace A cannot see, target, or publish through B's connections                 |
+| Validation                | Over-limit content cannot be scheduled                                             |
+| Analytics idempotency     | Re-ingesting a window creates no duplicate rows                                    |
+| Webhook security          | Invalid signatures are rejected; replays are ignored                               |
+| Rate-limit sharing        | Analytics ingestion never starves publishing                                       |
+| Contract tests            | Recorded provider fixtures detect breaking API changes per platform                |
 
 **No real social credentials are used before Phase 6.** Development and the first vertical slice use mock
 connectors exclusively.
