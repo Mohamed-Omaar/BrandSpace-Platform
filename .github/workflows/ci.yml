@@ -143,25 +143,40 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-          -- Owner/migrator: owns the schema, never serves a request.
-          CREATE ROLE brandspace_migrator LOGIN PASSWORD 'ci_migrator' NOBYPASSRLS CREATEDB;
-          -- Application role: what production uses. NOBYPASSRLS, owns nothing.
-          CREATE ROLE brandspace_app LOGIN PASSWORD 'ci_app' NOBYPASSRLS;
-          CREATE DATABASE brandspace_test OWNER brandspace_migrator;
-          SQL
+          # Throwaway credentials for an ephemeral CI container that is never
+          # reachable outside this job. No production secret is used in CI.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -v migrator_password=ci_migrator \
+            -v app_password=ci_app \
+            -v platform_password=ci_platform \
+            -f scripts/sql/setup-database-roles.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE brandspace_test OWNER brandspace_migrator;"
 
-      - name: Assert the app role really cannot bypass RLS
+      # F-01: the whole two-pool model rests on these properties. If any of them
+      # is wrong the security tests would pass while proving nothing, so they are
+      # asserted before a single test runs.
+      - name: Assert the role separation is real
         env:
           PGPASSWORD: postgres
         run: |
-          result=$(psql -h localhost -U postgres -d postgres -Atc \
-            "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='brandspace_app';")
-          if [ "$result" != "f" ]; then
-            echo "::error::brandspace_app can bypass RLS; the isolation suite would prove nothing."
+          for role in brandspace_app brandspace_platform brandspace_migrator; do
+            result=$(psql -h localhost -U postgres -d postgres -Atc \
+              "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname='$role';")
+            if [ "$result" != "f" ]; then
+              echo "::error::$role is superuser or BYPASSRLS; the isolation suite would prove nothing."
+              exit 1
+            fi
+            echo "$role: rolsuper=false, rolbypassrls=false"
+          done
+
+          member=$(psql -h localhost -U postgres -d postgres -Atc \
+            "SELECT pg_has_role('brandspace_app','brandspace_platform','MEMBER');")
+          if [ "$member" != "f" ]; then
+            echo "::error::brandspace_app can SET ROLE into brandspace_platform."
             exit 1
           fi
-          echo "brandspace_app: rolsuper=false, rolbypassrls=false"
+          echo "brandspace_app is NOT a member of brandspace_platform"
 
       - name: Write test environment
         run: |
@@ -172,6 +187,7 @@ jobs:
           DATA_REGION=local
           DATABASE_URL=postgresql://brandspace_app:ci_app@localhost:5432/brandspace_test?schema=public
           DATABASE_MIGRATION_URL=postgresql://brandspace_migrator:ci_migrator@localhost:5432/brandspace_test?schema=public
+          DATABASE_PLATFORM_URL=postgresql://brandspace_platform:ci_platform@localhost:5432/brandspace_test?schema=public
           REDIS_URL=redis://localhost:6379/1
           CUSTOMER_SESSION_SECRET=ci-only-customer-session-secret-0000000000000
           PLATFORM_SESSION_SECRET=ci-only-platform-session-secret-1111111111111
@@ -183,6 +199,61 @@ jobs:
 
       - name: Run isolation and RLS suites
         run: pnpm test:isolation
+
+  # ---------------------------------------------------------------------------
+  # F-04: Playwright E2E — RTL/LTR, keyboard, responsive and accessibility smoke
+  # tests across all three interfaces. Separate from unit and isolation so a
+  # browser failure is distinguishable at a glance.
+  #
+  # Needs no database: the apps are statically rendered and no test touches an
+  # external API, so DATABASE_PLATFORM_URL is deliberately absent here.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: Playwright E2E (RTL/LTR + accessibility)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client (offline)
+        run: pnpm --filter @brandspace/database exec prisma generate
+
+      - name: Install Chromium and its system dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build the three applications
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: pnpm e2e:build
+
+      - name: Run Playwright
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: pnpm test:e2e
+
+      # Failure artifacts only. The report contains traces and screenshots of
+      # scaffold pages; it never contains .env files, database URLs or logs,
+      # because no test has access to any of those.
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   # Nothing resembling a credential may enter the repository.

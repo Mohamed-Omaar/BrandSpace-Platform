@@ -23,6 +23,14 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   /** Migration connection. Owns the schema. Never used to serve a request. */
   DATABASE_MIGRATION_URL: z.string().url().optional(),
+  /**
+   * PLATFORM connection — the one identity RLS grants cross-tenant visibility.
+   *
+   * Set ONLY in processes that perform audited platform operations. It must be
+   * absent from the public website, the customer dashboard, tenant-facing API
+   * processes and ordinary workers. See docs/SECURITY.md §2.4.
+   */
+  DATABASE_PLATFORM_URL: z.string().url().optional(),
 
   // --- Redis ----------------------------------------------------------------
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
@@ -73,6 +81,14 @@ function assertProductionSafety(env: Env): void {
         'the two session realms must not share a signing key (docs/SECURITY.md §3).',
     );
   }
+  if (env.DATABASE_PLATFORM_URL !== undefined && env.DATABASE_PLATFORM_URL === env.DATABASE_URL) {
+    throw new Error(
+      'DATABASE_PLATFORM_URL and DATABASE_URL must be different roles: the whole point ' +
+        'of the two-pool model is that the tenant connection cannot reach cross-tenant data ' +
+        '(docs/SECURITY.md §2.4).',
+    );
+  }
+
   const placeholders = ['change-me', 'placeholder', 'example', 'devonly', 'localhost'];
   for (const [key, value] of Object.entries(env)) {
     if (typeof value !== 'string') continue;

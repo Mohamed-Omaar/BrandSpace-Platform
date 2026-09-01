@@ -1,25 +1,39 @@
 import type { PrismaClient } from '@prisma/client';
 import { AppError } from '@brandspace/shared';
-import { getPrisma } from './client';
+import { assertPlatformRole, getPlatformPrisma } from './platform-pool';
 import type { TenantScopedClient } from './tenant-client';
 
 /**
- * asPlatform() — the ONE audited cross-tenant escape hatch.
+ * asPlatform() — the ONE audited application entrance for cross-tenant work.
  *
- * docs/ARCHITECTURE.md §4.4 / docs/SECURITY.md §2.4:
- *   "Cross-tenant reads are only possible through asPlatform(), which is audited."
+ * docs/ARCHITECTURE.md §4.4, docs/SECURITY.md §2.4.
  *
- * Three properties, all enforced here:
- *   1. It requires a platform actor. A customer actor cannot reach it.
- *   2. It requires a written reason. Unexplained cross-tenant access is refused.
- *   3. It ALWAYS writes an AuditEvent — including when the callback throws.
+ * HOW THE GUARANTEE IS ENFORCED (F-01, hardened):
+ *   Cross-tenant visibility now comes from connecting as `brandspace_platform`,
+ *   a separate database identity that RLS policies name explicitly. It is NOT a
+ *   session variable any more. The tenant role `brandspace_app` cannot obtain it
+ *   by ANY SQL it can execute: no policy names it, it is not a member of the
+ *   platform role so SET ROLE fails, and the old `app.is_platform_mode()`
+ *   function has been dropped.
  *
- * SCOPE OF THE GUARANTEE, stated honestly: this is a control against developer
- * error and it produces the audit trail. It is not a defence against an attacker
- * who already has arbitrary SQL execution as the application role, since that
- * attacker could set the GUC directly. Hardening that case means a separate
- * database role and connection pool for platform operations; it is recorded as
- * follow-up work in docs/DECISIONS.md rather than silently assumed.
+ *   Neither role has BYPASSRLS. The platform role's access is a policy that is
+ *   evaluated normally, so WITH CHECK still applies and the behaviour remains
+ *   visible in pg_policies rather than hidden in a role attribute.
+ *
+ * FOUR PRECONDITIONS, all enforced here and all fail-closed:
+ *   1. a platform actor,
+ *   2. with verified MFA (D-27),
+ *   3. a written reason,
+ *   4. a correlation id, so the operation is traceable to a request.
+ *
+ * The audit event is written on a SEPARATE connection, so a rolled-back
+ * operation still leaves evidence that cross-tenant access was attempted.
+ *
+ * RESIDUAL RISK, stated rather than assumed away: anyone holding the
+ * DATABASE_PLATFORM_URL credential has cross-tenant access. That credential is
+ * the security boundary now, which is why it is confined to platform processes,
+ * never exported from this package, and lint- and test-enforced. Compromise of
+ * the tenant application role no longer grants cross-tenant access.
  */
 
 export interface PlatformActorRef {
@@ -29,11 +43,30 @@ export interface PlatformActorRef {
   readonly mfaVerified: boolean;
 }
 
+/** Platform roles permitted to perform cross-tenant operations at all. */
+const VALID_PLATFORM_ROLE_KEYS = new Set([
+  'platform_owner',
+  'platform_admin',
+  'support_agent',
+  'billing_manager',
+  'operations_viewer',
+]);
+
+export interface PlatformOperation {
+  /** Audit action key, e.g. 'platform.workspace.create'. */
+  readonly action: string;
+  /** Why this cross-tenant access is justified. Required. */
+  readonly reason: string;
+  /** Correlation id tying the operation to a request. Required. */
+  readonly requestId: string;
+  readonly resourceType?: string;
+  readonly resourceId?: string;
+}
+
 export interface AsPlatformOptions {
+  /** Test seam. Production always uses the platform pool. */
   readonly prisma?: PrismaClient;
   readonly timeoutMs?: number;
-  /** Correlation for the audit record. */
-  readonly requestId?: string;
   readonly traceId?: string;
   readonly ip?: string;
   readonly userAgent?: string;
@@ -42,27 +75,25 @@ export interface AsPlatformOptions {
   /** Narrows the audit record to the workspace being acted on, when known. */
   readonly targetWorkspaceId?: string;
   /**
-   * Skips the audit write. ONLY for bootstrap/seed, where the audit table may not
-   * yet be reachable. Never true in application code.
+   * Skips the audit write. ONLY for bootstrap/seed, where the audit table may
+   * not yet be reachable. Never true in application code.
    */
   readonly bootstrap?: boolean;
+  /** Repository root, so the seed can load .env before the pool is built. */
+  readonly repoRoot?: string;
 }
 
-export interface PlatformOperation {
-  /** Audit action key, e.g. 'platform.workspace.create'. */
-  readonly action: string;
-  /** Why this cross-tenant access is justified. Required. */
-  readonly reason: string;
-  readonly resourceType?: string;
-  readonly resourceId?: string;
-}
-
-function assertActorIsValid(actor: PlatformActorRef, operation: PlatformOperation): void {
-  if (!actor || typeof actor.platformUserId !== 'string' || actor.platformUserId.length === 0) {
+function assertPreconditions(actor: PlatformActorRef, operation: PlatformOperation): void {
+  if (!actor || typeof actor.platformUserId !== 'string' || actor.platformUserId.trim() === '') {
     throw new AppError('FORBIDDEN', 'asPlatform() requires a platform actor.');
   }
+  if (!VALID_PLATFORM_ROLE_KEYS.has(actor.roleKey)) {
+    throw new AppError(
+      'FORBIDDEN',
+      `asPlatform() requires a valid platform role. "${actor.roleKey}" is not one.`,
+    );
+  }
   if (!actor.mfaVerified) {
-    // D-27: mandatory 2FA for platform roles.
     throw new AppError(
       'FORBIDDEN',
       'asPlatform() requires a platform actor with verified MFA (D-27).',
@@ -75,13 +106,36 @@ function assertActorIsValid(actor: PlatformActorRef, operation: PlatformOperatio
         'Unexplained cross-tenant access is not permitted.',
     );
   }
+  if (!operation.requestId || operation.requestId.trim() === '') {
+    throw new AppError(
+      'FORBIDDEN',
+      'asPlatform() requires a correlation/request id so the operation is traceable.',
+    );
+  }
+}
+
+let roleVerified = false;
+
+async function resolvePlatformClient(options: AsPlatformOptions): Promise<PrismaClient> {
+  if (options.prisma) return options.prisma;
+  const client = getPlatformPrisma(options.repoRoot);
+  if (!roleVerified) {
+    await assertPlatformRole(client);
+    roleVerified = true;
+  }
+  return client;
+}
+
+/** Test seam: forget that the role was verified. */
+export function resetPlatformRoleVerification(): void {
+  roleVerified = false;
 }
 
 /**
  * Execute `fn` with cross-tenant visibility, under audit.
  *
- * The platform flag is transaction-local, so visibility is confined to this
- * transaction and released when it ends.
+ * Runs on the platform pool. No session variable is set, and nothing the tenant
+ * connection can do affects whether this succeeds.
  */
 export async function asPlatform<T>(
   actor: PlatformActorRef,
@@ -89,41 +143,31 @@ export async function asPlatform<T>(
   fn: (db: TenantScopedClient) => Promise<T>,
   options: AsPlatformOptions = {},
 ): Promise<T> {
-  assertActorIsValid(actor, operation);
-  const prisma = options.prisma ?? getPrisma();
+  assertPreconditions(actor, operation);
+  const client = await resolvePlatformClient(options);
 
   let outcome: 'SUCCESS' | 'ERROR' = 'SUCCESS';
   let failureReason: string | undefined;
 
   try {
-    return await prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.platform_mode', 'on', true)`;
-        try {
-          return await fn(tx as unknown as TenantScopedClient);
-        } finally {
-          // Close the window even on the failure path, so nothing later in this
-          // transaction runs with cross-tenant visibility.
-          await tx.$executeRaw`SELECT set_config('app.platform_mode', 'off', true)`;
-        }
-      },
-      { timeout: options.timeoutMs ?? 30_000 },
-    );
+    return await client.$transaction(async (tx) => fn(tx as unknown as TenantScopedClient), {
+      timeout: options.timeoutMs ?? 30_000,
+    });
   } catch (error: unknown) {
     outcome = 'ERROR';
     failureReason = error instanceof Error ? error.name : 'UnknownError';
     throw error;
   } finally {
-    // The audit record is written in a SEPARATE transaction, so a rolled-back
-    // operation still leaves evidence that cross-tenant access was attempted.
+    // Written on a separate connection and in its own transaction, so a
+    // rolled-back operation still leaves evidence.
     if (!options.bootstrap) {
-      await writePlatformAudit(prisma, actor, operation, options, outcome, failureReason);
+      await writePlatformAudit(client, actor, operation, options, outcome, failureReason);
     }
   }
 }
 
 async function writePlatformAudit(
-  prisma: PrismaClient,
+  client: PrismaClient,
   actor: PlatformActorRef,
   operation: PlatformOperation,
   options: AsPlatformOptions,
@@ -131,40 +175,36 @@ async function writePlatformAudit(
   failureReason: string | undefined,
 ): Promise<void> {
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT set_config('app.platform_mode', 'on', true)`;
-      await tx.auditEvent.create({
-        data: {
-          workspaceId: options.targetWorkspaceId ?? null,
-          actorType: 'PLATFORM_USER',
-          actorId: actor.platformUserId,
-          action: operation.action,
-          resourceType: operation.resourceType ?? null,
-          resourceId: operation.resourceId ?? null,
-          severity: outcome === 'ERROR' ? 'WARNING' : 'NOTICE',
-          outcome,
-          reason: failureReason
-            ? `${operation.reason} [failed: ${failureReason}]`
-            : operation.reason,
-          requestId: options.requestId ?? null,
-          traceId: options.traceId ?? null,
-          ip: options.ip ?? null,
-          userAgent: options.userAgent ?? null,
-          supportModeSessionId: options.supportModeSessionId ?? null,
-        },
-      });
-      await tx.$executeRaw`SELECT set_config('app.platform_mode', 'off', true)`;
+    await client.auditEvent.create({
+      data: {
+        workspaceId: options.targetWorkspaceId ?? null,
+        actorType: 'PLATFORM_USER',
+        actorId: actor.platformUserId,
+        action: operation.action,
+        resourceType: operation.resourceType ?? null,
+        resourceId: operation.resourceId ?? null,
+        severity: outcome === 'ERROR' ? 'WARNING' : 'NOTICE',
+        outcome,
+        reason: failureReason ? `${operation.reason} [failed: ${failureReason}]` : operation.reason,
+        requestId: operation.requestId,
+        traceId: options.traceId ?? null,
+        ip: options.ip ?? null,
+        userAgent: options.userAgent ?? null,
+        supportModeSessionId: options.supportModeSessionId ?? null,
+      },
     });
   } catch (auditError: unknown) {
-    // An audit failure must be loud. It never silently swallows the fact that
-    // cross-tenant access happened without a record.
+    // An audit failure must be loud. Cross-tenant access is never allowed to
+    // happen silently without a record. The message deliberately carries no
+    // connection string or configuration value.
     console.error(
       JSON.stringify({
         level: 'error',
         msg: 'CRITICAL: failed to write asPlatform audit event',
         action: operation.action,
         actorId: actor.platformUserId,
-        error: auditError instanceof Error ? auditError.message : String(auditError),
+        requestId: operation.requestId,
+        error: auditError instanceof Error ? auditError.name : 'UnknownError',
       }),
     );
     throw auditError;

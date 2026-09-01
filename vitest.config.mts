@@ -14,6 +14,10 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['tests/unit/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
+          // Playwright owns tests/e2e; Vitest must never try to run those specs.
+          // NOTE: `exclude` REPLACES Vitest's defaults, so node_modules must be
+          // listed explicitly — omitting it makes Vitest scan every dependency.
+          exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**', 'tests/e2e/**'],
           environment: 'node',
         },
       },

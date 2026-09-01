@@ -51,30 +51,42 @@ pnpm install
 
 ### 2. Create the database roles
 
-The application connects as a role that **cannot bypass row-level security and owns no table**.
-This is not a detail — it is what makes the isolation guarantee real, and the isolation test suite
-refuses to run on a privileged connection.
+**Three roles, deliberately** — this is the two-pool security model (F-01), and it is what makes
+the isolation guarantee real rather than aspirational.
+
+| Role                  | Purpose                                                   | Cross-tenant access                   |
+| --------------------- | --------------------------------------------------------- | ------------------------------------- |
+| `brandspace_migrator` | Owns the schema, runs migrations. Never serves a request. | none                                  |
+| `brandspace_app`      | Serves **every tenant request**. Owns nothing.            | **none — no policy names it**         |
+| `brandspace_platform` | Serves audited platform operations only.                  | granted by a role-targeted RLS policy |
+
+None of them has `BYPASSRLS`. The platform role's access comes from a policy that is _evaluated
+normally_, not a privilege that skips evaluation — so `WITH CHECK` still applies to it and the
+behaviour stays visible in `pg_policies`.
 
 ```bash
-sudo -u postgres psql <<'SQL'
--- Owner/migrator: owns the schema, runs migrations, never serves a request.
--- CREATEDB is only so Prisma can create its shadow database.
-CREATE ROLE brandspace_migrator LOGIN PASSWORD 'choose-a-local-password' NOBYPASSRLS CREATEDB;
+sudo -u postgres psql \
+  -v migrator_password=choose-a-local-password \
+  -v app_password=choose-another-local-password \
+  -v platform_password=choose-a-third-local-password \
+  -f scripts/sql/setup-database-roles.sql
 
--- Application role: what the API and workers use. Owns nothing, cannot bypass RLS.
-CREATE ROLE brandspace_app LOGIN PASSWORD 'choose-another-local-password' NOBYPASSRLS;
-
-CREATE DATABASE brandspace_dev  OWNER brandspace_migrator;
-CREATE DATABASE brandspace_test OWNER brandspace_migrator;
-SQL
+sudo -u postgres psql -c "CREATE DATABASE brandspace_dev  OWNER brandspace_migrator;"
+sudo -u postgres psql -c "CREATE DATABASE brandspace_test OWNER brandspace_migrator;"
 ```
 
-Verify both roles are unprivileged — if either shows `t`, the isolation tests would prove nothing:
+The script verifies its own work and fails loudly if any role is privileged or if `brandspace_app`
+is a member of `brandspace_platform` (which would let it `SET ROLE` into the platform identity).
+Confirm:
 
 ```bash
 sudo -u postgres psql -Atc \
   "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname LIKE 'brandspace%';"
-# expected: brandspace_app|f|f  and  brandspace_migrator|f|f
+# all three must show |f|f
+
+sudo -u postgres psql -Atc \
+  "SELECT pg_has_role('brandspace_app','brandspace_platform','MEMBER');"
+# must be f
 ```
 
 ### 3. Configure the environment
@@ -138,10 +150,28 @@ pnpm --filter @brandspace/worker    dev
 ## Testing
 
 ```bash
-pnpm test              # everything
+pnpm test              # unit + isolation
 pnpm test:unit         # unit tests, no database needed
-pnpm test:isolation    # tenant isolation + RLS, needs PostgreSQL
+pnpm test:isolation    # tenant isolation + RLS + platform role, needs PostgreSQL
 pnpm gate:isolation    # the D-29 coverage gate
+
+pnpm e2e:build         # build the three apps (Playwright serves the production output)
+pnpm test:e2e          # Playwright: RTL/LTR, keyboard, responsive, accessibility
+pnpm test:e2e:ui       # the same suite in Playwright's UI mode
+pnpm test:e2e:report   # open the HTML report from the last run
+```
+
+First E2E run only, to fetch the browser:
+
+```bash
+pnpm exec playwright install --with-deps chromium
+```
+
+If you already have a compatible Chromium and would rather not download another, point Playwright
+at it — this changes which binary runs the tests, never what is tested:
+
+```bash
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium pnpm test:e2e
 ```
 
 `tests/unit/prisma-config.test.ts` runs the Prisma CLI with a **scrubbed
@@ -153,18 +183,28 @@ bug, which is exactly how it reached CI the first time.
 `pnpm verify` runs the whole chain exactly as CI does:
 
 ```bash
-pnpm verify   # format:check → lint → typecheck → isolation gate → tests
+pnpm verify       # format:check → lint → typecheck → isolation gate → unit + isolation tests
+pnpm verify:all   # the above, plus the app builds and the Playwright suite
+```
+
+Run it at least once in a **clean shell** with nothing exported. Verification that only ever runs
+with `.env` loaded cannot catch a missing-environment defect — that is exactly how one reached CI
+(`docs/DECISIONS.md` F-06):
+
+```bash
+env -i PATH="$PATH" HOME="$HOME" bash -c 'pnpm verify'
 ```
 
 ### What the isolation suite proves
 
 Tenant isolation is enforced in **two independent layers**, and both are tested separately:
 
-| Suite                                      | Layer        | What it proves                                                                                                                                                 |
-| ------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests/isolation/tenant-isolation.test.ts` | application  | The tenant-scoped client cannot read, list, search, count, mutate, or re-parent another workspace's rows                                                       |
-| `tests/isolation/rls-raw-sql.test.ts`      | **database** | The same holds for raw SQL on a plain `pg` connection, with **no application code in the path**                                                                |
-| `tests/isolation/as-platform.test.ts`      | escape hatch | `asPlatform()` requires a platform actor with verified MFA and a written reason, and always writes an audit event — including when the wrapped operation fails |
+| Suite                                      | Layer              | What it proves                                                                                                                                                                    |
+| ------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/isolation/tenant-isolation.test.ts` | application        | The tenant-scoped client cannot read, list, search, count, mutate, or re-parent another workspace's rows                                                                          |
+| `tests/isolation/rls-raw-sql.test.ts`      | **database**       | The same holds for raw SQL on a plain `pg` connection, with **no application code in the path**                                                                                   |
+| `tests/isolation/as-platform.test.ts`      | escape hatch       | `asPlatform()` requires a valid platform role, verified MFA, a written reason and a correlation id, and always writes an audit event — including when the wrapped operation fails |
+| `tests/isolation/platform-role.test.ts`    | **two-pool model** | The tenant role cannot forge platform access by any means: the old GUC is gone, `SET ROLE` is denied, no policy names it, and it cannot grant itself membership                   |
 
 The raw-SQL suite is the important one. It bypasses Prisma entirely, which is the only way to
 demonstrate the claim in `docs/SECURITY.md` §2 that isolation holds _even if the application layer is
@@ -206,10 +246,12 @@ packages/
   social-connectors/   Per-platform connectors                (Phase 6)
   billing/             Payment abstraction                    (Phase 8)
 tests/
-  unit/        Unit tests
-  isolation/   Tenant isolation, raw-SQL RLS, asPlatform auditing
+  unit/        Unit tests (incl. module boundaries, contrast, prisma config)
+  isolation/   Tenant isolation, raw-SQL RLS, platform role, asPlatform auditing
+  e2e/         Playwright: RTL/LTR, keyboard, responsive, accessibility
 scripts/
-  isolation-gate.ts    The D-29 CI gate
+  isolation-gate.ts        The D-29 CI gate
+  sql/setup-database-roles.sql  Canonical three-role definition
 ```
 
 Module boundaries are enforced by lint rules generated from the dependency matrix in
@@ -238,14 +280,50 @@ Cross-tenant access has exactly one entry point, and it is audited:
 import { asPlatform } from '@brandspace/database';
 
 await asPlatform(
-  platformActor, // must have verified MFA (D-27)
-  { action: 'platform.workspace.read', reason: 'Investigating ticket SUP-1234' },
+  platformActor, // valid platform role + verified MFA (D-27)
+  {
+    action: 'platform.workspace.read',
+    reason: 'Investigating ticket SUP-1234',
+    requestId, // correlation id, required
+  },
   async (db) => db.workspace.findMany(),
 );
 ```
 
-`asPlatform()` refuses a caller without a platform actor, without verified MFA, or without a written
-reason, and writes an `AuditEvent` even when the wrapped operation throws.
+`asPlatform()` fails closed without a platform actor, a valid platform role, verified MFA, a written
+reason, or a correlation id — and writes an `AuditEvent` even when the wrapped operation throws,
+because the audit is written on a separate connection.
+
+#### The two-pool model (F-01)
+
+`asPlatform()` runs on the **platform pool**, a connection as `brandspace_platform`. Cross-tenant
+visibility is a property of _which role connected_ — decided by the credential in the connection
+string — not a session variable the application can set.
+
+The earlier design used a PostgreSQL GUC (`app.is_platform_mode()`) that `brandspace_app` could set
+itself, so anyone able to run arbitrary SQL as the tenant role could grant themselves cross-tenant
+access. That function is now **dropped**, and the tenant role cannot reach platform visibility by any
+SQL it can execute: no policy names it, and it is not a member of the platform role, so `SET ROLE`
+fails.
+
+|                               | `brandspace_app`                         | `brandspace_platform`       |
+| ----------------------------- | ---------------------------------------- | --------------------------- |
+| Environment variable          | `DATABASE_URL`                           | `DATABASE_PLATFORM_URL`     |
+| Present in                    | every tenant-facing process              | **platform processes only** |
+| RLS policy                    | `tenant_isolation` (workspace predicate) | `platform_access` (full)    |
+| `BYPASSRLS`                   | no                                       | **no**                      |
+| Can `SET ROLE` into the other | no                                       | no                          |
+
+`DATABASE_PLATFORM_URL` must be **absent** from the public website, the customer dashboard,
+tenant-facing API processes and ordinary workers. Where it is absent, `asPlatform()` fails closed —
+the correct behaviour for a process with no business doing cross-tenant work.
+
+The pool module is not exported from `@brandspace/database`, an ESLint rule rejects importing it from
+anywhere but `asPlatform()` itself, and `tests/unit/platform-pool-boundary.test.ts` asserts all three.
+
+**Residual risk, stated plainly:** anyone holding `DATABASE_PLATFORM_URL` has cross-tenant access.
+That credential _is_ the boundary now. What changed is that compromising the tenant application role
+no longer grants cross-tenant access — previously it did.
 
 ---
 

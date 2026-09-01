@@ -32,6 +32,23 @@ const ALL_APPS = ['web', 'dashboard', 'admin', 'api', 'worker'];
  * standalone `no-restricted-imports` block would silently wipe the boundary
  * patterns below. They must be declared together.
  */
+/**
+ * F-01: the platform connection pool opens the ONE identity with cross-tenant
+ * visibility. Only packages/database/src/platform.ts may import it — that file
+ * is `asPlatform()`, the single audited entrance.
+ *
+ * Declared as a pattern so relative and package-style specifiers are both
+ * caught, and merged into every block below because in ESLint flat config a
+ * later block setting the same rule REPLACES it.
+ */
+const PLATFORM_POOL_PATTERN = {
+  group: ['**/platform-pool', '**/platform-pool.*', '@brandspace/database/platform-pool'],
+  message:
+    'Restricted module: the platform database pool has cross-tenant visibility and may only be ' +
+    'imported by packages/database/src/platform.ts (asPlatform), the single audited entrance. ' +
+    'Use asPlatform() from @brandspace/database instead. See docs/SECURITY.md §2.4.',
+};
+
 const DB_ACCESS_PATHS = [
   {
     name: '@prisma/client',
@@ -64,6 +81,7 @@ function packageBoundary(pkg) {
           // packages/database is the sole exception to the DB access rule.
           paths: pkg === 'database' ? [] : DB_ACCESS_PATHS,
           patterns: [
+            PLATFORM_POOL_PATTERN,
             ...[...forbiddenPackages, ...forbiddenApps].map((name) => ({
               group: [name, `${name}/*`],
               message:
@@ -90,10 +108,13 @@ function appBoundary(app) {
         'error',
         {
           paths: DB_ACCESS_PATHS,
-          patterns: ALL_APPS.filter((a) => a !== app).map((other) => ({
-            group: [`@brandspace/${other}`, `@brandspace/${other}/*`, `**/apps/${other}/**`],
-            message: `Module boundary violation: apps/${app} may not import apps/${other}.`,
-          })),
+          patterns: [
+            PLATFORM_POOL_PATTERN,
+            ...ALL_APPS.filter((a) => a !== app).map((other) => ({
+              group: [`@brandspace/${other}`, `@brandspace/${other}/*`, `**/apps/${other}/**`],
+              message: `Module boundary violation: apps/${app} may not import apps/${other}.`,
+            })),
+          ],
         },
       ],
     },
@@ -146,6 +167,16 @@ export default tseslint.config(
   // --- Module boundaries -------------------------------------------------
   ...ALL_PACKAGES.map(packageBoundary),
   ...ALL_APPS.map(appBoundary),
+
+  // --- The single approved importer of the platform pool ------------------
+  // packages/database/src/platform.ts IS asPlatform(). It is the audited
+  // entrance, so it is the one file permitted to open the platform connection.
+  {
+    files: ['packages/database/src/platform.ts', 'packages/database/src/platform-pool.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { paths: [], patterns: [] }],
+    },
+  },
 
   // --- Config, scripts and tests are allowed to be noisier ----------------
   {

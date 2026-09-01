@@ -81,10 +81,57 @@ CREATE POLICY tenant_isolation ON content_item
 - Cross-tenant timing differences on authorization checks are avoided by performing the ownership check with
   a constant-shape query.
 
-### 2.4 Platform access to tenant data
+### 2.4 Platform access to tenant data — the two-pool model
 
-`asPlatform(actor, reason)` is the only path. It requires a platform session with an appropriate permission,
-records an `AuditEvent`, and for customer-data reads must be inside a **Support Mode session** (§8).
+`asPlatform(actor, operation)` is the only application path. It requires a platform actor holding a
+valid platform role with **verified MFA**, a **written reason**, and a **correlation id**; it records
+an `AuditEvent`; and for customer-data reads it must be inside a **Support Mode session** (§8).
+
+**Cross-tenant visibility is a property of which database role connected, not of a session variable.**
+
+|             | `brandspace_app`                         | `brandspace_platform`            | `brandspace_migrator`            |
+| ----------- | ---------------------------------------- | -------------------------------- | -------------------------------- |
+| Purpose     | serves every tenant request              | audited platform operations only | owns the schema, runs migrations |
+| Credential  | `DATABASE_URL`                           | `DATABASE_PLATFORM_URL`          | `DATABASE_MIGRATION_URL`         |
+| Present in  | every tenant-facing process              | **platform processes only**      | migration jobs only              |
+| RLS policy  | `tenant_isolation` — workspace predicate | `platform_access` — full         | none (DDL is unaffected by RLS)  |
+| `BYPASSRLS` | no                                       | **no**                           | no                               |
+| Owns tables | no                                       | no                               | yes                              |
+
+**Why this is secure.** The tenant role cannot obtain cross-tenant visibility by any SQL it is able
+to execute:
+
+1. No RLS policy names `brandspace_app` for cross-tenant access; `platform_access` is
+   `TO brandspace_platform` only, and no policy is granted to `PUBLIC`.
+2. `brandspace_app` is not a member of `brandspace_platform`, so `SET ROLE` is refused.
+3. The former `app.is_platform_mode()` function is **dropped**, so no session variable can widen
+   visibility. Setting the old GUC now has no effect at all.
+4. `brandspace_app` cannot `GRANT` itself membership, `ALTER` its own role attributes, or
+   `CREATE POLICY` naming itself — it owns nothing and holds no role-administration privilege.
+5. Neither role has `BYPASSRLS`. The platform role's access is an ordinary policy, so `WITH CHECK`
+   still constrains its writes and the behaviour is visible in `pg_policies` rather than hidden in a
+   role attribute.
+6. `audit_event` remains append-only for **both** roles: `UPDATE`/`DELETE` are revoked, with a
+   trigger as a second stop. Platform operations write the audit trail; nothing may rewrite it.
+
+Each of these is asserted in `tests/isolation/platform-role.test.ts` against a real PostgreSQL, using
+raw `pg` connections with no application code in the path.
+
+**Credential confinement.** The platform pool module is not exported from `@brandspace/database`; an
+ESLint rule rejects importing it from anywhere except `asPlatform()` itself; a browser guard throws if
+it is ever evaluated in a client context; and `DATABASE_PLATFORM_URL` is never a `NEXT_PUBLIC_`
+variable. `tests/unit/platform-pool-boundary.test.ts` asserts all of these.
+
+**Role membership is not managed by migrations.** Revoking a role membership requires ADMIN option on
+that role, and granting the migrator that power would make it a privilege-escalation path in its own
+right. `scripts/sql/setup-database-roles.sql` is the canonical definition, run by a DBA; the migration
+asserts the separation and refuses to deploy without it.
+
+**Residual risk.** Anyone holding `DATABASE_PLATFORM_URL` has cross-tenant access — that credential is
+the boundary. What changed is that compromising the _tenant application role_ no longer grants
+cross-tenant access, which it previously did. Further reduction (short-lived credentials from a secret
+manager, and splitting read-only from write platform access) is recorded as F-07 in
+`docs/DECISIONS.md` and belongs with the Secret Service in Phase 2.
 
 ---
 
