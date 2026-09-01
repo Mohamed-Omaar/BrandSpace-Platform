@@ -102,6 +102,16 @@ pnpm db:migrate    # applies schema + row-level-security migrations
 pnpm db:seed       # one Platform Owner, two isolated workspaces
 ```
 
+These read `.env` (or `.env.test` when `NODE_ENV=test`) automatically — no
+variables need to be exported into your shell first, and no `dotenv` CLI is
+required. If no database URL is configured they **fail closed** with an error
+naming the missing variable; the value is never printed.
+
+`prisma generate` is different on purpose: client generation reads the schema and
+writes TypeScript without opening a connection, so it needs **no environment at
+all** and works on a completely clean checkout. This is what the three CI jobs
+that run it depend on.
+
 The seed creates:
 
 | Account                  | Realm    | Notes                                          |
@@ -133,6 +143,12 @@ pnpm test:unit         # unit tests, no database needed
 pnpm test:isolation    # tenant isolation + RLS, needs PostgreSQL
 pnpm gate:isolation    # the D-29 coverage gate
 ```
+
+`tests/unit/prisma-config.test.ts` runs the Prisma CLI with a **scrubbed
+environment** — nothing inherited — to prove `generate` works on a clean checkout
+and that connecting commands fail closed without leaking a connection string.
+Verification that only ever runs with `.env` exported cannot catch that class of
+bug, which is exactly how it reached CI the first time.
 
 `pnpm verify` runs the whole chain exactly as CI does:
 

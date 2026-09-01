@@ -13,6 +13,7 @@
  * SECURITY` subjects even the table owner to policy. The seed therefore exercises
  * the same audited path production code uses — it does not get a private door.
  */
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
@@ -21,6 +22,7 @@ import {
   assertRealmsAreDisjoint,
   assertRolePermissionsAreValid,
 } from '@brandspace/shared';
+import { loadRepoEnv, requireDatabaseUrl } from '../src/env-file';
 import { asPlatform } from '../src/platform';
 import { withWorkspace } from '../src/tenant-client';
 
@@ -38,8 +40,14 @@ const SEED_ACTOR = {
 const DEV_PASSWORD_PLACEHOLDER = null;
 
 function client(): PrismaClient {
-  const connectionString = process.env['DATABASE_MIGRATION_URL'] ?? process.env['DATABASE_URL'];
-  if (!connectionString) throw new Error('DATABASE_MIGRATION_URL or DATABASE_URL must be set.');
+  // Load the env file rather than relying on variables leaking from the developer's
+  // shell — `pnpm db:seed` must work on a clean checkout. Fails closed with a
+  // redacted error when no URL is configured.
+  loadRepoEnv(path.resolve(import.meta.dirname, '..', '..', '..'));
+  const connectionString = requireDatabaseUrl(
+    ['DATABASE_MIGRATION_URL', 'DATABASE_URL'],
+    'the seed writes directly to the database',
+  );
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 

@@ -35,7 +35,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
+      # `prisma generate` is an OFFLINE command: it reads the schema and writes
+      # TypeScript. It deliberately requires no database URL, so this step runs
+      # with no database environment at all. See packages/database/prisma.config.ts.
+      - name: Generate Prisma client (no database environment required)
         run: pnpm --filter @brandspace/database exec prisma generate
 
       - name: Check formatting
@@ -175,7 +178,7 @@ jobs:
           SECRET_VAULT_KEK=ci-only-vault-key-encryption-key-22222222222222
           ENVEOF
 
-      - name: Generate Prisma client
+      - name: Generate Prisma client (offline; migrations below use .env.test)
         run: pnpm --filter @brandspace/database exec prisma generate
 
       - name: Run isolation and RLS suites
@@ -234,7 +237,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
+      - name: Generate Prisma client (no database environment required)
         run: pnpm --filter @brandspace/database exec prisma generate
 
       - name: Build Next.js applications
