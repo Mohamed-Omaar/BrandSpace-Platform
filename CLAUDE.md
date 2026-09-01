@@ -19,11 +19,11 @@ creators, agencies, and enterprise teams.
 
 It has **three architecturally separated interfaces**:
 
-| Interface | Audience | App | Auth realm |
-|---|---|---|---|
-| **Public Website** | Anonymous visitors, prospects | `apps/web` | none (public) |
-| **Customer Dashboard** | Paying customers and their teams | `apps/dashboard` | customer session, workspace-scoped |
-| **Platform Admin / Control Center** | BrandSpace owner + internal staff only | `apps/admin` | separate platform session, platform-scoped |
+| Interface                           | Audience                               | App              | Auth realm                                 |
+| ----------------------------------- | -------------------------------------- | ---------------- | ------------------------------------------ |
+| **Public Website**                  | Anonymous visitors, prospects          | `apps/web`       | none (public)                              |
+| **Customer Dashboard**              | Paying customers and their teams       | `apps/dashboard` | customer session, workspace-scoped         |
+| **Platform Admin / Control Center** | BrandSpace owner + internal staff only | `apps/admin`     | separate platform session, platform-scoped |
 
 **The Platform Admin is never a "role inside the customer dashboard."** It is a separate application,
 a separate session realm, a separate permission model, and a separate route namespace.
@@ -36,6 +36,7 @@ These rules are permanent. If a task appears to require breaking one of them, **
 owner** instead of proceeding.
 
 ### 2.1 Tenant isolation
+
 - Every tenant-owned table **must** carry `workspaceId` (or be reachable only through a parent row that does).
 - Every query that reads or writes tenant data **must** be constrained by the caller's resolved workspace.
 - Isolation is enforced in **two independent layers**: (a) the application data-access layer, (b) PostgreSQL
@@ -46,6 +47,7 @@ owner** instead of proceeding.
 - Any new tenant-owned model requires a corresponding isolation test in the same pull request. **No exceptions.**
 
 ### 2.2 Configuration over code
+
 The following **must never** be hard-coded in application source, environment files, or seed constants:
 
 AI providers · AI model names · task-to-model routing · plan names · plan prices · plan limits ·
@@ -60,6 +62,7 @@ Code may contain a **fallback bootstrap configuration** only for local developme
 used when `NODE_ENV=production`.
 
 ### 2.3 Secrets
+
 - Secrets are **never** stored as ordinary configuration values and **never** returned by any API.
 - Secrets are encrypted at rest with authenticated encryption (AEAD) through a vault abstraction that can
   later be backed by a cloud KMS.
@@ -70,6 +73,7 @@ used when `NODE_ENV=production`.
 - Secret lifecycle actions (create, rotate, disable, revoke, access) are audited **without** logging the value.
 
 ### 2.4 Credits and money
+
 - AI credit accounting uses **reserve → confirm → settle** with an immutable ledger. Balance is derived from
   the ledger, never mutated in place.
 - A failed provider request **never** results in a credit deduction.
@@ -78,11 +82,13 @@ used when `NODE_ENV=production`.
 - Billing events are idempotent on the provider event ID.
 
 ### 2.5 External side effects
+
 - Publishing, deleting, disconnecting, paying, and sending external communications are **high-impact actions**.
 - They require an explicit confirmation policy and produce an `AuditEvent`.
 - The AI Copilot may **propose** and **preview** these actions but must **never** execute them silently.
 
 ### 2.6 Git and delivery
+
 - **Never** push to `main`. All work happens on a task branch and is delivered for review.
 - Never commit `.env` files, credentials, tokens, or customer data.
 - Never request or use real API keys, OAuth tokens, or passwords during development. Use mock providers.
@@ -90,6 +96,7 @@ used when `NODE_ENV=production`.
 - Do not include model or assistant identifiers in commits, PR text, or code comments.
 
 ### 2.7 Phase discipline
+
 - **No implementation begins until the architecture documents in `docs/` are reviewed and approved.**
 - Deliver in the phase order defined in `docs/ROADMAP.md`. Do not pull work forward from a later phase
   without the owner's approval recorded in `docs/DECISIONS.md`.
@@ -151,19 +158,21 @@ Module boundaries are enforced by lint rules on import paths. A package may not 
   resources — an isolation test.
 
 ### Testing pyramid
-| Layer | Tool (proposed) | Must cover |
-|---|---|---|
-| Unit | Vitest | pure logic, credit math, routing rules, entitlement precedence |
-| Integration | Vitest + Testcontainers (Postgres, Redis) | API contracts, RLS, transactions, idempotency |
-| Isolation | dedicated suite | cross-workspace read/write/search/export denial |
-| E2E | Playwright | the MVP vertical slice, RTL + LTR, a11y smoke |
-| Contract | recorded fixtures | AI provider adapters, social connectors, payment webhooks |
+
+| Layer       | Tool (proposed)                           | Must cover                                                     |
+| ----------- | ----------------------------------------- | -------------------------------------------------------------- |
+| Unit        | Vitest                                    | pure logic, credit math, routing rules, entitlement precedence |
+| Integration | Vitest + Testcontainers (Postgres, Redis) | API contracts, RLS, transactions, idempotency                  |
+| Isolation   | dedicated suite                           | cross-workspace read/write/search/export denial                |
+| E2E         | Playwright                                | the MVP vertical slice, RTL + LTR, a11y smoke                  |
+| Contract    | recorded fixtures                         | AI provider adapters, social connectors, payment webhooks      |
 
 ---
 
 ## 6. Definition of Done
 
 A change is done when:
+
 1. It satisfies the acceptance criteria in `docs/MVP-ACCEPTANCE-CRITERIA.md`.
 2. Tests pass, including isolation tests.
 3. No new hard-coded configuration was introduced.
@@ -178,7 +187,7 @@ A change is done when:
 
 1. Read `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` before making any change.
 2. Confirm which roadmap phase the task belongs to.
-3. If the task requires a decision listed as *unresolved* in `docs/DECISIONS.md`, **ask the product owner first**.
+3. If the task requires a decision listed as _unresolved_ in `docs/DECISIONS.md`, **ask the product owner first**.
 4. Prefer extending configuration over adding code branches.
 5. When adding a tenant-owned entity, add: schema + migration + RLS policy + isolation test + audit events.
 6. Update the relevant doc in the same change.
@@ -187,16 +196,16 @@ A change is done when:
 
 ## 8. Document Map
 
-| Document | Purpose |
-|---|---|
-| `docs/PRODUCT.md` | Product definition, interfaces, personas, modules, page and screen inventory |
-| `docs/ARCHITECTURE.md` | System architecture, tech stack, module boundaries, tenancy, configuration service |
-| `docs/DATABASE.md` | Entities, relationships, indexes, constraints, lifecycle states, ER diagram |
-| `docs/SECURITY.md` | Tenant isolation, RBAC, secrets, encryption, reliability, privacy, incident response |
-| `docs/ADMIN-CONTROL-CENTER.md` | Platform Admin modules, workflows, permissions, support mode |
-| `docs/AI-GATEWAY.md` | Provider-agnostic AI gateway, routing, budgets, credits, ledger, failure handling |
-| `docs/SOCIAL-INTEGRATIONS.md` | Social connectors, OAuth, publishing pipeline, analytics ingestion |
-| `docs/BILLING-AND-CREDITS.md` | Payment abstraction, subscriptions, invoices, AI credit economics |
-| `docs/ROADMAP.md` | Phase 0 → Phase 8 + future expansion |
-| `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice |
-| `docs/DECISIONS.md` | Approved assumptions, recommendations, unresolved decisions, owner approvals needed |
+| Document                          | Purpose                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `docs/PRODUCT.md`                 | Product definition, interfaces, personas, modules, page and screen inventory         |
+| `docs/ARCHITECTURE.md`            | System architecture, tech stack, module boundaries, tenancy, configuration service   |
+| `docs/DATABASE.md`                | Entities, relationships, indexes, constraints, lifecycle states, ER diagram          |
+| `docs/SECURITY.md`                | Tenant isolation, RBAC, secrets, encryption, reliability, privacy, incident response |
+| `docs/ADMIN-CONTROL-CENTER.md`    | Platform Admin modules, workflows, permissions, support mode                         |
+| `docs/AI-GATEWAY.md`              | Provider-agnostic AI gateway, routing, budgets, credits, ledger, failure handling    |
+| `docs/SOCIAL-INTEGRATIONS.md`     | Social connectors, OAuth, publishing pipeline, analytics ingestion                   |
+| `docs/BILLING-AND-CREDITS.md`     | Payment abstraction, subscriptions, invoices, AI credit economics                    |
+| `docs/ROADMAP.md`                 | Phase 0 → Phase 8 + future expansion                                                 |
+| `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice                            |
+| `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed  |

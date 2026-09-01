@@ -6,6 +6,7 @@
 > مدعوم بالذكاء الاصطناعي، موجّه لرواد الأعمال والشركات الناشئة والشركات الصغيرة والمتوسطة وفرق التسويق وصنّاع المحتوى والوكالات.
 >
 > **المنتج ينقسم إلى ثلاث واجهات منفصلة تمامًا:**
+>
 > 1. **الموقع العام** — للتعريف بالمنتج والتسعير والتسجيل (١٥ صفحة مخططة).
 > 2. **لوحة تحكم العميل** — ١٩ وحدة تشمل مركز القيادة، مركز العلامة التجارية، عقل العلامة (Brand Brain)، الاستراتيجية بالذكاء الاصطناعي،
 >    الحملات، التقويم الاجتماعي، استوديو المحتوى، الاستوديو الإبداعي، مركز التواصل الاجتماعي، المساعد الذكي، التحليلات، مكتبة الأصول،
@@ -26,11 +27,12 @@ workspace where a brand's identity, knowledge, strategy, content, creative, publ
 live together — and where AI is a first-class collaborator that understands the brand rather than a generic
 text box.
 
-**Positioning statement:** *For teams that need a consistent brand voice across many channels, BrandSpace is
+**Positioning statement:** _For teams that need a consistent brand voice across many channels, BrandSpace is
 an AI brand and social operating system that turns brand knowledge into strategy, content, and measurable
-performance — in Arabic and English — without stitching together five tools.*
+performance — in Arabic and English — without stitching together five tools._
 
 ### 1.1 What makes it different
+
 1. **Brand Brain** — a per-brand knowledge base (identity, tone, audience, offers, do/don't rules, documents)
    that grounds every AI output. AI is brand-aware by default, not prompt-by-prompt.
 2. **True bilingual product** — Arabic RTL is a first-class experience, not a translation afterthought.
@@ -42,6 +44,7 @@ performance — in Arabic and English — without stitching together five tools.
 5. **Agency-ready multi-tenancy** — one workspace can hold many brands; an agency can hold many workspaces.
 
 ### 1.2 Explicit non-goals (MVP)
+
 - Not a full graphic design editor replacement (creative studio focuses on AI generation + templated edits).
 - Not a social listening / sentiment monitoring suite at MVP (Phase 7+ candidate).
 - Not an ads-buying platform (paid campaign management is future expansion).
@@ -51,16 +54,17 @@ performance — in Arabic and English — without stitching together five tools.
 
 ## 2. Target Customers and Personas
 
-| Persona | Primary need | Shape of usage |
-|---|---|---|
-| **Individual founder** | Look professional without a marketing team | 1 workspace, 1 brand, 1 user, heavy AI reliance |
-| **Startup** | Consistent output with 2–5 people, fast iteration | 1 workspace, 1–2 brands, light approvals |
-| **Company marketing team** | Process, roles, approvals, reporting to leadership | 1 workspace, 1–3 brands, formal approval chains, analysts |
-| **Creator** | Volume of content, personal brand voice, scheduling | 1 workspace, 1 brand, mobile-heavy, calendar-centric |
-| **Agency** | Many client brands, separation, client-visible reporting | Many workspaces (or many brands), Client Viewer role, white-label interest |
-| **Enterprise team** | Security, SSO, audit, data residency, retention control | 1 workspace, many brands, strict RBAC, export and audit needs |
+| Persona                    | Primary need                                             | Shape of usage                                                             |
+| -------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Individual founder**     | Look professional without a marketing team               | 1 workspace, 1 brand, 1 user, heavy AI reliance                            |
+| **Startup**                | Consistent output with 2–5 people, fast iteration        | 1 workspace, 1–2 brands, light approvals                                   |
+| **Company marketing team** | Process, roles, approvals, reporting to leadership       | 1 workspace, 1–3 brands, formal approval chains, analysts                  |
+| **Creator**                | Volume of content, personal brand voice, scheduling      | 1 workspace, 1 brand, mobile-heavy, calendar-centric                       |
+| **Agency**                 | Many client brands, separation, client-visible reporting | Many workspaces (or many brands), Client Viewer role, white-label interest |
+| **Enterprise team**        | Security, SSO, audit, data residency, retention control  | 1 workspace, many brands, strict RBAC, export and audit needs              |
 
 ### 2.1 Persona → capability mapping
+
 - Founder / Creator lean on **AI Content Studio**, **Social Calendar**, **Smart Analytics**.
 - Marketing teams lean on **AI Strategy**, **Campaigns**, **Team & Approvals**, **Marketing Intelligence**.
 - Agencies lean on **multi-workspace switching**, **Client Viewer**, **Asset Library**, **Automations**.
@@ -92,6 +96,7 @@ flowchart LR
 ```
 
 **Separation guarantees**
+
 - Different applications, different deploy targets, different route namespaces.
 - Different session cookies and different token audiences. A customer session is never valid in Admin.
 - Admin is reachable only on a dedicated hostname, behind platform authentication, with 2FA support planned
@@ -104,25 +109,26 @@ flowchart LR
 
 Marketing surface: fast, SEO-strong, bilingual, CMS-driven where content changes often.
 
-| Page | Purpose | Content source | Notes |
-|---|---|---|---|
-| **Home** | Value proposition, proof, primary CTA | CMS | Hero, module highlights, testimonials, CTA |
-| **Product Overview** | The whole system in one narrative | CMS | Journey: strategy → publish → insight |
-| **Feature Pages** | One page per major capability | CMS (templated) | Brand Brain, AI Strategy, Content Studio, Creative Studio, Calendar, Analytics, Copilot, Automations |
-| **Solutions** | By persona and industry | CMS | Founders, Startups, Teams, Creators, Agencies, Enterprise |
-| **Integrations** | Supported platforms and providers | Config-driven list | Reads the active social provider registry |
-| **Pricing** | Plans, comparison, FAQ | **Config-driven** from Plan registry | Never hard-coded; currency-aware |
-| **Templates** | Public template gallery | CMS + template registry | Drives sign-up intent |
-| **Resources** | Blog, guides, case studies, changelog | CMS | Bilingual, SEO-optimized |
-| **Security** | Security posture and practices | CMS | Mirrors `docs/SECURITY.md` public-safe subset |
-| **About** | Company, mission, team | CMS | |
-| **Contact / Book a Demo** | Lead capture, demo scheduling | Form → CRM/notification | Spam protection, rate limiting |
-| **Status** | Uptime and incident history | Status data source | Public health of publishing/AI/API |
-| **Legal** | Terms, Privacy, DPA, Cookies, Acceptable Use, Refunds | CMS (versioned) | Version history retained |
-| **Login** | Authentication entry | App | Redirects into dashboard |
-| **Sign Up** | Self-serve registration + trial | App | Creates Workspace, starts trial per config |
+| Page                      | Purpose                                               | Content source                       | Notes                                                                                                |
+| ------------------------- | ----------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Home**                  | Value proposition, proof, primary CTA                 | CMS                                  | Hero, module highlights, testimonials, CTA                                                           |
+| **Product Overview**      | The whole system in one narrative                     | CMS                                  | Journey: strategy → publish → insight                                                                |
+| **Feature Pages**         | One page per major capability                         | CMS (templated)                      | Brand Brain, AI Strategy, Content Studio, Creative Studio, Calendar, Analytics, Copilot, Automations |
+| **Solutions**             | By persona and industry                               | CMS                                  | Founders, Startups, Teams, Creators, Agencies, Enterprise                                            |
+| **Integrations**          | Supported platforms and providers                     | Config-driven list                   | Reads the active social provider registry                                                            |
+| **Pricing**               | Plans, comparison, FAQ                                | **Config-driven** from Plan registry | Never hard-coded; currency-aware                                                                     |
+| **Templates**             | Public template gallery                               | CMS + template registry              | Drives sign-up intent                                                                                |
+| **Resources**             | Blog, guides, case studies, changelog                 | CMS                                  | Bilingual, SEO-optimized                                                                             |
+| **Security**              | Security posture and practices                        | CMS                                  | Mirrors `docs/SECURITY.md` public-safe subset                                                        |
+| **About**                 | Company, mission, team                                | CMS                                  |                                                                                                      |
+| **Contact / Book a Demo** | Lead capture, demo scheduling                         | Form → CRM/notification              | Spam protection, rate limiting                                                                       |
+| **Status**                | Uptime and incident history                           | Status data source                   | Public health of publishing/AI/API                                                                   |
+| **Legal**                 | Terms, Privacy, DPA, Cookies, Acceptable Use, Refunds | CMS (versioned)                      | Version history retained                                                                             |
+| **Login**                 | Authentication entry                                  | App                                  | Redirects into dashboard                                                                             |
+| **Sign Up**               | Self-serve registration + trial                       | App                                  | Creates Workspace, starts trial per config                                                           |
 
 ### 4.1 Cross-cutting website requirements
+
 - **Bilingual routing:** `/{locale}/…` with `ar` and `en`; `hreflang` alternates; locale-aware sitemaps.
 - **RTL:** full mirrored layout for Arabic, logical CSS properties, RTL-aware icons and charts.
 - **SEO:** SSG/ISR rendering, canonical URLs, Open Graph and Twitter cards, JSON-LD (`Organization`,
@@ -141,33 +147,33 @@ Marketing surface: fast, SEO-strong, bilingual, CMS-driven where content changes
 Each module is listed with purpose, key objects, and the permissions that gate it. Scope column shows whether
 the module operates at **W** (workspace) or **B** (brand) level.
 
-| # | Module | Scope | Purpose | Key entities |
-|---|---|---|---|---|
-| 1 | **Command Center** | W | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas | aggregates all |
-| 2 | **Brand Center** | B | Brand identity: name, logos, palettes, typography, voice, boilerplate, guidelines | `Brand`, `Asset` |
-| 3 | **Brand Brain** | B | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors) | `BrandKnowledge` |
-| 4 | **AI Strategy** | B | Generate and maintain marketing strategy, pillars, monthly plans, channel mix | `Insight`, `Campaign` |
-| 5 | **Campaigns** | B | Campaign objects with goals, dates, budget, channels, content set, status | `Campaign`, `ContentItem` |
-| 6 | **Social Calendar** | B | Month/week/day/list views of scheduled and published content; drag to reschedule | `CalendarSlot`, `ContentItem`, `PublishJob` |
-| 7 | **AI Content Studio** | B | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual | `ContentItem`, `ContentVariant` |
-| 8 | **AI Creative Studio** | B | Generate and adapt images/video/voice assets on-brand; templated resizing per platform | `Asset` |
-| 9 | **Social Media Hub** | W/B | Connect accounts, view connection health, per-platform rules, inbox of publish results | `SocialConnection`, `PublishJob` |
-| 10 | **AI Copilot** | W/B | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions | `AIRequest`, action plans |
-| 11 | **Marketing Intelligence** | B | Competitive and market context, content gap analysis, trend suggestions | `Insight` |
-| 12 | **Smart Analytics** | B | Performance metrics with AI narrative explanation and recommendations | `MetricSnapshot`, `Insight` |
-| 13 | **Asset Library** | W/B | Central media library: folders, tags, versions, rights/expiry, usage tracking | `Asset` |
-| 14 | **Team and Approvals** | W | Members, roles, invitations, approval workflows and queues, comments | `Membership`, `Approval`, `Comment` |
-| 15 | **Automations** | W/B | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot") | `AutomationRule`, `AutomationRun` |
-| 16 | **Notifications** | W | In-app notification center + channel preferences | `Notification` |
-| 17 | **Activity Log** | W | Human-readable, filterable history of workspace activity | `AuditEvent` |
-| 18 | **Settings** | W | Workspace profile, locale/timezone, brands, security, integrations, data controls | `Workspace` |
-| 19 | **Billing and Usage** | W | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade | `Subscription`, `Invoice`, `CreditWallet` |
+| #   | Module                     | Scope | Purpose                                                                                                       | Key entities                                |
+| --- | -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| 1   | **Command Center**         | W     | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas             | aggregates all                              |
+| 2   | **Brand Center**           | B     | Brand identity: name, logos, palettes, typography, voice, boilerplate, guidelines                             | `Brand`, `Asset`                            |
+| 3   | **Brand Brain**            | B     | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors) | `BrandKnowledge`                            |
+| 4   | **AI Strategy**            | B     | Generate and maintain marketing strategy, pillars, monthly plans, channel mix                                 | `Insight`, `Campaign`                       |
+| 5   | **Campaigns**              | B     | Campaign objects with goals, dates, budget, channels, content set, status                                     | `Campaign`, `ContentItem`                   |
+| 6   | **Social Calendar**        | B     | Month/week/day/list views of scheduled and published content; drag to reschedule                              | `CalendarSlot`, `ContentItem`, `PublishJob` |
+| 7   | **AI Content Studio**      | B     | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual                        | `ContentItem`, `ContentVariant`             |
+| 8   | **AI Creative Studio**     | B     | Generate and adapt images/video/voice assets on-brand; templated resizing per platform                        | `Asset`                                     |
+| 9   | **Social Media Hub**       | W/B   | Connect accounts, view connection health, per-platform rules, inbox of publish results                        | `SocialConnection`, `PublishJob`            |
+| 10  | **AI Copilot**             | W/B   | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions       | `AIRequest`, action plans                   |
+| 11  | **Marketing Intelligence** | B     | Competitive and market context, content gap analysis, trend suggestions                                       | `Insight`                                   |
+| 12  | **Smart Analytics**        | B     | Performance metrics with AI narrative explanation and recommendations                                         | `MetricSnapshot`, `Insight`                 |
+| 13  | **Asset Library**          | W/B   | Central media library: folders, tags, versions, rights/expiry, usage tracking                                 | `Asset`                                     |
+| 14  | **Team and Approvals**     | W     | Members, roles, invitations, approval workflows and queues, comments                                          | `Membership`, `Approval`, `Comment`         |
+| 15  | **Automations**            | W/B   | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot")                        | `AutomationRule`, `AutomationRun`           |
+| 16  | **Notifications**          | W     | In-app notification center + channel preferences                                                              | `Notification`                              |
+| 17  | **Activity Log**           | W     | Human-readable, filterable history of workspace activity                                                      | `AuditEvent`                                |
+| 18  | **Settings**               | W     | Workspace profile, locale/timezone, brands, security, integrations, data controls                             | `Workspace`                                 |
+| 19  | **Billing and Usage**      | W     | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade                                  | `Subscription`, `Invoice`, `CreditWallet`   |
 
 ### 5.1 Module detail notes
 
-**Command Center** — the only screen a busy owner needs daily. Widgets: *Needs your approval*, *Publishing
-today*, *Failed publishes*, *AI credits remaining + burn rate*, *Top performing post this week*,
-*Connection health warnings*, *Trial/plan status*. Every widget respects the viewer's permissions; a
+**Command Center** — the only screen a busy owner needs daily. Widgets: _Needs your approval_, _Publishing
+today_, _Failed publishes_, _AI credits remaining + burn rate_, _Top performing post this week_,
+_Connection health warnings_, _Trial/plan status_. Every widget respects the viewer's permissions; a
 Client Viewer sees a read-only subset.
 
 **Brand Brain** — the differentiator. Structured sections (identity, audience segments, tone of voice,
@@ -175,7 +181,7 @@ products/offers, proof points, objections, do/don't rules, glossary, competitors
 that are chunked and embedded for retrieval. Every AI generation cites which Brand Brain sections it used,
 so output is explainable and correctable. Bilingual: each field can hold `ar` and `en` values.
 
-**AI Content Studio** — generation is always: *task + brand context + platform constraints + language*.
+**AI Content Studio** — generation is always: _task + brand context + platform constraints + language_.
 Produces a `ContentItem` with per-platform `ContentVariant`s (character limits, hashtag rules, mention rules,
 link handling). Supports rewrite, shorten, expand, change tone, translate ar↔en with brand-preserving glossary.
 
@@ -229,15 +235,16 @@ system gets better at the specific brand over time.
 
 ## 8. Multi-Tenant Product Model
 
-| Level | Meaning | Examples of what it owns |
-|---|---|---|
-| **Platform** | BrandSpace itself | Plans, features, providers, global config, all workspaces |
-| **Workspace** | One customer tenant — the isolation boundary | Members, subscription, credit wallet, brands, connections, audit |
-| **Brand** | One brand inside a workspace | Brand Brain, campaigns, content, calendar, assets, analytics |
-| **User** | A person (global identity) | Can hold memberships in several workspaces |
-| **Membership** | User ↔ Workspace link carrying role and brand scoping | Determines effective permissions |
+| Level          | Meaning                                               | Examples of what it owns                                         |
+| -------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| **Platform**   | BrandSpace itself                                     | Plans, features, providers, global config, all workspaces        |
+| **Workspace**  | One customer tenant — the isolation boundary          | Members, subscription, credit wallet, brands, connections, audit |
+| **Brand**      | One brand inside a workspace                          | Brand Brain, campaigns, content, calendar, assets, analytics     |
+| **User**       | A person (global identity)                            | Can hold memberships in several workspaces                       |
+| **Membership** | User ↔ Workspace link carrying role and brand scoping | Determines effective permissions                                 |
 
 Customer shapes map cleanly:
+
 - Founder / Startup / Creator → one workspace, one or two brands.
 - Company team → one workspace, several brands, several roles.
 - **Agency** → either many brands inside one workspace (shared team, per-brand scoping) **or** one workspace
@@ -265,15 +272,15 @@ dashboards, health, usage).
 
 ## 10. Product Metrics
 
-| Category | Metric | Why |
-|---|---|---|
-| Activation | % of new workspaces reaching "first draft on calendar" within 7 days | The core aha moment |
-| Engagement | Weekly active brands; posts scheduled per brand per week | Habit strength |
-| AI value | AI actions per active user; % of AI drafts published without heavy edit | Output quality |
-| Reliability | Publish success rate; median publish latency vs. scheduled time | Trust |
-| Economics | Credits consumed vs. plan allocation; provider cost per credit; gross margin per workspace | Unit economics |
-| Retention | Logo and net revenue retention; trial → paid conversion | Business health |
-| Support | Support-mode sessions per workspace; time to resolution | Operational load |
+| Category    | Metric                                                                                     | Why                 |
+| ----------- | ------------------------------------------------------------------------------------------ | ------------------- |
+| Activation  | % of new workspaces reaching "first draft on calendar" within 7 days                       | The core aha moment |
+| Engagement  | Weekly active brands; posts scheduled per brand per week                                   | Habit strength      |
+| AI value    | AI actions per active user; % of AI drafts published without heavy edit                    | Output quality      |
+| Reliability | Publish success rate; median publish latency vs. scheduled time                            | Trust               |
+| Economics   | Credits consumed vs. plan allocation; provider cost per credit; gross margin per workspace | Unit economics      |
+| Retention   | Logo and net revenue retention; trial → paid conversion                                    | Business health     |
+| Support     | Support-mode sessions per workspace; time to resolution                                    | Operational load    |
 
 ---
 

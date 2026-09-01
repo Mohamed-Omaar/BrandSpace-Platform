@@ -1,0 +1,57 @@
+/*
+ * BrandSpace design tokens.
+ * Layout uses LOGICAL properties (margin-inline-start, padding-block, inset-inline)
+ * so Arabic RTL mirrors correctly without a separate stylesheet — CLAUDE.md §4.
+ */
+:root {
+  --bs-brand-blue: #00adee;
+  --bs-brand-blue-hover: #0098d1;
+  --bs-brand-blue-ink: #ffffff;
+  --bs-brand-yellow: #ffdd15;
+  --bs-brand-yellow-ink: #1a1a1a;
+  --bs-brand-yellow-text: #7a6800;
+
+  --bs-surface: #ffffff;
+  --bs-surface-muted: #f6f8fa;
+  --bs-border: #e3e8ef;
+  --bs-text-primary: #0f172a;
+  --bs-text-secondary: #475569;
+
+  --bs-danger: #d92d20;
+  --bs-warning: #b54708;
+  --bs-success: #067647;
+
+  --bs-space-xs: 0.25rem;
+  --bs-space-sm: 0.5rem;
+  --bs-space-md: 1rem;
+  --bs-space-lg: 1.5rem;
+  --bs-space-xl: 2rem;
+
+  --bs-radius-sm: 0.25rem;
+  --bs-radius-md: 0.5rem;
+  --bs-radius-lg: 0.75rem;
+
+  --bs-font-latin: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --bs-font-arabic:
+    'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, Tahoma, Arial, sans-serif;
+}
+
+html[dir='rtl'] {
+  font-family: var(--bs-font-arabic);
+}
+
+html[dir='ltr'] {
+  font-family: var(--bs-font-latin);
+}
+
+body {
+  margin: 0;
+  background: var(--bs-surface);
+  color: var(--bs-text-primary);
+}
+
+/* Visible focus is a WCAG 2.2 AA requirement — never remove it. */
+:focus-visible {
+  outline: 2px solid var(--bs-brand-blue);
+  outline-offset: 2px;
+}
