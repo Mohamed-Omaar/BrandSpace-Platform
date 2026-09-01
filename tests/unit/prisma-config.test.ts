@@ -23,11 +23,22 @@ const databasePackage = path.join(repoRoot, 'packages', 'database');
  * verification lacked, so it is the property asserted here.
  */
 
-/** An environment with nothing inherited but the bare minimum to launch Node. */
+/**
+ * An environment with NOTHING inherited except what is needed to launch a process.
+ *
+ * PATH and HOME are preserved deliberately. PATH is not what these tests
+ * constrain — inherited DATABASE_* configuration is — and hardcoding a PATH makes
+ * the suite non-portable: CI installs pnpm under PNPM_HOME
+ * (/home/runner/setup-pnpm/...), so a fabricated PATH cannot find it and every
+ * spawn fails with ENOENT instead of exercising Prisma at all.
+ *
+ * `assertNoDatabaseVars` below proves the scrubbing is real.
+ */
 function scrubbedEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   const nodeDir = path.dirname(process.execPath);
+  const inheritedPath = process.env['PATH'] ?? '/usr/local/bin:/usr/bin:/bin';
   return {
-    PATH: `${nodeDir}:/usr/local/bin:/usr/bin:/bin`,
+    PATH: `${nodeDir}:${inheritedPath}`,
     HOME: process.env['HOME'] ?? '/root',
     ...overrides,
   };
@@ -82,9 +93,12 @@ describe('prisma generate in a clean environment', () => {
     assertNoDatabaseVars(scrubbedEnv());
   });
 
-  it('SUCCEEDS with no environment variables at all', () => {
+  it('SUCCEEDS with no database environment at all', () => {
     // The exact failure from CI: generate must not require a connection string.
     const result = runPrisma(['generate'], databasePackage, scrubbedEnv());
+    // Guard against a false pass: if the command could not be spawned at all we
+    // would see empty output, which must not be mistaken for success.
+    expect(result.output.trim()).not.toBe('');
     expect(result.output).not.toContain('Cannot resolve environment variable');
     expect(result.output).not.toContain('PrismaConfigEnvError');
     expect(result.code).toBe(0);
