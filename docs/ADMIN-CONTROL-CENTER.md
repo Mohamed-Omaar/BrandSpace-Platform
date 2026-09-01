@@ -1,0 +1,451 @@
+# BrandSpace — Platform Admin / Control Center
+
+> **الملخص التنفيذي بالعربية**
+>
+> **مركز التحكم** هو التطبيق الخاص بمالك المنصة والفريق الداخلي فقط، ومنفصل معماريًا بالكامل عن لوحة تحكم العملاء:
+> نطاق مستقل، جلسة مستقلة، صلاحيات مستقلة، ومصادقة ثنائية إلزامية للمالك والمدير.
+>
+> **الهدف الأساسي:** أن يدير مالك المنتج **كل العمليات اليومية للمنصة دون كتابة أو تعديل أي كود**.
+>
+> **الوحدات:** نظرة عامة على الأعمال (العملاء، الاشتراكات، الإيرادات، استخدام الذكاء الاصطناعي، التكلفة، هامش الربح، صحة التكاملات، التنبيهات) ·
+> إدارة العملاء ومساحات العمل (إنشاء، دعوة، تعيين خطة، تجربة مجانية، إيقاف، تفعيل، إضافة رصيد، تغيير الحدود، تفعيل ميزات خاصة) ·
+> الخطط والباقات · مفاتيح الميزات والاستحقاقات · التكاملات وإدارة الأسرار · بوابة الذكاء الاصطناعي · الرصيد والاستخدام ·
+> الفوترة · القوالب والإشعارات · إدارة الإعدادات المُصدَّرة · سجل التدقيق · **وضع الدعم الآمن**.
+>
+> **قاعدة حاكمة:** لا يرى فريق الدعم أبدًا كلمات مرور العملاء ولا الرموز الخام (Tokens)، ولا تُعرض أي مفاتيح سرية — فقط بيانات وصفية مقنّعة
+> (آخر أربعة أحرف)، وكل دخول إلى بيانات عميل يكون مؤقتًا، بسبب مُسجَّل، ومُدقَّقًا بالكامل.
+
+---
+
+## 1. Purpose and Separation
+
+The Control Center is the **operating console for the BrandSpace business**. It exists so that plans, prices,
+limits, features, AI models, integrations, and customer state can change without an engineering release.
+
+### 1.1 Separation guarantees
+
+| Aspect | Guarantee |
+|---|---|
+| Application | `apps/admin` — a separate build and deployment from `apps/dashboard` |
+| Hostname | Dedicated internal hostname; optional IP allowlist; excluded from public sitemaps and robots |
+| Session realm | Distinct cookie name, signing key, and token audience. A customer session is rejected at the edge of admin routes |
+| Identity | `PlatformUser` records are separate from customer `User` records; a person may hold both, but the accounts never share a session |
+| Authorization | Platform permission set is disjoint from the workspace permission set |
+| MFA | **Mandatory** for Platform Owner and Platform Admin; step-up re-auth for sensitive operations |
+| Data access | No ambient cross-tenant access — customer data requires Support Mode (§13) |
+| Audit | Every action is audited; audit access is itself audited |
+| Blast radius | Financial and secret operations require step-up auth and, for pricing/credit-cost domains, dual control |
+
+---
+
+## 2. Module 1 — Overview
+
+The landing screen: the health of the business in one view. Every widget is filterable by date range,
+plan, and country, and every number is drillable to its source records.
+
+| Widget | Content | Source |
+|---|---|---|
+| **Customers** | Total, new this period, active, churned, by type and country | `Workspace`, `Membership` |
+| **Active workspaces** | Trialing / active / past due / suspended, with 30-day trend | `Workspace`, `Subscription` |
+| **Subscriptions** | By plan and interval; trial→paid conversion; upgrades vs. downgrades | `Subscription` |
+| **Revenue** | MRR, ARR, new/expansion/contraction/churned MRR, ARPA, by currency | `Subscription`, `Invoice` |
+| **AI usage** | Requests, credits consumed, by task, model, plan, top workspaces | `AIRequest`, `AIUsageLedger` |
+| **Provider costs** | Actual spend by provider and model, day/month, vs. budget | `AIUsageLedger` |
+| **Estimated margin** | Credit revenue attributed vs. provider cost; margin % overall, per plan, per workspace | derived |
+| **Publishing status** | Scheduled / published / failed in the last 24h and 7d; failure reasons ranked | `PublishJob` |
+| **Integration health** | Per AI provider and social platform: status, error rate, latency, last check | health checks |
+| **System alerts** | Open alerts by severity with owner and age | alerting subsystem |
+
+**Attention queue** (the owner's daily to-do): trials ending within 3 days, payments failed, workspaces below
+low-credit threshold, connections needing re-auth, publish failure spikes, providers degraded, configuration
+drafts awaiting activation, refund requests, and abuse flags.
+
+---
+
+## 3. Module 2 — Customers and Workspaces
+
+### 3.1 Directory
+Searchable, filterable list: name, slug, type, country, plan, status, MRR, credits remaining, seats used,
+brands, connected accounts, last activity, health score. Saved views and CSV export.
+
+### 3.2 Workspace detail
+
+Tabs: **Summary · Members · Brands · Subscription · Credits · Usage · Integrations · Limits & Features ·
+Invoices · Activity · Support**.
+
+### 3.3 Owner capabilities
+
+| Capability | Behavior | Controls |
+|---|---|---|
+| **Create customer** | Create the `User` shell and workspace in one flow, without a password (invitation-based) | audited |
+| **Create workspace** | Name, slug, type, country, locale, timezone, currency, initial plan, trial | audited |
+| **Send invitation** | Choose role and brand scope; signed, expiring, single-use link; resend and revoke | audited, rate-limited |
+| **Assign plan** | Immediate or at next period; preview of entitlement and credit deltas before confirming | audited, dual control if price differs from list |
+| **Start / extend trial** | Set or extend `trialEndsAt`; reason required; cap on cumulative extension per role | audited |
+| **Suspend / reactivate** | Suspend blocks login and all publishing/AI; data is retained; reason required | audited, confirmation typed |
+| **Add / remove AI credits** | Writes a `CreditTransaction` of type `admin_adjustment` with reason; never edits the balance directly | audited, step-up above threshold |
+| **Change limits** | Creates `WorkspaceOverride` rows with optional expiry and reason | audited |
+| **Enable customer-specific features** | Per-workspace feature override with precedence over plan | audited |
+| **View usage** | AI credits by task/user/brand, storage, seats, scheduled posts, publish volume | read-only |
+| **View billing status** | Subscription state, next invoice, payment method presence (masked), dunning stage | read-only |
+| **View audit-safe support context** | Recent errors, failed jobs, connection health, entitlement resolution trace — **without** customer content by default | read-only |
+| **Enter support mode** | Time-boxed, reason-tagged, audited, read-only by default | §13 |
+
+**Never available:** viewing a customer password or hash, viewing raw OAuth tokens or BYOK keys, viewing full
+payment card data, silently acting as the customer.
+
+### 3.4 Entitlement resolution trace
+For any workspace and feature, Admin shows *why* the current value applies:
+
+```
+feature: ai.image_generation
+  ← workspace override (none)
+  ← flag rule "beta-image-v2" (matched: beta group) → enabled
+  ← plan "growth" entitlement → enabled, limit 200/month
+  ← feature default → disabled
+  = EFFECTIVE: enabled, limit 200/month, source: plan(growth) + flag(beta-image-v2)
+```
+
+This makes support questions answerable in seconds and makes precedence bugs visible.
+
+---
+
+## 4. Module 3 — Plans and Packages
+
+Plans are **configuration**, created and edited entirely in Admin, versioned through the Configuration Service.
+
+### 4.1 Plan editor fields
+
+| Group | Fields |
+|---|---|
+| Identity | key, name (ar/en), description (ar/en), tier, visibility (public/private/legacy), sort order, badge |
+| Pricing | monthly price, annual price, currency, **per-currency price table**, tax behavior (inclusive/exclusive) |
+| Trial | trial days, trial requires card (yes/no), trial credits |
+| Seats & scope | number of users, number of brands, number of social accounts |
+| Volume | scheduled posts per month, storage GB, analytics retention days |
+| AI | monthly AI credits, credit rollover policy, per-feature AI limits (e.g. images/month, video seconds/month) |
+| Features | allowed feature list with per-feature limits |
+| Add-ons | available add-ons (extra seats, extra credits, extra storage, extra brands) with prices |
+| Overage | policy: block / allow with charge / allow with cap; overage price per credit |
+| Change behavior | upgrade behavior (immediate + prorate), downgrade behavior (at period end, quota reconciliation rules) |
+
+### 4.2 Plan lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Validated: schema + semantic checks
+  Validated --> Active: activated (dual control for price changes)
+  Active --> Grandfathered: replaced by a newer public plan
+  Grandfathered --> Retired: no active subscriptions remain
+  Active --> Draft: new version drafted from active
+```
+
+**Existing subscribers are never silently repriced.** Changing the price of an active plan creates a new plan
+version; current subscriptions keep their agreed price until an explicit, audited migration is run, and the
+customer is notified per policy.
+
+### 4.3 Safety rails
+- Publishing a plan requires: all referenced features exist, no negative or zero-credit misconfiguration,
+  currency table complete for supported currencies, and downgrade rules resolvable.
+- **Impact preview before activation:** "3 plans changed, 128 workspaces affected, 12 would exceed their new
+  brand limit." Workspaces that would be pushed over a limit are listed, and the owner chooses grandfathering
+  or enforcement.
+- Retiring a plan with active subscriptions is blocked; a migration path must be chosen first.
+
+---
+
+## 5. Module 4 — Feature Flags and Entitlements
+
+### 5.1 Feature registry
+Each `Feature` has: key, name (ar/en), category, value type (boolean / quota / enum), default value,
+dependencies, and status. Features are referenced by plans, flags, overrides, and code — code asks
+`entitlements.can(workspace, 'ai.image_generation')`, never `if (plan === 'growth')`.
+
+### 5.2 Targeting dimensions
+
+| Dimension | Rule shape |
+|---|---|
+| Global | on/off for everyone |
+| By plan | enabled for plans `[…]` |
+| By workspace | explicit allow/deny list |
+| By individual customer | workspace override with reason and expiry |
+| Beta group | named cohort membership |
+| By country | workspace country in `[…]` |
+| Date range | active from → until (timezone-aware) |
+| Percentage rollout | deterministic hash of `(featureKey, workspaceId)` — **stable**, so a workspace does not flip between page loads |
+
+### 5.3 Precedence (highest wins)
+
+```
+1. Kill switch (feature.status = disabled)      → OFF for everyone, immediately
+2. Workspace override (explicit, unexpired)
+3. Explicit workspace allow/deny list on a flag rule
+4. Beta group membership
+5. Country rule
+6. Date-range rule
+7. Percentage rollout
+8. Plan entitlement
+9. Feature default
+```
+
+Rules are evaluated top-down; the first rule that produces a decision wins. The resolution trace (§3.4) shows
+which rule decided.
+
+### 5.4 Dependencies and conflicts
+- A feature declares `dependsOn`. Enabling `ai.video_generation` while `ai.generation` is off is rejected at
+  validation time, not discovered at runtime.
+- Disabling a feature that others depend on shows the dependency tree and requires explicit confirmation.
+- Quota features validate that a workspace-level override is not below current consumption without an
+  explicit "enforce anyway" acknowledgement.
+
+### 5.5 Rollback
+Every flag change is a configuration version. Rollback restores the previous rule set atomically and takes
+effect within the cache TTL (seconds). A **global kill switch** per feature bypasses all rules for immediate
+containment during an incident.
+
+---
+
+## 6. Module 5 — Integrations
+
+One consistent management surface for every external dependency:
+
+**AI providers · Social platform applications · Email providers · SMS and WhatsApp providers ·
+Payment providers · Object storage · Analytics providers · Webhooks · Future CRM integrations.**
+
+### 6.1 Common integration lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> Configure
+  Configure --> Validate: schema + required fields
+  Validate --> TestConnection: live probe against the provider
+  TestConnection --> Save: store config + secret references
+  Save --> Activate: becomes the active integration for the environment
+  Activate --> Disable: temporarily stopped, config retained
+  Disable --> Activate
+  Activate --> RotateCredentials: zero-downtime rotation
+  RotateCredentials --> Activate
+  Activate --> Revoked: permanently removed
+```
+
+### 6.2 Per-integration capabilities
+
+| Capability | Detail |
+|---|---|
+| **Configure** | Provider-specific form generated from a Zod schema, with inline help and validation |
+| **Validate** | Structural + semantic validation before anything is saved |
+| **Test connection** | Live probe (list models, fetch account, ping webhook endpoint) with the result shown and stored |
+| **Save** | Config stored as a configuration version; secrets stored by reference only |
+| **Activate** | Atomic switch of the active integration for the environment; audited |
+| **Disable** | Stops use immediately; existing config retained for quick re-enable |
+| **Rotate credentials** | Create new version → validate → shift traffic → retire old after drain window |
+| **Masked metadata** | Last 4 characters, fingerprint, created/rotated/last-used timestamps, expiry, status |
+| **Connection health** | Rolling status, error rate, p95 latency, last successful call, circuit-breaker state |
+| **Usage** | Calls, volume, and cost over time, by workspace where applicable |
+| **Errors** | Recent failures with codes, counts, and example (redacted) responses |
+| **Audit history** | Who changed what, when, and why |
+
+### 6.3 Environment separation
+Each integration is configured **independently per environment** (development / staging / production).
+Development defaults to mock providers. Production credentials are never readable from a non-production
+environment, and the UI labels the active environment prominently to prevent misclicks.
+
+### 6.4 Social platform applications
+Platform Admin holds the BrandSpace app credentials (client ID/secret, redirect URI, scopes, webhook secret)
+per provider per environment. **Customers never provide app credentials, and never provide social passwords** —
+they authorize via OAuth. See `docs/SOCIAL-INTEGRATIONS.md`.
+
+---
+
+## 7. Module 6 — Secret Management (Admin view)
+
+The Admin surface over the Secret Service (`docs/SECURITY.md` §5).
+
+| Screen element | Behavior |
+|---|---|
+| Secret list | ref, scope, environment, status, masked hint, last rotated, last used, expiry |
+| Create | Value entered once, in a masked field, over TLS, never echoed back |
+| Reveal | **Not available.** There is no "show secret" action anywhere in the product |
+| Rotate | Guided zero-downtime rotation with validation and a drain window |
+| Disable / Revoke | Immediate effect; dependent integrations flagged |
+| Access log | Who created/rotated/revoked, and which service resolved it when (value never logged) |
+| Expiry warnings | Alerts at 30/14/7 days before a known expiry |
+| Step-up auth | Required for every write operation |
+
+---
+
+## 8. Module 7 — AI Gateway Administration
+
+Full detail in `docs/AI-GATEWAY.md`. Admin screens:
+
+| Screen | Purpose |
+|---|---|
+| **Providers** | Register providers, base URL, timeouts, concurrency, rate limits, health, enable/disable |
+| **Credentials** | Per provider per environment, masked, rotatable |
+| **Model registry** | Add/edit models: modality, capabilities, unit costs, quality tier, status, **disable switch** |
+| **Routing rules** | Task → primary model + ordered fallbacks, parameters, timeouts, max cost per request; scoped globally, per plan, or per workspace |
+| **Credit costs** | Credit price per task/model/unit; margin calculator showing cost vs. credit revenue |
+| **Budgets** | Per-workspace, per-plan, and platform-wide daily/monthly caps with warn and hard-stop thresholds |
+| **Usage explorer** | Requests, credits, cost, latency, failure rate — sliced by task, model, provider, plan, workspace, user |
+| **Cost alerts** | Daily and monthly thresholds with recipients |
+| **Request inspector** | Per-request audit-safe metadata: task, model chain, status, latency, tokens, cost, credits, failure reason — **not** raw customer content unless the retention policy explicitly allows |
+| **Live test bench** | Run a task against a routing rule with a synthetic prompt to verify configuration before activation |
+
+---
+
+## 9. Module 8 — Credits and Usage Administration
+
+| Screen | Capability |
+|---|---|
+| Wallet list | Balance, reserved, monthly grant, burn rate, projected exhaustion date, low-balance status |
+| Wallet detail | Full `CreditTransaction` ledger with filters and export |
+| Manual adjustment | Grant or deduct with type, amount, expiry, and mandatory reason; step-up auth above a threshold |
+| Bulk grants | Promotional credits to a cohort (plan, country, beta group) with expiry and a preview of who is affected |
+| Reconciliation | Nightly ledger-vs-balance check; drift is surfaced here and alerted |
+| Cost vs. charge | Per workspace: provider cost, credits charged, estimated gross margin |
+| Refunds | Reverse a usage charge for a failed or disputed action, linked to the original ledger row |
+
+---
+
+## 10. Module 9 — Billing Administration
+
+| Screen | Capability |
+|---|---|
+| Subscriptions | Filter by status, plan, interval, currency; drill to workspace |
+| Invoices | List, view, download PDF, void, mark uncollectible, issue credit note |
+| Refunds | Full or partial, with reason; step-up auth; audited |
+| Coupons & promotions | Create, limit by plan/country/date/usage count; view redemption |
+| Add-ons | Define and price; assign to a workspace |
+| Dunning | Configure retry schedule, grace period, suspension timing, and email sequence |
+| Payment providers | Configure and switch the active provider; view webhook health and failed events with replay |
+| Tax | Configure tax behavior per country/region; view tax reports |
+| Reports | MRR/ARR movement, cohort retention, revenue by plan/country/currency, failed-payment recovery rate, AI margin |
+
+---
+
+## 11. Module 10 — Notification Templates
+
+Every template exists in **Arabic and English**.
+
+Templates: welcome · email confirmation · invitation · password reset · approval request · approval result ·
+publishing success · publishing failure · low AI balance · trial ending · subscription renewal ·
+payment failure · invoice · integration disconnected.
+
+| Capability | Detail |
+|---|---|
+| **Edit** | Subject and body per locale and per channel (email/in-app/SMS/WhatsApp/push), with a documented variable list |
+| **Preview** | Rendered with sample data, in both LTR and RTL, desktop and mobile widths |
+| **Test send** | To an internal address only, clearly marked as a test, rate-limited |
+| **Activate** | Becomes live as a configuration version |
+| **Version** | Full history with diffs, author, and reason |
+| **Rollback** | Restore a previous version atomically |
+
+Validation before activation: all required variables present, no unknown variables, both locales complete,
+links absolute and allowlisted, unsubscribe/footer present where legally required, and no secret-like content.
+
+---
+
+## 12. Module 11 — Configuration Management
+
+A single surface across all configuration domains (`docs/ARCHITECTURE.md` §7).
+
+| Capability | Detail |
+|---|---|
+| Domain browser | All domains, each with its active version, schema version, and last change |
+| Diff view | Side-by-side payload diff between any two versions |
+| Validation report | Structural and semantic errors, shown before activation is possible |
+| Impact preview | Which workspaces/plans/features are affected and how |
+| Activation | Atomic, audited; step-up auth on sensitive domains; dual control on pricing and credit costs |
+| Rollback | One click; creates a new activation carrying an older payload — history is never rewritten |
+| Change history | Author, timestamp, reason, diff, activation result |
+| Environment scoping | Independent active versions for development, staging, production |
+| Export / import | Export a domain to review; import creates a draft, never an active version |
+
+---
+
+## 13. Module 12 — Support Mode
+
+The controlled way to look at a customer's workspace.
+
+```mermaid
+sequenceDiagram
+  participant S as Support Agent
+  participant A as Admin App
+  participant AU as Audit
+  participant W as Workspace data
+  S->>A: Request support access (workspace, reason, ticket ref)
+  A->>A: Check permission + step-up auth (MFA)
+  A->>AU: Record SupportModeSession (start, reason, scope, TTL)
+  A-->>S: Read-only session opened, banner + countdown visible
+  S->>A: View entitlement trace, jobs, errors, connection health
+  A->>W: Queries tagged with supportModeSessionId
+  A->>AU: Every request audited
+  Note over S,A: Write actions require a separate elevated grant
+  A->>AU: Session ended (manually or by TTL)
+  A-->>W: Visible in the customer's Activity Log
+```
+
+| Rule | Detail |
+|---|---|
+| Entry | Permission + step-up auth + reason (free text) + optional ticket reference |
+| Default posture | **Read-only** |
+| Elevation | Write actions need a separate, narrower grant, justified and individually audited |
+| TTL | Default 60 minutes, configurable, auto-expiring, with a visible countdown |
+| Never visible | Passwords/hashes, MFA secrets, OAuth access/refresh tokens, BYOK keys, full card data |
+| Content masking | Configurable policy for content bodies and Brand Brain |
+| Customer visibility | Appears in the workspace Activity Log with reason and duration; optional owner notification |
+| Impersonation | Prohibited at MVP — the actor is always shown as a platform actor, never as the customer |
+
+---
+
+## 14. Module 13 — Platform Audit Log
+
+Filterable by actor, action, workspace, resource, severity, outcome, date, and support-mode session.
+Shows before/after diffs (redacted), request/trace IDs for correlation with logs, and supports export.
+Append-only; access to the audit log is itself audited. Saved investigations can be shared internally by link.
+
+---
+
+## 15. Module 14 — Platform Users and Roles
+
+Manage internal staff: invite, assign platform role, enforce MFA, view last login and active sessions,
+revoke sessions, deactivate. Only the Platform Owner may grant Platform Admin or transfer ownership.
+Quarterly access review is prompted in-product with a checklist and a recorded sign-off.
+
+---
+
+## 16. Module 15 — System Health and Operations
+
+| Screen | Content |
+|---|---|
+| Service health | API, workers, database, Redis, storage — status, latency, error rate |
+| Queues | Depth, oldest job age, throughput, failure rate, per-queue pause/resume |
+| Dead-letter queue | Failed jobs with payload (redacted), error, and a **replay** action |
+| Webhook inbox | Inbound provider events, signature verification results, processing status, replay |
+| Scheduled jobs | Cron health: credit resets, analytics polls, retention pruning, reconciliation |
+| Feature kill switches | One-click disable of any feature during an incident |
+| Status page control | Publish and update public incidents |
+| Maintenance mode | Per-app read-only or maintenance banner |
+
+---
+
+## 17. Module 16 — Website CMS
+
+Owner-editable public site content in both languages: page copy, feature pages, solutions, resources/blog,
+templates gallery, legal documents (versioned with effective dates), navigation, and SEO metadata.
+Pricing content is **generated from the Plan registry**, not typed twice — one source of truth.
+Draft → preview (both locales, both directions) → publish → version history → rollback.
+
+---
+
+## 18. Admin UX Principles
+
+1. **Every destructive or financial action** shows what will change, requires typed confirmation for the
+   irreversible ones, and records a reason.
+2. **Preview before activate** for anything affecting customers (plans, flags, routing, templates, pricing).
+3. **Traceability everywhere** — every number links to the records that produced it.
+4. **No hidden state.** If a customer's behavior differs from their plan, the resolution trace explains why.
+5. **Bilingual admin** — the Control Center itself is available in Arabic and English.
+6. **Environment clarity** — the active environment is always visible; production actions are visually distinct.
+7. **Safety over speed** — bulk operations run as reviewable, cancellable jobs with a dry-run mode.
