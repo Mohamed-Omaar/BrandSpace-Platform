@@ -52,7 +52,15 @@ export function platformRoleClient(): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-async function ensurePlatformRole(prisma: PrismaClient): Promise<string> {
+/**
+ * Ensure the `platform_owner` role exists and return its id.
+ *
+ * Exported because a suite must never ASSUME the role is there. CI runs
+ * migrations only — no seed — so a test that reads the role and asserts it is
+ * non-null passes on a developer machine that has been seeded and fails on a
+ * fresh database. Every suite bootstraps what it needs.
+ */
+export async function ensurePlatformRole(prisma: PrismaClient): Promise<string> {
   return asPlatform(
     SEED_ACTOR,
     {

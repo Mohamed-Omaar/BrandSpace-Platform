@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { ConfigurationService } from '@brandspace/config';
 import { SecretService, buildSecretRef } from '@brandspace/secrets';
 import { MODEL_TABLE_NAMES, PLATFORM_OWNED_MODELS } from '@brandspace/database';
-import { platformRoleClient } from './fixtures';
+import { ensurePlatformRole, platformRoleClient } from './fixtures';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -32,13 +32,14 @@ beforeAll(async () => {
   config = new ConfigurationService({ prisma });
   secrets = new SecretService({ prisma, env: { SECRET_VAULT_KEK: 'k'.repeat(48) } });
 
-  const role = await prisma.role.findFirst({ where: { key: 'platform_owner', workspaceId: null } });
+  // Bootstrapped, not assumed: CI applies migrations and runs no seed.
+  const roleId = await ensurePlatformRole(prisma);
   const created = await prisma.platformUser.create({
     data: {
       email: `svc-${crypto.randomUUID()}@brandspace.local`,
       name: 'Service Test Owner',
       status: 'ACTIVE',
-      roleId: role!.id,
+      roleId,
     },
   });
   ownerId = created.id;
@@ -48,8 +49,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await tenantSql.end();
-  await prisma.$disconnect();
+  // Optional-chained so a failure in beforeAll reports ITS error rather than a
+  // confusing "cannot read 'end' of undefined" on top of it.
+  await tenantSql?.end();
+  await prisma?.$disconnect();
 });
 
 /** A unique domain-free suffix so parallel runs never collide. */

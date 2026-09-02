@@ -15,7 +15,7 @@ import {
   requirePermission,
 } from '@brandspace/auth';
 import { SecretService } from '@brandspace/secrets';
-import { platformRoleClient } from './fixtures';
+import { ensurePlatformRole, platformRoleClient } from './fixtures';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -111,10 +111,10 @@ beforeAll(async () => {
   prisma = platformRoleClient();
   secrets = new SecretService({ prisma, env: { SECRET_VAULT_KEK: 'a'.repeat(48) } });
 
-  const role = await prisma.role.findFirst({
-    where: { key: 'platform_owner', workspaceId: null },
-  });
-  ownerRoleId = role!.id;
+  // Bootstrapped, not assumed: CI applies migrations and runs no seed, so a
+  // suite that only READS this role passes on a seeded developer database and
+  // fails on a fresh one.
+  ownerRoleId = await ensurePlatformRole(prisma);
 
   const systemUser = await prisma.platformUser.create({
     data: {
@@ -144,8 +144,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await tenantSql.end();
-  await prisma.$disconnect();
+  // Optional-chained so a failure in beforeAll reports ITS error rather than a
+  // confusing "cannot read 'end' of undefined" on top of it.
+  await tenantSql?.end();
+  await prisma?.$disconnect();
 });
 
 // ---------------------------------------------------------------------------

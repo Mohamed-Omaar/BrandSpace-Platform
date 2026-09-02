@@ -75,7 +75,10 @@ jobs:
         run: pnpm gate:isolation
 
   # ---------------------------------------------------------------------------
-  # Unit tests. No database required.
+  # Unit tests. No database CONNECTION required — but the generated Prisma client
+  # must exist, because unit tests import packages whose module graph reaches
+  # @prisma/client (packages/config re-exports its service, which takes a client
+  # type from packages/database). Generation is offline and needs no environment.
   # ---------------------------------------------------------------------------
   unit:
     name: Unit tests
@@ -93,6 +96,9 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client (offline; no database environment required)
+        run: pnpm --filter @brandspace/database exec prisma generate
 
       - run: pnpm test:unit
 
