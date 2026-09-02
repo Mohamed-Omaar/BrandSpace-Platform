@@ -39,6 +39,20 @@ const SEED_ACTOR = {
  */
 const DEV_PASSWORD_PLACEHOLDER = null;
 
+/**
+ * Whether the enrolment secret may be printed.
+ *
+ * The TOTP seed has to reach a human once — that is what enrolment IS — but a
+ * seed run whose output is captured (CI, a log file, a pipe) would leave that
+ * credential in a retained, searchable place. So it is printed only when a
+ * person is demonstrably watching, or when the operator explicitly overrides.
+ */
+function mayPrintEnrolment(): boolean {
+  if (process.env['SEED_PRINT_MFA_ENROLMENT'] === '1') return true;
+  if (process.env['CI']) return false;
+  return process.stdout.isTTY === true;
+}
+
 function client(): PrismaClient {
   // The seed performs PLATFORM operations — it provisions workspaces across
   // tenants — so it connects as the platform role, exactly like production
@@ -272,11 +286,78 @@ async function main(): Promise<void> {
       console.log(`  ${tenant.slug} (${workspaceId}) — owner ${tenant.userEmail}`);
     }
 
+    // --- Platform Owner MFA + password (development only) ------------------
+    // Real credentials are never committed. These are development values so the
+    // Control Center can actually be signed into locally; production accounts
+    // are provisioned through the invitation flow.
+    const devPassword = process.env['SEED_PLATFORM_PASSWORD'] ?? 'brandspace-dev-owner-2026';
+    const { hashPassword } = await import('@brandspace/auth');
+    const { generateTotpEnrolment, generateRecoveryCodes } = await import('@brandspace/auth');
+    const { SecretService, buildSecretRef } = await import('@brandspace/secrets');
+
+    const enrolment = generateTotpEnrolment(platformOwner.email);
+    const secretService = new SecretService({ prisma });
+    const mfaRef = buildSecretRef({
+      category: 'mfa_totp',
+      provider: 'platform',
+      environment: 'development',
+      name: platformOwner.email,
+    });
+
+    const existingMfa = await prisma.secretRecord.findUnique({
+      where: { ref_environment: { ref: mfaRef, environment: 'DEVELOPMENT' } },
+    });
+    if (!existingMfa) {
+      await secretService.createSecret(
+        { platformUserId: platformOwner.id, roleKey: 'platform_owner', mfaVerified: true },
+        {
+          ref: mfaRef,
+          name: `TOTP seed for ${platformOwner.email}`,
+          category: 'mfa_totp',
+          environment: 'DEVELOPMENT',
+          value: enrolment.secret,
+        },
+      );
+      await prisma.platformUser.update({
+        where: { id: platformOwner.id },
+        data: {
+          passwordHash: await hashPassword(devPassword),
+          mfaEnabled: true,
+          mfaSecretRef: mfaRef,
+          mfaEnrolledAt: new Date(),
+        },
+      });
+
+      const recoveryCodes = generateRecoveryCodes();
+      const { PlatformAuthService } = await import('@brandspace/auth');
+      await new PlatformAuthService({ prisma }).storeRecoveryCodes(platformOwner.id, recoveryCodes);
+
+      console.log('  MFA enrolled for the Platform Owner (development).');
+      if (mayPrintEnrolment()) {
+        console.log(
+          '  TOTP secret and recovery codes are printed ONCE, here, and never stored in clear:',
+        );
+        console.log(`    otpauth URI : ${enrolment.otpauthUri}`);
+        console.log(`    recovery    : ${recoveryCodes.join(' ')}`);
+      } else {
+        console.log('  Enrolment details WITHHELD: this is not an interactive terminal.');
+        console.log('  Printing a TOTP seed into a CI log or a redirected file would put a');
+        console.log('  credential somewhere it is retained and searchable (CLAUDE.md §2.3).');
+        console.log('  Re-run the seed from a terminal, or set SEED_PRINT_MFA_ENROLMENT=1 if you');
+        console.log('  are certain the output is not being captured.');
+      }
+    } else {
+      console.log('  Platform Owner MFA already enrolled; leaving it untouched.');
+    }
+
     console.log('\n✔ seed complete');
     console.log('  Platform Owner : owner@brandspace.local');
     console.log('  Workspace A    : acme-agency  / amal@acme.local');
     console.log('  Workspace B    : north-star   / noor@northstar.local');
-    console.log('  No passwords are seeded; auth flows arrive in Phase 2.');
+    console.log(
+      '  Platform Owner password comes from SEED_PLATFORM_PASSWORD (development default applies).',
+    );
+    console.log('  Customer auth flows arrive in Phase 2B.');
   } finally {
     await prisma.$disconnect();
   }

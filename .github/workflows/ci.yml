@@ -201,16 +201,38 @@ jobs:
         run: pnpm test:isolation
 
   # ---------------------------------------------------------------------------
-  # F-04: Playwright E2E — RTL/LTR, keyboard, responsive and accessibility smoke
-  # tests across all three interfaces. Separate from unit and isolation so a
-  # browser failure is distinguishable at a glance.
+  # F-04: Playwright E2E — RTL/LTR, keyboard, responsive and accessibility across
+  # all three interfaces, plus the Control Center's real journeys (sign-in, MFA,
+  # the configuration lifecycle, secret handling). Separate from unit and
+  # isolation so a browser failure is distinguishable at a glance.
   #
-  # Needs no database: the apps are statically rendered and no test touches an
-  # external API, so DATABASE_PLATFORM_URL is deliberately absent here.
+  # The public website and the customer dashboard are statically rendered and get
+  # a placeholder database URL. The Control Center is a real database-backed
+  # application from Phase 2A onwards, so this job runs a throwaway PostgreSQL and
+  # signs in with an account created seconds earlier by `pnpm e2e:seed`. No real
+  # credential is used anywhere.
   # ---------------------------------------------------------------------------
   e2e:
     name: Playwright E2E (RTL/LTR + accessibility)
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          # Throwaway credential for an ephemeral CI container that is never
+          # reachable outside this job. No production secret is used in CI.
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -225,8 +247,43 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Create least-privilege database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Throwaway credentials for an ephemeral CI container that is never
+          # reachable outside this job. No production secret is used in CI.
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -v migrator_password=ci_migrator \
+            -v app_password=ci_app \
+            -v platform_password=ci_platform \
+            -f scripts/sql/setup-database-roles.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE brandspace_test OWNER brandspace_migrator;"
+
+      - name: Write test environment
+        run: |
+          cat > .env.test <<'ENVEOF'
+          NODE_ENV=test
+          APP_ENV=development
+          LOG_LEVEL=error
+          DATA_REGION=local
+          DATABASE_URL=postgresql://brandspace_app:ci_app@localhost:5432/brandspace_test?schema=public
+          DATABASE_MIGRATION_URL=postgresql://brandspace_migrator:ci_migrator@localhost:5432/brandspace_test?schema=public
+          DATABASE_PLATFORM_URL=postgresql://brandspace_platform:ci_platform@localhost:5432/brandspace_test?schema=public
+          REDIS_URL=redis://localhost:6379/1
+          CUSTOMER_SESSION_SECRET=ci-only-customer-session-secret-0000000000000
+          PLATFORM_SESSION_SECRET=ci-only-platform-session-secret-1111111111111
+          SECRET_VAULT_KEK=ci-only-vault-key-encryption-key-22222222222222
+          ENVEOF
+
       - name: Generate Prisma client (offline)
         run: pnpm --filter @brandspace/database exec prisma generate
+
+      - name: Apply migrations to the end-to-end database
+        env:
+          NODE_ENV: test
+        run: pnpm db:migrate:deploy
 
       - name: Install Chromium and its system dependencies
         run: pnpm exec playwright install --with-deps chromium
@@ -236,14 +293,15 @@ jobs:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
         run: pnpm e2e:build
 
+      # `pnpm test:e2e` seeds the throwaway admin account first, then runs
+      # Playwright. The Playwright config reads .env.test for the Control
+      # Center's database connection; the other two apps get a placeholder.
       - name: Run Playwright
-        env:
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
         run: pnpm test:e2e
 
-      # Failure artifacts only. The report contains traces and screenshots of
-      # scaffold pages; it never contains .env files, database URLs or logs,
-      # because no test has access to any of those.
+      # Failure artifacts only. Traces and screenshots are of the applications
+      # themselves; the run has no real credential to capture, and the throwaway
+      # admin password is regenerated on every seed.
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -277,16 +335,53 @@ jobs:
       - name: Scan for credential-shaped strings
         run: |
           pattern='(sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
-          # Test fixtures deliberately contain sample-shaped strings to prove the
-          # redaction layer catches them, so the scan skips the redaction tests.
-          if git grep -nIE "$pattern" -- . \
-               ':!tests/unit/redaction.test.ts' \
-               ':!packages/shared/src/redaction.ts' \
-               ':!pnpm-lock.yaml'; then
+
+          # A handful of files MUST contain credential-shaped strings, because
+          # that is what they are testing: the redaction layer, the secret
+          # vault, and the span sanitiser are all asserted against values with
+          # the shape a real key has. They are excluded here and checked by the
+          # stricter pass below instead of being trusted outright.
+          allowlist=(
+            ':!tests/unit/redaction.test.ts'          # proves redaction catches these shapes
+            ':!tests/unit/secret-crypto.test.ts'      # proves masking reveals at most four characters
+            ':!tests/unit/observability.test.ts'      # proves no such value reaches a span
+            ':!tests/isolation/platform-services.test.ts'  # proves nothing is stored in plaintext
+            ':!packages/shared/src/redaction.ts'      # the patterns themselves
+            ':!pnpm-lock.yaml'
+          )
+
+          if git grep -nIE "$pattern" -- . "${allowlist[@]}"; then
             echo "::error::A credential-shaped string was found in tracked files."
             exit 1
           fi
-          echo "No credential-shaped strings found."
+          echo "No credential-shaped strings found outside the test fixtures."
+
+      # The allowlist above must not become a place where a real key can hide.
+      # Every credential-shaped string in those files has to be visibly fake:
+      # a sequential alphabet run that no generated key would ever contain.
+      - name: Fixtures in the allowlisted files must be visibly fake
+        run: |
+          pattern='(sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,})'
+          files=(
+            tests/unit/redaction.test.ts
+            tests/unit/secret-crypto.test.ts
+            tests/unit/observability.test.ts
+            tests/isolation/platform-services.test.ts
+          )
+          bad=0
+          for file in "${files[@]}"; do
+            while IFS= read -r match; do
+              case "$match" in
+                *abcdefgh*|*EXAMPLE*) ;;
+                *) echo "::error file=$file::'$match' does not look like an obvious fixture"; bad=1 ;;
+              esac
+            done < <(grep -oE "$pattern" "$file" || true)
+          done
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::A credential-shaped string in an allowlisted file is not visibly a fixture."
+            exit 1
+          fi
+          echo "All fixtures in the allowlisted files are visibly fake."
 
   # ---------------------------------------------------------------------------
   # Application builds must succeed.

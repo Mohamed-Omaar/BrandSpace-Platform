@@ -569,3 +569,98 @@ post-launch activity.
 | Restore drill                                            | Quarterly                                |
 | Access review (platform users, secrets, provider apps)   | Quarterly                                |
 | Threat model review                                      | Each major architectural change          |
+
+---
+
+## 18. Implementation Status — Phase 2A
+
+> **ملخّص بالعربية**
+>
+> هذا القسم يفصل بين ما هو مُنفَّذ ومُختبَر فعليًا، وما هو تصميم لم يُبنَ بعد. كل ادّعاء أدناه مرتبط باختبار
+> يمكن تشغيله. أهم ما في المرحلة: عزل بيانات المنصة عن دور التطبيق، إلزام التحقق بخطوتين، تشفير المفاتيح
+> السرية بمفتاح بيانات مُغلَّف، وعدم وجود أي مسار لإظهار قيمة سرية بعد حفظها.
+
+### 18.1 The three database identities
+
+| Role                  | Owns schema | `BYPASSRLS` | Sees tenant data             | Sees platform data  |
+| --------------------- | ----------- | ----------- | ---------------------------- | ------------------- |
+| `brandspace_migrator` | yes         | no          | only via migrations          | only via migrations |
+| `brandspace_app`      | no          | no          | only its request's workspace | **none at all**     |
+| `brandspace_platform` | no          | no          | all, through `asPlatform()`  | yes                 |
+
+"None at all" is literal and is asserted, not assumed: every privilege is revoked from `brandspace_app` on
+every platform-owned table, so a query returns _permission denied_, not zero rows. The distinction matters —
+zero rows would mean the grant still exists and only a policy stands between the tenant role and the data.
+
+### 18.2 Platform-owned tables
+
+`platform_user`, `platform_session`, `platform_mfa_recovery_code`, `configuration_version`, `secret_record`,
+`secret_version`. Each has RLS **enabled and forced**, a policy naming `brandspace_platform` only, and every
+privilege revoked from `brandspace_app`.
+
+`platform_user` was added to this list in Phase 2A after the Control Center tests found it readable by the
+tenant role — the identity migration created it and the RLS migration's blanket `GRANT ... ON ALL TABLES`
+covered it, while no policy was ever written. The tenant role could read the Platform Owner's Argon2id
+password hash. Recorded as F-10 in `docs/DECISIONS.md`, fixed by migration
+`20260901210500_platform_user_isolation`, and the class of bug is now closed by the isolation gate: every
+model must be classified in the tenancy registry, so a new model nobody thought about fails the build.
+
+### 18.3 Platform Admin authentication
+
+- **Password**: Argon2id, 19 MiB memory, 2 iterations, parallelism 1.
+- **Two steps, and the first is worthless.** A correct password creates a session with `mfaVerifiedAt = NULL`.
+  `resolveActor()` returns `null` for such a session, so a stolen pre-MFA cookie grants nothing — asserted in
+  both the isolation suite and the browser suite.
+- **TOTP** (RFC 6238, ±1 step). The seed lives in the Secret Service; `platform_user` stores only a reference.
+- **Recovery codes**: high-entropy, stored as SHA-256 hashes, single-use, compared in constant time.
+- **No enumeration**: unknown email, wrong password, suspended account, passwordless account and a locked
+  account all return `Invalid credentials.` after the same Argon2 work.
+- **Lockout**: 10 failed attempts across _either_ factor lock the account for 15 minutes. Counting MFA failures
+  matters — without it, holding the password reduces the second factor to a million guesses.
+- **Sessions**: 4-hour idle, 12-hour absolute. The token is never stored; only its SHA-256 hash is. Revocation,
+  suspension and a role demotion each stop an existing session at the next request.
+- **Realms cannot cross**: different cookie name, audience, signing-key source, TTL and SameSite. There is no
+  shared session store for a customer token to be found in.
+
+### 18.4 Secret storage
+
+Envelope encryption. Each secret **version** gets its own AES-256-GCM data key; that data key is wrapped by a
+key-encryption key from a `KeyProvider`. The encryption context — `ref`, environment and version number — is
+the AEAD additional data, so ciphertext moved to another environment or renumbered fails to decrypt rather
+than silently succeeding.
+
+- **`resolveSecret()` is the only decrypt path**, and it is server-side. No API, page or action returns a
+  plaintext value.
+- **There is no reveal feature** (D-32). Operators see a masked hint (last four characters), a keyed
+  fingerprint for "is this the key I meant?", status and timestamps.
+- **Material is immutable**: a database trigger refuses any update to ciphertext, IV, auth tag, wrapped key or
+  encryption context. Rotation creates a new version and retires the old one in one transaction; a partial
+  unique index makes two ACTIVE versions impossible.
+- **Fails closed**: `createKeyProvider()` throws when no key material is configured, and refuses the local
+  development provider entirely when `NODE_ENV=production`. The KMS provider throws honestly rather than
+  pretending to work — see F-09.
+- **Nothing is logged**: audit events for create, rotate, disable, enable and revoke carry the ref and the
+  actor, never the value. The isolation suite searches every raw row of the database for the plaintext.
+
+### 18.5 Telemetry
+
+Spans are exported over OTLP when a collector is configured and are silently disabled when one is not —
+telemetry is never a deployment prerequisite, and a collector outage never changes what a request returns.
+Every attribute passes `sanitizeAttributes`, which drops forbidden keys outright (password, secret, token,
+api key, credential, authorization, cookie, session, email, phone, dsn, connection string) and drops any value
+shaped like a connection string or bearer token under any key. A failed span records the error's _name_, never
+its message, because a message can carry a connection string.
+
+### 18.6 What these claims rest on
+
+| Claim                                                                   | Where it is proven                                                                  |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Tenant role cannot read platform data                                   | `tests/isolation/platform-services.test.ts`, `platform-auth.test.ts`                |
+| MFA is mandatory and a pre-MFA session is inert                         | `tests/isolation/platform-auth.test.ts`, `tests/e2e/admin-console.spec.ts`          |
+| Lockout, uniform errors, session lifecycle                              | `tests/isolation/platform-auth.test.ts`                                             |
+| No plaintext secret anywhere in the database                            | `tests/isolation/platform-services.test.ts`                                         |
+| No secret value in any HTTP response                                    | `tests/e2e/admin-console.spec.ts`                                                   |
+| Encryption fails closed when unconfigured                               | `tests/unit/secret-crypto.test.ts`                                                  |
+| No credential reaches a span                                            | `tests/unit/observability.test.ts`                                                  |
+| Secret Service and platform client are unreachable from tenant surfaces | `tests/unit/module-boundaries.test.ts`, `tests/unit/platform-pool-boundary.test.ts` |
+| Every model is classified and protected                                 | `scripts/isolation-gate.ts`, `tests/unit/isolation-gate.test.ts`                    |

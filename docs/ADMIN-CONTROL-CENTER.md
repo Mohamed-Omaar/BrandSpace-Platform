@@ -457,3 +457,70 @@ Draft → preview (both locales, both directions) → publish → version histor
 5. **Bilingual admin** — the Control Center itself is available in Arabic and English.
 6. **Environment clarity** — the active environment is always visible; production actions are visually distinct.
 7. **Safety over speed** — bulk operations run as reviewable, cancellable jobs with a dry-run mode.
+
+---
+
+## 19. Implementation Status — Phase 2A
+
+> **ملخّص بالعربية**
+>
+> هذا القسم يوثّق ما تم بناؤه فعليًا في المرحلة 2A، وما لم يُبنَ بعد. الوحدات المذكورة أعلاه هي التصميم الكامل؛
+> ما يلي هو الواقع الحالي في الكود، حتى لا يُفترض وجود ما لم يُنفَّذ.
+
+Sections 1–18 describe the Control Center as designed. This section records what actually exists in the
+codebase today, so nobody plans against a module that has not been built.
+
+### 19.1 Built and working
+
+| Area                                            | Route                             | State                                                                                                           |
+| ----------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Sign-in (password)                              | `/[locale]/login`                 | Server action. Uniform failure message; the session it creates grants nothing.                                  |
+| Second factor (TOTP)                            | `/[locale]/mfa`                   | Mandatory (D-27). Recovery codes accepted once each. Only this makes a session usable.                          |
+| Overview                                        | `/[locale]/console`               | Real counts from the platform database: activated domains, pending drafts, stored secrets, active environment.  |
+| Configuration management                        | `/[locale]/console/configuration` | 17 domains. Draft → edit (JSON) → validate → impact preview → activate → rollback, with optimistic concurrency. |
+| Secret management                               | `/[locale]/console/secrets`       | Create, rotate, disable. Masked hint and keyed fingerprint only — there is no reveal.                           |
+| Providers / AI models / routing / flags / plans | `/[locale]/console/*`             | Read-only views of the ACTIVE configuration for each domain. Editing happens through the configuration module.  |
+| Platform audit log                              | `/[locale]/console/audit`         | Most recent platform events, read-only, gated on `platform.audit.read`.                                         |
+| System health                                   | `/[locale]/console/health`        | Database, configuration, secret vault, tracing, and each provider adapter's connection test.                    |
+| Sign out                                        | `POST /[locale]/sign-out`         | Revokes the session server-side before clearing the cookie.                                                     |
+
+### 19.2 How authorisation actually works
+
+Three checks, none of which trusts the others:
+
+1. **The console layout** (`app/[locale]/console/layout.tsx`) resolves the actor and redirects to sign-in when
+   there is none. Every console page nests inside it.
+2. **Every page** calls `requirePageActor(locale, permission)` — redirect when unauthenticated, **404** when
+   authenticated without the permission, so the page is indistinguishable from one that does not exist.
+3. **Every server action** calls `requirePlatformActor(permission)` independently. A server action is a public
+   HTTP endpoint; being reachable only from an authorised page is not a control.
+
+Middleware handles locale redirection **only**. It runs on the edge with no database access and is never an
+authorisation control.
+
+### 19.3 Configuration lifecycle as implemented
+
+```
+create draft ──► edit payload (JSON) ──► validate ──► impact preview ──► activate
+     │                   │                   │              │               │
+     │                   │                   │              │               └─ atomic; exactly one ACTIVE
+     │                   │                   │              │                  per (domain, environment),
+     │                   │                   │              │                  enforced by a partial
+     │                   │                   │              │                  unique index
+     │                   │                   │              └─ high-impact changes require an explicit tick
+     │                   │                   └─ structural (Zod) then semantic (cross-domain references)
+     │                   └─ clears any previous validation and preview; lockVersion must match
+     └─ seeded from the current ACTIVE payload, or the domain's empty-but-valid default
+```
+
+Rollback activates a **new** version carrying an older payload. History is never rewritten: a database trigger
+refuses any edit to an ACTIVE version's payload.
+
+`plans` and `ai.credit-rules` additionally require **dual control** (D-31): the activator may not be the author.
+
+### 19.4 Not built yet
+
+Customers and workspaces (§3), plan editing as a form (§4), feature-flag targeting UI (§5), integration
+connect/disconnect flows (§6), credits and billing administration (§9, §10), notification templates (§11),
+Support Mode UI (§12), platform user management (§15), and the website CMS (§17) are **designed but not
+implemented**. The configuration and secret modules they depend on now exist, which is what Phase 2A was for.

@@ -395,3 +395,60 @@ The slice is complete when **all** of the following hold:
 | 15. Audit events visible                 | AC-15.1 – AC-15.8   |
 | 16. Isolation and credit tests           | AC-16.1 – AC-16.26  |
 | Cross-cutting                            | AC-17.1 – AC-17.21  |
+
+---
+
+## 21. Phase 2A Status Against These Criteria
+
+> **ملخّص بالعربية**
+>
+> هذا الجدول يوضح بدقة أي معايير القبول تحققت في المرحلة 2A وأيها لم يتحقق بعد. لم يُعدَّل أي معيار
+> ليطابق ما بُني؛ المعايير كما هي، والحالة مذكورة بصدق.
+
+No criterion below was reworded to match what was built. They read as written in Phase 0; only the status
+column is new.
+
+### 21.1 Met
+
+| ID       | Where it is proven                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| AC-01.1  | `apps/admin` is a separate app with `robots: { index: false }`; asserted in `tests/e2e/admin-console.spec.ts`             |
+| AC-01.2  | E2E: password + TOTP reaches the console and shows the signed-in actor                                                    |
+| AC-01.3  | E2E and isolation: a password-only session resolves to **no actor**, and `/console` redirects to sign-in                  |
+| AC-01.4  | Isolation + E2E: a token not in `platform_session` resolves to nothing; the realms share no session store                 |
+| AC-01.6  | `tests/unit/realms.test.ts` — different cookie names, audiences, and signing-key sources                                  |
+| AC-01.7  | **Adapted**: 10 failed attempts (across either factor) lock the account for 15 minutes, refused with the uniform error    |
+| AC-01.8  | `platform.login.succeeded` written with actor, IP and timestamp; denials and lockouts audited too                         |
+| AC-01.9  | E2E: sign-in and console render in `ar`/RTL and `en`/LTR, with axe, keyboard and overflow checks on every console page    |
+| AC-02.2  | Configuration is stored as a `ConfigurationVersion` in `DRAFT` with `createdByPlatformUserId`                             |
+| AC-02.3  | Two-stage validation; an invalid payload cannot be activated, and malformed JSON is rejected without a stack trace        |
+| AC-02.4  | The secret value field is `type="password"` and never round-trips                                                         |
+| AC-02.5  | E2E asserts the plaintext is absent from the **raw HTTP response**, not merely from the DOM; only mask + fingerprint show |
+| AC-02.6  | AES-256-GCM per-version data key, wrapped by a KEK; the encryption context is AEAD data, so a replayed ciphertext fails   |
+| AC-02.7  | There is no decrypt-and-display code path at all (D-32); E2E enumerates every control on the page to confirm              |
+| AC-02.8  | `secret.created` carries the ref and actor; the isolation suite greps every audit row for the value                       |
+| AC-02.9  | Environment separation tested across DEVELOPMENT / STAGING / PRODUCTION for both configuration and secrets                |
+| AC-03.3  | Activation is atomic; the previous ACTIVE becomes SUPERSEDED in the same transaction                                      |
+| AC-03.4  | A **partial unique index** enforces it; the isolation suite proves the database refuses a second ACTIVE                   |
+| AC-03.8  | Semantic validation rejects a routing rule pointing at a disabled model                                                   |
+| AC-03.9  | Rollback creates a new version; a trigger refuses to rewrite an ACTIVE payload                                            |
+| AC-03.10 | `config.activated` is written with the domain, version and reason                                                         |
+
+### 21.2 Not met, and why
+
+| ID      | Status                                                                                                                                                                                  |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-01.5 | Not testable yet — there is no customer session to present. Phase 2B.                                                                                                                   |
+| AC-02.1 | **Partly.** Providers are configured from Admin with no deployment, but through the JSON editor rather than a per-field form (D-30). Field-level errors on a form arrive with the form. |
+| AC-03.1 | Provider adapters expose `testConnection()` and the health page runs it, but the Control Center has no per-provider "Test connection" button yet.                                       |
+| AC-03.2 | Follows AC-03.1.                                                                                                                                                                        |
+| AC-03.5 | **Single-instance only.** In-process cache with a 30-second TTL; cross-instance invalidation over Redis pub/sub is not implemented (F-12).                                              |
+| AC-03.6 | The `ai.models` domain and its schema exist; the model-registry form does not.                                                                                                          |
+| AC-03.7 | The `ai.routing` domain and its validation exist; the routing-rule form does not.                                                                                                       |
+| §5–§16  | Plans, customers, invitations, brands, content, credits, calendar and the customer-facing slice are **not built**. They are Phase 2B and later.                                         |
+
+### 21.3 The vertical slice
+
+§19's end-to-end journey is **not** covered, and no test claims otherwise. It requires customer
+authentication, workspaces created from Admin, and the AI gateway — none of which exist yet. What Phase 2A
+delivered is the machinery those steps depend on: configuration, secrets, admin identity, and the audit trail.

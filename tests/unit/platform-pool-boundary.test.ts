@@ -20,10 +20,41 @@ const repoRoot = path.resolve(here, '../..');
  *   3. ESLint rejects an import from every tenant-facing location.
  */
 
+/**
+ * The only files permitted to reach the pool.
+ *
+ *  - `platform.ts`        — asPlatform(), the single AUDITED entrance for
+ *                           cross-tenant reads of TENANT data.
+ *  - `platform-client.ts` — the Phase 2A seam that hands a platform-scoped
+ *                           client to apps/admin and apps/api for PLATFORM-owned
+ *                           data (configuration, secrets, admin sessions), which
+ *                           no tenant policy covers. Its own ESLint rule limits
+ *                           who may import it.
+ *  - `platform-pool.ts`   — the module itself.
+ */
 const APPROVED_IMPORTERS = [
   'packages/database/src/platform.ts',
+  'packages/database/src/platform-client.ts',
   'packages/database/src/platform-pool.ts',
 ];
+
+/**
+ * Strip comments before searching for a reference.
+ *
+ * A file that only NAMES a restricted variable in prose — "fails closed when
+ * DATABASE_PLATFORM_URL is absent" — is documenting the boundary, not crossing
+ * it. Matching raw text would make the correct comment a build failure and
+ * quietly train people to delete the explanation.
+ */
+function code(source: string): string {
+  return (
+    source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // Trailing `//` comments too, but not the `//` in a URL, which is why the
+      // preceding character may not be a colon.
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  );
+}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -75,7 +106,7 @@ describe('the platform pool is not reachable through the package API', () => {
       const relative = path.relative(repoRoot, file);
       if (APPROVED_IMPORTERS.includes(relative)) continue;
       if (relative.startsWith('tests/')) continue; // tests assert about it by name
-      const source = readFileSync(file, 'utf8');
+      const source = code(readFileSync(file, 'utf8'));
       if (/from ['"][^'"]*platform-pool['"]|require\(['"][^'"]*platform-pool['"]\)/.test(source)) {
         offenders.push(relative);
       }
@@ -85,8 +116,23 @@ describe('the platform pool is not reachable through the package API', () => {
 
   it('is never referenced by any app', () => {
     const appFiles = walk(path.join(repoRoot, 'apps'));
-    const offenders = appFiles.filter((f) => /platform-pool/.test(readFileSync(f, 'utf8')));
+    const offenders = appFiles.filter((f) => /platform-pool/.test(code(readFileSync(f, 'utf8'))));
     expect(offenders.map((f) => path.relative(repoRoot, f))).toEqual([]);
+  });
+
+  it('the approved client seam hands out a client, never the pool itself', () => {
+    // apps/admin may import platform-client.ts. If that module re-exported the
+    // pool, the restriction on the pool would be decorative.
+    const source = readFileSync(
+      path.join(repoRoot, 'packages/database/src/platform-client.ts'),
+      'utf8',
+    );
+    const exportLines = code(source)
+      .split('\n')
+      .filter((l) => l.trimStart().startsWith('export'))
+      .join('\n');
+    expect(exportLines).not.toContain('platform-pool');
+    expect(exportLines).not.toContain('getPlatformPrisma');
   });
 });
 
@@ -129,8 +175,20 @@ describe('the platform credential cannot reach a browser bundle', () => {
 
   it('no app source reads DATABASE_PLATFORM_URL', () => {
     const appFiles = walk(path.join(repoRoot, 'apps'));
-    const offenders = appFiles.filter((f) => /DATABASE_PLATFORM_URL/.test(readFileSync(f, 'utf8')));
+    const offenders = appFiles.filter((f) =>
+      /DATABASE_PLATFORM_URL/.test(code(readFileSync(f, 'utf8'))),
+    );
     expect(offenders.map((f) => path.relative(repoRoot, f))).toEqual([]);
+  });
+
+  it('the comment-stripping used above does not hide a real read', () => {
+    // Non-vacuity: if `code()` were too aggressive, the check above would pass
+    // no matter what an app did.
+    expect(code('const a = 1; // DATABASE_PLATFORM_URL\n')).not.toContain('DATABASE_PLATFORM_URL');
+    expect(code("const url = process.env['DATABASE_PLATFORM_URL'];\n")).toContain(
+      'DATABASE_PLATFORM_URL',
+    );
+    expect(code('/* DATABASE_PLATFORM_URL */ const b = 2;')).not.toContain('DATABASE_PLATFORM_URL');
   });
 
   it('THROWS when loaded in a browser context', async () => {

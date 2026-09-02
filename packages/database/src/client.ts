@@ -48,3 +48,9 @@ export async function disconnectPrisma(): Promise<void> {
 }
 
 export type { PrismaClient };
+/**
+ * Re-exported so other packages can use Prisma's sentinel values (DbNull,
+ * JsonNull) without importing @prisma/client directly — packages/database
+ * remains the only package permitted to do that.
+ */
+export { Prisma } from '@prisma/client';

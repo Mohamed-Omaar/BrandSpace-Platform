@@ -739,3 +739,58 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 | Deleted workspace              | 30-day grace, then irreversible purge | export offered first                                            |
 | Publish attempts               | 12 months                             | provider responses redacted                                     |
 | Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                        |
+
+---
+
+## 14. Platform-Owned Tables (implemented in Phase 2A)
+
+> **ملخّص بالعربية**
+>
+> هذه الجداول تخص المنصة نفسها لا العملاء: هوية مسؤولي المنصة وجلساتهم، إصدارات الإعدادات، والمفاتيح السرية
+> المشفّرة. لا تحتوي على `workspaceId`، ولا يملك دور التطبيق أي صلاحية عليها إطلاقًا.
+
+These carry **no `workspaceId`**. They are not tenant data, and the tenant application role has no privilege on
+them at all — a query from `brandspace_app` returns _permission denied_, not an empty result.
+
+| Table                        | Purpose                                 | Notable constraints                                                                                                                                        |
+| ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `platform_user`              | Platform Admin identity                 | `email` unique; `mfaSecretRef` is a vault reference, never a secret; `lockedUntil` drives lockout                                                          |
+| `platform_session`           | Admin sessions                          | `tokenHash` unique — the token itself is never stored; `mfaVerifiedAt IS NULL` grants nothing                                                              |
+| `platform_mfa_recovery_code` | Single-use recovery codes               | stored as SHA-256 hashes; `usedAt` burns one on use                                                                                                        |
+| `configuration_version`      | Versioned configuration documents       | partial unique index `(domain, environment) WHERE status = 'ACTIVE'`; trigger rejects editing an ACTIVE payload                                            |
+| `secret_record`              | Secret identity and lifecycle           | unique `(ref, environment)`                                                                                                                                |
+| `secret_version`             | Encrypted material, one row per version | partial unique index `(secretRecordId) WHERE status = 'ACTIVE'`; trigger rejects any change to ciphertext, IV, auth tag, wrapped key or encryption context |
+
+### 14.1 Protection
+
+Each of the six has, in the same migration that creates it:
+
+```sql
+ALTER TABLE "<table>" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "<table>" FORCE  ROW LEVEL SECURITY;
+CREATE POLICY platform_only ON "<table>"
+  TO brandspace_platform USING (true) WITH CHECK (true);
+REVOKE ALL ON "<table>" FROM brandspace_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON "<table>" TO brandspace_platform;
+```
+
+Two independent controls, so neither is load-bearing alone: the grant is gone, **and** the policy names only
+the platform role, so a future blanket `GRANT` still yields zero rows.
+
+`platform_user` joined this set in migration `20260901210500_platform_user_isolation`. It was created in Phase
+1 as an unclassified table and picked up the RLS migration's `GRANT ... ON ALL TABLES IN SCHEMA public`, which
+left its password hashes readable by the tenant role. See `docs/DECISIONS.md` F-10.
+
+### 14.2 Secret material columns
+
+`secret_version` stores `ciphertext`, `iv`, `authTag`, `wrappedDataKey` and `encryptionContext`. The plaintext
+appears in no column, no index and no log. The encryption context binds the ciphertext to
+`(ref, environment, version)` as AEAD additional data, so a row copied to another environment fails to decrypt
+rather than quietly working.
+
+### 14.3 The tenancy registry is the source of truth
+
+`packages/database/src/tenant-models.ts` classifies **every** model as tenant-owned, platform-owned, identity,
+or a global catalogue. `scripts/isolation-gate.ts` fails the build when a model is unclassified, when the
+classification disagrees with the schema, when a platform-owned table lacks its policy or its revoke, or when
+the isolation suite never exercises it. A model nobody thought about is a build failure, not a default.

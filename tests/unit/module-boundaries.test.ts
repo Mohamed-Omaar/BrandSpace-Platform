@@ -100,3 +100,144 @@ describe('permitted imports are allowed', () => {
     expect(lintSnippet(file, source)).not.toMatch(VIOLATION);
   });
 });
+
+/**
+ * Phase 2A boundaries — F-07.
+ *
+ * Two modules can leak the whole platform if they end up in the wrong bundle:
+ *
+ *   - `@brandspace/secrets` holds the ONLY decrypt path for platform credentials;
+ *   - `@brandspace/database/platform` opens a connection with cross-tenant
+ *     visibility.
+ *
+ * `import 'server-only'` and the pools' runtime guards are the other two
+ * controls. This one is the cheapest and the earliest, so it is also the one
+ * most likely to be silently disabled by an unrelated lint edit — hence probes
+ * in both directions.
+ */
+const RESTRICTED = /Restricted module/;
+
+describe('the Secret Service is unreachable from tenant-facing surfaces (F-07)', () => {
+  it.each([
+    ['apps/web/src/__boundary_probe.ts', 'the public website'],
+    ['apps/dashboard/src/__boundary_probe.ts', 'the customer dashboard'],
+    ['apps/worker/src/__boundary_probe.ts', 'background workers'],
+    ['packages/entitlements/src/__boundary_probe.ts', 'an ordinary domain package'],
+    ['packages/ui/src/__boundary_probe.ts', 'the design system'],
+    ['packages/providers/src/__boundary_probe.ts', 'the provider adapters'],
+  ])('rejects @brandspace/secrets in %s (%s)', (file) => {
+    expect(lintSnippet(file, "import '@brandspace/secrets';")).toMatch(RESTRICTED);
+  });
+
+  it.each([
+    ['packages/auth/src/__boundary_probe.ts', 'auth resolves the TOTP seed at MFA verification'],
+    ['apps/admin/src/__boundary_probe.ts', 'the Control Center manages secrets'],
+    ['apps/api/src/__boundary_probe.ts', 'server-side platform routes'],
+  ])('allows @brandspace/secrets in %s (%s)', (file) => {
+    expect(lintSnippet(file, "import '@brandspace/secrets';")).not.toMatch(RESTRICTED);
+  });
+
+  it('rejects a deep relative import that bypasses the package specifier', () => {
+    expect(
+      lintSnippet(
+        'apps/dashboard/src/__boundary_probe.ts',
+        "import '../../../packages/secrets/src/service';",
+      ),
+    ).toMatch(RESTRICTED);
+  });
+});
+
+describe('the platform database client is unreachable outside admin and api (F-07)', () => {
+  it.each([
+    ['apps/web/src/__boundary_probe.ts', 'the public website'],
+    ['apps/dashboard/src/__boundary_probe.ts', 'the customer dashboard'],
+    ['apps/worker/src/__boundary_probe.ts', 'background workers'],
+    ['packages/config/src/__boundary_probe.ts', 'a package must take its client as a parameter'],
+    ['packages/auth/src/__boundary_probe.ts', 'auth included'],
+  ])('rejects @brandspace/database/platform in %s (%s)', (file) => {
+    expect(lintSnippet(file, "import '@brandspace/database/platform';")).toMatch(RESTRICTED);
+  });
+
+  it.each([
+    ['apps/admin/src/__boundary_probe.ts', 'the Control Center'],
+    ['apps/api/src/__boundary_probe.ts', 'server-side platform routes'],
+    ['packages/database/src/__boundary_probe.ts', 'the package that owns the seam'],
+  ])('allows @brandspace/database/platform in %s (%s)', (file) => {
+    expect(lintSnippet(file, "import '@brandspace/database/platform';")).not.toMatch(RESTRICTED);
+  });
+
+  it('still rejects the raw platform pool everywhere, including apps/admin', () => {
+    // The approved seam is the client, not the pool. asPlatform() is the only
+    // audited entrance to cross-tenant reads of TENANT data.
+    expect(
+      lintSnippet(
+        'apps/admin/src/__boundary_probe.ts',
+        "import '@brandspace/database/platform-pool';",
+      ),
+    ).toMatch(RESTRICTED);
+  });
+});
+
+describe('Phase 2A packages stay inside their declared dependencies', () => {
+  it.each([
+    [
+      'packages/observability/src/__boundary_probe.ts',
+      "import '@brandspace/database';",
+      'observability must not reach the database',
+    ],
+    [
+      'packages/secrets/src/__boundary_probe.ts',
+      "import '@brandspace/config';",
+      'secrets must not depend on configuration',
+    ],
+    [
+      'packages/providers/src/__boundary_probe.ts',
+      "import '@brandspace/database';",
+      'provider adapters must not read the database directly',
+    ],
+    [
+      'packages/config/src/__boundary_probe.ts',
+      "import '@brandspace/auth';",
+      'configuration must not depend on auth',
+    ],
+    [
+      'packages/secrets/src/__boundary_probe.ts',
+      "import '@prisma/client';",
+      'only packages/database may import Prisma directly',
+    ],
+    [
+      'packages/observability/src/__boundary_probe.ts',
+      "import '@brandspace/admin';",
+      'a package may never import an app',
+    ],
+  ])('rejects %s (%s)', (file, source) => {
+    expect(lintSnippet(file, source)).toMatch(/Module boundary violation|Only packages\/database/);
+  });
+
+  it.each([
+    [
+      'packages/secrets/src/__boundary_probe.ts',
+      "import '@brandspace/database';",
+      'secrets takes its Prisma client from the database package',
+    ],
+    [
+      'packages/config/src/__boundary_probe.ts',
+      "import '@brandspace/database';",
+      'so does configuration',
+    ],
+    [
+      'packages/providers/src/__boundary_probe.ts',
+      "import '@brandspace/config';",
+      'adapters are configured, not hard-coded',
+    ],
+    [
+      'packages/observability/src/__boundary_probe.ts',
+      "import '@brandspace/shared';",
+      'observability reuses the shared redaction layer',
+    ],
+  ])('allows %s (%s)', (file, source) => {
+    expect(lintSnippet(file, source)).not.toMatch(
+      /Module boundary violation|Only packages\/database/,
+    );
+  });
+});

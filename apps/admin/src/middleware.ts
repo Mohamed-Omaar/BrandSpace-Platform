@@ -2,8 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
 
 /**
- * Redirects a locale-less path to the default locale (Arabic — D-03), so every
- * route resolves to an explicit locale and `dir`/`lang` are always unambiguous.
+ * Locale redirect only.
+ *
+ * This middleware is a CONVENIENCE, never a security control. Authorisation is
+ * enforced in the console layout and in every server action against the real
+ * session (docs/SECURITY.md §4.5). Middleware runs on the edge with no database
+ * access, so it could not verify a session even if we wanted it to.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

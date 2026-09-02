@@ -85,6 +85,39 @@ enum AuditOutcome {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 2A enums — configuration, secrets, platform sessions
+// ---------------------------------------------------------------------------
+
+enum ConfigurationStatus {
+  DRAFT
+  VALIDATED
+  ACTIVE
+  SUPERSEDED
+  DISCARDED
+}
+
+enum DeploymentEnvironment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+}
+
+enum SecretStatus {
+  PENDING
+  ACTIVE
+  ROTATING
+  DISABLED
+  REVOKED
+}
+
+enum SecretVersionStatus {
+  PENDING
+  ACTIVE
+  RETIRED
+  REVOKED
+}
+
+// ---------------------------------------------------------------------------
 // Identity — NOT tenant-owned. A User is a global identity that may hold
 // memberships in several workspaces. Access is constrained by Membership.
 // ---------------------------------------------------------------------------
@@ -131,8 +164,10 @@ model PlatformUser {
   status          UserStatus @default(PENDING)
 
   // D-27: 2FA is mandatory for platform roles. Enforced at login, not optional.
-  mfaEnabled   Boolean @default(false)
-  mfaSecretRef String?
+  mfaEnabled     Boolean   @default(false)
+  /// Reference into the Secret Service — the TOTP secret is never a column.
+  mfaSecretRef   String?
+  mfaEnrolledAt  DateTime? @db.Timestamptz(6)
 
   roleId String @db.Uuid
   role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
@@ -145,7 +180,12 @@ model PlatformUser {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  supportSessions SupportModeSession[]
+  supportSessions      SupportModeSession[]
+  sessions             PlatformSession[]
+  recoveryCodes        PlatformMfaRecoveryCode[]
+  configVersionsAuthored  ConfigurationVersion[] @relation("ConfigAuthor")
+  configVersionsActivated ConfigurationVersion[] @relation("ConfigActivator")
+  secretsCreated          SecretRecord[]         @relation("SecretAuthor")
 
   @@index([status])
   @@map("platform_user")
@@ -354,4 +394,180 @@ model SupportModeSession {
   @@index([platformUserId, grantedAt(sort: Desc)])
   @@index([expiresAt])
   @@map("support_mode_session")
+}
+
+// ===========================================================================
+// PLATFORM-OWNED MODELS (Phase 2A)
+//
+// These carry NO workspaceId and are NOT tenant-owned. They are reachable only
+// through the platform database identity: RLS grants them to brandspace_platform
+// alone, and all privileges are REVOKED from brandspace_app, so the tenant role
+// cannot read them even if a policy were mistakenly added later.
+//
+// scripts/isolation-gate.ts verifies both properties for every model listed in
+// PLATFORM_OWNED_MODELS (packages/database/src/tenant-models.ts).
+// ===========================================================================
+
+/// PLATFORM-OWNED. One immutable version of one configuration domain.
+model ConfigurationVersion {
+  id            String                @id @default(uuid()) @db.Uuid
+  domain        String
+  environment   DeploymentEnvironment
+  versionNumber Int
+  schemaVersion Int                   @default(1)
+
+  /// The configuration document. Never contains a secret value — secret-bearing
+  /// fields hold a `secretRef` resolved server-side by the Secret Service.
+  payload         Json
+  payloadChecksum String
+
+  status ConfigurationStatus @default(DRAFT)
+
+  previousVersionId String? @db.Uuid
+  rollbackOfVersionId String? @db.Uuid
+
+  validationReport Json?
+  impactPreview    Json?
+
+  createdByPlatformUserId   String  @db.Uuid
+  activatedByPlatformUserId String? @db.Uuid
+  changeReason              String
+
+  /// Optimistic concurrency: an update must present the lockVersion it read, so
+  /// two administrators editing the same draft cannot silently overwrite one
+  /// another. The loser gets a conflict, not a lost edit.
+  lockVersion Int @default(0)
+
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  activatedAt   DateTime? @db.Timestamptz(6)
+  deactivatedAt DateTime? @db.Timestamptz(6)
+
+  createdBy   PlatformUser  @relation("ConfigAuthor", fields: [createdByPlatformUserId], references: [id], onDelete: Restrict)
+  activatedBy PlatformUser? @relation("ConfigActivator", fields: [activatedByPlatformUserId], references: [id], onDelete: SetNull)
+
+  @@unique([domain, environment, versionNumber])
+  @@index([domain, environment, status])
+  @@index([activatedAt(sort: Desc)])
+  @@map("configuration_version")
+}
+
+/// PLATFORM-OWNED. The logical secret. Holds NO ciphertext — material lives in
+/// SecretVersion so rotation can keep two versions valid at once.
+model SecretRecord {
+  id          String                @id @default(uuid()) @db.Uuid
+  /// Stable reference used by configuration, e.g. "ai/openai/production/api-key".
+  ref         String
+  environment DeploymentEnvironment
+  category    String
+  name        String
+  description String?
+
+  status SecretStatus @default(PENDING)
+
+  createdByPlatformUserId String    @db.Uuid
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+  lastRotatedAt           DateTime? @db.Timestamptz(6)
+  lastUsedAt              DateTime? @db.Timestamptz(6)
+  disabledAt              DateTime? @db.Timestamptz(6)
+  revokedAt               DateTime? @db.Timestamptz(6)
+  expiresAt               DateTime? @db.Timestamptz(6)
+
+  createdBy PlatformUser    @relation("SecretAuthor", fields: [createdByPlatformUserId], references: [id], onDelete: Restrict)
+  versions  SecretVersion[]
+
+  @@unique([ref, environment])
+  @@index([environment, status])
+  @@index([category])
+  @@map("secret_record")
+}
+
+/// PLATFORM-OWNED. One encrypted version of a secret.
+///
+/// Envelope encryption: `wrappedDataKey` is a data key encrypted by the KEK
+/// (KMS or the local development provider); `ciphertext` is the secret value
+/// encrypted by that data key with AES-256-GCM. The plaintext value is never
+/// stored, never logged, and never returned by any API.
+model SecretVersion {
+  id             String @id @default(uuid()) @db.Uuid
+  secretRecordId String @db.Uuid
+  version        Int
+
+  /// AEAD ciphertext, IV and auth tag. Base64, so a dump is never a usable key.
+  ciphertext String
+  iv         String
+  authTag    String
+  /// The data key, itself encrypted by the key-encryption key.
+  wrappedDataKey String
+  /// Which KEK wrapped the data key, so rotation of the KEK is traceable.
+  keyProvider    String
+  keyId          String
+  algorithm      String @default("AES-256-GCM")
+  /// Bound into the AEAD additional data, so ciphertext cannot be replayed into
+  /// another ref, environment or version.
+  encryptionContext String
+
+  /// Audit-safe metadata. The ONLY things ever shown in the UI or an API.
+  maskedHint  String
+  fingerprint String
+
+  status SecretVersionStatus @default(PENDING)
+
+  createdByPlatformUserId String    @db.Uuid
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  activatedAt             DateTime? @db.Timestamptz(6)
+  retiredAt               DateTime? @db.Timestamptz(6)
+
+  secretRecord SecretRecord @relation(fields: [secretRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([secretRecordId, version])
+  @@index([secretRecordId, status])
+  @@map("secret_version")
+}
+
+/// PLATFORM-OWNED. A Platform Admin session. Separate table from any customer
+/// session by design — the two realms never share storage (docs/SECURITY.md §3).
+model PlatformSession {
+  id             String @id @default(uuid()) @db.Uuid
+  platformUserId String @db.Uuid
+
+  /// Only the hash is stored; the raw token exists solely in the cookie.
+  tokenHash String @unique
+
+  /// D-27: platform roles require MFA. A session is unusable until this is set.
+  mfaVerifiedAt DateTime? @db.Timestamptz(6)
+  /// Step-up re-authentication for high-impact operations.
+  stepUpVerifiedAt DateTime? @db.Timestamptz(6)
+
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenAt        DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt         DateTime  @db.Timestamptz(6)
+  absoluteExpiresAt DateTime  @db.Timestamptz(6)
+  revokedAt         DateTime? @db.Timestamptz(6)
+  revokedReason     String?
+
+  ip        String?
+  userAgent String?
+
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  @@index([platformUserId, revokedAt])
+  @@index([expiresAt])
+  @@map("platform_session")
+}
+
+/// PLATFORM-OWNED. Single-use MFA recovery codes. Hashed, never recoverable.
+model PlatformMfaRecoveryCode {
+  id             String @id @default(uuid()) @db.Uuid
+  platformUserId String @db.Uuid
+  codeHash       String @unique
+
+  usedAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  @@index([platformUserId, usedAt])
+  @@map("platform_mfa_recovery_code")
 }

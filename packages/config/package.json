@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@brandspace/shared": "workspace:*",
-    "@brandspace/database": "workspace:*"
+    "@brandspace/database": "workspace:*",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "typescript": "5.9.3"

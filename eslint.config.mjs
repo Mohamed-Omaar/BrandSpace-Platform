@@ -11,13 +11,17 @@ import importX from 'eslint-plugin-import-x';
 const ALLOWED_IMPORTS = {
   shared: [],
   database: ['shared'],
+  observability: ['shared'],
+  secrets: ['shared', 'database'],
   config: ['shared', 'database'],
-  auth: ['shared', 'database'],
+  // auth needs secrets to resolve the TOTP seed at MFA verification.
+  auth: ['shared', 'database', 'secrets'],
   ui: ['shared'],
+  providers: ['shared', 'config'],
   entitlements: ['shared', 'database', 'config'],
-  'ai-gateway': ['shared', 'database', 'config', 'entitlements'],
-  'social-connectors': ['shared', 'database', 'config', 'entitlements'],
-  billing: ['shared', 'database', 'config', 'entitlements'],
+  'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };
 
 const ALL_PACKAGES = Object.keys(ALLOWED_IMPORTS);
@@ -82,6 +86,10 @@ function packageBoundary(pkg) {
           paths: pkg === 'database' ? [] : DB_ACCESS_PATHS,
           patterns: [
             PLATFORM_POOL_PATTERN,
+            // Only auth may reach the Secret Service among packages.
+            ...(pkg === 'auth' || pkg === 'secrets' ? [] : [SECRETS_PATTERN]),
+            // No package outside database may open a platform-scoped client.
+            ...(pkg === 'database' ? [] : [PLATFORM_CLIENT_PATTERN]),
             ...[...forbiddenPackages, ...forbiddenApps].map((name) => ({
               group: [name, `${name}/*`],
               message:
@@ -99,6 +107,41 @@ function packageBoundary(pkg) {
   };
 }
 
+/**
+ * F-07: the Secret Service holds the decrypt path for every platform
+ * credential. Tenant-facing surfaces have no legitimate reason to import it, and
+ * a bundler that pulled it into a client build would be a catastrophic leak.
+ *
+ * Allowed: apps/admin and apps/api (server-side platform routes), and
+ * packages/auth (resolves the TOTP seed at MFA verification).
+ */
+const SECRETS_PATTERN = {
+  group: ['@brandspace/secrets', '@brandspace/secrets/*', '**/packages/secrets/**'],
+  message:
+    'Restricted module: @brandspace/secrets can decrypt platform credentials and is server-only. ' +
+    'It may not be imported by the public website, the customer dashboard or ordinary workers. ' +
+    'See docs/SECURITY.md §2.4 and docs/DECISIONS.md F-07.',
+};
+
+/** Apps that must never touch platform credentials. */
+const TENANT_FACING_APPS = new Set(['web', 'dashboard', 'worker']);
+
+/**
+ * F-07: the platform database client is the narrow, approved seam for
+ * server-side platform surfaces. apps/admin and apps/api may use it; nothing
+ * else may, because it connects with cross-tenant visibility.
+ */
+const PLATFORM_CLIENT_PATTERN = {
+  group: ['@brandspace/database/platform', '**/platform-client', '**/platform-client.*'],
+  message:
+    'Restricted module: the platform database client has cross-tenant visibility and may only be ' +
+    'used by apps/admin and apps/api. Tenant code must use withWorkspace() from ' +
+    '@brandspace/database. See docs/SECURITY.md §2.4 and docs/DECISIONS.md F-07.',
+};
+
+/** The only apps permitted to open a platform-scoped database client. */
+const PLATFORM_SURFACE_APPS = new Set(['admin', 'api']);
+
 /** Apps may use any package, but never another app, and never the database directly. */
 function appBoundary(app) {
   return {
@@ -110,6 +153,8 @@ function appBoundary(app) {
           paths: DB_ACCESS_PATHS,
           patterns: [
             PLATFORM_POOL_PATTERN,
+            ...(TENANT_FACING_APPS.has(app) ? [SECRETS_PATTERN] : []),
+            ...(PLATFORM_SURFACE_APPS.has(app) ? [] : [PLATFORM_CLIENT_PATTERN]),
             ...ALL_APPS.filter((a) => a !== app).map((other) => ({
               group: [`@brandspace/${other}`, `@brandspace/${other}/*`, `**/apps/${other}/**`],
               message: `Module boundary violation: apps/${app} may not import apps/${other}.`,
@@ -172,7 +217,11 @@ export default tseslint.config(
   // packages/database/src/platform.ts IS asPlatform(). It is the audited
   // entrance, so it is the one file permitted to open the platform connection.
   {
-    files: ['packages/database/src/platform.ts', 'packages/database/src/platform-pool.ts'],
+    files: [
+      'packages/database/src/platform.ts',
+      'packages/database/src/platform-pool.ts',
+      'packages/database/src/platform-client.ts',
+    ],
     rules: {
       'no-restricted-imports': ['error', { paths: [], patterns: [] }],
     },
