@@ -6,13 +6,13 @@ import { translator, type MessageKey } from '../i18n/messages';
 /** Console navigation. Each entry names the permission that gates its page. */
 const NAV: readonly { href: string; key: MessageKey; permission: string }[] = [
   { href: '', key: 'nav.overview', permission: 'platform.workspace.read' },
-  { href: '/configuration', key: 'nav.configuration', permission: 'platform.workspace.read' },
-  { href: '/secrets', key: 'nav.secrets', permission: 'platform.workspace.read' },
-  { href: '/providers', key: 'nav.providers', permission: 'platform.workspace.read' },
-  { href: '/ai-models', key: 'nav.aiRegistry', permission: 'platform.workspace.read' },
-  { href: '/routing', key: 'nav.routing', permission: 'platform.workspace.read' },
-  { href: '/flags', key: 'nav.flags', permission: 'platform.workspace.read' },
-  { href: '/plans', key: 'nav.plans', permission: 'platform.workspace.read' },
+  { href: '/configuration', key: 'nav.configuration', permission: 'platform.configuration.read' },
+  { href: '/secrets', key: 'nav.secrets', permission: 'platform.secret.read' },
+  { href: '/providers', key: 'nav.providers', permission: 'platform.configuration.read' },
+  { href: '/ai-models', key: 'nav.aiRegistry', permission: 'platform.configuration.read' },
+  { href: '/routing', key: 'nav.routing', permission: 'platform.configuration.read' },
+  { href: '/flags', key: 'nav.flags', permission: 'platform.configuration.read' },
+  { href: '/plans', key: 'nav.plans', permission: 'platform.configuration.read' },
   { href: '/audit', key: 'nav.audit', permission: 'platform.audit.read' },
   { href: '/health', key: 'nav.health', permission: 'platform.workspace.read' },
 ];

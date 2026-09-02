@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 /** Renders the ACTIVE 'feature-flags' configuration for this environment. */
 export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  await requirePageActor(locale, 'platform.workspace.read');
+  await requirePageActor(locale, 'platform.configuration.read');
   const isArabic = locale === 'ar';
 
   const payload = (await getConfigService().get('feature-flags', currentEnvironment())) as Record<

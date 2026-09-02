@@ -1,11 +1,13 @@
 import { CONFIG_DOMAIN_KEYS, isConfigDomain } from '@brandspace/config';
 import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import Link from 'next/link';
 import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
   requirePageActor,
+  serviceActor,
 } from '../../../../server/platform-context';
 import {
   activateAction,
@@ -22,23 +24,35 @@ export default async function ConfigurationPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ domain?: string; error?: string; ok?: string }>;
+  searchParams: Promise<{
+    domain?: string;
+    error?: string;
+    ok?: string;
+    ref?: string;
+    changes?: string;
+    high?: string;
+    errors?: string;
+  }>;
 }) {
   const { locale } = await params;
-  const { domain: rawDomain, error, ok } = await searchParams;
-  await requirePageActor(locale, 'platform.workspace.read');
+  const search = await searchParams;
+  const { domain: rawDomain, error, ok } = search;
+  const actor = await requirePageActor(locale, 'platform.configuration.read');
+  const mayEdit = actor.permissionKeys.includes('platform.configuration.manage');
+  const mayActivate = actor.permissionKeys.includes('platform.configuration.activate');
 
   const environment = currentEnvironment();
   const domain = rawDomain && isConfigDomain(rawDomain) ? rawDomain : CONFIG_DOMAIN_KEYS[0]!;
   const config = getConfigService();
-  const versions = await config.listVersions(domain, environment);
+  const versions = await config.listVersions(serviceActor(actor), domain, environment);
   const isArabic = locale === 'ar';
 
   // The editable draft, if there is one. Only DRAFT and VALIDATED versions can
   // be edited; an ACTIVE version is the record of what was deployed and the
   // database refuses to rewrite it.
   const editable = versions.find((v) => v.status === 'DRAFT' || v.status === 'VALIDATED');
-  const editableVersion = editable ? await config.getVersion(editable.id) : null;
+  const editableVersion =
+    editable && mayEdit ? await config.getVersion(serviceActor(actor), editable.id) : null;
 
   return (
     <>
@@ -53,12 +67,14 @@ export default async function ConfigurationPage({
 
       {error ? (
         <p role="alert" data-testid="config-error" style={{ color: colorTokens.danger }}>
-          {decodeURIComponent(error)}
+          {/* A code from a closed set, rendered here. The server never sends
+              text derived from an exception. */}
+          {errorMessage(error, locale, search.ref)}
         </p>
       ) : null}
       {ok ? (
         <p role="status" data-testid="config-ok" style={{ color: colorTokens.success }}>
-          {decodeURIComponent(ok)}
+          {successMessage(ok, locale, new URLSearchParams(search as Record<string, string>))}
         </p>
       ) : null}
 
@@ -96,34 +112,36 @@ export default async function ConfigurationPage({
         </ul>
       </nav>
 
-      <form
-        action={createDraftAction}
-        style={{
-          marginBlockEnd: spacingTokens.lg,
-          display: 'grid',
-          gap: spacingTokens.sm,
-          maxInlineSize: '40rem',
-        }}
-      >
-        <input type="hidden" name="locale" value={locale} />
-        <input type="hidden" name="domain" value={domain} />
-        <label htmlFor="reason">
-          {isArabic ? 'سبب التغيير (٨ أحرف على الأقل)' : 'Change reason (min 8 characters)'}
-        </label>
-        <input
-          id="reason"
-          name="reason"
-          required
-          minLength={8}
-          data-testid="draft-reason"
-          style={{ padding: spacingTokens.sm }}
-        />
-        <button type="submit" data-testid="create-draft" style={buttonStyle}>
-          {isArabic ? 'إنشاء مسودة' : 'Create draft'}
-        </button>
-      </form>
+      {mayEdit ? (
+        <form
+          action={createDraftAction}
+          style={{
+            marginBlockEnd: spacingTokens.lg,
+            display: 'grid',
+            gap: spacingTokens.sm,
+            maxInlineSize: '40rem',
+          }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="domain" value={domain} />
+          <label htmlFor="reason">
+            {isArabic ? 'سبب التغيير (٨ أحرف على الأقل)' : 'Change reason (min 8 characters)'}
+          </label>
+          <input
+            id="reason"
+            name="reason"
+            required
+            minLength={8}
+            data-testid="draft-reason"
+            style={{ padding: spacingTokens.sm }}
+          />
+          <button type="submit" data-testid="create-draft" style={buttonStyle}>
+            {isArabic ? 'إنشاء مسودة' : 'Create draft'}
+          </button>
+        </form>
+      ) : null}
 
-      {editableVersion ? (
+      {editableVersion && mayEdit ? (
         <form
           action={updateDraftAction}
           style={{ marginBlockEnd: spacingTokens.lg, display: 'grid', gap: spacingTokens.sm }}
@@ -220,49 +238,53 @@ export default async function ConfigurationPage({
                   <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
                     {(version.status === 'DRAFT' || version.status === 'VALIDATED') && (
                       <>
-                        <form action={validateAction}>
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="versionId" value={version.id} />
-                          <input type="hidden" name="domain" value={domain} />
-                          <button
-                            type="submit"
-                            data-testid={`validate-${version.versionNumber}`}
-                            style={smallButton}
-                          >
-                            {isArabic ? 'تحقق ومعاينة' : 'Validate & preview'}
-                          </button>
-                        </form>
-                        <form action={activateAction}>
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="versionId" value={version.id} />
-                          <input type="hidden" name="domain" value={domain} />
-                          {/* High-impact activation requires an explicit tick —
+                        {mayEdit ? (
+                          <form action={validateAction}>
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="versionId" value={version.id} />
+                            <input type="hidden" name="domain" value={domain} />
+                            <button
+                              type="submit"
+                              data-testid={`validate-${version.versionNumber}`}
+                              style={smallButton}
+                            >
+                              {isArabic ? 'تحقق ومعاينة' : 'Validate & preview'}
+                            </button>
+                          </form>
+                        ) : null}
+                        {mayActivate ? (
+                          <form action={activateAction}>
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="versionId" value={version.id} />
+                            <input type="hidden" name="domain" value={domain} />
+                            {/* High-impact activation requires an explicit tick —
                               never a browser confirm() dialog. */}
-                          {high > 0 ? (
-                            <label style={{ display: 'block', fontSize: '0.75rem' }}>
-                              <input
-                                type="checkbox"
-                                name="acknowledge"
-                                value="yes"
-                                data-testid={`ack-${version.versionNumber}`}
-                                required
-                              />{' '}
-                              {isArabic
-                                ? `أُقر بـ ${high} تغيير عالي الأثر`
-                                : `I acknowledge ${high} high-impact change(s)`}
-                            </label>
-                          ) : null}
-                          <button
-                            type="submit"
-                            data-testid={`activate-${version.versionNumber}`}
-                            style={smallButton}
-                          >
-                            {isArabic ? 'تفعيل' : 'Activate'}
-                          </button>
-                        </form>
+                            {high > 0 ? (
+                              <label style={{ display: 'block', fontSize: '0.75rem' }}>
+                                <input
+                                  type="checkbox"
+                                  name="acknowledge"
+                                  value="yes"
+                                  data-testid={`ack-${version.versionNumber}`}
+                                  required
+                                />{' '}
+                                {isArabic
+                                  ? `أُقر بـ ${high} تغيير عالي الأثر`
+                                  : `I acknowledge ${high} high-impact change(s)`}
+                              </label>
+                            ) : null}
+                            <button
+                              type="submit"
+                              data-testid={`activate-${version.versionNumber}`}
+                              style={smallButton}
+                            >
+                              {isArabic ? 'تفعيل' : 'Activate'}
+                            </button>
+                          </form>
+                        ) : null}
                       </>
                     )}
-                    {version.status === 'SUPERSEDED' && (
+                    {version.status === 'SUPERSEDED' && mayActivate && (
                       <form action={rollbackAction}>
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="versionId" value={version.id} />

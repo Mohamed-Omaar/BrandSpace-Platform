@@ -18,6 +18,11 @@ const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*/gi, // bearer tokens
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // JWT
   /-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?-----END[A-Z ]*PRIVATE KEY-----/g,
+  // A connection string with embedded credentials. These arrive inside driver
+  // ERROR MESSAGES, not under a helpfully-named key, so the key pattern above
+  // never sees them — which is exactly how a database password ends up in a log
+  // line that everybody assumed was redacted.
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@[^\s]*/gi,
 ];
 
 export const REDACTED = '[REDACTED]';

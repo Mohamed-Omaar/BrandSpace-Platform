@@ -23,6 +23,7 @@ import {
   assertRolePermissionsAreValid,
 } from '@brandspace/shared';
 import { loadRepoEnv, requireDatabaseUrl } from '../src/env-file';
+import { resolveSeedPassword } from './seed-password';
 import { asPlatform } from '../src/platform';
 import { withWorkspace } from '../src/tenant-client';
 
@@ -286,16 +287,20 @@ async function main(): Promise<void> {
       console.log(`  ${tenant.slug} (${workspaceId}) — owner ${tenant.userEmail}`);
     }
 
-    // --- Platform Owner MFA + password (development only) ------------------
-    // Real credentials are never committed. These are development values so the
-    // Control Center can actually be signed into locally; production accounts
-    // are provisioned through the invitation flow.
-    const devPassword = process.env['SEED_PLATFORM_PASSWORD'] ?? 'brandspace-dev-owner-2026';
+    // --- Platform Owner MFA + password -------------------------------------
+    // There is NO fallback password. A literal committed here would be a known
+    // credential for every database this seed is ever pointed at, including one
+    // it was pointed at by mistake. Absent variable -> the owner is created
+    // without a password and simply cannot sign in. Present but weak or
+    // placeholder -> a hard error, because that is somebody trying and failing.
+    const ownerPassword = resolveSeedPassword();
     const { hashPassword } = await import('@brandspace/auth');
     const { generateTotpEnrolment, generateRecoveryCodes } = await import('@brandspace/auth');
     const { SecretService, buildSecretRef } = await import('@brandspace/secrets');
 
     const enrolment = generateTotpEnrolment(platformOwner.email);
+    const ownerPermissionKeys =
+      ROLE_DEFINITIONS.find((d) => d.key === 'platform_owner')?.permissionKeys ?? [];
     const secretService = new SecretService({ prisma });
     const mfaRef = buildSecretRef({
       category: 'mfa_totp',
@@ -309,7 +314,14 @@ async function main(): Promise<void> {
     });
     if (!existingMfa) {
       await secretService.createSecret(
-        { platformUserId: platformOwner.id, roleKey: 'platform_owner', mfaVerified: true },
+        {
+          platformUserId: platformOwner.id,
+          roleKey: 'platform_owner',
+          mfaVerified: true,
+          // The seed acts as the Platform Owner, so it carries that role's
+          // permissions rather than a bespoke bypass.
+          permissionKeys: ownerPermissionKeys,
+        },
         {
           ref: mfaRef,
           name: `TOTP seed for ${platformOwner.email}`,
@@ -321,7 +333,10 @@ async function main(): Promise<void> {
       await prisma.platformUser.update({
         where: { id: platformOwner.id },
         data: {
-          passwordHash: await hashPassword(devPassword),
+          // Null when SEED_PLATFORM_PASSWORD is absent: the account exists, is
+          // enrolled in MFA, and cannot be signed into until a real password is
+          // set. `verifyPassword` treats a null hash as a failed login.
+          passwordHash: ownerPassword === null ? null : await hashPassword(ownerPassword),
           mfaEnabled: true,
           mfaSecretRef: mfaRef,
           mfaEnrolledAt: new Date(),
@@ -355,7 +370,10 @@ async function main(): Promise<void> {
     console.log('  Workspace A    : acme-agency  / amal@acme.local');
     console.log('  Workspace B    : north-star   / noor@northstar.local');
     console.log(
-      '  Platform Owner password comes from SEED_PLATFORM_PASSWORD (development default applies).',
+      ownerPassword === null
+        ? '  Platform Owner sign-in is DISABLED: SEED_PLATFORM_PASSWORD was not set, so no\n' +
+            '  password was stored. Set it and re-run the seed to enable sign-in.'
+        : '  Platform Owner password came from SEED_PLATFORM_PASSWORD (never printed).',
     );
     console.log('  Customer auth flows arrive in Phase 2B.');
   } finally {

@@ -351,6 +351,8 @@ jobs:
             ':!tests/unit/redaction.test.ts'          # proves redaction catches these shapes
             ':!tests/unit/secret-crypto.test.ts'      # proves masking reveals at most four characters
             ':!tests/unit/observability.test.ts'      # proves no such value reaches a span
+            ':!tests/unit/public-error.test.ts'        # proves no such value reaches the client
+            ':!tests/unit/error-boundary.test.ts'      # proves no such value reaches URL, UI, log or span
             ':!tests/isolation/platform-services.test.ts'  # proves nothing is stored in plaintext
             ':!packages/shared/src/redaction.ts'      # the patterns themselves
             ':!pnpm-lock.yaml'
@@ -372,6 +374,8 @@ jobs:
             tests/unit/redaction.test.ts
             tests/unit/secret-crypto.test.ts
             tests/unit/observability.test.ts
+            tests/unit/public-error.test.ts
+            tests/unit/error-boundary.test.ts
             tests/isolation/platform-services.test.ts
           )
           bad=0

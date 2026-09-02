@@ -15,6 +15,7 @@ import {
   requirePermission,
 } from '@brandspace/auth';
 import { SecretService } from '@brandspace/secrets';
+import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
 import type { PrismaClient } from '@prisma/client';
 
@@ -72,7 +73,12 @@ async function createPlatformUser(options: {
 
   if (enrolment) {
     await secrets.createSecret(
-      { platformUserId: SYSTEM_ACTOR_ID, roleKey: 'platform_owner', mfaVerified: true },
+      {
+        platformUserId: SYSTEM_ACTOR_ID,
+        roleKey: 'platform_owner',
+        mfaVerified: true,
+        permissionKeys: PLATFORM_PERMISSIONS.map((p) => p.key),
+      },
       {
         ref: `mfa-totp/platform/${ENV.toLowerCase()}/${email}`,
         name: `TOTP seed for ${email}`,

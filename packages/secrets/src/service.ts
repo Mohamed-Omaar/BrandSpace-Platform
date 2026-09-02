@@ -44,7 +44,19 @@ export interface SecretActor {
   readonly platformUserId: string;
   readonly roleKey: string;
   readonly mfaVerified: boolean;
+  /**
+   * The actor's resolved permissions. REQUIRED: the service is the
+   * authorization boundary, not the page that called it. A server action is a
+   * public HTTP endpoint, so a check that lives only in the UI layer is not a
+   * check at all.
+   */
+  readonly permissionKeys: readonly string[];
 }
+
+/** Viewing masked metadata. Never a value — no permission grants that. */
+export const SECRET_READ_PERMISSION = 'platform.secret.read';
+/** Creating, rotating, disabling, enabling or revoking a secret. */
+export const SECRET_MANAGE_PERMISSION = 'platform.secret.manage';
 
 export interface SecretServiceOptions {
   readonly prisma: PrismaClient;
@@ -57,14 +69,23 @@ export interface SecretServiceOptions {
   readonly clock?: Clock;
 }
 
-function assertActor(actor: SecretActor, operation: string): void {
-  if (!actor?.platformUserId) {
-    throw new AppError('FORBIDDEN', `${operation} requires a platform actor.`);
+/**
+ * Why this actor may not perform the operation, or null when it may.
+ *
+ * The message names the operation and the missing permission — useful to an
+ * operator and to the audit trail, and safe because it is derived from our own
+ * constants, never from input. It also never reaches a browser verbatim: the
+ * server actions map every failure to a fixed public code (see
+ * `@brandspace/shared` `toPublicErrorCode`).
+ */
+function denialReason(actor: SecretActor, operation: string, permission: string): string | null {
+  if (!actor?.platformUserId) return `${operation} requires a platform actor.`;
+  // D-27: every platform operation is a step-up action.
+  if (!actor.mfaVerified) return `${operation} requires verified MFA (D-27).`;
+  if (!actor.permissionKeys?.includes(permission)) {
+    return `${operation} requires ${permission}.`;
   }
-  // D-27: every secret operation is a step-up action.
-  if (!actor.mfaVerified) {
-    throw new AppError('FORBIDDEN', `${operation} requires verified MFA (D-27).`);
-  }
+  return null;
 }
 
 export class SecretService {
@@ -93,7 +114,7 @@ export class SecretService {
       expiresAt?: Date;
     },
   ): Promise<SecretMetadata> {
-    assertActor(actor, 'Creating a secret');
+    await this.#authorize(actor, 'Creating a secret', SECRET_MANAGE_PERMISSION);
     if (!isSecretCategory(input.category)) {
       throw new AppError('VALIDATION_FAILED', `Unknown secret category: ${input.category}`);
     }
@@ -168,7 +189,7 @@ export class SecretService {
       return created;
     });
 
-    return this.getSecret(record.id);
+    return this.#readSecret(record.id);
   }
 
   /**
@@ -184,7 +205,7 @@ export class SecretService {
     newValue: string,
     reason: string,
   ): Promise<SecretMetadata> {
-    assertActor(actor, 'Rotating a secret');
+    await this.#authorize(actor, 'Rotating a secret', SECRET_MANAGE_PERMISSION);
     if (!reason || reason.trim().length < 8) {
       throw new AppError('FORBIDDEN', 'Rotating a secret requires a written reason.');
     }
@@ -241,7 +262,7 @@ export class SecretService {
       });
     });
 
-    return this.getSecret(record.id);
+    return this.#readSecret(record.id);
   }
 
   /** Disable: the secret stops resolving but its material is retained. */
@@ -250,7 +271,7 @@ export class SecretService {
     secretId: string,
     reason: string,
   ): Promise<SecretMetadata> {
-    assertActor(actor, 'Disabling a secret');
+    await this.#authorize(actor, 'Disabling a secret', SECRET_MANAGE_PERMISSION);
     if (!reason || reason.trim().length < 8) {
       throw new AppError('FORBIDDEN', 'Disabling a secret requires a written reason.');
     }
@@ -273,7 +294,7 @@ export class SecretService {
         },
       });
     });
-    return this.getSecret(secretId);
+    return this.#readSecret(secretId);
   }
 
   async enableSecret(
@@ -281,7 +302,7 @@ export class SecretService {
     secretId: string,
     reason: string,
   ): Promise<SecretMetadata> {
-    assertActor(actor, 'Enabling a secret');
+    await this.#authorize(actor, 'Enabling a secret', SECRET_MANAGE_PERMISSION);
     const record = await this.#prisma.secretRecord.findUnique({ where: { id: secretId } });
     if (!record) throw new AppError('NOT_FOUND', 'Secret not found');
     if (record.status === 'REVOKED') {
@@ -306,7 +327,7 @@ export class SecretService {
         },
       });
     });
-    return this.getSecret(secretId);
+    return this.#readSecret(secretId);
   }
 
   /** Revoke: permanent. The secret can never resolve again. */
@@ -315,7 +336,7 @@ export class SecretService {
     secretId: string,
     reason: string,
   ): Promise<SecretMetadata> {
-    assertActor(actor, 'Revoking a secret');
+    await this.#authorize(actor, 'Revoking a secret', SECRET_MANAGE_PERMISSION);
     if (!reason || reason.trim().length < 8) {
       throw new AppError('FORBIDDEN', 'Revoking a secret requires a written reason.');
     }
@@ -342,10 +363,51 @@ export class SecretService {
         },
       });
     });
-    return this.getSecret(secretId);
+    return this.#readSecret(secretId);
   }
 
-  async getSecret(secretId: string): Promise<SecretMetadata> {
+  async getSecret(actor: SecretActor, secretId: string): Promise<SecretMetadata> {
+    await this.#authorize(actor, 'Viewing secret metadata', SECRET_READ_PERMISSION);
+    return this.#readSecret(secretId);
+  }
+
+  /**
+   * The authorization boundary for this service.
+   *
+   * Async because a denial is audited. An attempt to touch a credential without
+   * the permission for it is precisely the event an operator wants to see.
+   */
+  async #authorize(actor: SecretActor, operation: string, permission: string): Promise<void> {
+    const denial = denialReason(actor, operation, permission);
+    if (denial === null) return;
+
+    if (actor?.platformUserId) {
+      await this.#prisma.auditEvent
+        .create({
+          data: {
+            workspaceId: null,
+            actorType: 'PLATFORM_USER',
+            actorId: actor.platformUserId,
+            action: 'secret.access.denied',
+            resourceType: 'secret',
+            severity: 'WARNING',
+            outcome: 'DENIED',
+            // Operation and permission only. The value the caller submitted is
+            // never written anywhere, denied or not.
+            reason: denial,
+          },
+        })
+        .catch(() => {
+          // A failed audit write must not turn a denial into anything else; the
+          // throw below happens regardless, so this cannot fail open.
+        });
+    }
+
+    throw new AppError('FORBIDDEN', denial);
+  }
+
+  /** Internal read with no permission check — every caller above has one. */
+  async #readSecret(secretId: string): Promise<SecretMetadata> {
     const record = await this.#prisma.secretRecord.findUnique({
       where: { id: secretId },
       include: { versions: { where: { status: 'ACTIVE' }, take: 1 } },
@@ -355,11 +417,16 @@ export class SecretService {
   }
 
   async listSecrets(
+    actor: SecretActor,
     filter: {
       environment?: Environment;
       category?: string;
     } = {},
   ): Promise<SecretMetadata[]> {
+    // Even masked metadata is operational intelligence: which providers are
+    // wired up, when a key was last rotated, which environments are live.
+    await this.#authorize(actor, 'Listing secrets', SECRET_READ_PERMISSION);
+
     const records = await this.#prisma.secretRecord.findMany({
       where: {
         ...(filter.environment ? { environment: filter.environment } : {}),
@@ -379,6 +446,13 @@ export class SecretService {
    * before handing the value to a provider SDK. Never log the result, never
    * return it from an API, never put it in a template or an error.
    * ===========================================================================
+   *
+   * Deliberately takes NO actor. This is a SYSTEM path, not an operator one:
+   * its callers are the MFA step (which runs before any actor exists) and
+   * provider adapters acting on their own behalf. Adding an operator permission
+   * here would be theatre — there is no operator — and would break sign-in.
+   * The control that matters is that nothing reachable from a browser calls it:
+   * `@brandspace/secrets` is a restricted module (docs/ARCHITECTURE.md §4.1a).
    */
   async resolveSecret(ref: string, environment: Environment): Promise<string> {
     const record = await this.#prisma.secretRecord.findUnique({
@@ -417,7 +491,13 @@ export class SecretService {
   }
 
   /** Compare a candidate against the stored fingerprint without decrypting. */
-  async matchesStoredValue(secretId: string, candidate: string): Promise<boolean> {
+  async matchesStoredValue(
+    actor: SecretActor,
+    secretId: string,
+    candidate: string,
+  ): Promise<boolean> {
+    // An unauthenticated oracle here would let anyone confirm a guessed key.
+    await this.#authorize(actor, 'Comparing a secret fingerprint', SECRET_READ_PERMISSION);
     const record = await this.#prisma.secretRecord.findUnique({
       where: { id: secretId },
       include: { versions: { where: { status: 'ACTIVE' }, take: 1 } },

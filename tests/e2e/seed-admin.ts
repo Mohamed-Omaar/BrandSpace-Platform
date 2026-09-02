@@ -116,7 +116,17 @@ async function main(): Promise<void> {
     // The TOTP seed goes into the vault, encrypted, like every other secret.
     // A previous run's seed is ROTATED, never overwritten in place: that is the
     // only path the Secret Service offers, and the seed uses no other.
-    const actor = { platformUserId: user.id, roleKey: 'platform_owner', mfaVerified: true };
+    const actor = {
+      platformUserId: user.id,
+      roleKey: 'platform_owner',
+      mfaVerified: true,
+      // The account's real permissions, read back from the role it was given.
+      permissionKeys: role.permissions.length
+        ? await prisma.rolePermission
+            .findMany({ where: { roleId: role.id }, include: { permission: true } })
+            .then((rows) => rows.map((r) => r.permission.key))
+        : [],
+    };
     const existing = await prisma.secretRecord.findUnique({
       where: { ref_environment: { ref: MFA_SECRET_REF, environment: ENVIRONMENT } },
     });

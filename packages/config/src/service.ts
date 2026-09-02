@@ -42,7 +42,20 @@ export interface ConfigActor {
   readonly platformUserId: string;
   readonly roleKey: string;
   readonly mfaVerified: boolean;
+  /**
+   * The actor's resolved permissions. REQUIRED: this service is the
+   * authorization boundary. A check that lives only in a page or a server
+   * action is not a check — the action is a public HTTP endpoint.
+   */
+  readonly permissionKeys: readonly string[];
 }
+
+/** Viewing configuration and its version history. */
+export const CONFIG_READ_PERMISSION = 'platform.configuration.read';
+/** Drafting and editing. Does NOT grant deployment. */
+export const CONFIG_MANAGE_PERMISSION = 'platform.configuration.manage';
+/** Activation and rollback — the high-impact half, held separately. */
+export const CONFIG_ACTIVATE_PERMISSION = 'platform.configuration.activate';
 
 export interface ConfigVersionSummary {
   readonly id: string;
@@ -67,13 +80,23 @@ function checksum(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-function assertActor(actor: ConfigActor, operation: string): void {
-  if (!actor?.platformUserId) {
-    throw new AppError('FORBIDDEN', `${operation} requires a platform actor.`);
+/**
+ * Why this actor may not perform the operation, or null when it may.
+ *
+ * The message names the operation and the missing permission — useful to an
+ * operator and to the audit trail, and safe because it is derived from our own
+ * constants, never from input. It also never reaches a browser verbatim: the
+ * server actions map every failure to a fixed public code (see
+ * `@brandspace/shared` `toPublicErrorCode`).
+ */
+function denialReason(actor: ConfigActor, operation: string, permission: string): string | null {
+  if (!actor?.platformUserId) return `${operation} requires a platform actor.`;
+  // D-27: every platform operation is a step-up action.
+  if (!actor.mfaVerified) return `${operation} requires verified MFA (D-27).`;
+  if (!actor.permissionKeys?.includes(permission)) {
+    return `${operation} requires ${permission}.`;
   }
-  if (!actor.mfaVerified) {
-    throw new AppError('FORBIDDEN', `${operation} requires verified MFA (D-27).`);
-  }
+  return null;
 }
 
 export interface ConfigCache {
@@ -177,9 +200,11 @@ export class ConfigurationService {
   }
 
   async listVersions(
+    actor: ConfigActor,
     domain: ConfigDomain,
     environment: Environment,
   ): Promise<ConfigVersionSummary[]> {
+    await this.#authorize(actor, 'Listing configuration versions', CONFIG_READ_PERMISSION);
     const rows = await this.#prisma.configurationVersion.findMany({
       where: { domain, environment },
       orderBy: { versionNumber: 'desc' },
@@ -187,7 +212,11 @@ export class ConfigurationService {
     return rows.map(toSummary);
   }
 
-  async getVersion(versionId: string): Promise<ConfigVersionSummary & { payload: unknown }> {
+  async getVersion(
+    actor: ConfigActor,
+    versionId: string,
+  ): Promise<ConfigVersionSummary & { payload: unknown }> {
+    await this.#authorize(actor, 'Viewing a configuration version', CONFIG_READ_PERMISSION);
     const row = await this.#prisma.configurationVersion.findUnique({ where: { id: versionId } });
     if (!row) throw new AppError('NOT_FOUND', 'Configuration version not found');
     return { ...toSummary(row), payload: row.payload };
@@ -205,7 +234,7 @@ export class ConfigurationService {
     changeReason: string,
     payload?: unknown,
   ): Promise<ConfigVersionSummary> {
-    assertActor(actor, 'Creating a configuration draft');
+    await this.#authorize(actor, 'Creating a configuration draft', CONFIG_MANAGE_PERMISSION);
     if (!changeReason || changeReason.trim().length < 8) {
       throw new AppError(
         'VALIDATION_FAILED',
@@ -257,7 +286,7 @@ export class ConfigurationService {
     payload: unknown,
     expectedLockVersion: number,
   ): Promise<ConfigVersionSummary> {
-    assertActor(actor, 'Updating a configuration draft');
+    await this.#authorize(actor, 'Updating a configuration draft', CONFIG_MANAGE_PERMISSION);
 
     const existing = await this.#prisma.configurationVersion.findUnique({
       where: { id: versionId },
@@ -306,7 +335,7 @@ export class ConfigurationService {
 
   /** Validate a draft and record the report. */
   async validateDraft(actor: ConfigActor, versionId: string): Promise<ValidationReport> {
-    assertActor(actor, 'Validating a configuration draft');
+    await this.#authorize(actor, 'Validating a configuration draft', CONFIG_MANAGE_PERMISSION);
     const version = await this.#prisma.configurationVersion.findUnique({
       where: { id: versionId },
     });
@@ -329,7 +358,8 @@ export class ConfigurationService {
   }
 
   /** Compute and store the impact preview against the current active version. */
-  async previewImpact(versionId: string): Promise<ImpactPreview> {
+  async previewImpact(actor: ConfigActor, versionId: string): Promise<ImpactPreview> {
+    await this.#authorize(actor, 'Previewing configuration impact', CONFIG_MANAGE_PERMISSION);
     const version = await this.#prisma.configurationVersion.findUnique({
       where: { id: versionId },
     });
@@ -368,7 +398,7 @@ export class ConfigurationService {
     versionId: string,
     options: { acknowledgeHighImpact?: boolean } = {},
   ): Promise<ConfigVersionSummary> {
-    assertActor(actor, 'Activating configuration');
+    await this.#authorize(actor, 'Activating configuration', CONFIG_ACTIVATE_PERMISSION);
 
     const version = await this.#prisma.configurationVersion.findUnique({
       where: { id: versionId },
@@ -473,7 +503,7 @@ export class ConfigurationService {
     targetVersionId: string,
     reason: string,
   ): Promise<ConfigVersionSummary> {
-    assertActor(actor, 'Rolling back configuration');
+    await this.#authorize(actor, 'Rolling back configuration', CONFIG_ACTIVATE_PERMISSION);
     if (!reason || reason.trim().length < 8) {
       throw new AppError(
         'VALIDATION_FAILED',
@@ -515,7 +545,7 @@ export class ConfigurationService {
   }
 
   async discardDraft(actor: ConfigActor, versionId: string, reason: string): Promise<void> {
-    assertActor(actor, 'Discarding a configuration draft');
+    await this.#authorize(actor, 'Discarding a configuration draft', CONFIG_MANAGE_PERMISSION);
     const version = await this.#prisma.configurationVersion.findUnique({
       where: { id: versionId },
     });
@@ -537,6 +567,43 @@ export class ConfigurationService {
   invalidateCache(domain?: ConfigDomain, environment?: Environment): void {
     if (domain && environment) this.#cache.invalidate(`${domain}:${environment}`);
     else this.#cache.clear();
+  }
+
+  /**
+   * The authorization boundary for this service.
+   *
+   * Async because a denial is audited: repeated refusals are a detection
+   * signal, and an operator who tried something they may not do is exactly what
+   * a platform audit log is for.
+   */
+  async #authorize(actor: ConfigActor, operation: string, permission: string): Promise<void> {
+    const denial = denialReason(actor, operation, permission);
+    if (denial === null) return;
+
+    if (actor?.platformUserId) {
+      await this.#prisma.auditEvent
+        .create({
+          data: {
+            workspaceId: null,
+            actorType: 'PLATFORM_USER',
+            actorId: actor.platformUserId,
+            action: 'config.access.denied',
+            resourceType: 'configuration_version',
+            severity: 'WARNING',
+            outcome: 'DENIED',
+            // The permission and the operation — never the payload the caller
+            // was trying to write.
+            reason: denial,
+          },
+        })
+        .catch(() => {
+          // A failed audit write must not turn a denial into anything else.
+          // Unlike the rate-limit counter, this cannot fail open: the throw
+          // below happens regardless.
+        });
+    }
+
+    throw new AppError('FORBIDDEN', denial);
   }
 
   async #audit(

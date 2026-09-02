@@ -26,6 +26,11 @@ const FORBIDDEN_ATTRIBUTE_KEYS = [
   /\bdsn\b/i,
   /connection[_-]?string/i,
   /database[_-]?url/i,
+  // Error DETAIL, as opposed to error TYPE. A driver message, a constraint
+  // name, a secret ref or a stack frame is internal state; the error's name is
+  // all a trace needs, and all `withSpan` records.
+  /error\.(detail|message|stack|cause|body|response)/i,
+  /\bstack\b/i,
 ];
 
 /** Values that look like a connection string or credential, under any key. */

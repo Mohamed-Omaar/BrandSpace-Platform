@@ -45,6 +45,21 @@ export const PLATFORM_PERMISSIONS: readonly PermissionDefinition[] = [
   def('platform.user.manage', 'platform', 'Manage platform users and roles'),
   def('platform.audit.read', 'platform', 'View the platform audit log'),
   def('platform.support_mode.enter', 'platform', 'Enter time-boxed support mode'),
+
+  // Configuration and secrets are split into read / manage / activate on
+  // purpose. They were previously all gated on `platform.workspace.read`
+  // ("View any workspace"), which every admin-capable role holds — so a support
+  // agent could rotate a production API key. Viewing a customer's workspace and
+  // repricing the platform are not the same authority.
+  def('platform.configuration.read', 'platform', 'View platform configuration and its history'),
+  def('platform.configuration.manage', 'platform', 'Draft and edit platform configuration'),
+  def(
+    'platform.configuration.activate',
+    'platform',
+    'Activate or roll back platform configuration (high impact)',
+  ),
+  def('platform.secret.read', 'platform', 'View secret metadata — never a value'),
+  def('platform.secret.manage', 'platform', 'Create, rotate, disable or revoke secrets'),
 ] as const;
 
 export const ALL_PERMISSIONS: readonly PermissionDefinition[] = [

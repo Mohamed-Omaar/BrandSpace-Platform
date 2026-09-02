@@ -317,7 +317,57 @@ test.describe('the configuration lifecycle works end to end', () => {
     await page.getByTestId('draft-payload').fill('{ not json at all');
     await page.getByTestId('save-draft').click();
 
-    await expect(page.getByTestId('config-error')).toHaveText('The payload is not valid JSON.');
+    await expect(page.getByTestId('config-error')).toContainText('The payload is not valid JSON.');
+
+    // The URL carries a CODE and an opaque correlation id — never a parser
+    // message, which would echo a fragment of the submitted payload.
+    const params = new URL(page.url()).searchParams;
+    expect(params.get('error')).toBe('INVALID_JSON');
+    expect(params.get('ref')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(page.url()).not.toContain('not json at all');
+    expect(page.url()).not.toContain('JSON.parse');
+    expect(page.url()).not.toContain('SyntaxError');
+
+    // The reference is shown so an operator can quote it against the log.
+    await expect(page.getByTestId('config-error')).toContainText(params.get('ref')!);
+  });
+
+  test('a failed action puts no internal detail in the address bar', async ({ page }) => {
+    await signIn(page, 'en');
+    // Its own domain and its own draft: this assertion is about the error
+    // boundary, so it must not depend on what earlier tests left behind.
+    await page.goto(`${ADMIN_BASE_URL}/en/console/configuration?domain=usage-limits`);
+    await page.getByTestId('draft-reason').fill('Error-boundary check for the address bar');
+    await page.getByTestId('create-draft').click();
+    await expect(page.getByTestId('config-ok')).toContainText('Draft created');
+
+    // The version the EDITOR is bound to, read from its own label, so the
+    // version edited and the version activated are guaranteed to be the same.
+    const label = (await page.locator('label[for="payload"]').textContent())!;
+    const versionNumber = /v(\d+)/.exec(label)![1]!;
+
+    // A payload the schema rejects: `maxItems` must be a positive integer.
+    await page.getByTestId('draft-payload').fill(JSON.stringify({ limits: 'not-an-object' }));
+    await page.getByTestId('save-draft').click();
+    await expect(page.getByTestId('config-ok')).toContainText('Draft saved');
+
+    await page.getByTestId(`activate-${versionNumber}`).click();
+    await expect(page.getByTestId('config-error')).toBeVisible();
+
+    const url = page.url();
+    for (const fragment of [
+      'postgresql://',
+      'prisma',
+      'secret_record',
+      'Error:',
+      'at ',
+      'not-an-object',
+    ]) {
+      expect(url, `the URL must not carry "${fragment}"`).not.toContain(fragment);
+    }
+    const code = new URL(url).searchParams.get('error');
+    expect(code).toBe('INVALID_INPUT');
+    expect(new URL(url).searchParams.get('ref')).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   test('a concurrent edit is refused rather than silently overwriting', async ({
@@ -697,21 +747,24 @@ test.describe('accessibility', () => {
     });
   }
 
-  test('every console page has no serious or critical violations', async ({ page }) => {
-    await signIn(page, 'en');
-    for (const path of CONSOLE_PAGES) {
+  // One test per page rather than one loop over ten. An axe scan of a page with
+  // a long version history is not fast, and a single shared timeout turns a slow
+  // page into an unattributable failure of all ten.
+  for (const path of CONSOLE_PAGES) {
+    test(`${path} has no serious or critical violations`, async ({ page }) => {
+      await signIn(page, 'en');
       await page.goto(`${ADMIN_BASE_URL}/en${path}`);
       await expectNoBlockingA11yViolations(page, path);
-    }
-  });
+    });
+  }
 
-  test('the Arabic console has no serious or critical violations', async ({ page }) => {
-    await signIn(page, 'ar');
-    for (const path of ['/console', '/console/configuration', '/console/secrets']) {
+  for (const path of ['/console', '/console/configuration', '/console/secrets']) {
+    test(`${path} has no serious or critical violations in Arabic`, async ({ page }) => {
+      await signIn(page, 'ar');
       await page.goto(`${ADMIN_BASE_URL}/ar${path}`);
       await expectNoBlockingA11yViolations(page, `ar${path}`);
-    }
-  });
+    });
+  }
 });
 
 test.describe('layout never overflows horizontally', () => {

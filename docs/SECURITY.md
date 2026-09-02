@@ -664,3 +664,130 @@ its message, because a message can carry a connection string.
 | No credential reaches a span                                            | `tests/unit/observability.test.ts`                                                  |
 | Secret Service and platform client are unreachable from tenant surfaces | `tests/unit/module-boundaries.test.ts`, `tests/unit/platform-pool-boundary.test.ts` |
 | Every model is classified and protected                                 | `scripts/isolation-gate.ts`, `tests/unit/isolation-gate.test.ts`                    |
+
+---
+
+## 19. Independent Security Review of PR #4 — Findings and Resolutions
+
+> **ملخّص بالعربية**
+>
+> مراجعة أمنية مستقلة وجدت خمسة عيوب في المرحلة 2A. جميعها أُصلحت، ولكل منها اختبار انحدار أُثبت فشله قبل
+> الإصلاح ونجاحه بعده. الأهم: القفل بعد فشل التحقق بخطوتين كان قابلًا للتجاوز تمامًا، وأدوار القراءة فقط
+> كانت تستطيع تدوير المفاتيح السرية.
+
+Five defects, recorded as R-01…R-05 in `docs/DECISIONS.md` §7. CI was green when they were found:
+**the tests did not cover the failing behaviour**, which is the point worth remembering.
+
+### 19.1 R-01 — the MFA lockout did not lock
+
+`verifyMfa()` never read `lockedUntil`. Failed MFA attempts set it; nothing consulted it. A session created
+before the lock could keep submitting codes, and a **correct** code still signed in. The counter was also a
+read-modify-write (`currentCount + 1`), so ten parallel attempts each read `0`, each wrote `1`, and the
+threshold was never reached.
+
+Now:
+
+- the lock is checked at the top of `verifyMfa()`, before the vault is touched;
+- reaching the threshold **revokes every pre-MFA session** for that user, so the lock is a property of the
+  stored session rather than of one `if` statement. Sessions that already passed MFA are left alone — an
+  attacker guessing codes must not be able to sign a real administrator out;
+- the counter is one atomic `UPDATE` that computes the new value from the row's own column, so PostgreSQL
+  row locking serialises concurrent attempts and no increment is lost;
+- a failure to persist the counter is **audited at CRITICAL** rather than swallowed. The attempt is refused
+  either way; what must never happen is rate limiting silently switching itself off;
+- every MFA-step failure — wrong code, spent recovery code, locked account, revoked or expired session —
+  returns the same message. The distinction lives in the audit log.
+
+### 19.2 R-02 — read-only roles could rotate credentials
+
+Every secret and configuration action was gated on `platform.workspace.read`, described as "View any
+workspace" and held by `support_agent`, `billing_manager` and `operations_viewer`. `SecretService` checked
+only that an actor existed and had verified MFA — so calling the service directly bypassed RBAC entirely.
+
+Five permissions now separate the authorities that were conflated:
+
+| Permission                        | Owner | Admin | Operations viewer | Support agent | Billing manager |
+| --------------------------------- | ----- | ----- | ----------------- | ------------- | --------------- |
+| `platform.configuration.read`     | ✅    | ✅    | ✅                | ✖             | ✖               |
+| `platform.configuration.manage`   | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.configuration.activate` | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.secret.read`            | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.secret.manage`          | ✅    | ✅    | ✖                 | ✖             | ✖               |
+
+Enforced at **four** layers: the page (`requirePageActor`), the server action (`requirePlatformActor`), the
+service (`ConfigActor` / `SecretActor` now carry `permissionKeys` and every method asserts), and the UI, which
+hides controls a role cannot use. The service layer is the one that matters — the others are convenience.
+
+Two deliberate exceptions, both documented in the code:
+
+- `SecretService.resolveSecret()` takes **no actor**. It is a SYSTEM path: its callers are the MFA step, which
+  runs before any actor exists, and provider adapters acting on their own behalf. An operator permission there
+  would be theatre and would break sign-in. What protects it is that nothing reachable from a browser can
+  import `@brandspace/secrets` at all (§18, `docs/ARCHITECTURE.md` §4.1a).
+- `ConfigurationService.get()` / `getContext()` take no actor. They are the runtime accessor for application
+  code reading the ACTIVE payload, which contains `secretRef` strings and no values.
+
+Denials write an audit event naming the operation and the missing permission — never the payload the caller
+was trying to write.
+
+**Existing deployments must re-run `pnpm db:seed`.** Permissions and role mappings are seeded rows; the seed
+replaces a role's grants rather than merging, so a removed permission actually disappears. A data migration
+was considered and rejected: `role` is under `FORCE ROW LEVEL SECURITY` with no policy naming the migrator,
+so a migration cannot read it, and granting the migrator that visibility would itself be an escalation path.
+
+### 19.3 R-03 — a recovery code could be spent twice
+
+`findMany({ usedAt: null })`, match in memory, `update` by id. Two concurrent requests both read the same
+unused row and both succeeded. Consumption is now a single conditional write:
+
+```sql
+UPDATE platform_mfa_recovery_code
+   SET "usedAt" = now()
+ WHERE "platformUserId" = $1 AND "codeHash" = $2 AND "usedAt" IS NULL
+```
+
+and the caller requires exactly one affected row. This replaces `timingSafeEqual` with an equality test in
+the database — a deliberate trade, stated in the code: the compared value is a SHA-256 hash of a high-entropy
+code, so a timing channel there reveals nothing usable, whereas losing atomicity handed an attacker a second
+use of a code the owner believed was spent.
+
+### 19.4 R-04 — a committed development password
+
+`seed.ts` fell back to a literal value when `SEED_PLATFORM_PASSWORD` was unset. There is now no fallback:
+
+- variable **absent** → the Platform Owner is created with `passwordHash: null`. The account exists, is
+  enrolled in MFA, and cannot be signed into. No default credential is ever created;
+- variable **present but weak or placeholder-shaped** → the seed fails. Somebody tried and got it wrong, and
+  ignoring that would be worse than stopping;
+- the rejected value is **never** printed, in any message;
+- `.env.example` and `.env.test.example` document the variable with a commented placeholder that the
+  validator itself rejects, so it cannot be uncommented as-is.
+
+### 19.5 R-05 — internal errors in redirect URLs
+
+`safeMessage()` returned `error.message`, and the result went into a query parameter — and from there into
+the address bar, browser history, access logs, `Referer` headers and screenshots. `AppError.toPublicJSON()`
+had always omitted `message` for exactly this reason; the redirect path had not.
+
+Server actions now emit a **code from a closed allowlist** (`@brandspace/shared` `toPublicErrorCode`) plus an
+opaque correlation id. The page renders fixed bilingual text per code; an unrecognised code falls back to the
+generic message, so a hand-crafted `?error=` cannot put words on the screen. The real error is logged once,
+redacted, against the same correlation id. Success messages are codes too, because the previous
+`Secret "${name}" stored` reflected operator input back through the URL.
+
+Two adjacent gaps the boundary tests exposed, both fixed (R-05a): `redact()` did not catch a connection string
+with embedded credentials inside an error _message_ — only under a sensitive key name — and
+`sanitizeAttributes` did not drop `error.detail`-style span attributes.
+
+### 19.6 What proves it
+
+| Claim                                                         | Where                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| A correct TOTP code is refused while locked                   | `tests/isolation/platform-lockout.test.ts`                                 |
+| Parallel attempts lose no increments                          | same file, `Promise.all` over `MAX_FAILED_ATTEMPTS`                        |
+| One recovery code, one consumption                            | same file                                                                  |
+| Every role's exact configuration and secret authority         | `tests/isolation/platform-rbac.test.ts` (table-driven over all five roles) |
+| Direct service calls are refused without the permission       | same file                                                                  |
+| The RBAC matrix itself                                        | `tests/unit/rbac-matrix.test.ts`                                           |
+| The seed refuses to invent a password                         | `tests/unit/seed-password.test.ts`                                         |
+| No internal error text in a redirect, the UI, a log or a span | `tests/unit/public-error.test.ts`, `tests/unit/error-boundary.test.ts`     |

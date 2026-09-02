@@ -2,13 +2,24 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { randomUUID } from 'node:crypto';
 import { isConfigDomain } from '@brandspace/config';
+import {
+  AppError,
+  PublicError,
+  createLogger,
+  internalErrorFields,
+  toPublicErrorCode,
+} from '@brandspace/shared';
 import { withSpan } from '@brandspace/observability';
 import {
   currentEnvironment,
   getConfigService,
   requirePlatformActor,
+  serviceActor,
 } from '../../../../server/platform-context';
+
+const log = createLogger({ context: { component: 'admin.configuration' } });
 
 /**
  * Configuration server actions.
@@ -22,10 +33,23 @@ function backTo(locale: string, domain: string, params: Record<string, string>):
   return `/${locale}/console/configuration?${search.toString()}`;
 }
 
-/** Errors are surfaced to the operator, never a raw stack. */
-function safeMessage(error: unknown): string {
-  if (error instanceof Error && error.name === 'AppError') return error.message;
-  return error instanceof Error ? error.message : 'Unexpected error';
+/**
+ * Turn any failure into a redirect that carries a CODE, never a message.
+ *
+ * The previous `safeMessage()` returned `error.message` and put it in the query
+ * string, so a Prisma constraint, a connection string or a stack trace would
+ * have ended up in the address bar, browser history and access logs. The real
+ * error is logged once, redacted, against a correlation id the operator can
+ * quote.
+ */
+function failure(locale: string, domain: string, error: unknown): string {
+  const correlationId = randomUUID();
+  log.error('configuration action failed', {
+    correlationId,
+    domain,
+    ...internalErrorFields(error),
+  });
+  return backTo(locale, domain, { error: toPublicErrorCode(error), ref: correlationId });
 }
 
 export async function createDraftAction(formData: FormData): Promise<void> {
@@ -35,27 +59,21 @@ export async function createDraftAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const actor = await requirePlatformActor('platform.workspace.read');
-    if (!isConfigDomain(domain)) throw new Error(`Unknown domain: ${domain}`);
+    const actor = await requirePlatformActor('platform.configuration.manage');
+    if (!isConfigDomain(domain)) {
+      // The submitted domain is attacker-controllable; it never goes into a URL.
+      throw new AppError('VALIDATION_FAILED', 'Unknown configuration domain.');
+    }
 
     await withSpan(
       'config.draft.create',
       { 'config.domain': domain, 'config.environment': currentEnvironment() },
       async () =>
-        getConfigService().createDraft(
-          {
-            platformUserId: actor.platformUserId,
-            roleKey: actor.roleKey,
-            mfaVerified: actor.mfaVerified,
-          },
-          domain,
-          currentEnvironment(),
-          reason,
-        ),
+        getConfigService().createDraft(serviceActor(actor), domain, currentEnvironment(), reason),
     );
-    destination = backTo(locale, domain, { ok: encodeURIComponent('Draft created') });
+    destination = backTo(locale, domain, { ok: 'DRAFT_CREATED' });
   } catch (error: unknown) {
-    destination = backTo(locale, domain, { error: encodeURIComponent(safeMessage(error)) });
+    destination = failure(locale, domain, error);
   }
   revalidatePath(`/${locale}/console/configuration`);
   redirect(destination);
@@ -77,7 +95,7 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const actor = await requirePlatformActor('platform.workspace.read');
+    const actor = await requirePlatformActor('platform.configuration.manage');
     if (!Number.isInteger(lockVersion)) {
       throw new Error(
         'The form was submitted without a version to compare against. Reload the page.',
@@ -88,31 +106,20 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
     try {
       payload = JSON.parse(raw);
     } catch {
-      // The parser's own message can echo a fragment of the input, and this
-      // input is operator-supplied configuration.
-      throw new Error('The payload is not valid JSON.');
+      // The parser's own message echoes a fragment of the input, and this input
+      // is operator-supplied configuration. A chosen code, not a message.
+      throw new PublicError('INVALID_JSON');
     }
 
     await withSpan(
       'config.draft.update',
       { 'config.domain': domain, 'config.version_id': versionId },
       async () =>
-        getConfigService().updateDraft(
-          {
-            platformUserId: actor.platformUserId,
-            roleKey: actor.roleKey,
-            mfaVerified: actor.mfaVerified,
-          },
-          versionId,
-          payload,
-          lockVersion,
-        ),
+        getConfigService().updateDraft(serviceActor(actor), versionId, payload, lockVersion),
     );
-    destination = backTo(locale, domain, {
-      ok: encodeURIComponent('Draft saved. Validate it again before activating.'),
-    });
+    destination = backTo(locale, domain, { ok: 'DRAFT_SAVED' });
   } catch (error: unknown) {
-    destination = backTo(locale, domain, { error: encodeURIComponent(safeMessage(error)) });
+    destination = failure(locale, domain, error);
   }
   revalidatePath(`/${locale}/console/configuration`);
   redirect(destination);
@@ -125,33 +132,29 @@ export async function validateAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const actor = await requirePlatformActor('platform.workspace.read');
+    const actor = await requirePlatformActor('platform.configuration.manage');
     const config = getConfigService();
     const report = await withSpan(
       'config.validate',
       { 'config.domain': domain, 'config.version_id': versionId },
-      async () =>
-        config.validateDraft(
-          {
-            platformUserId: actor.platformUserId,
-            roleKey: actor.roleKey,
-            mfaVerified: actor.mfaVerified,
-          },
-          versionId,
-        ),
+      async () => config.validateDraft(serviceActor(actor), versionId),
     );
     // Impact preview is computed alongside validation, so the operator sees
     // both before deciding.
-    const preview = await config.previewImpact(versionId);
-    destination = backTo(locale, domain, {
-      ok: encodeURIComponent(
-        report.valid
-          ? `Valid. ${preview.changes.length} change(s), ${preview.highImpactCount} high impact.`
-          : `${report.issues.filter((i) => i.severity === 'error').length} validation error(s).`,
-      ),
-    });
+    const preview = await config.previewImpact(serviceActor(actor), versionId);
+    // Codes and numbers only: nothing free-form goes into the URL.
+    destination = report.valid
+      ? backTo(locale, domain, {
+          ok: 'VALIDATION_PASSED',
+          changes: String(preview.changes.length),
+          high: String(preview.highImpactCount),
+        })
+      : backTo(locale, domain, {
+          ok: 'VALIDATION_FAILED',
+          errors: String(report.issues.filter((i) => i.severity === 'error').length),
+        });
   } catch (error: unknown) {
-    destination = backTo(locale, domain, { error: encodeURIComponent(safeMessage(error)) });
+    destination = failure(locale, domain, error);
   }
   revalidatePath(`/${locale}/console/configuration`);
   redirect(destination);
@@ -165,7 +168,7 @@ export async function activateAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const actor = await requirePlatformActor('platform.workspace.read');
+    const actor = await requirePlatformActor('platform.configuration.activate');
     await withSpan(
       'config.activate',
       {
@@ -174,19 +177,13 @@ export async function activateAction(formData: FormData): Promise<void> {
         'config.acknowledged': acknowledge,
       },
       async () =>
-        getConfigService().activate(
-          {
-            platformUserId: actor.platformUserId,
-            roleKey: actor.roleKey,
-            mfaVerified: actor.mfaVerified,
-          },
-          versionId,
-          { acknowledgeHighImpact: acknowledge },
-        ),
+        getConfigService().activate(serviceActor(actor), versionId, {
+          acknowledgeHighImpact: acknowledge,
+        }),
     );
-    destination = backTo(locale, domain, { ok: encodeURIComponent('Configuration activated') });
+    destination = backTo(locale, domain, { ok: 'ACTIVATED' });
   } catch (error: unknown) {
-    destination = backTo(locale, domain, { error: encodeURIComponent(safeMessage(error)) });
+    destination = failure(locale, domain, error);
   }
   revalidatePath(`/${locale}/console/configuration`);
   redirect(destination);
@@ -200,24 +197,15 @@ export async function rollbackAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const actor = await requirePlatformActor('platform.workspace.read');
+    const actor = await requirePlatformActor('platform.configuration.activate');
     await withSpan(
       'config.rollback',
       { 'config.domain': domain, 'config.target_version_id': versionId },
-      async () =>
-        getConfigService().rollback(
-          {
-            platformUserId: actor.platformUserId,
-            roleKey: actor.roleKey,
-            mfaVerified: actor.mfaVerified,
-          },
-          versionId,
-          reason,
-        ),
+      async () => getConfigService().rollback(serviceActor(actor), versionId, reason),
     );
-    destination = backTo(locale, domain, { ok: encodeURIComponent('Rolled back') });
+    destination = backTo(locale, domain, { ok: 'ROLLED_BACK' });
   } catch (error: unknown) {
-    destination = backTo(locale, domain, { error: encodeURIComponent(safeMessage(error)) });
+    destination = failure(locale, domain, error);
   }
   revalidatePath(`/${locale}/console/configuration`);
   redirect(destination);

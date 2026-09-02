@@ -135,11 +135,28 @@ The seed creates:
 Two separate workspaces exist so tenant isolation can be inspected by hand as well as by the test
 suite. **Customer accounts have no password** — customer authentication arrives in Phase 2B.
 
-The Platform Owner **is** signable-in from Phase 2A. The seed enrols it in TOTP and prints the enrolment URI
-and recovery codes **once**, and only when it can see a terminal: if stdout is redirected, piped, or running
-in CI, the details are withheld rather than written into a log that is retained and searchable. Re-run the
-seed interactively, or set `SEED_PRINT_MFA_ENROLMENT=1` if you are certain the output is not captured. The
-password comes from `SEED_PLATFORM_PASSWORD`.
+The Platform Owner **is** signable-in from Phase 2A, but only if you choose a password:
+
+```bash
+SEED_PLATFORM_PASSWORD='REPLACE_WITH_A_STRONG_LOCAL_ONLY_VALUE' pnpm db:seed
+```
+
+Replace the placeholder — the seed rejects it as written, deliberately, so the line above cannot be
+copy-pasted into working use.
+
+There is **no default**. Leave the variable unset and the owner is created without a password and simply
+cannot sign in — the safe outcome, since a committed default would be a known credential for every database
+this seed is ever pointed at. A value that is present but short or placeholder-shaped is a hard error, and the
+rejected value is never printed.
+
+The seed enrols the owner in TOTP and prints the enrolment URI and recovery codes **once**, and only when it
+can see a terminal: if stdout is redirected, piped, or running in CI, the details are withheld rather than
+written into a log that is retained and searchable. Re-run the seed interactively, or set
+`SEED_PRINT_MFA_ENROLMENT=1` if you are certain the output is not captured.
+
+**Upgrading an existing database:** re-run `pnpm db:seed` after pulling the Phase 2A security-review changes.
+Platform permissions and role grants are seeded rows, and the new least-privilege split
+(`platform.configuration.*`, `platform.secret.*`) only takes effect once they are re-synced.
 
 ### 5. Run
 

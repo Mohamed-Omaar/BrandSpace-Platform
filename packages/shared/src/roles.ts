@@ -129,6 +129,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'platform',
     nameEn: 'Support Agent',
     nameAr: 'وكيل الدعم',
+    // Helps customers. Has no business editing platform configuration and no
+    // business anywhere near a credential.
     permissionKeys: ['platform.workspace.read', 'platform.support_mode.enter'],
   },
   {
@@ -136,6 +138,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'platform',
     nameEn: 'Billing Manager',
     nameAr: 'مدير الفوترة',
+    // Billing-specific permissions arrive with billing (Phase 8). Until then
+    // this role gets no configuration or secret authority at all.
     permissionKeys: ['platform.workspace.read'],
   },
   {
@@ -143,7 +147,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'platform',
     nameEn: 'Operations Viewer',
     nameAr: 'مُشاهِد العمليات',
-    permissionKeys: ['platform.workspace.read', 'platform.audit.read'],
+    // Read-only by name and by grant: it can inspect configuration and the
+    // audit log, and cannot change either. No secret permission — not even
+    // metadata, because nothing in the role's job needs it.
+    permissionKeys: [
+      'platform.workspace.read',
+      'platform.audit.read',
+      'platform.configuration.read',
+    ],
   },
 ] as const;
 

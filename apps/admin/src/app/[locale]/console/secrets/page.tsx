@@ -1,10 +1,12 @@
 import { SECRET_CATEGORY_DEFINITIONS } from '@brandspace/secrets';
 import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getSecretService,
   requirePageActor,
+  serviceActor,
 } from '../../../../server/platform-context';
 import { createSecretAction, disableSecretAction, rotateSecretAction } from './actions';
 
@@ -22,14 +24,16 @@ export default async function SecretsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; ok?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; ref?: string }>;
 }) {
   const { locale } = await params;
-  const { error, ok } = await searchParams;
-  await requirePageActor(locale, 'platform.workspace.read');
+  const search = await searchParams;
+  const { error, ok } = search;
+  const actor = await requirePageActor(locale, 'platform.secret.read');
+  const mayManage = actor.permissionKeys.includes('platform.secret.manage');
 
   const environment = currentEnvironment();
-  const secrets = await getSecretService().listSecrets({ environment });
+  const secrets = await getSecretService().listSecrets(serviceActor(actor), { environment });
   const isArabic = locale === 'ar';
 
   return (
@@ -59,82 +63,84 @@ export default async function SecretsPage({
 
       {error ? (
         <p role="alert" data-testid="secret-error" style={{ color: colorTokens.danger }}>
-          {decodeURIComponent(error)}
+          {errorMessage(error, locale, search.ref)}
         </p>
       ) : null}
       {ok ? (
         <p role="status" data-testid="secret-ok" style={{ color: colorTokens.success }}>
-          {decodeURIComponent(ok)}
+          {successMessage(ok, locale)}
         </p>
       ) : null}
 
       <h2 style={{ fontSize: '1.1rem' }}>{isArabic ? 'إضافة مفتاح' : 'Add a secret'}</h2>
-      <form
-        action={createSecretAction}
-        style={{
-          display: 'grid',
-          gap: spacingTokens.sm,
-          maxInlineSize: '40rem',
-          marginBlockEnd: spacingTokens.xl,
-        }}
-      >
-        <input type="hidden" name="locale" value={locale} />
-        <div>
-          <label htmlFor="name" style={labelStyle}>
-            {isArabic ? 'الاسم' : 'Name'}
-          </label>
-          <input id="name" name="name" required data-testid="secret-name" style={inputStyle} />
-        </div>
-        <div>
-          <label htmlFor="category" style={labelStyle}>
-            {isArabic ? 'الفئة' : 'Category'}
-          </label>
-          <select
-            id="category"
-            name="category"
-            required
-            data-testid="secret-category"
-            style={inputStyle}
-          >
-            {SECRET_CATEGORY_DEFINITIONS.map((c) => (
-              <option key={c.key} value={c.key}>
-                {isArabic ? c.labelAr : c.labelEn}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="provider" style={labelStyle}>
-            {isArabic ? 'المزود' : 'Provider'}
-          </label>
-          <input
-            id="provider"
-            name="provider"
-            required
-            data-testid="secret-provider"
-            style={inputStyle}
-          />
-        </div>
-        <div>
-          <label htmlFor="value" style={labelStyle}>
-            {isArabic ? 'القيمة' : 'Value'}
-          </label>
-          {/* type=password so it is not shoulder-readable; autoComplete off so a
+      {mayManage ? (
+        <form
+          action={createSecretAction}
+          style={{
+            display: 'grid',
+            gap: spacingTokens.sm,
+            maxInlineSize: '40rem',
+            marginBlockEnd: spacingTokens.xl,
+          }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <div>
+            <label htmlFor="name" style={labelStyle}>
+              {isArabic ? 'الاسم' : 'Name'}
+            </label>
+            <input id="name" name="name" required data-testid="secret-name" style={inputStyle} />
+          </div>
+          <div>
+            <label htmlFor="category" style={labelStyle}>
+              {isArabic ? 'الفئة' : 'Category'}
+            </label>
+            <select
+              id="category"
+              name="category"
+              required
+              data-testid="secret-category"
+              style={inputStyle}
+            >
+              {SECRET_CATEGORY_DEFINITIONS.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {isArabic ? c.labelAr : c.labelEn}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="provider" style={labelStyle}>
+              {isArabic ? 'المزود' : 'Provider'}
+            </label>
+            <input
+              id="provider"
+              name="provider"
+              required
+              data-testid="secret-provider"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label htmlFor="value" style={labelStyle}>
+              {isArabic ? 'القيمة' : 'Value'}
+            </label>
+            {/* type=password so it is not shoulder-readable; autoComplete off so a
               browser never stores a platform credential. */}
-          <input
-            id="value"
-            name="value"
-            type="password"
-            required
-            autoComplete="off"
-            data-testid="secret-value"
-            style={inputStyle}
-          />
-        </div>
-        <button type="submit" data-testid="secret-save" style={buttonStyle}>
-          {isArabic ? 'حفظ' : 'Save'}
-        </button>
-      </form>
+            <input
+              id="value"
+              name="value"
+              type="password"
+              required
+              autoComplete="off"
+              data-testid="secret-value"
+              style={inputStyle}
+            />
+          </div>
+          <button type="submit" data-testid="secret-save" style={buttonStyle}>
+            {isArabic ? 'حفظ' : 'Save'}
+          </button>
+        </form>
+      ) : null}
 
       <h2 style={{ fontSize: '1.1rem' }}>{isArabic ? 'المفاتيح المخزَّنة' : 'Stored secrets'}</h2>
       {secrets.length === 0 ? (
@@ -171,52 +177,65 @@ export default async function SecretsPage({
               </Cell>
               <Cell>
                 <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-                  <form action={rotateSecretAction} style={{ display: 'grid', gap: '2px' }}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="secretId" value={secret.id} />
-                    <input
-                      type="password"
-                      name="value"
-                      required
-                      autoComplete="off"
-                      placeholder={isArabic ? 'القيمة الجديدة' : 'New value'}
-                      data-testid={`rotate-value-${secret.ref}`}
-                      style={smallInput}
-                    />
-                    <input
-                      type="text"
-                      name="reason"
-                      required
-                      minLength={8}
-                      placeholder={isArabic ? 'السبب' : 'Reason'}
-                      data-testid={`rotate-reason-${secret.ref}`}
-                      style={smallInput}
-                    />
-                    <button type="submit" data-testid={`rotate-${secret.ref}`} style={smallButton}>
-                      {isArabic ? 'تدوير' : 'Rotate'}
-                    </button>
-                  </form>
-                  {secret.status === 'ACTIVE' ? (
-                    <form action={disableSecretAction} style={{ display: 'grid', gap: '2px' }}>
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="secretId" value={secret.id} />
-                      <input
-                        type="text"
-                        name="reason"
-                        required
-                        minLength={8}
-                        placeholder={isArabic ? 'سبب التعطيل' : 'Disable reason'}
-                        data-testid={`disable-reason-${secret.ref}`}
-                        style={smallInput}
-                      />
-                      <button
-                        type="submit"
-                        data-testid={`disable-${secret.ref}`}
-                        style={smallButton}
-                      >
-                        {isArabic ? 'تعطيل' : 'Disable'}
-                      </button>
-                    </form>
+                  {!mayManage ? (
+                    <span data-testid={`readonly-${secret.ref}`}>
+                      {isArabic ? 'للعرض فقط' : 'Read-only'}
+                    </span>
+                  ) : null}
+                  {mayManage ? (
+                    <>
+                      <form action={rotateSecretAction} style={{ display: 'grid', gap: '2px' }}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="secretId" value={secret.id} />
+                        <input
+                          type="password"
+                          name="value"
+                          required
+                          autoComplete="off"
+                          placeholder={isArabic ? 'القيمة الجديدة' : 'New value'}
+                          data-testid={`rotate-value-${secret.ref}`}
+                          style={smallInput}
+                        />
+                        <input
+                          type="text"
+                          name="reason"
+                          required
+                          minLength={8}
+                          placeholder={isArabic ? 'السبب' : 'Reason'}
+                          data-testid={`rotate-reason-${secret.ref}`}
+                          style={smallInput}
+                        />
+                        <button
+                          type="submit"
+                          data-testid={`rotate-${secret.ref}`}
+                          style={smallButton}
+                        >
+                          {isArabic ? 'تدوير' : 'Rotate'}
+                        </button>
+                      </form>
+                      {secret.status === 'ACTIVE' ? (
+                        <form action={disableSecretAction} style={{ display: 'grid', gap: '2px' }}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="secretId" value={secret.id} />
+                          <input
+                            type="text"
+                            name="reason"
+                            required
+                            minLength={8}
+                            placeholder={isArabic ? 'سبب التعطيل' : 'Disable reason'}
+                            data-testid={`disable-reason-${secret.ref}`}
+                            style={smallInput}
+                          />
+                          <button
+                            type="submit"
+                            data-testid={`disable-${secret.ref}`}
+                            style={smallButton}
+                          >
+                            {isArabic ? 'تعطيل' : 'Disable'}
+                          </button>
+                        </form>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               </Cell>

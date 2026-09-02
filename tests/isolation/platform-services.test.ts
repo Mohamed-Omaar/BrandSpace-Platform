@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { ConfigurationService } from '@brandspace/config';
 import { SecretService, buildSecretRef } from '@brandspace/secrets';
 import { MODEL_TABLE_NAMES, PLATFORM_OWNED_MODELS } from '@brandspace/database';
+import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
 import type { PrismaClient } from '@prisma/client';
 
@@ -20,7 +21,14 @@ let secrets: SecretService;
 let tenantSql: Client;
 let ownerId: string;
 
-const ACTOR = { roleKey: 'platform_owner', mfaVerified: true } as const;
+// The Platform Owner's real permission set, not a bespoke bypass: these suites
+// must exercise the same authorization path production does.
+const OWNER_PERMISSIONS = PLATFORM_PERMISSIONS.map((p) => p.key);
+const ACTOR = {
+  roleKey: 'platform_owner',
+  mfaVerified: true,
+  permissionKeys: OWNER_PERMISSIONS,
+} as const;
 const ENV = 'DEVELOPMENT' as const;
 
 function actor() {
@@ -125,7 +133,7 @@ describe('configuration lifecycle', () => {
     const report = await config.validateDraft(actor(), draft.id);
     expect(report.valid).toBe(true);
 
-    const preview = await config.previewImpact(draft.id);
+    const preview = await config.previewImpact(actor(), draft.id);
     expect(preview.changes.length).toBeGreaterThan(0);
 
     const activated = await config.activate(actor(), draft.id, { acknowledgeHighImpact: true });
@@ -145,7 +153,7 @@ describe('configuration lifecycle', () => {
     await config.validateDraft(actor(), second.id);
     await config.activate(actor(), second.id, { acknowledgeHighImpact: true });
 
-    const versions = await config.listVersions('usage-limits', ENV);
+    const versions = await config.listVersions(actor(), 'usage-limits', ENV);
     const active = versions.filter((v) => v.status === 'ACTIVE');
     expect(active).toHaveLength(1);
     expect(active[0]?.id).toBe(second.id);
@@ -192,7 +200,7 @@ describe('configuration lifecycle', () => {
     // The original v1 row is untouched; a NEW version carries its payload.
     expect(rolled.id).not.toBe(v1.id);
     expect(rolled.versionNumber).toBeGreaterThan(v2.versionNumber);
-    const original = await config.getVersion(v1.id);
+    const original = await config.getVersion(actor(), v1.id);
     expect(original.status).toBe('SUPERSEDED');
   });
 
@@ -323,7 +331,7 @@ describe('optimistic concurrency', () => {
     ).rejects.toThrow(/changed by someone else/i);
 
     // A's edit survives intact — B's write was refused, not merged.
-    const after = await config.getVersion(draft.id);
+    const after = await config.getVersion(actor(), draft.id);
     expect((after.payload as { limits: { key: string }[] }).limits[0]?.key).toBe('a');
   });
 
@@ -340,7 +348,12 @@ describe('configuration authorisation', () => {
   it('refuses an actor without verified MFA', async () => {
     await expect(
       config.createDraft(
-        { platformUserId: ownerId, roleKey: 'platform_owner', mfaVerified: false },
+        {
+          platformUserId: ownerId,
+          roleKey: 'platform_owner',
+          mfaVerified: false,
+          permissionKeys: OWNER_PERMISSIONS,
+        },
         'website',
         ENV,
         uniqueReason(),
@@ -489,7 +502,12 @@ describe('secret service against the real database', () => {
   it('refuses a secret operation without verified MFA', async () => {
     await expect(
       secrets.createSecret(
-        { platformUserId: ownerId, roleKey: 'platform_owner', mfaVerified: false },
+        {
+          platformUserId: ownerId,
+          roleKey: 'platform_owner',
+          mfaVerified: false,
+          permissionKeys: OWNER_PERMISSIONS,
+        },
         {
           ref: 'x/y/z/w',
           name: 'n',
@@ -543,8 +561,10 @@ describe('secret service against the real database', () => {
       environment: ENV,
       value,
     });
-    expect(await secrets.matchesStoredValue(created.id, value)).toBe(true);
-    expect(await secrets.matchesStoredValue(created.id, 'something-else-entirely')).toBe(false);
+    expect(await secrets.matchesStoredValue(actor(), created.id, value)).toBe(true);
+    expect(await secrets.matchesStoredValue(actor(), created.id, 'something-else-entirely')).toBe(
+      false,
+    );
   });
 });
 

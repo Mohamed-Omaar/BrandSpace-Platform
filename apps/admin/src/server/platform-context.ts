@@ -117,6 +117,26 @@ export async function requirePageActor(
   return actor;
 }
 
+/**
+ * The actor shape the domain services require.
+ *
+ * One conversion in one place, so no call site can quietly drop
+ * `permissionKeys` and hand a service an actor it cannot authorize.
+ */
+export function serviceActor(actor: AuthenticatedPlatformActor): {
+  platformUserId: string;
+  roleKey: string;
+  mfaVerified: boolean;
+  permissionKeys: readonly string[];
+} {
+  return {
+    platformUserId: actor.platformUserId,
+    roleKey: actor.roleKey,
+    mfaVerified: actor.mfaVerified,
+    permissionKeys: actor.permissionKeys,
+  };
+}
+
 export class PlatformAccessError extends Error {
   constructor(
     readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN',

@@ -6,6 +6,7 @@ import {
   getConfigService,
   getSecretService,
   requirePageActor,
+  serviceActor,
 } from '../../../server/platform-context';
 
 export const dynamic = 'force-dynamic';
@@ -13,39 +14,47 @@ export const dynamic = 'force-dynamic';
 /** Overview — real counts from the platform database, not placeholders. */
 export default async function OverviewPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  await requirePageActor(locale, 'platform.workspace.read');
+  // Every admin-capable role may see the overview. WHAT it shows depends on the
+  // actor's permissions: a role that may not read secrets does not learn how
+  // many exist from a summary tile.
+  const actor = await requirePageActor(locale, 'platform.workspace.read');
+  const mayReadConfig = actor.permissionKeys.includes('platform.configuration.read');
+  const mayReadSecrets = actor.permissionKeys.includes('platform.secret.read');
 
   const environment = currentEnvironment();
   const config = getConfigService();
   const secrets = getSecretService();
 
   const [secretList, activeDomains] = await Promise.all([
-    secrets.listSecrets({ environment }),
-    Promise.all(
-      CONFIG_DOMAIN_KEYS.map(async (domain) => ({
-        domain,
-        versions: await config.listVersions(domain, environment),
-      })),
-    ),
+    mayReadSecrets ? secrets.listSecrets(serviceActor(actor), { environment }) : [],
+    mayReadConfig
+      ? Promise.all(
+          CONFIG_DOMAIN_KEYS.map(async (domain) => ({
+            domain,
+            versions: await config.listVersions(serviceActor(actor), domain, environment),
+          })),
+        )
+      : [],
   ]);
 
   const activated = activeDomains.filter((d) => d.versions.some((v) => v.status === 'ACTIVE'));
   const drafts = activeDomains.flatMap((d) => d.versions.filter((v) => v.status === 'DRAFT'));
+  const withheld = locale === 'ar' ? '—' : '—';
 
   const stats = [
     {
       label: locale === 'ar' ? 'مجالات مُفعّلة' : 'Activated domains',
-      value: `${activated.length} / ${CONFIG_DOMAIN_KEYS.length}`,
+      value: mayReadConfig ? `${activated.length} / ${CONFIG_DOMAIN_KEYS.length}` : withheld,
       testid: 'stat-active-domains',
     },
     {
       label: locale === 'ar' ? 'مسودات معلّقة' : 'Pending drafts',
-      value: String(drafts.length),
+      value: mayReadConfig ? String(drafts.length) : withheld,
       testid: 'stat-drafts',
     },
     {
       label: locale === 'ar' ? 'مفاتيح سرية' : 'Stored secrets',
-      value: String(secretList.length),
+      value: mayReadSecrets ? String(secretList.length) : withheld,
       testid: 'stat-secrets',
     },
     {

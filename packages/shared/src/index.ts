@@ -3,6 +3,7 @@ export * from './env';
 export * from './errors';
 export * from './logger';
 export * from './permissions';
+export * from './public-error';
 export * from './redaction';
 export * from './result';
 export * from './roles';

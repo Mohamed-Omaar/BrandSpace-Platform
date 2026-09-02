@@ -5,7 +5,7 @@ import type { PrismaClient } from '@brandspace/database';
 import { AppError, systemClock, type Clock } from '@brandspace/shared';
 import { PLATFORM_REALM } from './realms';
 import { verifyPassword } from './password';
-import { hashRecoveryCode, recoveryCodeMatches, totpVerifier } from './mfa';
+import { hashRecoveryCode, totpVerifier } from './mfa';
 
 /**
  * Platform Admin sessions — docs/SECURITY.md §3, D-27.
@@ -37,6 +37,15 @@ import { hashRecoveryCode, recoveryCodeMatches, totpVerifier } from './mfa';
  */
 export const MAX_FAILED_ATTEMPTS = 10;
 export const LOCKOUT_MINUTES = 15;
+
+/**
+ * The ONE public message every MFA-step failure returns.
+ *
+ * Wrong code, spent recovery code, locked account, revoked session, expired
+ * session, unknown token — all indistinguishable to the caller. The real reason
+ * is recorded in the audit trail, which is where it belongs.
+ */
+const MFA_FAILURE_MESSAGE = 'Invalid verification code.';
 
 /** Platform roles permitted to reach the Control Center at all. */
 export const ADMIN_CAPABLE_ROLES = new Set([
@@ -126,14 +135,13 @@ export class PlatformAuthService {
 
     // Checked AFTER the hash comparison, so a locked account costs the same
     // time as any other failure and is indistinguishable from one.
-    const lockedUntil = user?.lockedUntil ?? null;
-    if (user && lockedUntil && lockedUntil.getTime() > this.#clock.now().getTime()) {
+    if (user && this.#isLocked(user.lockedUntil)) {
       await this.#auditDenied(user.id, 'platform.login.locked', input.ip, input.userAgent);
       throw new AppError('UNAUTHENTICATED', 'Invalid credentials.');
     }
 
     if (!user || !passwordOk || user.status !== 'ACTIVE') {
-      if (user) await this.#recordFailedAttempt(user.id, user.failedLoginCount);
+      if (user) await this.#countFailure(user.id, input.ip, input.userAgent);
       await this.#auditDenied(user?.id ?? null, 'platform.login.failed', input.ip, input.userAgent);
       throw new AppError('UNAUTHENTICATED', 'Invalid credentials.');
     }
@@ -167,11 +175,33 @@ export class PlatformAuthService {
     code: string;
     ip?: string;
   }): Promise<AuthenticatedPlatformActor> {
-    const session = await this.#loadSession(input.token);
+    let session;
+    try {
+      session = await this.#loadSession(input.token);
+    } catch {
+      // A revoked, expired or unknown session is refused with exactly the same
+      // message as a wrong code. Lockout revokes pre-MFA sessions, and the
+      // difference must not be observable.
+      throw new AppError('UNAUTHENTICATED', MFA_FAILURE_MESSAGE);
+    }
+
     const user = await this.#prisma.platformUser.findUniqueOrThrow({
       where: { id: session.platformUserId },
       include: { role: { include: { permissions: { include: { permission: true } } } } },
     });
+
+    // THE LOCK APPLIES HERE TOO. This check was missing: the lock was set by
+    // failed MFA attempts but only ever read on the password step, so a session
+    // created before the lock could keep submitting codes — and a CORRECT code
+    // still signed the attacker in. Checked before the secret is resolved, so a
+    // locked account does no vault work either.
+    if (this.#isLocked(user.lockedUntil)) {
+      await this.#auditDenied(user.id, 'platform.mfa.locked', input.ip, undefined);
+      // Belt and braces: any pre-MFA session that survived the lock is revoked
+      // now, so this cannot become a slow leak if the check above is ever moved.
+      await this.#revokePreMfaSessions(user.id, 'Account locked');
+      throw new AppError('UNAUTHENTICATED', MFA_FAILURE_MESSAGE);
+    }
 
     if (!user.mfaEnabled || !user.mfaSecretRef) {
       throw new AppError('FORBIDDEN', 'MFA enrolment is required before signing in (D-27).');
@@ -188,9 +218,9 @@ export class PlatformAuthService {
       if (!recovered) {
         // The second factor is six digits. Without a limit here, holding the
         // password reduces the account to a million guesses.
-        await this.#recordFailedAttempt(user.id, user.failedLoginCount);
+        await this.#countFailure(user.id, input.ip, undefined);
         await this.#auditDenied(user.id, 'platform.mfa.failed', input.ip, undefined);
-        throw new AppError('UNAUTHENTICATED', 'Invalid verification code.');
+        throw new AppError('UNAUTHENTICATED', MFA_FAILURE_MESSAGE);
       }
     }
 
@@ -293,44 +323,106 @@ export class PlatformAuthService {
     });
   }
 
+  /**
+   * Match AND consume a recovery code in ONE conditional statement.
+   *
+   * The previous shape — read every unused code, find a match in memory, then
+   * update it by id — let two concurrent requests read the same unused row and
+   * both succeed. `usedAt IS NULL` in the WHERE clause makes the second writer
+   * update zero rows instead, so exactly one caller can ever spend a code.
+   *
+   * The comparison is now an equality test in the database rather than
+   * `timingSafeEqual`. That is a deliberate trade: the compared value is a
+   * SHA-256 hash of a high-entropy code, not the code itself, so a timing
+   * channel there reveals nothing usable — while losing atomicity would hand an
+   * attacker a second free use of a code the owner believes is spent.
+   */
   async #tryRecoveryCode(platformUserId: string, code: string): Promise<boolean> {
-    const candidateHash = hashRecoveryCode(code);
-    const unused = await this.#prisma.platformMfaRecoveryCode.findMany({
-      where: { platformUserId, usedAt: null },
-    });
-    const match = unused.find((row) => recoveryCodeMatches(candidateHash, row.codeHash));
-    if (!match) return false;
-    // Single use: burn it immediately.
-    await this.#prisma.platformMfaRecoveryCode.update({
-      where: { id: match.id },
+    const result = await this.#prisma.platformMfaRecoveryCode.updateMany({
+      where: { platformUserId, codeHash: hashRecoveryCode(code), usedAt: null },
       data: { usedAt: this.#clock.now() },
     });
-    return true;
+    return result.count === 1;
+  }
+
+  #isLocked(lockedUntil: Date | null): boolean {
+    return lockedUntil !== null && lockedUntil.getTime() > this.#clock.now().getTime();
   }
 
   /**
-   * Count a failed attempt and lock the account once the limit is reached.
+   * Revoke every session of this user that has not passed MFA.
+   *
+   * A lock that leaves pre-MFA sessions alive is only as good as the checks
+   * that read it. Revoking them makes the lock a property of the stored session
+   * rather than of one `if` statement. Sessions that already passed MFA are
+   * deliberately left alone: an attacker guessing codes must not be able to
+   * sign a legitimate administrator out.
+   */
+  async #revokePreMfaSessions(platformUserId: string, reason: string): Promise<void> {
+    await this.#prisma.platformSession.updateMany({
+      where: { platformUserId, mfaVerifiedAt: null, revokedAt: null },
+      data: { revokedAt: this.#clock.now(), revokedReason: reason },
+    });
+  }
+
+  /**
+   * Count a failed attempt and lock the account once the limit is reached —
+   * ATOMICALLY.
+   *
+   * The previous implementation read `failedLoginCount` into JavaScript, added
+   * one, and wrote it back. Ten parallel requests all read the same value and
+   * all wrote 1, so the threshold was never reached and the lock never fired.
+   * A single UPDATE that computes the new value from the row's own column takes
+   * the row lock, and PostgreSQL re-evaluates the expression against the latest
+   * committed version, so no increment can be lost.
    *
    * The counter resets when the lock is applied, so the next window starts
    * clean rather than locking again on the first attempt after expiry.
    */
-  async #recordFailedAttempt(platformUserId: string, currentCount: number): Promise<void> {
-    const next = currentCount + 1;
-    const lock = next >= MAX_FAILED_ATTEMPTS;
-    await this.#prisma.platformUser
-      .update({
-        where: { id: platformUserId },
-        data: lock
-          ? {
-              failedLoginCount: 0,
-              lockedUntil: new Date(this.#clock.now().getTime() + LOCKOUT_MINUTES * 60_000),
-            }
-          : { failedLoginCount: next },
-      })
-      .catch(() => {
-        // A counter that cannot be written must not change the auth outcome —
-        // the attempt is still refused.
-      });
+  async #recordFailedAttempt(platformUserId: string): Promise<boolean> {
+    const lockUntil = new Date(this.#clock.now().getTime() + LOCKOUT_MINUTES * 60_000);
+    const rows = await this.#prisma.$queryRaw<{ lockedUntil: Date | null }[]>`
+      UPDATE "platform_user"
+         SET "failedLoginCount" =
+               CASE WHEN "failedLoginCount" + 1 >= ${MAX_FAILED_ATTEMPTS} THEN 0
+                    ELSE "failedLoginCount" + 1 END,
+             "lockedUntil" =
+               CASE WHEN "failedLoginCount" + 1 >= ${MAX_FAILED_ATTEMPTS} THEN ${lockUntil}
+                    ELSE "lockedUntil" END
+       WHERE "id" = ${platformUserId}::uuid
+       RETURNING "lockedUntil"`;
+
+    return this.#isLocked(rows[0]?.lockedUntil ?? null);
+  }
+
+  /**
+   * Count a failure, and act on a lock the moment it fires.
+   *
+   * A failure to persist the counter is NOT swallowed. The attempt is refused
+   * either way, but silently ignoring the write would mean rate limiting is off
+   * while everything still looks healthy — so it is audited at CRITICAL. The
+   * account is not locked on a write failure, because that would let anyone who
+   * can break the database lock every administrator out.
+   */
+  async #countFailure(platformUserId: string, ip?: string, userAgent?: string): Promise<void> {
+    let locked: boolean;
+    try {
+      locked = await this.#recordFailedAttempt(platformUserId);
+    } catch {
+      await this.#auditDenied(
+        platformUserId,
+        'platform.security.rate_limit_unavailable',
+        ip,
+        userAgent,
+        'CRITICAL',
+      );
+      return;
+    }
+
+    if (locked) {
+      await this.#revokePreMfaSessions(platformUserId, 'Account locked');
+      await this.#auditDenied(platformUserId, 'platform.account.locked', ip, userAgent, 'CRITICAL');
+    }
   }
 
   async #createSession(
@@ -376,6 +468,7 @@ export class PlatformAuthService {
     action: string,
     ip?: string,
     userAgent?: string,
+    severity: 'WARNING' | 'CRITICAL' = 'WARNING',
   ): Promise<void> {
     // Denials are audited too — repeated denials are a detection signal
     // (docs/SECURITY.md §7).
@@ -386,7 +479,7 @@ export class PlatformAuthService {
           actorType: 'PLATFORM_USER',
           actorId,
           action,
-          severity: 'WARNING',
+          severity,
           outcome: 'DENIED',
           reason: 'Platform authentication denied',
           ip: ip ?? null,

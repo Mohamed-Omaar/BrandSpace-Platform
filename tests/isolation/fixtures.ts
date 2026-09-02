@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { asPlatform } from '@brandspace/database';
+import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
 
 /**
  * Two workspaces with deliberately overlapping data shapes, so a test that passes
@@ -84,6 +85,76 @@ export async function ensurePlatformRole(prisma: PrismaClient): Promise<string> 
         },
       });
       return created.id;
+    },
+    { prisma, bootstrap: true },
+  );
+}
+
+/**
+ * Bootstrap the full permission catalogue and every PLATFORM role, exactly as
+ * the repository seed does.
+ *
+ * The RBAC suite reads each role's permissions back OUT of the database rather
+ * than trusting the constant, so it proves the whole chain: definition ->
+ * seeded rows -> service enforcement. Mirrors `packages/database/prisma/seed.ts`
+ * deliberately; if the two ever disagree, `tests/unit/rbac-matrix.test.ts`
+ * fails on the definitions and this suite fails on behaviour.
+ */
+export async function ensurePlatformRbac(prisma: PrismaClient): Promise<void> {
+  for (const permission of ALL_PERMISSIONS) {
+    await prisma.permission.upsert({
+      where: { key: permission.key },
+      update: {
+        resource: permission.resource,
+        action: permission.action,
+        minScope: permission.minScope,
+        description: permission.description,
+      },
+      create: {
+        key: permission.key,
+        resource: permission.resource,
+        action: permission.action,
+        minScope: permission.minScope,
+        description: permission.description,
+      },
+    });
+  }
+
+  await asPlatform(
+    SEED_ACTOR,
+    {
+      action: 'test.fixture.rbac',
+      reason: 'Isolation test fixture bootstrap',
+      requestId: FIXTURE_REQUEST_ID,
+    },
+    async (db) => {
+      for (const definition of ROLE_DEFINITIONS.filter((d) => d.realm === 'platform')) {
+        const existing = await db.role.findFirst({
+          where: { key: definition.key, workspaceId: null },
+        });
+        const role =
+          existing ??
+          (await db.role.create({
+            data: {
+              key: definition.key,
+              workspaceId: null,
+              realm: 'PLATFORM',
+              nameEn: definition.nameEn,
+              nameAr: definition.nameAr,
+              isSystem: true,
+            },
+          }));
+
+        // Replace, never merge: a permission removed from a role must actually
+        // disappear, or a demotion would be cosmetic.
+        await db.rolePermission.deleteMany({ where: { roleId: role.id } });
+        for (const key of definition.permissionKeys) {
+          const permission = await db.permission.findUniqueOrThrow({ where: { key } });
+          await db.rolePermission.create({
+            data: { roleId: role.id, permissionId: permission.id },
+          });
+        }
+      }
     },
     { prisma, bootstrap: true },
   );
