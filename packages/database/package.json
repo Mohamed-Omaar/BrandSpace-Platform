@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing.ts",
-    "./server-only-guard": "./src/server-only-guard.ts"
+    "./server-only-guard": "./src/server-only-guard.ts",
+    "./platform": "./src/platform-client.ts"
   },
   "scripts": {
     "generate": "prisma generate",
@@ -27,7 +28,9 @@
     "@brandspace/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0",
-    "pg": "8.23.0"
+    "pg": "8.23.0",
+    "@brandspace/auth": "workspace:*",
+    "@brandspace/secrets": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",

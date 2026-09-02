@@ -8,18 +8,24 @@
   },
   "dependencies": {
     "@brandspace/auth": "workspace:*",
+    "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
+    "@brandspace/observability": "workspace:*",
+    "@brandspace/providers": "workspace:*",
+    "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "@brandspace/ui": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@opentelemetry/api": "1.9.1",
+    "@playwright/test": "1.62.1",
     "@types/node": "22.20.1",
     "@types/pg": "8.23.1",
+    "otpauth": "9.5.1",
     "pg": "8.23.0",
-    "typescript": "5.9.3",
-    "@playwright/test": "1.62.1",
-    "@axe-core/playwright": "4.13.0"
+    "typescript": "5.9.3"
   }
 }

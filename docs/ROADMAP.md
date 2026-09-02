@@ -91,13 +91,12 @@ bilingual UI — are proven before any feature exists.
 
 ### Exit criteria
 
-> **Status after the Phase 1 hardening PR:** the tenancy, isolation, boundary,
-> bilingual and accessibility criteria are met. Authentication flows (Phase 2) and
-> OTLP span export (F-05) remain outstanding, so **Phase 1 is not yet fully
-> complete** — see `docs/DECISIONS.md` §7.
+> **Status after Phase 2A:** the tenancy, isolation, boundary, bilingual and
+> accessibility criteria are met, and OTLP span export (F-05) is now done.
+> Customer authentication remains outstanding — it is Phase 2B work.
 
-- [ ] A user can sign up, verify email, log in, and enable MFA — **outstanding (Phase 2)**
-- [ ] A platform user can log in to Admin; a customer session is rejected there — **outstanding (Phase 2)**; realm separation is in place and tested, login flows are not
+- [ ] A user can sign up, verify email, log in, and enable MFA — **outstanding (Phase 2B)**; this is the CUSTOMER flow
+- [x] A platform user can log in to Admin; a customer session is rejected there — **done (Phase 2A)**; password + mandatory TOTP, and a customer token resolves to no actor because the realms share no session store
 - [x] Two workspaces exist and the isolation suite passes for every seeded model — **done** (88 isolation tests, incl. the two-pool model)
 - [x] The route/permission report shows zero unprotected routes — **done** (registration throws without a scope)
 - [x] Both locales render correctly in RTL and LTR, verified in E2E — **done** (114 Playwright tests across all three interfaces)
@@ -127,12 +126,16 @@ bilingual UI — are proven before any feature exists.
 
 ### Exit criteria
 
-- [ ] Owner creates a workspace and invites a user entirely from Admin
-- [ ] A configuration version can be drafted, validated, activated, and rolled back — with history
-- [ ] A secret can be stored and rotated; **no interface anywhere reveals its value**
-- [ ] Support mode grants time-boxed read-only access, appears in the customer's activity log, and expires
-- [ ] Every admin action produces an audit event
-- [ ] Platform Owner and Platform Admin cannot log in without MFA
+> **Status after Phase 2A.** Phase 2 was split: **2A** delivered the Admin shell, the
+> Configuration Service, the Secret Service and observability; **2B** covers customers,
+> workspaces, invitations and Support Mode.
+
+- [ ] Owner creates a workspace and invites a user entirely from Admin — **outstanding (Phase 2B)**
+- [x] A configuration version can be drafted, validated, activated, and rolled back — with history — **done (2A)**; 17 domains, two-stage validation, impact preview, atomic activation, optimistic concurrency, rollback as a new version
+- [x] A secret can be stored and rotated; **no interface anywhere reveals its value** — **done (2A)**; envelope encryption, no reveal path exists, asserted against the raw HTTP response
+- [ ] Support mode grants time-boxed read-only access, appears in the customer's activity log, and expires — **outstanding (Phase 2B)**; the model and RLS policy exist from Phase 1, the UI does not
+- [x] Every admin action produces an audit event — **done (2A)** for the actions that exist: sign-in, MFA, denials, lockouts, configuration draft/validate/activate/rollback, secret create/rotate/disable/enable/revoke
+- [x] Platform Owner and Platform Admin cannot log in without MFA — **done (2A)**; a password-only session resolves to no actor at all
 
 ---
 

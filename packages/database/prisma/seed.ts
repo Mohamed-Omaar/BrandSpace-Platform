@@ -23,6 +23,7 @@ import {
   assertRolePermissionsAreValid,
 } from '@brandspace/shared';
 import { loadRepoEnv, requireDatabaseUrl } from '../src/env-file';
+import { resolveSeedPassword } from './seed-password';
 import { asPlatform } from '../src/platform';
 import { withWorkspace } from '../src/tenant-client';
 
@@ -38,6 +39,20 @@ const SEED_ACTOR = {
  * credential is ever committed (CLAUDE.md §2.6).
  */
 const DEV_PASSWORD_PLACEHOLDER = null;
+
+/**
+ * Whether the enrolment secret may be printed.
+ *
+ * The TOTP seed has to reach a human once — that is what enrolment IS — but a
+ * seed run whose output is captured (CI, a log file, a pipe) would leave that
+ * credential in a retained, searchable place. So it is printed only when a
+ * person is demonstrably watching, or when the operator explicitly overrides.
+ */
+function mayPrintEnrolment(): boolean {
+  if (process.env['SEED_PRINT_MFA_ENROLMENT'] === '1') return true;
+  if (process.env['CI']) return false;
+  return process.stdout.isTTY === true;
+}
 
 function client(): PrismaClient {
   // The seed performs PLATFORM operations — it provisions workspaces across
@@ -272,11 +287,95 @@ async function main(): Promise<void> {
       console.log(`  ${tenant.slug} (${workspaceId}) — owner ${tenant.userEmail}`);
     }
 
+    // --- Platform Owner MFA + password -------------------------------------
+    // There is NO fallback password. A literal committed here would be a known
+    // credential for every database this seed is ever pointed at, including one
+    // it was pointed at by mistake. Absent variable -> the owner is created
+    // without a password and simply cannot sign in. Present but weak or
+    // placeholder -> a hard error, because that is somebody trying and failing.
+    const ownerPassword = resolveSeedPassword();
+    const { hashPassword } = await import('@brandspace/auth');
+    const { generateTotpEnrolment, generateRecoveryCodes } = await import('@brandspace/auth');
+    const { SecretService, buildSecretRef } = await import('@brandspace/secrets');
+
+    const enrolment = generateTotpEnrolment(platformOwner.email);
+    const ownerPermissionKeys =
+      ROLE_DEFINITIONS.find((d) => d.key === 'platform_owner')?.permissionKeys ?? [];
+    const secretService = new SecretService({ prisma });
+    const mfaRef = buildSecretRef({
+      category: 'mfa_totp',
+      provider: 'platform',
+      environment: 'development',
+      name: platformOwner.email,
+    });
+
+    const existingMfa = await prisma.secretRecord.findUnique({
+      where: { ref_environment: { ref: mfaRef, environment: 'DEVELOPMENT' } },
+    });
+    if (!existingMfa) {
+      await secretService.createSecret(
+        {
+          platformUserId: platformOwner.id,
+          roleKey: 'platform_owner',
+          mfaVerified: true,
+          // The seed acts as the Platform Owner, so it carries that role's
+          // permissions rather than a bespoke bypass.
+          permissionKeys: ownerPermissionKeys,
+        },
+        {
+          ref: mfaRef,
+          name: `TOTP seed for ${platformOwner.email}`,
+          category: 'mfa_totp',
+          environment: 'DEVELOPMENT',
+          value: enrolment.secret,
+        },
+      );
+      await prisma.platformUser.update({
+        where: { id: platformOwner.id },
+        data: {
+          // Null when SEED_PLATFORM_PASSWORD is absent: the account exists, is
+          // enrolled in MFA, and cannot be signed into until a real password is
+          // set. `verifyPassword` treats a null hash as a failed login.
+          passwordHash: ownerPassword === null ? null : await hashPassword(ownerPassword),
+          mfaEnabled: true,
+          mfaSecretRef: mfaRef,
+          mfaEnrolledAt: new Date(),
+        },
+      });
+
+      const recoveryCodes = generateRecoveryCodes();
+      const { PlatformAuthService } = await import('@brandspace/auth');
+      await new PlatformAuthService({ prisma }).storeRecoveryCodes(platformOwner.id, recoveryCodes);
+
+      console.log('  MFA enrolled for the Platform Owner (development).');
+      if (mayPrintEnrolment()) {
+        console.log(
+          '  TOTP secret and recovery codes are printed ONCE, here, and never stored in clear:',
+        );
+        console.log(`    otpauth URI : ${enrolment.otpauthUri}`);
+        console.log(`    recovery    : ${recoveryCodes.join(' ')}`);
+      } else {
+        console.log('  Enrolment details WITHHELD: this is not an interactive terminal.');
+        console.log('  Printing a TOTP seed into a CI log or a redirected file would put a');
+        console.log('  credential somewhere it is retained and searchable (CLAUDE.md §2.3).');
+        console.log('  Re-run the seed from a terminal, or set SEED_PRINT_MFA_ENROLMENT=1 if you');
+        console.log('  are certain the output is not being captured.');
+      }
+    } else {
+      console.log('  Platform Owner MFA already enrolled; leaving it untouched.');
+    }
+
     console.log('\n✔ seed complete');
     console.log('  Platform Owner : owner@brandspace.local');
     console.log('  Workspace A    : acme-agency  / amal@acme.local');
     console.log('  Workspace B    : north-star   / noor@northstar.local');
-    console.log('  No passwords are seeded; auth flows arrive in Phase 2.');
+    console.log(
+      ownerPassword === null
+        ? '  Platform Owner sign-in is DISABLED: SEED_PLATFORM_PASSWORD was not set, so no\n' +
+            '  password was stored. Set it and re-run the seed to enable sign-in.'
+        : '  Platform Owner password came from SEED_PLATFORM_PASSWORD (never printed).',
+    );
+    console.log('  Customer auth flows arrive in Phase 2B.');
   } finally {
     await prisma.$disconnect();
   }

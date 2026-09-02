@@ -133,7 +133,30 @@ The seed creates:
 | `noor@northstar.local`   | customer | Workspace Owner of `north-star`                |
 
 Two separate workspaces exist so tenant isolation can be inspected by hand as well as by the test
-suite. **No passwords are seeded** — authentication flows arrive in Phase 2.
+suite. **Customer accounts have no password** — customer authentication arrives in Phase 2B.
+
+The Platform Owner **is** signable-in from Phase 2A, but only if you choose a password:
+
+```bash
+SEED_PLATFORM_PASSWORD='REPLACE_WITH_A_STRONG_LOCAL_ONLY_VALUE' pnpm db:seed
+```
+
+Replace the placeholder — the seed rejects it as written, deliberately, so the line above cannot be
+copy-pasted into working use.
+
+There is **no default**. Leave the variable unset and the owner is created without a password and simply
+cannot sign in — the safe outcome, since a committed default would be a known credential for every database
+this seed is ever pointed at. A value that is present but short or placeholder-shaped is a hard error, and the
+rejected value is never printed.
+
+The seed enrols the owner in TOTP and prints the enrolment URI and recovery codes **once**, and only when it
+can see a terminal: if stdout is redirected, piped, or running in CI, the details are withheld rather than
+written into a log that is retained and searchable. Re-run the seed interactively, or set
+`SEED_PRINT_MFA_ENROLMENT=1` if you are certain the output is not captured.
+
+**Upgrading an existing database:** re-run `pnpm db:seed` after pulling the Phase 2A security-review changes.
+Platform permissions and role grants are seeded rows, and the new least-privilege split
+(`platform.configuration.*`, `platform.secret.*`) only takes effect once they are re-synced.
 
 ### 5. Run
 
@@ -156,10 +179,26 @@ pnpm test:isolation    # tenant isolation + RLS + platform role, needs PostgreSQ
 pnpm gate:isolation    # the D-29 coverage gate
 
 pnpm e2e:build         # build the three apps (Playwright serves the production output)
-pnpm test:e2e          # Playwright: RTL/LTR, keyboard, responsive, accessibility
+pnpm e2e:seed          # seed the test database + a throwaway Control Center account
+pnpm test:e2e          # runs e2e:seed, then Playwright
 pnpm test:e2e:ui       # the same suite in Playwright's UI mode
 pnpm test:e2e:report   # open the HTML report from the last run
 ```
+
+The E2E suite needs a **migrated test database**, because the Control Center is a real, session-gated
+application — a suite that only exercised the signed-out state would prove nothing about it:
+
+```bash
+cp .env.test.example .env.test        # then fill in your local role passwords
+NODE_ENV=test pnpm db:migrate:deploy
+pnpm test:e2e
+```
+
+`pnpm e2e:seed` runs the repository seed against the **test** database and then creates a throwaway Platform
+Owner: a freshly generated password, a freshly generated TOTP seed, fresh recovery codes, written to
+`.e2e-admin.json` (git-ignored, mode 0600, replaced on every run). Nothing there is a real credential and
+nothing survives the next seed. The public website and customer dashboard are served with a **placeholder**
+database URL and no platform credential at all — their not having one is part of what the suite checks.
 
 First E2E run only, to fetch the browser:
 
@@ -212,17 +251,25 @@ completely bypassed_.
 
 ### The isolation gate (D-29)
 
-`pnpm gate:isolation` parses `schema.prisma`, treats every model with a `workspaceId` field as
-tenant-owned, and fails the build unless that model:
+`pnpm gate:isolation` reads `schema.prisma`, the tenancy registry
+(`packages/database/src/tenant-models.ts`), every migration and the isolation suite, and fails the build
+unless all four agree:
 
-1. is declared in `packages/database/src/tenant-models.ts`,
-2. has `ENABLE` **and** `FORCE ROW LEVEL SECURITY` in a migration,
-3. has an RLS policy, and
-4. is actually exercised by the isolation suite.
+1. **every** model is classified in the registry — tenant-owned, platform-owned, identity, or a global
+   catalogue. A model nobody classified is a failure, not a default;
+2. the classification matches the schema (a model with `workspaceId` is tenant-owned, and vice versa);
+3. tenant-owned models have `ENABLE` **and** `FORCE ROW LEVEL SECURITY` plus a policy;
+4. platform-owned models additionally have a policy scoped to `brandspace_platform` and every privilege
+   revoked from `brandspace_app`;
+5. the isolation suite actually exercises each of them.
 
-Adding a tenant-owned model without tests is therefore a build failure, not a review oversight.
-`tests/unit/isolation-gate.test.ts` asserts the gate fails when it should — a safety mechanism nobody
-has watched fire is not known to work.
+Requirement 1 exists because of a real bug: `platform_user` carried no `workspaceId`, so the original gate
+skipped it, and the RLS migration's blanket `GRANT ... ON ALL TABLES` left the Platform Owner's password hash
+readable by the tenant role (`docs/DECISIONS.md` F-10). "Not tenant data" is not the same as "safe".
+
+Adding a model without protection or tests is therefore a build failure, not a review oversight.
+`tests/unit/isolation-gate.test.ts` asserts the gate fails when it should, in six different ways — a safety
+mechanism nobody has watched fire is not known to work.
 
 ---
 
@@ -238,17 +285,22 @@ apps/
 packages/
   shared/              Errors, result types, env schema, logging + redaction, permissions, roles
   database/            Prisma schema, migrations, RLS, tenant-scoped client, asPlatform()
-  auth/                Session realms and actor types
+  auth/                Session realms, Argon2id passwords, TOTP MFA, platform sessions
   ui/                  Design tokens, RTL/LTR direction
-  config/              Versioned configuration service        (Phase 2)
+  config/              Versioned configuration service — 17 domains, validation, activation, rollback
+  secrets/             Envelope-encrypted vault; the only decrypt path, and no reveal path
+  observability/       OpenTelemetry tracing + span attribute redaction
+  providers/           Provider adapter contracts and deterministic fakes
   entitlements/        Plans, features, flags, limits         (Phase 3)
   ai-gateway/          Provider-agnostic AI gateway           (Phase 4)
   social-connectors/   Per-platform connectors                (Phase 6)
   billing/             Payment abstraction                    (Phase 8)
 tests/
   unit/        Unit tests (incl. module boundaries, contrast, prisma config)
-  isolation/   Tenant isolation, raw-SQL RLS, platform role, asPlatform auditing
-  e2e/         Playwright: RTL/LTR, keyboard, responsive, accessibility
+  isolation/   Tenant isolation, raw-SQL RLS, platform role, asPlatform auditing,
+               platform services (config + secrets), Platform Admin authentication
+  e2e/         Playwright: RTL/LTR, keyboard, responsive, accessibility, and the
+               Control Center journeys (sign-in, MFA, configuration, secrets)
 scripts/
   isolation-gate.ts        The D-29 CI gate
   sql/setup-database-roles.sql  Canonical three-role definition
@@ -319,11 +371,19 @@ tenant-facing API processes and ordinary workers. Where it is absent, `asPlatfor
 the correct behaviour for a process with no business doing cross-tenant work.
 
 The pool module is not exported from `@brandspace/database`, an ESLint rule rejects importing it from
-anywhere but `asPlatform()` itself, and `tests/unit/platform-pool-boundary.test.ts` asserts all three.
+anywhere but `asPlatform()` and the platform-client seam, and `tests/unit/platform-pool-boundary.test.ts`
+asserts all three.
+
+Phase 2A added a second restricted module for the same reason. `@brandspace/database/platform` hands
+`apps/admin` and `apps/api` a platform-scoped client for **platform-owned** data — configuration, secrets,
+admin sessions — which no tenant policy covers. It is restricted by an ESLint rule, by `import 'server-only'`
+in the admin server context (a client-component import becomes a build error), and by the pool's own browser
+guard. `@brandspace/secrets` is restricted the same way, because it holds the only decrypt path.
 
 **Residual risk, stated plainly:** anyone holding `DATABASE_PLATFORM_URL` has cross-tenant access.
 That credential _is_ the boundary now. What changed is that compromising the tenant application role
-no longer grants cross-tenant access — previously it did.
+no longer grants cross-tenant access — previously it did. Narrowing it further (short-lived credentials from
+a secret manager, and splitting read-only from read-write platform access) is still open as F-07.
 
 ---
 
@@ -336,5 +396,12 @@ no longer grants cross-tenant access — previously it did.
   the wrong expectation — decide which, and say so.
 - Every new tenant-owned model needs schema + migration + RLS policy + isolation test in the same
   pull request.
+- Every new model of **any** kind must be classified in `packages/database/src/tenant-models.ts`. A
+  platform-owned table additionally needs its `platform_only` policy and `REVOKE ALL ... FROM
+brandspace_app`. The isolation gate fails the build otherwise.
+- Never add a way to display a stored secret. `resolveSecret()` is the only decrypt path and it is
+  server-side; masked hints and fingerprints are what the interface shows.
+- Never put a credential, token, email address or connection string into a span or a log. The redaction
+  layer exists, but it is the last line of defence, not the first.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md) and [`CLAUDE.md`](CLAUDE.md) §2.

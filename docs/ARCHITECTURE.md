@@ -268,41 +268,64 @@ apps/web · apps/dashboard · apps/admin · apps/api · apps/worker
 packages/ui · packages/database · packages/auth · packages/ai-gateway
 packages/social-connectors · packages/entitlements · packages/billing
 packages/config · packages/shared
+packages/secrets · packages/observability · packages/providers   (added in Phase 2A)
 ```
 
 ### 4.1 Dependency rules (lint-enforced)
 
-| Package             | May import                                     | Must never import                            |
-| ------------------- | ---------------------------------------------- | -------------------------------------------- |
-| `shared`            | —                                              | anything                                     |
-| `database`          | `shared`                                       | any domain package                           |
-| `config`            | `shared`, `database`                           | `billing`, `ai-gateway`, `social-connectors` |
-| `auth`              | `shared`, `database`                           | domain packages                              |
-| `entitlements`      | `shared`, `database`, `config`                 | `ai-gateway`, `billing`, `social-connectors` |
-| `ai-gateway`        | `shared`, `database`, `config`, `entitlements` | `social-connectors`, `billing`               |
-| `social-connectors` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `billing`                      |
-| `billing`           | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `social-connectors`            |
-| `ui`                | `shared`                                       | everything else                              |
-| apps                | any package                                    | another app                                  |
+| Package             | May import                                     | Must never import                                               |
+| ------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
+| `shared`            | —                                              | anything                                                        |
+| `database`          | `shared`                                       | any domain package                                              |
+| `observability`     | `shared`                                       | everything else, including `database`                           |
+| `secrets`           | `shared`, `database`                           | `config` and every domain package                               |
+| `config`            | `shared`, `database`                           | `secrets`, `auth`, `billing`, `ai-gateway`, `social-connectors` |
+| `auth`              | `shared`, `database`, `secrets`                | domain packages                                                 |
+| `providers`         | `shared`, `config`                             | `database`, `secrets`, domain packages                          |
+| `entitlements`      | `shared`, `database`, `config`                 | `ai-gateway`, `billing`, `social-connectors`                    |
+| `ai-gateway`        | `shared`, `database`, `config`, `entitlements` | `social-connectors`, `billing`                                  |
+| `social-connectors` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `billing`                                         |
+| `billing`           | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `social-connectors`                               |
+| `ui`                | `shared`                                       | everything else                                                 |
+| apps                | any package                                    | another app                                                     |
 
 **No package imports an app. No package reads another package's tables directly** — cross-module access goes
 through the owning package's exported service functions or through queue events.
 
+`auth` depends on `secrets` for one reason only: the TOTP seed is a vault entry, not a column, so MFA
+verification has to resolve it. `providers` depends on `config` and nothing else, because an adapter is
+configured rather than wired — it never reaches the database itself.
+
+### 4.1a Two restricted modules (F-07)
+
+Beyond the table above, two modules are restricted by name because either one, in the wrong bundle, exposes
+the whole platform:
+
+| Module                               | Who may import it                                                 | Why                                                                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `@brandspace/secrets`                | `packages/auth`, `apps/admin`, `apps/api`                         | It holds the only decrypt path for every platform credential.                                                                  |
+| `@brandspace/database/platform`      | `apps/admin`, `apps/api`, `packages/database`                     | It opens a connection with cross-tenant visibility.                                                                            |
+| `@brandspace/database/platform-pool` | `packages/database/src/platform.ts` and `platform-client.ts` only | The raw pool. `asPlatform()` is the audited entrance for tenant data; the client seam is the entrance for platform-owned data. |
+
+Enforced by ESLint patterns, by `import 'server-only'` in the admin server context (a client-component import
+becomes a build error), by the pool's own browser guard, and by unit tests that probe each boundary in both
+directions — a rule nobody has watched fail is not known to work.
+
 ### 4.2 Bounded contexts and their tables
 
-| Context           | Owns                                                                                                                      | Split-out candidate           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| Identity & Access | `User`, `Membership`, `Role`, `Permission`, sessions, invitations                                                         | later                         |
-| Tenancy           | `Workspace`, `Brand`                                                                                                      | no (core)                     |
-| Brand & Content   | `BrandKnowledge`, `Campaign`, `ContentItem`, `ContentVariant`, `Asset`, `CalendarSlot`, `Approval`, `Comment`             | no (core)                     |
-| Social            | `SocialProvider`, `SocialAppConfiguration`, `SocialConnection`, `PublishJob`, `PublishAttempt`                            | **yes — publishing workers**  |
-| Analytics         | `MetricSnapshot`, `Insight`                                                                                               | **yes — analytics ingestion** |
-| AI                | `AIProvider`, `AIProviderCredential`, `AIModel`, `AIRoutingRule`, `AIRequest`, `AIUsageLedger`                            | **yes — AI workers**          |
-| Commerce          | `Plan`, `Feature`, `PlanEntitlement`, `WorkspaceOverride`, `Subscription`, `Invoice`, `CreditWallet`, `CreditTransaction` | **yes — billing**             |
-| Automation        | `AutomationRule`, `AutomationRun`                                                                                         | later                         |
-| Messaging         | `Notification`, templates                                                                                                 | **yes — notifications**       |
-| Platform Ops      | `AuditEvent`, `ConfigurationVersion`                                                                                      | no (core)                     |
-| Media             | asset derivatives, scanning                                                                                               | **yes — media processing**    |
+| Context           | Owns                                                                                                                                | Split-out candidate           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Identity & Access | `User`, `Membership`, `Role`, `Permission`, sessions, invitations                                                                   | later                         |
+| Tenancy           | `Workspace`, `Brand`                                                                                                                | no (core)                     |
+| Brand & Content   | `BrandKnowledge`, `Campaign`, `ContentItem`, `ContentVariant`, `Asset`, `CalendarSlot`, `Approval`, `Comment`                       | no (core)                     |
+| Social            | `SocialProvider`, `SocialAppConfiguration`, `SocialConnection`, `PublishJob`, `PublishAttempt`                                      | **yes — publishing workers**  |
+| Analytics         | `MetricSnapshot`, `Insight`                                                                                                         | **yes — analytics ingestion** |
+| AI                | `AIProvider`, `AIProviderCredential`, `AIModel`, `AIRoutingRule`, `AIRequest`, `AIUsageLedger`                                      | **yes — AI workers**          |
+| Commerce          | `Plan`, `Feature`, `PlanEntitlement`, `WorkspaceOverride`, `Subscription`, `Invoice`, `CreditWallet`, `CreditTransaction`           | **yes — billing**             |
+| Automation        | `AutomationRule`, `AutomationRun`                                                                                                   | later                         |
+| Messaging         | `Notification`, templates                                                                                                           | **yes — notifications**       |
+| Platform Ops      | `AuditEvent`, `ConfigurationVersion`, `SecretRecord`, `SecretVersion`, `PlatformUser`, `PlatformSession`, `PlatformMfaRecoveryCode` | no (core)                     |
+| Media             | asset derivatives, scanning                                                                                                         | **yes — media processing**    |
 
 ### 4.3 How a module becomes a service later
 
@@ -401,6 +424,33 @@ stateDiagram-v2
   seconds without a restart.
 - **Reading configuration never returns secrets.** Secret-bearing fields are references
   (`secretRef: "ai/openai/prod/api-key"`) resolved only server-side by the Secret Service.
+
+### 7.3a As implemented (Phase 2A)
+
+The design above is unchanged; these are the concrete details a reader needs when working in the code.
+
+**Seventeen domains ship**, named as they appear in `packages/config/src/domains.ts`:
+
+`ai.providers` · `ai.models` · `ai.model-capabilities` · `ai.routing` · `ai.credit-rules` · `plans` ·
+`entitlements` · `feature-flags` · `usage-limits` · `integrations.email` · `integrations.storage` ·
+`integrations.payment` · `integrations.observability` · `integrations.social-apps` · `templates` ·
+`website` · `operations`.
+
+Every domain's default is **empty but valid** — no provider, price, model or limit is invented in code, which
+is the point of CLAUDE.md §2.2. A fresh installation therefore reads a well-formed empty document rather than
+throwing, and the owner fills it in from the Control Center.
+
+| Guarantee                                  | How it is actually enforced                                                                                                                                                |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One ACTIVE version per domain/environment  | A **partial unique index** on `(domain, environment) WHERE status = 'ACTIVE'`. Not application logic — the database refuses.                                               |
+| History is immutable                       | A trigger rejects any update to an ACTIVE version's payload or checksum. Rollback creates a new version.                                                                   |
+| Concurrent edits do not silently overwrite | `lockVersion` travels in the `WHERE` clause of a conditional `updateMany`, so the check and the write are one statement.                                                   |
+| Editing invalidates prior verdicts         | `updateDraft` clears `validationReport` and `impactPreview` (as `Prisma.DbNull`, not `undefined`, which under `exactOptionalPropertyTypes` would mean "leave unchanged").  |
+| Money changes need two people              | `plans` and `ai.credit-rules` require dual control: the activator may not be the author (D-31).                                                                            |
+| High-impact changes are acknowledged       | The impact preview marks removals, price changes, credit-rule changes, model disables and kill switches as `high`; activation refuses without an explicit acknowledgement. |
+
+**Cache**: `InMemoryConfigCache` with a 30-second TTL, invalidated in-process on activation. Redis pub/sub
+invalidation across instances is **not** implemented — recorded as F-12, and bounded at 30 seconds until it is.
 
 ### 7.4 What is code vs. configuration
 

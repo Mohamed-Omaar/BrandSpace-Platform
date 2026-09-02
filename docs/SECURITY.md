@@ -569,3 +569,225 @@ post-launch activity.
 | Restore drill                                            | Quarterly                                |
 | Access review (platform users, secrets, provider apps)   | Quarterly                                |
 | Threat model review                                      | Each major architectural change          |
+
+---
+
+## 18. Implementation Status — Phase 2A
+
+> **ملخّص بالعربية**
+>
+> هذا القسم يفصل بين ما هو مُنفَّذ ومُختبَر فعليًا، وما هو تصميم لم يُبنَ بعد. كل ادّعاء أدناه مرتبط باختبار
+> يمكن تشغيله. أهم ما في المرحلة: عزل بيانات المنصة عن دور التطبيق، إلزام التحقق بخطوتين، تشفير المفاتيح
+> السرية بمفتاح بيانات مُغلَّف، وعدم وجود أي مسار لإظهار قيمة سرية بعد حفظها.
+
+### 18.1 The three database identities
+
+| Role                  | Owns schema | `BYPASSRLS` | Sees tenant data             | Sees platform data  |
+| --------------------- | ----------- | ----------- | ---------------------------- | ------------------- |
+| `brandspace_migrator` | yes         | no          | only via migrations          | only via migrations |
+| `brandspace_app`      | no          | no          | only its request's workspace | **none at all**     |
+| `brandspace_platform` | no          | no          | all, through `asPlatform()`  | yes                 |
+
+"None at all" is literal and is asserted, not assumed: every privilege is revoked from `brandspace_app` on
+every platform-owned table, so a query returns _permission denied_, not zero rows. The distinction matters —
+zero rows would mean the grant still exists and only a policy stands between the tenant role and the data.
+
+### 18.2 Platform-owned tables
+
+`platform_user`, `platform_session`, `platform_mfa_recovery_code`, `configuration_version`, `secret_record`,
+`secret_version`. Each has RLS **enabled and forced**, a policy naming `brandspace_platform` only, and every
+privilege revoked from `brandspace_app`.
+
+`platform_user` was added to this list in Phase 2A after the Control Center tests found it readable by the
+tenant role — the identity migration created it and the RLS migration's blanket `GRANT ... ON ALL TABLES`
+covered it, while no policy was ever written. The tenant role could read the Platform Owner's Argon2id
+password hash. Recorded as F-10 in `docs/DECISIONS.md`, fixed by migration
+`20260901210500_platform_user_isolation`, and the class of bug is now closed by the isolation gate: every
+model must be classified in the tenancy registry, so a new model nobody thought about fails the build.
+
+### 18.3 Platform Admin authentication
+
+- **Password**: Argon2id, 19 MiB memory, 2 iterations, parallelism 1.
+- **Two steps, and the first is worthless.** A correct password creates a session with `mfaVerifiedAt = NULL`.
+  `resolveActor()` returns `null` for such a session, so a stolen pre-MFA cookie grants nothing — asserted in
+  both the isolation suite and the browser suite.
+- **TOTP** (RFC 6238, ±1 step). The seed lives in the Secret Service; `platform_user` stores only a reference.
+- **Recovery codes**: high-entropy, stored as SHA-256 hashes, single-use, compared in constant time.
+- **No enumeration**: unknown email, wrong password, suspended account, passwordless account and a locked
+  account all return `Invalid credentials.` after the same Argon2 work.
+- **Lockout**: 10 failed attempts across _either_ factor lock the account for 15 minutes. Counting MFA failures
+  matters — without it, holding the password reduces the second factor to a million guesses.
+- **Sessions**: 4-hour idle, 12-hour absolute. The token is never stored; only its SHA-256 hash is. Revocation,
+  suspension and a role demotion each stop an existing session at the next request.
+- **Realms cannot cross**: different cookie name, audience, signing-key source, TTL and SameSite. There is no
+  shared session store for a customer token to be found in.
+
+### 18.4 Secret storage
+
+Envelope encryption. Each secret **version** gets its own AES-256-GCM data key; that data key is wrapped by a
+key-encryption key from a `KeyProvider`. The encryption context — `ref`, environment and version number — is
+the AEAD additional data, so ciphertext moved to another environment or renumbered fails to decrypt rather
+than silently succeeding.
+
+- **`resolveSecret()` is the only decrypt path**, and it is server-side. No API, page or action returns a
+  plaintext value.
+- **There is no reveal feature** (D-32). Operators see a masked hint (last four characters), a keyed
+  fingerprint for "is this the key I meant?", status and timestamps.
+- **Material is immutable**: a database trigger refuses any update to ciphertext, IV, auth tag, wrapped key or
+  encryption context. Rotation creates a new version and retires the old one in one transaction; a partial
+  unique index makes two ACTIVE versions impossible.
+- **Fails closed**: `createKeyProvider()` throws when no key material is configured, and refuses the local
+  development provider entirely when `NODE_ENV=production`. The KMS provider throws honestly rather than
+  pretending to work — see F-09.
+- **Nothing is logged**: audit events for create, rotate, disable, enable and revoke carry the ref and the
+  actor, never the value. The isolation suite searches every raw row of the database for the plaintext.
+
+### 18.5 Telemetry
+
+Spans are exported over OTLP when a collector is configured and are silently disabled when one is not —
+telemetry is never a deployment prerequisite, and a collector outage never changes what a request returns.
+Every attribute passes `sanitizeAttributes`, which drops forbidden keys outright (password, secret, token,
+api key, credential, authorization, cookie, session, email, phone, dsn, connection string) and drops any value
+shaped like a connection string or bearer token under any key. A failed span records the error's _name_, never
+its message, because a message can carry a connection string.
+
+### 18.6 What these claims rest on
+
+| Claim                                                                   | Where it is proven                                                                  |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Tenant role cannot read platform data                                   | `tests/isolation/platform-services.test.ts`, `platform-auth.test.ts`                |
+| MFA is mandatory and a pre-MFA session is inert                         | `tests/isolation/platform-auth.test.ts`, `tests/e2e/admin-console.spec.ts`          |
+| Lockout, uniform errors, session lifecycle                              | `tests/isolation/platform-auth.test.ts`                                             |
+| No plaintext secret anywhere in the database                            | `tests/isolation/platform-services.test.ts`                                         |
+| No secret value in any HTTP response                                    | `tests/e2e/admin-console.spec.ts`                                                   |
+| Encryption fails closed when unconfigured                               | `tests/unit/secret-crypto.test.ts`                                                  |
+| No credential reaches a span                                            | `tests/unit/observability.test.ts`                                                  |
+| Secret Service and platform client are unreachable from tenant surfaces | `tests/unit/module-boundaries.test.ts`, `tests/unit/platform-pool-boundary.test.ts` |
+| Every model is classified and protected                                 | `scripts/isolation-gate.ts`, `tests/unit/isolation-gate.test.ts`                    |
+
+---
+
+## 19. Independent Security Review of PR #4 — Findings and Resolutions
+
+> **ملخّص بالعربية**
+>
+> مراجعة أمنية مستقلة وجدت خمسة عيوب في المرحلة 2A. جميعها أُصلحت، ولكل منها اختبار انحدار أُثبت فشله قبل
+> الإصلاح ونجاحه بعده. الأهم: القفل بعد فشل التحقق بخطوتين كان قابلًا للتجاوز تمامًا، وأدوار القراءة فقط
+> كانت تستطيع تدوير المفاتيح السرية.
+
+Five defects, recorded as R-01…R-05 in `docs/DECISIONS.md` §7. CI was green when they were found:
+**the tests did not cover the failing behaviour**, which is the point worth remembering.
+
+### 19.1 R-01 — the MFA lockout did not lock
+
+`verifyMfa()` never read `lockedUntil`. Failed MFA attempts set it; nothing consulted it. A session created
+before the lock could keep submitting codes, and a **correct** code still signed in. The counter was also a
+read-modify-write (`currentCount + 1`), so ten parallel attempts each read `0`, each wrote `1`, and the
+threshold was never reached.
+
+Now:
+
+- the lock is checked at the top of `verifyMfa()`, before the vault is touched;
+- reaching the threshold **revokes every pre-MFA session** for that user, so the lock is a property of the
+  stored session rather than of one `if` statement. Sessions that already passed MFA are left alone — an
+  attacker guessing codes must not be able to sign a real administrator out;
+- the counter is one atomic `UPDATE` that computes the new value from the row's own column, so PostgreSQL
+  row locking serialises concurrent attempts and no increment is lost;
+- a failure to persist the counter is **audited at CRITICAL** rather than swallowed. The attempt is refused
+  either way; what must never happen is rate limiting silently switching itself off;
+- every MFA-step failure — wrong code, spent recovery code, locked account, revoked or expired session —
+  returns the same message. The distinction lives in the audit log.
+
+### 19.2 R-02 — read-only roles could rotate credentials
+
+Every secret and configuration action was gated on `platform.workspace.read`, described as "View any
+workspace" and held by `support_agent`, `billing_manager` and `operations_viewer`. `SecretService` checked
+only that an actor existed and had verified MFA — so calling the service directly bypassed RBAC entirely.
+
+Five permissions now separate the authorities that were conflated:
+
+| Permission                        | Owner | Admin | Operations viewer | Support agent | Billing manager |
+| --------------------------------- | ----- | ----- | ----------------- | ------------- | --------------- |
+| `platform.configuration.read`     | ✅    | ✅    | ✅                | ✖             | ✖               |
+| `platform.configuration.manage`   | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.configuration.activate` | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.secret.read`            | ✅    | ✅    | ✖                 | ✖             | ✖               |
+| `platform.secret.manage`          | ✅    | ✅    | ✖                 | ✖             | ✖               |
+
+Enforced at **four** layers: the page (`requirePageActor`), the server action (`requirePlatformActor`), the
+service (`ConfigActor` / `SecretActor` now carry `permissionKeys` and every method asserts), and the UI, which
+hides controls a role cannot use. The service layer is the one that matters — the others are convenience.
+
+Two deliberate exceptions, both documented in the code:
+
+- `SecretService.resolveSecret()` takes **no actor**. It is a SYSTEM path: its callers are the MFA step, which
+  runs before any actor exists, and provider adapters acting on their own behalf. An operator permission there
+  would be theatre and would break sign-in. What protects it is that nothing reachable from a browser can
+  import `@brandspace/secrets` at all (§18, `docs/ARCHITECTURE.md` §4.1a).
+- `ConfigurationService.get()` / `getContext()` take no actor. They are the runtime accessor for application
+  code reading the ACTIVE payload, which contains `secretRef` strings and no values.
+
+Denials write an audit event naming the operation and the missing permission — never the payload the caller
+was trying to write.
+
+**Existing deployments must re-run `pnpm db:seed`.** Permissions and role mappings are seeded rows; the seed
+replaces a role's grants rather than merging, so a removed permission actually disappears. A data migration
+was considered and rejected: `role` is under `FORCE ROW LEVEL SECURITY` with no policy naming the migrator,
+so a migration cannot read it, and granting the migrator that visibility would itself be an escalation path.
+
+### 19.3 R-03 — a recovery code could be spent twice
+
+`findMany({ usedAt: null })`, match in memory, `update` by id. Two concurrent requests both read the same
+unused row and both succeeded. Consumption is now a single conditional write:
+
+```sql
+UPDATE platform_mfa_recovery_code
+   SET "usedAt" = now()
+ WHERE "platformUserId" = $1 AND "codeHash" = $2 AND "usedAt" IS NULL
+```
+
+and the caller requires exactly one affected row. This replaces `timingSafeEqual` with an equality test in
+the database — a deliberate trade, stated in the code: the compared value is a SHA-256 hash of a high-entropy
+code, so a timing channel there reveals nothing usable, whereas losing atomicity handed an attacker a second
+use of a code the owner believed was spent.
+
+### 19.4 R-04 — a committed development password
+
+`seed.ts` fell back to a literal value when `SEED_PLATFORM_PASSWORD` was unset. There is now no fallback:
+
+- variable **absent** → the Platform Owner is created with `passwordHash: null`. The account exists, is
+  enrolled in MFA, and cannot be signed into. No default credential is ever created;
+- variable **present but weak or placeholder-shaped** → the seed fails. Somebody tried and got it wrong, and
+  ignoring that would be worse than stopping;
+- the rejected value is **never** printed, in any message;
+- `.env.example` and `.env.test.example` document the variable with a commented placeholder that the
+  validator itself rejects, so it cannot be uncommented as-is.
+
+### 19.5 R-05 — internal errors in redirect URLs
+
+`safeMessage()` returned `error.message`, and the result went into a query parameter — and from there into
+the address bar, browser history, access logs, `Referer` headers and screenshots. `AppError.toPublicJSON()`
+had always omitted `message` for exactly this reason; the redirect path had not.
+
+Server actions now emit a **code from a closed allowlist** (`@brandspace/shared` `toPublicErrorCode`) plus an
+opaque correlation id. The page renders fixed bilingual text per code; an unrecognised code falls back to the
+generic message, so a hand-crafted `?error=` cannot put words on the screen. The real error is logged once,
+redacted, against the same correlation id. Success messages are codes too, because the previous
+`Secret "${name}" stored` reflected operator input back through the URL.
+
+Two adjacent gaps the boundary tests exposed, both fixed (R-05a): `redact()` did not catch a connection string
+with embedded credentials inside an error _message_ — only under a sensitive key name — and
+`sanitizeAttributes` did not drop `error.detail`-style span attributes.
+
+### 19.6 What proves it
+
+| Claim                                                         | Where                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| A correct TOTP code is refused while locked                   | `tests/isolation/platform-lockout.test.ts`                                 |
+| Parallel attempts lose no increments                          | same file, `Promise.all` over `MAX_FAILED_ATTEMPTS`                        |
+| One recovery code, one consumption                            | same file                                                                  |
+| Every role's exact configuration and secret authority         | `tests/isolation/platform-rbac.test.ts` (table-driven over all five roles) |
+| Direct service calls are refused without the permission       | same file                                                                  |
+| The RBAC matrix itself                                        | `tests/unit/rbac-matrix.test.ts`                                           |
+| The seed refuses to invent a password                         | `tests/unit/seed-password.test.ts`                                         |
+| No internal error text in a redirect, the UI, a log or a span | `tests/unit/public-error.test.ts`, `tests/unit/error-boundary.test.ts`     |

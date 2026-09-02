@@ -1,0 +1,103 @@
+/**
+ * Control Center messages.
+ *
+ * CLAUDE.md §4: every user-facing string is a translation key, and both locales
+ * are first-class. Typed so a missing key is a compile error, not a runtime
+ * placeholder that ships.
+ */
+export const messages = {
+  ar: {
+    'app.title': 'مركز تحكم براندسبيس',
+    'app.subtitle': 'إدارة المنصة',
+    'nav.overview': 'نظرة عامة',
+    'nav.configuration': 'الإعدادات',
+    'nav.secrets': 'المفاتيح السرية',
+    'nav.providers': 'المزودون',
+    'nav.aiRegistry': 'نماذج الذكاء الاصطناعي',
+    'nav.routing': 'توجيه المهام',
+    'nav.flags': 'مفاتيح الميزات',
+    'nav.plans': 'الخطط والاستحقاقات',
+    'nav.audit': 'سجل التدقيق',
+    'nav.health': 'صحة النظام',
+    'nav.signOut': 'تسجيل الخروج',
+    'login.title': 'تسجيل دخول المنصة',
+    'login.email': 'البريد الإلكتروني',
+    'login.password': 'كلمة المرور',
+    'login.submit': 'متابعة',
+    'login.mfaRequired': 'المصادقة الثنائية مطلوبة لجميع أدوار المنصة.',
+    'mfa.title': 'التحقق بخطوتين',
+    'mfa.code': 'رمز التحقق',
+    'mfa.submit': 'تحقق',
+    'mfa.recoveryHint': 'يمكنك استخدام رمز استرداد بدلاً من ذلك.',
+    'config.versions': 'إصدارات الإعدادات',
+    'config.draft': 'مسودة',
+    'config.validate': 'تحقق',
+    'config.preview': 'معاينة الأثر',
+    'config.activate': 'تفعيل',
+    'config.rollback': 'تراجع',
+    'config.active': 'مُفعّل',
+    'secrets.title': 'إدارة المفاتيح السرية',
+    'secrets.noReveal': 'لا يمكن إظهار قيمة أي مفتاح بعد حفظه — بأي حال.',
+    'secrets.masked': 'مقنّع',
+    'secrets.rotate': 'تدوير',
+    'secrets.disable': 'تعطيل',
+    'common.environment': 'البيئة',
+    'common.status': 'الحالة',
+    'common.created': 'أُنشئ',
+    'common.confirm': 'تأكيد',
+    'common.cancel': 'إلغاء',
+    'common.save': 'حفظ',
+    'common.highImpact': 'تغيير عالي الأثر',
+  },
+  en: {
+    'app.title': 'BrandSpace Control Center',
+    'app.subtitle': 'Platform administration',
+    'nav.overview': 'Overview',
+    'nav.configuration': 'Configuration',
+    'nav.secrets': 'Secrets',
+    'nav.providers': 'Providers',
+    'nav.aiRegistry': 'AI models',
+    'nav.routing': 'Task routing',
+    'nav.flags': 'Feature flags',
+    'nav.plans': 'Plans & entitlements',
+    'nav.audit': 'Audit log',
+    'nav.health': 'System health',
+    'nav.signOut': 'Sign out',
+    'login.title': 'Platform sign in',
+    'login.email': 'Email',
+    'login.password': 'Password',
+    'login.submit': 'Continue',
+    'login.mfaRequired': 'Two-factor authentication is mandatory for all platform roles.',
+    'mfa.title': 'Two-factor verification',
+    'mfa.code': 'Verification code',
+    'mfa.submit': 'Verify',
+    'mfa.recoveryHint': 'You can use a recovery code instead.',
+    'config.versions': 'Configuration versions',
+    'config.draft': 'Draft',
+    'config.validate': 'Validate',
+    'config.preview': 'Preview impact',
+    'config.activate': 'Activate',
+    'config.rollback': 'Roll back',
+    'config.active': 'Active',
+    'secrets.title': 'Secret management',
+    'secrets.noReveal': 'A stored secret value can never be shown again — by any means.',
+    'secrets.masked': 'Masked',
+    'secrets.rotate': 'Rotate',
+    'secrets.disable': 'Disable',
+    'common.environment': 'Environment',
+    'common.status': 'Status',
+    'common.created': 'Created',
+    'common.confirm': 'Confirm',
+    'common.cancel': 'Cancel',
+    'common.save': 'Save',
+    'common.highImpact': 'High-impact change',
+  },
+} as const;
+
+export type MessageKey = keyof (typeof messages)['en'];
+export type AdminLocale = keyof typeof messages;
+
+export function translator(locale: string) {
+  const dictionary = locale === 'ar' ? messages.ar : messages.en;
+  return (key: MessageKey): string => dictionary[key];
+}

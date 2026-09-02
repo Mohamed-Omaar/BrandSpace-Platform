@@ -1,16 +1,46 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration — F-04.
+ * Load `.env.test` into this process.
  *
- * CHROMIUM ONLY, deliberately. Phase 1 has three near-identical scaffold pages;
- * running three engines over them would triple CI time to re-assert the same
- * markup. The value of cross-browser testing arrives with real interactive
- * features, so more projects are added when there is behaviour that could
- * plausibly differ between engines (recorded in docs/DECISIONS.md).
+ * The Control Center is a real database-backed application from Phase 2A
+ * onwards, so the served admin app needs the test database's connection details.
  *
- * Every test is offline: the apps are statically rendered and no test touches an
- * external API, so runs are deterministic.
+ * This does NOT reuse `loadEnvFile` from @brandspace/database, deliberately:
+ * Playwright transpiles this config to CommonJS, and loading a module from
+ * `tests/` here would register a CommonJS copy of it that then breaks the ESM
+ * import of the same module from the spec files. The behaviour is identical —
+ * an existing variable is never overwritten, so CI-injected values still win.
+ */
+function loadTestEnv(): void {
+  const file = path.join(__dirname, '.env.test');
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) continue;
+    const separator = trimmed.indexOf('=');
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    if (key === '' || key in process.env) continue;
+    process.env[key] = trimmed.slice(separator + 1).trim();
+  }
+}
+
+loadTestEnv();
+
+/**
+ * Playwright configuration — F-04, extended in Phase 2A.
+ *
+ * CHROMIUM ONLY, deliberately. The value of cross-browser testing arrives with
+ * behaviour that could plausibly differ between engines; more projects are added
+ * when there is such behaviour (recorded in docs/DECISIONS.md).
+ *
+ * No test contacts an external service. The public website and the customer
+ * dashboard are statically rendered; the Control Center talks only to the local
+ * test database, signing in with a throwaway account that `pnpm e2e:seed`
+ * creates seconds earlier. No real credential is involved anywhere.
  */
 
 const PORTS = { web: 3100, dashboard: 3101, admin: 3102 } as const;
@@ -26,17 +56,45 @@ const PORTS = { web: 3100, dashboard: 3101, admin: 3102 } as const;
 const chromiumExecutable = process.env['PLAYWRIGHT_CHROMIUM_EXECUTABLE'];
 const launchOptions = chromiumExecutable ? { executablePath: chromiumExecutable } : {};
 
+const PLACEHOLDER_DATABASE_URL = 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+
+/**
+ * Environment for a served app.
+ *
+ * The public website and the customer dashboard get a PLACEHOLDER database URL
+ * and no platform credential at all — that absence is itself part of what is
+ * under test (F-07: a tenant-facing process must not be able to open a
+ * cross-tenant connection even if it tried).
+ *
+ * The Control Center gets the real test-database platform URL, because signing
+ * in, activating configuration and storing a secret are exactly the journeys the
+ * admin suite exercises. Every value comes from .env.test; none is hard-coded.
+ */
+function serverEnv(app: keyof typeof PORTS): Record<string, string> {
+  if (app !== 'admin') {
+    return { DATABASE_URL: PLACEHOLDER_DATABASE_URL };
+  }
+  const env: Record<string, string> = {
+    DATABASE_URL: process.env['DATABASE_URL'] ?? PLACEHOLDER_DATABASE_URL,
+    APP_ENV: 'development',
+  };
+  for (const key of ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']) {
+    const value = process.env[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
+
 /** Build once, then serve — production output is what CI and users actually get. */
 function server(app: keyof typeof PORTS) {
   return {
     command: `pnpm --filter @brandspace/${app} start --port ${PORTS[app]}`,
+    // The admin root redirects to /en/login when signed out, which is a 307 and
+    // a perfectly good readiness signal.
     url: `http://127.0.0.1:${PORTS[app]}/en`,
     reuseExistingServer: !process.env['CI'],
     timeout: 120_000,
-    env: {
-      // Build/serve-time placeholder only; no test touches a database.
-      DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder',
-    },
+    env: serverEnv(app),
   };
 }
 
@@ -62,8 +120,13 @@ export default defineConfig({
   },
 
   projects: [
+    // The admin console suite signs in, activates configuration and stores
+    // secrets, so it must not run twice concurrently against one database.
+    // It gets its own project, is excluded from the two viewport projects, and
+    // runs its files serially.
     {
       name: 'chromium-desktop',
+      testIgnore: /admin-console\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -72,7 +135,18 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
+      testIgnore: /admin-console\.spec\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
+    },
+    {
+      name: 'admin-console',
+      testMatch: /admin-console\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
     },
   ],
 
