@@ -91,14 +91,24 @@ describe('the seed refuses to invent a password', () => {
   });
 });
 
+/**
+ * Composed at runtime on purpose. If this file spelled the assignment out as a
+ * literal, the repository-wide scan below would match its own source and read
+ * the tail of a regular expression as a committed password. Composing it keeps
+ * the scan honest: it covers every tracked file, this one included, with no
+ * exclusion list to hide a credential behind.
+ */
+const VARIABLE = ['SEED', 'PLATFORM', 'PASSWORD'].join('_');
+const ASSIGNMENT = new RegExp(`${VARIABLE}=(.+)$`);
+
 describe('the example environment files carry a placeholder only', () => {
   it.each(['.env.example', '.env.test.example'])('%s documents but does not set it', (file) => {
     const content = readFileSync(path.join(repoRoot, file), 'utf8');
-    expect(content).toContain('SEED_PLATFORM_PASSWORD');
+    expect(content).toContain(VARIABLE);
 
     // Every occurrence must be commented out, and must not be usable.
     for (const line of content.split('\n')) {
-      if (!line.includes('SEED_PLATFORM_PASSWORD=')) continue;
+      if (!line.includes(`${VARIABLE}=`)) continue;
       expect(line.trimStart().startsWith('#')).toBe(true);
       const value = line.slice(line.indexOf('=') + 1).trim();
       expect(() => assertUsableSeedPassword(value)).toThrow();
@@ -107,14 +117,19 @@ describe('the example environment files carry a placeholder only', () => {
 });
 
 describe('no working credential is tracked in the repository', () => {
-  it('finds no committed SEED_PLATFORM_PASSWORD with a usable value', () => {
-    const tracked = execFileSync('git', ['grep', '-nI', 'SEED_PLATFORM_PASSWORD', '--', '.'], {
+  it(`finds no committed ${VARIABLE} with a usable value`, () => {
+    const tracked = execFileSync('git', ['grep', '-nI', VARIABLE, '--', '.'], {
       cwd: repoRoot,
       encoding: 'utf8',
     });
 
+    // The scan must actually see the repository; an empty result would pass
+    // vacuously and hide a regression in the scan itself.
+    expect(tracked).toContain('.env.example');
+    expect(tracked).toContain(path.relative(repoRoot, fileURLToPath(import.meta.url)));
+
     for (const line of tracked.split('\n')) {
-      const match = /SEED_PLATFORM_PASSWORD=(.+)$/.exec(line);
+      const match = ASSIGNMENT.exec(line);
       if (!match) continue;
       // A tracked assignment is only acceptable if the value would be refused.
       const value = match[1]!.trim();
