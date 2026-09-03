@@ -1,28 +1,18 @@
-import Link from 'next/link';
-import { AppShell } from '../../components/app-shell';
+import { redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
+import { isSupportedLocale } from '@brandspace/ui';
+
+export const dynamic = 'force-dynamic';
 
 /**
- * Phase 1 scaffold. Deliberately contains NO product features — it exists so the
- * E2E suite has a deterministic, offline page to assert direction, landmarks,
- * keyboard navigation and accessibility against.
+ * The dashboard root.
+ *
+ * From Phase 2B the customer application is session-gated, so the root is not a
+ * page: it hands off to the workspace home, which redirects to sign-in when
+ * there is no session. Exactly the shape the Control Center took in Phase 2A.
  */
-export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function DashboardRoot({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const isArabic = locale === 'ar';
-  return (
-    <AppShell
-      locale={locale}
-      heading={isArabic ? 'لوحة التحكم' : 'Dashboard'}
-      description={
-        isArabic
-          ? 'المرحلة الأولى: الأساسات فقط. لا توجد ميزات منتج بعد.'
-          : 'Phase 1: foundations only. No product features yet.'
-      }
-    >
-      <p data-testid="phase-note">Customer application shell.</p>
-      <Link href={`/${locale}/overview`} data-testid="primary-link">
-        {isArabic ? 'نظرة عامة' : 'Overview'}
-      </Link>
-    </AppShell>
-  );
+  if (!isSupportedLocale(locale)) notFound();
+  redirect(`/${locale}/overview`);
 }

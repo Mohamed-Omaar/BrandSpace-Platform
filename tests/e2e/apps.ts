@@ -8,27 +8,26 @@ export interface AppUnderTest {
 }
 
 /**
- * The two PUBLIC-FACING scaffolds. These are statically rendered, need no
- * database and expose the same shell, so one set of generic specs covers both.
+ * The PUBLIC-FACING scaffold. Statically rendered, needs no database, and
+ * exposes the shared shell the generic specs assert against.
  *
- * The Control Center is deliberately NOT in this list. From Phase 2A it is a
- * real, session-gated, database-backed application: its root redirects to the
- * sign-in page, it has no shared scaffold markup, and asserting the scaffold's
- * shape against it would test nothing that exists. It has its own suite in
- * admin-console.spec.ts, which covers strictly more: authentication, MFA, the
- * configuration lifecycle, secret handling, RTL/LTR, keyboard navigation,
- * accessibility and overflow.
+ * Neither authenticated application is in this list, for the same reason in
+ * both cases: they are real, session-gated, database-backed products whose
+ * roots redirect to a sign-in page, so asserting the scaffold's shape against
+ * them would test markup that no longer exists.
+ *
+ *   - The Control Center left in Phase 2A -> admin-console.spec.ts
+ *   - The customer dashboard leaves in Phase 2B -> customer-app.spec.ts
+ *
+ * Each replacement suite covers strictly MORE than the generic one did:
+ * authentication, session realm separation, RBAC, RTL/LTR, keyboard operation,
+ * accessibility and overflow, against pages that hold real data.
  */
 export const APPS: readonly AppUnderTest[] = [
   { name: 'web', label: 'Public website', baseUrl: 'http://127.0.0.1:3100', secondPath: 'status' },
-  {
-    name: 'dashboard',
-    label: 'Customer dashboard',
-    baseUrl: 'http://127.0.0.1:3101',
-    secondPath: 'overview',
-  },
 ];
 
+export const DASHBOARD_BASE_URL = 'http://127.0.0.1:3101';
 export const ADMIN_BASE_URL = 'http://127.0.0.1:3102';
 
 export const LOCALES = [

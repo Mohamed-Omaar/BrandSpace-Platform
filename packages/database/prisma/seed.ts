@@ -23,7 +23,7 @@ import {
   assertRolePermissionsAreValid,
 } from '@brandspace/shared';
 import { loadRepoEnv, requireDatabaseUrl } from '../src/env-file';
-import { resolveSeedPassword } from './seed-password';
+import { resolveCustomerSeedPassword, resolveSeedPassword } from './seed-password';
 import { asPlatform } from '../src/platform';
 import { withWorkspace } from '../src/tenant-client';
 
@@ -204,18 +204,30 @@ async function main(): Promise<void> {
     ];
 
     console.log('› seeding two isolated customer workspaces …');
+
+    // Phase 2B. Same rule as the platform password (R-04): absent means the
+    // owners are created passwordless and must be invited; present but weak or
+    // placeholder-shaped is a hard error. No default credential is ever minted.
+    const customerPassword = resolveCustomerSeedPassword();
+    const customerHash = customerPassword
+      ? await (await import('@brandspace/auth')).hashPassword(customerPassword)
+      : null;
+
     for (const tenant of tenants) {
       const user = await prisma.user.upsert({
         where: { email: tenant.userEmail },
-        update: {},
+        update: customerHash ? { passwordHash: customerHash, status: 'ACTIVE' } : {},
         create: {
           email: tenant.userEmail,
           name: tenant.userName,
-          status: 'ACTIVE',
+          // Without a password the account is PENDING: it exists, holds a
+          // membership, and cannot be signed into until an invitation is
+          // accepted or a password is set.
+          status: customerHash ? 'ACTIVE' : 'PENDING',
           locale: tenant.locale,
           timezone: 'Asia/Riyadh',
           emailVerifiedAt: new Date(),
-          passwordHash: DEV_PASSWORD_PLACEHOLDER,
+          passwordHash: customerHash ?? DEV_PASSWORD_PLACEHOLDER,
         },
       });
 
@@ -259,6 +271,9 @@ async function main(): Promise<void> {
               brandScope: [],
             },
           });
+          // Phase 2B: every workspace owns a wallet from creation, so no later
+          // code path has to invent one under concurrency.
+          await db.creditWallet.create({ data: { workspaceId: workspace.id } });
           return workspace.id;
         },
         { bootstrap: true },
@@ -375,7 +390,12 @@ async function main(): Promise<void> {
             '  password was stored. Set it and re-run the seed to enable sign-in.'
         : '  Platform Owner password came from SEED_PLATFORM_PASSWORD (never printed).',
     );
-    console.log('  Customer auth flows arrive in Phase 2B.');
+    console.log(
+      customerHash === null
+        ? '  Customer sign-in is DISABLED: SEED_CUSTOMER_PASSWORD was not set, so the two\n' +
+            '  workspace owners have no password. Invite them, or set it and re-run.'
+        : '  Customer owner passwords came from SEED_CUSTOMER_PASSWORD (never printed).',
+    );
   } finally {
     await prisma.$disconnect();
   }

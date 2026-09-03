@@ -87,6 +87,20 @@ const SUCCESS_TEXT: Record<string, (locale: string, params: URLSearchParams) => 
   SECRET_STORED: (locale) => (locale === 'ar' ? 'تم حفظ المفتاح السري' : 'Secret stored'),
   SECRET_ROTATED: (locale) => (locale === 'ar' ? 'تم تدوير المفتاح السري' : 'Secret rotated'),
   SECRET_DISABLED: (locale) => (locale === 'ar' ? 'تم تعطيل المفتاح السري' : 'Secret disabled'),
+
+  // --- Phase 2B. Codes only: none of these interpolates operator input. ---
+  WORKSPACE_CREATED: (locale) => (locale === 'ar' ? 'تم إنشاء مساحة العمل' : 'Workspace created'),
+  WORKSPACE_UPDATED: (locale) => (locale === 'ar' ? 'تم حفظ التغييرات' : 'Changes saved'),
+  STATUS_CHANGED: (locale) =>
+    locale === 'ar' ? 'تم تغيير حالة مساحة العمل' : 'Workspace status changed',
+  PLAN_ASSIGNED: (locale) => (locale === 'ar' ? 'تم تعيين الخطة' : 'Plan assigned'),
+  OVERRIDE_SET: (locale) => (locale === 'ar' ? 'تم حفظ الاستثناء' : 'Override saved'),
+  OVERRIDE_REVOKED: (locale) => (locale === 'ar' ? 'تم إلغاء الاستثناء' : 'Override revoked'),
+  CREDITS_ADJUSTED: (locale) => (locale === 'ar' ? 'تم تعديل الرصيد' : 'Credits adjusted'),
+  INVITATION_SENT: (locale) => (locale === 'ar' ? 'تم إرسال الدعوة' : 'Invitation sent'),
+  INVITATION_REVOKED: (locale) => (locale === 'ar' ? 'تم إلغاء الدعوة' : 'Invitation revoked'),
+  SUPPORT_STARTED: (locale) => (locale === 'ar' ? 'بدأت جلسة الدعم' : 'Support session started'),
+  SUPPORT_ENDED: (locale) => (locale === 'ar' ? 'انتهت جلسة الدعم' : 'Support session ended'),
 };
 
 /** Render a success code, or null when the code is not one we emit. */

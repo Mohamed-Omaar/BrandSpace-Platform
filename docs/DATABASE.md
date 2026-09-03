@@ -794,3 +794,83 @@ rather than quietly working.
 or a global catalogue. `scripts/isolation-gate.ts` fails the build when a model is unclassified, when the
 classification disagrees with the schema, when a platform-owned table lacks its policy or its revoke, or when
 the isolation suite never exercises it. A model nobody thought about is a build failure, not a default.
+
+---
+
+## 15. Phase 2B Tables — Customers, Invitations, Entitlements, Credits
+
+> **ملخّص بالعربية**
+>
+> جداول المرحلة 2B: جلسات العملاء ورموز إعادة تعيين كلمة المرور (هوية عالمية، لا تخص مساحة عمل)،
+> الدعوات ذات الرمز المُخزَّن كتجزئة فقط، استثناءات الاستحقاقات لكل عميل، محفظة الأرصدة ودفترها غير القابل
+> للتعديل، وصندوق البريد الصادر. كل جدول يحمل `workspaceId` محميّ بـ RLS واختبار عزل.
+
+### 15.1 Tenant-owned
+
+| Table                | Purpose                            | Notable constraints                                                                                                                                                                                         |
+| -------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invitation`         | A workspace invitation             | `unique(tokenHash)`; partial unique `(workspaceId, email) WHERE status='PENDING'`; CHECK exactly one inviter; CHECK the address is lower-case; trigger refuses reviving a terminal row or editing the token |
+| `workspace_override` | Per-customer entitlement deviation | partial unique `(workspaceId, featureKey) WHERE status='ACTIVE'`                                                                                                                                            |
+| `credit_wallet`      | One wallet per workspace           | `unique(workspaceId)`; `CHECK (balanceMilliCredits >= 0)`; `CHECK (reservedMilliCredits >= 0)`                                                                                                              |
+| `credit_transaction` | The immutable ledger               | `unique(idempotencyKey)`; `UPDATE`/`DELETE` revoked from **both** roles; trigger as the second stop                                                                                                         |
+| `email_message`      | The outbox (nullable tenant key)   | `workspaceId IS NULL` for messages that precede any workspace, e.g. a password reset                                                                                                                        |
+
+### 15.2 Identity, RLS-protected, not tenant-owned
+
+`customer_session` and `password_reset_token` carry no `workspaceId`, because a `User` is a global identity
+and the workspace is chosen **after** authentication. They are still RLS-protected, with the tightest
+policy in the schema:
+
+```sql
+CREATE POLICY tenant_isolation ON "customer_session"
+  TO brandspace_app
+  USING      (app.current_workspace_id() IS NULL)
+  WITH CHECK (app.current_workspace_id() IS NULL);
+```
+
+Readable **only** with no workspace context — that is, from the authentication path. A member acting inside
+workspace A cannot read session rows at all: not another tenant's, and not even their own. Authentication
+itself works because it runs before any workspace is known, which the isolation suite asserts in both
+directions so the policy cannot be "narrow" by simply being broken.
+
+### 15.3 Changes to existing tables
+
+`workspace` gains: `statusReason`, `statusChangedAt`, `statusChangedByPlatformUserId`, `archivedAt` (the
+provenance of a lifecycle change, so a suspension is never an unexplained state); `planKey`,
+`planAssignedAt`, `planAssignedByPlatformUserId` (D-40 — superseded by `Subscription` when billing
+arrives); `lockVersion` (optimistic concurrency for platform edits); and `lastActivityAt`, which is **null**
+until a customer session touches the workspace and is displayed as "none yet" rather than as a date.
+
+`WorkspaceStatus` gains `ARCHIVED`: retained, read-only, out of the working set. There is no hard-delete
+path through any interface (CLAUDE.md §2.5).
+
+A CHECK constraint requires `statusReason` whenever the status is `SUSPENDED`, `ARCHIVED` or `CANCELLED`.
+An unexplained lifecycle change is the one support cannot answer.
+
+### 15.4 The context-less reads, and the two write-only widenings
+
+Four Phase 2B questions arise **before** any workspace context exists. Each is answered by the narrowest
+policy that can answer it, and no wider:
+
+| Question                                  | Policy                                    | Keyed on                     | Shape                       |
+| ----------------------------------------- | ----------------------------------------- | ---------------------------- | --------------------------- |
+| Which workspaces may this session act in? | `session_membership`, `session_workspace` | `app.session_token_hash`     | `SELECT` only, tenant role  |
+| What does this invitation offer?          | `invitation_by_token`                     | `app.invitation_token_hash`  | `SELECT` only, PENDING only |
+| May the login path record what happened?  | `audit_event` `WITH CHECK`                | NULL workspace, NULL context | write only, never readable  |
+| May the reset path queue a message?       | `email_message` `WITH CHECK`              | NULL workspace, NULL context | write only, never readable  |
+
+The two read widenings expose rows the caller already holds a 256-bit secret for. The two write widenings
+leave `USING` untouched, so what they permit to be written can never be read back by any tenant — and
+inside a workspace a NULL-workspace write is still refused, so a tenant cannot detach a record from their
+own history.
+
+**A trap worth naming.** PostgreSQL applies `USING` to `INSERT … RETURNING`, and reports the refusal as
+`new row violates row-level security policy` — a _write_ error for a write the policy allows. Any table
+whose `WITH CHECK` is wider than its `USING` will do this, so both the audit path and the outbox generate
+the row id and insert without `RETURNING`.
+
+### 15.5 Credit units
+
+Milli-credits are stored; whole credits are displayed (D-14). `balanceMilliCredits` is a materialised
+projection of the ledger, updated only inside the same transaction as its `CreditTransaction` row.
+`CreditService.reconcile()` replays the ledger and reports the drift, which must be zero.

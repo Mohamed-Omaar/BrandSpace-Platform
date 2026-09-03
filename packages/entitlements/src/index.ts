@@ -1,8 +1,11 @@
 /**
- * Plans, features, flags, limits, overrides and the precedence engine.
+ * Plans, features, flags, limits, overrides, the precedence engine and the
+ * credit ledger — CLAUDE.md §3, docs/ADMIN-CONTROL-CENTER.md §5.
  *
- * PHASE 3. Placeholder in Phase 1 to establish the module boundary only.
- * See docs/ADMIN-CONTROL-CENTER.md §5.3 for the 9-level precedence order this
- * package will implement.
+ * Phase 2B implements the machinery. The plan catalogue itself stays
+ * configuration: no plan name, price or allowance is written in code, because
+ * D-06…D-12 are unanswered owner decisions (docs/DECISIONS.md §4.2).
  */
-export const ENTITLEMENTS_PACKAGE_PHASE = 3 as const;
+export * from './credits';
+export * from './precedence';
+export * from './service';

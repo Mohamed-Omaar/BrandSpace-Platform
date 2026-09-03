@@ -56,6 +56,9 @@ importers:
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../../packages/entitlements
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -124,6 +127,21 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@brandspace/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../../packages/entitlements
+      '@brandspace/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -427,6 +445,9 @@ importers:
       '@brandspace/database':
         specifier: workspace:*
         version: link:../packages/database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../packages/entitlements
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../packages/observability

@@ -87,4 +87,43 @@ export async function withoutTenantContext<T>(
   );
 }
 
+/**
+ * Run `fn` with the CUSTOMER SESSION scope bound and no workspace context.
+ *
+ * The narrow companion to `withWorkspace()`, for the two questions that precede
+ * any workspace: which workspaces this session may act in, and what its plan
+ * entitles it to.
+ *
+ * The token hash is set transaction-locally, so it cannot leak across pooled
+ * connections, and the `session_membership` / `session_workspace` policies
+ * grant exactly the rows that session's user is an active member of — after
+ * re-validating the session inline. Every strictly tenant-owned table stays
+ * empty, because no workspace context is set.
+ *
+ * The HASH is passed, never the token: the raw value belongs in the cookie and
+ * nowhere else, least of all in a database parameter that could reach a log.
+ */
+export async function withCustomerSession<T>(
+  sessionTokenHash: string,
+  fn: (db: TenantScopedClient) => Promise<T>,
+  options: WithWorkspaceOptions = {},
+): Promise<T> {
+  if (!/^[0-9a-f]{64}$/i.test(sessionTokenHash)) {
+    // Fail closed: an unparseable hash must never reach the GUC, where an empty
+    // string would make the policy's `IS NOT NULL` guard the only thing
+    // standing between a caller and somebody else's memberships.
+    throw new AppError('TENANT_CONTEXT_MISSING', 'Invalid session scope.');
+  }
+  const prisma = options.prisma ?? getPrisma();
+
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', '', true)`;
+      await tx.$executeRaw`SELECT set_config('app.session_token_hash', ${sessionTokenHash}, true)`;
+      return fn(tx as unknown as TenantScopedClient);
+    },
+    { timeout: options.timeoutMs ?? 15_000 },
+  );
+}
+
 export type { Prisma };

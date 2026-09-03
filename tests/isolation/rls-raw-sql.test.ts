@@ -1,4 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  IDENTITY_MODELS_WITH_POLICY,
+  MODEL_TABLE_NAMES,
+  NULLABLE_TENANT_MODELS,
+  STRICT_TENANT_MODELS,
+} from '@brandspace/database';
 import { Client } from 'pg';
 import type { PrismaClient } from '@prisma/client';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
@@ -93,14 +99,73 @@ describe('RLS is enabled AND forced on every protected table', () => {
   });
 
   it('each protected table carries a tenant_isolation policy', async () => {
+    // DERIVED from the tenancy registry, not hard-coded. A hard-coded list has
+    // to be edited every time a model is added, and the edit is exactly what
+    // gets forgotten — so the assertion silently stops covering the new table.
+    // Reading the registry means a new tenant-owned or identity model is
+    // checked here automatically.
+    const expected = [
+      ...STRICT_TENANT_MODELS,
+      ...NULLABLE_TENANT_MODELS,
+      ...IDENTITY_MODELS_WITH_POLICY,
+    ]
+      .map((model) => MODEL_TABLE_NAMES[model])
+      .filter((table): table is string => typeof table === 'string')
+      .sort();
+
     const r = await sql.query<{ tablename: string }>(
       `SELECT tablename FROM pg_policies
         WHERE schemaname = 'public' AND policyname = 'tenant_isolation'`,
     );
     const tables = r.rows.map((x) => x.tablename).sort();
-    expect(tables).toEqual(
-      ['audit_event', 'membership', 'role', 'support_mode_session', 'user', 'workspace'].sort(),
+
+    expect(expected.length).toBeGreaterThan(6);
+    expect(tables).toEqual(expected);
+  });
+
+  it('the session-scoped policies exist and name only the tenant role', async () => {
+    // The two reads that precede any workspace context (docs/SECURITY.md §20.1).
+    // Asserted here so the widening stays visible and stays narrow: SELECT only,
+    // tenant role only.
+    const r = await sql.query<{ tablename: string; roles: string; cmd: string }>(
+      `SELECT tablename, roles::text AS roles, cmd FROM pg_policies
+        WHERE schemaname = 'public'
+          AND policyname IN ('session_membership', 'session_workspace')
+        ORDER BY tablename`,
     );
+    expect(r.rows.map((x) => x.tablename)).toEqual(['membership', 'workspace']);
+    for (const row of r.rows) {
+      expect(row.roles).toBe('{brandspace_app}');
+      expect(row.cmd).toBe('SELECT');
+    }
+  });
+
+  it('the invitation-token policy is SELECT-only, tenant-only, and one row wide', async () => {
+    // The third and last context-less read (docs/SECURITY.md §20.1). Redemption
+    // needs to see one invitation before any workspace exists to bind; nothing
+    // else about this policy may widen.
+    const r = await sql.query<{
+      tablename: string;
+      roles: string;
+      cmd: string;
+      qual: string;
+      with_check: string | null;
+    }>(
+      `SELECT tablename, roles::text AS roles, cmd, qual, with_check FROM pg_policies
+        WHERE schemaname = 'public' AND policyname = 'invitation_by_token'`,
+    );
+    expect(r.rows).toHaveLength(1);
+    const policy = r.rows[0]!;
+    expect(policy.tablename).toBe('invitation');
+    expect(policy.roles).toBe('{brandspace_app}');
+    expect(policy.cmd).toBe('SELECT');
+    // No WITH CHECK at all: this policy grants no write of any kind.
+    expect(policy.with_check).toBeNull();
+    // Inert without a token, inert inside a workspace, and pending-only — so a
+    // spent link cannot even confirm the invitation existed.
+    expect(policy.qual).toContain('current_workspace_id');
+    expect(policy.qual).toContain('current_invitation_token_hash');
+    expect(policy.qual).toContain('PENDING');
   });
 });
 

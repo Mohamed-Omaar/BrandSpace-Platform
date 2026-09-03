@@ -791,3 +791,174 @@ with embedded credentials inside an error _message_ — only under a sensitive k
 | The RBAC matrix itself                                        | `tests/unit/rbac-matrix.test.ts`                                           |
 | The seed refuses to invent a password                         | `tests/unit/seed-password.test.ts`                                         |
 | No internal error text in a redirect, the UI, a log or a span | `tests/unit/public-error.test.ts`, `tests/unit/error-boundary.test.ts`     |
+
+---
+
+## 20. Implementation Status — Phase 2B
+
+> **ملخّص بالعربية**
+>
+> هذا القسم يوثّق ما بُني فعليًا في المرحلة 2B: مصادقة العميل المنفصلة تمامًا عن مصادقة المنصة، الدعوات
+> أحادية الاستخدام المخزّنة كتجزئة فقط، صلاحيات مساحة العمل المفروضة في طبقة الخدمة، محرّك الاستحقاقات
+> بترتيب أولويات صارم لا يعلو عليه أي استثناء، ودفتر أرصدة غير قابل للتعديل. كل ادّعاء أدناه مرتبط باختبار.
+
+### 20.1 Two authentication realms, separate by construction
+
+The customer realm is not "the platform realm with a different check". It is a different table, a
+different cookie, a different audience and a different signing key:
+
+|                            | Customer                       | Platform                     |
+| -------------------------- | ------------------------------ | ---------------------------- |
+| Session table              | `customer_session`             | `platform_session`           |
+| Cookie                     | `__Host-bs_customer_session`   | `__Host-bs_platform_session` |
+| Audience                   | `brandspace:customer`          | `brandspace:platform`        |
+| Signing key                | `CUSTOMER_SESSION_SECRET`      | `PLATFORM_SESSION_SECRET`    |
+| SameSite / idle / absolute | `lax` · 12h · 30d              | `strict` · 4h · 12h          |
+| MFA                        | optional (F-17: not yet built) | **mandatory** (D-27)         |
+
+A platform token presented to the customer application resolves to `null` **because its hash is not in
+that table** — not because a check rejected it. A missing check cannot re-enable what does not exist.
+
+**No enumeration.** Unknown address, wrong password, unverified email, suspended account, passwordless
+(invitation-only) account and locked account all return `Invalid credentials.` after the same Argon2id
+work — a dummy verification runs when no user matched, so timing is not an oracle either. The real reason
+is audited, where it helps an operator and nowhere a caller can see it.
+
+**Lockout.** 10 failed attempts lock the account for 15 minutes. The counter is one atomic `UPDATE`
+computing the new value from the row's own column, so parallel attempts serialise and no increment is
+lost — the R-01 defect, not repeated. A failure to persist the counter is audited at CRITICAL rather
+than swallowed.
+
+**A session proves identity, never scope.** `activeWorkspaceId` is re-verified against a live, non-removed
+`Membership` on every resolve, so removing a membership or suspending a workspace takes effect at the next
+request rather than the next login. Suspending workspace A revokes the sessions scoped to A and leaves a
+member's session in B alone.
+
+### 20.2 Invitations
+
+- The token is 256 bits of `randomBytes`, base64url. **Only its SHA-256 hash reaches the database**; the
+  raw value exists in one email link and nowhere else. A database dump contains no usable invitation.
+- Acceptance is a single conditional `UPDATE` requiring exactly one affected row, so concurrent
+  acceptances cannot both win.
+- Expired, revoked, superseded, already-accepted, unknown, and **addressed-to-someone-else** all produce
+  the identical message. Telling the holder of a forwarded link that it belongs to another person
+  confirms both that an invitation exists and which workspace it names.
+- A resend **supersedes**: a new row, a new token, the old one dead immediately. Reusing it would keep a
+  link in a forwarded thread live for as long as anyone kept resending.
+- The database enforces what the service intends: one PENDING invitation per (workspace, address),
+  exactly one inviter, a lower-cased address, and a trigger that refuses reviving a terminal invitation
+  or editing a token.
+
+**Redemption happens on the tenant role, and needs exactly one widening to do it.** The holder of a link
+is not a member yet, so there is no workspace context to bind — and every ordinary policy on `invitation`
+requires one. Migration `20260903100000` adds a single `SELECT`-only policy, `invitation_by_token`, that
+exposes the one row addressed by the SHA-256 hash the caller presents in the transaction-local
+`app.invitation_token_hash`. It is:
+
+- **read-only** — no `WITH CHECK`, so it grants no write of any kind;
+- **one row wide** — keyed on a 256-bit token the caller must already hold;
+- **pending-only** — a spent, revoked or expired token reads nothing, so it cannot even confirm that the
+  invitation existed;
+- **inert inside a workspace** — the `USING` clause requires `app.current_workspace_id() IS NULL`, so it
+  can never widen an ordinary tenant request.
+
+Acceptance itself does **not** run under that scope. The service reads the invitation's `workspaceId`
+through it, drops the token scope, and performs the conditional status update, the membership upsert and
+the audit event inside the ordinary workspace context — so every write is governed by the normal tenant
+policies. It refuses outright to run inside an existing tenant context rather than overwriting it, and
+that refusal is checked against the live setting, not against the shape of the client.
+
+- Acceptance binds to a **proven identity**: the caller must already be signed in as the invited address.
+
+**The outbox follows the same rule as the audit log.** `email_message` is written under the context the
+message belongs to: an invitation mail inside the workspace's own transaction, a password-reset mail with
+no context at all — because a reset must answer identically whether or not an account exists and so cannot
+resolve a workspace without becoming an existence oracle. Migration `20260903110000` widens only the
+`WITH CHECK`, exactly as `20260902230000` did for `audit_event`: a NULL-workspace row may be **written**
+with no context and can never be **read** by any tenant, and inside a workspace a NULL-workspace write is
+still refused so a tenant cannot detach a message from their own record.
+
+One consequence is worth stating because it is easy to misread: PostgreSQL applies the `USING` clause to
+`INSERT … RETURNING`, and reports the refusal as `new row violates row-level security policy` — a _write_
+error for a write the policy allows. Both the audit path and the outbox therefore generate the row id and
+use an insert without `RETURNING`. Widening `USING` to make the read succeed would let any context-less
+caller enumerate every reset request in the system, which is the thing that clause exists to prevent.
+
+### 20.3 Workspace RBAC
+
+Two invariants are enforced inside the transaction that would break them, not by a caller who is trusted
+to have checked:
+
+1. **A workspace always keeps an active Workspace Owner.** Removing or demoting the last one is refused
+   and rolled back. An ownerless workspace can only be rescued by a platform actor.
+2. **Nobody grants a role above their own authority.** `workspace_admin` may assign only roles below its
+   level, and may not edit a member who outranks what it can assign — otherwise demoting the owner and
+   taking the workspace is one step.
+
+Enforcement is at four layers — navigation, page loader, server action, and **service**. The service is
+the one that matters; the rest are convenience. A missing permission on a page is a `404`, not a `403`:
+which pages exist but are closed is itself information.
+
+### 20.4 Entitlements
+
+The precedence engine is **pure** and implements docs/ADMIN-CONTROL-CENTER.md §5.3 exactly, in order:
+kill switch → workspace override → workspace allow/deny → beta group → country → date range →
+percentage rollout → plan entitlement → feature default.
+
+- **The kill switch is first and unconditional.** An override cannot outrank it, and an override that
+  tries is refused at validation time rather than written and ignored. Containment during an incident
+  must not depend on nobody having granted an exception.
+- A **deny** list beats an **allow** list: a contradiction resolves to the restrictive reading.
+- Percentage rollout hashes `(featureKey, workspaceId)`, so a workspace does not flip between page loads
+  and two features at 50% do not select the same half of the customer base.
+- An unknown feature key is **off**. Failing closed matters more than being forgiving.
+- The **same call** decides and explains, so the Control Center's "why is this on?" answer can never
+  disagree with the decision the customer experiences.
+
+Plan names, prices and allowances are configuration and remain **unset**: D-06…D-12 are unanswered owner
+decisions, and Phase 2B invents none of them (D-40).
+
+### 20.5 Credits
+
+Milli-credits internally, whole credits displayed (D-14). Four properties, each by mechanism:
+
+| Property                             | Mechanism                                                                                                   |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| The balance is derived, never edited | Every change writes an immutable `CreditTransaction` in the SAME transaction; replay reproduces the balance |
+| No negative balance                  | `SELECT … FOR UPDATE` plus `CHECK (balanceMilliCredits >= 0)`                                               |
+| No double adjustment on retry        | `unique(idempotencyKey)`, checked inside the transaction before the lock is taken                           |
+| No rewriting history                 | `UPDATE`/`DELETE` revoked from **both** database roles, plus a trigger                                      |
+
+### 20.6 Support Mode
+
+Not impersonation, and not by policy — by construction. There is no code path in the Support Mode service
+that touches `customer_session`, so it cannot mint one even by mistake. The workspace is fixed at grant
+time and never read from the request, so a grant cannot be pointed at a second tenant. Expiry is checked
+on every resolve, so an unswept row is already inert. Read-only is the default; a write attempt is refused
+**and audited**, and no role holds the elevated grant in Phase 2B (F-16).
+
+Entry requires the permission, **verified MFA**, an existing workspace and a written reason of at least
+eight characters. The entry event is written against the **workspace**, so it appears in the customer's own
+Activity Log with its reason and duration — the guarantee of §8, which is also why the record is
+tenant-owned (D-43).
+
+A support grant is an application-level authorisation and changes nothing in the database: the tenant role
+still sees one workspace, and platform-owned tables still return _permission denied_.
+
+### 20.7 What these claims rest on
+
+| Claim                                                              | Where it is proven                                                        |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| The realms cannot cross                                            | `tests/isolation/customer-auth.test.ts`, `tests/e2e/customer-app.spec.ts` |
+| Sign-in does not reveal whether an account exists                  | same, four separate causes asserted identical                             |
+| Lockout locks, and parallel attempts lose no increments            | `tests/isolation/customer-auth.test.ts`                                   |
+| An invitation is single-use under concurrency                      | `tests/isolation/invitations.test.ts`                                     |
+| A forwarded invitation is useless and silent                       | same                                                                      |
+| The last owner cannot be removed or demoted                        | same                                                                      |
+| An admin cannot mint an owner                                      | same                                                                      |
+| Every Phase 2B model is tenant-isolated                            | `tests/isolation/phase2b-tenancy.test.ts`                                 |
+| Precedence, kill switch and stable rollout                         | `tests/unit/precedence.test.ts`                                           |
+| Credits: idempotency, concurrency, no negative balance, replay     | `tests/isolation/entitlements-credits.test.ts`                            |
+| Support Mode cannot become a customer session or cross a workspace | `tests/isolation/support-mode.test.ts`                                    |
+| The customer app cannot import platform or secret modules          | `tests/unit/phase2b-boundaries.test.ts`                                   |
+| The role matrices match the Blueprint                              | same                                                                      |

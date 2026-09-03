@@ -52,4 +52,24 @@ export interface E2eAdminCredentials {
   /** TOTP seed, so the test can act as the authenticator app. */
   readonly totpSecret: string;
   readonly recoveryCode: string;
+  /**
+   * A throwaway CUSTOMER account (Phase 2B), in the same file and under the
+   * same rules: generated per run, never committed, worthless a minute later.
+   * The two realms are separate everywhere else — this file is a test artefact,
+   * not a session store.
+   */
+  readonly customer: {
+    readonly email: string;
+    readonly password: string;
+    readonly workspaceSlug: string;
+    readonly workspaceName: string;
+    /** A second workspace, so switching can be exercised. */
+    readonly secondWorkspaceSlug: string;
+    /** A read-only member, for the RBAC assertions. */
+    readonly viewerEmail: string;
+    readonly viewerPassword: string;
+    /** A live invitation token, for the acceptance flow. */
+    readonly invitationToken: string;
+    readonly invitedEmail: string;
+  };
 }

@@ -610,3 +610,39 @@ than disappearing.
 | A8  | Separate `apps/admin`                       | Admin routes in dashboard      | Hard separation of session realm, permissions, and blast radius                      |
 | A9  | Credits abstraction over tokens             | Pass-through token billing     | Predictable pricing, provider independence, margin control                           |
 | A10 | Adapter + registry for AI, social, payments | Direct SDK calls               | Provider churn is certain; swaps must be configuration, not releases                 |
+
+---
+
+## Phase 2B — where the customer-side code lives
+
+> **ملخّص بالعربية**
+>
+> توزيع كود المرحلة 2B على الحزم المعتمدة في CLAUDE.md §3، دون اختراع أي حزمة جديدة، ومع بيان لماذا وُضع كل
+> جزء حيث وُضع.
+
+No new package was created. Phase 2B fits the structure CLAUDE.md §3 already approves:
+
+| Package                 | What Phase 2B added, and why here                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/auth`         | Customer sessions, invitations, memberships, workspace lifecycle and Support Mode. CLAUDE.md §3 defines this package as _"Sessions, MFA, invitations, platform vs customer realms"_ — invitations are named explicitly, and memberships are the subject sessions are scoped by. The workspace lifecycle lives here because what it gates is access. |
+| `packages/entitlements` | Plans, features, flags, limits, overrides, the precedence engine and the credit wallet/ledger — exactly the package's stated remit. The engine is **pure**; only the service touches a database.                                                                                                                                                    |
+| `packages/database`     | `withCustomerSession()`, the two session-scoped policies, and the catalogue snapshot table. Still the only package that talks to PostgreSQL.                                                                                                                                                                                                        |
+| `packages/config`       | Projects the three customer-relevant domains into the snapshot when it activates one, in the same transaction.                                                                                                                                                                                                                                      |
+| `apps/dashboard`        | The customer application. Runs on the TENANT identity only; cannot import `@brandspace/secrets` or the platform client, asserted by lint and by a scan of its real source.                                                                                                                                                                          |
+| `apps/admin`            | Customers, workspaces, plans, overrides, credits, invitations and Support Mode surfaces.                                                                                                                                                                                                                                                            |
+
+### The one thing that needed a new mechanism
+
+Two reads precede any workspace context, and RLS has no notion of "the signed-in user":
+
+1. **Which workspaces may this session act in?** Solved with a transaction-local session-token hash and
+   two `SELECT`-only policies on `membership` and `workspace` that apply _only_ when there is no workspace
+   context. Expressed as policies, not definer rights, so the widening is visible in `pg_policies`.
+
+2. **What does the plan entitle them to?** Solved by projecting three configuration domains into
+   `entitlement_catalogue_snapshot`. `configuration_version` keeps every privilege revoked from the tenant
+   role.
+
+`SECURITY DEFINER` was tried for both and rejected: the tables are under `FORCE ROW LEVEL SECURITY`, so
+even the owner is subject to policy, and no policy names the migrator — a definer function would have
+returned nothing. That is the schema working as designed, and it pushed the solution somewhere better.

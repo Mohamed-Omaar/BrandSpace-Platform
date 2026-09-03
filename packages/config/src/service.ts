@@ -51,6 +51,15 @@ export interface ConfigActor {
 }
 
 /** Viewing configuration and its version history. */
+/**
+ * The only domains ever projected into the tenant-readable catalogue.
+ *
+ * A set rather than a convention, mirrored by a CHECK constraint on the table,
+ * so neither a future caller nor a direct write can put an operational or
+ * integration payload where a customer can read it.
+ */
+const CUSTOMER_VISIBLE_DOMAINS = new Set(['entitlements', 'plans', 'feature-flags']);
+
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';
 /** Drafting and editing. Does NOT grant deployment. */
 export const CONFIG_MANAGE_PERMISSION = 'platform.configuration.manage';
@@ -470,7 +479,7 @@ export class ConfigurationService {
         where: { domain: version.domain, environment: version.environment, status: 'ACTIVE' },
         data: { status: 'SUPERSEDED', deactivatedAt: now },
       });
-      return tx.configurationVersion.update({
+      const row = await tx.configurationVersion.update({
         where: { id: versionId },
         data: {
           status: 'ACTIVE',
@@ -480,6 +489,31 @@ export class ConfigurationService {
           impactPreview: preview as never,
         },
       });
+
+      // Project the three customer-relevant domains into the tenant-readable
+      // catalogue snapshot, in the SAME transaction as the activation, so the
+      // two can never disagree.
+      //
+      // `configuration_version` stays platform-owned with every privilege
+      // revoked from the tenant role. The customer application resolves its own
+      // entitlements from this projection instead, which carries feature keys,
+      // plan keys, limits and flag rules — and none of the `integrations.*` or
+      // `operations` payloads that are no customer's business.
+      if (CUSTOMER_VISIBLE_DOMAINS.has(version.domain)) {
+        await tx.entitlementCatalogueSnapshot.upsert({
+          where: {
+            domain_environment: { domain: version.domain, environment: version.environment },
+          },
+          create: {
+            domain: version.domain,
+            environment: version.environment,
+            payload: version.payload as never,
+            sourceVersionId: row.id,
+          },
+          update: { payload: version.payload as never, sourceVersionId: row.id },
+        });
+      }
+      return row;
     });
 
     this.#cache.invalidate(`${version.domain}:${version.environment}`);

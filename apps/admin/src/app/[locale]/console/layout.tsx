@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { AdminShell } from '../../../components/admin-shell';
-import { currentEnvironment, getPlatformActor } from '../../../server/platform-context';
+import {
+  currentEnvironment,
+  getPlatformActor,
+  getSupportModeService,
+} from '../../../server/platform-context';
+import { SUPPORT_COOKIE } from '../../../server/support-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +30,17 @@ export default async function ConsoleLayout({
   const actor = await getPlatformActor().catch(() => null);
   if (!actor) redirect(`/${locale}/login`);
 
+  // The Support Mode banner is rendered from the RESOLVED grant, not from the
+  // cookie: an expired or ended session shows no banner, so the badge can never
+  // claim an access that no longer exists (docs/SECURITY.md §8).
+  const store = await cookies();
+  const supportSessionId = store.get(SUPPORT_COOKIE)?.value;
+  const supportGrant = supportSessionId
+    ? await getSupportModeService()
+        .resolve(supportSessionId, actor.platformUserId)
+        .catch(() => null)
+    : null;
+
   return (
     <AdminShell
       locale={locale}
@@ -31,6 +48,15 @@ export default async function ConsoleLayout({
       actorRole={actor.roleKey}
       permissionKeys={actor.permissionKeys}
       environment={currentEnvironment()}
+      support={
+        supportGrant
+          ? {
+              workspaceName: supportGrant.workspaceName,
+              reason: supportGrant.reason,
+              remainingMinutes: Math.floor(supportGrant.remainingSeconds / 60),
+            }
+          : null
+      }
     >
       {children}
     </AdminShell>

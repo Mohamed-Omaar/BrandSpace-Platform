@@ -34,6 +34,12 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('member.remove', 'workspace', 'Remove a member'),
   def('member.assign_role', 'workspace', 'Change a member role'),
   def('audit.read', 'workspace', 'View the workspace activity log'),
+
+  // Phase 2B. Split read from manage: docs/SECURITY.md §4.3 gives Workspace
+  // Admin "view only" on billing, and only the Owner may change the plan.
+  def('billing.read', 'workspace', 'View the plan, effective features and limits'),
+  def('billing.manage', 'workspace', 'Change the plan or payment method'),
+  def('credits.read', 'workspace', 'View the workspace AI credit balance'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */
@@ -45,6 +51,16 @@ export const PLATFORM_PERMISSIONS: readonly PermissionDefinition[] = [
   def('platform.user.manage', 'platform', 'Manage platform users and roles'),
   def('platform.audit.read', 'platform', 'View the platform audit log'),
   def('platform.support_mode.enter', 'platform', 'Enter time-boxed support mode'),
+
+  // Phase 2B. Each authority in docs/SECURITY.md §4.4 that a role holds
+  // outright gets its own key, so no capability rides on another's back — the
+  // mistake R-02 was. Assigning a plan, granting a feature override and moving
+  // credits are three different powers held by three different sets of roles.
+  def('platform.workspace.update', 'platform', 'Edit customer workspace details'),
+  def('platform.workspace.invite', 'platform', 'Invite a member into a customer workspace'),
+  def('platform.plan.assign', 'platform', 'Assign or change a workspace plan'),
+  def('platform.entitlement.override', 'platform', 'Grant or revoke a customer feature override'),
+  def('platform.credit.adjust', 'platform', 'Add or remove AI credits'),
 
   // Configuration and secrets are split into read / manage / activate on
   // purpose. They were previously all gated on `platform.workspace.read`

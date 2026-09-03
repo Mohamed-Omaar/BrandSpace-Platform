@@ -452,3 +452,46 @@ column is new.
 §19's end-to-end journey is **not** covered, and no test claims otherwise. It requires customer
 authentication, workspaces created from Admin, and the AI gateway — none of which exist yet. What Phase 2A
 delivered is the machinery those steps depend on: configuration, secrets, admin identity, and the audit trail.
+
+---
+
+## 22. Phase 2B Status Against These Criteria
+
+> **ملخّص بالعربية**
+>
+> ما تحقّق فعليًا في المرحلة 2B مقابل معايير القبول، وما لم يتحقّق ولماذا. لم تُعَد صياغة أي معيار ليطابق ما
+> بُني: المعايير غير المحقّقة مذكورة كما هي، مع سبب واضح لكل واحد.
+
+No criterion below was reworded to match what was built. Where something is partial, it says so and says
+which half is missing.
+
+### 22.1 Met
+
+| ID             | Criterion, and what makes it true                                                                                                                                                                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AC-01.5        | **A customer session is rejected by the Control Center.** Previously "not testable — there is no customer session". There is now: the browser suite signs in as a customer and navigates to `/console`, which redirects to sign-in. The realms share no session store, so the rejection is structural. |
+| §5 (partial)   | **The owner creates a customer, a workspace and a wallet in one audited transaction**, edits it under optimistic concurrency, and moves it through a lifecycle that refuses unsafe transitions and demands a written reason.                                                                           |
+| §6             | **Invitations**: unguessable token stored only as a hash, single-use under concurrency, expiring, revocable, resend-by-supersession, bound to the invited address, and refusing to reveal anything on failure.                                                                                         |
+| §7             | **Workspace RBAC** enforced at navigation, page, action and service, with the last-owner and no-escalation invariants enforced inside the transaction that would break them.                                                                                                                           |
+| §8 (machinery) | **Entitlement precedence** — all nine levels, kill switch first and unconditional, stable percentage rollout, override validation including dependencies. **Credits** — immutable ledger, idempotent adjustment, row-locked concurrency, no negative balance, replay reconciliation.                   |
+| §9             | **Support Mode** — permission + verified MFA + written reason + short expiry, read-only, audited on entry, access, denial, expiry and termination, visible in the customer's own Activity Log, and provably unable to become a customer session or reach a second workspace.                           |
+| AC-17.x        | **Isolation tests** cover every new tenant-owned model; the D-29 gate now guards ten tenant-owned and six platform-owned models.                                                                                                                                                                       |
+
+### 22.2 Not met, and why
+
+| ID                              | Status                                                                                                                                                                                                                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §5 (rest)                       | **Brands, content, calendar and publishing are not built.** Phase 4–6. The Control Center shows the workspace's identity, status, plan, members, entitlements, credits and audited activity — the operational context §3.3 calls for — and shows nothing it does not have. |
+| Self-serve sign-up              | **Not built.** Customers arrive by invitation, which proves control of the address. Sign-up needs email verification, which is F-18.                                                                                                                                       |
+| Customer MFA                    | **Not built** (F-17). `docs/SECURITY.md` §3 makes it optional for customers and mandatory for platform roles; only the platform half exists.                                                                                                                               |
+| Per-IP rate limiting            | **Not built** (F-19). Both realms lock an account after 10 failed attempts; neither throttles by source address.                                                                                                                                                           |
+| Plan editor, prices, allowances | **Deliberately absent.** D-06…D-12 are unanswered owner decisions, so no tier, price or quota is invented (D-40). The machinery reads whatever the owner later configures.                                                                                                 |
+| Reserve / settle credits        | **Not built.** Adjustment, ledger and reconciliation exist; reserve→confirm→settle arrives with the AI Gateway that needs it.                                                                                                                                              |
+| Support Mode content view       | **Not built.** Support sees operational context, not customer content. Content masking (§8) needs content to mask.                                                                                                                                                         |
+| Elevated Support write grant    | **Not issued** (F-16). `assertMayWrite()` always refuses and audits.                                                                                                                                                                                                       |
+| §19 vertical slice              | **Still not covered**, and no test claims otherwise. It needs the AI gateway. Phase 2B closed the customer-authentication and workspace-provisioning halves of it.                                                                                                         |
+
+### 22.3 What changed in the criteria themselves
+
+Nothing. Two entries moved from "not met" to "met" (AC-01.5 and the §5/§6 provisioning criteria) because
+the behaviour now exists and is tested, not because the wording was softened.
