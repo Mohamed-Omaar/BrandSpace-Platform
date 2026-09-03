@@ -155,7 +155,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             title={t('plan.current')}
             testId="overview-plan"
             actions={
-              <Link href={`/${locale}/plan`} style={buttonStyle('secondary', 'sm')}>
+              <Link href={`/${locale}/plan`} style={buttonStyle('neutral', 'sm')}>
                 {t('nav.plan')}
               </Link>
             }

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
+import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { AlertIcon, CheckIcon, EmptyBoxIcon, InfoIcon, LockIcon, SearchIcon } from './icons';
 
 /**
@@ -83,11 +83,13 @@ export function Banner({
         marginBlockEnd: spacingTokens.md,
         padding: spacingTokens.sm,
         paddingInline: spacingTokens.md,
-        borderRadius: radiusTokens.md,
+        borderRadius: radiusTokens.lg,
         ...typographyTokens.bodySm,
         background: style.background,
         color: style.color,
-        border: `1px solid ${style.border}`,
+        // Filled, not outlined. The icon and the wording carry the tone as well
+        // as the colour, so nothing here depends on a stroke (WCAG 1.4.1).
+        border: '1px solid transparent',
       }}
     >
       <span style={{ flexShrink: 0, display: 'inline-flex', marginBlockStart: '1px' }}>
@@ -131,12 +133,10 @@ export function Toast({
         gap: spacingTokens.sm,
         maxInlineSize: '24rem',
         padding: spacingTokens.md,
-        borderRadius: radiusTokens.md,
+        borderRadius: radiusTokens.lg,
         background: colorTokens.surface,
-        border: `1px solid ${style.border}`,
-        borderInlineStartWidth: '3px',
-        borderInlineStartColor: style.color,
-        boxShadow: '0 12px 24px -6px rgba(16, 24, 40, 0.12)',
+        border: '1px solid transparent',
+        boxShadow: shadowTokens.overlay,
         ...typographyTokens.bodySm,
         color: colorTokens.textPrimary,
       }}
@@ -225,11 +225,12 @@ export function StateMessage({
         alignItems: 'center',
         textAlign: 'center',
         gap: spacingTokens.sm,
-        padding: spacingTokens.xl,
+        padding: spacingTokens['2xl'],
         paddingInline: spacingTokens.md,
-        background: colorTokens.surfaceMuted,
-        border: `1px dashed ${colorTokens.border}`,
-        borderRadius: radiusTokens.lg,
+        // A soft filled well, not a dashed box. A dashed outline reads as a
+        // drop target or an unfinished screen; this reads as a calm blank.
+        background: colorTokens.surfaceSoft,
+        borderRadius: radiusTokens.xl,
         color: colorTokens.textSecondary,
       }}
     >
@@ -238,12 +239,11 @@ export function StateMessage({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '2.75rem',
-          blockSize: '2.75rem',
+          inlineSize: '3rem',
+          blockSize: '3rem',
           borderRadius: radiusTokens.full,
-          background: colorTokens.surface,
-          border: `1px solid ${colorTokens.border}`,
-          color: kind === 'error' ? colorTokens.danger : colorTokens.textSecondary,
+          background: kind === 'error' ? colorTokens.dangerTint : colorTokens.surfaceLavenderStrong,
+          color: kind === 'error' ? colorTokens.danger : colorTokens.brandPurplePressed,
         }}
       >
         {stateIcon(kind)}

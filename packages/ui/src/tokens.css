@@ -32,11 +32,26 @@
   --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
-  --bs-surface-muted: #f6f8fa;
-  --bs-surface-sunken: #eef2f6;
-  /* The application ground is white (D-49); structure comes from borders. */
+  --bs-surface-soft: #fbfbfc;
+  --bs-surface-warm: #f7f6f4;
+  --bs-surface-lavender: #f8f5ff;
+  --bs-surface-lavender-strong: #f0e9ff;
+  --bs-surface-muted: #f5f6f8;
+  --bs-surface-sunken: #edeff3;
+  --bs-surface-ink: #171528;
+  /* The ground is white (D-49); structure comes from tinted surfaces (D-54). */
   --bs-app-background: #ffffff;
 
+  /* Controls are identified by fill, label and focus ring — not by a resting
+     stroke (D-55). See the prefers-contrast block near the end of this file. */
+  --bs-control-surface: #f4f4f7;
+  --bs-control-surface-hover: #ededf3;
+  --bs-control-surface-focus: #ffffff;
+  --bs-control-surface-disabled: #f7f7f9;
+  --bs-control-border: transparent;
+  --bs-control-border-contrast: #818c9c;
+
+  --bs-hairline: #f0f1f4;
   --bs-card-border: #eaecf0;
   --bs-border: #e3e8ef;
   --bs-border-strong: #818c9c;
@@ -62,10 +77,12 @@
   --bs-focus-ring: #7935fe;
   --bs-focus-ring-contrast: #ffffff;
 
-  --bs-shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04), 0 1px 3px 0 rgba(16, 24, 40, 0.06);
-  --bs-shadow-raised: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+  --bs-shadow-card: 0 1px 2px 0 rgba(23, 21, 40, 0.03), 0 6px 16px -8px rgba(23, 21, 40, 0.08);
+  --bs-shadow-raised:
+    0 2px 4px -1px rgba(23, 21, 40, 0.04), 0 12px 28px -12px rgba(23, 21, 40, 0.12);
   --bs-shadow-overlay:
-    0 12px 24px -6px rgba(16, 24, 40, 0.12), 0 4px 8px -4px rgba(16, 24, 40, 0.06);
+    0 8px 16px -8px rgba(23, 21, 40, 0.1), 0 24px 48px -16px rgba(23, 21, 40, 0.18);
+  --bs-shadow-brand-glow: 0 18px 48px -18px rgba(121, 53, 254, 0.35);
 
   --bs-space-3xs: 0.125rem;
   --bs-space-2xs: 0.1875rem;
@@ -77,10 +94,12 @@
   --bs-space-2xl: 3rem;
   --bs-space-3xl: 4rem;
 
-  --bs-radius-sm: 0.25rem;
-  --bs-radius-md: 0.5rem;
-  --bs-radius-lg: 0.75rem;
-  --bs-radius-xl: 1rem;
+  --bs-radius-xs: 0.375rem;
+  --bs-radius-sm: 0.5rem;
+  --bs-radius-md: 0.75rem;
+  --bs-radius-lg: 0.875rem;
+  --bs-radius-xl: 1.125rem;
+  --bs-radius-2xl: 1.5rem;
   --bs-radius-full: 9999px;
 
   --bs-duration-instant: 80ms;
@@ -275,5 +294,156 @@ h4 {
 @media (min-width: 768px) {
   .bs-wide-only-inline {
     display: inline-block;
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * HIGH CONTRAST — the honest half of the borderless direction (D-55).
+ *
+ * The approved visual language identifies a control by its FILL, its
+ * persistent label and its focus ring rather than by a resting stroke. That is
+ * what every modern product does, and it is also a real tension with WCAG
+ * 1.4.11, which wants 3:1 for the visual information that identifies a
+ * component: a `#F4F4F7` fill on white is 1.06:1, and no "soft" fill can reach
+ * 3:1 while still being soft.
+ *
+ * Rather than pretend the tension is not there, the system resolves it:
+ *
+ *   - Every field carries a PERSISTENT visible label, never a placeholder
+ *     standing in for one, so the control is identifiable from its text even
+ *     when its edge is not.
+ *   - The focus ring is 2px of `--bs-focus-ring` at 5.6:1, well past 3:1.
+ *   - Error and success states carry a 3:1 border AND an icon AND text.
+ *   - And here: when the reader's own operating system asks for more contrast,
+ *     every control gains a real 3:1 boundary. This is not a setting buried in
+ *     the product — it is `prefers-contrast`, which the OS already knows.
+ *
+ * `forced-colors` is handled too, where the user agent replaces our palette
+ * entirely and a transparent border would leave nothing at all.
+ * ---------------------------------------------------------------------------
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --bs-control-border: var(--bs-control-border-contrast);
+    --bs-hairline: var(--bs-border-strong);
+    --bs-card-border: var(--bs-border-strong);
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --bs-control-border: ButtonBorder;
+    --bs-hairline: CanvasText;
+    --bs-card-border: CanvasText;
+  }
+}
+
+/*
+ * The control surface, as a class, so a hover state can exist without every
+ * component shipping its own JavaScript. Inline styles cannot express `:hover`,
+ * and a filled control with no hover feedback feels dead.
+ */
+.bs-control {
+  background: var(--bs-control-surface);
+  border: 1px solid var(--bs-control-border);
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+.bs-control:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--bs-control-surface-hover);
+}
+
+.bs-control:focus-visible {
+  background: var(--bs-control-surface-focus);
+}
+
+.bs-control:disabled,
+.bs-control[aria-disabled='true'] {
+  background: var(--bs-control-surface-disabled);
+  color: var(--bs-text-muted);
+  cursor: not-allowed;
+}
+
+.bs-control::placeholder {
+  color: var(--bs-text-muted);
+}
+
+/* A row that responds to the pointer without being outlined. */
+.bs-row {
+  transition: background-color var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+.bs-row:hover {
+  background: var(--bs-surface-muted);
+}
+
+/* A card that lifts on hover, for grids of navigable things. */
+.bs-liftable {
+  transition:
+    box-shadow var(--bs-duration-base) var(--bs-ease-out),
+    transform var(--bs-duration-base) var(--bs-ease-out);
+}
+
+.bs-liftable:hover {
+  box-shadow: var(--bs-shadow-raised);
+  transform: translateY(-2px);
+}
+
+/* Buttons and chips get the same treatment without a bespoke class each. */
+.bs-pressable {
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-duration-fast) var(--bs-ease-out),
+    transform var(--bs-duration-instant) var(--bs-ease-out);
+}
+
+.bs-pressable:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/*
+ * A slow brand pulse for the Copilot's processing state.
+ *
+ * The reduced-motion block above already neutralises this for anyone who asked
+ * for less motion, so it needs no media query of its own.
+ */
+@keyframes bs-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.bs-pulse {
+  animation: bs-pulse 1.4s var(--bs-ease-out) infinite;
+}
+
+/*
+ * Design Studio layout.
+ *
+ * On a narrow screen the tool rail is a horizontal scroller above a stacked
+ * canvas and properties panel — a phone cannot usefully show three columns, and
+ * squeezing them is the failure the brief calls out. From the tablet breakpoint
+ * the rail becomes a vertical column and the canvas sits beside the properties.
+ */
+@media (min-width: 768px) {
+  .bs-studio-shell {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .bs-studio-rail {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+
+  .bs-studio-body {
+    grid-template-columns: minmax(0, 1fr) 18rem;
   }
 }

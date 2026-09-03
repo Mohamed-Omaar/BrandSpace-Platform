@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL, ADMIN_BASE_URL, LOCALES } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { expectNoHorizontalOverflow } from './overflow';
 
 /**
  * The customer application, end to end, in a real browser.
@@ -581,10 +582,7 @@ test.describe('layout never overflows horizontally', () => {
         `/${locale.code}/plan`,
       ]) {
         await page.goto(`${DASHBOARD_BASE_URL}${path}`);
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        );
-        expect(overflow, `${path} overflows by ${overflow}px`).toBeLessThanOrEqual(1);
+        await expectNoHorizontalOverflow(page, path);
       }
     });
   }
@@ -592,9 +590,6 @@ test.describe('layout never overflows horizontally', () => {
   test('the sign-in card fits on a small screen', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(1);
+    await expectNoHorizontalOverflow(page, 'the Arabic sign-in page');
   });
 });

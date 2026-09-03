@@ -111,7 +111,7 @@ export default async function MembersPage({
         <button
           type="submit"
           data-testid={`change-role-${email}`}
-          style={buttonStyle('secondary', 'sm')}
+          style={buttonStyle('neutral', 'sm')}
         >
           {t('common.save')}
         </button>
@@ -145,7 +145,7 @@ export default async function MembersPage({
           <button
             type="submit"
             data-testid={`resend-${email}`}
-            style={buttonStyle('secondary', 'sm')}
+            style={buttonStyle('neutral', 'sm')}
           >
             {t('members.resend')}
           </button>
@@ -156,7 +156,7 @@ export default async function MembersPage({
           <button
             type="submit"
             data-testid={`revoke-${email}`}
-            style={buttonStyle('secondary', 'sm')}
+            style={buttonStyle('neutral', 'sm')}
           >
             {t('members.revoke')}
           </button>

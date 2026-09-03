@@ -122,23 +122,48 @@ function navLinkStyle(active: boolean, collapsed: boolean): CSSProperties {
     alignItems: 'center',
     gap: spacingTokens.sm,
     justifyContent: collapsed ? 'center' : 'flex-start',
-    // WCAG 2.2 target size (2.5.8): never below the minimum pointer target.
-    minBlockSize: '2.25rem',
-    paddingInline: collapsed ? 0 : spacingTokens.sm,
+    minBlockSize: '2.75rem',
+    paddingInline: collapsed ? 0 : spacingTokens.md,
     paddingBlock: spacingTokens.xs,
+    // A soft filled PILL, not an outlined row (D-54). The old treatment put a
+    // 3px yellow bar on the inline-start edge of every active item, which read
+    // as a border on a list of bordered rows.
     borderRadius: radiusTokens.md,
     textDecoration: 'none',
     ...typographyTokens.bodySm,
     fontWeight: active ? 650 : 500,
     color: active ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
-    background: active ? colorTokens.brandPurpleTint : 'transparent',
-    // The active item carries THREE signals, not one: a purple tint, a purple
-    // label, and a yellow accent mark on the inline-start edge. Colour alone
-    // would fail WCAG 1.4.1, and `aria-current` below carries it for a screen
-    // reader.
-    borderInlineStart: active ? `3px solid ${colorTokens.brandYellow}` : '3px solid transparent',
+    background: active ? colorTokens.surfaceLavenderStrong : 'transparent',
+    border: '1px solid transparent',
+    position: 'relative',
     transition: `background-color ${motionTokens.fast} ${motionTokens.easeOut}`,
   };
+}
+
+/**
+ * The active item's yellow accent.
+ *
+ * A small rounded mark INSIDE the pill rather than a bar along its edge, so the
+ * accent reads as a dot on a filled shape instead of as another stroke. It is
+ * decoration: the state is carried by the pill, the purple label and
+ * `aria-current`, which is what keeps it clear of WCAG 1.4.1.
+ */
+function ActiveAccent({ collapsed }: { readonly collapsed: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        insetInlineStart: collapsed ? '50%' : spacingTokens.xs,
+        insetBlockEnd: collapsed ? '0.3rem' : undefined,
+        transform: collapsed ? 'translateX(-50%)' : undefined,
+        inlineSize: collapsed ? '1rem' : '0.25rem',
+        blockSize: collapsed ? '0.1875rem' : '1.25rem',
+        borderRadius: radiusTokens.full,
+        background: colorTokens.brandYellow,
+      }}
+    />
+  );
 }
 
 function NavLink({
@@ -170,6 +195,7 @@ function NavLink({
       {...(onNavigate ? { onClick: onNavigate } : {})}
       style={navLinkStyle(active, collapsed)}
     >
+      {active ? <ActiveAccent collapsed={collapsed} /> : null}
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{item.icon}</span>
       {collapsed ? null : (
         <span style={{ minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -182,8 +208,9 @@ function NavLink({
             marginInlineStart: 'auto',
             paddingInline: spacingTokens.xs,
             borderRadius: radiusTokens.full,
-            background: colorTokens.surfaceMuted,
+            background: active ? colorTokens.surface : colorTokens.surfaceMuted,
             ...typographyTokens.caption,
+            fontWeight: 600,
             color: colorTokens.textSecondary,
           }}
         >
@@ -215,7 +242,7 @@ function NavList({
                 aria-hidden="true"
                 style={{
                   blockSize: '1px',
-                  background: colorTokens.cardBorder,
+                  background: colorTokens.hairline,
                   marginBlock: spacingTokens.xs,
                   marginInline: spacingTokens.sm,
                 }}
@@ -270,6 +297,7 @@ export function AppShell({
   headerStart,
   headerEnd,
   banner,
+  profile,
   children,
   contentMaxWidth = layoutTokens.contentMaxWidth,
 }: {
@@ -282,6 +310,14 @@ export function AppShell({
   readonly headerEnd?: ReactNode;
   /** Support Mode banner — rendered above everything and never scrolled away. */
   readonly banner?: ReactNode;
+  /**
+   * The signed-in identity, pinned to the foot of the sidebar.
+   *
+   * In the sidebar rather than the header because the header should stay
+   * light: a header carrying brand, workspace, language, notifications, account
+   * AND sign-out is the cluttered strip the brief asks to avoid.
+   */
+  readonly profile?: ReactNode;
   readonly children: ReactNode;
   readonly contentMaxWidth?: string;
 }) {
@@ -332,7 +368,7 @@ export function AppShell({
           paddingInline: spacingTokens.md,
           paddingBlock: spacingTokens.xs,
           background: colorTokens.surface,
-          borderBlockEnd: `1px solid ${colorTokens.cardBorder}`,
+          borderBlockEnd: `1px solid ${colorTokens.hairline}`,
         }}
       >
         {/* The drawer trigger exists only below `md`; the CSS class is defined
@@ -352,8 +388,8 @@ export function AppShell({
             inlineSize: '2.25rem',
             blockSize: '2.25rem',
             borderRadius: radiusTokens.md,
-            border: `1px solid ${colorTokens.borderStrong}`,
-            background: colorTokens.surface,
+            border: '1px solid transparent',
+            background: colorTokens.controlSurface,
             color: colorTokens.textPrimary,
             cursor: 'pointer',
           }}
@@ -396,41 +432,63 @@ export function AppShell({
             insetBlockStart: layoutTokens.headerHeight,
             blockSize: `calc(100vh - ${layoutTokens.headerHeight})`,
             overflowY: 'auto',
-            padding: spacingTokens.sm,
-            background: colorTokens.surface,
-            borderInlineEnd: `1px solid ${colorTokens.cardBorder}`,
+            padding: spacingTokens.md,
+            // A faint off-white rail: enough to separate navigation from the
+            // white content column without drawing a line down the page.
+            background: colorTokens.surfaceSoft,
+            borderInlineEnd: `1px solid ${colorTokens.hairline}`,
             transition: `inline-size ${motionTokens.base} ${motionTokens.easeOut}`,
           }}
         >
           <NavList sections={sections} collapsed={collapsed} />
 
-          <button
-            type="button"
-            data-testid="toggle-sidebar"
-            aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
-            aria-pressed={collapsed}
-            onClick={() => setCollapsed(!collapsed)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              gap: spacingTokens.sm,
-              minBlockSize: '2.25rem',
-              paddingInline: collapsed ? 0 : spacingTokens.sm,
-              borderRadius: radiusTokens.md,
-              border: `1px solid ${colorTokens.cardBorder}`,
-              background: colorTokens.surface,
-              color: colorTokens.textSecondary,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              ...typographyTokens.caption,
-            }}
-          >
-            {/* Logical chevrons: `ChevronStart` points toward the inline start,
-                so the control reads correctly in Arabic without a second icon. */}
-            {collapsed ? <ChevronEndIcon size={18} /> : <ChevronStartIcon size={18} />}
-            {collapsed ? null : <span>{labels.collapseSidebar}</span>}
-          </button>
+          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+            {profile ? (
+              <div
+                style={{
+                  padding: collapsed ? spacingTokens.xs : spacingTokens.sm,
+                  borderRadius: radiusTokens.md,
+                  background: colorTokens.surfaceSoft,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  minInlineSize: 0,
+                }}
+              >
+                {profile}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              className="bs-pressable bs-control"
+              data-testid="toggle-sidebar"
+              aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
+              aria-pressed={collapsed}
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                gap: spacingTokens.sm,
+                minBlockSize: '2.5rem',
+                paddingInline: collapsed ? 0 : spacingTokens.md,
+                borderRadius: radiusTokens.md,
+                background: 'transparent',
+                border: '1px solid transparent',
+                color: colorTokens.textMuted,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                ...typographyTokens.caption,
+                fontWeight: 600,
+              }}
+            >
+              {/* Logical chevrons: `ChevronStart` points toward the inline start,
+                  so the control reads correctly in Arabic without a second icon. */}
+              {collapsed ? <ChevronEndIcon size={18} /> : <ChevronStartIcon size={18} />}
+              {collapsed ? null : <span>{labels.collapseSidebar}</span>}
+            </button>
+          </div>
         </nav>
 
         <main
@@ -471,8 +529,10 @@ export function AppShell({
               position: 'absolute',
               insetBlock: 0,
               insetInlineStart: 0,
-              inlineSize: 'min(18rem, 85vw)',
+              inlineSize: 'min(19rem, 88vw)',
               background: colorTokens.surface,
+              borderStartEndRadius: radiusTokens['2xl'],
+              borderEndEndRadius: radiusTokens['2xl'],
               boxShadow: shadowTokens.overlay,
               padding: spacingTokens.md,
               overflowY: 'auto',
@@ -502,8 +562,8 @@ export function AppShell({
                   inlineSize: '2.25rem',
                   blockSize: '2.25rem',
                   borderRadius: radiusTokens.md,
-                  border: `1px solid ${colorTokens.borderStrong}`,
-                  background: colorTokens.surface,
+                  border: '1px solid transparent',
+                  background: colorTokens.controlSurface,
                   color: colorTokens.textPrimary,
                   cursor: 'pointer',
                 }}

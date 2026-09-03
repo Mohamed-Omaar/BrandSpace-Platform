@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 import { scrollContainerStyle } from './a11y';
 import { ChevronEndIcon, ChevronStartIcon, SearchIcon } from './icons';
-import { inputStyle } from './primitives';
+import { CONTROL_CLASS, inputStyle } from './primitives';
 
 /**
  * Tabular data, badges, and the controls that sit above a table.
@@ -32,7 +32,7 @@ export function DataTable({
   testId,
 }: {
   readonly headers: readonly string[];
-  /** Announced to screen readers; visually hidden unless `captionVisible`. */
+  /** Announced to screen readers; the table's accessible name. */
   readonly caption?: string | undefined;
   readonly children: ReactNode;
   readonly minWidth?: string;
@@ -45,7 +45,8 @@ export function DataTable({
       aria-label={caption}
       style={{
         ...scrollContainerStyle(),
-        border: `1px solid ${colorTokens.cardBorder}`,
+        // A soft container, not a bordered box: the surface and the radius say
+        // "this is a table" without drawing a frame around it (D-54).
         borderRadius: radiusTokens.lg,
         background: colorTokens.surface,
       }}
@@ -75,26 +76,61 @@ export function DataTable({
   );
 }
 
+/**
+ * A table row that responds to the pointer.
+ *
+ * `bs-row` supplies the hover fill from `tokens.css`; `selected` marks a row
+ * with a lavender surface AND `aria-selected`, so the state is never carried by
+ * colour alone.
+ */
+export function Row({
+  children,
+  selected = false,
+  testId,
+}: {
+  readonly children: ReactNode;
+  readonly selected?: boolean;
+  readonly testId?: string | undefined;
+}) {
+  return (
+    <tr
+      className="bs-row"
+      data-testid={testId}
+      aria-selected={selected || undefined}
+      style={selected ? { background: colorTokens.surfaceLavender } : undefined}
+    >
+      {children}
+    </tr>
+  );
+}
+
 export function thStyle(): CSSProperties {
   return {
     // `start`, not `left`, so Arabic mirrors.
     textAlign: 'start',
-    padding: spacingTokens.sm,
+    paddingBlock: spacingTokens.sm,
     paddingInline: spacingTokens.md,
-    background: colorTokens.surfaceMuted,
-    borderBlockEnd: `1px solid ${colorTokens.border}`,
-    color: colorTokens.textSecondary,
-    ...typographyTokens.label,
+    // No filled header band and no grid: one hairline under the header row is
+    // all the separation a column heading needs.
+    background: 'transparent',
+    borderBlockEnd: `1px solid ${colorTokens.hairline}`,
+    color: colorTokens.textMuted,
+    ...typographyTokens.caption,
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
     whiteSpace: 'nowrap',
   };
 }
 
 export function tdStyle(): CSSProperties {
   return {
-    padding: spacingTokens.sm,
+    paddingBlock: spacingTokens.md,
     paddingInline: spacingTokens.md,
-    borderBlockEnd: `1px solid ${colorTokens.cardBorder}`,
-    verticalAlign: 'top',
+    // A row separator, not a cell grid. Vertical rules are what made the old
+    // tables read as a spreadsheet.
+    borderBlockEnd: `1px solid ${colorTokens.hairline}`,
+    verticalAlign: 'middle',
     color: colorTokens.textPrimary,
   };
 }
@@ -139,10 +175,12 @@ export function RecordList({
       {records.map((record) => (
         <li
           key={record.id}
+          className="bs-liftable"
           style={{
-            border: `1px solid ${colorTokens.cardBorder}`,
-            borderRadius: radiusTokens.md,
-            background: colorTokens.surface,
+            borderRadius: radiusTokens.lg,
+            // A soft filled card, not an outlined record. Same data, shaped for
+            // a thumb rather than a cursor.
+            background: colorTokens.surfaceSoft,
             padding: spacingTokens.md,
             display: 'grid',
             gap: spacingTokens.sm,
@@ -193,10 +231,13 @@ export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 
 export function StatusBadge({
   label,
   tone = 'neutral',
+  dot = false,
   testId,
 }: {
   readonly label: string;
   readonly tone?: BadgeTone;
+  /** A small dot before the label. Decoration; the word is still the label. */
+  readonly dot?: boolean;
   readonly testId?: string | undefined;
 }) {
   const palette = badgePalette(tone);
@@ -208,16 +249,30 @@ export function StatusBadge({
         alignItems: 'center',
         gap: spacingTokens.xs,
         paddingInline: spacingTokens.sm,
-        paddingBlock: spacingTokens['3xs'],
+        paddingBlock: spacingTokens['2xs'],
         borderRadius: radiusTokens.full,
         ...typographyTokens.caption,
         fontWeight: 600,
         whiteSpace: 'nowrap',
         background: palette.background,
         color: palette.color,
-        border: `1px solid ${palette.border}`,
+        // No resting stroke: the fill and the WORD carry the meaning, and the
+        // word survives greyscale and colour-blindness (WCAG 1.4.1).
+        border: '1px solid transparent',
       }}
     >
+      {dot ? (
+        <span
+          aria-hidden="true"
+          style={{
+            inlineSize: '0.375rem',
+            blockSize: '0.375rem',
+            borderRadius: radiusTokens.full,
+            background: palette.color,
+            flexShrink: 0,
+          }}
+        />
+      ) : null}
       {label}
     </span>
   );
@@ -335,7 +390,8 @@ export function SearchField({
         type="search"
         defaultValue={defaultValue}
         placeholder={placeholder}
-        style={{ ...inputStyle(), paddingInlineStart: '2.25rem' }}
+        className={CONTROL_CLASS}
+        style={{ ...inputStyle(), paddingInlineStart: '2.5rem' }}
       />
     </div>
   );
@@ -409,7 +465,8 @@ export function Pagination({
     paddingInline: spacingTokens.sm,
     justifyContent: 'center',
     borderRadius: radiusTokens.md,
-    border: `1px solid ${colorTokens.borderStrong}`,
+    background: colorTokens.controlSurface,
+    border: '1px solid transparent',
     color: colorTokens.textPrimary,
     textDecoration: 'none',
     ...typographyTokens.caption,
@@ -417,8 +474,8 @@ export function Pagination({
   };
   const disabledStyle: CSSProperties = {
     ...linkStyle,
+    background: colorTokens.surfaceMuted,
     color: colorTokens.textMuted,
-    borderColor: colorTokens.border,
     pointerEvents: 'none',
   };
 

@@ -72,35 +72,94 @@ export const colorTokens = {
   brandYellowTint: '#FFF9DB',
 
   /* ---------------------------------------------------------------------- */
-  /* Neutrals                                                               */
+  /* Neutrals and supporting surfaces                                       */
+  /*                                                                        */
+  /* THE HIERARCHY MODEL CHANGED IN 2C-A REVISION 2 (D-54).                 */
+  /*                                                                        */
+  /* Before: a white card, a visible border, on a white ground — which made */
+  /* the BORDER the only thing separating a section from the page. That is  */
+  /* what made the product read as an outlined admin template: every card,  */
+  /* input and toolbar was a stroked rectangle, and strokes were doing all  */
+  /* the work that spacing, surface and type should be doing.               */
+  /*                                                                        */
+  /* Now: the canvas stays white, and SUPPORTING SURFACES carry the         */
+  /* structure — soft lavender, warm grey and off-white fills with a very   */
+  /* subtle shadow and a large radius. Borders drop to hairlines used only  */
+  /* where a genuine edge is needed, and controls are filled rather than    */
+  /* outlined.                                                              */
   /* ---------------------------------------------------------------------- */
 
-  /** Cards, sheets, the sidebar, and the page ground itself (D-49). */
+  /** The canvas, and any card that must read as raised white on white. */
   surface: '#FFFFFF',
+  /** Off-white card fill. The default card surface — near-white, not grey. */
+  surfaceSoft: '#FBFBFC',
+  /** Warm grey section surface, for grouping without drawing a box. */
+  surfaceWarm: '#F7F6F4',
   /**
-   * A faint neutral for insets that must read as recessed against a white
-   * card: table headers, code blocks, skeletons, disabled controls.
+   * Lavender-tinted supporting surface. The brand-adjacent neutral: used for
+   * the active navigation pill, selected rows, Copilot surfaces and hero
+   * areas. Purple at 4% — a tint, never a colour wash.
    */
-  surfaceMuted: '#F6F8FA',
-  /** Slightly deeper inset, for a nested surface on an already-muted one. */
-  surfaceSunken: '#EEF2F6',
+  surfaceLavender: '#F8F5FF',
+  /** Deeper lavender, for hover and selected states on a lavender surface. */
+  surfaceLavenderStrong: '#F0E9FF',
   /**
-   * THE APPLICATION GROUND IS WHITE (D-49). Structure comes from restrained
-   * borders and one subtle shadow, not from a tinted background — which is what
-   * "clean white surfaces, subtle neutral borders" asks for. Kept as its own
-   * token so a future change is one edit, not a search for `#FFFFFF`.
+   * A faint neutral for insets that must read as recessed: table headers,
+   * code blocks, skeletons, disabled controls.
+   */
+  surfaceMuted: '#F5F6F8',
+  /** Slightly deeper inset, for a nested surface on an already-muted one. */
+  surfaceSunken: '#EDEFF3',
+  /** A dark surface, for the Design Studio canvas frame and media chrome. */
+  surfaceInk: '#171528',
+  /**
+   * THE APPLICATION GROUND IS WHITE (D-49, reaffirmed in D-54). Structure now
+   * comes from tinted surfaces, spacing and radius rather than from borders —
+   * but the ground itself is still white, so the product reads as open rather
+   * than as a grey utility.
    */
   appBackground: '#FFFFFF',
 
+  /* ------------------------------------------------------------------ */
+  /* Controls                                                            */
+  /*                                                                     */
+  /* A control is identified by its FILL, its persistent text label and  */
+  /* its focus ring — not by a resting stroke (D-55). `controlBorder` is */
+  /* transparent by design; `controlBorderContrast` is the 3:1 boundary  */
+  /* that `tokens.css` swaps in under `prefers-contrast: more`, so a     */
+  /* reader who needs edges gets real ones from their own OS setting.    */
+  /* ------------------------------------------------------------------ */
+
+  /** Resting fill for inputs, selects, textareas and search fields. */
+  controlSurface: '#F4F4F7',
+  /** Hover fill. Perceptible without becoming a second state to read. */
+  controlSurfaceHover: '#EDEDF3',
+  /** Focused fill: white, so the purple ring reads at full strength. */
+  controlSurfaceFocus: '#FFFFFF',
+  /** Disabled fill. Paired with `textMuted`, never with `textPrimary`. */
+  controlSurfaceDisabled: '#F7F7F9',
+  /** Resting control border. Transparent by design — see D-55. */
+  controlBorder: 'transparent',
+  /** The 3:1 boundary used under `prefers-contrast: more` and forced colours. */
+  controlBorderContrast: '#818C9C',
+
+  /**
+   * Hairline. A structural edge that separates without outlining: table rows,
+   * a sticky header's underside, a panel split. Deliberately below the
+   * non-text threshold because it is DECORATION, not the way a component is
+   * identified.
+   */
+  hairline: '#F0F1F4',
   /** Card border. Subtle by design; the shadow carries the rest. 1.28:1. */
   cardBorder: '#EAECF0',
-  /** Default border for inputs and dividers. 1.44:1 — decorative. */
+  /** Default border for dividers. 1.44:1 — decorative. */
   border: '#E3E8EF',
   /**
-   * Border for a control that must be PERCEIVABLE as a control. WCAG 1.4.11
-   * requires 3:1 for a UI component boundary, and `#98A2B3` — the obvious
-   * mid-grey, and the first value tried here — scores 2.58:1. Inputs and
-   * buttons use this token, never the decorative `border`.
+   * A boundary that must be PERCEIVABLE — WCAG 1.4.11 wants 3:1 for a UI
+   * component boundary, and `#98A2B3`, the obvious mid-grey and the first
+   * value tried here, scores 2.58:1. Used for high-contrast mode, for a
+   * control in an error state, and anywhere an edge is load-bearing rather
+   * than decorative.
    */
   borderStrong: '#818C9C',
 
@@ -208,19 +267,47 @@ export type TypographyToken = keyof typeof typographyTokens;
  * Elevation. Restrained by direction: two steps, plus one for overlays.
  * A stack of heavy shadows is the thing this system is explicitly avoiding.
  */
+/**
+ * Elevation.
+ *
+ * Restrained and LARGE-RADIUS rather than tight and dark: a soft, wide,
+ * low-opacity shadow lifts a surface off white without drawing an edge, which
+ * is precisely the job the borders used to be doing. `card` is almost
+ * subliminal on purpose — it should be felt, not seen.
+ */
 export const shadowTokens = {
-  card: '0 1px 2px 0 rgba(16, 24, 40, 0.04), 0 1px 3px 0 rgba(16, 24, 40, 0.06)',
-  raised: '0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04)',
-  overlay: '0 12px 24px -6px rgba(16, 24, 40, 0.12), 0 4px 8px -4px rgba(16, 24, 40, 0.06)',
+  /** The default card lift. Two very soft layers, no visible edge. */
+  card: '0 1px 2px 0 rgba(23, 21, 40, 0.03), 0 6px 16px -8px rgba(23, 21, 40, 0.08)',
+  /** Hover, and a card that must sit above its neighbours. */
+  raised: '0 2px 4px -1px rgba(23, 21, 40, 0.04), 0 12px 28px -12px rgba(23, 21, 40, 0.12)',
+  /** Menus, dialogs, drawers, the Copilot panel. */
+  overlay: '0 8px 16px -8px rgba(23, 21, 40, 0.10), 0 24px 48px -16px rgba(23, 21, 40, 0.18)',
+  /** A brand-tinted glow, for the sign-in hero and the Copilot header only. */
+  brandGlow: '0 18px 48px -18px rgba(121, 53, 254, 0.35)',
   /** The focus ring, as a shadow, for controls that cannot use `outline`. */
   focus: `0 0 0 2px ${colorTokens.focusRingContrast}, 0 0 0 4px ${colorTokens.focusRing}`,
 } as const;
 
+/**
+ * Corner radius.
+ *
+ * The scale moved up in the 2C-A revision (D-54): controls sit at 12px and
+ * cards at 18–20px, because a 6px corner on a 44px control reads as a form
+ * field in a database tool, and a 12px corner on a card reads as a panel. The
+ * softer geometry is a large part of what separates "premium product" from
+ * "admin template", and it costs nothing.
+ */
 export const radiusTokens = {
-  sm: '0.25rem',
-  md: '0.5rem',
-  lg: '0.75rem',
-  xl: '1rem',
+  xs: '0.375rem',
+  sm: '0.5rem',
+  /** Controls: inputs, buttons, chips. 12px. */
+  md: '0.75rem',
+  /** Slightly larger control, and small surfaces. 14px. */
+  lg: '0.875rem',
+  /** Cards and panels. 18px. */
+  xl: '1.125rem',
+  /** Hero surfaces, sheets and the composer's media well. 24px. */
+  '2xl': '1.5rem',
   full: '9999px',
 } as const;
 
@@ -280,16 +367,23 @@ export const zIndexTokens = {
 } as const;
 
 /** Fixed layout measurements the shell and its tests both need. */
+/** Fixed layout measurements the shell and its tests both need. */
 export const layoutTokens = {
-  sidebarExpanded: '16rem',
-  sidebarCollapsed: '4rem',
-  headerHeight: '3.5rem',
-  contentMaxWidth: '85rem',
-  copilotPanelWidth: '24rem',
+  sidebarExpanded: '17rem',
+  sidebarCollapsed: '4.5rem',
+  headerHeight: '4rem',
+  contentMaxWidth: '88rem',
+  copilotPanelWidth: '26rem',
   /** WCAG 2.2 target size (2.5.8) minimum for a pointer target. */
   minTargetSize: '24px',
-  /** The comfortable control height this system uses for buttons and inputs. */
-  controlHeight: '2.25rem',
+  /**
+   * The comfortable control height. 44px — the brief's 44–48px band, and the
+   * size a thumb can hit without aiming. The previous 36px was a desktop-only
+   * assumption.
+   */
+  controlHeight: '2.75rem',
+  /** A compact control, for toolbars and table rows. Still 36px. */
+  controlHeightSm: '2.25rem',
 } as const;
 
 /**

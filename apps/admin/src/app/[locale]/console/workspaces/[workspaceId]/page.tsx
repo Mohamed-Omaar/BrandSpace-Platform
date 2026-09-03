@@ -123,7 +123,7 @@ export default async function WorkspaceDetailPage({
         actions={
           <Link
             href={`/${locale}/console/workspaces`}
-            style={{ ...buttonStyle('secondary', 'sm'), textDecoration: 'none' }}
+            style={{ ...buttonStyle('neutral', 'sm'), textDecoration: 'none' }}
           >
             {t('ws.backToList')}
           </Link>

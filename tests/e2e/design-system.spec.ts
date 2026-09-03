@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { inlineEndOverhang } from './overflow';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { ADMIN_BASE_URL, DASHBOARD_BASE_URL } from './apps';
@@ -47,68 +48,6 @@ async function signInAndEnterWorkspace(page: Page, locale = 'en'): Promise<void>
   await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
   await page.click(`[data-testid="choose-workspace-${customer.workspaceSlug}"]`);
   await page.waitForURL(new RegExp(`/${locale}/overview$`));
-}
-
-/**
- * The furthest any VISIBLE element extends past the viewport's inline-end edge.
- *
- * MEASURED BY FINDING THE ELEMENT, not by a page-level proxy — and the two
- * proxies both proved unreliable here:
- *
- *   - `scrollWidth - clientWidth` counts content parked at negative offsets.
- *     Next.js puts its route announcer at `left: -10px` and the skip link at
- *     `-2px`, so it reported a 10px "overflow" on pages with nothing overflowing.
- *   - Actually scrolling has the same problem: Chromium's scrollable region
- *     includes that announcer, so `scrollTo(9999)` really does move 10px.
- *
- * Neither is the requirement. The requirement is that no content a reader is
- * meant to see sits past the edge of the screen. So this walks the DOM, skips
- * anything already clipped by a scrolling ancestor (a wide table is SUPPOSED to
- * scroll inside its own box) and anything with no area (off-screen affordances),
- * and returns the worst overhang together with the element responsible — which
- * also makes a failure diagnosable instead of a bare number.
- *
- * Direction-aware: in Arabic the inline-end edge is the left one.
- */
-async function inlineEndOverhang(page: Page): Promise<{ px: number; offender: string }> {
-  return page.evaluate(() => {
-    const viewport = document.documentElement.clientWidth;
-    const rtl = getComputedStyle(document.documentElement).direction === 'rtl';
-    let worst = 0;
-    let offender = 'none';
-
-    for (const element of Array.from(document.querySelectorAll('*'))) {
-      const box = element.getBoundingClientRect();
-      if (box.width <= 0 || box.height <= 0) continue;
-
-      const overhang = rtl ? -box.left : box.right - viewport;
-      if (overhang <= 1 || overhang <= worst) continue;
-
-      // Clipped by a scrolling ancestor that itself fits? Then it is scrolling
-      // inside its own box, which is the intended behaviour.
-      let ancestor = element.parentElement;
-      let clipped = false;
-      while (ancestor) {
-        const style = getComputedStyle(ancestor);
-        if (style.overflowX !== 'visible') {
-          const ancestorBox = ancestor.getBoundingClientRect();
-          const ancestorOverhang = rtl ? -ancestorBox.left : ancestorBox.right - viewport;
-          if (ancestorOverhang <= 1) {
-            clipped = true;
-            break;
-          }
-        }
-        ancestor = ancestor.parentElement;
-      }
-      if (clipped) continue;
-
-      worst = overhang;
-      const testId = (element as HTMLElement).dataset['testid'] ?? '';
-      offender = `${element.tagName}${testId ? `[${testId}]` : ''} w=${Math.round(box.width)}`;
-    }
-
-    return { px: Math.round(worst), offender };
-  });
 }
 
 /** Fail on serious and critical axe violations only (F-04a). */

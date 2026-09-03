@@ -11,21 +11,32 @@ import {
 /**
  * The control primitives every surface composes.
  *
- * STYLE FUNCTIONS, NOT CLASS NAMES. The applications render on the server with
- * no CSS build step beyond `tokens.css`, so a style object is what actually
- * travels. Each function reads only from `tokens.ts`, which is what makes the
- * "no colour literals in applications" rule enforceable rather than aspirational.
+ * THE 2C-A REVISION REMOVED THE OUTLINES (D-55). A control used to be a white
+ * box with a grey stroke; it is now a soft filled shape with a transparent
+ * resting border, a 12px radius and a 44px height. The stroke returns only
+ * where it carries meaning — an error, or a reader whose OS asks for more
+ * contrast (`tokens.css`, `prefers-contrast: more`).
  *
- * Every size is LOGICAL (`padding-inline`, `border-inline-start`, `inline-size`)
- * so Arabic RTL mirrors with no second implementation.
+ * Identification without a stroke rests on three things, and all three are
+ * obligations rather than preferences:
+ *
+ *   1. a PERSISTENT visible label — `Field` renders one and there is no
+ *      placeholder-only path through this API;
+ *   2. a fill that differs from the surface it sits on;
+ *   3. a 2px purple focus ring at 5.6:1.
+ *
+ * `bs-control` and `bs-pressable` come from `tokens.css`, because hover, active
+ * and disabled are pseudo-classes and an inline style cannot express them. A
+ * filled control with no hover feedback feels broken.
  */
 
-export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'danger';
-export type ControlSize = 'sm' | 'md';
+export type ButtonVariant = 'primary' | 'accent' | 'neutral' | 'ghost' | 'danger';
+export type ControlSize = 'sm' | 'md' | 'lg';
 
 const CONTROL_HEIGHT: Record<ControlSize, string> = {
-  sm: '2rem',
+  sm: layoutTokens.controlHeightSm,
   md: layoutTokens.controlHeight,
+  lg: '3rem',
 };
 
 function buttonBase(size: ControlSize): CSSProperties {
@@ -35,27 +46,30 @@ function buttonBase(size: ControlSize): CSSProperties {
     justifyContent: 'center',
     gap: spacingTokens.sm,
     minBlockSize: CONTROL_HEIGHT[size],
-    paddingInline: size === 'sm' ? spacingTokens.sm : spacingTokens.md,
+    paddingInline: size === 'sm' ? spacingTokens.md : spacingTokens.lg,
     paddingBlock: spacingTokens.xs,
     borderRadius: radiusTokens.md,
     fontFamily: 'inherit',
-    fontSize: typographyTokens.bodySm.fontSize,
+    fontSize: size === 'sm' ? typographyTokens.caption.fontSize : typographyTokens.bodySm.fontSize,
     fontWeight: 600,
     lineHeight: typographyTokens.bodySm.lineHeight,
     cursor: 'pointer',
     textDecoration: 'none',
     whiteSpace: 'nowrap',
-    transition: `background-color ${motionTokens.fast} ${motionTokens.easeOut}, border-color ${motionTokens.fast} ${motionTokens.easeOut}`,
+    border: '1px solid transparent',
+    transition: `background-color ${motionTokens.fast} ${motionTokens.easeOut}`,
   };
 }
 
 /**
  * Button styling by variant.
  *
- * `secondary` and `tertiary` use `borderStrong`, not `border`: WCAG 1.4.11
- * requires a UI component's boundary to reach 3:1 against its surroundings, and
- * the subtle `border` token is decorative at 1.44:1. A control the eye cannot
- * find is not a control.
+ * FIVE VARIANTS, ONE RULE: none of them is a stroked box. Primary is a solid
+ * purple surface; accent is the yellow, which carries near-black text and is
+ * used sparingly; neutral is a soft lavender-grey fill; ghost has no resting
+ * surface at all; destructive is a soft red fill rather than a red outline —
+ * a red-outlined button beside a filled purple one reads as equally routine,
+ * and these are the actions CLAUDE.md §2.5 calls high-impact.
  */
 export function buttonStyle(
   variant: ButtonVariant = 'primary',
@@ -64,66 +78,87 @@ export function buttonStyle(
   const base = buttonBase(size);
   switch (variant) {
     case 'primary':
+      return { ...base, background: colorTokens.brandPurple, color: colorTokens.brandPurpleInk };
+    case 'accent':
+      // Yellow with near-black ink at 15.3:1. Never white text on yellow.
+      return { ...base, background: colorTokens.brandYellow, color: colorTokens.brandYellowInk };
+    case 'neutral':
       return {
         ...base,
-        background: colorTokens.brandPurple,
-        color: colorTokens.brandPurpleInk,
-        border: `1px solid ${colorTokens.brandPurple}`,
-      };
-    case 'secondary':
-      return {
-        ...base,
-        background: colorTokens.surface,
+        background: colorTokens.controlSurface,
         color: colorTokens.textPrimary,
-        border: `1px solid ${colorTokens.borderStrong}`,
       };
-    case 'tertiary':
-      return {
-        ...base,
-        background: 'transparent',
-        color: colorTokens.brandPurple,
-        border: '1px solid transparent',
-      };
+    case 'ghost':
+      return { ...base, background: 'transparent', color: colorTokens.textSecondary };
     case 'danger':
-      // Destructive actions are outlined, never a filled red block: a filled
-      // red button next to a filled purple one reads as equally routine, and
-      // these are the actions CLAUDE.md §2.5 calls high-impact.
-      return {
-        ...base,
-        background: colorTokens.surface,
-        color: colorTokens.danger,
-        border: `1px solid ${colorTokens.danger}`,
-      };
+      return { ...base, background: colorTokens.dangerTint, color: colorTokens.danger };
   }
+}
+
+/** The interaction classes a button needs for hover, active and disabled. */
+function buttonClass(variant: ButtonVariant): string {
+  return variant === 'neutral' || variant === 'ghost' ? 'bs-pressable bs-control' : 'bs-pressable';
 }
 
 export function Button({
   variant = 'primary',
   size = 'md',
   icon,
+  iconEnd,
   fullWidth = false,
+  loading = false,
+  loadingLabel,
   children,
   style,
+  className,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   readonly variant?: ButtonVariant;
   readonly size?: ControlSize;
   readonly icon?: ReactNode;
+  readonly iconEnd?: ReactNode;
   readonly fullWidth?: boolean;
+  /** Disables the control AND announces the wait. Never one without the other. */
+  readonly loading?: boolean;
+  readonly loadingLabel?: string | undefined;
 }) {
   return (
     <button
       type="button"
       {...rest}
+      disabled={rest.disabled === true || loading}
+      aria-busy={loading || undefined}
+      className={[buttonClass(variant), className].filter(Boolean).join(' ')}
       style={{
         ...buttonStyle(variant, size),
         ...(fullWidth ? { inlineSize: '100%' } : {}),
+        ...(loading ? { opacity: 0.75 } : {}),
         ...style,
       }}
     >
-      {icon}
-      {children}
+      {loading ? <Spinner /> : icon}
+      {loading && loadingLabel ? loadingLabel : children}
+      {!loading && iconEnd ? iconEnd : null}
     </button>
+  );
+}
+
+/** A pure-CSS spinner. `aria-hidden` — the button's `aria-busy` is the signal. */
+export function Spinner({ size = 16 }: { readonly size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="bs-spinner"
+      style={{
+        display: 'inline-block',
+        inlineSize: size,
+        blockSize: size,
+        borderRadius: radiusTokens.full,
+        border: '2px solid currentColor',
+        borderBlockStartColor: 'transparent',
+        opacity: 0.8,
+      }}
+    />
   );
 }
 
@@ -137,26 +172,33 @@ export function Button({
 export function IconButton({
   label,
   icon,
-  variant = 'tertiary',
+  variant = 'ghost',
+  size = 'md',
+  circular = false,
   style,
+  className,
   ...rest
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
   readonly label: string;
   readonly icon: ReactNode;
   readonly variant?: ButtonVariant;
+  readonly size?: ControlSize;
+  readonly circular?: boolean;
 }) {
+  const edge = CONTROL_HEIGHT[size];
   return (
     <button
       type="button"
       aria-label={label}
       {...rest}
+      className={[buttonClass(variant), className].filter(Boolean).join(' ')}
       style={{
-        ...buttonStyle(variant, 'md'),
-        // Square, and never below the WCAG 2.2 target-size minimum.
-        inlineSize: layoutTokens.controlHeight,
-        blockSize: layoutTokens.controlHeight,
+        ...buttonStyle(variant, size),
+        inlineSize: edge,
+        blockSize: edge,
         minInlineSize: layoutTokens.minTargetSize,
         paddingInline: 0,
+        borderRadius: circular ? radiusTokens.full : radiusTokens.md,
         ...style,
       }}
     >
@@ -165,17 +207,31 @@ export function IconButton({
   );
 }
 
-export function inputStyle(options: { invalid?: boolean } = {}): CSSProperties {
+export type ControlTone = 'default' | 'error' | 'success';
+
+/**
+ * Input, select and textarea styling.
+ *
+ * The resting border is TRANSPARENT and the fill does the identifying. An
+ * error or success state is the one place a control keeps a real 3:1 boundary,
+ * because there the edge carries meaning rather than decoration — and it is
+ * never the only signal: `Field` also renders an icon and a sentence.
+ */
+export function inputStyle(
+  options: { tone?: ControlTone; size?: ControlSize } = {},
+): CSSProperties {
+  const { tone = 'default', size = 'md' } = options;
+  const toneBorder =
+    tone === 'error' ? colorTokens.danger : tone === 'success' ? colorTokens.success : undefined;
   return {
     inlineSize: '100%',
-    minBlockSize: layoutTokens.controlHeight,
-    paddingInline: spacingTokens.sm,
-    paddingBlock: spacingTokens.xs,
+    minBlockSize: CONTROL_HEIGHT[size],
+    paddingInline: spacingTokens.md,
+    paddingBlock: spacingTokens.sm,
     borderRadius: radiusTokens.md,
-    // `borderStrong`, not `border`: an input outline is a UI component boundary
-    // and must reach 3:1 (WCAG 1.4.11).
-    border: `1px solid ${options.invalid ? colorTokens.danger : colorTokens.borderStrong}`,
-    background: colorTokens.surface,
+    // `bs-control` supplies the fill and the transparent resting border; a tone
+    // overrides only the colour, so high-contrast mode still wins on default.
+    ...(toneBorder ? { border: `1px solid ${toneBorder}` } : {}),
     color: colorTokens.textPrimary,
     fontFamily: 'inherit',
     fontSize: typographyTokens.bodySm.fontSize,
@@ -183,43 +239,56 @@ export function inputStyle(options: { invalid?: boolean } = {}): CSSProperties {
   };
 }
 
-export function textareaStyle(): CSSProperties {
+/** The class every input, select and textarea must carry. */
+export const CONTROL_CLASS = 'bs-control';
+
+export function textareaStyle(options: { tone?: ControlTone } = {}): CSSProperties {
   return {
-    ...inputStyle(),
-    minBlockSize: '6rem',
+    ...inputStyle(options),
+    minBlockSize: '7rem',
     resize: 'vertical',
     paddingBlock: spacingTokens.sm,
+    lineHeight: typographyTokens.body.lineHeight,
   };
 }
 
 /**
  * A labelled form control.
  *
- * The label is a real `<label for>`, the hint is wired through
- * `aria-describedby`, and an error is announced. Passing `error` also marks the
- * control invalid, so the state is not carried by colour alone (WCAG 1.4.1).
+ * The label is a real `<label for>` and is ALWAYS rendered — there is no
+ * placeholder-only path through this API, because a placeholder disappears the
+ * moment someone types and takes the control's only identification with it.
+ * That matters more than usual here: with the resting border gone, the label is
+ * load-bearing (D-55).
  */
 export function Field({
   label,
   htmlFor,
   hint,
   error,
+  success,
   required = false,
+  optionalLabel,
   children,
 }: {
   readonly label: string;
   readonly htmlFor: string;
   readonly hint?: string | undefined;
   readonly error?: string | undefined;
+  readonly success?: string | undefined;
   readonly required?: boolean;
+  /** Shown when NOT required, so "optional" is stated rather than inferred. */
+  readonly optionalLabel?: string | undefined;
   readonly children: ReactNode;
 }) {
   return (
-    <div style={{ marginBlockEnd: spacingTokens.md }}>
+    <div style={{ marginBlockEnd: spacingTokens.lg }}>
       <label
         htmlFor={htmlFor}
         style={{
-          display: 'block',
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: spacingTokens.xs,
           marginBlockEnd: spacingTokens.xs,
           ...typographyTokens.label,
           color: colorTokens.textPrimary,
@@ -228,12 +297,18 @@ export function Field({
         {label}
         {required ? (
           <span aria-hidden="true" style={{ color: colorTokens.danger }}>
-            {' *'}
+            *
+          </span>
+        ) : optionalLabel ? (
+          <span
+            style={{ ...typographyTokens.caption, color: colorTokens.textMuted, fontWeight: 400 }}
+          >
+            {optionalLabel}
           </span>
         ) : null}
       </label>
       {children}
-      {hint ? (
+      {hint && !error ? (
         <p
           id={`${htmlFor}-hint`}
           style={{
@@ -251,6 +326,9 @@ export function Field({
           id={`${htmlFor}-error`}
           role="alert"
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacingTokens.xs,
             margin: 0,
             marginBlockStart: spacingTokens.xs,
             ...typographyTokens.caption,
@@ -258,20 +336,98 @@ export function Field({
             fontWeight: 600,
           }}
         >
+          <span aria-hidden="true">⚠</span>
           {error}
+        </p>
+      ) : null}
+      {success && !error ? (
+        <p
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacingTokens.xs,
+            margin: 0,
+            marginBlockStart: spacingTokens.xs,
+            ...typographyTokens.caption,
+            color: colorTokens.success,
+            fontWeight: 600,
+          }}
+        >
+          <span aria-hidden="true">✓</span>
+          {success}
         </p>
       ) : null}
     </div>
   );
 }
 
-/** A horizontal rule that uses the divider token rather than a browser default. */
+/**
+ * A group of related fields.
+ *
+ * Grouping by HEADING AND SPACING on a soft surface, rather than by drawing a
+ * box around every group — which is the thing that made the old forms read as
+ * nested outlined rectangles.
+ */
+export function FieldGroup({
+  title,
+  description,
+  children,
+  tinted = false,
+}: {
+  readonly title?: string | undefined;
+  readonly description?: string | undefined;
+  readonly children: ReactNode;
+  /** Puts the group on a warm surface. For one group among several, not all. */
+  readonly tinted?: boolean;
+}) {
+  return (
+    <section
+      style={{
+        marginBlockEnd: spacingTokens.xl,
+        ...(tinted
+          ? {
+              background: colorTokens.surfaceWarm,
+              borderRadius: radiusTokens.xl,
+              padding: spacingTokens.lg,
+            }
+          : {}),
+      }}
+    >
+      {title ? (
+        <h3
+          style={{
+            ...typographyTokens.h3,
+            color: colorTokens.textPrimary,
+            marginBlockEnd: description ? spacingTokens['3xs'] : spacingTokens.md,
+          }}
+        >
+          {title}
+        </h3>
+      ) : null}
+      {description ? (
+        <p
+          style={{
+            margin: 0,
+            marginBlockEnd: spacingTokens.md,
+            ...typographyTokens.bodySm,
+            color: colorTokens.textSecondary,
+          }}
+        >
+          {description}
+        </p>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+/** A hairline divider that separates without outlining. */
 export function Divider({ spacing = spacingTokens.lg }: { readonly spacing?: string }) {
   return (
     <hr
       style={{
         border: 0,
-        borderBlockStart: `1px solid ${colorTokens.cardBorder}`,
+        borderBlockStart: `1px solid ${colorTokens.hairline}`,
         marginBlock: spacing,
       }}
     />
@@ -282,20 +438,68 @@ export function Divider({ spacing = spacingTokens.lg }: { readonly spacing?: str
 export function ButtonRow({
   children,
   align = 'start',
+  gap = spacingTokens.sm,
 }: {
   readonly children: ReactNode;
   readonly align?: 'start' | 'end';
+  readonly gap?: string;
 }) {
   return (
     <div
       style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: spacingTokens.sm,
+        gap,
+        alignItems: 'center',
         justifyContent: align === 'end' ? 'flex-end' : 'flex-start',
       }}
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * An icon in a soft rounded tile.
+ *
+ * The tile is what lets an icon carry weight in a borderless system: it gives
+ * the glyph a surface of its own so a card has a focal point without a stroke.
+ */
+export function IconTile({
+  icon,
+  tone = 'brand',
+  size = 'md',
+}: {
+  readonly icon: ReactNode;
+  readonly tone?: 'brand' | 'accent' | 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+  readonly size?: 'sm' | 'md' | 'lg';
+}) {
+  const edge = size === 'sm' ? '2rem' : size === 'lg' ? '3rem' : '2.5rem';
+  const palette = {
+    brand: { background: colorTokens.surfaceLavenderStrong, color: colorTokens.brandPurplePressed },
+    accent: { background: colorTokens.brandYellowTint, color: colorTokens.brandYellowText },
+    neutral: { background: colorTokens.surfaceMuted, color: colorTokens.textSecondary },
+    success: { background: colorTokens.successTint, color: colorTokens.success },
+    warning: { background: colorTokens.warningTint, color: colorTokens.warning },
+    danger: { background: colorTokens.dangerTint, color: colorTokens.danger },
+    info: { background: colorTokens.infoTint, color: colorTokens.info },
+  }[tone];
+
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        inlineSize: edge,
+        blockSize: edge,
+        flexShrink: 0,
+        borderRadius: size === 'sm' ? radiusTokens.sm : radiusTokens.md,
+        ...palette,
+      }}
+    >
+      {icon}
+    </span>
   );
 }

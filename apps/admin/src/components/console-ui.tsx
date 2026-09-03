@@ -50,7 +50,7 @@ export function primaryButtonStyle(): CSSProperties {
 }
 
 export function secondaryButtonStyle(): CSSProperties {
-  return buttonStyle('secondary');
+  return buttonStyle('neutral');
 }
 
 /** Destructive/high-impact. Never the default, never the only styling signal. */

@@ -120,7 +120,7 @@ export default async function WorkspacesPage({
                 placeholder={locale === 'ar' ? 'الاسم أو المُعرّف' : 'Name or slug'}
                 defaultValue={search ?? ''}
               />
-              <button type="submit" data-testid="search-submit" style={buttonStyle('secondary')}>
+              <button type="submit" data-testid="search-submit" style={buttonStyle('neutral')}>
                 {locale === 'ar' ? 'بحث' : 'Search'}
               </button>
             </Toolbar>

@@ -6,52 +6,89 @@ import {
   Banner,
   Button,
   ButtonRow,
+  CalendarIcon,
   Card,
   Cell,
   ConfirmDialog,
   ContentGrid,
+  ContentCalendar,
   CopilotBody,
   CopilotLauncher,
   CopilotPanel,
+  CreditIcon,
   DataTable,
+  DesignStudio,
   Dialog,
   DropdownMenu,
+  FeatureCard,
   Field,
   IconButton,
+  ImageIcon,
+  LayersIcon,
+  ListIcon,
   MetricCard,
   Pagination,
+  PostComposer,
+  PostGridCard,
+  PostListRow,
+  PulseIcon,
   RecordList,
   SearchField,
   SectionHeader,
   SkeletonLines,
   SocialPostPreview,
   SocialPostPreviewer,
+  SparkIcon,
   Stack,
   StateMessage,
   StatusBadge,
   TabPanel,
   Tabs,
+  TeamIcon,
   Toast,
   Toolbar,
   Tooltip,
+  RouteIcon,
   SettingsIcon,
+  ShieldIcon,
   colorTokens,
   inputStyle,
   menuItemStyle,
+  radiusTokens,
+  shadowTokens,
   spacingTokens,
   textareaStyle,
   typographyTokens,
   type CopilotState,
+  type CopilotSurface,
   type SocialPlatform,
 } from '@brandspace/ui';
 import {
+  calendarDays,
+  calendarLabels,
+  calendarPeriodLabel,
+  composerAccounts,
+  composerApprovers,
+  composerCampaigns,
+  composerCaption,
+  composerLabels,
   copilotLabels,
+  copilotSuggestions,
+  featureFixtures,
+  featureLabels,
+  postCardLabels,
+  postFixtures,
+  previewVariants,
   sampleConversation,
   sampleProposedAction,
+  sampleTools,
   samplePost,
   socialLabels,
+  studioDocumentName,
+  studioLabels,
   SHORT_CAPTION_EN,
 } from './fixtures';
+import type { ReactNode } from 'react';
 
 /**
  * The interactive half of the design showcase.
@@ -63,9 +100,42 @@ import {
  *
  * Every control here operates on local state. Nothing calls a server action,
  * touches a database or spends a credit.
+ *
+ * THE PROTOTYPE SCREENS (features hub, calendar, posts library, composer,
+ * Design Studio) live HERE and only here. They are complete compositions so the
+ * owner can judge the visual direction on a real screen rather than on a
+ * component gallery — but they are behind the same `showcaseEnabled()` gate as
+ * everything else on this page, they are linked from no navigation, and every
+ * one of them says on its face that it performs nothing.
  */
 
 const PLATFORMS: readonly SocialPlatform[] = ['instagram', 'facebook', 'linkedin', 'x', 'tiktok'];
+
+/** Icons for the features hub, keyed by the fixture's id. */
+const FEATURE_ICONS: Record<string, ReactNode> = {
+  social: <RouteIcon size={18} />,
+  calendar: <CalendarIcon size={18} />,
+  library: <ListIcon size={18} />,
+  composer: <ImageIcon size={18} />,
+  studio: <LayersIcon size={18} />,
+  copilot: <SparkIcon size={18} />,
+  'brand-kit': <ShieldIcon size={18} />,
+  media: <ImageIcon size={18} />,
+  analytics: <PulseIcon size={18} />,
+  team: <TeamIcon size={18} />,
+  automations: <SettingsIcon size={18} />,
+};
+
+/** A banner every prototype screen carries, so no screenshot can mislead. */
+function PrototypeNotice({ ar, testId }: { readonly ar: boolean; readonly testId: string }) {
+  return (
+    <Banner tone="warning" testId={testId}>
+      {ar
+        ? 'شاشة نموذجية للمراجعة البصرية فقط. لا تتصل بقاعدة بيانات أو منصة، ولا ينفّذ أي زر فيها إجراءً حقيقيًا.'
+        : 'A prototype screen, for visual review only. It connects to no database and no platform, and no control on it performs a real action.'}
+    </Banner>
+  );
+}
 
 export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
   const ar = locale === 'ar';
@@ -74,9 +144,38 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotState, setCopilotState] = useState<CopilotState>('idle');
+  const [copilotSurface, setCopilotSurface] = useState<CopilotSurface>('composer');
+  const [libraryTab, setLibraryTab] = useState('all');
+  const [selectedPosts, setSelectedPosts] = useState<readonly string[]>([]);
+
   const post = samplePost(locale);
   const labels = socialLabels(locale);
   const cLabels = copilotLabels(locale);
+  const posts = postFixtures(locale);
+  const pcLabels = postCardLabels(locale);
+
+  const toggleSelected = (id: string) =>
+    setSelectedPosts((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+
+  /** The Copilot body, wired to whichever surface the reviewer picked. */
+  const copilotBody = (surface: CopilotSurface, testId?: string) => (
+    <CopilotBody
+      labels={cLabels}
+      state={copilotState}
+      messages={sampleConversation(locale)}
+      suggestions={copilotSuggestions(locale, surface)}
+      tools={sampleTools(locale)}
+      context={{
+        surface,
+        subject: ar ? 'إطلاق المجموعة — ١٢ مارس' : 'Collection launch — 12 Mar',
+      }}
+      attachments={testId ? [ar ? 'دليل-العلامة.pdf' : 'brand-guide.pdf'] : []}
+      proposedAction={copilotState === 'approval' ? sampleProposedAction(locale) : undefined}
+      disabled
+    />
+  );
 
   return (
     <Stack gap={spacingTokens.xl}>
@@ -84,16 +183,21 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       <Card title={ar ? 'الأزرار' : 'Buttons'} testId="showcase-buttons">
         <ButtonRow>
           <Button variant="primary">{ar ? 'إجراء أساسي' : 'Primary'}</Button>
-          <Button variant="secondary">{ar ? 'ثانوي' : 'Secondary'}</Button>
-          <Button variant="tertiary">{ar ? 'ثالثي' : 'Tertiary'}</Button>
+          <Button variant="accent">{ar ? 'إجراء مميّز' : 'Accent'}</Button>
+          <Button variant="neutral">{ar ? 'محايد' : 'Neutral'}</Button>
+          <Button variant="ghost">{ar ? 'شفاف' : 'Ghost'}</Button>
           <Button variant="danger">{ar ? 'إجراء خطر' : 'Destructive'}</Button>
           <Button variant="primary" disabled>
             {ar ? 'معطّل' : 'Disabled'}
           </Button>
+          <Button variant="primary" loading loadingLabel={ar ? 'جارٍ الحفظ' : 'Saving'}>
+            {ar ? 'حفظ' : 'Save'}
+          </Button>
           <Tooltip label={ar ? 'الإعدادات' : 'Settings'}>
             <IconButton
               label={ar ? 'الإعدادات' : 'Settings'}
-              variant="secondary"
+              variant="neutral"
+              circular
               icon={<SettingsIcon size={18} />}
             />
           </Tooltip>
@@ -106,6 +210,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           <Field label={ar ? 'الاسم' : 'Name'} htmlFor="demo-name" required>
             <input
               id="demo-name"
+              className="bs-control"
               style={inputStyle()}
               defaultValue={ar ? 'متجر نموذجي' : 'Sample Brand'}
             />
@@ -115,7 +220,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             htmlFor="demo-email"
             hint={ar ? 'يُستخدم للإشعارات فقط.' : 'Used for notifications only.'}
           >
-            <input id="demo-email" type="email" style={inputStyle()} />
+            <input id="demo-email" type="email" className="bs-control" style={inputStyle()} />
           </Field>
           <Field
             label={ar ? 'المُعرّف' : 'Slug'}
@@ -124,12 +229,29 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           >
             <input
               id="demo-slug"
-              style={inputStyle({ invalid: true })}
+              className="bs-control"
+              style={inputStyle({ tone: 'error' })}
               defaultValue="sample-brand"
             />
           </Field>
-          <Field label={ar ? 'ملاحظات' : 'Notes'} htmlFor="demo-notes">
-            <textarea id="demo-notes" style={textareaStyle()} />
+          <Field
+            label={ar ? 'اسم مساحة العمل' : 'Workspace name'}
+            htmlFor="demo-ok"
+            success={ar ? 'الاسم متاح.' : 'That name is available.'}
+          >
+            <input
+              id="demo-ok"
+              className="bs-control"
+              style={inputStyle({ tone: 'success' })}
+              defaultValue={ar ? 'متجر نموذجي' : 'Sample Brand'}
+            />
+          </Field>
+          <Field
+            label={ar ? 'ملاحظات' : 'Notes'}
+            htmlFor="demo-notes"
+            optionalLabel={ar ? 'اختياري' : 'Optional'}
+          >
+            <textarea id="demo-notes" className="bs-control" style={textareaStyle()} />
           </Field>
         </div>
       </Card>
@@ -182,7 +304,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
                 title={ar ? 'تعذّر التحميل' : 'Could not load'}
                 description={ar ? 'حدث خطأ مؤقت.' : 'Something went wrong.'}
                 action={
-                  <Button size="sm" variant="secondary">
+                  <Button size="sm" variant="neutral">
                     {ar ? 'إعادة المحاولة' : 'Retry'}
                   </Button>
                 }
@@ -205,11 +327,11 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           </TabPanel>
           <TabPanel id="badges" activeId={tab}>
             <ButtonRow>
-              <StatusBadge label="ACTIVE" tone="success" />
-              <StatusBadge label="TRIALING" tone="warning" />
-              <StatusBadge label="SUSPENDED" tone="danger" />
-              <StatusBadge label="ARCHIVED" tone="neutral" />
-              <StatusBadge label="INFO" tone="info" />
+              <StatusBadge label="ACTIVE" tone="success" dot />
+              <StatusBadge label="TRIALING" tone="warning" dot />
+              <StatusBadge label="SUSPENDED" tone="danger" dot />
+              <StatusBadge label="ARCHIVED" tone="neutral" dot />
+              <StatusBadge label="INFO" tone="info" dot />
               <StatusBadge label={ar ? 'مميّز' : 'Featured'} tone="accent" />
             </ButtonRow>
           </TabPanel>
@@ -253,13 +375,13 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           description={ar ? 'حوار قياسي بمصيدة تركيز.' : 'A standard dialog with a focus trap.'}
           closeLabel={ar ? 'إغلاق' : 'Close'}
           footer={
-            <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+            <Button variant="neutral" onClick={() => setDialogOpen(false)}>
               {ar ? 'إغلاق' : 'Close'}
             </Button>
           }
         >
           <Field label={ar ? 'الاسم' : 'Name'} htmlFor="dialog-name">
-            <input id="dialog-name" style={inputStyle()} />
+            <input id="dialog-name" className="bs-control" style={inputStyle()} />
           </Field>
         </Dialog>
 
@@ -283,7 +405,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       <Card title={ar ? 'الجداول' : 'Tables'} testId="showcase-table">
         <Toolbar>
           <SearchField id="showcase-search" label={ar ? 'بحث' : 'Search'} />
-          <Button variant="secondary" size="sm">
+          <Button variant="neutral" size="sm">
             {ar ? 'تصفية' : 'Filter'}
           </Button>
         </Toolbar>
@@ -294,10 +416,10 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             testId="showcase-data-table"
           >
             {SAMPLE_ROWS.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} className="bs-row">
                 <Cell>{row.name}</Cell>
                 <Cell>
-                  <StatusBadge label={row.status} tone={row.tone} />
+                  <StatusBadge label={row.status} tone={row.tone} dot />
                 </Cell>
                 <Cell>{ar ? row.roleAr : row.roleEn}</Cell>
               </tr>
@@ -313,7 +435,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
               fields: [
                 {
                   label: ar ? 'الحالة' : 'Status',
-                  value: <StatusBadge label={row.status} tone={row.tone} />,
+                  value: <StatusBadge label={row.status} tone={row.tone} dot />,
                 },
                 { label: ar ? 'الدور' : 'Role', value: ar ? row.roleAr : row.roleEn },
               ],
@@ -336,55 +458,47 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       {/* ---------------------------------------------- Social preview --- */}
       <Card title={ar ? 'معاينة المنشور' : 'Social post preview'} testId="showcase-social">
         <SectionHeader
-          title={ar ? 'مبدّل المنصة والنسبة' : 'Platform and aspect switcher'}
+          title={ar ? 'مبدّل المنصة والصيغة' : 'Platform and format switcher'}
           description={labels.previewNotice}
         />
         <SocialPostPreviewer content={post} labels={labels} platforms={PLATFORMS} />
 
         <SectionHeader
-          title={ar ? 'الحالات' : 'States'}
-          description={ar ? 'حالات النشر والوسائط.' : 'Publishing and media states.'}
+          title={ar ? 'الصيغ المطلوبة' : 'The required variants'}
+          description={
+            ar
+              ? 'كل صيغة تركيبة مختلفة، لا البطاقة نفسها بشارة مختلفة.'
+              : 'Each variant is a different composition, not the same card with a different badge.'
+          }
         />
-        <ContentGrid min="18rem" gap={spacingTokens.lg}>
-          <SocialPostPreview
-            testId="preview-published-square"
-            labels={labels}
-            content={{ ...post, platform: 'linkedin', aspect: '1:1', status: 'PUBLISHED' }}
-          />
-          <SocialPostPreview
-            testId="preview-story"
-            labels={labels}
-            content={{
-              ...post,
-              platform: 'tiktok',
-              aspect: '9:16',
-              status: 'DRAFT',
-              media: { kind: 'video', alt: ar ? 'مقطع' : 'Clip', durationLabel: '0:18' },
-            }}
-          />
-          <SocialPostPreview
-            testId="preview-failed-missing"
-            labels={labels}
-            content={{
-              ...post,
-              platform: 'x',
-              aspect: '16:9',
-              status: 'FAILED',
-              media: { kind: 'missing' },
-              caption: SHORT_CAPTION_EN,
-              captionDirection: 'ltr',
-            }}
-          />
+        <ContentGrid min="17rem" gap={spacingTokens.lg}>
+          {previewVariants(locale).map((variant) => (
+            <div key={variant.key} style={{ display: 'grid', gap: spacingTokens.xs }}>
+              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                {variant.title}
+              </span>
+              <SocialPostPreview
+                testId={`preview-${variant.key}`}
+                labels={labels}
+                content={variant.content}
+              />
+            </div>
+          ))}
+        </ContentGrid>
+
+        <SectionHeader
+          title={ar ? 'حالات الوسائط والاتجاه' : 'Media and direction states'}
+          description={
+            ar
+              ? 'التحميل، والوسائط الغائبة، والنص المعاكس.'
+              : 'Loading, missing media, and the opposite script.'
+          }
+        />
+        <ContentGrid min="17rem" gap={spacingTokens.lg}>
           <SocialPostPreview
             testId="preview-loading"
             labels={labels}
-            content={{
-              ...post,
-              platform: 'facebook',
-              aspect: '4:5',
-              status: 'SCHEDULED',
-              media: { kind: 'loading' },
-            }}
+            content={{ ...post, media: { kind: 'loading' } }}
           />
           {/* The opposite script, so both directions are reviewable at once. */}
           <SocialPostPreview
@@ -392,7 +506,6 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             labels={labels}
             content={{
               ...post,
-              platform: 'instagram',
               aspect: '1:1',
               caption: ar ? SHORT_CAPTION_EN : 'محتوى عربي داخل واجهة إنجليزية.',
               captionDirection: ar ? 'ltr' : 'rtl',
@@ -421,7 +534,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
               <Button
                 key={state}
                 size="sm"
-                variant={copilotState === state ? 'primary' : 'secondary'}
+                variant={copilotState === state ? 'primary' : 'neutral'}
                 onClick={() => setCopilotState(state)}
                 data-testid={`copilot-state-${state}`}
               >
@@ -431,59 +544,73 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           )}
         </ButtonRow>
 
+        {/* The Copilot is CONTEXTUAL: each surface offers only the actions that
+            surface can serve, so the chip set changes with the context. */}
+        <ButtonRow>
+          {(['calendar', 'posts', 'composer', 'studio'] as const).map((surface) => (
+            <Button
+              key={surface}
+              size="sm"
+              variant={copilotSurface === surface ? 'accent' : 'neutral'}
+              onClick={() => setCopilotSurface(surface)}
+              data-testid={`copilot-surface-${surface}`}
+            >
+              {cLabels.surfaceNames[surface]}
+            </Button>
+          ))}
+        </ButtonRow>
+
         {/* The same body, inline, so the states are reviewable without opening
             the panel — and so a screenshot can capture them. */}
         <div
           data-testid="copilot-inline"
           style={{
             marginBlockStart: spacingTokens.md,
-            blockSize: '28rem',
+            blockSize: '34rem',
             maxInlineSize: '26rem',
-            border: `1px solid ${colorTokens.cardBorder}`,
-            borderRadius: spacingTokens.sm,
+            borderRadius: radiusTokens.xl,
+            background: colorTokens.surface,
+            boxShadow: shadowTokens.raised,
             overflow: 'hidden',
           }}
         >
-          <CopilotBody
-            labels={cLabels}
-            state={copilotState}
-            messages={sampleConversation(locale)}
-            suggestions={[
-              ar ? 'أعد صياغة أقصر' : 'Make it shorter',
-              ar ? 'أضف دعوة لاتخاذ إجراء' : 'Add a call to action',
-            ]}
-            attachments={[ar ? 'دليل-العلامة.pdf' : 'brand-guide.pdf']}
-            proposedAction={copilotState === 'approval' ? sampleProposedAction(locale) : undefined}
-            disabled
-          />
+          {copilotBody(copilotSurface, 'inline')}
         </div>
 
         <CopilotPanel open={copilotOpen} onClose={() => setCopilotOpen(false)} labels={cLabels}>
-          <CopilotBody
-            labels={cLabels}
-            state={copilotState}
-            messages={sampleConversation(locale)}
-            suggestions={[ar ? 'أعد صياغة أقصر' : 'Make it shorter']}
-            proposedAction={copilotState === 'approval' ? sampleProposedAction(locale) : undefined}
-            disabled
-          />
+          {copilotBody(copilotSurface)}
         </CopilotPanel>
       </Card>
 
       {/* ---------------------------------------------------- Metrics --- */}
       <Card title={ar ? 'بطاقات القياس' : 'Metric cards'} testId="showcase-metrics">
         <ContentGrid min="13rem">
-          <MetricCard label={ar ? 'الأعضاء' : 'Members'} value="12" />
+          <MetricCard label={ar ? 'الأعضاء' : 'Members'} value="12" icon={<TeamIcon size={16} />} />
           <MetricCard
-            label={ar ? 'الرصيد' : 'Credits'}
-            value="4,820"
-            hint={ar ? 'أرصدة كاملة' : 'Whole credits'}
+            label={ar ? 'منشورات مجدولة' : 'Scheduled posts'}
+            value="7"
+            icon={<CalendarIcon size={16} />}
             accent
           />
+          {/*
+            NO CREDIT BALANCE AND NO ANALYTICS FIGURE. Both are configuration
+            and measurement the platform does not have yet (CLAUDE.md §2.2), so
+            the cards state that the value is unavailable rather than showing a
+            plausible number on a screenshot the owner is asked to approve.
+          */}
           <MetricCard
-            label={ar ? 'المنشور اليوم' : 'Published today'}
+            label={ar ? 'رصيد الذكاء الاصطناعي' : 'AI credits'}
+            icon={<CreditIcon size={16} />}
             unavailable
-            unavailableLabel={ar ? 'يتوفر لاحقًا' : 'Available later'}
+            unavailableLabel={ar ? 'يُدار من لوحة المنصة' : 'Managed from Platform Admin'}
+          />
+          <MetricCard
+            label={ar ? 'المشاهدات هذا الأسبوع' : 'Views this week'}
+            icon={<PulseIcon size={16} />}
+            unavailable
+            unavailableLabel={
+              ar ? 'يتوفر بعد ربط المنصات' : 'Available once platforms are connected'
+            }
           />
         </ContentGrid>
         <p
@@ -501,6 +628,250 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             ? 'كل الأرقام هنا بيانات عرض ثابتة، وليست قياسات حقيقية.'
             : 'Every figure here is fixed showcase data, not a real measurement.'}
         </p>
+      </Card>
+
+      {/* ------------------------------------------------ Features hub --- */}
+      <Card title={ar ? 'مركز المزايا' : 'Features hub'} testId="showcase-features">
+        <PrototypeNotice ar={ar} testId="features-prototype-notice" />
+        <SectionHeader
+          title={ar ? 'ما تستطيع مساحة العمل فعله' : 'What this workspace can do'}
+          description={
+            ar
+              ? 'حالة كل ميزة هي حالتها الحقيقية في هذه المرحلة. لا خطط ولا أسعار ولا حصص — كلها إعدادات تُدار من لوحة المنصة.'
+              : 'Each feature carries its honest state in this phase. No plan, price or quota appears: all of those are configuration owned by Platform Admin.'
+          }
+          icon={<LayersIcon size={16} />}
+        />
+        <ContentGrid min="17rem">
+          {featureFixtures(locale).map((feature) => (
+            <FeatureCard
+              key={feature.id}
+              testId={`feature-${feature.id}`}
+              name={feature.name}
+              description={feature.description}
+              icon={FEATURE_ICONS[feature.id] ?? <LayersIcon size={18} />}
+              state={feature.state}
+              labels={featureLabels(locale)}
+              lockedReason={feature.lockedReason}
+              action={
+                feature.state === 'enabled' ? (
+                  <Button size="sm" variant="neutral">
+                    {ar ? 'فتح' : 'Open'}
+                  </Button>
+                ) : undefined
+              }
+            />
+          ))}
+        </ContentGrid>
+      </Card>
+
+      {/* --------------------------------------------------- Calendar --- */}
+      <Card
+        title={ar ? 'تقويم المحتوى' : 'Content calendar'}
+        testId="showcase-calendar"
+        padded={false}
+      >
+        <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.md }}>
+          <PrototypeNotice ar={ar} testId="calendar-prototype-notice" />
+          <ContentCalendar
+            testId="prototype-calendar"
+            periodLabel={calendarPeriodLabel(locale)}
+            days={calendarDays(locale)}
+            labels={calendarLabels(locale)}
+            createAction={<Button size="sm">{ar ? 'إنشاء منشور' : 'Create post'}</Button>}
+            filters={
+              <>
+                <SearchField id="calendar-search" label={ar ? 'بحث' : 'Search'} />
+                {[
+                  ar ? 'كل المنصات' : 'All platforms',
+                  ar ? 'كل الحسابات' : 'All accounts',
+                  ar ? 'كل الحملات' : 'All campaigns',
+                  ar ? 'كل الحالات' : 'All statuses',
+                ].map((filter) => (
+                  <Button key={filter} size="sm" variant="neutral">
+                    {filter}
+                  </Button>
+                ))}
+              </>
+            }
+          />
+        </div>
+      </Card>
+
+      {/* --------------------------------------------- Posts library --- */}
+      <Card title={ar ? 'مكتبة المنشورات' : 'Posts library'} testId="showcase-library">
+        <PrototypeNotice ar={ar} testId="library-prototype-notice" />
+        <Toolbar>
+          <SearchField id="library-search" label={ar ? 'بحث في المنشورات' : 'Search posts'} />
+          {[
+            ar ? 'المنصة' : 'Platform',
+            ar ? 'الحساب' : 'Account',
+            ar ? 'الحملة' : 'Campaign',
+            ar ? 'التاريخ' : 'Date',
+            ar ? 'الترتيب: الأحدث' : 'Sort: newest',
+          ].map((filter) => (
+            <Button key={filter} size="sm" variant="neutral">
+              {filter}
+            </Button>
+          ))}
+        </Toolbar>
+
+        <Tabs
+          label={ar ? 'حالة المنشور' : 'Post status'}
+          activeId={libraryTab}
+          onSelect={setLibraryTab}
+          testId="library-tabs"
+          tabs={[
+            { id: 'all', label: ar ? 'الكل' : 'All', badge: String(posts.length) },
+            { id: 'drafts', label: ar ? 'مسودات' : 'Drafts' },
+            { id: 'approval', label: ar ? 'بانتظار الموافقة' : 'Needs approval' },
+            { id: 'scheduled', label: ar ? 'مجدول' : 'Scheduled' },
+            { id: 'published', label: ar ? 'منشور' : 'Published' },
+            { id: 'failed', label: ar ? 'فشل' : 'Failed' },
+            { id: 'archived', label: ar ? 'مؤرشف' : 'Archived' },
+          ]}
+        />
+
+        {/* The bulk-selection state, which only appears once something is chosen. */}
+        {selectedPosts.length > 0 ? (
+          <div
+            data-testid="library-bulk-bar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: spacingTokens.sm,
+              marginBlock: spacingTokens.md,
+              padding: spacingTokens.sm,
+              paddingInline: spacingTokens.md,
+              borderRadius: radiusTokens.lg,
+              background: colorTokens.surfaceLavender,
+            }}
+          >
+            <span style={{ ...typographyTokens.label, color: colorTokens.textPrimary }}>
+              {ar ? `${selectedPosts.length} محدد` : `${selectedPosts.length} selected`}
+            </span>
+            <ButtonRow align="end">
+              <Button size="sm" variant="neutral">
+                {ar ? 'إضافة إلى حملة' : 'Add to campaign'}
+              </Button>
+              <Button size="sm" variant="neutral">
+                {ar ? 'أرشفة' : 'Archive'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedPosts([])}>
+                {ar ? 'إلغاء التحديد' : 'Clear selection'}
+              </Button>
+            </ButtonRow>
+          </div>
+        ) : null}
+
+        <SectionHeader
+          title={ar ? 'عرض شبكي' : 'Grid view'}
+          description={
+            ar
+              ? 'لا تظهر أرقام أداء: لم تُربط أي منصة بعد.'
+              : 'No performance figures appear: no platform is connected yet.'
+          }
+        />
+        <ContentGrid min="15rem">
+          {posts.slice(0, 4).map((record) => (
+            <PostGridCard
+              key={record.id}
+              post={record}
+              labels={pcLabels}
+              selected={selectedPosts.includes(record.id)}
+              actions={
+                <Button size="sm" variant="ghost" onClick={() => toggleSelected(record.id)}>
+                  {selectedPosts.includes(record.id)
+                    ? ar
+                      ? 'إلغاء'
+                      : 'Deselect'
+                    : ar
+                      ? 'تحديد'
+                      : 'Select'}
+                </Button>
+              }
+            />
+          ))}
+        </ContentGrid>
+
+        <SectionHeader title={ar ? 'عرض قائمة' : 'List view'} />
+        <Stack gap={spacingTokens.xs}>
+          {posts.slice(4).map((record) => (
+            <PostListRow
+              key={record.id}
+              post={record}
+              labels={pcLabels}
+              selected={selectedPosts.includes(record.id)}
+              actions={
+                <DropdownMenu
+                  label={ar ? 'إجراءات المنشور' : 'Post actions'}
+                  triggerContent="⋯"
+                  testId={`library-menu-${record.id}`}
+                >
+                  <button type="button" role="menuitem" style={menuItemStyle()}>
+                    {ar ? 'تعديل' : 'Edit'}
+                  </button>
+                  <button type="button" role="menuitem" style={menuItemStyle()}>
+                    {ar ? 'نسخ' : 'Duplicate'}
+                  </button>
+                  <button type="button" role="menuitem" style={menuItemStyle()}>
+                    {ar ? 'أرشفة' : 'Archive'}
+                  </button>
+                </DropdownMenu>
+              }
+            />
+          ))}
+        </Stack>
+      </Card>
+
+      {/* --------------------------------------------------- Composer --- */}
+      <Card title={ar ? 'إنشاء منشور' : 'Create post'} testId="showcase-composer" padded={false}>
+        <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.md }}>
+          <PrototypeNotice ar={ar} testId="composer-prototype-notice" />
+          <PostComposer
+            testId="prototype-composer"
+            accounts={composerAccounts(locale)}
+            labels={composerLabels(locale)}
+            previewLabels={labels}
+            campaigns={composerCampaigns(locale)}
+            approvers={composerApprovers(locale)}
+            initialCaption={composerCaption(locale)}
+            captionDirection={ar ? 'rtl' : 'ltr'}
+            scheduledLabel={ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00'}
+            mediaAlt={ar ? 'عمل فني للمنشور' : 'Composed artwork'}
+            copilot={
+              <div
+                data-testid="composer-copilot"
+                style={{
+                  blockSize: '30rem',
+                  borderRadius: radiusTokens.xl,
+                  background: colorTokens.surface,
+                  boxShadow: shadowTokens.card,
+                  overflow: 'hidden',
+                }}
+              >
+                {copilotBody('composer')}
+              </div>
+            }
+          />
+        </div>
+      </Card>
+
+      {/* --------------------------------------------- Design Studio --- */}
+      <Card
+        title={ar ? 'استوديو التصميم' : 'Design Studio'}
+        testId="showcase-studio"
+        padded={false}
+      >
+        <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.md }}>
+          <PrototypeNotice ar={ar} testId="studio-prototype-banner" />
+          <DesignStudio
+            testId="prototype-studio"
+            labels={studioLabels(locale)}
+            documentName={studioDocumentName(locale)}
+          />
+        </div>
       </Card>
     </Stack>
   );

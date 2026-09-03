@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
 import { ADMIN_BASE_URL, LOCALES } from './apps';
+import { expectNoHorizontalOverflow } from './overflow';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
 
 /**
@@ -781,14 +782,7 @@ test.describe('layout never overflows horizontally', () => {
 
         for (const path of CONSOLE_PAGES) {
           await page.goto(`${ADMIN_BASE_URL}/${locale}${path}`);
-          const overflow = await page.evaluate(() => ({
-            scrollWidth: document.documentElement.scrollWidth,
-            clientWidth: document.documentElement.clientWidth,
-          }));
-          expect(
-            overflow.scrollWidth,
-            `horizontal overflow on ${locale}${path}: content ${overflow.scrollWidth}px in ${overflow.clientWidth}px viewport`,
-          ).toBeLessThanOrEqual(overflow.clientWidth + 1);
+          await expectNoHorizontalOverflow(page, `${locale}${path}`);
         }
       });
     }
@@ -798,11 +792,7 @@ test.describe('layout never overflows horizontally', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const locale of ['ar', 'en'] as const) {
       await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
-      const overflow = await page.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth,
-      }));
-      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+      await expectNoHorizontalOverflow(page, `${locale} sign-in`);
       await expect(page.getByTestId('heading')).toBeInViewport();
     }
   });

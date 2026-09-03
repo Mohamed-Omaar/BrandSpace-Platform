@@ -188,8 +188,8 @@ export function Tooltip({
           ...position,
           zIndex: zIndexTokens.tooltip,
           padding: `${spacingTokens.xs} ${spacingTokens.sm}`,
-          borderRadius: radiusTokens.md,
-          background: colorTokens.textPrimary,
+          borderRadius: radiusTokens.sm,
+          background: colorTokens.surfaceInk,
           color: colorTokens.textInverse,
           ...typographyTokens.caption,
           whiteSpace: 'nowrap',
@@ -247,7 +247,7 @@ export function DropdownMenu({
         data-testid={testId}
         onClick={() => setOpen((value) => !value)}
         style={{
-          ...buttonStyle('secondary', 'sm'),
+          ...buttonStyle('neutral', 'sm'),
           gap: spacingTokens.xs,
           maxInlineSize: '100%',
           minInlineSize: 0,
@@ -282,11 +282,12 @@ export function DropdownMenu({
             insetInlineEnd: align === 'end' ? 0 : undefined,
             insetInlineStart: align === 'start' ? 0 : undefined,
             zIndex: zIndexTokens.overlay,
-            minInlineSize: '12rem',
+            minInlineSize: '13rem',
             padding: spacingTokens.xs,
             background: colorTokens.surface,
-            border: `1px solid ${colorTokens.cardBorder}`,
-            borderRadius: radiusTokens.md,
+            // A soft floating panel: shadow and radius, no outline (D-54).
+            border: '1px solid transparent',
+            borderRadius: radiusTokens.lg,
             boxShadow: shadowTokens.overlay,
             display: 'grid',
             gap: spacingTokens['3xs'],
@@ -364,9 +365,9 @@ export function Dialog({
           maxBlockSize: '90vh',
           overflowY: 'auto',
           background: colorTokens.surface,
-          borderRadius: radiusTokens.lg,
+          borderRadius: radiusTokens['2xl'],
           boxShadow: shadowTokens.overlay,
-          padding: spacingTokens.lg,
+          padding: spacingTokens.xl,
         }}
       >
         <div
@@ -386,11 +387,13 @@ export function Dialog({
             aria-label={closeLabel}
             data-testid="dialog-close"
             onClick={onClose}
+            className="bs-pressable bs-control"
             style={{
-              ...buttonStyle('tertiary', 'sm'),
-              inlineSize: '2rem',
-              blockSize: '2rem',
+              ...buttonStyle('ghost', 'sm'),
+              inlineSize: '2.25rem',
+              blockSize: '2.25rem',
               paddingInline: 0,
+              borderRadius: radiusTokens.full,
               color: colorTokens.textSecondary,
             }}
           >
@@ -472,7 +475,7 @@ export function ConfirmDialog({
       testId={testId ?? 'confirm-dialog'}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} data-testid="confirm-cancel">
+          <Button variant="neutral" onClick={onClose} data-testid="confirm-cancel">
             {cancelLabel}
           </Button>
           <Button variant="danger" onClick={onConfirm} data-testid="confirm-accept">
@@ -539,11 +542,15 @@ export function Tabs({
         }
       }}
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         flexWrap: 'wrap',
-        gap: spacingTokens.xs,
-        borderBlockEnd: `1px solid ${colorTokens.cardBorder}`,
-        marginBlockEnd: spacingTokens.md,
+        gap: spacingTokens['3xs'],
+        // A soft segmented control rather than a ruled strip of underlines.
+        padding: spacingTokens['3xs'],
+        borderRadius: radiusTokens.lg,
+        background: colorTokens.surfaceMuted,
+        marginBlockEnd: spacingTokens.lg,
+        maxInlineSize: '100%',
       }}
     >
       {tabs.map((tab) => {
@@ -560,6 +567,7 @@ export function Tabs({
             aria-controls={`panel-${tab.id}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onSelect(tab.id)}
+            className="bs-pressable"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -567,15 +575,16 @@ export function Tabs({
               minBlockSize: '2.25rem',
               paddingInline: spacingTokens.md,
               border: 0,
-              background: 'transparent',
+              borderRadius: radiusTokens.md,
               cursor: 'pointer',
               fontFamily: 'inherit',
               ...typographyTokens.bodySm,
               fontWeight: 600,
-              color: selected ? colorTokens.brandPurple : colorTokens.textSecondary,
-              // The selected tab is marked by a purple underline AND by
-              // `aria-selected`, so the state is never carried by colour alone.
-              boxShadow: selected ? `inset 0 -2px 0 0 ${colorTokens.brandPurple}` : 'none',
+              // The selected tab is a raised white pill on the muted track AND
+              // carries `aria-selected`, so the state is never colour alone.
+              background: selected ? colorTokens.surface : 'transparent',
+              color: selected ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
+              boxShadow: selected ? shadowTokens.card : 'none',
               transition: `color ${motionTokens.fast} ${motionTokens.easeOut}`,
             }}
           >
@@ -585,7 +594,9 @@ export function Tabs({
                 style={{
                   paddingInline: spacingTokens.xs,
                   borderRadius: radiusTokens.full,
-                  background: selected ? colorTokens.brandPurpleTint : colorTokens.surfaceMuted,
+                  background: selected
+                    ? colorTokens.surfaceLavenderStrong
+                    : colorTokens.surfaceSunken,
                   color: selected ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
                   ...typographyTokens.caption,
                 }}

@@ -4,45 +4,49 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { AlertIcon, CalendarIcon, ImageIcon, PlayIcon } from './icons';
 import { StatusBadge, statusTone } from './data';
+import { Skeleton } from './feedback';
+import { AbstractMedia, Avatar, CarouselDots, MediaChip, MediaStateOverlay } from './media';
 import {
+  CAPTION_CLAMP,
+  PLATFORM_ACCENT,
   PLATFORM_ASPECTS,
+  PLATFORM_FORMATS,
+  defaultFormat,
+  resolveAspect,
   type PostAspect,
   type PreviewSurface,
+  type SocialFormat,
   type SocialPlatform,
   type SocialPostPreviewContent,
   type SocialPostPreviewLabels,
 } from './social-post-types';
-import { Skeleton } from './feedback';
 
 /**
- * `SocialPostPreview` — the VISUAL CONTRACT for Content Studio, Calendar,
+ * `SocialPostPreview` — the visual contract for Content Studio, Calendar,
  * Social Media and the AI Copilot.
  *
  * WHAT THIS IS: a faithful sense of how a composed post will read, so an
- * operator can judge a caption length, a crop and a schedule before anything is
- * published. WHAT IT IS NOT: a copy of any platform's interface, and not a
- * connection to one. There is no persistence, no OAuth, no API and no publish
- * button here — those arrive with the phase that owns them, and a preview that
- * implied otherwise would be exactly the "button that claims an unsupported
- * action" the brief forbids.
+ * operator can judge a caption length, a crop, a format and a schedule before
+ * anything is published. WHAT IT IS NOT: a copy of any platform's interface,
+ * and not a connection to one. No persistence, no OAuth, no platform API, no
+ * publish path, and it never fetches remote media.
  *
- * The chrome is deliberately BrandSpace-shaped: a platform is identified by its
- * name and its accent, and the frame is our own. Reproducing a platform's UI
- * pixel-for-pixel is both a trademark problem and a maintenance treadmill.
+ * SEVEN VARIANTS, BECAUSE A PLATFORM IS NOT ONE SURFACE. An Instagram feed
+ * post, a Story and a Reel differ in chrome, aspect ratio and action strip;
+ * modelling only "instagram" is what made the first attempt feel generic. The
+ * variants are feed (Instagram / Facebook / LinkedIn / X), story, reel and
+ * vertical video (TikTok).
+ *
+ * FAMILIAR, NOT COPIED. Each variant borrows the COMPOSITION a reader expects —
+ * where the avatar sits, whether the caption is above or below the media, that
+ * there is an action strip — and renders it in BrandSpace's own shapes,
+ * spacing and palette. Reproducing a platform's interface pixel-for-pixel is
+ * both a trademark problem and a maintenance treadmill.
  *
  * Bilingual by construction: the caption's direction follows the CONTENT, not
- * the interface, because an Arabic post previewed in an English interface must
+ * the interface, because an Arabic post previewed in an English console must
  * still read right-to-left.
  */
-
-/** Accent per platform, used for a 3px identity mark only — never for text. */
-const PLATFORM_ACCENT: Record<SocialPlatform, string> = {
-  instagram: '#C13584',
-  facebook: '#1877F2',
-  linkedin: '#0A66C2',
-  x: '#0F172A',
-  tiktok: '#111827',
-};
 
 const ASPECT_RATIO: Record<PostAspect, string> = {
   '1:1': '1 / 1',
@@ -51,36 +55,102 @@ const ASPECT_RATIO: Record<PostAspect, string> = {
   '9:16': '9 / 16',
 };
 
-/** Where a platform truncates a caption in its own feed, approximately. */
-const CAPTION_CLAMP: Record<SocialPlatform, number> = {
-  instagram: 125,
-  facebook: 250,
-  linkedin: 210,
-  x: 240,
-  tiktok: 100,
-};
+/** A tiny platform mark. A badge, never a theme. */
+function PlatformBadge({
+  platform,
+  labels,
+}: {
+  readonly platform: SocialPlatform;
+  readonly labels: SocialPostPreviewLabels;
+}) {
+  return (
+    <span
+      data-testid={`platform-badge-${platform}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: spacingTokens['3xs'],
+        paddingInline: spacingTokens.xs,
+        paddingBlock: spacingTokens['3xs'],
+        borderRadius: radiusTokens.full,
+        background: colorTokens.surfaceMuted,
+        ...typographyTokens.caption,
+        fontWeight: 600,
+        color: colorTokens.textSecondary,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          inlineSize: '0.5rem',
+          blockSize: '0.5rem',
+          borderRadius: radiusTokens.full,
+          background: PLATFORM_ACCENT[platform],
+        }}
+      />
+      {labels.platformNames[platform]}
+    </span>
+  );
+}
+
+/** The decorative action strip every social surface has. */
+function ActionStrip({
+  variant,
+  labels,
+}: {
+  readonly variant: 'feed' | 'vertical';
+  readonly labels: SocialPostPreviewLabels;
+}) {
+  const glyphs = variant === 'feed' ? ['♡', '💬', '↗'] : ['♡', '💬', '↗', '⋯'];
+  return (
+    <div
+      aria-label={labels.actionsLabel}
+      role="group"
+      data-testid="preview-actions"
+      style={{
+        display: 'flex',
+        gap: variant === 'feed' ? spacingTokens.md : spacingTokens.sm,
+        flexDirection: variant === 'feed' ? 'row' : 'column',
+        alignItems: 'center',
+        color: variant === 'feed' ? colorTokens.textSecondary : colorTokens.textInverse,
+        fontSize: '1rem',
+        lineHeight: 1,
+      }}
+    >
+      {glyphs.map((glyph) => (
+        <span key={glyph} aria-hidden="true" style={{ opacity: 0.85 }}>
+          {glyph}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function MediaFrame({
   content,
   labels,
-  surface,
+  aspect,
+  radius = '0',
+  children,
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
-  readonly surface: PreviewSurface;
+  readonly aspect: PostAspect;
+  readonly radius?: string;
+  readonly children?: ReactNode;
 }) {
   const media = content.media ?? { kind: 'missing' as const };
   const frame: CSSProperties = {
     position: 'relative',
-    aspectRatio: ASPECT_RATIO[content.aspect],
-    // A 9:16 preview must not become taller than the screen on a phone.
-    maxBlockSize: surface === 'mobile' ? '26rem' : '30rem',
+    aspectRatio: ASPECT_RATIO[aspect],
     inlineSize: '100%',
+    borderRadius: radius,
+    overflow: 'hidden',
     background: colorTokens.surfaceSunken,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   };
 
   if (media.kind === 'loading') {
@@ -93,62 +163,433 @@ function MediaFrame({
 
   if (media.kind === 'missing') {
     return (
-      <div style={frame} data-testid="preview-media-missing">
+      <div
+        style={{ ...frame, background: colorTokens.surfaceLavender }}
+        data-testid="preview-media-missing"
+      >
         <div
           style={{
             display: 'grid',
             justifyItems: 'center',
             gap: spacingTokens.xs,
-            color: colorTokens.textSecondary,
+            color: colorTokens.brandPurplePressed,
             padding: spacingTokens.md,
             textAlign: 'center',
           }}
         >
           <ImageIcon size={28} />
-          <span style={{ ...typographyTokens.caption }}>{labels.missingMedia}</span>
+          <span style={{ ...typographyTokens.caption, fontWeight: 600 }}>
+            {labels.missingMedia}
+          </span>
         </div>
+        {children}
       </div>
     );
   }
 
-  // A placeholder stands in for the asset: this component NEVER fetches remote
-  // media, so a showcase cannot silently depend on the network. The alt text is
-  // still surfaced, because writing it is part of composing a post.
+  const carouselCount = media.kind === 'image' ? (media.count ?? 1) : 1;
+
   return (
     <div style={frame} data-testid="preview-media">
-      <div
-        role="img"
-        aria-label={media.alt}
+      <AbstractMedia seed={media.seed ?? 0} alt={media.alt} />
+      {media.kind === 'video' ? (
+        <>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              inlineSize: '3rem',
+              blockSize: '3rem',
+              borderRadius: radiusTokens.full,
+              background: 'rgba(255, 255, 255, 0.9)',
+              color: colorTokens.surfaceInk,
+            }}
+          >
+            <PlayIcon size={26} />
+          </span>
+          <MediaChip placement="start-end" testId="preview-video-badge">
+            {media.durationLabel ?? labels.videoBadge}
+          </MediaChip>
+        </>
+      ) : null}
+      {carouselCount > 1 ? (
+        <>
+          <MediaChip placement="start-end" testId="preview-carousel-badge">
+            {labels.carouselLabel(carouselCount)}
+          </MediaChip>
+          <CarouselDots count={carouselCount} />
+        </>
+      ) : null}
+      {content.status === 'DRAFT' ? (
+        <MediaStateOverlay label={labels.statusLabels.DRAFT} testId="preview-draft-overlay" />
+      ) : null}
+      {content.status === 'FAILED' ? (
+        <MediaStateOverlay
+          label={labels.statusLabels.FAILED}
+          tone="danger"
+          testId="preview-failed-overlay"
+        />
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+function Caption({
+  content,
+  labels,
+  expanded,
+  onToggle,
+  tone = 'light',
+}: {
+  readonly content: SocialPostPreviewContent;
+  readonly labels: SocialPostPreviewLabels;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+  readonly tone?: 'light' | 'onMedia';
+}) {
+  const clamp = CAPTION_CLAMP[content.platform];
+  const isLong = content.caption.length > clamp;
+  const shown =
+    expanded || !isLong ? content.caption : `${content.caption.slice(0, clamp).trimEnd()}…`;
+  const textColor = tone === 'onMedia' ? colorTokens.textInverse : colorTokens.textPrimary;
+
+  return (
+    <div style={{ display: 'grid', gap: spacingTokens.xs, minInlineSize: 0 }}>
+      <p
+        data-testid="preview-caption"
+        // The caption's direction follows the CONTENT. An Arabic caption in an
+        // English interface still reads right-to-left, and vice versa —
+        // otherwise the preview misrepresents what will be published.
+        dir={content.captionDirection}
         style={{
-          inlineSize: '100%',
-          blockSize: '100%',
-          display: 'grid',
-          placeItems: 'center',
-          background: `linear-gradient(135deg, ${colorTokens.brandPurpleTint}, ${colorTokens.surfaceMuted})`,
-          color: colorTokens.textSecondary,
+          margin: 0,
+          ...typographyTokens.bodySm,
+          color: textColor,
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
         }}
       >
-        {media.kind === 'video' ? <PlayIcon size={34} /> : <ImageIcon size={30} />}
-      </div>
-      {media.kind === 'video' ? (
-        <span
-          data-testid="preview-video-badge"
+        <strong style={{ fontWeight: 700 }}>{content.account.handle}</strong> {shown}
+      </p>
+      {content.hashtags && content.hashtags.length > 0 ? (
+        <p
+          data-testid="preview-hashtags"
+          dir={content.captionDirection}
           style={{
-            position: 'absolute',
-            insetBlockStart: spacingTokens.sm,
-            insetInlineEnd: spacingTokens.sm,
-            paddingInline: spacingTokens.xs,
-            paddingBlock: spacingTokens['3xs'],
-            borderRadius: radiusTokens.sm,
-            background: 'rgba(15, 23, 42, 0.78)',
-            color: colorTokens.textInverse,
+            margin: 0,
+            ...typographyTokens.bodySm,
+            color: tone === 'onMedia' ? colorTokens.textInverse : colorTokens.brandPurple,
+            opacity: tone === 'onMedia' ? 0.9 : 1,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {content.hashtags.map((tag) => `#${tag}`).join(' ')}
+        </p>
+      ) : null}
+      {isLong ? (
+        <button
+          type="button"
+          data-testid="preview-caption-toggle"
+          aria-expanded={expanded}
+          onClick={onToggle}
+          style={{
+            justifySelf: 'start',
+            background: 'transparent',
+            border: 0,
+            padding: 0,
+            minBlockSize: '24px',
+            color: tone === 'onMedia' ? colorTokens.textInverse : colorTokens.brandPurple,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
             ...typographyTokens.caption,
             fontWeight: 600,
           }}
         >
-          {media.durationLabel ?? labels.videoBadge}
+          {expanded ? labels.showLess : labels.showMore}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusRow({
+  content,
+  labels,
+}: {
+  readonly content: SocialPostPreviewContent;
+  readonly labels: SocialPostPreviewLabels;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: spacingTokens.xs,
+        paddingBlock: spacingTokens.sm,
+        paddingInline: spacingTokens.md,
+        borderBlockStart: `1px solid ${colorTokens.hairline}`,
+        ...typographyTokens.caption,
+        color: colorTokens.textSecondary,
+      }}
+    >
+      <StatusBadge
+        label={labels.statusLabels[content.status]}
+        tone={statusTone(content.status)}
+        dot
+        testId={`preview-status-${content.status}`}
+      />
+      {content.approval && content.approval !== 'NOT_REQUIRED' ? (
+        <StatusBadge
+          label={labels.approvalLabels[content.approval]}
+          tone={
+            content.approval === 'APPROVED'
+              ? 'success'
+              : content.approval === 'CHANGES_REQUESTED'
+                ? 'danger'
+                : 'accent'
+          }
+          testId={`preview-approval-${content.approval}`}
+        />
+      ) : null}
+      {content.scheduledLabel ? (
+        <span
+          data-testid="preview-schedule"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: spacingTokens['3xs'] }}
+        >
+          <CalendarIcon size={14} />
+          {content.scheduledLabel}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The FEED variant: Instagram, Facebook, LinkedIn and X.
+ *
+ * Header, media, action strip, caption. The three differ in how much text sits
+ * above the media — X and LinkedIn lead with it, Instagram follows it — which
+ * is the one composition difference a reviewer actually notices.
+ */
+function FeedPreview({
+  content,
+  labels,
+  aspect,
+  surface,
+  expanded,
+  onToggle,
+}: {
+  readonly content: SocialPostPreviewContent;
+  readonly labels: SocialPostPreviewLabels;
+  readonly aspect: PostAspect;
+  readonly surface: PreviewSurface;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+}) {
+  const captionLeads = content.platform === 'x' || content.platform === 'linkedin';
+  const caption = (
+    <div
+      style={{
+        padding: spacingTokens.md,
+        paddingBlockEnd: captionLeads ? spacingTokens.sm : spacingTokens.md,
+      }}
+    >
+      <Caption content={content} labels={labels} expanded={expanded} onToggle={onToggle} />
+    </div>
+  );
+
+  return (
+    <>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: spacingTokens.sm,
+          padding: spacingTokens.md,
+          paddingBlockEnd: spacingTokens.sm,
+        }}
+      >
+        <Avatar
+          initials={content.account.initials}
+          seed={content.account.avatarSeed ?? 0}
+          size={surface === 'desktop' ? '2.5rem' : '2.25rem'}
+        />
+        <span style={{ display: 'grid', minInlineSize: 0 }}>
+          <span
+            style={{
+              ...typographyTokens.label,
+              color: colorTokens.textPrimary,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {content.account.displayName}
+          </span>
+          <span
+            style={{
+              ...typographyTokens.caption,
+              color: colorTokens.textMuted,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {content.account.handle}
+          </span>
+        </span>
+        <span style={{ marginInlineStart: 'auto', flexShrink: 0 }}>
+          <PlatformBadge platform={content.platform} labels={labels} />
+        </span>
+      </header>
+
+      {captionLeads ? caption : null}
+      <MediaFrame content={content} labels={labels} aspect={aspect} />
+      <div style={{ padding: spacingTokens.md, paddingBlockEnd: 0 }}>
+        <ActionStrip variant="feed" labels={labels} />
+      </div>
+      {captionLeads ? null : caption}
+      <StatusRow content={content} labels={labels} />
+    </>
+  );
+}
+
+/**
+ * The VERTICAL variant: Story, Reel and TikTok.
+ *
+ * Full-bleed media with the identity and caption laid OVER it and the actions
+ * down the trailing edge — the composition every vertical surface uses, and the
+ * one a feed card cannot express.
+ */
+function VerticalPreview({
+  content,
+  labels,
+  format,
+  labelsForFormat,
+  expanded,
+  onToggle,
+}: {
+  readonly content: SocialPostPreviewContent;
+  readonly labels: SocialPostPreviewLabels;
+  readonly format: SocialFormat;
+  readonly labelsForFormat: string;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <MediaFrame content={content} labels={labels} aspect="9:16" radius={radiusTokens.xl}>
+        {/* A story's progress bar: the one piece of chrome that says "story"
+            rather than "tall post". */}
+        {format === 'story' ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              insetBlockStart: spacingTokens.sm,
+              insetInline: spacingTokens.sm,
+              display: 'flex',
+              gap: spacingTokens['3xs'],
+            }}
+          >
+            {[0, 1, 2].map((index) => (
+              <span
+                key={index}
+                style={{
+                  flex: 1,
+                  blockSize: '2px',
+                  borderRadius: radiusTokens.full,
+                  background: colorTokens.textInverse,
+                  opacity: index === 0 ? 1 : 0.4,
+                }}
+              />
+            ))}
+          </span>
+        ) : null}
+
+        <div
+          style={{
+            position: 'absolute',
+            insetBlockStart: format === 'story' ? '1.75rem' : spacingTokens.sm,
+            insetInline: spacingTokens.sm,
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacingTokens.sm,
+          }}
+        >
+          <Avatar
+            initials={content.account.initials}
+            seed={content.account.avatarSeed ?? 0}
+            size="1.75rem"
+          />
+          <span
+            style={{
+              ...typographyTokens.caption,
+              fontWeight: 700,
+              color: colorTokens.textInverse,
+              textShadow: '0 1px 3px rgba(0,0,0,0.45)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {content.account.displayName}
+          </span>
+          <span
+            style={{
+              marginInlineStart: 'auto',
+              paddingInline: spacingTokens.xs,
+              paddingBlock: spacingTokens['3xs'],
+              borderRadius: radiusTokens.full,
+              background: 'rgba(23, 21, 40, 0.55)',
+              color: colorTokens.textInverse,
+              ...typographyTokens.caption,
+              fontWeight: 600,
+            }}
+          >
+            {labelsForFormat}
+          </span>
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            insetInlineEnd: spacingTokens.sm,
+            insetBlockEnd: '25%',
+            textShadow: '0 1px 3px rgba(0,0,0,0.45)',
+          }}
+        >
+          <ActionStrip variant="vertical" labels={labels} />
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            insetInline: spacingTokens.sm,
+            insetBlockEnd: spacingTokens.sm,
+            paddingInlineEnd: '2.5rem',
+            // A scrim so the caption stays legible over any artwork.
+            background:
+              'linear-gradient(to top, rgba(23, 21, 40, 0.78) 0%, rgba(23, 21, 40, 0) 100%)',
+            borderRadius: radiusTokens.md,
+            padding: spacingTokens.sm,
+          }}
+        >
+          <Caption
+            content={content}
+            labels={labels}
+            expanded={expanded}
+            onToggle={onToggle}
+            tone="onMedia"
+          />
+        </div>
+      </MediaFrame>
+      <StatusRow content={content} labels={labels} />
     </div>
   );
 }
@@ -165,170 +606,58 @@ export function SocialPostPreview({
   readonly testId?: string | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const clamp = CAPTION_CLAMP[content.platform];
-  const isLong = content.caption.length > clamp;
-  const shown =
-    expanded || !isLong ? content.caption : `${content.caption.slice(0, clamp).trimEnd()}…`;
+  const format = content.format ?? defaultFormat(content.platform);
+  const aspect = resolveAspect(content.platform, format, content.aspect);
+  const vertical = format === 'story' || format === 'reel' || format === 'video';
 
   return (
     <article
       data-testid={testId ?? 'social-post-preview'}
       data-platform={content.platform}
-      data-aspect={content.aspect}
+      data-format={format}
+      data-aspect={aspect}
       data-status={content.status}
       style={{
         inlineSize: '100%',
-        maxInlineSize: surface === 'mobile' ? '20rem' : '30rem',
+        maxInlineSize: vertical ? '17rem' : surface === 'mobile' ? '21rem' : '30rem',
         background: colorTokens.surface,
-        border: `1px solid ${colorTokens.cardBorder}`,
-        borderRadius: radiusTokens.lg,
+        // Borderless: radius and a soft shadow, like every other card (D-54).
+        border: '1px solid transparent',
+        borderRadius: radiusTokens.xl,
         boxShadow: shadowTokens.card,
         overflow: 'hidden',
-        display: 'grid',
-        gridTemplateRows: 'auto auto 1fr auto',
       }}
     >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: spacingTokens.sm,
-          padding: spacingTokens.sm,
-          paddingInline: spacingTokens.md,
-          borderBlockEnd: `1px solid ${colorTokens.cardBorder}`,
-          // The platform identity is a 3px mark, not a themed card.
-          borderInlineStart: `3px solid ${PLATFORM_ACCENT[content.platform]}`,
-        }}
-      >
-        <span
-          aria-hidden="true"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            inlineSize: '2rem',
-            blockSize: '2rem',
-            flexShrink: 0,
-            borderRadius: radiusTokens.full,
-            background: colorTokens.brandPurpleTint,
-            color: colorTokens.brandPurplePressed,
-            ...typographyTokens.caption,
-            fontWeight: 700,
-          }}
-        >
-          {content.account.initials}
-        </span>
-        <span style={{ display: 'grid', minInlineSize: 0 }}>
-          <span
-            style={{
-              ...typographyTokens.label,
-              color: colorTokens.textPrimary,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {content.account.displayName}
-          </span>
-          <span
-            style={{
-              ...typographyTokens.caption,
-              color: colorTokens.textSecondary,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {content.account.handle} · {labels.platformNames[content.platform]}
-          </span>
-        </span>
-        <span style={{ marginInlineStart: 'auto', flexShrink: 0 }}>
-          <StatusBadge
-            label={labels.statusLabels[content.status]}
-            tone={statusTone(content.status)}
-            testId={`preview-status-${content.status}`}
-          />
-        </span>
-      </header>
-
-      <MediaFrame content={content} labels={labels} surface={surface} />
-
-      <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.sm }}>
-        <p
-          data-testid="preview-caption"
-          // The caption's direction follows the CONTENT. An Arabic caption in an
-          // English interface still reads right-to-left, and vice versa —
-          // otherwise the preview misrepresents what will be published.
-          dir={content.captionDirection}
-          style={{
-            margin: 0,
-            ...typographyTokens.bodySm,
-            color: colorTokens.textPrimary,
-            whiteSpace: 'pre-wrap',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {shown}
-        </p>
-        {isLong ? (
-          <button
-            type="button"
-            data-testid="preview-caption-toggle"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((value) => !value)}
-            style={{
-              justifySelf: 'start',
-              background: 'transparent',
-              border: 0,
-              padding: 0,
-              minBlockSize: '24px',
-              color: colorTokens.brandPurple,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              ...typographyTokens.caption,
-              fontWeight: 600,
-            }}
-          >
-            {expanded ? labels.showLess : labels.showMore}
-          </button>
-        ) : null}
-      </div>
-
-      <footer
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: spacingTokens.sm,
-          padding: spacingTokens.sm,
-          paddingInline: spacingTokens.md,
-          borderBlockStart: `1px solid ${colorTokens.cardBorder}`,
-          background: colorTokens.surfaceMuted,
-          ...typographyTokens.caption,
-          color: colorTokens.textSecondary,
-        }}
-      >
-        {content.scheduledLabel ? (
-          <span
-            data-testid="preview-schedule"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: spacingTokens.xs }}
-          >
-            <CalendarIcon size={14} />
-            {content.scheduledLabel}
-          </span>
-        ) : null}
-        <span style={{ marginInlineStart: 'auto' }}>{labels.aspectLabel(content.aspect)}</span>
-      </footer>
+      {vertical ? (
+        <VerticalPreview
+          content={content}
+          labels={labels}
+          format={format}
+          labelsForFormat={labels.formatNames[format]}
+          expanded={expanded}
+          onToggle={() => setExpanded((value) => !value)}
+        />
+      ) : (
+        <FeedPreview
+          content={content}
+          labels={labels}
+          aspect={aspect}
+          surface={surface}
+          expanded={expanded}
+          onToggle={() => setExpanded((value) => !value)}
+        />
+      )}
     </article>
   );
 }
 
 /**
- * A preview with a platform and aspect switcher around it.
+ * A preview with platform, format and aspect switchers around it.
  *
- * The aspect list is derived from `PLATFORM_ASPECTS`, so choosing TikTok cannot
- * leave a landscape ratio selected — the control never offers a combination the
- * platform will not accept.
+ * The option lists are derived from the platform tables, so choosing TikTok
+ * cannot leave a landscape ratio selected and choosing "Story" cannot leave a
+ * square one — the control never offers a combination the platform will not
+ * accept.
  */
 export function SocialPostPreviewer({
   content,
@@ -344,28 +673,39 @@ export function SocialPostPreviewer({
   readonly notice?: ReactNode;
 }) {
   const [platform, setPlatform] = useState<SocialPlatform>(content.platform);
-  const allowed = PLATFORM_ASPECTS[platform];
-  const [aspect, setAspect] = useState<PostAspect>(
-    allowed.includes(content.aspect) ? content.aspect : allowed[0]!,
+  const [format, setFormat] = useState<SocialFormat>(
+    content.format ?? defaultFormat(content.platform),
   );
+  const [aspect, setAspect] = useState<PostAspect>(content.aspect);
 
   function choosePlatform(next: SocialPlatform) {
     setPlatform(next);
-    const options = PLATFORM_ASPECTS[next];
-    if (!options.includes(aspect)) setAspect(options[0]!);
+    const formats = PLATFORM_FORMATS[next];
+    const nextFormat = formats.includes(format) ? format : (formats[0] ?? 'feed');
+    setFormat(nextFormat);
+    setAspect(resolveAspect(next, nextFormat, aspect));
   }
 
+  function chooseFormat(next: SocialFormat) {
+    setFormat(next);
+    setAspect(resolveAspect(platform, next, aspect));
+  }
+
+  const aspectsForFormat =
+    format === 'feed' ? PLATFORM_ASPECTS[platform] : [resolveAspect(platform, format, aspect)];
+
   const chipStyle = (selected: boolean): CSSProperties => ({
-    minBlockSize: '2rem',
-    paddingInline: spacingTokens.sm,
+    minBlockSize: '2.25rem',
+    paddingInline: spacingTokens.md,
     borderRadius: radiusTokens.full,
     cursor: 'pointer',
     fontFamily: 'inherit',
     ...typographyTokens.caption,
     fontWeight: 600,
-    background: selected ? colorTokens.brandPurpleTint : colorTokens.surface,
-    color: selected ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
-    border: `1px solid ${selected ? colorTokens.brandPurpleBorder : colorTokens.borderStrong}`,
+    // Filled chips, no outlines (D-54).
+    background: selected ? colorTokens.brandPurple : colorTokens.controlSurface,
+    color: selected ? colorTokens.brandPurpleInk : colorTokens.textSecondary,
+    border: '1px solid transparent',
   });
 
   return (
@@ -379,6 +719,7 @@ export function SocialPostPreviewer({
           <button
             key={option}
             type="button"
+            className="bs-pressable"
             data-testid={`preview-platform-${option}`}
             aria-pressed={option === platform}
             onClick={() => choosePlatform(option)}
@@ -388,15 +729,34 @@ export function SocialPostPreviewer({
           </button>
         ))}
       </div>
+
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-        {allowed.map((option) => (
+        {PLATFORM_FORMATS[platform].map((option) => (
           <button
             key={option}
             type="button"
+            className="bs-pressable"
+            data-testid={`preview-format-${option}`}
+            aria-pressed={option === format}
+            onClick={() => chooseFormat(option)}
+            style={chipStyle(option === format)}
+          >
+            {labels.formatNames[option]}
+          </button>
+        ))}
+        {aspectsForFormat.map((option) => (
+          <button
+            key={option}
+            type="button"
+            className="bs-pressable"
             data-testid={`preview-aspect-${option}`}
             aria-pressed={option === aspect}
             onClick={() => setAspect(option)}
-            style={chipStyle(option === aspect)}
+            disabled={format !== 'feed'}
+            style={{
+              ...chipStyle(option === aspect),
+              ...(format !== 'feed' ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
+            }}
           >
             {labels.aspectLabel(option)}
           </button>
@@ -404,7 +764,7 @@ export function SocialPostPreviewer({
       </div>
 
       <SocialPostPreview
-        content={{ ...content, platform, aspect }}
+        content={{ ...content, platform, format, aspect }}
         labels={labels}
         surface={surface}
       />

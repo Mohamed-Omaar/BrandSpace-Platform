@@ -151,7 +151,7 @@ export function WorkspaceShell({
           />
           <form action={signOutAction}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" data-testid="sign-out" style={buttonStyle('secondary', 'sm')}>
+            <button type="submit" data-testid="sign-out" style={buttonStyle('neutral', 'sm')}>
               {t('nav.signOut')}
             </button>
           </form>
@@ -202,7 +202,7 @@ export const customerTableStyle = (): CSSProperties => ({
 export const customerThStyle = thStyle;
 export const customerTdStyle = tdStyle;
 export const customerButtonStyle = (): CSSProperties => buttonStyle('primary');
-export const customerSecondaryButtonStyle = (): CSSProperties => buttonStyle('secondary');
+export const customerSecondaryButtonStyle = (): CSSProperties => buttonStyle('neutral');
 export const customerInputStyle = (): CSSProperties => ({
   ...inputStyle(),
   maxInlineSize: '24rem',

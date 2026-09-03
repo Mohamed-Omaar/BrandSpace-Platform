@@ -218,7 +218,7 @@ describe('the customer role matrix matches the Blueprint', () => {
     }
   });
 
-  it('the Client Viewer sees the workspace and nothing else', () => {
+  it('the read-only Viewer sees the workspace and nothing else', () => {
     expect(grants('client_viewer')).toEqual(['workspace.read']);
   });
 });

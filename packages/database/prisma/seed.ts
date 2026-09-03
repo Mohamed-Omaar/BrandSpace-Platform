@@ -186,11 +186,16 @@ async function main(): Promise<void> {
 
     const tenants = [
       {
-        slug: 'acme-agency',
-        name: 'Acme Agency',
-        type: 'AGENCY' as const,
-        userEmail: 'amal@acme.local',
-        userName: 'Amal (Acme)',
+        // A brand, not an agency. BrandSpace serves founders, teams, creators
+        // and agencies alike, and seeding the stock "Acme Agency" placeholder
+        // made every screenshot read as an agency tool for other people's
+        // clients. The WorkspaceType enum still carries AGENCY for the
+        // customers who are one; the SAMPLE tenant is simply not one.
+        slug: 'sample-brand',
+        name: 'Sample Brand',
+        type: 'STARTUP' as const,
+        userEmail: 'amal@samplebrand.local',
+        userName: 'Amal (Sample Brand)',
         locale: 'AR' as const,
       },
       {
@@ -382,7 +387,7 @@ async function main(): Promise<void> {
 
     console.log('\n✔ seed complete');
     console.log('  Platform Owner : owner@brandspace.local');
-    console.log('  Workspace A    : acme-agency  / amal@acme.local');
+    console.log('  Workspace A    : sample-brand / amal@samplebrand.local');
     console.log('  Workspace B    : north-star   / noor@northstar.local');
     console.log(
       ownerPassword === null

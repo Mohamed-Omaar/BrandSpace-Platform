@@ -39,6 +39,27 @@ function readCode(relative: string): string {
 }
 
 /**
+ * Every `.ts`/`.tsx` file under a directory, as repository-relative paths.
+ *
+ * Walks the real source tree rather than `git ls-files`, so a file added and
+ * not yet committed is still covered by the scans that use it.
+ */
+function collectSourceFiles(directory: string): string[] {
+  const absolute = path.join(REPO_ROOT, directory);
+  if (!existsSync(absolute)) return [];
+  const found: string[] = [];
+  for (const entry of readdirSync(absolute)) {
+    const full = path.join(absolute, entry);
+    if (statSync(full).isDirectory()) {
+      found.push(...collectSourceFiles(path.join(directory, entry)));
+    } else if (/\.tsx?$/.test(entry)) {
+      found.push(path.join(directory, entry));
+    }
+  }
+  return found;
+}
+
+/**
  * The design system's structural promises.
  *
  * These are the rules a reviewer would otherwise have to re-check by eye on
@@ -130,22 +151,7 @@ describe('applications hold no colour literals', () => {
    */
   const SOURCE_DIRECTORIES = ['apps/dashboard/src', 'apps/admin/src', 'apps/web/src'];
 
-  function walk(directory: string): string[] {
-    const absolute = path.join(REPO_ROOT, directory);
-    if (!existsSync(absolute)) return [];
-    const found: string[] = [];
-    for (const entry of readdirSync(absolute)) {
-      const full = path.join(absolute, entry);
-      if (statSync(full).isDirectory()) {
-        found.push(...walk(path.join(directory, entry)));
-      } else if (/\.tsx?$/.test(entry)) {
-        found.push(path.join(directory, entry));
-      }
-    }
-    return found;
-  }
-
-  const files = SOURCE_DIRECTORIES.flatMap(walk);
+  const files = SOURCE_DIRECTORIES.flatMap(collectSourceFiles);
 
   it('scans a meaningful number of files, so a passing result is not vacuous', () => {
     expect(files.length).toBeGreaterThan(20);
@@ -186,22 +192,128 @@ describe('RTL correctness is structural, not a second stylesheet', () => {
 
   it('the shell and the primitives use logical properties', () => {
     expect(shell).toContain('insetInlineStart');
-    expect(shell).toContain('borderInlineStart');
+    // A logical BORDER side, whichever side the current design uses. The
+    // borderless direction moved the shell's one visible edge from the
+    // sidebar's start to the drawer's end, so pinning the assertion to a
+    // specific side tested the design, not the property model.
+    expect(shell).toMatch(/border(Inline|Block)(Start|End)/);
     expect(primitives).toContain('paddingInline');
   });
 
+  /*
+   * WIDENED, not narrowed. The scan now covers every module in the design
+   * system rather than four of them, because the prototype screens added in
+   * this revision (calendar, composer, Design Studio, post cards, media) lay
+   * out just as much as the originals and are just as capable of pinning a
+   * margin to the left.
+   */
   it('uses no physical left/right layout property', () => {
-    for (const [name, source] of [
-      ['app-shell', shell],
-      ['primitives', primitives],
-      ['surfaces', read('packages/ui/src/surfaces.tsx')],
-      ['data', read('packages/ui/src/data.tsx')],
-    ] as const) {
+    const modules = readdirSync(path.join(REPO_ROOT, 'packages/ui/src'))
+      .filter((file) => file.endsWith('.tsx') || file.endsWith('.ts'))
+      // `readCode`, because this very test file's neighbours document the
+      // physical properties they avoid, and a comment is not a layout.
+      .map((file) => [file, readCode(`packages/ui/src/${file}`)] as const);
+
+    expect(modules.length, 'the scan found no modules to check').toBeGreaterThan(15);
+
+    for (const [name, source] of modules) {
       // `marginLeft`, `paddingRight`, `borderLeft`, `left:`/`right:` as offsets.
       const physical = source.match(
         /\b(marginLeft|marginRight|paddingLeft|paddingRight|borderLeft|borderRight|textAlign:\s*'(left|right)')\b/,
       );
       expect(physical, `${name} uses a physical property: ${physical?.[0]}`).toBeNull();
+    }
+  });
+});
+
+/*
+ * F-25, closed structurally.
+ *
+ * THE HAZARD. Everything exported from a module whose first line is
+ * `'use client'` becomes a CLIENT REFERENCE. A server component that imports a
+ * plain lookup table or a style helper from such a module does not get the
+ * table — it gets a proxy, and either the build fails or the whole component
+ * tree behind that module is dragged into the browser bundle. This has already
+ * happened twice in this repository, which is why `menu-style.ts`,
+ * `social-post-types.ts`, `copilot-types.ts` and `studio-presets.ts` exist as
+ * neutral modules beside their components.
+ *
+ * THE RULE. A `'use client'` module may export React components (PascalCase),
+ * hooks (`use…`), and types — which are erased at compile time and cost
+ * nothing. It may NOT export a runtime value that is neither: a `const` table,
+ * a `let`, or a lowercase helper function. Those belong in a neutral module,
+ * where both sides of the boundary can read them.
+ *
+ * This is a structural test rather than an ESLint rule because the property is
+ * about a module's FIRST LINE and its export names together — cheap to check
+ * by reading, awkward to express as a lint rule, and impossible to forget when
+ * it fails the suite.
+ */
+describe('a client module exports no value a server component would want', () => {
+  const uiDir = path.join(REPO_ROOT, 'packages/ui/src');
+
+  /** Every export name a module declares, with the keyword that declared it. */
+  function exportsOf(source: string): readonly { kind: string; name: string }[] {
+    const found: { kind: string; name: string }[] = [];
+    const pattern =
+      /^export\s+(async\s+)?(const|let|var|function|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/gm;
+    for (const match of source.matchAll(pattern)) {
+      found.push({ kind: match[2] ?? '', name: match[3] ?? '' });
+    }
+    return found;
+  }
+
+  const clientModules = readdirSync(uiDir)
+    .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+    .map((file) => [file, read(`packages/ui/src/${file}`)] as const)
+    .filter(([, source]) => source.trimStart().startsWith("'use client'"));
+
+  it('finds the client modules, so the check is not vacuous', () => {
+    expect(clientModules.length).toBeGreaterThan(3);
+  });
+
+  it.each(clientModules.map(([file]) => file))(
+    '%s exports only components, hooks and types',
+    (file) => {
+      const source = read(`packages/ui/src/${file}`);
+      const offenders = exportsOf(source).filter(({ kind, name }) => {
+        if (kind === 'type' || kind === 'interface') return false; // erased
+        if (/^use[A-Z]/.test(name)) return false; // a hook
+        if (/^[A-Z]/.test(name) && (kind === 'function' || kind === 'class')) return false;
+        return true;
+      });
+
+      expect(
+        offenders.map((o) => `${o.kind} ${o.name}`),
+        `${file} is a 'use client' module: move these into a neutral module beside it`,
+      ).toEqual([]);
+    },
+  );
+
+  it('detects a planted violation, so the rule is known to work', () => {
+    const planted = "'use client';\nexport const LOOKUP = { a: 1 };\n";
+    const offenders = exportsOf(planted).filter(
+      ({ kind, name }) =>
+        !(kind === 'type' || kind === 'interface') &&
+        !/^use[A-Z]/.test(name) &&
+        !(/^[A-Z]/.test(name) && (kind === 'function' || kind === 'class')),
+    );
+    expect(offenders).toEqual([{ kind: 'const', name: 'LOOKUP' }]);
+  });
+
+  it('keeps the neutral tables OUT of the client modules that use them', () => {
+    // The four neutral modules that exist precisely because of this rule.
+    for (const neutral of [
+      'menu-style.ts',
+      'social-post-types.ts',
+      'copilot-types.ts',
+      'studio-presets.ts',
+    ]) {
+      const source = read(`packages/ui/src/${neutral}`);
+      expect(
+        source.trimStart().startsWith("'use client'"),
+        `${neutral} became a client module`,
+      ).toBe(false);
     }
   });
 });
@@ -329,6 +441,58 @@ describe('the design showcase cannot reach production', () => {
       expect(source, `${file} imports the customer context`).not.toContain('customer-context');
       expect(source, `${file} imports a database client`).not.toContain('@brandspace/database');
       expect(source, `${file} imports auth`).not.toContain('@brandspace/auth');
+    }
+  });
+
+  /*
+   * §19, enforced.
+   *
+   * The prototype screens (features hub, calendar, posts library, composer,
+   * Design Studio) show flows the backend cannot yet perform. They are safe to
+   * have only while they are reachable ONLY through the gated showcase. The
+   * moment one of them is imported by a production route, the gate stops being
+   * the thing that decides whether a customer can see a button that does
+   * nothing.
+   *
+   * So: every prototype component may appear in exactly one file in either
+   * application, and that file is the showcase's own client component.
+   */
+  it('renders the prototype screens from the gated showcase and nowhere else', () => {
+    const prototypes = [
+      'ContentCalendar',
+      'PostComposer',
+      'DesignStudio',
+      'PostGridCard',
+      'PostListRow',
+      'FeatureCard',
+    ];
+    const showcase = 'apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx';
+
+    const appFiles = [
+      ...collectSourceFiles('apps/dashboard/src'),
+      ...collectSourceFiles('apps/admin/src'),
+    ];
+    expect(appFiles.length, 'no application files were scanned').toBeGreaterThan(20);
+
+    for (const component of prototypes) {
+      const users = appFiles.filter((file) =>
+        new RegExp(`\\b${component}\\b`).test(readCode(file)),
+      );
+      expect(users, `${component} is used outside the gated showcase`).toEqual([showcase]);
+    }
+  });
+
+  it('states on every prototype screen that it performs nothing', () => {
+    const client = read('apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx');
+    // One shared notice component, used by each prototype section.
+    for (const testId of [
+      'features-prototype-notice',
+      'calendar-prototype-notice',
+      'library-prototype-notice',
+      'composer-prototype-notice',
+      'studio-prototype-banner',
+    ]) {
+      expect(client, `the ${testId} notice is missing`).toContain(testId);
     }
   });
 

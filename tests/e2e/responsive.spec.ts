@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { APPS, LOCALES } from './apps';
+import { expectNoHorizontalOverflow } from './overflow';
 
 /**
  * Responsive layout smoke tests.
@@ -8,6 +9,11 @@ import { APPS, LOCALES } from './apps';
  * HORIZONTALLY. Horizontal overflow is the classic RTL regression — a hardcoded
  * `margin-left` or a fixed width that only breaks in Arabic — so it is checked
  * in both directions at both sizes.
+ *
+ * The measurement lives in `./overflow` and walks the DOM rather than reading
+ * `scrollWidth`; the reasoning is written out there (F-26). The short version:
+ * `scrollWidth` cannot see content pushed past the LEFT edge, which is exactly
+ * the direction an Arabic regression goes.
  */
 
 const VIEWPORTS = [
@@ -24,16 +30,7 @@ for (const app of APPS) {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await page.goto(`${app.baseUrl}/${locale.code}`);
 
-        const overflow = await page.evaluate(() => ({
-          scrollWidth: document.documentElement.scrollWidth,
-          clientWidth: document.documentElement.clientWidth,
-        }));
-
-        // Allow one pixel for sub-pixel rounding.
-        expect(
-          overflow.scrollWidth,
-          `horizontal overflow: content ${overflow.scrollWidth}px in ${overflow.clientWidth}px viewport`,
-        ).toBeLessThanOrEqual(overflow.clientWidth + 1);
+        await expectNoHorizontalOverflow(page, `${app.label} ${viewport.name} ${locale.code}`);
       });
     }
   }

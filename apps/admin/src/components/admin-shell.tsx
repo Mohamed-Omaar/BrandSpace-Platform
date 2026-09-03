@@ -283,7 +283,7 @@ export function AdminShell({
             ariaLabel={t('nav.language')}
           />
           <form action={`/${locale}/sign-out`} method="post">
-            <button type="submit" data-testid="sign-out" style={buttonStyle('secondary', 'sm')}>
+            <button type="submit" data-testid="sign-out" style={buttonStyle('neutral', 'sm')}>
               {t('nav.signOut')}
             </button>
           </form>
