@@ -161,3 +161,100 @@ describe('the Phase 2B application palette meets AA', () => {
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });
+
+/**
+ * Phase 2C design foundation (D-49…D-51).
+ *
+ * The system grew a focus ring, a strong control border, a muted text tone,
+ * four semantic tint/border families and a white page ground. Each one is a
+ * promise about legibility, so each one is asserted — including the promises
+ * that a colour must NOT keep, because a token that quietly becomes legible is
+ * a token somebody will start using as text.
+ */
+describe('the Phase 2C foundation meets AA', () => {
+  it('every text tone is legible on white, which is now the page ground too', () => {
+    for (const [name, color] of [
+      ['textPrimary', colorTokens.textPrimary],
+      ['textSecondary', colorTokens.textSecondary],
+      ['textMuted', colorTokens.textMuted],
+    ] as const) {
+      expect(
+        contrastRatio(color, colorTokens.appBackground),
+        `${name} on the application ground`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL);
+      expect(contrastRatio(color, colorTokens.surface), `${name} on a card`).toBeGreaterThanOrEqual(
+        AA_NORMAL,
+      );
+    }
+  });
+
+  it('the application ground and the card surface are the same white (D-49)', () => {
+    // Structure comes from borders and one shadow, not from a tinted ground.
+    // If these ever diverge, the direction changed and the docs must follow.
+    expect(colorTokens.appBackground).toBe(colorTokens.surface);
+  });
+
+  it('the focus ring is visible on every surface it can land on', () => {
+    for (const [name, background] of [
+      ['surface', colorTokens.surface],
+      ['surfaceMuted', colorTokens.surfaceMuted],
+      ['surfaceSunken', colorTokens.surfaceSunken],
+      ['brandPurpleTint', colorTokens.brandPurpleTint],
+    ] as const) {
+      expect(
+        contrastRatio(colorTokens.focusRing, background),
+        `focus ring on ${name}`,
+      ).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it('a control boundary reaches the 3:1 non-text threshold (WCAG 1.4.11)', () => {
+    // `borderStrong` exists precisely because `border` does NOT reach it: an
+    // input outlined at 1.4:1 is invisible to a lot of people.
+    expect(contrastRatio(colorTokens.borderStrong, colorTokens.surface)).toBeGreaterThanOrEqual(
+      AA_NON_TEXT,
+    );
+    expect(contrastRatio(colorTokens.border, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
+  });
+
+  it('every semantic tone is legible on its own tint', () => {
+    for (const [name, ink, tint] of [
+      ['success', colorTokens.success, colorTokens.successTint],
+      ['warning', colorTokens.warning, colorTokens.warningTint],
+      ['danger', colorTokens.danger, colorTokens.dangerTint],
+      ['info', colorTokens.info, colorTokens.infoTint],
+    ] as const) {
+      expect(contrastRatio(ink, tint), `${name} on its tint`).toBeGreaterThanOrEqual(AA_NORMAL);
+    }
+  });
+
+  it('the yellow accent badge carries darkened yellow text, never white', () => {
+    // The accent badge is `brandYellowText` on `brandYellowTint`.
+    expect(
+      contrastRatio(colorTokens.brandYellowText, colorTokens.brandYellowTint),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    // And white on yellow stays firmly unusable, which is why the rule exists.
+    expect(contrastRatio('#FFFFFF', colorTokens.brandYellow)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio('#FFFFFF', colorTokens.brandYellowTint)).toBeLessThan(AA_LARGE);
+  });
+
+  it('the pressed purple is legible on the tint it appears against', () => {
+    // Active navigation is `brandPurplePressed` on `brandPurpleTint`.
+    expect(
+      contrastRatio(colorTokens.brandPurplePressed, colorTokens.brandPurpleTint),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(
+      contrastRatio(colorTokens.brandPurplePressed, colorTokens.surface),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  it('the selected-surface border is a perceivable boundary', () => {
+    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
+    // …so the active nav item never relies on the yellow mark alone. It also
+    // carries a purple tint, a purple label and `aria-current` — asserted in
+    // tests/unit/design-system.test.ts.
+    expect(contrastRatio(colorTokens.brandPurpleTint, colorTokens.surface)).toBeLessThan(
+      AA_NON_TEXT,
+    );
+  });
+});

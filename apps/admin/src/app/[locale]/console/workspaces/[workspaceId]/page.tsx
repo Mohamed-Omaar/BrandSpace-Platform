@@ -1,7 +1,14 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import {
+  Breadcrumbs,
+  PageHeader,
+  buttonStyle,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 import {
   getCreditService,
   getEntitlementService,
@@ -94,15 +101,34 @@ export default async function WorkspaceDetailPage({
 
   return (
     <div>
-      <p style={{ marginBlockStart: 0 }}>
-        <Link href={`/${locale}/console/workspaces`} style={{ color: colorTokens.brandPurple }}>
-          ← {t('ws.backToList')}
-        </Link>
-      </p>
+      {/* Breadcrumbs, not a bare back-link: the directory is a real level in
+          the hierarchy, and a reader arriving from a deep link needs to know
+          where they are as well as how to leave. */}
+      <Breadcrumbs
+        label={locale === 'ar' ? 'مسار التنقل' : 'Breadcrumb'}
+        items={[
+          { label: t('ws.title'), href: `/${locale}/console/workspaces` },
+          { label: workspace.name },
+        ]}
+      />
 
-      <h1 style={{ marginBlockStart: 0, fontSize: '1.35rem' }} data-testid="workspace-name">
-        {workspace.name} <StatusPill status={workspace.status} />
-      </h1>
+      <PageHeader
+        title={workspace.name}
+        description={workspace.slug}
+        meta={
+          <span data-testid="workspace-name" style={{ display: 'inline-flex' }}>
+            <StatusPill status={workspace.status} />
+          </span>
+        }
+        actions={
+          <Link
+            href={`/${locale}/console/workspaces`}
+            style={{ ...buttonStyle('secondary', 'sm'), textDecoration: 'none' }}
+          >
+            {t('ws.backToList')}
+          </Link>
+        }
+      />
 
       {errorCode && <Banner tone="error">{errorMessage(errorCode, locale, ref)}</Banner>}
       {okCode && successMessage(okCode, locale) && (
@@ -111,44 +137,39 @@ export default async function WorkspaceDetailPage({
 
       {/* --- Summary -------------------------------------------------- */}
       <Card title={locale === 'ar' ? 'الملخّص' : 'Summary'} testId="workspace-summary">
-        <TableScroll>
-          <table style={tableStyle()}>
-            <tbody>
-              <Row label={t('ws.slug')} value={workspace.slug} />
-              <Row label={t('ws.type')} value={workspace.type} />
-              <Row label={t('ws.country')} value={workspace.country} />
-              <Row label={t('ws.locale')} value={workspace.defaultLocale} />
-              <Row label={t('ws.timezone')} value={workspace.timezone} />
-              <Row label={t('ws.currency')} value={workspace.currency} />
-              <Row label={t('ws.ownerEmail')} value={workspace.ownerEmail ?? t('ws.noData')} />
-              <Row label={t('ws.plan')} value={workspace.planKey ?? t('ws.noPlan')} />
-              <Row
-                label={t('common.created')}
-                value={workspace.createdAt.toISOString().slice(0, 10)}
-              />
-              <Row
-                label={t('ws.lastActivity')}
-                value={
-                  workspace.lastActivityAt
-                    ? workspace.lastActivityAt.toISOString().slice(0, 16).replace('T', ' ')
-                    : t('ws.never')
-                }
-              />
-              {workspace.statusReason && (
-                <Row
-                  label={t('ws.statusReason')}
-                  value={`${workspace.statusReason}${
-                    workspace.statusChangedBy ? ` — ${workspace.statusChangedBy}` : ''
-                  }${
-                    workspace.statusChangedAt
-                      ? ` (${workspace.statusChangedAt.toISOString().slice(0, 10)})`
-                      : ''
-                  }`}
-                />
-              )}
-            </tbody>
-          </table>
-        </TableScroll>
+        <SummaryList
+          rows={[
+            { label: t('ws.slug'), value: workspace.slug },
+            { label: t('ws.type'), value: workspace.type },
+            { label: t('ws.country'), value: workspace.country },
+            { label: t('ws.locale'), value: workspace.defaultLocale },
+            { label: t('ws.timezone'), value: workspace.timezone },
+            { label: t('ws.currency'), value: workspace.currency },
+            { label: t('ws.ownerEmail'), value: workspace.ownerEmail ?? t('ws.noData') },
+            { label: t('ws.plan'), value: workspace.planKey ?? t('ws.noPlan') },
+            { label: t('common.created'), value: workspace.createdAt.toISOString().slice(0, 10) },
+            {
+              label: t('ws.lastActivity'),
+              value: workspace.lastActivityAt
+                ? workspace.lastActivityAt.toISOString().slice(0, 16).replace('T', ' ')
+                : t('ws.never'),
+            },
+            ...(workspace.statusReason
+              ? [
+                  {
+                    label: t('ws.statusReason'),
+                    value: `${workspace.statusReason}${
+                      workspace.statusChangedBy ? ` — ${workspace.statusChangedBy}` : ''
+                    }${
+                      workspace.statusChangedAt
+                        ? ` (${workspace.statusChangedAt.toISOString().slice(0, 10)})`
+                        : ''
+                    }`,
+                  },
+                ]
+              : []),
+          ]}
+        />
       </Card>
 
       {/* --- Edit ----------------------------------------------------- */}
@@ -622,13 +643,57 @@ export default async function WorkspaceDetailPage({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/**
+ * Key/value summary as a description list rather than a borderless table.
+ *
+ * A two-column table with no header row is a table only in markup: screen
+ * readers announce it as tabular data with one meaningless column, and it
+ * cannot reflow. A `<dl>` says what this actually is and wraps to one column on
+ * a phone without a second implementation.
+ */
+function SummaryList({
+  rows,
+}: {
+  rows: ReadonlyArray<{ readonly label: string; readonly value: string }>;
+}) {
   return (
-    <tr>
-      <th scope="row" style={{ ...thStyle(), inlineSize: '14rem' }}>
-        {label}
-      </th>
-      <td style={tdStyle()}>{value}</td>
-    </tr>
+    <dl
+      data-testid="workspace-summary-list"
+      style={{ margin: 0, display: 'grid', gap: spacingTokens.sm }}
+    >
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: spacingTokens.sm,
+            alignItems: 'baseline',
+          }}
+        >
+          <dt
+            style={{
+              ...typographyTokens.label,
+              color: colorTokens.textSecondary,
+              flex: '0 0 12rem',
+              minInlineSize: 0,
+            }}
+          >
+            {row.label}
+          </dt>
+          <dd
+            style={{
+              margin: 0,
+              ...typographyTokens.bodySm,
+              flex: '1 1 12rem',
+              minInlineSize: 0,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

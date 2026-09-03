@@ -196,6 +196,11 @@ test.describe('workspace selection and switching', () => {
     await enterWorkspace(page, customer.workspaceSlug);
     await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
 
+    // Phase 2C moved "switch workspace" INTO the workspace switcher menu, so
+    // the menu is opened first. The assertions either side are unchanged: what
+    // is being tested is that a member of two workspaces reaches the picker and
+    // lands in a correctly scoped second workspace.
+    await page.click('[data-testid="workspace-switcher"]');
     await page.click('[data-testid="switch-workspace"]');
     await enterWorkspace(page, customer.secondWorkspaceSlug);
     // A new, correctly scoped context — not the previous workspace's data.

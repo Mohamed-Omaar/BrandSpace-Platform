@@ -21,6 +21,8 @@ export interface VisuallyHiddenStyle {
 export interface ScrollContainerStyle {
   readonly overflowX: 'auto';
   readonly maxInlineSize: '100%';
+  /** So a flex or grid item may be narrower than the content it scrolls. */
+  readonly minInlineSize: 0;
   readonly position: 'relative';
 }
 
@@ -69,5 +71,5 @@ export function visuallyHiddenStyle(): VisuallyHiddenStyle {
  * than extending the document. See `visuallyHiddenStyle()`.
  */
 export function scrollContainerStyle(): ScrollContainerStyle {
-  return { overflowX: 'auto', maxInlineSize: '100%', position: 'relative' };
+  return { overflowX: 'auto', maxInlineSize: '100%', minInlineSize: 0, position: 'relative' };
 }

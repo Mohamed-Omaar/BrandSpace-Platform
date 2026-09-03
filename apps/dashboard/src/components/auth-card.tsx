@@ -1,12 +1,27 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens } from '@brandspace/ui';
+import {
+  BrandMark,
+  LanguageSwitcher,
+  buttonStyle,
+  cardStyle,
+  colorTokens,
+  inputStyle,
+  layoutTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 
 /**
  * The unauthenticated shell: sign-in, password reset, invitation acceptance.
  *
- * One white card centred on the `#FAFAFA` application ground (D-42), with the
- * landmarks the accessibility suite asserts: a single `main` that the skip link
- * targets, exactly one `h1`, and a visible focus ring that is never removed.
+ * One white card on the application ground, with the landmarks the
+ * accessibility suite asserts: a single `main` that the skip link targets,
+ * exactly one `h1`, and a focus ring that is never removed.
+ *
+ * Since the ground is now white too (D-49), the card is separated by its border
+ * and one restrained shadow rather than by a tinted page — which is the whole
+ * point of the approved direction, and is also why the card is centred with
+ * generous whitespace rather than pinned to the top of the viewport.
  *
  * All layout properties are logical, so Arabic RTL mirrors with no second
  * stylesheet.
@@ -14,10 +29,14 @@ import { colorTokens, radiusTokens, shadowTokens, spacingTokens } from '@brandsp
 export function AuthCard({
   locale,
   heading,
+  description,
+  footer,
   children,
 }: {
   locale: string;
   heading: string;
+  description?: string | undefined;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const other = locale === 'ar' ? 'en' : 'ar';
@@ -30,11 +49,24 @@ export function AuthCard({
         flexDirection: 'column',
       }}
     >
-      <header style={{ padding: spacingTokens.md }}>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: spacingTokens.md,
+          minBlockSize: layoutTokens.headerHeight,
+          paddingInline: spacingTokens.md,
+        }}
+      >
+        <BrandMark title="BrandSpace" />
         <nav aria-label={locale === 'ar' ? 'التنقل الرئيسي' : 'Main navigation'}>
-          <a href={`/${other}/sign-in`} data-testid="locale-switch" hrefLang={other}>
-            {other === 'ar' ? 'العربية' : 'English'}
-          </a>
+          <LanguageSwitcher
+            href={`/${other}/sign-in`}
+            targetLocale={other}
+            targetLabel={other === 'ar' ? 'العربية' : 'English'}
+            ariaLabel={locale === 'ar' ? 'تغيير اللغة' : 'Change language'}
+          />
         </nav>
       </header>
 
@@ -46,56 +78,67 @@ export function AuthCard({
           alignItems: 'start',
           justifyContent: 'center',
           padding: spacingTokens.md,
+          paddingBlockStart: spacingTokens['2xl'],
         }}
       >
-        <div
-          style={{
-            inlineSize: '100%',
-            maxInlineSize: '26rem',
-            background: colorTokens.surface,
-            border: `1px solid ${colorTokens.cardBorder}`,
-            borderRadius: radiusTokens.lg,
-            boxShadow: shadowTokens.card,
-            padding: spacingTokens.lg,
-          }}
-        >
-          <h1 style={{ marginBlockStart: 0, fontSize: '1.25rem' }}>{heading}</h1>
-          {children}
+        <div style={{ inlineSize: '100%', maxInlineSize: '26rem' }}>
+          <div style={cardStyle()}>
+            <h1
+              style={{ ...typographyTokens.h1, marginBlockEnd: description ? 0 : spacingTokens.md }}
+            >
+              {heading}
+            </h1>
+            {description ? (
+              <p
+                style={{
+                  marginBlockStart: spacingTokens.xs,
+                  marginBlockEnd: spacingTokens.md,
+                  ...typographyTokens.bodySm,
+                  color: colorTokens.textSecondary,
+                }}
+              >
+                {description}
+              </p>
+            ) : null}
+            {children}
+          </div>
+          {footer ? (
+            <div
+              style={{
+                marginBlockStart: spacingTokens.md,
+                textAlign: 'center',
+                ...typographyTokens.bodySm,
+              }}
+            >
+              {footer}
+            </div>
+          ) : null}
         </div>
       </main>
     </div>
   );
 }
 
+/**
+ * The auth form's input.
+ *
+ * A taller control than the in-app default: these forms are the first thing a
+ * customer touches, often on a phone, and a 44px target is the comfortable
+ * size rather than the 24px minimum.
+ */
 export function authInputStyle(): CSSProperties {
   return {
-    inlineSize: '100%',
-    minBlockSize: '40px',
-    marginBlockStart: '4px',
-    paddingInline: spacingTokens.sm,
-    paddingBlock: '8px',
-    borderRadius: radiusTokens.md,
-    border: `1px solid ${colorTokens.border}`,
-    background: colorTokens.surface,
-    color: colorTokens.textPrimary,
-    fontFamily: 'inherit',
-    fontSize: '0.9375rem',
-    // `box-sizing` so a 100% width plus padding does not overflow the card at
-    // 390px, which the responsive suite checks.
-    boxSizing: 'border-box',
+    ...inputStyle(),
+    minBlockSize: '2.75rem',
+    fontSize: typographyTokens.body.fontSize,
   };
 }
 
 export function authButtonStyle(): CSSProperties {
   return {
+    ...buttonStyle('primary'),
     inlineSize: '100%',
-    minBlockSize: '44px',
-    borderRadius: radiusTokens.md,
-    background: colorTokens.brandPurple,
-    color: colorTokens.brandPurpleInk,
-    border: `1px solid ${colorTokens.brandPurple}`,
-    fontSize: '0.9375rem',
-    fontWeight: 600,
-    cursor: 'pointer',
+    minBlockSize: '2.75rem',
+    fontSize: typographyTokens.body.fontSize,
   };
 }

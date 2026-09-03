@@ -140,6 +140,38 @@ bilingual UI — are proven before any feature exists.
 
 ---
 
+## Phase 2C — Design System and Visual Direction
+
+> **Inserted between Phase 2B and Phase 3 (D-49).** A UI foundation only. It changes no database
+> ownership, no RLS policy, no permission and no commercial assumption, and pulls no functional
+> feature forward from a later phase. **The phase order below is unchanged.**
+
+**Phase 2C-A — the foundation and the visual-approval checkpoint. Delivered.**
+
+- [x] Centralised tokens: colour, typography, spacing, radii, shadows, focus ring, breakpoints,
+      motion, z-index and layout — all in `packages/ui`, with a unit test that fails on a hex literal
+      anywhere in `apps/*/src`
+- [x] One icon family, drawn in the repository (D-51)
+- [x] A responsive application shell shared by both consoles: collapsible sidebar with tooltips and a
+      persisted preference, an accessible mobile drawer with a focus trap, a wrapping header
+- [x] The shared component system: buttons, forms, cards, metric cards, tables with a phone shape,
+      tabs, search, pagination, badges, menus, dialogs and confirmations, toasts, skeletons,
+      empty/error/permission-denied/no-results states, tooltip, breadcrumbs, switchers
+- [x] `SocialPostPreview` — five platforms, four aspect ratios, media and post states, bilingual
+      captions. A visual contract with no persistence, no OAuth and no platform API
+- [x] The AI Copilot visual shell — panel and sheet, streaming/error/insufficient-credit/approval
+      states, an inert composer that says so, and a mutating action that cannot run without an
+      explicit approval
+- [x] Applied to the representative screens: customer sign-in, workspace home and team; console
+      overview, workspaces directory and workspace detail; the Support Mode banner
+- [x] An isolated design showcase, refused in production and linked from no navigation (D-53)
+
+**Phase 2C-B — apply the approved direction to the remaining screens.** Not started. Scope is listed
+in `docs/DESIGN-SYSTEM.md` §11: migrate the pages still using the compatibility aliases, delete both
+alias blocks, extend the mobile record-list shape to the console tables, and decide toast placement.
+
+---
+
 ## Phase 3 — Plans, Entitlements and Credits
 
 > **Status after Phase 2B.** The owner approved pulling the entitlement and credit

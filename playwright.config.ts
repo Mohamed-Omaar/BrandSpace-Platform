@@ -89,6 +89,11 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
     APP_ENV: 'development',
   };
 
+  // The design showcase is opt-in and refused in production. The suite enables
+  // it for the dashboard only, which is also the assertion that the gate works:
+  // the admin app never sets it, so a showcase route there stays a 404.
+  if (app === 'dashboard') env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+
   const keys =
     app === 'admin'
       ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
@@ -143,7 +148,7 @@ export default defineConfig({
     // serial project and is excluded from the two viewport projects.
     {
       name: 'chromium-desktop',
-      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
+      testIgnore: /(admin-console|customer-app|design-system)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -152,12 +157,38 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
-      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
+      testIgnore: /(admin-console|customer-app|design-system)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
       name: 'admin-console',
       testMatch: /admin-console\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      // Visual-review evidence for the Phase 2C-A checkpoint. Not run by
+      // default — `pnpm e2e:screenshots` invokes it — because it writes files
+      // into the repository rather than asserting behaviour.
+      name: 'visual-review',
+      testMatch: /design-system\.screenshots\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        launchOptions,
+      },
+    },
+    {
+      // The design system's own suite: the shell, the showcase, responsive
+      // behaviour and accessibility. It signs in for the shell journeys, so it
+      // is serial for the same reason the other two are.
+      name: 'design-system',
+      testMatch: /design-system\.spec\.ts$/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

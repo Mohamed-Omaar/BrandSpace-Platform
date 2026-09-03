@@ -1,54 +1,109 @@
 /*
- * BrandSpace design tokens.
- * Layout uses LOGICAL properties (margin-inline-start, padding-block, inset-inline)
- * so Arabic RTL mirrors correctly without a separate stylesheet — CLAUDE.md §4.
+ * BrandSpace design tokens — the CSS mirror of `tokens.ts`.
+ *
+ * Layout uses LOGICAL properties (margin-inline-start, padding-block,
+ * inset-inline) so Arabic RTL mirrors correctly without a second stylesheet —
+ * CLAUDE.md §4.
+ *
+ * `tests/unit/token-parity.test.ts` asserts that every colour here matches the
+ * TypeScript token of the same name, so the two cannot drift.
  */
 :root {
-  /* Identity blue — logos, large graphics, accents. NOT for text (2.56:1). */
+  /* Identity blue — the marketing site's primary. NOT for text (2.56:1). */
   --bs-brand-blue: #00adee;
   --bs-brand-blue-hover: #0098d1;
-  /* Text on a light background — 6.50:1 against white. */
   --bs-brand-blue-text: #00658a;
-  /* Filled surface for controls; pairs with --bs-brand-blue-ink. */
   --bs-brand-blue-surface: #00658a;
   --bs-brand-blue-ink: #ffffff;
-  /* Phase 2B application primary (D-42). 5.60:1 on white: safe as text AND as
-     a filled surface with white ink. */
+
+  /* Application primary (D-42). 5.60:1 on white: safe as text AND as a filled
+     surface with white ink. */
   --bs-brand-purple: #7935fe;
   --bs-brand-purple-hover: #6528e0;
+  --bs-brand-purple-pressed: #5312c4;
   --bs-brand-purple-ink: #ffffff;
   --bs-brand-purple-tint: #f3edff;
+  --bs-brand-purple-border: #d6c2ff;
 
+  /* Accent yellow. Never body text, never white text on it. */
   --bs-brand-yellow: #ffdd15;
   --bs-brand-yellow-ink: #1a1a1a;
   --bs-brand-yellow-text: #7a6800;
+  --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
   --bs-surface-muted: #f6f8fa;
-  --bs-app-background: #fafafa;
+  --bs-surface-sunken: #eef2f6;
+  /* The application ground is white (D-49); structure comes from borders. */
+  --bs-app-background: #ffffff;
+
   --bs-card-border: #eaecf0;
-  --bs-shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04), 0 1px 3px 0 rgba(16, 24, 40, 0.06);
   --bs-border: #e3e8ef;
+  --bs-border-strong: #818c9c;
+
   --bs-text-primary: #0f172a;
   --bs-text-secondary: #475569;
+  --bs-text-muted: #667085;
+  --bs-text-inverse: #ffffff;
 
-  --bs-danger: #d92d20;
+  --bs-danger: #b42318;
+  --bs-danger-tint: #fef3f2;
+  --bs-danger-border: #fda29b;
   --bs-warning: #b54708;
+  --bs-warning-tint: #fffaeb;
+  --bs-warning-border: #fec84b;
   --bs-success: #067647;
+  --bs-success-tint: #ecfdf3;
+  --bs-success-border: #6ce9a6;
+  --bs-info: #175cd3;
+  --bs-info-tint: #eff8ff;
+  --bs-info-border: #84caff;
 
+  --bs-focus-ring: #7935fe;
+  --bs-focus-ring-contrast: #ffffff;
+
+  --bs-shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04), 0 1px 3px 0 rgba(16, 24, 40, 0.06);
+  --bs-shadow-raised: 0 4px 8px -2px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+  --bs-shadow-overlay:
+    0 12px 24px -6px rgba(16, 24, 40, 0.12), 0 4px 8px -4px rgba(16, 24, 40, 0.06);
+
+  --bs-space-3xs: 0.125rem;
+  --bs-space-2xs: 0.1875rem;
   --bs-space-xs: 0.25rem;
   --bs-space-sm: 0.5rem;
   --bs-space-md: 1rem;
   --bs-space-lg: 1.5rem;
   --bs-space-xl: 2rem;
+  --bs-space-2xl: 3rem;
+  --bs-space-3xl: 4rem;
 
   --bs-radius-sm: 0.25rem;
   --bs-radius-md: 0.5rem;
   --bs-radius-lg: 0.75rem;
+  --bs-radius-xl: 1rem;
+  --bs-radius-full: 9999px;
 
-  --bs-font-latin: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --bs-duration-instant: 80ms;
+  --bs-duration-fast: 140ms;
+  --bs-duration-base: 200ms;
+  --bs-duration-slow: 320ms;
+  --bs-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --bs-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --bs-z-sticky: 10;
+  --bs-z-drawer: 40;
+  --bs-z-overlay: 50;
+  --bs-z-dialog: 60;
+  --bs-z-toast: 70;
+  --bs-z-tooltip: 80;
+  --bs-z-skip-link: 100;
+
+  --bs-font-latin:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --bs-font-arabic:
-    'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, Tahoma, Arial, sans-serif;
+    'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, 'Segoe UI', Tahoma, Arial,
+    sans-serif;
+  --bs-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 html[dir='rtl'] {
@@ -61,39 +116,164 @@ html[dir='ltr'] {
 
 body {
   margin: 0;
-  background: var(--bs-surface);
+  background: var(--bs-app-background);
   color: var(--bs-text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Visible focus is a WCAG 2.2 AA requirement — never remove it. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/*
+ * Visible focus is a WCAG 2.2 AA requirement — never remove it.
+ *
+ * The ring is the application primary, so it reads on white, on the purple
+ * tint and on a muted inset alike. `:focus-visible` rather than `:focus`, so a
+ * mouse click does not leave a ring behind while a keyboard user always sees one.
+ */
 :focus-visible {
-  outline: 2px solid var(--bs-brand-blue-text);
+  outline: 2px solid var(--bs-focus-ring);
   outline-offset: 2px;
+  border-radius: var(--bs-radius-sm);
+}
+
+/*
+ * Motion is a preference, not a decision the design gets to make. Honoured
+ * ONCE, here, so no component has to remember (WCAG 2.3.3).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /*
  * Skip link — the first tab stop on every page (WCAG 2.2 "Bypass Blocks").
- * Off-screen until focused, then clearly visible. Uses logical inset properties
- * so it lands correctly in both RTL and LTR.
+ * Off-screen until focused, then clearly visible. Logical inset properties, so
+ * it lands correctly in both RTL and LTR.
  */
 .skip-link {
   position: absolute;
   inset-inline-start: var(--bs-space-sm);
   inset-block-start: -4rem;
-  z-index: 100;
+  z-index: var(--bs-z-skip-link);
   padding: var(--bs-space-sm) var(--bs-space-md);
-  background: var(--bs-brand-blue-surface);
-  color: var(--bs-brand-blue-ink);
+  background: var(--bs-brand-purple);
+  color: var(--bs-brand-purple-ink);
   border-radius: var(--bs-radius-md);
   text-decoration: none;
-  transition: inset-block-start 0.15s ease-in-out;
+  font-weight: 600;
+  transition: inset-block-start var(--bs-duration-fast) var(--bs-ease-out);
 }
 
 .skip-link:focus {
   inset-block-start: var(--bs-space-sm);
 }
 
-/* Links must remain distinguishable without relying on colour alone. */
+/*
+ * Links carry the application primary and stay underlined, so they remain
+ * distinguishable without relying on colour alone (WCAG 1.4.1).
+ */
 a {
-  color: var(--bs-brand-blue-text);
+  color: var(--bs-brand-purple);
+}
+
+/* A heading never inherits a stray browser margin into a card. */
+h1,
+h2,
+h3,
+h4 {
+  margin-block: 0;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Application shell responsiveness.
+ *
+ * These two rules are the ONLY place that decides whether the navigation is a
+ * sidebar or a drawer, and they are CSS rather than JavaScript on purpose: a
+ * layout that depends on a measured viewport flickers on first paint, differs
+ * between server and client, and breaks when JavaScript has not loaded yet.
+ * The breakpoint is `md` (768px) from `breakpointTokens`.
+ * ---------------------------------------------------------------------------
+ */
+.bs-sidebar {
+  display: none !important;
+}
+
+.bs-drawer-trigger {
+  display: inline-flex !important;
+}
+
+@media (min-width: 768px) {
+  .bs-sidebar {
+    display: flex !important;
+  }
+
+  .bs-drawer-trigger {
+    display: none !important;
+  }
+}
+
+/*
+ * A table and its phone-shaped equivalent render the SAME data; only one is
+ * shown. Both are in the DOM so the markup stays semantic, and the hidden one
+ * is `display: none`, which also removes it from the accessibility tree — a
+ * screen reader reads one representation, not two.
+ */
+.bs-wide-only {
+  display: none;
+}
+
+.bs-narrow-only {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .bs-wide-only {
+    display: block;
+  }
+
+  .bs-narrow-only {
+    display: none;
+  }
+}
+
+/*
+ * The Copilot is a docked panel on desktop and a full-height sheet on a phone.
+ * The scrim exists only in the sheet presentation: on desktop the panel sits
+ * beside the page and must not block it.
+ */
+.bs-copilot-scrim {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .bs-copilot-scrim {
+    display: none;
+  }
+}
+
+/*
+ * An inline variant of the wide-only rule, for text that must disappear from a
+ * cramped header without collapsing the line it sits on.
+ */
+.bs-wide-only-inline {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .bs-wide-only-inline {
+    display: inline-block;
+  }
 }

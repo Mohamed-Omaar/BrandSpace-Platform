@@ -208,4 +208,5 @@ A change is done when:
 | `docs/BILLING-AND-CREDITS.md`     | Payment abstraction, subscriptions, invoices, AI credit economics                    |
 | `docs/ROADMAP.md`                 | Phase 0 → Phase 8 + future expansion                                                 |
 | `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice                            |
+| `docs/DESIGN-SYSTEM.md`           | Design tokens, components, shell behaviour, RTL/LTR, preview and Copilot contracts   |
 | `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed  |

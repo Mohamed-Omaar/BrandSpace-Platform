@@ -1,5 +1,5 @@
 import { CONFIG_DOMAIN_KEYS } from '@brandspace/config';
-import { spacingTokens, colorTokens } from '@brandspace/ui';
+import { Card, ContentGrid, MetricCard, Stack, StateMessage } from '@brandspace/ui';
 import { PageHeading } from '../../../components/admin-shell';
 import {
   currentEnvironment,
@@ -39,27 +39,29 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
 
   const activated = activeDomains.filter((d) => d.versions.some((v) => v.status === 'ACTIVE'));
   const drafts = activeDomains.flatMap((d) => d.versions.filter((v) => v.status === 'DRAFT'));
-  const withheld = locale === 'ar' ? '—' : '—';
-
   const stats = [
     {
       label: locale === 'ar' ? 'مجالات مُفعّلة' : 'Activated domains',
-      value: mayReadConfig ? `${activated.length} / ${CONFIG_DOMAIN_KEYS.length}` : withheld,
+      value: mayReadConfig ? `${activated.length} / ${CONFIG_DOMAIN_KEYS.length}` : undefined,
+      withheld: !mayReadConfig,
       testid: 'stat-active-domains',
     },
     {
       label: locale === 'ar' ? 'مسودات معلّقة' : 'Pending drafts',
-      value: mayReadConfig ? String(drafts.length) : withheld,
+      value: mayReadConfig ? String(drafts.length) : undefined,
+      withheld: !mayReadConfig,
       testid: 'stat-drafts',
     },
     {
       label: locale === 'ar' ? 'مفاتيح سرية' : 'Stored secrets',
-      value: mayReadSecrets ? String(secretList.length) : withheld,
+      value: mayReadSecrets ? String(secretList.length) : undefined,
+      withheld: !mayReadSecrets,
       testid: 'stat-secrets',
     },
     {
       label: locale === 'ar' ? 'البيئة' : 'Environment',
       value: environment,
+      withheld: false,
       testid: 'stat-environment',
     },
   ];
@@ -74,32 +76,43 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             : 'Configuration and secret state for this environment.'
         }
       />
-      <div
-        style={{
-          display: 'grid',
-          gap: spacingTokens.md,
-          // `min(12rem, 100%)` so a narrow column collapses the cards rather
-          // than forcing 12rem of content into less space than that.
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))',
-        }}
-      >
-        {stats.map((stat) => (
-          <div
-            key={stat.testid}
-            data-testid={stat.testid}
-            style={{
-              border: `1px solid ${colorTokens.border}`,
-              borderRadius: '0.5rem',
-              padding: spacingTokens.md,
-            }}
-          >
-            <div style={{ color: colorTokens.textSecondary, fontSize: '0.875rem' }}>
-              {stat.label}
-            </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{stat.value}</div>
-          </div>
-        ))}
-      </div>
+      <Stack>
+        <ContentGrid min="12rem" testId="overview-stats">
+          {stats.map((stat) => (
+            <MetricCard
+              key={stat.testid}
+              testId={stat.testid}
+              label={stat.label}
+              value={stat.value}
+              unavailable={stat.withheld}
+              // A withheld figure says so. Rendering a zero for a role that may
+              // not read secrets would state, falsely, that none exist.
+              unavailableLabel={
+                locale === 'ar'
+                  ? 'لا تملك صلاحية عرض هذه القيمة'
+                  : 'You do not have permission to see this'
+              }
+              accent={stat.testid === 'stat-environment'}
+            />
+          ))}
+        </ContentGrid>
+
+        {/*
+          Operational metrics — request volume, job queues, provider health —
+          need telemetry that no phase has wired to this screen. The card says
+          so instead of showing a chart with no data behind it.
+        */}
+        <Card title={locale === 'ar' ? 'صحة المنصة' : 'Platform health'} testId="overview-health">
+          <StateMessage
+            title={locale === 'ar' ? 'لا توجد مقاييس بعد' : 'No metrics yet'}
+            description={
+              locale === 'ar'
+                ? 'ستظهر مؤشرات التشغيل هنا بعد ربط التتبّع في مرحلة لاحقة.'
+                : 'Operational indicators appear here once telemetry is wired in a later phase.'
+            }
+          />
+        </Card>
+      </Stack>
     </>
   );
 }
