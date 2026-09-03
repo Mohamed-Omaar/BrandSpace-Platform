@@ -18,20 +18,44 @@
  */
 
 /** Models carrying a non-null `workspaceId`: strict tenant ownership. */
-export const STRICT_TENANT_MODELS = ['Workspace', 'Membership', 'SupportModeSession'] as const;
+export const STRICT_TENANT_MODELS = [
+  'Workspace',
+  'Membership',
+  'SupportModeSession',
+  // Phase 2B
+  'Invitation',
+  'WorkspaceOverride',
+  'CreditWallet',
+  'CreditTransaction',
+] as const;
 
 /**
  * Models carrying a NULLABLE `workspaceId`. These still require a policy, but the
  * meaning of NULL differs per model and each behaviour is asserted by a test.
  */
-export const NULLABLE_TENANT_MODELS = ['Role', 'AuditEvent'] as const;
+export const NULLABLE_TENANT_MODELS = [
+  'Role',
+  'AuditEvent',
+  // Phase 2B. NULL denotes a message that precedes any workspace — a password
+  // reset — and `NULL = <uuid>` is never true, so tenants never see those rows.
+  'EmailMessage',
+] as const;
 
 /**
  * Not tenant-owned, but still RLS-protected because they can leak tenant
  * membership. `User` is a global identity; inside a workspace context only users
  * with a membership in that workspace are visible.
  */
-export const IDENTITY_MODELS_WITH_POLICY = ['User'] as const;
+export const IDENTITY_MODELS_WITH_POLICY = [
+  'User',
+  // Phase 2B. A customer session belongs to a global identity, not to a
+  // workspace: the workspace is chosen AFTER authentication. Both are still
+  // RLS-protected, and their policy admits ONLY the no-workspace-context
+  // authentication path, so a member acting inside workspace A cannot read
+  // session or reset rows at all.
+  'CustomerSession',
+  'PasswordResetToken',
+] as const;
 
 /**
  * PLATFORM-owned models. These belong to BrandSpace itself, not to any customer:
@@ -63,7 +87,16 @@ export const PLATFORM_OWNED_MODELS = [
  * for every tenant, and readable by the tenant role because RBAC resolution
  * needs them.
  */
-export const GLOBAL_MODELS = ['Permission', 'RolePermission'] as const;
+export const GLOBAL_MODELS = [
+  'Permission',
+  'RolePermission',
+  // Phase 2B. A tenant-readable projection of the three configuration domains
+  // that entitlement resolution depends on: feature keys, plan keys, limits and
+  // flag rules. Identical rows for every tenant, no customer data, no secrets.
+  // The `configuration_version` table itself stays platform-owned and remains
+  // unreadable by the tenant role.
+  'EntitlementCatalogueSnapshot',
+] as const;
 
 export type TenantModel =
   (typeof STRICT_TENANT_MODELS)[number] | (typeof NULLABLE_TENANT_MODELS)[number];
@@ -94,6 +127,15 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   ConfigurationVersion: 'configuration_version',
   SecretRecord: 'secret_record',
   SecretVersion: 'secret_version',
+  // Phase 2B
+  CustomerSession: 'customer_session',
+  PasswordResetToken: 'password_reset_token',
+  Invitation: 'invitation',
+  WorkspaceOverride: 'workspace_override',
+  CreditWallet: 'credit_wallet',
+  CreditTransaction: 'credit_transaction',
+  EmailMessage: 'email_message',
+  EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };
 
 export function isTenantOwned(model: string): model is TenantModel {

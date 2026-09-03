@@ -12,12 +12,22 @@
   /* Filled surface for controls; pairs with --bs-brand-blue-ink. */
   --bs-brand-blue-surface: #00658a;
   --bs-brand-blue-ink: #ffffff;
+  /* Phase 2B application primary (D-42). 5.60:1 on white: safe as text AND as
+     a filled surface with white ink. */
+  --bs-brand-purple: #7935fe;
+  --bs-brand-purple-hover: #6528e0;
+  --bs-brand-purple-ink: #ffffff;
+  --bs-brand-purple-tint: #f3edff;
+
   --bs-brand-yellow: #ffdd15;
   --bs-brand-yellow-ink: #1a1a1a;
   --bs-brand-yellow-text: #7a6800;
 
   --bs-surface: #ffffff;
   --bs-surface-muted: #f6f8fa;
+  --bs-app-background: #fafafa;
+  --bs-card-border: #eaecf0;
+  --bs-shadow-card: 0 1px 2px 0 rgba(16, 24, 40, 0.04), 0 1px 3px 0 rgba(16, 24, 40, 0.06);
   --bs-border: #e3e8ef;
   --bs-text-primary: #0f172a;
   --bs-text-secondary: #475569;
@@ -38,7 +48,7 @@
 
   --bs-font-latin: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --bs-font-arabic:
-    'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, Tahoma, Arial, sans-serif;
+    'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, Tahoma, Arial, sans-serif;
 }
 
 html[dir='rtl'] {

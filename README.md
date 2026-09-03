@@ -133,7 +133,18 @@ The seed creates:
 | `noor@northstar.local`   | customer | Workspace Owner of `north-star`                |
 
 Two separate workspaces exist so tenant isolation can be inspected by hand as well as by the test
-suite. **Customer accounts have no password** — customer authentication arrives in Phase 2B.
+suite.
+
+From Phase 2B the customer application is real, and the seeded workspace owners can sign in — under the
+same rule as the Platform Owner, and only if you choose a password:
+
+```bash
+SEED_CUSTOMER_PASSWORD='REPLACE_WITH_A_STRONG_LOCAL_ONLY_VALUE' pnpm db:seed
+```
+
+Leave it unset and they are created **passwordless**: the accounts exist, hold their memberships, and
+cannot be signed into until somebody invites them or sets a password. No default credential is ever
+minted, for the same reason it is not for the platform side.
 
 The Platform Owner **is** signable-in from Phase 2A, but only if you choose a password:
 
@@ -154,9 +165,17 @@ can see a terminal: if stdout is redirected, piped, or running in CI, the detail
 written into a log that is retained and searchable. Re-run the seed interactively, or set
 `SEED_PRINT_MFA_ENROLMENT=1` if you are certain the output is not captured.
 
-**Upgrading an existing database:** re-run `pnpm db:seed` after pulling the Phase 2A security-review changes.
-Platform permissions and role grants are seeded rows, and the new least-privilege split
-(`platform.configuration.*`, `platform.secret.*`) only takes effect once they are re-synced.
+**Upgrading an existing database:** re-run `pnpm db:seed` after pulling the Phase 2A security-review
+changes **and again after Phase 2B**. Permissions and role grants are seeded rows, so the Phase 2A
+least-privilege split (`platform.configuration.*`, `platform.secret.*`) and the Phase 2B additions
+(`billing.*`, `credits.read`, `platform.workspace.update`, `platform.workspace.invite`,
+`platform.plan.assign`, `platform.entitlement.override`, `platform.credit.adjust`) only take effect once
+they are re-synced.
+
+Phase 2B also changed one existing grant: `workspace_admin` was defined as "every workspace permission
+except two", which silently swept in `billing.manage` — an authority `docs/SECURITY.md` §4.3 reserves for
+the Workspace Owner. It is now an explicit deny list. Re-seeding removes the grant from existing
+databases, because the seed replaces a role's permissions rather than merging them.
 
 ### 5. Run
 
@@ -310,6 +329,31 @@ Module boundaries are enforced by lint rules generated from the dependency matri
 `eslint.config.mjs`, mirroring `docs/ARCHITECTURE.md` §4.1. A package may never import an app; an app
 may never import another app; and `packages/database` is the only package that may touch PostgreSQL
 directly. `tests/unit/module-boundaries.test.ts` asserts each rule in both directions.
+
+---
+
+## Customer authentication and workspace scope
+
+From Phase 2B the customer dashboard is a real, session-gated application. Two things are worth knowing
+before working on it:
+
+**The two realms share nothing.** A customer session lives in `customer_session`, a platform session in
+`platform_session`. Different cookie, audience, signing key, TTL and `SameSite`. A platform token
+presented to the customer app resolves to `null` because its hash is not in that table — not because a
+check rejected it.
+
+**Reading workspace data requires a context.** Everything the customer app reads or writes goes through
+`inWorkspace()` (`apps/dashboard/src/server/customer-context.ts`), which runs inside `withWorkspace()` —
+a transaction that sets `app.workspace_id`, so PostgreSQL RLS applies to every statement including raw
+SQL. Two questions precede any workspace, and each has its own narrow mechanism:
+
+| Question                                  | Mechanism                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Which workspaces may this session act in? | `withCustomerSession()` sets a transaction-local session-token hash; the `session_membership` and `session_workspace` policies grant exactly that session's own active memberships. SELECT only, tenant role only, and only with a NULL workspace context. |
+| What does the plan entitle them to?       | `entitlement_catalogue_snapshot`, a tenant-readable projection the Configuration Service writes when it activates one of three domains. `configuration_version` itself stays platform-owned with every privilege revoked.                                  |
+
+Neither uses `SECURITY DEFINER`. Both are visible in `pg_policies` or as an ordinary table, and both are
+asserted in `tests/isolation/`.
 
 ---
 

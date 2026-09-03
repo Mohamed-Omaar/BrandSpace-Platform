@@ -56,9 +56,17 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'workspace',
     nameEn: 'Workspace Admin',
     nameAr: 'مدير مساحة العمل',
-    // Everything except ownership transfer and workspace deletion.
+    // Everything EXCEPT the four authorities docs/SECURITY.md §4.3 reserves
+    // for the Owner: ownership transfer, deletion, and changing the plan or
+    // payment method (the Admin is "view only" on billing).
+    //
+    // Stated as an explicit deny list rather than "everything minus two",
+    // because that phrasing silently granted `billing.manage` the moment the
+    // permission was added — caught by tests/unit/phase2b-boundaries.test.ts
+    // before it shipped. A blanket grant inherits every future permission.
     permissionKeys: allWorkspacePermissionKeys.filter(
-      (k) => k !== 'workspace.transfer_ownership' && k !== 'workspace.delete',
+      (k) =>
+        k !== 'workspace.transfer_ownership' && k !== 'workspace.delete' && k !== 'billing.manage',
     ),
   },
   {
@@ -66,7 +74,10 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'workspace',
     nameEn: 'Marketing Manager',
     nameAr: 'مدير التسويق',
-    permissionKeys: ['workspace.read', 'member.read', 'audit.read'],
+    // docs/SECURITY.md §4.3 marks "invite / remove members" as conditional for
+    // this role (non-admin roles only). A conditional grant needs the condition
+    // to be enforced, not assumed, so it is NOT granted in Phase 2B — see F-15.
+    permissionKeys: ['workspace.read', 'member.read', 'audit.read', 'credits.read'],
   },
   {
     key: 'content_creator',
@@ -101,7 +112,7 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'workspace',
     nameEn: 'Analyst',
     nameAr: 'محلل',
-    permissionKeys: ['workspace.read', 'member.read', 'audit.read'],
+    permissionKeys: ['workspace.read', 'member.read', 'audit.read', 'credits.read'],
   },
   {
     key: 'client_viewer',
@@ -129,8 +140,12 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'platform',
     nameEn: 'Support Agent',
     nameAr: 'وكيل الدعم',
-    // Helps customers. Has no business editing platform configuration and no
-    // business anywhere near a credential.
+    // Helps customers: support mode and a read of the directory, nothing more.
+    // No business editing platform configuration, and no business anywhere near
+    // a credential. Resending an invitation and
+    // granting goodwill credits are marked conditional ("within cap") in
+    // docs/SECURITY.md §4.4; the cap does not exist yet, so neither is granted
+    // — an ungranted capability is recoverable, an ungated one is not (F-15).
     permissionKeys: ['platform.workspace.read', 'platform.support_mode.enter'],
   },
   {
@@ -138,9 +153,10 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'platform',
     nameEn: 'Billing Manager',
     nameAr: 'مدير الفوترة',
-    // Billing-specific permissions arrive with billing (Phase 8). Until then
-    // this role gets no configuration or secret authority at all.
-    permissionKeys: ['platform.workspace.read'],
+    // docs/SECURITY.md §4.4 gives this role plan assignment and credit
+    // movement outright. Everything else there is conditional and therefore
+    // ungranted. No configuration or secret authority at all.
+    permissionKeys: ['platform.workspace.read', 'platform.plan.assign', 'platform.credit.adjust'],
   },
   {
     key: 'operations_viewer',

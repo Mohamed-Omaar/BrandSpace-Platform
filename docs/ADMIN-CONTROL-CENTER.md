@@ -524,3 +524,62 @@ Customers and workspaces (§3), plan editing as a form (§4), feature-flag targe
 connect/disconnect flows (§6), credits and billing administration (§9, §10), notification templates (§11),
 Support Mode UI (§12), platform user management (§15), and the website CMS (§17) are **designed but not
 implemented**. The configuration and secret modules they depend on now exist, which is what Phase 2A was for.
+
+---
+
+## 20. Implementation Status — Phase 2B
+
+> **ملخّص بالعربية**
+>
+> ما بُني في المرحلة 2B داخل مركز التحكم: دليل العملاء ومساحات العمل، إنشاء عميل، صفحة تفاصيل تعرض بيانات
+> حقيقية، إدارة دورة الحياة، تعيين الخطة، عارض الميزات الفعّالة مع سبب كل قرار، محرّر الاستثناءات، تعديل
+> رصيد الذكاء الاصطناعي، الدعوات، ووضع الدعم. ما لم يُعرض بعد يُقال صراحةً بدل اختراع رقم.
+
+### 20.1 Built and working
+
+| Module                     | What exists                                                                                                                                                                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Customers & workspaces** | Searchable directory; create customer + workspace + wallet in one audited transaction; detail page with identity, status, plan, members, invitations, effective features, limits, credits, creation and last-activity dates, and recent audited activity |
+| **Lifecycle**              | Suspend, reactivate, archive and cancel, each with a mandatory written reason, a transition table that refuses unsafe moves by name, optimistic concurrency, and session revocation scoped to that workspace                                             |
+| **Plans**                  | Assign or clear a plan, validated against the ACTIVE `plans` configuration version                                                                                                                                                                       |
+| **Entitlements**           | Effective feature/limit table for a workspace, each row carrying the rule that decided it (§3.4)                                                                                                                                                         |
+| **Overrides**              | Grant and revoke per-customer overrides, validated for feature existence, value type, dependencies and kill switches                                                                                                                                     |
+| **Credits**                | Signed adjustment with a mandatory reason and a per-render idempotency key; recent ledger                                                                                                                                                                |
+| **Invitations**            | Invite into a customer workspace, list, revoke                                                                                                                                                                                                           |
+| **Support Mode**           | Start with a reason and optional ticket reference, a persistent banner with a countdown, explicit termination, automatic expiry, and full audit                                                                                                          |
+
+### 20.2 The entitlement resolution trace is the deciding code
+
+§3.4 promises Admin can show _why_ a value applies. It does — using the **same call** that decides. There
+is no second implementation to drift: `resolveEntitlement()` returns the decision and the ordered trace
+together, and both the Control Center and the customer's own plan page render from it.
+
+### 20.3 Honest empty states
+
+Where later-phase data does not exist, the Control Center says so rather than showing a plausible zero.
+`lastActivityAt` is null until a customer session touches the workspace and renders as "none yet". MRR,
+connected accounts, publish volume and health score are **absent columns**, not zeroes — a fabricated
+number in an admin console is worse than a missing one, because somebody will act on it.
+
+Plans are the same: with no configured plan the selector is empty and says that plans are owner-managed
+configuration. No tier, price or allowance is invented (D-40).
+
+### 20.4 Support Mode, as implemented
+
+Entry requires the permission, **verified MFA**, an existing workspace and a written reason of at least
+eight characters. The banner is rendered from the RESOLVED grant, never from the cookie, so an expired or
+ended session shows no banner and the badge cannot claim access that no longer exists. It states in both
+languages that the operator is platform staff and **not** the customer, because D-28 prohibits
+impersonation and a vague banner undermines that as effectively as a missing check.
+
+Read-only. A write attempt is refused and audited. No role holds the elevated grant (F-16).
+
+### 20.5 Not built yet
+
+Brands, subscription and invoice tabs, usage explorer, integration health, saved views and CSV export,
+platform user management, the notification-template editor, and the website CMS. Support Mode does not yet
+render customer CONTENT — it shows the workspace's operational context (status, plan, entitlements,
+members, activity), which is what §3.3 calls "audit-safe support context".
+
+Conditional authorities in §4.4 (support resend, goodwill credits within a cap, billing-manager suspension
+for non-payment) are **ungranted** until their conditions exist — F-14.

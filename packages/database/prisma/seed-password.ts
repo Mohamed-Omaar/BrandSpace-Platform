@@ -87,3 +87,18 @@ export function resolveSeedPassword(env: NodeJS.ProcessEnv = process.env): strin
   assertUsableSeedPassword(raw);
   return raw.trim();
 }
+
+/**
+ * The same rule for the seeded CUSTOMER owners (Phase 2B).
+ *
+ * Identical policy, deliberately: a development customer password committed to
+ * source control is a known credential for every database the seed touches,
+ * exactly like the platform one that R-04 removed. Absent -> the owners are
+ * created passwordless and must be invited.
+ */
+export function resolveCustomerSeedPassword(env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = env['SEED_CUSTOMER_PASSWORD'];
+  if (raw === undefined) return null;
+  assertUsableSeedPassword(raw);
+  return raw.trim();
+}

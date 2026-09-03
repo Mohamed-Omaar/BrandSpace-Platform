@@ -10,6 +10,7 @@
     "@brandspace/auth": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
     "@brandspace/observability": "workspace:*",
     "@brandspace/providers": "workspace:*",
     "@brandspace/secrets": "workspace:*",

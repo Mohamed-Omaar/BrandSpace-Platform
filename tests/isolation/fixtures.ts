@@ -17,6 +17,15 @@ export interface TenantFixture {
   readonly auditEventId: string;
   readonly customRoleId: string;
   readonly supportSessionId: string;
+  // --- Phase 2B ---
+  readonly invitationId: string;
+  readonly invitationEmail: string;
+  readonly overrideId: string;
+  readonly walletId: string;
+  readonly creditTransactionId: string;
+  readonly emailMessageId: string;
+  readonly customerSessionId: string;
+  readonly passwordResetTokenId: string;
 }
 
 export interface IsolationFixtures {
@@ -160,6 +169,77 @@ export async function ensurePlatformRbac(prisma: PrismaClient): Promise<void> {
   );
 }
 
+/**
+ * Bootstrap the WORKSPACE role catalogue, with permissions.
+ *
+ * CI RUNS MIGRATIONS ONLY — no seed — so a suite that reads `workspace_admin`
+ * or `analyst` and assumes it is there passes on a developer machine that has
+ * been seeded and fails on a fresh database. That is exactly what happened to
+ * the Phase 2B suites: green locally, red on a clean checkout.
+ *
+ * Permissions are REPLACED rather than merged, for the same reason as the
+ * platform catalogue: a permission removed from a role must actually disappear,
+ * or a demotion would be cosmetic and a test asserting the denial would pass
+ * against a role that still holds it.
+ */
+export async function ensureWorkspaceRbac(prisma: PrismaClient): Promise<void> {
+  for (const permission of ALL_PERMISSIONS) {
+    await prisma.permission.upsert({
+      where: { key: permission.key },
+      update: {
+        resource: permission.resource,
+        action: permission.action,
+        minScope: permission.minScope,
+        description: permission.description,
+      },
+      create: {
+        key: permission.key,
+        resource: permission.resource,
+        action: permission.action,
+        minScope: permission.minScope,
+        description: permission.description,
+      },
+    });
+  }
+
+  await asPlatform(
+    SEED_ACTOR,
+    {
+      action: 'test.fixture.workspace_rbac',
+      reason: 'Isolation test fixture bootstrap',
+      requestId: FIXTURE_REQUEST_ID,
+    },
+    async (db) => {
+      for (const definition of ROLE_DEFINITIONS.filter((d) => d.realm === 'workspace')) {
+        const existing = await db.role.findFirst({
+          where: { key: definition.key, workspaceId: null },
+        });
+        const role =
+          existing ??
+          (await db.role.create({
+            data: {
+              key: definition.key,
+              workspaceId: null,
+              realm: 'WORKSPACE',
+              nameEn: definition.nameEn,
+              nameAr: definition.nameAr,
+              isSystem: true,
+            },
+          }));
+
+        await db.rolePermission.deleteMany({ where: { roleId: role.id } });
+        for (const key of definition.permissionKeys) {
+          const permission = await db.permission.findUniqueOrThrow({ where: { key } });
+          await db.rolePermission.create({
+            data: { roleId: role.id, permissionId: permission.id },
+          });
+        }
+      }
+    },
+    { prisma, bootstrap: true },
+  );
+}
+
 async function ensureWorkspaceRole(prisma: PrismaClient): Promise<string> {
   return asPlatform(
     SEED_ACTOR,
@@ -259,6 +339,71 @@ async function createTenant(
         },
       });
 
+      // --- Phase 2B rows. Every one carries the tenant key, so each is a
+      // direct target for the cross-tenant assertions the D-29 gate demands.
+      const invitationEmail = `invitee-${slug}@example.local`;
+      const invitation = await db.invitation.create({
+        data: {
+          workspaceId: id,
+          email: invitationEmail,
+          roleId: workspaceRoleId,
+          brandScope: [],
+          tokenHash: `fixture-token-hash-${slug}`,
+          expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+          invitedByPlatformUserId: platformUserId,
+        },
+      });
+      const override = await db.workspaceOverride.create({
+        data: {
+          workspaceId: id,
+          featureKey: 'fixture.feature',
+          enabled: true,
+          reason: `fixture override ${slug}`,
+          grantedByPlatformUserId: platformUserId,
+        },
+      });
+      const wallet = await db.creditWallet.create({
+        data: { workspaceId: id, balanceMilliCredits: 5000n },
+      });
+      const creditTransaction = await db.creditTransaction.create({
+        data: {
+          workspaceId: id,
+          walletId: wallet.id,
+          type: 'ADMIN_ADJUSTMENT',
+          amountMilliCredits: 5000n,
+          balanceAfterMilliCredits: 5000n,
+          reason: `fixture grant ${slug}`,
+          idempotencyKey: `fixture-credit-${slug}`,
+          actorType: 'PLATFORM_USER',
+          actorId: platformUserId,
+        },
+      });
+      const emailMessage = await db.emailMessage.create({
+        data: {
+          workspaceId: id,
+          toEmail: invitationEmail,
+          templateKey: 'workspace.invitation',
+          locale: 'EN',
+          status: 'SENT',
+        },
+      });
+      const customerSession = await db.customerSession.create({
+        data: {
+          userId: user.id,
+          tokenHash: `fixture-session-hash-${slug}`,
+          activeWorkspaceId: id,
+          expiresAt: new Date(Date.now() + 3600_000),
+          absoluteExpiresAt: new Date(Date.now() + 24 * 3600_000),
+        },
+      });
+      const resetToken = await db.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: `fixture-reset-hash-${slug}`,
+          expiresAt: new Date(Date.now() + 3600_000),
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -268,6 +413,14 @@ async function createTenant(
         auditEventId: audit.id,
         customRoleId: customRole.id,
         supportSessionId: support.id,
+        invitationId: invitation.id,
+        invitationEmail,
+        overrideId: override.id,
+        walletId: wallet.id,
+        creditTransactionId: creditTransaction.id,
+        emailMessageId: emailMessage.id,
+        customerSessionId: customerSession.id,
+        passwordResetTokenId: resetToken.id,
       };
     },
     { prisma, bootstrap: true },
@@ -283,6 +436,10 @@ export async function createIsolationFixtures(
   const prisma = platformRoleClient();
   const run = crypto.randomUUID().slice(0, 8);
   const platformRoleId = await ensurePlatformRole(prisma);
+  // The full workspace catalogue FIRST, so `workspace_owner` carries its real
+  // permissions rather than an empty set — the fixtures must look like the
+  // product, not like a stub that happens to satisfy a foreign key.
+  await ensureWorkspaceRbac(prisma);
   const workspaceRoleId = await ensureWorkspaceRole(prisma);
 
   const platformUser = await prisma.platformUser.create({

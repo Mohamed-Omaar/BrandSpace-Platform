@@ -95,7 +95,7 @@ bilingual UI — are proven before any feature exists.
 > accessibility criteria are met, and OTLP span export (F-05) is now done.
 > Customer authentication remains outstanding — it is Phase 2B work.
 
-- [ ] A user can sign up, verify email, log in, and enable MFA — **outstanding (Phase 2B)**; this is the CUSTOMER flow
+- [~] A user can sign up, verify email, log in, and enable MFA — **partially done (2B)**. Customer **log in** is complete: separate realm, no enumeration, atomic lockout, password reset, invitation acceptance. **Self-serve sign-up** and **customer MFA** are not built (F-17, F-18); customers arrive by invitation, which proves control of the address
 - [x] A platform user can log in to Admin; a customer session is rejected there — **done (Phase 2A)**; password + mandatory TOTP, and a customer token resolves to no actor because the realms share no session store
 - [x] Two workspaces exist and the isolation suite passes for every seeded model — **done** (88 isolation tests, incl. the two-pool model)
 - [x] The route/permission report shows zero unprotected routes — **done** (registration throws without a scope)
@@ -126,20 +126,28 @@ bilingual UI — are proven before any feature exists.
 
 ### Exit criteria
 
-> **Status after Phase 2A.** Phase 2 was split: **2A** delivered the Admin shell, the
-> Configuration Service, the Secret Service and observability; **2B** covers customers,
-> workspaces, invitations and Support Mode.
+> **Status after Phase 2B.** Phase 2 was split: **2A** delivered the Admin shell, the
+> Configuration Service, the Secret Service and observability; **2B** delivered customers,
+> workspaces, customer authentication, invitations, workspace RBAC, entitlements,
+> credits and Support Mode. Phase 2 is complete.
 
-- [ ] Owner creates a workspace and invites a user entirely from Admin — **outstanding (Phase 2B)**
+- [x] Owner creates a workspace and invites a user entirely from Admin — **done (2B)**; create customer + workspace + wallet in one audited transaction, invite, resend, revoke
 - [x] A configuration version can be drafted, validated, activated, and rolled back — with history — **done (2A)**; 17 domains, two-stage validation, impact preview, atomic activation, optimistic concurrency, rollback as a new version
 - [x] A secret can be stored and rotated; **no interface anywhere reveals its value** — **done (2A)**; envelope encryption, no reveal path exists, asserted against the raw HTTP response
-- [ ] Support mode grants time-boxed read-only access, appears in the customer's activity log, and expires — **outstanding (Phase 2B)**; the model and RLS policy exist from Phase 1, the UI does not
+- [x] Support mode grants time-boxed read-only access, appears in the customer's activity log, and expires — **done (2B)**; permission + verified MFA + written reason, a persistent banner with a countdown, expiry enforced on every resolve, and the entry event written against the workspace so the customer sees it
 - [x] Every admin action produces an audit event — **done (2A)** for the actions that exist: sign-in, MFA, denials, lockouts, configuration draft/validate/activate/rollback, secret create/rotate/disable/enable/revoke
 - [x] Platform Owner and Platform Admin cannot log in without MFA — **done (2A)**; a password-only session resolves to no actor at all
 
 ---
 
 ## Phase 3 — Plans, Entitlements and Credits
+
+> **Status after Phase 2B.** The owner approved pulling the entitlement and credit
+> MACHINERY forward into 2B (D-40), with no commercial data: the precedence engine,
+> workspace overrides, the credit wallet and its immutable ledger all ship. What
+> remains for Phase 3 is the plan EDITOR, the remaining flag targeting surfaces,
+> reserve/settle primitives for AI, quota enforcement, and — above all — the owner
+> decisions D-06…D-12 that give the plans their names, prices and allowances.
 
 **Goal:** commercial rules are data, and credit accounting is provably correct — before any AI exists.
 
@@ -159,12 +167,12 @@ bilingual UI — are proven before any feature exists.
 
 ### Exit criteria
 
-- [ ] Owner creates a plan with prices, limits, features, and credits — with no code change
-- [ ] Assigning a plan to a workspace changes what that workspace can do, immediately
-- [ ] The entitlement trace explains every effective value
-- [ ] A feature flag can target by plan, workspace, beta group, country, date range, and percentage — and roll back
-- [ ] Credit reserve/settle/release primitives pass the full concurrency and idempotency suite
-- [ ] Ledger replay reproduces balances exactly; the reconciliation job reports zero drift
+- [~] Owner creates a plan with prices, limits, features, and credits — with no code change — **partially (2B)**; plans are configuration and the schema exists, but the plan EDITOR is Phase 3 and D-06…D-12 are unanswered, so no tier, price or allowance is defined
+- [x] Assigning a plan to a workspace changes what that workspace can do, immediately — **done (2B)**
+- [x] The entitlement trace explains every effective value — **done (2B)**; the same call decides and explains
+- [~] A feature flag can target by plan, workspace, beta group, country, date range, and percentage — and roll back — **engine done (2B)**, all nine precedence levels implemented and tested; the flag EDITOR and beta-cohort membership are Phase 3
+- [~] Credit reserve/settle/release primitives pass the full concurrency and idempotency suite — **adjustment done (2B)** with idempotency, row locking and a non-negative constraint; reserve/settle arrive with the AI Gateway
+- [x] Ledger replay reproduces balances exactly; the reconciliation job reports zero drift — **done (2B)**; `CreditService.reconcile()` and an assertion that drift is zero
 
 ---
 

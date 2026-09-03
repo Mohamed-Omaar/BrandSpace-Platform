@@ -3,19 +3,75 @@ import Link from 'next/link';
 import { colorTokens, spacingTokens } from '@brandspace/ui';
 import { translator, type MessageKey } from '../i18n/messages';
 
-/** Console navigation. Each entry names the permission that gates its page. */
-const NAV: readonly { href: string; key: MessageKey; permission: string }[] = [
-  { href: '', key: 'nav.overview', permission: 'platform.workspace.read' },
-  { href: '/configuration', key: 'nav.configuration', permission: 'platform.configuration.read' },
-  { href: '/secrets', key: 'nav.secrets', permission: 'platform.secret.read' },
-  { href: '/providers', key: 'nav.providers', permission: 'platform.configuration.read' },
-  { href: '/ai-models', key: 'nav.aiRegistry', permission: 'platform.configuration.read' },
-  { href: '/routing', key: 'nav.routing', permission: 'platform.configuration.read' },
-  { href: '/flags', key: 'nav.flags', permission: 'platform.configuration.read' },
-  { href: '/plans', key: 'nav.plans', permission: 'platform.configuration.read' },
-  { href: '/audit', key: 'nav.audit', permission: 'platform.audit.read' },
-  { href: '/health', key: 'nav.health', permission: 'platform.workspace.read' },
+interface NavItem {
+  readonly href: string;
+  readonly key: MessageKey;
+  readonly permission: string;
+}
+
+/**
+ * Console navigation, grouped into functional sections.
+ *
+ * Each entry names the permission that gates its page. Filtering by permission
+ * here is a CONVENIENCE — the page itself calls `requirePageActor` and returns
+ * 404 without the permission. Hiding a link is not authorization.
+ *
+ * A section with no visible item is not rendered, so a support agent does not
+ * see an empty "Configuration" heading and wonder what is missing.
+ */
+const NAV_SECTIONS: ReadonlyArray<{
+  readonly titleAr: string;
+  readonly titleEn: string;
+  readonly items: readonly NavItem[];
+}> = [
+  {
+    titleAr: 'العملاء',
+    titleEn: 'Customers',
+    items: [
+      { href: '', key: 'nav.overview', permission: 'platform.workspace.read' },
+      { href: '/workspaces', key: 'nav.workspaces', permission: 'platform.workspace.read' },
+      { href: '/support', key: 'nav.support', permission: 'platform.support_mode.enter' },
+    ],
+  },
+  {
+    titleAr: 'المنصة',
+    titleEn: 'Platform',
+    items: [
+      {
+        href: '/configuration',
+        key: 'nav.configuration',
+        permission: 'platform.configuration.read',
+      },
+      { href: '/secrets', key: 'nav.secrets', permission: 'platform.secret.read' },
+      { href: '/flags', key: 'nav.flags', permission: 'platform.configuration.read' },
+      { href: '/plans', key: 'nav.plans', permission: 'platform.configuration.read' },
+    ],
+  },
+  {
+    titleAr: 'الذكاء الاصطناعي والتكاملات',
+    titleEn: 'AI & integrations',
+    items: [
+      { href: '/providers', key: 'nav.providers', permission: 'platform.configuration.read' },
+      { href: '/ai-models', key: 'nav.aiRegistry', permission: 'platform.configuration.read' },
+      { href: '/routing', key: 'nav.routing', permission: 'platform.configuration.read' },
+    ],
+  },
+  {
+    titleAr: 'العمليات',
+    titleEn: 'Operations',
+    items: [
+      { href: '/audit', key: 'nav.audit', permission: 'platform.audit.read' },
+      { href: '/health', key: 'nav.health', permission: 'platform.workspace.read' },
+    ],
+  },
 ];
+
+/** The active Support Mode grant, resolved server-side by the console layout. */
+export interface SupportBannerState {
+  readonly workspaceName: string;
+  readonly reason: string;
+  readonly remainingMinutes: number;
+}
 
 export function AdminShell({
   locale,
@@ -23,6 +79,7 @@ export function AdminShell({
   actorRole,
   permissionKeys,
   environment,
+  support = null,
   children,
 }: {
   locale: string;
@@ -30,6 +87,7 @@ export function AdminShell({
   actorRole: string;
   permissionKeys: readonly string[];
   environment: string;
+  support?: SupportBannerState | null;
   children: ReactNode;
 }) {
   const t = translator(locale);
@@ -37,10 +95,45 @@ export function AdminShell({
   const isProduction = environment === 'PRODUCTION';
 
   return (
-    <div style={{ minBlockSize: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        minBlockSize: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: colorTokens.appBackground,
+      }}
+    >
+      {/*
+        Support Mode banner. Persistent, unmistakable, and above everything —
+        docs/SECURITY.md §8. Yellow is the platform's alert accent, and the text
+        states plainly that this is platform staff and NOT the customer, because
+        D-28 prohibits impersonation and an ambiguous banner weakens that as
+        surely as a missing check would.
+      */}
+      {support && (
+        <div
+          role="status"
+          data-testid="support-mode-banner"
+          style={{
+            background: colorTokens.brandYellow,
+            color: colorTokens.brandYellowInk,
+            padding: spacingTokens.sm,
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            textAlign: 'center',
+            borderBlockEnd: `2px solid ${colorTokens.warning}`,
+          }}
+        >
+          {locale === 'ar'
+            ? `وضع الدعم — قراءة فقط · ${support.workspaceName} · تبقّى ${support.remainingMinutes} دقيقة · أنت موظف منصة ولستَ العميل`
+            : `SUPPORT MODE — read only · ${support.workspaceName} · ${support.remainingMinutes} min left · you are platform staff, not the customer`}
+        </div>
+      )}
+
       <header
         style={{
           borderBlockEnd: `1px solid ${colorTokens.border}`,
+          background: colorTokens.surface,
           padding: spacingTokens.md,
           display: 'flex',
           flexWrap: 'wrap',
@@ -50,7 +143,7 @@ export function AdminShell({
         }}
       >
         <div>
-          <strong style={{ color: colorTokens.brandBlueText }}>{t('app.title')}</strong>
+          <strong style={{ color: colorTokens.brandPurple }}>{t('app.title')}</strong>
           {/* The active environment is always visible: production actions must
               never be taken by accident. */}
           <span
@@ -92,41 +185,66 @@ export function AdminShell({
           // the viewport. Logical properties throughout, so RTL behaves the same.
           style={{
             padding: spacingTokens.md,
+            background: colorTokens.surface,
             borderInlineEnd: `1px solid ${colorTokens.border}`,
             flex: '1 1 14rem',
           }}
         >
-          <ul
-            style={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'grid',
-              gap: spacingTokens.xs,
-            }}
-          >
-            {NAV.filter((item) => permissionKeys.includes(item.permission)).map((item) => (
-              <li key={item.key}>
-                <Link
-                  href={`/${locale}/console${item.href}`}
-                  data-testid={`nav-${item.key}`}
-                  // WCAG 2.2 AA target size (2.5.8): each link is its own
-                  // pointer target of at least 24x24 CSS pixels. A bare inline
-                  // link in a tight list fails this on touch, which the
-                  // accessibility suite caught.
+          {NAV_SECTIONS.map((section) => {
+            const visible = section.items.filter((item) =>
+              permissionKeys.includes(item.permission),
+            );
+            if (visible.length === 0) return null;
+            return (
+              <div key={section.titleEn} style={{ marginBlockEnd: spacingTokens.md }}>
+                <h2
                   style={{
-                    display: 'block',
-                    minBlockSize: '24px',
-                    paddingBlock: '6px',
+                    margin: 0,
+                    marginBlockEnd: spacingTokens.xs,
                     paddingInline: spacingTokens.sm,
-                    borderRadius: '0.375rem',
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: colorTokens.textSecondary,
                   }}
                 >
-                  {t(item.key)}
-                </Link>
-              </li>
-            ))}
-          </ul>
+                  {locale === 'ar' ? section.titleAr : section.titleEn}
+                </h2>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'grid',
+                    gap: spacingTokens.xs,
+                  }}
+                >
+                  {visible.map((item) => (
+                    <li key={item.key}>
+                      <Link
+                        href={`/${locale}/console${item.href}`}
+                        data-testid={`nav-${item.key}`}
+                        // WCAG 2.2 AA target size (2.5.8): each link is its own
+                        // pointer target of at least 24x24 CSS pixels. A bare
+                        // inline link in a tight list fails this on touch, which
+                        // the accessibility suite caught.
+                        style={{
+                          display: 'block',
+                          minBlockSize: '24px',
+                          paddingBlock: '6px',
+                          paddingInline: spacingTokens.sm,
+                          borderRadius: '0.375rem',
+                        }}
+                      >
+                        {t(item.key)}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
 
         {/* A large grow factor keeps the content column dominant once both fit

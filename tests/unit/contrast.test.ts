@@ -107,3 +107,57 @@ describe('non-text UI meets the 3:1 threshold', () => {
     );
   });
 });
+
+/**
+ * Phase 2B application palette (D-42).
+ *
+ * The owner-approved purple is the primary action colour for the Control Center
+ * and the customer dashboard. Unlike the identity blue it must work in BOTH
+ * directions — as text on a light surface and as a filled surface under white
+ * text — so both pairings are asserted here. A token change that breaks either
+ * fails this test rather than an accessibility scan in the browser.
+ */
+describe('the Phase 2B application palette meets AA', () => {
+  it('purple is legible as text on every light surface we use', () => {
+    for (const bg of [
+      colorTokens.surface,
+      colorTokens.appBackground,
+      colorTokens.brandPurpleTint,
+    ]) {
+      expect(contrastRatio(colorTokens.brandPurple, bg)).toBeGreaterThanOrEqual(AA_NORMAL);
+    }
+  });
+
+  it('white text on the purple surface meets AA', () => {
+    expect(
+      contrastRatio(colorTokens.brandPurpleInk, colorTokens.brandPurple),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(
+      contrastRatio(colorTokens.brandPurpleInk, colorTokens.brandPurpleHover),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  it('body text stays legible on the application background', () => {
+    expect(
+      contrastRatio(colorTokens.textPrimary, colorTokens.appBackground),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(
+      contrastRatio(colorTokens.textSecondary, colorTokens.appBackground),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(
+      contrastRatio(colorTokens.textPrimary, colorTokens.brandPurpleTint),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  it('the card border is a non-text boundary, not a text colour', () => {
+    // Asserted so nobody later uses it for a label: it is deliberately subtle.
+    expect(contrastRatio(colorTokens.cardBorder, colorTokens.surface)).toBeLessThan(AA_NORMAL);
+  });
+
+  it('yellow remains an accent and never carries text on white', () => {
+    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_LARGE);
+    expect(
+      contrastRatio(colorTokens.brandYellowInk, colorTokens.brandYellow),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+});

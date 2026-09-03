@@ -34,6 +34,9 @@ enum WorkspaceStatus {
   PAST_DUE
   SUSPENDED
   CANCELLED
+  /// Phase 2B. Retained, read-only, excluded from the working directory. There is
+  /// no hard-delete path through any interface (CLAUDE.md §2.5).
+  ARCHIVED
   DELETED
 }
 
@@ -118,6 +121,44 @@ enum SecretVersionStatus {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 2B enums — customers, invitations, entitlements, credits
+// ---------------------------------------------------------------------------
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  /// Set by a sweep; expiry is also enforced by comparing `expiresAt` on read,
+  /// so an unswept row is never accepted.
+  EXPIRED
+  /// A resend supersedes the previous token rather than reusing it.
+  SUPERSEDED
+}
+
+enum OverrideStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum CreditTransactionType {
+  PLAN_GRANT
+  PROMOTIONAL_GRANT
+  ADMIN_ADJUSTMENT
+  RESERVATION
+  RESERVATION_RELEASE
+  USAGE_CHARGE
+  REFUND
+  EXPIRY
+  RESET
+}
+
+enum EmailMessageStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
 // Identity — NOT tenant-owned. A User is a global identity that may hold
 // memberships in several workspaces. Access is constrained by Membership.
 // ---------------------------------------------------------------------------
@@ -148,6 +189,11 @@ model User {
   ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
   invitesSent     Membership[] @relation("MembershipInviter")
 
+  sessions            CustomerSession[]
+  passwordResets      PasswordResetToken[]
+  invitationsSent     Invitation[]         @relation("InvitationInviter")
+  invitationsAccepted Invitation[]         @relation("InvitationAcceptor")
+
   @@index([status])
   @@map("user")
 }
@@ -164,10 +210,10 @@ model PlatformUser {
   status          UserStatus @default(PENDING)
 
   // D-27: 2FA is mandatory for platform roles. Enforced at login, not optional.
-  mfaEnabled     Boolean   @default(false)
+  mfaEnabled    Boolean   @default(false)
   /// Reference into the Secret Service — the TOTP secret is never a column.
-  mfaSecretRef   String?
-  mfaEnrolledAt  DateTime? @db.Timestamptz(6)
+  mfaSecretRef  String?
+  mfaEnrolledAt DateTime? @db.Timestamptz(6)
 
   roleId String @db.Uuid
   role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
@@ -180,12 +226,14 @@ model PlatformUser {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  supportSessions      SupportModeSession[]
-  sessions             PlatformSession[]
-  recoveryCodes        PlatformMfaRecoveryCode[]
-  configVersionsAuthored  ConfigurationVersion[] @relation("ConfigAuthor")
-  configVersionsActivated ConfigurationVersion[] @relation("ConfigActivator")
-  secretsCreated          SecretRecord[]         @relation("SecretAuthor")
+  supportSessions         SupportModeSession[]
+  invitationsSent         Invitation[]              @relation("InvitationPlatformInviter")
+  overridesGranted        WorkspaceOverride[]
+  sessions                PlatformSession[]
+  recoveryCodes           PlatformMfaRecoveryCode[]
+  configVersionsAuthored  ConfigurationVersion[]    @relation("ConfigAuthor")
+  configVersionsActivated ConfigurationVersion[]    @relation("ConfigActivator")
+  secretsCreated          SecretRecord[]            @relation("SecretAuthor")
 
   @@index([status])
   @@map("platform_user")
@@ -219,6 +267,30 @@ model Workspace {
   suspendedAt     DateTime? @db.Timestamptz(6)
   suspendedReason String?
 
+  // --- Phase 2B: lifecycle provenance -------------------------------------
+  // Who changed the status, when, and why. Shown in the Control Center so a
+  // suspension is never an unexplained state (docs/ADMIN-CONTROL-CENTER.md §3.3).
+  statusReason                  String?
+  statusChangedAt               DateTime? @db.Timestamptz(6)
+  statusChangedByPlatformUserId String?   @db.Uuid
+  archivedAt                    DateTime? @db.Timestamptz(6)
+
+  // --- Phase 2B: plan assignment ------------------------------------------
+  // The plan KEY, resolved against the active `plans` configuration version.
+  // Prices and allowances are configuration, never columns (CLAUDE.md §2.2).
+  // Superseded by `Subscription` when billing arrives (Phase 3/8) — see D-40.
+  planKey                      String?
+  planAssignedAt               DateTime? @db.Timestamptz(6)
+  planAssignedByPlatformUserId String?   @db.Uuid
+
+  /// Optimistic concurrency for platform edits. Travels in the WHERE of a
+  /// conditional UPDATE, so a lost update is refused rather than silent.
+  lockVersion Int @default(0)
+
+  /// Advanced by customer sessions. Null means "never signed in" — displayed as
+  /// such rather than invented (docs/ADMIN-CONTROL-CENTER.md §3.2).
+  lastActivityAt DateTime? @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
@@ -227,9 +299,15 @@ model Workspace {
   roles           Role[]
   auditEvents     AuditEvent[]
   supportSessions SupportModeSession[]
+  invitations     Invitation[]
+  overrides       WorkspaceOverride[]
+  creditWallet    CreditWallet?
+  creditLedger    CreditTransaction[]
+  emailMessages   EmailMessage[]
 
   @@index([status])
   @@index([ownerUserId])
+  @@index([planKey])
   @@map("workspace")
 }
 
@@ -246,11 +324,11 @@ model Membership {
 
   status MembershipStatus @default(INVITED)
 
-  invitedByUserId       String?   @db.Uuid
+  invitedByUserId     String?   @db.Uuid
   /// Only the hash is stored — the raw invitation token exists solely in the emailed link.
-  invitationTokenHash   String?   @unique
-  invitationExpiresAt   DateTime? @db.Timestamptz(6)
-  acceptedAt            DateTime? @db.Timestamptz(6)
+  invitationTokenHash String?   @unique
+  invitationExpiresAt DateTime? @db.Timestamptz(6)
+  acceptedAt          DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -287,6 +365,7 @@ model Role {
   permissions   RolePermission[]
   memberships   Membership[]
   platformUsers PlatformUser[]
+  invitations   Invitation[]
 
   @@unique([workspaceId, key])
   @@index([realm])
@@ -336,14 +415,14 @@ model AuditEvent {
   workspaceId String?  @db.Uuid
   occurredAt  DateTime @default(now()) @db.Timestamptz(6)
 
-  actorType     ActorType
-  actorId       String?   @db.Uuid
+  actorType      ActorType
+  actorId        String?   @db.Uuid
   actorEmailHash String?
 
   action       String
   resourceType String?
-  resourceId   String?  @db.Uuid
-  brandId      String?  @db.Uuid
+  resourceId   String? @db.Uuid
+  brandId      String? @db.Uuid
 
   severity AuditSeverity @default(INFO)
   outcome  AuditOutcome  @default(SUCCESS)
@@ -376,7 +455,7 @@ model SupportModeSession {
   id          String @id @default(uuid()) @db.Uuid
   workspaceId String @db.Uuid
 
-  platformUserId String @db.Uuid
+  platformUserId String  @db.Uuid
   reason         String
   ticketRef      String?
 
@@ -423,7 +502,7 @@ model ConfigurationVersion {
 
   status ConfigurationStatus @default(DRAFT)
 
-  previousVersionId String? @db.Uuid
+  previousVersionId   String? @db.Uuid
   rollbackOfVersionId String? @db.Uuid
 
   validationReport Json?
@@ -495,15 +574,15 @@ model SecretVersion {
   version        Int
 
   /// AEAD ciphertext, IV and auth tag. Base64, so a dump is never a usable key.
-  ciphertext String
-  iv         String
-  authTag    String
+  ciphertext        String
+  iv                String
+  authTag           String
   /// The data key, itself encrypted by the key-encryption key.
-  wrappedDataKey String
+  wrappedDataKey    String
   /// Which KEK wrapped the data key, so rotation of the KEK is traceable.
-  keyProvider    String
-  keyId          String
-  algorithm      String @default("AES-256-GCM")
+  keyProvider       String
+  keyId             String
+  algorithm         String @default("AES-256-GCM")
   /// Bound into the AEAD additional data, so ciphertext cannot be replayed into
   /// another ref, environment or version.
   encryptionContext String
@@ -536,7 +615,7 @@ model PlatformSession {
   tokenHash String @unique
 
   /// D-27: platform roles require MFA. A session is unusable until this is set.
-  mfaVerifiedAt DateTime? @db.Timestamptz(6)
+  mfaVerifiedAt    DateTime? @db.Timestamptz(6)
   /// Step-up re-authentication for high-impact operations.
   stepUpVerifiedAt DateTime? @db.Timestamptz(6)
 
@@ -570,4 +649,281 @@ model PlatformMfaRecoveryCode {
 
   @@index([platformUserId, usedAt])
   @@map("platform_mfa_recovery_code")
+}
+
+// ===========================================================================
+// PHASE 2B — customers, workspaces, customer authentication, invitations,
+// entitlement overrides and the credit ledger.
+//
+// Classification rules (packages/database/src/tenant-models.ts):
+//   - carries `workspaceId`            -> tenant-owned, RLS + isolation test
+//   - identity, no `workspaceId`       -> RLS policy still required, because a
+//                                         session row names a person
+// ===========================================================================
+
+/// IDENTITY. A customer session. Deliberately NOT tenant-owned: a User is a
+/// global identity who may hold memberships in several workspaces, and the
+/// workspace is chosen AFTER authentication. The realm separation from
+/// `PlatformSession` is physical — a different table, cookie, audience and
+/// signing key (docs/SECURITY.md §3).
+model CustomerSession {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// Only the SHA-256 hash is stored; the raw token exists solely in the cookie.
+  tokenHash String @unique
+
+  /// The workspace this session is currently scoped to. Null until the member
+  /// picks one. Switching writes a NEW value here after re-verifying membership
+  /// server-side — a client claim never selects a workspace.
+  activeWorkspaceId String? @db.Uuid
+
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  lastSeenAt        DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt         DateTime  @db.Timestamptz(6)
+  absoluteExpiresAt DateTime  @db.Timestamptz(6)
+  revokedAt         DateTime? @db.Timestamptz(6)
+  revokedReason     String?
+
+  ip        String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@index([activeWorkspaceId])
+  @@map("customer_session")
+}
+
+/// IDENTITY. Single-use, expiring password-reset tokens, stored hashed.
+/// Not tenant-owned: a reset happens before any workspace is chosen.
+model PasswordResetToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  tokenHash String @unique
+
+  expiresAt DateTime  @db.Timestamptz(6)
+  usedAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  ip String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("password_reset_token")
+}
+
+/// TENANT-OWNED. A workspace invitation.
+///
+/// Modelled separately from `Membership` (docs/DATABASE.md §10) because an
+/// invitee may have no `User` row at all, and `Membership.userId` is required.
+/// The token is stored ONLY as a SHA-256 hash; the raw value exists solely in
+/// the emailed link. Acceptance is a single conditional UPDATE, so two
+/// concurrent acceptances cannot both win.
+model Invitation {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// Lower-cased at write time so a case variant cannot accept someone else's
+  /// invitation. Compared against the authenticated user's email.
+  email  String
+  roleId String @db.Uuid
+
+  /// null = all brands; a non-empty array restricts the future member.
+  brandScope String[] @db.Uuid
+
+  tokenHash String           @unique
+  status    InvitationStatus @default(PENDING)
+
+  expiresAt     DateTime  @db.Timestamptz(6)
+  acceptedAt    DateTime? @db.Timestamptz(6)
+  revokedAt     DateTime? @db.Timestamptz(6)
+  revokedReason String?
+
+  /// Exactly one inviter is set: a workspace member, or a platform actor acting
+  /// through the Control Center. Never both.
+  invitedByUserId         String? @db.Uuid
+  invitedByPlatformUserId String? @db.Uuid
+
+  acceptedByUserId String? @db.Uuid
+
+  /// A resend creates a new row and points the old one here, so the audit trail
+  /// shows the chain rather than a mutated token.
+  supersededByInvitationId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace         Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role              Role          @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  invitedByUser     User?         @relation("InvitationInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  invitedByPlatform PlatformUser? @relation("InvitationPlatformInviter", fields: [invitedByPlatformUserId], references: [id], onDelete: SetNull)
+  acceptedByUser    User?         @relation("InvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, email])
+  @@index([expiresAt])
+  @@map("invitation")
+}
+
+/// TENANT-OWNED. An owner-granted, per-customer deviation from the plan.
+/// docs/DATABASE.md §8.4. Precedence level 2 — it beats plan entitlement but
+/// NEVER beats the kill switch (docs/ADMIN-CONTROL-CENTER.md §5.3).
+model WorkspaceOverride {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// Feature key from the active `entitlements` configuration version.
+  featureKey String
+
+  enabled    Boolean
+  /// null = unlimited for a quota feature; ignored for a boolean feature.
+  limitValue Int?
+
+  reason String
+
+  grantedByPlatformUserId String @db.Uuid
+
+  effectiveFrom  DateTime       @default(now()) @db.Timestamptz(6)
+  effectiveUntil DateTime?      @db.Timestamptz(6)
+  status         OverrideStatus @default(ACTIVE)
+
+  revokedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  grantedBy PlatformUser @relation(fields: [grantedByPlatformUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, featureKey])
+  @@index([effectiveUntil])
+  @@map("workspace_override")
+}
+
+/// TENANT-OWNED. One wallet per workspace.
+///
+/// `balanceMilliCredits` is a materialised projection of the ledger, updated
+/// only inside the same transaction as its `CreditTransaction` row and
+/// reconcilable by replay. Milli-credits internally, whole credits displayed
+/// (D-14). A CHECK constraint refuses a negative balance.
+model CreditWallet {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @unique @db.Uuid
+
+  balanceMilliCredits          BigInt @default(0)
+  reservedMilliCredits         BigInt @default(0)
+  lifetimeGrantedMilliCredits  BigInt @default(0)
+  lifetimeConsumedMilliCredits BigInt @default(0)
+
+  /// Optimistic-lock counter, in addition to the row lock taken on every write.
+  version Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("credit_wallet")
+}
+
+/// TENANT-OWNED and IMMUTABLE. The credit ledger.
+/// `idempotencyKey` is unique, so a retry can never double-adjust a balance.
+model CreditTransaction {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  walletId    String @db.Uuid
+
+  type                     CreditTransactionType
+  /// Signed. Negative for charges and expiries.
+  amountMilliCredits       BigInt
+  /// The wallet balance immediately after this row committed.
+  balanceAfterMilliCredits BigInt
+
+  reason String
+
+  /// Unique. A retry with the same key returns the original row.
+  idempotencyKey String @unique
+
+  actorType ActorType
+  actorId   String?   @db.Uuid
+
+  occurredAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  wallet    CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, occurredAt(sort: Desc)])
+  @@index([walletId, type])
+  @@map("credit_transaction")
+}
+
+/// TENANT-OWNED (nullable tenant key). The email outbox.
+///
+/// There is no external email vendor: sending is an interface, and the default
+/// implementation writes here (D-41). `workspaceId` is null for messages that
+/// precede any workspace, such as a password reset.
+///
+/// The body carries no token: a reset or invitation link is composed from the
+/// raw token, which is never persisted. Only the destination and the template
+/// key are stored.
+model EmailMessage {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String? @db.Uuid
+
+  toEmail     String
+  templateKey String
+  locale      Locale @default(AR)
+
+  /// Template variables, redacted before write. Never contains a raw token.
+  variables Json?
+
+  status     EmailMessageStatus @default(QUEUED)
+  sentAt     DateTime?          @db.Timestamptz(6)
+  failedAt   DateTime?          @db.Timestamptz(6)
+  failReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([toEmail, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("email_message")
+}
+
+/// GLOBAL CATALOGUE. A tenant-readable projection of the three configuration
+/// domains a customer's own entitlements depend on.
+///
+/// WHY THIS EXISTS. Effective features resolve from the ACTIVE `entitlements`,
+/// `plans` and `feature-flags` configuration versions — but
+/// `configuration_version` is PLATFORM-owned, with every privilege revoked from
+/// the tenant role, and it also holds `integrations.*` and `operations` payloads
+/// that are none of a customer's business. Rather than weaken that table's
+/// protection, the Configuration Service PROJECTS the three customer-relevant
+/// payloads here when it activates one, and the customer application reads only
+/// this.
+///
+/// It carries no `workspaceId` and no secrets: feature keys, plan keys, limits
+/// and flag rules, identical for every tenant — the same shape as `permission`.
+model EntitlementCatalogueSnapshot {
+  /// One of: entitlements, plans, feature-flags.
+  domain      String
+  environment DeploymentEnvironment
+
+  /// The ACTIVE payload, copied verbatim at activation.
+  payload Json
+
+  /// Which configuration version this came from, for traceability.
+  sourceVersionId String   @db.Uuid
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  @@id([domain, environment])
+  @@map("entitlement_catalogue_snapshot")
 }

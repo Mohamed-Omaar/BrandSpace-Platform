@@ -61,24 +61,40 @@ const PLACEHOLDER_DATABASE_URL = 'postgresql://placeholder:placeholder@localhost
 /**
  * Environment for a served app.
  *
- * The public website and the customer dashboard get a PLACEHOLDER database URL
- * and no platform credential at all — that absence is itself part of what is
- * under test (F-07: a tenant-facing process must not be able to open a
- * cross-tenant connection even if it tried).
+ * THE ABSENCE OF A CREDENTIAL IS PART OF WHAT IS UNDER TEST. Each app gets
+ * exactly what its job needs and nothing more (F-07: a tenant-facing process
+ * must not be able to open a cross-tenant connection even if it tried).
  *
- * The Control Center gets the real test-database platform URL, because signing
- * in, activating configuration and storing a secret are exactly the journeys the
- * admin suite exercises. Every value comes from .env.test; none is hard-coded.
+ *   - web       — a PLACEHOLDER database url. The marketing site is statically
+ *                 rendered and touches no database at all.
+ *   - dashboard — the real TENANT url and the customer signing key. From Phase
+ *                 2B this is a real database-backed application: it
+ *                 authenticates customers and reads workspace data through the
+ *                 tenant role. It is given NO `DATABASE_PLATFORM_URL` and NO
+ *                 `SECRET_VAULT_KEK`, so a cross-tenant read is impossible in
+ *                 the served process rather than merely un-attempted.
+ *   - admin     — additionally the PLATFORM url and the vault key, because
+ *                 signing in, activating configuration and storing a secret are
+ *                 the journeys the admin suite exercises.
+ *
+ * Every value comes from .env.test; none is hard-coded.
  */
 function serverEnv(app: keyof typeof PORTS): Record<string, string> {
-  if (app !== 'admin') {
+  if (app === 'web') {
     return { DATABASE_URL: PLACEHOLDER_DATABASE_URL };
   }
+
   const env: Record<string, string> = {
     DATABASE_URL: process.env['DATABASE_URL'] ?? PLACEHOLDER_DATABASE_URL,
     APP_ENV: 'development',
   };
-  for (const key of ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']) {
+
+  const keys =
+    app === 'admin'
+      ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
+      : ['CUSTOMER_SESSION_SECRET'];
+
+  for (const key of keys) {
     const value = process.env[key];
     if (value) env[key] = value;
   }
@@ -120,13 +136,14 @@ export default defineConfig({
   },
 
   projects: [
-    // The admin console suite signs in, activates configuration and stores
-    // secrets, so it must not run twice concurrently against one database.
-    // It gets its own project, is excluded from the two viewport projects, and
-    // runs its files serially.
+    // Two suites sign in and mutate shared state, so neither may run twice
+    // concurrently against one database: the Control Center activates
+    // configuration and stores secrets, and the customer suite accepts a
+    // single-use invitation and edits workspace settings. Each gets its own
+    // serial project and is excluded from the two viewport projects.
     {
       name: 'chromium-desktop',
-      testIgnore: /admin-console\.spec\.ts/,
+      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -135,12 +152,22 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
-      testIgnore: /admin-console\.spec\.ts/,
+      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
       name: 'admin-console',
       testMatch: /admin-console\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      name: 'customer-app',
+      testMatch: /customer-app\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

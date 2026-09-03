@@ -17,7 +17,9 @@ import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import {
+  InvitationService,
   PlatformAuthService,
+  WorkspaceAdminService,
   generateRecoveryCodes,
   generateTotpEnrolment,
   hashPassword,
@@ -153,11 +155,20 @@ async function main(): Promise<void> {
 
     await auth.storeRecoveryCodes(user.id, recoveryCodes);
 
+    // --- Phase 2B: a throwaway CUSTOMER estate ---------------------------
+    //
+    // Provisioned through the SAME services the Control Center uses, so the
+    // suite exercises the real code path rather than hand-built rows. Two
+    // workspaces (so switching is testable), an owner, a read-only viewer and
+    // one live invitation.
+    const customer = await seedCustomerEstate(prisma, actor);
+
     const credentials: E2eAdminCredentials = {
       email: EMAIL,
       password,
       totpSecret: enrolment.secret,
       recoveryCode: recoveryCodes[0]!,
+      customer,
     };
 
     mkdirSync(path.dirname(E2E_CREDENTIALS_FILE), { recursive: true });
@@ -169,6 +180,169 @@ async function main(): Promise<void> {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * Provision the customer estate for the run.
+ *
+ * Idempotent by slug, and every password is generated here. Nothing in this
+ * function is a credential before it runs.
+ */
+async function seedCustomerEstate(
+  prisma: PrismaClient,
+  actor: {
+    platformUserId: string;
+    roleKey: string;
+    mfaVerified: boolean;
+    permissionKeys: readonly string[];
+  },
+): Promise<E2eAdminCredentials['customer']> {
+  const workspaces = new WorkspaceAdminService({ prisma });
+  const invitations = new InvitationService({ prisma });
+
+  const ownerEmail = 'e2e-owner@brandspace.test';
+  const viewerEmail = 'e2e-viewer@brandspace.test';
+  const invitedEmail = 'e2e-invitee@brandspace.test';
+  const password = `e2e-${randomBytes(18).toString('base64url')}`;
+  const viewerPassword = `e2e-${randomBytes(18).toString('base64url')}`;
+
+  const primarySlug = 'e2e-primary';
+  const secondSlug = 'e2e-secondary';
+
+  for (const [slug, name] of [
+    [primarySlug, 'E2E Primary Workspace'],
+    [secondSlug, 'E2E Secondary Workspace'],
+  ] as const) {
+    const existing = await prisma.workspace.findUnique({ where: { slug } });
+    if (!existing) {
+      await workspaces.create(actor, {
+        name,
+        slug,
+        ownerEmail,
+        ownerName: 'E2E Workspace Owner',
+        defaultLocale: 'EN',
+      });
+    }
+  }
+
+  const primary = await prisma.workspace.findUniqueOrThrow({ where: { slug: primarySlug } });
+  const secondary = await prisma.workspace.findUniqueOrThrow({ where: { slug: secondSlug } });
+
+  const ownerRole = await prisma.role.findFirstOrThrow({
+    where: { key: 'workspace_owner', workspaceId: null },
+  });
+  const viewerRole = await prisma.role.findFirstOrThrow({
+    where: { key: 'client_viewer', workspaceId: null },
+  });
+
+  // The owner: ACTIVE, with a fresh password, and an ACTIVE membership in both
+  // workspaces so the switcher has something to switch between.
+  const owner = await prisma.user.update({
+    where: { email: ownerEmail },
+    data: {
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      passwordHash: await hashPassword(password),
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+  for (const workspaceId of [primary.id, secondary.id]) {
+    await prisma.membership.upsert({
+      where: { workspaceId_userId: { workspaceId, userId: owner.id } },
+      create: {
+        workspaceId,
+        userId: owner.id,
+        roleId: ownerRole.id,
+        status: 'ACTIVE',
+        acceptedAt: new Date(),
+        brandScope: [],
+      },
+      update: { status: 'ACTIVE', roleId: ownerRole.id, acceptedAt: new Date() },
+    });
+  }
+
+  // A read-only member of the primary workspace, for the RBAC assertions.
+  const viewer = await prisma.user.upsert({
+    where: { email: viewerEmail },
+    create: {
+      email: viewerEmail,
+      name: 'E2E Client Viewer',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      passwordHash: await hashPassword(viewerPassword),
+    },
+    update: {
+      status: 'ACTIVE',
+      passwordHash: await hashPassword(viewerPassword),
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+  await prisma.membership.upsert({
+    where: { workspaceId_userId: { workspaceId: primary.id, userId: viewer.id } },
+    create: {
+      workspaceId: primary.id,
+      userId: viewer.id,
+      roleId: viewerRole.id,
+      status: 'ACTIVE',
+      acceptedAt: new Date(),
+      brandScope: [],
+    },
+    update: { status: 'ACTIVE', roleId: viewerRole.id },
+  });
+
+  // One live invitation. Any earlier pending one is revoked first, because the
+  // partial unique index allows only a single PENDING row per address.
+  await prisma.invitation.updateMany({
+    where: { workspaceId: primary.id, email: invitedEmail, status: 'PENDING' },
+    data: { status: 'REVOKED', revokedAt: new Date(), revokedReason: 'Replaced for a new run' },
+  });
+  await prisma.membership.deleteMany({
+    where: { workspaceId: primary.id, user: { email: invitedEmail } },
+  });
+  const issued = await invitations.create({
+    workspaceId: primary.id,
+    email: invitedEmail,
+    roleId: viewerRole.id,
+    inviter: {
+      kind: 'platform',
+      platformUserId: actor.platformUserId,
+      permissionKeys: actor.permissionKeys,
+      mfaVerified: actor.mfaVerified,
+    },
+  });
+
+  // The invitee needs an account to accept with: acceptance binds an
+  // invitation to a PROVEN identity, never to whoever opened the link.
+  await prisma.user.upsert({
+    where: { email: invitedEmail },
+    create: {
+      email: invitedEmail,
+      name: 'E2E Invitee',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      passwordHash: await hashPassword(password),
+    },
+    update: {
+      status: 'ACTIVE',
+      passwordHash: await hashPassword(password),
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+
+  return {
+    email: ownerEmail,
+    password,
+    workspaceSlug: primarySlug,
+    workspaceName: 'E2E Primary Workspace',
+    secondWorkspaceSlug: secondSlug,
+    viewerEmail,
+    viewerPassword,
+    invitationToken: issued.token,
+    invitedEmail,
+  };
 }
 
 main().catch((error: unknown) => {

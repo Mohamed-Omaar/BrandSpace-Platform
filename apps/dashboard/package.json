@@ -9,6 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/auth": "workspace:*",
+    "@brandspace/config": "workspace:*",
+    "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/observability": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "@brandspace/ui": "workspace:*",
     "next": "16.3.4",

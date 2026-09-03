@@ -3,11 +3,18 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { getPlatformClient, type PlatformPrismaClient } from '@brandspace/database/platform';
 import {
+  InvitationService,
+  MembershipService,
+  OutboxEmailProvider,
   PLATFORM_REALM,
   PlatformAuthService,
+  SupportModeService,
+  WorkspaceAdminService,
   type AuthenticatedPlatformActor,
+  type EmailProvider,
 } from '@brandspace/auth';
 import { ConfigurationService } from '@brandspace/config';
+import { CreditService, EntitlementService } from '@brandspace/entitlements';
 import { SecretService } from '@brandspace/secrets';
 
 /**
@@ -46,6 +53,47 @@ export function getPlatformAuth(): PlatformAuthService {
     resolveMfaSecret: async (secretRef) =>
       getSecretService().resolveSecret(secretRef, currentEnvironment()),
   });
+}
+
+/**
+ * Phase 2B services. Every one is constructed on the PLATFORM pool and every
+ * one re-checks the actor's permission inside the service — the page guard and
+ * the action guard are convenience, not the control (R-02).
+ */
+export function getWorkspaceService(): WorkspaceAdminService {
+  return new WorkspaceAdminService({ prisma: getPlatformPrisma() });
+}
+
+export function getMembershipService(): MembershipService {
+  return new MembershipService({ prisma: getPlatformPrisma() });
+}
+
+export function getInvitationService(): InvitationService {
+  return new InvitationService({ prisma: getPlatformPrisma() });
+}
+
+export function getSupportModeService(): SupportModeService {
+  return new SupportModeService({ prisma: getPlatformPrisma() });
+}
+
+export function getEntitlementService(): EntitlementService {
+  return new EntitlementService({
+    prisma: getPlatformPrisma(),
+    config: getConfigService(),
+    environment: currentEnvironment(),
+  });
+}
+
+export function getCreditService(): CreditService {
+  return new CreditService({ prisma: getPlatformPrisma() });
+}
+
+/**
+ * Outbound email. D-41: no vendor is approved, so the default writes to the
+ * auditable outbox rather than pretending a message was delivered.
+ */
+export function getEmailProvider(): EmailProvider {
+  return new OutboxEmailProvider(getPlatformPrisma());
 }
 
 export function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
