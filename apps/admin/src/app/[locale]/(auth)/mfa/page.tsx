@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { PLATFORM_REALM } from '@brandspace/auth';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { Banner, Button, CONTROL_CLASS, Field, inputStyle, spacingTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
+import { PlatformAuthShell } from '../../../../components/platform-auth';
 import { verifyMfaAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -23,29 +24,23 @@ export default async function MfaPage({
   if (!store.get(PLATFORM_REALM.cookieName)?.value) redirect(`/${locale}/login`);
 
   return (
-    <main
-      id="main"
-      style={{ maxInlineSize: '26rem', marginInline: 'auto', padding: spacingTokens.xl }}
+    <PlatformAuthShell
+      heading={t('mfa.title')}
+      description={t('mfa.recoveryHint')}
+      descriptionTestId="description"
+      error={
+        error ? (
+          <div role="alert" data-testid="mfa-error">
+            <Banner tone="error" testId="mfa-error-banner">
+              {locale === 'ar' ? 'رمز التحقق غير صحيح.' : 'Invalid verification code.'}
+            </Banner>
+          </div>
+        ) : null
+      }
     >
-      <h1 style={{ color: colorTokens.brandBlueText }} data-testid="heading">
-        {t('mfa.title')}
-      </h1>
-      <p style={{ color: colorTokens.textSecondary }} data-testid="description">
-        {t('mfa.recoveryHint')}
-      </p>
-
-      {error ? (
-        <p role="alert" data-testid="mfa-error" style={{ color: colorTokens.danger }}>
-          {locale === 'ar' ? 'رمز التحقق غير صحيح.' : 'Invalid verification code.'}
-        </p>
-      ) : null}
-
-      <form action={verifyMfaAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+      <form action={verifyMfaAction} style={{ display: 'grid', gap: spacingTokens.xs }}>
         <input type="hidden" name="locale" value={locale} />
-        <div>
-          <label htmlFor="code" style={{ display: 'block', marginBlockEnd: spacingTokens.xs }}>
-            {t('mfa.code')}
-          </label>
+        <Field label={t('mfa.code')} htmlFor="code" required>
           <input
             id="code"
             name="code"
@@ -53,24 +48,20 @@ export default async function MfaPage({
             autoComplete="one-time-code"
             required
             data-testid="mfa-code"
-            style={{ inlineSize: '100%', padding: spacingTokens.sm }}
+            className={CONTROL_CLASS}
+            style={inputStyle({ size: 'lg' })}
           />
-        </div>
-        <button
+        </Field>
+        <Button
           type="submit"
+          size="lg"
+          fullWidth
           data-testid="submit"
-          style={{
-            padding: spacingTokens.sm,
-            background: colorTokens.brandBlueSurface,
-            color: colorTokens.brandBlueInk,
-            border: 'none',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-          }}
+          style={{ marginBlockStart: spacingTokens.sm }}
         >
           {t('mfa.submit')}
-        </button>
+        </Button>
       </form>
-    </main>
+    </PlatformAuthShell>
   );
 }

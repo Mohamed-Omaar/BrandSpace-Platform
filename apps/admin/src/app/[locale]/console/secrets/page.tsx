@@ -1,5 +1,5 @@
 import { SECRET_CATEGORY_DEFINITIONS } from '@brandspace/secrets';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, radiusTokens, spacingTokens } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
 import {
@@ -50,10 +50,10 @@ export default async function SecretsPage({
       <p
         data-testid="no-reveal-notice"
         style={{
-          border: `1px solid ${colorTokens.border}`,
-          background: colorTokens.surfaceMuted,
+          border: 'none',
+          background: colorTokens.surfaceLavender,
           padding: spacingTokens.md,
-          borderRadius: '0.5rem',
+          borderRadius: radiusTokens.lg,
         }}
       >
         {isArabic
@@ -88,13 +88,21 @@ export default async function SecretsPage({
             <label htmlFor="name" style={labelStyle}>
               {isArabic ? 'الاسم' : 'Name'}
             </label>
-            <input id="name" name="name" required data-testid="secret-name" style={inputStyle} />
+            <input
+              className="bs-control"
+              id="name"
+              name="name"
+              required
+              data-testid="secret-name"
+              style={inputStyle}
+            />
           </div>
           <div>
             <label htmlFor="category" style={labelStyle}>
               {isArabic ? 'الفئة' : 'Category'}
             </label>
             <select
+              className="bs-control"
               id="category"
               name="category"
               required
@@ -113,6 +121,7 @@ export default async function SecretsPage({
               {isArabic ? 'المزود' : 'Provider'}
             </label>
             <input
+              className="bs-control"
               id="provider"
               name="provider"
               required
@@ -127,6 +136,7 @@ export default async function SecretsPage({
             {/* type=password so it is not shoulder-readable; autoComplete off so a
               browser never stores a platform credential. */}
             <input
+              className="bs-control"
               id="value"
               name="value"
               type="password"
@@ -259,10 +269,11 @@ const buttonStyle = {
   cursor: 'pointer',
 } as const;
 const smallButton = {
-  padding: '4px 8px',
+  padding: '4px 10px',
   fontSize: '0.8rem',
-  background: colorTokens.surfaceMuted,
-  border: `1px solid ${colorTokens.border}`,
-  borderRadius: '0.375rem',
+  background: colorTokens.controlSurface,
+  color: colorTokens.textPrimary,
+  border: 'none',
+  borderRadius: radiusTokens.full,
   cursor: 'pointer',
 } as const;

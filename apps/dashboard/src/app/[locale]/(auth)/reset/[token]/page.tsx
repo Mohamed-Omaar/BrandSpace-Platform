@@ -43,6 +43,7 @@ export default async function ResetCompletePage({
           {t('reset.newPassword')}
         </label>
         <input
+          className="bs-control"
           id="password"
           name="password"
           type="password"

@@ -1,4 +1,4 @@
-import { colorTokens, radiusTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, radiusTokens, shadowTokens, spacingTokens } from '@brandspace/ui';
 import {
   getCustomerAuth,
   getSessionToken,
@@ -67,14 +67,23 @@ export default async function WorkspacePickerPage({
                 <button
                   type="submit"
                   data-testid={`choose-workspace-${w.workspaceSlug}`}
+                  className="bs-pressable bs-liftable"
                   style={{
                     ...authButtonStyle(),
-                    background: colorTokens.surface,
+                    // A soft filled surface, not an outlined button. The list is
+                    // separated by the gap between the tiles and by the shadow
+                    // each one lifts on hover.
+                    background: colorTokens.surfaceSoft,
                     color: colorTokens.textPrimary,
-                    border: `1px solid ${colorTokens.border}`,
-                    borderRadius: radiusTokens.md,
+                    border: 'none',
+                    boxShadow: shadowTokens.card,
+                    borderRadius: radiusTokens.lg,
                     textAlign: 'start',
                     paddingInline: spacingTokens.md,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacingTokens.xs,
+                    flexWrap: 'wrap',
                   }}
                 >
                   <strong>{w.workspaceName}</strong>

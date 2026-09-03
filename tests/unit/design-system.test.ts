@@ -186,6 +186,62 @@ describe('applications hold no colour literals', () => {
   });
 });
 
+/*
+ * THE BORDERLESS DIRECTION'S ONE FRAGILE JOINT.
+ *
+ * A control is no longer identified by an outline. Its fill, its hover, its
+ * disabled state and its focus ring all come from the `.bs-control` class in
+ * `tokens.css`; `inputStyle()` supplies only the geometry. So an input styled
+ * with `inputStyle()` and NO class is not a slightly-off input — it is a
+ * transparent rectangle on a white page, invisible until it is focused.
+ *
+ * This was not hypothetical: forty-three controls across the two consoles were
+ * in exactly that state after the token change, because they had been written
+ * when the border was doing the work. They are fixed, and this test is why the
+ * next one cannot ship.
+ */
+describe('every form control carries the class that makes it visible', () => {
+  const controlPattern = /<(input|textarea|select)\b((?:[^<>]|\{[^{}]*\})*?)\/?>/gs;
+  const stylePattern = /(inputStyle|textareaStyle|authInputStyle|selectStyle)/;
+
+  const sources = [
+    ...collectSourceFiles('apps/dashboard/src'),
+    ...collectSourceFiles('apps/admin/src'),
+    ...collectSourceFiles('packages/ui/src'),
+  ].filter((file) => file.endsWith('.tsx'));
+
+  it('scans a meaningful number of files', () => {
+    expect(sources.length).toBeGreaterThan(20);
+  });
+
+  it('gives every styled control the bs-control class', () => {
+    const offenders: string[] = [];
+    let scanned = 0;
+
+    for (const file of sources) {
+      const source = read(file);
+      for (const match of source.matchAll(controlPattern)) {
+        const attributes = match[2] ?? '';
+        if (!stylePattern.test(attributes)) continue;
+        scanned += 1;
+        if (attributes.includes('bs-control') || attributes.includes('CONTROL_CLASS')) continue;
+        const line = source.slice(0, match.index).split('\n').length;
+        offenders.push(`${file}:${line} <${match[1]}>`);
+      }
+    }
+
+    expect(scanned, 'no styled controls were found; the scan is broken').toBeGreaterThan(30);
+    expect(offenders, 'these controls would render invisible on a white page').toEqual([]);
+  });
+
+  it('defines the class it depends on, with a fill and a focus state', () => {
+    const css = read('packages/ui/src/tokens.css');
+    expect(css).toContain('.bs-control {');
+    expect(css).toMatch(/\.bs-control:focus-visible/);
+    expect(css).toMatch(/\.bs-control:disabled/);
+  });
+});
+
 describe('RTL correctness is structural, not a second stylesheet', () => {
   const shell = read('packages/ui/src/app-shell.tsx');
   const primitives = read('packages/ui/src/primitives.tsx');

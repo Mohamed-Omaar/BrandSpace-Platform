@@ -226,7 +226,7 @@ export default async function WorkspacesPage({
           <form action={createWorkspaceAction}>
             <input type="hidden" name="locale" value={locale} />
             <Field label={t('ws.name')} htmlFor="name">
-              <input id="name" name="name" required style={inputStyle()} />
+              <input className="bs-control" id="name" name="name" required style={inputStyle()} />
             </Field>
             <Field
               label={t('ws.slug')}
@@ -237,16 +237,29 @@ export default async function WorkspacesPage({
                   : '3–50 lower-case letters, digits or hyphens.'
               }
             >
-              <input id="slug" name="slug" required style={inputStyle()} />
+              <input className="bs-control" id="slug" name="slug" required style={inputStyle()} />
             </Field>
             <Field label={t('ws.ownerEmail')} htmlFor="ownerEmail">
-              <input id="ownerEmail" name="ownerEmail" type="email" required style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="ownerEmail"
+                name="ownerEmail"
+                type="email"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.ownerName')} htmlFor="ownerName">
-              <input id="ownerName" name="ownerName" style={inputStyle()} />
+              <input className="bs-control" id="ownerName" name="ownerName" style={inputStyle()} />
             </Field>
             <Field label={t('ws.type')} htmlFor="type">
-              <select id="type" name="type" defaultValue="STARTUP" style={inputStyle()}>
+              <select
+                className="bs-control"
+                id="type"
+                name="type"
+                defaultValue="STARTUP"
+                style={inputStyle()}
+              >
                 {['INDIVIDUAL', 'STARTUP', 'COMPANY', 'CREATOR', 'AGENCY', 'ENTERPRISE'].map(
                   (v) => (
                     <option key={v} value={v}>
@@ -258,6 +271,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.locale')} htmlFor="defaultLocale">
               <select
+                className="bs-control"
                 id="defaultLocale"
                 name="defaultLocale"
                 defaultValue="AR"
@@ -269,6 +283,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.country')} htmlFor="country">
               <input
+                className="bs-control"
                 id="country"
                 name="country"
                 defaultValue="SA"
@@ -278,6 +293,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.timezone')} htmlFor="timezone">
               <input
+                className="bs-control"
                 id="timezone"
                 name="timezone"
                 defaultValue="Asia/Riyadh"
@@ -286,6 +302,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.currency')} htmlFor="currency">
               <input
+                className="bs-control"
                 id="currency"
                 name="currency"
                 defaultValue="SAR"
@@ -304,7 +321,13 @@ export default async function WorkspacesPage({
                   : undefined
               }
             >
-              <select id="planKey" name="planKey" defaultValue="" style={inputStyle()}>
+              <select
+                className="bs-control"
+                id="planKey"
+                name="planKey"
+                defaultValue=""
+                style={inputStyle()}
+              >
                 <option value="">{t('ws.noPlan')}</option>
                 {plans.map((p) => (
                   <option key={p.key} value={p.key}>
@@ -315,6 +338,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.trialDays')} htmlFor="trialDays">
               <input
+                className="bs-control"
                 id="trialDays"
                 name="trialDays"
                 type="number"

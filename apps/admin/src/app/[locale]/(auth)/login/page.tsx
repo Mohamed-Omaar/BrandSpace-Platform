@@ -1,5 +1,6 @@
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { Banner, Button, CONTROL_CLASS, Field, inputStyle, spacingTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
+import { PlatformAuthShell } from '../../../../components/platform-auth';
 import { signInAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -16,29 +17,25 @@ export default async function LoginPage({
   const t = translator(locale);
 
   return (
-    <main
-      id="main"
-      style={{ maxInlineSize: '26rem', marginInline: 'auto', padding: spacingTokens.xl }}
+    <PlatformAuthShell
+      heading={t('login.title')}
+      description={t('login.mfaRequired')}
+      descriptionTestId="mfa-notice"
+      error={
+        error ? (
+          /* One generic failure for every cause. The distinction lives in the
+             audit log, never in something a caller can observe. */
+          <div role="alert" data-testid="login-error">
+            <Banner tone="error" testId="login-error-banner">
+              {locale === 'ar' ? 'بيانات الدخول غير صحيحة.' : 'Invalid credentials.'}
+            </Banner>
+          </div>
+        ) : null
+      }
     >
-      <h1 style={{ color: colorTokens.brandBlueText }} data-testid="heading">
-        {t('login.title')}
-      </h1>
-      <p data-testid="mfa-notice" style={{ color: colorTokens.textSecondary }}>
-        {t('login.mfaRequired')}
-      </p>
-
-      {error ? (
-        <p role="alert" data-testid="login-error" style={{ color: colorTokens.danger }}>
-          {locale === 'ar' ? 'بيانات الدخول غير صحيحة.' : 'Invalid credentials.'}
-        </p>
-      ) : null}
-
-      <form action={signInAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+      <form action={signInAction} style={{ display: 'grid', gap: spacingTokens.xs }}>
         <input type="hidden" name="locale" value={locale} />
-        <div>
-          <label htmlFor="email" style={{ display: 'block', marginBlockEnd: spacingTokens.xs }}>
-            {t('login.email')}
-          </label>
+        <Field label={t('login.email')} htmlFor="email" required>
           <input
             id="email"
             name="email"
@@ -46,13 +43,11 @@ export default async function LoginPage({
             required
             autoComplete="username"
             data-testid="email"
-            style={{ inlineSize: '100%', padding: spacingTokens.sm }}
+            className={CONTROL_CLASS}
+            style={inputStyle({ size: 'lg' })}
           />
-        </div>
-        <div>
-          <label htmlFor="password" style={{ display: 'block', marginBlockEnd: spacingTokens.xs }}>
-            {t('login.password')}
-          </label>
+        </Field>
+        <Field label={t('login.password')} htmlFor="password" required>
           <input
             id="password"
             name="password"
@@ -60,24 +55,20 @@ export default async function LoginPage({
             required
             autoComplete="current-password"
             data-testid="password"
-            style={{ inlineSize: '100%', padding: spacingTokens.sm }}
+            className={CONTROL_CLASS}
+            style={inputStyle({ size: 'lg' })}
           />
-        </div>
-        <button
+        </Field>
+        <Button
           type="submit"
+          size="lg"
+          fullWidth
           data-testid="submit"
-          style={{
-            padding: spacingTokens.sm,
-            background: colorTokens.brandBlueSurface,
-            color: colorTokens.brandBlueInk,
-            border: 'none',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-          }}
+          style={{ marginBlockStart: spacingTokens.sm }}
         >
           {t('login.submit')}
-        </button>
+        </Button>
       </form>
-    </main>
+    </PlatformAuthShell>
   );
 }

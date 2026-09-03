@@ -27,7 +27,14 @@ export default async function ResetRequestPage({
         <label htmlFor="email" style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem' }}>
           {t('signIn.email')}
         </label>
-        <input id="email" name="email" type="email" required style={authInputStyle()} />
+        <input
+          className="bs-control"
+          id="email"
+          name="email"
+          type="email"
+          required
+          style={authInputStyle()}
+        />
         <button
           type="submit"
           data-testid="reset-request-submit"

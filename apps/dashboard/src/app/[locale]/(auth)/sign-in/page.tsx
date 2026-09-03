@@ -69,6 +69,7 @@ export default async function SignInPage({
         <input type="hidden" name="next" value={next} />
         <Field label={t('signIn.email')} htmlFor="email" required>
           <input
+            className="bs-control"
             id="email"
             name="email"
             type="email"
@@ -79,6 +80,7 @@ export default async function SignInPage({
         </Field>
         <Field label={t('signIn.password')} htmlFor="password" required>
           <input
+            className="bs-control"
             id="password"
             name="password"
             type="password"

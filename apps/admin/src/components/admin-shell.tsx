@@ -254,7 +254,14 @@ export function AdminShell({
             fontWeight: 700,
             background: isProduction ? colorTokens.danger : colorTokens.surfaceMuted,
             color: isProduction ? colorTokens.textInverse : colorTokens.textSecondary,
-            border: `1px solid ${isProduction ? colorTokens.danger : colorTokens.border}`,
+            /*
+             * A PRODUCTION BADGE KEEPS ITS OUTLINE. Everywhere else the border
+             * came off with the rest of them, but this one is not decoration:
+             * it is the signal that an action here is real, and it is the one
+             * place where being visually louder than its neighbours is the
+             * point. Non-production is a plain filled pill.
+             */
+            border: isProduction ? `1px solid ${colorTokens.danger}` : 'none',
             whiteSpace: 'nowrap',
           }}
         >

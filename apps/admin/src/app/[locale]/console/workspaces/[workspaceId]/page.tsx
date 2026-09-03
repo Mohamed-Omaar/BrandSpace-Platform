@@ -181,6 +181,7 @@ export default async function WorkspaceDetailPage({
             <input type="hidden" name="lockVersion" value={workspace.lockVersion} />
             <Field label={t('ws.name')} htmlFor="edit-name">
               <input
+                className="bs-control"
                 id="edit-name"
                 name="name"
                 defaultValue={workspace.name}
@@ -189,6 +190,7 @@ export default async function WorkspaceDetailPage({
             </Field>
             <Field label={t('ws.slug')} htmlFor="edit-slug">
               <input
+                className="bs-control"
                 id="edit-slug"
                 name="slug"
                 defaultValue={workspace.slug}
@@ -197,6 +199,7 @@ export default async function WorkspaceDetailPage({
             </Field>
             <Field label={t('ws.locale')} htmlFor="edit-locale">
               <select
+                className="bs-control"
                 id="edit-locale"
                 name="defaultLocale"
                 defaultValue={workspace.defaultLocale}
@@ -208,6 +211,7 @@ export default async function WorkspaceDetailPage({
             </Field>
             <Field label={t('ws.timezone')} htmlFor="edit-timezone">
               <input
+                className="bs-control"
                 id="edit-timezone"
                 name="timezone"
                 defaultValue={workspace.timezone}
@@ -216,6 +220,7 @@ export default async function WorkspaceDetailPage({
             </Field>
             <Field label={t('ws.country')} htmlFor="edit-country">
               <input
+                className="bs-control"
                 id="edit-country"
                 name="country"
                 defaultValue={workspace.country}
@@ -225,6 +230,7 @@ export default async function WorkspaceDetailPage({
             </Field>
             <Field label={t('ws.currency')} htmlFor="edit-currency">
               <input
+                className="bs-control"
                 id="edit-currency"
                 name="currency"
                 defaultValue={workspace.currency}
@@ -255,7 +261,7 @@ export default async function WorkspaceDetailPage({
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <input type="hidden" name="lockVersion" value={workspace.lockVersion} />
             <Field label={t('ws.status')} htmlFor="nextStatus">
-              <select id="nextStatus" name="nextStatus" style={inputStyle()}>
+              <select className="bs-control" id="nextStatus" name="nextStatus" style={inputStyle()}>
                 {['ACTIVE', 'SUSPENDED', 'TRIALING', 'PAST_DUE', 'CANCELLED', 'ARCHIVED'].map(
                   (s) => (
                     <option key={s} value={s}>
@@ -270,7 +276,14 @@ export default async function WorkspaceDetailPage({
               htmlFor="status-reason"
               hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
             >
-              <input id="status-reason" name="reason" required minLength={8} style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="status-reason"
+                name="reason"
+                required
+                minLength={8}
+                style={inputStyle()}
+              />
             </Field>
             <button type="submit" data-testid="workspace-status-submit" style={dangerButtonStyle()}>
               {t('ws.changeStatus')}
@@ -297,6 +310,7 @@ export default async function WorkspaceDetailPage({
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <Field label={t('ws.plan')} htmlFor="planKey">
               <select
+                className="bs-control"
                 id="planKey"
                 name="planKey"
                 defaultValue={workspace.planKey ?? ''}
@@ -311,7 +325,7 @@ export default async function WorkspaceDetailPage({
               </select>
             </Field>
             <Field label={t('ws.reason')} htmlFor="plan-reason">
-              <input id="plan-reason" name="reason" style={inputStyle()} />
+              <input className="bs-control" id="plan-reason" name="reason" style={inputStyle()} />
             </Field>
             <button type="submit" data-testid="assign-plan-submit" style={primaryButtonStyle()}>
               {t('ws.assignPlan')}
@@ -418,16 +432,34 @@ export default async function WorkspaceDetailPage({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <Field label={t('ws.feature')} htmlFor="featureKey">
-              <input id="featureKey" name="featureKey" required style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="featureKey"
+                name="featureKey"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.status')} htmlFor="override-enabled">
-              <select id="override-enabled" name="enabled" defaultValue="true" style={inputStyle()}>
+              <select
+                className="bs-control"
+                id="override-enabled"
+                name="enabled"
+                defaultValue="true"
+                style={inputStyle()}
+              >
                 <option value="true">{t('ws.enabled')}</option>
                 <option value="false">{t('ws.disabled')}</option>
               </select>
             </Field>
             <Field label={t('ws.limit')} htmlFor="limitValue">
-              <input id="limitValue" name="limitValue" type="number" style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="limitValue"
+                name="limitValue"
+                type="number"
+                style={inputStyle()}
+              />
             </Field>
             <Field
               label={t('ws.reason')}
@@ -435,6 +467,7 @@ export default async function WorkspaceDetailPage({
               hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
             >
               <input
+                className="bs-control"
                 id="override-reason"
                 name="reason"
                 required
@@ -466,7 +499,14 @@ export default async function WorkspaceDetailPage({
                 adjustment rather than applying a second one. */}
             <input type="hidden" name="idempotencyKey" value={randomUUID()} />
             <Field label={t('ws.creditsAmount')} htmlFor="credits">
-              <input id="credits" name="credits" type="number" required style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="credits"
+                name="credits"
+                type="number"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field
               label={t('ws.reason')}
@@ -474,6 +514,7 @@ export default async function WorkspaceDetailPage({
               hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
             >
               <input
+                className="bs-control"
                 id="credits-reason"
                 name="reason"
                 required
@@ -590,10 +631,17 @@ export default async function WorkspaceDetailPage({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="workspaceId" value={workspaceId} />
             <Field label={t('ws.inviteEmail')} htmlFor="invite-email">
-              <input id="invite-email" name="email" type="email" required style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="invite-email"
+                name="email"
+                type="email"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.inviteRole')} htmlFor="invite-role">
-              <select id="invite-role" name="roleId" style={inputStyle()}>
+              <select className="bs-control" id="invite-role" name="roleId" style={inputStyle()}>
                 {roles.map((r) => (
                   <option key={r.id} value={r.id}>
                     {locale === 'ar' ? r.nameAr : r.nameEn}

@@ -96,6 +96,7 @@ export default async function MembersPage({
           {t('members.changeRole')}
         </label>
         <select
+          className="bs-control"
           id={`role-${membershipId}`}
           name="roleId"
           defaultValue=""
@@ -340,10 +341,17 @@ export default async function MembersPage({
             >
               <input type="hidden" name="locale" value={locale} />
               <Field label={t('members.email')} htmlFor="invite-email" required>
-                <input id="invite-email" name="email" type="email" required style={inputStyle()} />
+                <input
+                  className="bs-control"
+                  id="invite-email"
+                  name="email"
+                  type="email"
+                  required
+                  style={inputStyle()}
+                />
               </Field>
               <Field label={t('members.role')} htmlFor="invite-role" required>
-                <select id="invite-role" name="roleId" style={inputStyle()}>
+                <select className="bs-control" id="invite-role" name="roleId" style={inputStyle()}>
                   {assignableRoles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {locale === 'ar' ? r.nameAr : r.nameEn}

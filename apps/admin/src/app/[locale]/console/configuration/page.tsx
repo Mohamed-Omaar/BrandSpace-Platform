@@ -1,5 +1,5 @@
 import { CONFIG_DOMAIN_KEYS, isConfigDomain } from '@brandspace/config';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, radiusTokens, spacingTokens } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import Link from 'next/link';
 import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
@@ -100,9 +100,15 @@ export default async function ConfigurationPage({
                 style={{
                   display: 'inline-block',
                   padding: `${spacingTokens.xs} ${spacingTokens.sm}`,
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${key === domain ? colorTokens.brandBlueText : colorTokens.border}`,
-                  fontWeight: key === domain ? 600 : 400,
+                  borderRadius: radiusTokens.full,
+                  // Selected by FILL, not by an outline — the same treatment the
+                  // navigation and the segmented switchers use.
+                  background:
+                    key === domain ? colorTokens.brandPurpleTint : colorTokens.controlSurface,
+                  color:
+                    key === domain ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
+                  border: 'none',
+                  fontWeight: key === domain ? 600 : 500,
                 }}
               >
                 {key}
@@ -328,10 +334,11 @@ const buttonStyle = {
 } as const;
 
 const smallButton = {
-  padding: '4px 8px',
+  padding: '4px 10px',
   fontSize: '0.8rem',
-  background: colorTokens.surfaceMuted,
-  border: `1px solid ${colorTokens.border}`,
-  borderRadius: '0.375rem',
+  background: colorTokens.controlSurface,
+  color: colorTokens.textPrimary,
+  border: 'none',
+  borderRadius: radiusTokens.full,
   cursor: 'pointer',
 } as const;

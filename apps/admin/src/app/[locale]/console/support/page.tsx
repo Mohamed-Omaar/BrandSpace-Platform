@@ -158,7 +158,12 @@ export default async function SupportModePage({
             <form action={startSupportAction}>
               <input type="hidden" name="locale" value={locale} />
               <Field label={locale === 'ar' ? 'مساحة العمل' : 'Workspace'} htmlFor="workspaceId">
-                <select id="workspaceId" name="workspaceId" style={inputStyle()}>
+                <select
+                  className="bs-control"
+                  id="workspaceId"
+                  name="workspaceId"
+                  style={inputStyle()}
+                >
                   {workspaces.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name} ({w.slug})
@@ -172,6 +177,7 @@ export default async function SupportModePage({
                 hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
               >
                 <input
+                  className="bs-control"
                   id="support-reason-input"
                   name="reason"
                   required
@@ -180,7 +186,12 @@ export default async function SupportModePage({
                 />
               </Field>
               <Field label={t('support.ticket')} htmlFor="ticketRef">
-                <input id="ticketRef" name="ticketRef" style={inputStyle()} />
+                <input
+                  className="bs-control"
+                  id="ticketRef"
+                  name="ticketRef"
+                  style={inputStyle()}
+                />
               </Field>
               <button type="submit" data-testid="support-start" style={primaryButtonStyle()}>
                 {t('support.start')}
