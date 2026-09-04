@@ -225,11 +225,9 @@ jobs:
   e2e:
     name: Playwright E2E (RTL/LTR + accessibility)
     runs-on: ubuntu-latest
-    # A CEILING, so a hang fails in twenty-five minutes with an uploaded report
-    # instead of silently consuming the six-hour default. This suite has
-    # historically finished in about three minutes; when it did not, the run sat
-    # there for hours saying nothing, which is the worst possible failure mode
-    # for a check somebody is waiting on.
+    # A CEILING, so a hang fails with an uploaded report instead of inheriting
+    # GitHub's six-hour default. This suite finishes in about three minutes;
+    # twenty-five is generous headroom, not a target.
     timeout-minutes: 25
 
     services:
