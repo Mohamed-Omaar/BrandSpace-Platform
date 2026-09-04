@@ -170,19 +170,35 @@ export default defineConfig({
         launchOptions,
       },
     },
-    {
-      // Visual-review evidence for the Phase 2C-A checkpoint. Not run by
-      // default — `pnpm e2e:screenshots` invokes it — because it writes files
-      // into the repository rather than asserting behaviour.
-      name: 'visual-review',
-      testMatch: /design-system\.screenshots\.spec\.ts/,
-      fullyParallel: false,
-      use: {
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1440, height: 900 },
-        launchOptions,
-      },
-    },
+    /*
+     * VISUAL-REVIEW EVIDENCE — OPT-IN, and now actually opt-in.
+     *
+     * This project writes PNGs into `docs/visual-review/`; it asserts almost
+     * nothing. The comment here has always said "not run by default", but
+     * Playwright runs every project in this array unless `--project` is given,
+     * so it ran in `pnpm test:e2e` — including in CI, where the files it
+     * produces are discarded when the runner is torn down.
+     *
+     * That was merely wasteful at eight captures. At fifty-five, several of
+     * them full-page shots of a document twelve thousand pixels tall, it turned
+     * a three-minute CI step into one that did not finish. The intent is now
+     * implemented rather than described: `pnpm e2e:screenshots` sets the flag,
+     * and nothing else runs it.
+     */
+    ...(process.env['BRANDSPACE_VISUAL_REVIEW'] === '1'
+      ? [
+          {
+            name: 'visual-review',
+            testMatch: /design-system\.screenshots\.spec\.ts/,
+            fullyParallel: false,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 1440, height: 900 },
+              launchOptions,
+            },
+          },
+        ]
+      : []),
     {
       // The design system's own suite: the shell, the showcase, responsive
       // behaviour and accessibility. It signs in for the shell journeys, so it

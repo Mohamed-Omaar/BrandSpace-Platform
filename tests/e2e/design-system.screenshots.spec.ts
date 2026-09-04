@@ -20,7 +20,14 @@ import { E2E_CREDENTIALS_FILE, repoRoot, type E2eAdminCredentials } from './env'
  * image — the accounts are the throwaway `@brandspace.test` ones the suite
  * creates and discards.
  *
- * Run with:  npx playwright test --project=visual-review
+ * Run with:  pnpm e2e:screenshots
+ *
+ * NOT part of `pnpm test:e2e`. This project is registered only when
+ * `BRANDSPACE_VISUAL_REVIEW=1`, which that script sets — see the comment beside
+ * the project in `playwright.config.ts` and F-33 in `docs/DECISIONS.md`. It
+ * writes files into the repository rather than asserting behaviour, so running
+ * it in CI produced artefacts nobody reads and, at fifty-five captures, a step
+ * that did not finish.
  */
 
 const OUTPUT = path.join(repoRoot, 'docs', 'visual-review');

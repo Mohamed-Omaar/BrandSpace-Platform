@@ -21,6 +21,7 @@ jobs:
   static:
     name: Format, lint, typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +58,7 @@ jobs:
   isolation-gate:
     name: Tenant-isolation gate (D-29)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +85,7 @@ jobs:
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -113,6 +116,7 @@ jobs:
   isolation:
     name: Tenant isolation and RLS (real PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -221,6 +225,12 @@ jobs:
   e2e:
     name: Playwright E2E (RTL/LTR + accessibility)
     runs-on: ubuntu-latest
+    # A CEILING, so a hang fails in twenty-five minutes with an uploaded report
+    # instead of silently consuming the six-hour default. This suite has
+    # historically finished in about three minutes; when it did not, the run sat
+    # there for hours saying nothing, which is the worst possible failure mode
+    # for a check somebody is waiting on.
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -325,6 +335,7 @@ jobs:
   secrets-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -399,6 +410,7 @@ jobs:
   build:
     name: Build applications
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
