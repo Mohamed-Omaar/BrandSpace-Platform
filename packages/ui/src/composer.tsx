@@ -138,7 +138,13 @@ function AccountChip({
       <Avatar initials={account.initials} seed={account.avatarSeed ?? 0} size="1.5rem" />
       <span style={{ display: 'grid', textAlign: 'start' }}>
         <span>{account.name}</span>
-        <span style={{ color: colorTokens.textMuted, fontWeight: 400 }}>{platformName}</span>
+        {/*
+          `textSecondary`, not `textMuted`. Muted is 4.61:1 on WHITE, which is
+          the only ground it was measured against — on this chip's lavender fill
+          it drops to 4.21:1 and fails AA. A muted token is only muted enough
+          for the surface it was measured on.
+        */}
+        <span style={{ color: colorTokens.textSecondary, fontWeight: 400 }}>{platformName}</span>
       </span>
     </button>
   );

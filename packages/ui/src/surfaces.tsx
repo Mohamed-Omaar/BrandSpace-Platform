@@ -36,6 +36,14 @@ export function cardStyle(
     border: `1px solid ${tone === 'plain' ? colorTokens.hairline : 'transparent'}`,
     boxShadow: elevated ? shadowTokens.card : 'none',
     padding: padded ? spacingTokens.lg : 0,
+    /*
+     * A GRID OR FLEX ITEM DEFAULTS TO `min-width: auto`, which means it refuses
+     * to shrink below its content. A card holding a table with a 40rem minimum
+     * therefore pushed the whole page sideways at 768px instead of letting the
+     * table scroll inside its own box — which is exactly what that box is for.
+     * Zero here restores the intended behaviour everywhere a card is laid out.
+     */
+    minInlineSize: 0,
   };
 }
 

@@ -42,6 +42,43 @@ async function capture(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: path.join(OUTPUT, `${name}.png`), fullPage: true });
 }
 
+/**
+ * A long screen, captured in READABLE SECTIONS rather than as one tall strip.
+ *
+ * A full-page shot of the showcase is roughly 12,000 pixels tall. Scaled to fit
+ * a review window it is illegible, which makes it useless as the evidence it is
+ * supposed to be. This takes a viewport-height slice at the top, the middle and
+ * the bottom of the document, each at 1:1, so the reviewer can actually read
+ * the type they are being asked to approve (§23).
+ */
+async function captureSections(page: Page, name: string): Promise<void> {
+  await settle(page);
+  const viewport = page.viewportSize();
+  const height = viewport?.height ?? 900;
+  const documentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  const sections: readonly (readonly [string, number])[] = [
+    ['top', 0],
+    ['middle', Math.max(0, Math.round(documentHeight / 2 - height / 2))],
+    ['bottom', Math.max(0, documentHeight - height)],
+  ];
+
+  for (const [suffix, offset] of sections) {
+    await page.evaluate((y) => window.scrollTo(0, y), offset);
+    // One frame for the scroll to land before the shot.
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: path.join(OUTPUT, `${name}-${suffix}.png`) });
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
+/** One section of the showcase, clipped to its own card. */
+async function captureRegion(page: Page, testId: string, name: string): Promise<void> {
+  const region = page.getByTestId(testId);
+  await region.scrollIntoViewIfNeeded();
+  await settle(page);
+  await region.screenshot({ path: path.join(OUTPUT, `${name}.png`) });
+}
+
 async function signInCustomer(page: Page, locale = 'en'): Promise<void> {
   const { customer } = credentials();
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
@@ -130,75 +167,208 @@ test.describe('visual review evidence', () => {
     await capture(page, '08-sidebar-collapsed');
   });
 
-  test('customer sign-in — both directions', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+  test('customer sign-in — both directions and mobile', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await expect(page.getByTestId('auth-brand-panel')).toBeVisible();
     await capture(page, '09-customer-sign-in-en');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
     await capture(page, '10-customer-sign-in-ar');
     await expect(page.getByTestId('signin-submit')).toBeVisible();
+
+    // The phone drops the brand panel entirely; the form is the whole screen.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await capture(page, '11-customer-sign-in-mobile');
   });
 
-  test('Control Center — overview and workspaces directory', async ({ page }) => {
+  test('Platform Admin sign-in and MFA challenge', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${ADMIN_BASE_URL}/en/login`);
+    await expect(page.getByTestId('platform-auth-card')).toBeVisible();
+    await capture(page, '12-platform-admin-sign-in');
+
+    // The second factor, which is a separate screen and a separate realm.
+    const creds = credentials();
+    await page.getByTestId('email').fill(creds.email);
+    await page.getByTestId('password').fill(creds.password);
+    await page.getByTestId('submit').click();
+    await expect(page).toHaveURL(`${ADMIN_BASE_URL}/en/mfa`);
+    await capture(page, '13-platform-admin-mfa');
+  });
+
+  test('Control Center — overview, directory and workspace detail', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await signInAdmin(page, 'en');
-    await capture(page, '11-admin-overview');
+    await capture(page, '14-admin-overview');
 
     await page.goto(`${ADMIN_BASE_URL}/en/console/workspaces`);
     await expect(page.getByTestId('workspace-table')).toBeVisible();
-    await capture(page, '12-admin-workspaces-directory');
+    await capture(page, '15-admin-workspaces-directory');
 
     // A workspace detail page, which is the third console screen restyled.
     await page.getByTestId('workspace-table').getByRole('link').first().click();
     await page.waitForURL(/\/console\/workspaces\/[0-9a-f-]{36}/);
-    await capture(page, '12b-admin-workspace-detail');
+    await captureSections(page, '16-admin-workspace-detail');
   });
 
-  test('the design showcase, Support Mode banner, previews and Copilot', async ({ page }) => {
+  test('the design showcase — full page, in readable sections', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
     await expect(page.getByTestId('showcase-support-banner')).toBeVisible();
-    await capture(page, '13-showcase-full-en');
+    await captureSections(page, '17-showcase-en');
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/design-system`);
-    await capture(page, '14-showcase-full-ar-rtl');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await captureSections(page, '18-showcase-ar-rtl');
+  });
 
-    // The Support Mode state, on its own.
+  test('the component gallery, section by section', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
-    await page.getByTestId('showcase-support-banner').scrollIntoViewIfNeeded();
+
+    await captureRegion(page, 'showcase-support-banner', '19-support-mode-banner');
+    await captureRegion(page, 'showcase-buttons', '20-buttons-and-controls');
+    await captureRegion(page, 'showcase-forms', '21-forms');
+    await captureRegion(page, 'showcase-feedback', '22-component-states');
+    await captureRegion(page, 'showcase-table', '23-tables-and-records');
+    await captureRegion(page, 'showcase-metrics', '24-metric-cards');
+  });
+
+  test('the social post previews, by format', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+
+    // Seven required variants, in one grid: Instagram feed, Story and Reel,
+    // Facebook, LinkedIn, a vertical TikTok video and an X-style post.
+    await expect(page.getByTestId('preview-instagram-story')).toBeVisible();
+    await expect(page.getByTestId('preview-tiktok-video')).toBeVisible();
+    const social = page.getByTestId('showcase-social');
+    await social.scrollIntoViewIfNeeded();
     await settle(page);
-    await page
-      .getByTestId('showcase-support-banner')
-      .screenshot({ path: path.join(OUTPUT, '15-support-mode-banner.png') });
+    await social.screenshot({ path: path.join(OUTPUT, '25-social-previews.png') });
+  });
 
-    // Component states.
-    await page
-      .getByTestId('showcase-feedback')
-      .screenshot({ path: path.join(OUTPUT, '16-component-states.png') });
-    await page
-      .getByTestId('showcase-buttons')
-      .screenshot({ path: path.join(OUTPUT, '17-buttons-and-controls.png') });
-    await page
-      .getByTestId('showcase-forms')
-      .screenshot({ path: path.join(OUTPUT, '18-forms.png') });
+  test('the features hub', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await expect(page.getByTestId('features-prototype-notice')).toBeVisible();
+    await captureRegion(page, 'showcase-features', '26-features-hub');
 
-    // Social previews: the grid covers five platforms and four ratios at once.
-    await page
-      .getByTestId('showcase-social')
-      .screenshot({ path: path.join(OUTPUT, '19-social-post-previews.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await captureRegion(page, 'showcase-features', '27-features-hub-mobile');
+  });
 
-    // Copilot: desktop panel.
-    await page.getByTestId('showcase-copilot').scrollIntoViewIfNeeded();
-    await page.click('[data-testid="copilot-state-approval"]');
-    await page.click('[data-testid="copilot-launcher"]');
+  test('the content calendar — month on desktop, agenda on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await expect(page.getByTestId('calendar-month-grid')).toBeVisible();
+    await captureRegion(page, 'showcase-calendar', '28-calendar-month-desktop');
+
+    // The agenda view, which is a first-class desktop view and not only a
+    // fallback.
+    await page.getByTestId('calendar-view-agenda').click();
+    await captureRegion(page, 'showcase-calendar', '29-calendar-agenda-desktop');
+
+    // On a phone the calendar is ALWAYS the agenda: the month grid is not
+    // squeezed into 390px, it is replaced.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await captureRegion(page, 'showcase-calendar', '30-calendar-agenda-mobile');
+  });
+
+  test('the calendar in Arabic', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/design-system`);
+    await captureRegion(page, 'showcase-calendar', '31-calendar-month-ar-rtl');
+  });
+
+  test('the posts library — grid, list and bulk selection', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await expect(page.getByTestId('library-prototype-notice')).toBeVisible();
+    await captureRegion(page, 'showcase-library', '32-posts-library-all');
+
+    // Selecting a record reveals the bulk bar, which exists only in that state.
+    await page
+      .getByTestId('showcase-library')
+      .getByRole('button', { name: 'Select' })
+      .first()
+      .click();
+    await expect(page.getByTestId('library-bulk-bar')).toBeVisible();
+    await captureRegion(page, 'showcase-library', '33-posts-library-bulk-selection');
+
+    // A status tab that genuinely matches nothing, showing the empty state
+    // rather than the same records under a different heading.
+    await page.getByTestId('tab-archived').click();
+    await captureRegion(page, 'showcase-library', '34-posts-library-empty-state');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await captureRegion(page, 'showcase-library', '35-posts-library-mobile');
+  });
+
+  test('the post composer — desktop, mobile and Arabic', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await expect(page.getByTestId('prototype-composer')).toBeVisible();
+    await captureRegion(page, 'showcase-composer', '36-composer-desktop');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/design-system`);
+    await captureRegion(page, 'showcase-composer', '37-composer-ar-rtl');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await captureRegion(page, 'showcase-composer', '38-composer-mobile');
+  });
+
+  test('the Design Studio — desktop and mobile', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await expect(page.getByTestId('studio-canvas')).toBeVisible();
+    await captureRegion(page, 'showcase-studio', '39-design-studio-desktop');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/design-system`);
+    await captureRegion(page, 'showcase-studio', '40-design-studio-ar-rtl');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+    await captureRegion(page, 'showcase-studio', '41-design-studio-mobile');
+  });
+
+  test('the contextual Copilot — surfaces, states and the approval preview', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/design-system`);
+
+    // The composer's action set.
+    await page.getByTestId('copilot-surface-composer').click();
+    await captureRegion(page, 'showcase-copilot', '42-copilot-composer-context');
+
+    // A different surface offers a different set — the point of D-56.
+    await page.getByTestId('copilot-surface-studio').click();
+    await captureRegion(page, 'showcase-copilot', '43-copilot-studio-context');
+
+    await page.getByTestId('copilot-state-streaming').click();
+    await captureRegion(page, 'showcase-copilot', '44-copilot-processing');
+
+    await page.getByTestId('copilot-state-error').click();
+    await captureRegion(page, 'showcase-copilot', '45-copilot-error');
+
+    await page.getByTestId('copilot-state-insufficient-credits').click();
+    await captureRegion(page, 'showcase-copilot', '46-copilot-insufficient-credits');
+
+    // The approval gate, with the before/after preview of what would change.
+    await page.getByTestId('copilot-state-approval').click();
+    await expect(page.getByTestId('copilot-change-preview').first()).toBeVisible();
+    await captureRegion(page, 'showcase-copilot', '47-copilot-approval-preview');
+
+    // And the docked desktop panel.
+    await page.getByTestId('copilot-launcher').click();
     await expect(page.getByTestId('copilot-panel')).toBeVisible();
-    await capture(page, '20-copilot-desktop-panel');
-    await page.click('[data-testid="copilot-close"]');
-
-    await page
-      .getByTestId('showcase-copilot')
-      .screenshot({ path: path.join(OUTPUT, '21-copilot-states.png') });
+    await capture(page, '48-copilot-desktop-panel');
+    await page.getByTestId('copilot-close').click();
   });
 
   test('Copilot as a mobile sheet', async ({ page }) => {
@@ -210,6 +380,6 @@ test.describe('visual review evidence', () => {
     await expect(sheet).toBeVisible();
     await expect(sheet).toHaveAttribute('aria-modal', 'true');
     await settle(page);
-    await page.screenshot({ path: path.join(OUTPUT, '22-copilot-mobile-sheet.png') });
+    await page.screenshot({ path: path.join(OUTPUT, '49-copilot-mobile-sheet.png') });
   });
 });

@@ -73,9 +73,13 @@ export function FeatureCard({
         display: 'flex',
         flexDirection: 'column',
         gap: spacingTokens.sm,
-        // An unavailable feature reads as quieter, never as broken: reduced
-        // emphasis rather than a disabled-looking box.
-        opacity: state === 'coming-soon' ? 0.85 : 1,
+        /*
+         * NO CONTAINER OPACITY. "Quieter" used to be `opacity: 0.85`, and that
+         * blended the state badge's #175CD3 toward its own tint until it read
+         * 4.2:1 — an AA failure axe caught, invisible in the source because
+         * neither colour had changed. The soft surface above is the whole of
+         * the quieting; every colour inside stays the colour it was measured at.
+         */
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacingTokens.sm }}>

@@ -67,6 +67,17 @@ export interface StudioLabels {
   readonly prototypeNotice: string;
   readonly layerNames: readonly string[];
   readonly mobileNotice: string;
+  /*
+   * THE SAMPLE DESIGN'S OWN COPY.
+   *
+   * §16 asks for a polished sample on the canvas rather than an empty editor,
+   * and the words on that sample are user-facing text like any other — so they
+   * are props, not literals (CLAUDE.md §4).
+   */
+  readonly brandName: string;
+  readonly sampleHeadline: string;
+  readonly sampleSupporting: string;
+  readonly sampleUrl: string;
 }
 
 const TOOL_ICONS: Record<StudioTool, ReactNode> = {
@@ -107,9 +118,15 @@ export function StudioToolRail({
     <nav
       aria-label={labels.toolsLabel}
       data-testid="studio-tool-rail"
+      /*
+        NO `flexDirection` HERE. The rail is a horizontal scroller on a phone and
+        a vertical column from the tablet breakpoint, and that decision belongs
+        to `.bs-studio-rail` in `tokens.css`. An inline `flexDirection: 'row'`
+        beats the stylesheet, which is exactly what kept the rail horizontal on
+        the desktop screenshot while the shell had already gone three-column.
+      */
       style={{
         display: 'flex',
-        flexDirection: 'row',
         gap: spacingTokens.xs,
         padding: spacingTokens.xs,
         borderRadius: radiusTokens.lg,
@@ -174,6 +191,9 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
         position: 'relative',
         aspectRatio: '1 / 1',
         inlineSize: 'min(100%, 26rem)',
+        // `cqw` below needs a query container, or it resolves against the
+        // viewport and the headline overruns the artboard — which it did.
+        containerType: 'inline-size',
         borderRadius: radiusTokens.sm,
         overflow: 'hidden',
         background: colorTokens.surface,
@@ -220,22 +240,20 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
           >
             B
           </span>
-          BrandSpace
+          {labels.brandName}
         </span>
 
         <div style={{ display: 'grid', alignContent: 'center', gap: '4%' }}>
           <span
             style={{
-              fontSize: 'clamp(1.5rem, 7cqw, 2.5rem)',
+              fontSize: 'clamp(1.125rem, 6.5cqw, 2rem)',
               lineHeight: 1.1,
               fontWeight: 800,
               letterSpacing: '-0.03em',
               color: colorTokens.surfaceInk,
             }}
           >
-            Plan a whole quarter
-            <br />
-            in one afternoon
+            {labels.sampleHeadline}
           </span>
           <span
             style={{
@@ -245,7 +263,7 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
               maxInlineSize: '22ch',
             }}
           >
-            Brand voice, approvals and scheduling in one place.
+            {labels.sampleSupporting}
           </span>
         </div>
 
@@ -261,7 +279,7 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
             fontWeight: 800,
           }}
         >
-          brandspace.cc
+          {labels.sampleUrl}
         </span>
       </div>
 

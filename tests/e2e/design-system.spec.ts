@@ -445,14 +445,20 @@ test.describe('the social post preview keeps its visual contract', () => {
 
   test('shows missing media, loading media and a video badge honestly', async ({ page }) => {
     await page.goto(SHOWCASE('en'));
+    // The variants are now named by platform and FORMAT, because a feed post, a
+    // Story and a Reel are three compositions rather than one card with three
+    // badges. Same three assertions, addressed to the new names.
     await expect(
-      page.getByTestId('preview-failed-missing').getByTestId('preview-media-missing'),
+      page.getByTestId('preview-x-post').getByTestId('preview-media-missing'),
     ).toBeVisible();
     await expect(
       page.getByTestId('preview-loading').getByTestId('preview-media-loading'),
     ).toBeVisible();
     await expect(
-      page.getByTestId('preview-story').getByTestId('preview-video-badge'),
+      page.getByTestId('preview-instagram-reel').getByTestId('preview-video-badge'),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId('preview-tiktok-video').getByTestId('preview-video-badge'),
     ).toBeVisible();
   });
 

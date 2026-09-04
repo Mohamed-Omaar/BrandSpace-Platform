@@ -55,6 +55,15 @@ export interface CalendarLabels extends PostCardLabels {
  *
  * Hidden below `md` by `bs-wide-only`: see the agenda below for why.
  */
+/** The days in rows of seven, so the grid can carry real `role="row"` groups. */
+function weeksOf(days: readonly CalendarDay[]): readonly (readonly CalendarDay[])[] {
+  const weeks: CalendarDay[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+  return weeks;
+}
+
 function MonthGrid({
   days,
   labels,
@@ -78,61 +87,87 @@ function MonthGrid({
         padding: spacingTokens.sm,
       }}
     >
-      {labels.weekdayNames.map((name) => (
-        <div
-          key={name}
-          role="columnheader"
-          style={{
-            padding: spacingTokens.xs,
-            ...typographyTokens.caption,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            color: colorTokens.textMuted,
-            textAlign: 'center',
-          }}
-        >
-          {name}
-        </div>
-      ))}
-      {days.map((day) => (
-        <div
-          key={day.key}
-          role="gridcell"
-          data-testid={`calendar-day-${day.key}`}
-          aria-label={`${day.longLabel} — ${labels.postsOnDay(day.posts.length)}`}
-          style={{
-            minBlockSize: '7.5rem',
-            padding: spacingTokens.xs,
-            borderRadius: radiusTokens.md,
-            // Today is a lavender cell; a day outside the month is quieter.
-            background: day.isToday ? colorTokens.surfaceLavenderStrong : colorTokens.surface,
-            opacity: day.inCurrentPeriod ? 1 : 0.45,
-            display: 'grid',
-            gridTemplateRows: 'auto 1fr',
-            gap: spacingTokens['3xs'],
-            alignContent: 'start',
-          }}
-        >
-          <span
+      {/*
+        ROWS ARE REQUIRED, even in a CSS grid. `role="grid"` may only contain
+        `role="row"`, and a `columnheader`/`gridcell` may only sit inside one —
+        axe reported both, as `aria-required-children` and
+        `aria-required-parent`. `display: contents` gives the rows their
+        semantics without adding a box, so the seven-column grid is unchanged.
+      */}
+      <div role="row" style={{ display: 'contents' }}>
+        {labels.weekdayNames.map((name) => (
+          <div
+            key={name}
+            role="columnheader"
             style={{
+              padding: spacingTokens.xs,
               ...typographyTokens.caption,
-              fontWeight: day.isToday ? 700 : 600,
-              color: day.isToday ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: colorTokens.textSecondary,
+              textAlign: 'center',
             }}
           >
-            {day.label}
-          </span>
-          <div style={{ display: 'grid', gap: spacingTokens['3xs'], alignContent: 'start' }}>
-            {day.posts.map((post) => (
-              <CalendarPostChip
-                key={post.id}
-                post={post}
-                labels={labels}
-                onOpen={onOpenPost ? () => onOpenPost(post) : undefined}
-              />
-            ))}
+            {name}
           </div>
+        ))}
+      </div>
+      {weeksOf(days).map((week) => (
+        <div key={week[0]?.key ?? 'week'} role="row" style={{ display: 'contents' }}>
+          {week.map((day) => (
+            <div
+              key={day.key}
+              role="gridcell"
+              data-testid={`calendar-day-${day.key}`}
+              aria-label={`${day.longLabel} — ${labels.postsOnDay(day.posts.length)}`}
+              style={{
+                minBlockSize: '7.5rem',
+                padding: spacingTokens.xs,
+                borderRadius: radiusTokens.md,
+                // Today is a lavender cell; a day outside the month is quieter.
+                //
+                // QUIETER BY SURFACE, NOT BY OPACITY. A container opacity blends
+                // every descendant toward the page and silently drops their
+                // contrast below AA — which is exactly how the feature cards'
+                // badges failed. A softer background and a muted (but still
+                // 4.6:1) number say the same thing honestly.
+                background: day.isToday
+                  ? colorTokens.surfaceLavenderStrong
+                  : day.inCurrentPeriod
+                    ? colorTokens.surface
+                    : colorTokens.surfaceMuted,
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr',
+                gap: spacingTokens['3xs'],
+                alignContent: 'start',
+              }}
+            >
+              <span
+                style={{
+                  ...typographyTokens.caption,
+                  fontWeight: day.isToday ? 700 : 600,
+                  color: day.isToday
+                    ? colorTokens.brandPurplePressed
+                    : day.inCurrentPeriod
+                      ? colorTokens.textSecondary
+                      : colorTokens.textMuted,
+                }}
+              >
+                {day.label}
+              </span>
+              <div style={{ display: 'grid', gap: spacingTokens['3xs'], alignContent: 'start' }}>
+                {day.posts.map((post) => (
+                  <CalendarPostChip
+                    key={post.id}
+                    post={post}
+                    labels={labels}
+                    onOpen={onOpenPost ? () => onOpenPost(post) : undefined}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -337,7 +372,24 @@ export function ContentCalendar({
         {createAction}
       </div>
 
-      {filters}
+      {/*
+        THE FILTER ROW WRAPS; it does not stack. The calendar renders in a grid,
+        where a block child takes the full column — so the caller's filters were
+        each landing on their own line. This gives them a flex row of their own.
+      */}
+      {filters ? (
+        <div
+          data-testid="calendar-filters"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: spacingTokens.xs,
+          }}
+        >
+          {filters}
+        </div>
+      ) : null}
 
       {/*
         The month and week grids exist on a wide screen only. On a phone the

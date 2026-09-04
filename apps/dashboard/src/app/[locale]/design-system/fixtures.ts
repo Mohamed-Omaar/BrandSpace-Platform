@@ -934,6 +934,14 @@ export function studioLabels(locale: string): StudioLabels {
     mobileNotice: ar
       ? 'على الشاشات الصغيرة يعرض الاستوديو اللوح والخصائص أسفل بعضهما بدل ثلاثة أعمدة.'
       : 'On a small screen the Studio stacks the artboard and its properties instead of showing three columns.',
+    brandName: ar ? 'براندسبيس' : 'BrandSpace',
+    sampleHeadline: ar
+      ? 'خطّط ربعًا كاملًا في جلسة واحدة'
+      : 'Plan a whole quarter in one afternoon',
+    sampleSupporting: ar
+      ? 'نبرة العلامة والموافقات والجدولة في مكان واحد.'
+      : 'Brand voice, approvals and scheduling in one place.',
+    sampleUrl: 'brandspace.cc',
   };
 }
 

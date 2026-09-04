@@ -61,6 +61,12 @@ export function AbstractMedia({
   testId,
 }: {
   readonly seed?: MediaSeed;
+  /**
+   * The artwork's description. An EMPTY string marks it decorative: the element
+   * then carries `aria-hidden` and no `img` role at all, because a `role="img"`
+   * with an empty label is a control a screen reader announces as nothing
+   * (axe's `role-img-alt`).
+   */
   readonly alt: string;
   readonly radius?: string;
   /** Overlays: a video badge, a carousel indicator, a draft watermark. */
@@ -70,8 +76,7 @@ export function AbstractMedia({
   const palette = mediaPalette(seed);
   return (
     <div
-      role="img"
-      aria-label={alt}
+      {...(alt === '' ? { 'aria-hidden': true } : { role: 'img', 'aria-label': alt })}
       data-testid={testId ?? 'abstract-media'}
       data-media-seed={seed}
       style={{

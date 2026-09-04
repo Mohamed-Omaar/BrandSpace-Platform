@@ -248,6 +248,81 @@ describe('the Phase 2C foundation meets AA', () => {
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
+  /*
+   * EVERY TEXT TOKEN, ON EVERY SURFACE IT CAN LAND ON.
+   *
+   * The revision made supporting surfaces the primary structural device, which
+   * means body text now lands on five different grounds instead of one. A token
+   * measured only against white is not measured: `textMuted` is 4.61:1 on white
+   * and 4.21:1 on `surfaceLavenderStrong`, and it shipped onto a selected
+   * account chip in the composer, where axe caught it (F-32).
+   *
+   * This asserts the whole matrix, so the next surface added to the palette has
+   * to state which text tokens may sit on it.
+   */
+  it('every text token clears AA on every supporting surface it can land on', () => {
+    const surfaces = [
+      ['surface', colorTokens.surface],
+      ['surfaceSoft', colorTokens.surfaceSoft],
+      ['surfaceWarm', colorTokens.surfaceWarm],
+      ['surfaceLavender', colorTokens.surfaceLavender],
+      ['surfaceLavenderStrong', colorTokens.surfaceLavenderStrong],
+      ['surfaceMuted', colorTokens.surfaceMuted],
+      ['surfaceSunken', colorTokens.surfaceSunken],
+      ['controlSurface', colorTokens.controlSurface],
+    ] as const;
+
+    const failures: string[] = [];
+    for (const [surfaceName, background] of surfaces) {
+      for (const [inkName, ink] of [
+        ['textPrimary', colorTokens.textPrimary],
+        ['textSecondary', colorTokens.textSecondary],
+      ] as const) {
+        const ratio = contrastRatio(ink, background);
+        if (ratio < AA_NORMAL) {
+          failures.push(`${inkName} on ${surfaceName}: ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('textMuted has exactly two surfaces it may not sit on, and they are named', () => {
+    /*
+     * `textMuted` clears AA on white and on every near-white surface, and fails
+     * on the two darkest supporting ones. That is not a defect in the token —
+     * it is the boundary, and naming it is the point: the rule is "muted is for
+     * the page ground and the pale surfaces, secondary for a stronger tint".
+     *
+     * If a future palette change moves a surface across this line, this test
+     * fails and the rule gets rewritten deliberately rather than discovered by
+     * axe on a screen somebody already approved.
+     */
+    for (const [name, background] of [
+      ['surface', colorTokens.surface],
+      ['surfaceSoft', colorTokens.surfaceSoft],
+      ['surfaceWarm', colorTokens.surfaceWarm],
+      ['surfaceLavender', colorTokens.surfaceLavender],
+      ['surfaceMuted', colorTokens.surfaceMuted],
+      ['controlSurface', colorTokens.controlSurface],
+    ] as const) {
+      expect(
+        contrastRatio(colorTokens.textMuted, background),
+        `textMuted on ${name}`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL);
+    }
+
+    for (const [name, background] of [
+      ['surfaceLavenderStrong', colorTokens.surfaceLavenderStrong],
+      ['surfaceSunken', colorTokens.surfaceSunken],
+    ] as const) {
+      expect(
+        contrastRatio(colorTokens.textMuted, background),
+        `textMuted unexpectedly passes on ${name}; the documented rule is now wrong`,
+      ).toBeLessThan(AA_NORMAL);
+    }
+  });
+
   it('the selected-surface border is a perceivable boundary', () => {
     expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
     // …so the active nav item never relies on the yellow mark alone. It also

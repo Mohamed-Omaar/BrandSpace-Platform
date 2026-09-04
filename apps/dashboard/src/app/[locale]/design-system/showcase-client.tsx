@@ -61,6 +61,7 @@ import {
   typographyTokens,
   type CopilotState,
   type CopilotSurface,
+  type PostRecord,
   type SocialPlatform,
 } from '@brandspace/ui';
 import {
@@ -126,6 +127,63 @@ const FEATURE_ICONS: Record<string, ReactNode> = {
   automations: <SettingsIcon size={18} />,
 };
 
+/**
+ * The status tabs of the posts library, and what each one selects.
+ *
+ * `archived` deliberately matches nothing: there is no archived fixture, and a
+ * tab that quietly shows the same eight posts as every other tab would be a
+ * decorative control. It shows the empty state instead.
+ */
+const LIBRARY_TABS = [
+  'all',
+  'drafts',
+  'approval',
+  'scheduled',
+  'published',
+  'failed',
+  'archived',
+] as const;
+
+type LibraryTab = (typeof LIBRARY_TABS)[number];
+
+function libraryTabLabel(tab: LibraryTab, ar: boolean): string {
+  switch (tab) {
+    case 'all':
+      return ar ? 'الكل' : 'All';
+    case 'drafts':
+      return ar ? 'مسودات' : 'Drafts';
+    case 'approval':
+      return ar ? 'بانتظار الموافقة' : 'Needs approval';
+    case 'scheduled':
+      return ar ? 'مجدول' : 'Scheduled';
+    case 'published':
+      return ar ? 'منشور' : 'Published';
+    case 'failed':
+      return ar ? 'فشل' : 'Failed';
+    case 'archived':
+      return ar ? 'مؤرشف' : 'Archived';
+  }
+}
+
+function filterPosts(posts: readonly PostRecord[], tab: LibraryTab): readonly PostRecord[] {
+  switch (tab) {
+    case 'all':
+      return posts;
+    case 'drafts':
+      return posts.filter((post) => post.status === 'DRAFT');
+    case 'approval':
+      return posts.filter((post) => post.approval === 'NEEDS_APPROVAL');
+    case 'scheduled':
+      return posts.filter((post) => post.status === 'SCHEDULED');
+    case 'published':
+      return posts.filter((post) => post.status === 'PUBLISHED');
+    case 'failed':
+      return posts.filter((post) => post.status === 'FAILED');
+    case 'archived':
+      return [];
+  }
+}
+
 /** A banner every prototype screen carries, so no screenshot can mislead. */
 function PrototypeNotice({ ar, testId }: { readonly ar: boolean; readonly testId: string }) {
   return (
@@ -145,7 +203,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotState, setCopilotState] = useState<CopilotState>('idle');
   const [copilotSurface, setCopilotSurface] = useState<CopilotSurface>('composer');
-  const [libraryTab, setLibraryTab] = useState('all');
+  const [libraryTab, setLibraryTab] = useState<LibraryTab>('all');
   const [selectedPosts, setSelectedPosts] = useState<readonly string[]>([]);
 
   const post = samplePost(locale);
@@ -719,17 +777,13 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
         <Tabs
           label={ar ? 'حالة المنشور' : 'Post status'}
           activeId={libraryTab}
-          onSelect={setLibraryTab}
+          onSelect={(id) => setLibraryTab(id as LibraryTab)}
           testId="library-tabs"
-          tabs={[
-            { id: 'all', label: ar ? 'الكل' : 'All', badge: String(posts.length) },
-            { id: 'drafts', label: ar ? 'مسودات' : 'Drafts' },
-            { id: 'approval', label: ar ? 'بانتظار الموافقة' : 'Needs approval' },
-            { id: 'scheduled', label: ar ? 'مجدول' : 'Scheduled' },
-            { id: 'published', label: ar ? 'منشور' : 'Published' },
-            { id: 'failed', label: ar ? 'فشل' : 'Failed' },
-            { id: 'archived', label: ar ? 'مؤرشف' : 'Archived' },
-          ]}
+          tabs={LIBRARY_TABS.map((tabId) => ({
+            id: tabId,
+            label: libraryTabLabel(tabId, ar),
+            badge: String(filterPosts(posts, tabId).length),
+          }))}
         />
 
         {/* The bulk-selection state, which only appears once something is chosen. */}
@@ -765,64 +819,100 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           </div>
         ) : null}
 
-        <SectionHeader
-          title={ar ? 'عرض شبكي' : 'Grid view'}
-          description={
-            ar
-              ? 'لا تظهر أرقام أداء: لم تُربط أي منصة بعد.'
-              : 'No performance figures appear: no platform is connected yet.'
-          }
-        />
-        <ContentGrid min="15rem">
-          {posts.slice(0, 4).map((record) => (
-            <PostGridCard
-              key={record.id}
-              post={record}
-              labels={pcLabels}
-              selected={selectedPosts.includes(record.id)}
-              actions={
-                <Button size="sm" variant="ghost" onClick={() => toggleSelected(record.id)}>
-                  {selectedPosts.includes(record.id)
-                    ? ar
-                      ? 'إلغاء'
-                      : 'Deselect'
-                    : ar
-                      ? 'تحديد'
-                      : 'Select'}
-                </Button>
-              }
-            />
-          ))}
-        </ContentGrid>
+        {/*
+          A REAL FILTER, not a decorative tab strip. The status tabs select
+          from the fixture set client-side: an "Archived" tab with no archived
+          records shows the empty state rather than the same eight posts under
+          a different heading. It also gives every `aria-controls` a panel that
+          exists — axe reported the dangling reference when the tabs had none.
+        */}
+        {LIBRARY_TABS.map((tabId) => {
+          const shown = filterPosts(posts, tabId);
+          return (
+            <TabPanel key={tabId} id={tabId} activeId={libraryTab}>
+              {shown.length === 0 ? (
+                <StateMessage
+                  kind="no-results"
+                  title={ar ? 'لا منشورات في هذه الحالة' : 'No posts in this state'}
+                  description={
+                    ar
+                      ? 'غيّر الحالة أعلاه لعرض منشورات أخرى.'
+                      : 'Choose another status above to see other posts.'
+                  }
+                />
+              ) : (
+                <>
+                  <SectionHeader
+                    title={ar ? 'عرض شبكي' : 'Grid view'}
+                    description={
+                      ar
+                        ? 'لا تظهر أرقام أداء: لم تُربط أي منصة بعد.'
+                        : 'No performance figures appear: no platform is connected yet.'
+                    }
+                  />
+                  <ContentGrid min="15rem">
+                    {shown.slice(0, 4).map((record) => (
+                      <PostGridCard
+                        key={record.id}
+                        post={record}
+                        labels={pcLabels}
+                        selected={selectedPosts.includes(record.id)}
+                        actions={
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleSelected(record.id)}
+                          >
+                            {selectedPosts.includes(record.id)
+                              ? ar
+                                ? 'إلغاء'
+                                : 'Deselect'
+                              : ar
+                                ? 'تحديد'
+                                : 'Select'}
+                          </Button>
+                        }
+                      />
+                    ))}
+                  </ContentGrid>
 
-        <SectionHeader title={ar ? 'عرض قائمة' : 'List view'} />
-        <Stack gap={spacingTokens.xs}>
-          {posts.slice(4).map((record) => (
-            <PostListRow
-              key={record.id}
-              post={record}
-              labels={pcLabels}
-              selected={selectedPosts.includes(record.id)}
-              actions={
-                <DropdownMenu
-                  label={ar ? 'إجراءات المنشور' : 'Post actions'}
-                  triggerContent="⋯"
-                  testId={`library-menu-${record.id}`}
-                >
-                  <button type="button" role="menuitem" style={menuItemStyle()}>
-                    {ar ? 'تعديل' : 'Edit'}
-                  </button>
-                  <button type="button" role="menuitem" style={menuItemStyle()}>
-                    {ar ? 'نسخ' : 'Duplicate'}
-                  </button>
-                  <button type="button" role="menuitem" style={menuItemStyle()}>
-                    {ar ? 'أرشفة' : 'Archive'}
-                  </button>
-                </DropdownMenu>
-              }
-            />
-          ))}
-        </Stack>
+                  {shown.length > 4 ? (
+                    <>
+                      <SectionHeader title={ar ? 'عرض قائمة' : 'List view'} />
+                      <Stack gap={spacingTokens.xs}>
+                        {shown.slice(4).map((record) => (
+                          <PostListRow
+                            key={record.id}
+                            post={record}
+                            labels={pcLabels}
+                            selected={selectedPosts.includes(record.id)}
+                            actions={
+                              <DropdownMenu
+                                label={ar ? 'إجراءات المنشور' : 'Post actions'}
+                                triggerContent="⋯"
+                                testId={`library-menu-${record.id}`}
+                              >
+                                <button type="button" role="menuitem" style={menuItemStyle()}>
+                                  {ar ? 'تعديل' : 'Edit'}
+                                </button>
+                                <button type="button" role="menuitem" style={menuItemStyle()}>
+                                  {ar ? 'نسخ' : 'Duplicate'}
+                                </button>
+                                <button type="button" role="menuitem" style={menuItemStyle()}>
+                                  {ar ? 'أرشفة' : 'Archive'}
+                                </button>
+                              </DropdownMenu>
+                            }
+                          />
+                        ))}
+                      </Stack>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </TabPanel>
+          );
+        })}
       </Card>
 
       {/* --------------------------------------------------- Composer --- */}
