@@ -53,6 +53,12 @@ export async function inlineEndOverhang(page: Page): Promise<Overhang> {
       let ancestor = element.parentElement;
       let clipped = false;
       while (ancestor) {
+        // `html` and `body` are NOT legitimate clipping ancestors. A
+        // page-level `overflow-x: hidden` hides overflow from the reader
+        // instead of fixing it, and treating it as intentional made this
+        // measurement return 0 for a planted 900px element — the assertion
+        // could no longer fail for the reason it exists.
+        if (ancestor === document.body || ancestor === document.documentElement) break;
         const style = getComputedStyle(ancestor);
         if (style.overflowX !== 'visible') {
           const ancestorBox = ancestor.getBoundingClientRect();

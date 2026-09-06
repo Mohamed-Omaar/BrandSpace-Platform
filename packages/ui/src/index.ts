@@ -14,6 +14,7 @@ export * from './icons';
 export * from './media';
 export * from './menu-style';
 export * from './overlays';
+export * from './overview-hero';
 export * from './post-card';
 export * from './primitives';
 export * from './social-post-preview';

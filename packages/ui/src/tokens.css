@@ -172,9 +172,19 @@ html[dir='ltr'] {
 body {
   margin: 0;
   min-height: 100vh;
-  /* The orbs are 56vw across and deliberately positioned off-canvas; without
-     this a phone gets a horizontal scrollbar from the background alone. */
-  overflow-x: hidden;
+  /*
+   * NO `overflow-x: hidden` HERE, deliberately — the reference has it and it
+   * was copied for one commit before the overflow suite caught what it costs.
+   *
+   * A page-level horizontal clip does not fix overflow, it HIDES it: the
+   * content is still off-screen and still unreachable, and every automated
+   * check that looks for it goes quiet at the same time. It made
+   * `inlineEndOverhang` blind to a planted 900px element, which is the exact
+   * shape of F-28 — a device that removes the evidence rather than the defect.
+   *
+   * The orbs cannot widen the page anyway: `.bs-ambient` is `position: fixed`
+   * and clips its own overflow, which is the correct scope for the clip.
+   */
   background: var(--bs-app-background);
   color: var(--bs-text-primary);
   font-size: 1rem;
@@ -636,5 +646,54 @@ h4 {
 
   .bs-auth-panel {
     display: grid;
+  }
+}
+
+/*
+ * The Overview hero (§5).
+ *
+ * One column on a phone with the decorative orbit removed entirely — a 340px
+ * ring and two floating tiles on a 390px screen are not a smaller version of
+ * the composition, they are clutter over the only text that matters. From the
+ * large breakpoint the approved two-column split applies.
+ */
+.bs-hero {
+  grid-template-columns: minmax(0, 1fr);
+  min-block-size: auto;
+}
+
+.bs-hero-orbit {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .bs-hero {
+    grid-template-columns: 1.05fr 0.95fr;
+    min-block-size: 19.375rem;
+  }
+
+  .bs-hero-orbit {
+    display: block;
+  }
+}
+
+/*
+ * The Overview's asymmetric split — 1.45fr / 0.8fr in the approved reference.
+ *
+ * Stacked below the large breakpoint, because a 0.8fr column on a tablet is
+ * narrower than the content it holds and the "compact" side ends up taller
+ * than the main one.
+ */
+.bs-split-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--bs-space-md);
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .bs-split-main {
+    grid-template-columns: 1.45fr 0.8fr;
+    gap: var(--bs-space-lg);
   }
 }

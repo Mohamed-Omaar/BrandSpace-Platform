@@ -215,15 +215,37 @@ export function MetricCard({
         <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>{label}</span>
       </div>
       <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+        {/*
+         * THE VALUE MUST NEVER SET THE CARD'S WIDTH.
+         *
+         * `value` is a string the caller formats, and it is not always a
+         * number — a plan key renders here too. At the reference's 32px
+         * numeric step the single word "DEVELOPMENT" is 253px, which pushed
+         * the whole console 11px off the inline-end edge in Arabic. The
+         * overflow suite caught it the moment the page-level clip that had
+         * been hiding it was removed.
+         */}
         {unavailable ? (
           <span
             data-testid={testId ? `${testId}-unavailable` : undefined}
-            style={{ ...typographyTokens.numeric, color: colorTokens.textMuted }}
+            style={{
+              ...typographyTokens.numeric,
+              color: colorTokens.textMuted,
+              minInlineSize: 0,
+              overflowWrap: 'anywhere',
+            }}
           >
             {'—'}
           </span>
         ) : (
-          <span style={{ ...typographyTokens.numeric, color: colorTokens.textPrimary }}>
+          <span
+            style={{
+              ...typographyTokens.numeric,
+              color: colorTokens.textPrimary,
+              minInlineSize: 0,
+              overflowWrap: 'anywhere',
+            }}
+          >
             {value}
           </span>
         )}
@@ -353,11 +375,22 @@ export function SectionHeader({
   description,
   actions,
   icon,
+  eyebrow,
 }: {
   readonly title: string;
   readonly description?: string | undefined;
   readonly actions?: ReactNode;
   readonly icon?: ReactNode;
+  /**
+   * The reference's `.section-kicker` — a heavily tracked uppercase word above
+   * the section title. It names the KIND of thing below it ("Upcoming",
+   * "Copilot") where the title names the thing itself, which is how the
+   * reference gets two levels of heading out of one line of small type.
+   *
+   * A `span`, not a heading: it would otherwise insert a level into the
+   * document outline for a word that is not a section of its own.
+   */
+  readonly eyebrow?: string | undefined;
 }) {
   return (
     <div
@@ -375,6 +408,19 @@ export function SectionHeader({
       >
         {icon ? <IconTile icon={icon} size="sm" tone="neutral" /> : null}
         <div>
+          {eyebrow ? (
+            <span
+              style={{
+                display: 'block',
+                marginBlockEnd: spacingTokens['3xs'],
+                ...typographyTokens.overline,
+                textTransform: 'uppercase',
+                color: colorTokens.textMuted,
+              }}
+            >
+              {eyebrow}
+            </span>
+          ) : null}
           <h2 style={{ ...typographyTokens.h2, color: colorTokens.textPrimary }}>{title}</h2>
           {description ? (
             <p

@@ -3,6 +3,7 @@ import {
   Card,
   ContentGrid,
   MetricCard,
+  OverviewHero,
   SectionHeader,
   Stack,
   StateMessage,
@@ -20,14 +21,23 @@ import { WorkspaceShell } from '../../../components/workspace-shell';
 export const dynamic = 'force-dynamic';
 
 /**
- * The authenticated workspace home.
+ * The authenticated workspace home, and the screen the approved direction is
+ * judged on (§5 of the brief).
  *
- * DELIBERATELY SPARSE, AND HONESTLY SO. The Command Center widgets in
- * docs/PRODUCT.md §5.1 need content, publishing and analytics data that no
- * phase has created yet. Phase 2C restyles this page; it does not invent
- * content for it. The metric cards below therefore show either a real figure or
- * an explicit "not available yet" — never a plausible-looking zero that a
- * reader would take for a measurement.
+ * THE LARGE OVERVIEW IS REPRODUCED, THE INVENTED DATA IS NOT. The reference's
+ * hero, its four-across statistic row, its 1.45/0.8 split and its section
+ * kickers are all here at the reference's scale. What is not here is the
+ * reference's content: "12 scheduled", "03 in review", "28 published across 4
+ * channels", "76% of AI credits, resets in 12 days", and two posts on a
+ * calendar. There is no Post model, no connected account and no publishing
+ * pipeline in this phase, so every one of those would be a fabricated
+ * measurement — CLAUDE.md §2.2, and the reason this page has always shown
+ * either a real figure or an explicit reason it is unavailable.
+ *
+ * So each panel says which of the three things is true: here is the real
+ * number; you do not have permission to see it; or the capability has not
+ * shipped yet. An empty state that names its reason is a finished screen. A
+ * plausible-looking zero is not.
  */
 export default async function OverviewPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -51,25 +61,52 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
     }),
   );
 
+  /*
+   * Both hero actions go somewhere real, and to a page the reader is actually
+   * allowed to open — §20 forbids a dead button or a `#` placeholder, and a
+   * primary action that lands on a 404 is worse than no primary action.
+   */
+  const primaryHref = maySeeMembers ? `/${locale}/members` : `/${locale}/settings`;
+  const primaryLabel = maySeeMembers ? t('overview.hero.primary') : t('nav.settings');
+
   return (
     <WorkspaceShell
       locale={locale}
       activePath="/overview"
       heading={t('overview.greeting')}
-      description={customer.email}
-      meta={
-        <StatusBadge
-          label={workspace.workspaceStatus}
-          tone={statusTone(workspace.workspaceStatus)}
-          testId={`workspace-status-${workspace.workspaceStatus}`}
-        />
-      }
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       permissionKeys={workspace.permissionKeys}
+      hero={
+        <OverviewHero
+          isPageTitle
+          eyebrow={workspace.workspaceName}
+          title={t('overview.hero.title')}
+          description={t('overview.hero.body')}
+          primaryAction={
+            <Link href={primaryHref} style={buttonStyle('primary')} data-testid="hero-primary">
+              {primaryLabel}
+            </Link>
+          }
+          secondaryAction={
+            <Link
+              href={`/${locale}/settings`}
+              data-testid="hero-secondary"
+              style={{
+                ...buttonStyle('ghost'),
+                background: 'transparent',
+                color: colorTokens.textPrimary,
+              }}
+            >
+              {t('overview.hero.secondary')}
+              <span aria-hidden="true">→</span>
+            </Link>
+          }
+        />
+      }
     >
       <Stack>
-        <ContentGrid min="14rem" testId="overview-metrics">
+        <ContentGrid min="12rem" testId="overview-metrics">
           <MetricCard
             label={t('overview.metric.plan')}
             value={effective?.planKey ?? undefined}
@@ -103,85 +140,122 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             label={t('overview.metric.published')}
             unavailable
             unavailableLabel={t('overview.metric.laterPhase')}
-            accent
             testId="metric-published"
           />
         </ContentGrid>
 
-        <Card testId="overview-identity">
-          <SectionHeader
-            title={t('overview.workspaceSection')}
-            description={t('overview.workspaceSectionHint')}
-          />
-          <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.sm }}>
-            {[
-              {
-                label: t('overview.field.signedInAs'),
-                value: customer.email,
-                testId: 'signed-in-as',
-              },
-              { label: t('overview.field.workspace'), value: workspace.workspaceName },
-              {
-                label: t('overview.field.role'),
-                value: locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn,
-              },
-            ].map((row) => (
-              <div
-                key={row.label}
-                style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}
+        <div className="bs-split-main">
+          <Stack>
+            {/*
+              The reference's "Next on your calendar". The composition is
+              reproduced; the two posts inside it are not, because a scheduled
+              post cannot exist before the schedule does.
+            */}
+            <Card testId="overview-upcoming">
+              <SectionHeader
+                eyebrow={t('overview.upcomingKicker')}
+                title={t('overview.upcoming')}
+              />
+              <StateMessage
+                title={t('overview.upcomingEmptyTitle')}
+                description={t('overview.upcomingEmptyBody')}
+              />
+            </Card>
+
+            <Card testId="overview-activity">
+              <SectionHeader title={t('overview.activity')} />
+              <StateMessage
+                title={t('overview.activityEmptyTitle')}
+                description={t('overview.activityEmptyBody')}
+              />
+            </Card>
+          </Stack>
+
+          <Stack>
+            <Card testId="overview-copilot">
+              <SectionHeader eyebrow={t('overview.copilotKicker')} title={t('overview.copilot')} />
+              <StateMessage
+                title={t('overview.copilotEmptyTitle')}
+                description={t('overview.copilotEmptyBody')}
+              />
+            </Card>
+
+            <Card testId="overview-identity">
+              <SectionHeader
+                title={t('overview.workspaceSection')}
+                description={t('overview.workspaceSectionHint')}
+                actions={
+                  <StatusBadge
+                    label={workspace.workspaceStatus}
+                    tone={statusTone(workspace.workspaceStatus)}
+                    testId={`workspace-status-${workspace.workspaceStatus}`}
+                  />
+                }
+              />
+              <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.sm }}>
+                {[
+                  {
+                    label: t('overview.field.signedInAs'),
+                    value: customer.email,
+                    testId: 'signed-in-as',
+                  },
+                  { label: t('overview.field.workspace'), value: workspace.workspaceName },
+                  {
+                    label: t('overview.field.role'),
+                    value: locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn,
+                  },
+                ].map((row) => (
+                  <div key={row.label} style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
+                    <dt
+                      style={{
+                        ...typographyTokens.caption,
+                        color: colorTokens.textMuted,
+                      }}
+                    >
+                      {row.label}
+                    </dt>
+                    <dd
+                      data-testid={row.testId}
+                      style={{
+                        margin: 0,
+                        ...typographyTokens.bodySm,
+                        fontWeight: 600,
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+
+            {maySeeBilling && effective ? (
+              <Card
+                title={t('plan.current')}
+                testId="overview-plan"
+                actions={
+                  <Link href={`/${locale}/plan`} style={buttonStyle('neutral', 'sm')}>
+                    {t('nav.plan')}
+                  </Link>
+                }
               >
-                <dt
-                  style={{
-                    ...typographyTokens.label,
-                    color: colorTokens.textSecondary,
-                    minInlineSize: '9rem',
-                  }}
+                <p
+                  style={{ margin: 0, ...typographyTokens.bodySm }}
+                  data-testid="overview-plan-key"
                 >
-                  {row.label}
-                </dt>
-                <dd
-                  data-testid={row.testId}
-                  style={{ margin: 0, ...typographyTokens.bodySm, overflowWrap: 'anywhere' }}
-                >
-                  {row.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Card>
-
-        {maySeeBilling && effective ? (
-          <Card
-            title={t('plan.current')}
-            testId="overview-plan"
-            actions={
-              <Link href={`/${locale}/plan`} style={buttonStyle('neutral', 'sm')}>
-                {t('nav.plan')}
-              </Link>
-            }
-          >
-            <p style={{ margin: 0, ...typographyTokens.bodySm }} data-testid="overview-plan-key">
-              {effective.planKey ?? t('plan.none')}
-            </p>
-            {wallet ? (
-              <p style={{ marginBlockEnd: 0, ...typographyTokens.bodySm }}>
-                {t('plan.credits')}:{' '}
-                <strong data-testid="overview-credits">{wallet.balanceCredits}</strong>
-              </p>
+                  {effective.planKey ?? t('plan.none')}
+                </p>
+                {wallet ? (
+                  <p style={{ marginBlockEnd: 0, ...typographyTokens.bodySm }}>
+                    {t('plan.credits')}:{' '}
+                    <strong data-testid="overview-credits">{wallet.balanceCredits}</strong>
+                  </p>
+                ) : null}
+              </Card>
             ) : null}
-          </Card>
-        ) : null}
-
-        {/*
-          The activity feed is Phase 3 work. An empty state that names the
-          reason is the honest surface; a placeholder chart would not be.
-        */}
-        <Card title={t('overview.activity')} testId="overview-activity">
-          <StateMessage
-            title={t('overview.activityEmptyTitle')}
-            description={t('overview.activityEmptyBody')}
-          />
-        </Card>
+          </Stack>
+        </div>
       </Stack>
     </WorkspaceShell>
   );

@@ -59,6 +59,7 @@ export function WorkspaceShell({
   description,
   actions,
   meta,
+  hero,
   activePath,
   workspaceName,
   roleName,
@@ -77,6 +78,14 @@ export function WorkspaceShell({
   actions?: ReactNode;
   /** Badges or status pills that belong next to the title. */
   meta?: ReactNode;
+  /**
+   * A page that supplies its own title surface.
+   *
+   * The Overview's approved hero IS its page title (§5), so it renders the
+   * `h1` itself and the standard header is suppressed rather than stacked
+   * above it. Any page that passes `hero` is responsible for exactly one `h1`.
+   */
+  hero?: ReactNode;
   /**
    * The current path segment, e.g. `/members`. Marks the active nav item and
    * keeps the language switcher on the page the reader is actually on.
@@ -158,7 +167,9 @@ export function WorkspaceShell({
         </>
       }
     >
-      <PageHeader title={heading} description={description} actions={actions} meta={meta} />
+      {hero ?? (
+        <PageHeader title={heading} description={description} actions={actions} meta={meta} />
+      )}
       {children}
     </AppShell>
   );
