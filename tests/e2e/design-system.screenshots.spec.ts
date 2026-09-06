@@ -78,6 +78,20 @@ async function captureSections(page: Page, name: string): Promise<void> {
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
+/**
+ * A route sweep shot: the FIRST VIEWPORT, at 1:1, not the whole document.
+ *
+ * The stored-secrets page renders 176 rows against the seeded database, so a
+ * `fullPage: true` capture of it is 42,000 pixels tall — a grey smear once
+ * scaled into a review window, and evidence of nothing. What a reviewer needs
+ * from a route sweep is whether the page reads as the approved direction, and
+ * that is entirely decided above the fold.
+ */
+async function captureViewport(page: Page, name: string): Promise<void> {
+  await settle(page);
+  await page.screenshot({ path: path.join(OUTPUT, `${name}.png`) });
+}
+
 /** One section of the showcase, clipped to its own card. */
 async function captureRegion(page: Page, testId: string, name: string): Promise<void> {
   const region = page.getByTestId(testId);
@@ -217,6 +231,57 @@ test.describe('visual review evidence', () => {
     await page.getByTestId('workspace-table').getByRole('link').first().click();
     await page.waitForURL(/\/console\/workspaces\/[0-9a-f-]{36}/);
     await captureSections(page, '16-admin-workspace-detail');
+  });
+
+  /*
+   * §15 AND §19: THE PAGES THE FIRST ROUND DID NOT REACH.
+   *
+   * Round 1 restyled a representative set and stated plainly that the rest
+   * inherited the tokens without having their layouts reworked. "Do not finish
+   * while some pages still look like the previous outlined admin console" means
+   * that claim has to be checked rather than repeated, so every remaining route
+   * in both applications is captured here and reviewed like the others.
+   */
+  test('every remaining Control Center route', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signInAdmin(page, 'en');
+
+    const routes = [
+      ['50-admin-configuration', '/console/configuration'],
+      ['51-admin-secrets', '/console/secrets'],
+      ['52-admin-flags', '/console/flags'],
+      ['53-admin-plans', '/console/plans'],
+      ['54-admin-providers', '/console/providers'],
+      ['55-admin-ai-models', '/console/ai-models'],
+      ['56-admin-routing', '/console/routing'],
+      ['57-admin-audit', '/console/audit'],
+      ['58-admin-health', '/console/health'],
+      ['59-admin-support', '/console/support'],
+    ] as const;
+
+    for (const [name, route] of routes) {
+      await page.goto(`${ADMIN_BASE_URL}/en${route}`);
+      await expect(page.getByTestId('heading')).toBeVisible();
+      await captureViewport(page, name);
+    }
+  });
+
+  test('every remaining customer route', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signInCustomer(page, 'en');
+
+    const routes = [
+      ['60-customer-permissions', '/permissions'],
+      ['61-customer-plan', '/plan'],
+      ['62-customer-settings', '/settings'],
+      ['63-customer-workspaces', '/workspaces'],
+    ] as const;
+
+    for (const [name, route] of routes) {
+      await page.goto(`${DASHBOARD_BASE_URL}/en${route}`);
+      await expect(page.getByTestId('heading')).toBeVisible();
+      await captureViewport(page, name);
+    }
   });
 
   test('the design showcase — full page, in readable sections', async ({ page }) => {

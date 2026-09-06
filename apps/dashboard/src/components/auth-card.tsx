@@ -205,7 +205,9 @@ export function AuthCard({
               }}
             >
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-                <h1 style={{ ...typographyTokens.h1, margin: 0 }}>{heading}</h1>
+                <h1 data-testid="heading" style={{ ...typographyTokens.h1, margin: 0 }}>
+                  {heading}
+                </h1>
                 {description ? (
                   <p
                     style={{

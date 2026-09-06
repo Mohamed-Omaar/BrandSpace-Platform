@@ -243,7 +243,7 @@ export function CustomerBanner({
 export const customerTableStyle = (): CSSProperties => ({
   inlineSize: '100%',
   borderCollapse: 'collapse',
-  fontSize: '0.875rem',
+  fontSize: typographyTokens.bodySm.fontSize,
   textAlign: 'start',
 });
 export const customerThStyle = thStyle;

@@ -484,9 +484,9 @@ export default async function WorkspaceDetailPage({
 
       {/* --- Credits -------------------------------------------------- */}
       <Card title={t('ws.credits')} testId="workspace-credits">
-        <p style={{ marginBlockStart: 0, fontSize: '1.5rem', fontWeight: 700 }}>
+        <p style={{ marginBlockStart: 0, ...typographyTokens.numeric }}>
           <span data-testid="credit-balance">{wallet.balanceCredits}</span>{' '}
-          <span style={{ fontSize: '0.875rem', color: colorTokens.textSecondary }}>
+          <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
             {locale === 'ar' ? 'وحدة' : 'credits'}
           </span>
         </p>

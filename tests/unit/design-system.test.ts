@@ -202,7 +202,34 @@ describe('applications hold no colour literals', () => {
  */
 describe('every form control carries the class that makes it visible', () => {
   const controlPattern = /<(input|textarea|select)\b((?:[^<>]|\{[^{}]*\})*?)\/?>/gs;
-  const stylePattern = /(inputStyle|textareaStyle|authInputStyle|selectStyle)/;
+
+  /*
+   * WIDENED, AND THE WIDENING FOUND SIX MORE (F-38).
+   *
+   * The scan used to look only at controls styled by a call NAMED
+   * `inputStyle`/`textareaStyle`/…, which meant it could not see two whole
+   * classes of the very defect it exists to catch:
+   *
+   *   - a control styled with an AD-HOC literal, e.g. the configuration page's
+   *     `style={{ padding: spacingTokens.sm }}`;
+   *   - a control styled through an ALIAS, e.g. the settings page's
+   *     `customerInputStyle()`.
+   *
+   * Six controls across three pages were in exactly those states — invisible
+   * rectangles on a white card — while this test passed. The rule is now the
+   * simple one it should always have been: EVERY control needs the class,
+   * whatever it is styled with, with only the exemptions below.
+   */
+  const EXEMPT_TYPES = [
+    // Not a filled surface at all: the browser draws these, and `.bs-control`
+    // would paint a box around a tick or a slider.
+    'type="hidden"',
+    'type="checkbox"',
+    'type="radio"',
+    'type="range"',
+    'type="color"',
+    'type="file"',
+  ];
 
   const sources = [
     ...collectSourceFiles('apps/dashboard/src'),
@@ -222,7 +249,7 @@ describe('every form control carries the class that makes it visible', () => {
       const source = read(file);
       for (const match of source.matchAll(controlPattern)) {
         const attributes = match[2] ?? '';
-        if (!stylePattern.test(attributes)) continue;
+        if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;
         scanned += 1;
         if (attributes.includes('bs-control') || attributes.includes('CONTROL_CLASS')) continue;
         const line = source.slice(0, match.index).split('\n').length;
@@ -564,6 +591,64 @@ describe('the design showcase cannot reach production', () => {
       );
       expect(users, `${component} is used outside the gated showcase`).toEqual([showcase]);
     }
+  });
+
+  /*
+   * §15, enforced: no page may hand-roll its own heading.
+   *
+   * The Support Mode page carried an `<h1 style={{ fontSize: '1.35rem' }}>`
+   * from before the design system existed — no eyebrow, no description, no
+   * test hook, and a size that matched no step in the type scale. It is
+   * exactly the residue of the outlined console the brief says must not
+   * survive, and it survived precisely because nothing checked.
+   *
+   * A heading belongs to `PageHeader`, so the only files allowed to write one
+   * are the three shells that own the page title. Everything else composes.
+   */
+  /*
+   * §17, enforced: the type scale is a token, not a literal.
+   *
+   * The hex-literal scan below has kept colours in the design system since
+   * Phase 2C. Sizes had no equivalent guard, and by the time of this revision
+   * sixteen literals had accumulated across both applications — `1.1rem`,
+   * `1.35rem`, `0.8rem`, `1.75rem` — none of which matched any step in the
+   * scale. That is how two pages that both mean "section heading" end up
+   * rendering at different sizes, which is exactly the drift the token layer
+   * exists to prevent.
+   */
+  it('no application page hard-codes a font size', () => {
+    const offenders: string[] = [];
+    for (const file of [
+      ...collectSourceFiles('apps/dashboard/src'),
+      ...collectSourceFiles('apps/admin/src'),
+    ]) {
+      const source = readCode(file);
+      for (const [index, line] of source.split('\n').entries()) {
+        if (/fontSize:\s*'[\d.]+(rem|px|em)'/.test(line)) {
+          offenders.push(`${file}:${index + 1} ${line.trim()}`);
+        }
+      }
+    }
+    expect(offenders, 'these lines set a size outside the type scale').toEqual([]);
+  });
+
+  it('no page hand-rolls a heading; only the shells write one', () => {
+    // The three shells that own a page title. Every other file composes.
+    const SHELLS = [
+      'apps/dashboard/src/components/auth-card.tsx',
+      'apps/admin/src/components/platform-auth.tsx',
+      // The public marketing site keeps its own shell and its own identity
+      // blue: §15 scopes this revision to the dashboard and the console, and
+      // restyling the marketing site is not this change's business.
+      'apps/web/src/components/app-shell.tsx',
+    ];
+    const offenders = [
+      ...collectSourceFiles('apps/dashboard/src'),
+      ...collectSourceFiles('apps/admin/src'),
+      ...collectSourceFiles('apps/web/src'),
+    ].filter((file) => !SHELLS.includes(file) && /<h1[\s>]/.test(readCode(file)));
+
+    expect(offenders, 'these files write their own <h1> instead of using PageHeader').toEqual([]);
   });
 
   it('states on every prototype screen that it performs nothing', () => {

@@ -349,7 +349,14 @@ export function AppShell({
 
   const sidebarBody = (
     <>
-      <div style={{ display: 'grid', gap: spacingTokens.sm, marginBlockEnd: spacingTokens.md }}>
+      <div
+        style={{
+          display: 'grid',
+          gap: spacingTokens.sm,
+          flexShrink: 0,
+          marginBlockEnd: spacingTokens.md,
+        }}
+      >
         <div
           style={{
             display: 'flex',
@@ -391,7 +398,24 @@ export function AppShell({
         {headerStart}
       </div>
 
-      <NavList sections={sections} collapsed={collapsed} />
+      {/*
+       * `flex-shrink: 0`, AND THIS IS THE WHOLE BUG.
+       *
+       * The rail is a flex column with a one-viewport minimum. A flex item
+       * defaults to `flex-shrink: 1`, so when the Control Center's thirteen
+       * items in four groups came to ~840px inside a 760px box, the navigation
+       * BOX was squeezed to fit while its content overflowed — straight through
+       * the profile block below it. axe read it exactly right, twice over:
+       * "partially obscured, smallest space is 244.9px by 8.4px", and "safe
+       * clickable space has a diameter of 10.8px". A WCAG 2.5.8 target-size
+       * failure on the last link in the rail; half a link is not a target.
+       *
+       * Refusing to shrink makes the column grow past the viewport instead, and
+       * the page scrolls — which is what the reference does.
+       */}
+      <div style={{ flexShrink: 0 }}>
+        <NavList sections={sections} collapsed={collapsed} />
+      </div>
 
       {/* The identity sits at the FOOT, pinned by `margin-block-start: auto`,
           so the navigation and the account never compete for the same corner. */}
@@ -399,6 +423,7 @@ export function AppShell({
         <div
           style={{
             marginBlockStart: 'auto',
+            flexShrink: 0,
             paddingBlockStart: spacingTokens.md,
             display: 'flex',
             alignItems: 'center',
@@ -442,23 +467,26 @@ export function AppShell({
             flexDirection: 'column',
             gap: spacingTokens.xs,
             minInlineSize: 0,
-            position: 'sticky',
-            insetBlockStart: 0,
-            alignSelf: 'start',
             /*
-             * A FIXED HEIGHT, not a content height. The profile at the foot is
-             * pinned with `margin-block-start: auto`, which does nothing at all
-             * unless the column it sits in is taller than its content — the
-             * sign-out button was landing directly under the last navigation
-             * item instead of at the bottom of the rail.
+             * THE RAIL IS AS TALL AS THE PAGE, AND IT DOES NOT SCROLL ITSELF.
              *
-             * `100vh` less the shell's inset on both sides, matching the shell
-             * itself. The rail scrolls inside this box if the navigation ever
-             * outgrows it.
+             * A minimum of one viewport gives `margin-block-start: auto` on the
+             * foot something to push against, and `align-self: stretch` (the
+             * grid default) lets it grow with a long page. What it deliberately
+             * does NOT have is an internal scroll region, which the reference
+             * does not have either.
+             *
+             * Two earlier attempts had one, and both failed the same way. A
+             * scroll container whose last item straddles its bottom edge leaves
+             * that item's box overlapping whatever sits below — and the
+             * Control Center's thirteen items in four groups do not fit 800px.
+             * axe reported it exactly right: "Target has insufficient size
+             * because it is partially obscured", a WCAG 2.5.8 failure on the
+             * last link in the rail. Half a link is not a target, and no amount
+             * of padding inside a scroll container fixes the top scroll
+             * position.
              */
-            blockSize: `calc(100vh - ${layoutTokens.shellInset} * 2)`,
-            overflowY: 'auto',
-            overflowX: 'hidden',
+            minBlockSize: `calc(100vh - ${layoutTokens.shellInset} * 2)`,
             paddingInline: spacingTokens.sm,
             paddingBlock: spacingTokens.md,
             background: colorTokens.shellSidebar,

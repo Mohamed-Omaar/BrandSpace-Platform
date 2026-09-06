@@ -1,13 +1,7 @@
-import { spacingTokens } from '@brandspace/ui';
+import { Card, Field, buttonStyle, inputStyle, spacingTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { statusMessage, translator } from '../../../i18n/messages';
-import {
-  CustomerBanner,
-  CustomerCard,
-  WorkspaceShell,
-  customerButtonStyle,
-  customerInputStyle,
-} from '../../../components/workspace-shell';
+import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { saveSettingsAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -49,71 +43,62 @@ export default async function SettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <CustomerCard testId="settings-card">
-        <form action={saveSettingsAction}>
+      <Card testId="settings-card">
+        {/*
+          THE THREE CONTROLS ON THIS PAGE WERE INVISIBLE (F-38).
+
+          They were styled with `customerInputStyle()` and carried no
+          `bs-control` class, so under the borderless tokens they rendered as
+          transparent rectangles on a white card — F-27 exactly, in three
+          controls the original scan could not see because it only looked at
+          calls named `inputStyle`. Their labels were hand-rolled `<label>`
+          elements with a literal `0.8125rem` rather than `Field`, which is
+          what let them drift in the first place.
+        */}
+        <form action={saveSettingsAction} style={{ display: 'grid', gap: spacingTokens.md }}>
           <input type="hidden" name="locale" value={locale} />
-          <label
-            htmlFor="name"
-            style={{ display: 'block', fontWeight: 600, fontSize: '0.8125rem' }}
-          >
-            {t('settings.name')}
-          </label>
-          <input
-            id="name"
-            name="name"
-            defaultValue={row.name}
-            required
-            style={customerInputStyle()}
-          />
 
-          <label
-            htmlFor="defaultLocale"
-            style={{
-              display: 'block',
-              fontWeight: 600,
-              fontSize: '0.8125rem',
-              marginBlockStart: spacingTokens.md,
-            }}
-          >
-            {t('settings.locale')}
-          </label>
-          <select
-            id="defaultLocale"
-            name="defaultLocale"
-            defaultValue={row.defaultLocale}
-            style={customerInputStyle()}
-          >
-            <option value="AR">AR</option>
-            <option value="EN">EN</option>
-          </select>
+          <Field label={t('settings.name')} htmlFor="name">
+            <input
+              className="bs-control"
+              id="name"
+              name="name"
+              defaultValue={row.name}
+              required
+              style={inputStyle()}
+            />
+          </Field>
 
-          <label
-            htmlFor="timezone"
-            style={{
-              display: 'block',
-              fontWeight: 600,
-              fontSize: '0.8125rem',
-              marginBlockStart: spacingTokens.md,
-            }}
-          >
-            {t('settings.timezone')}
-          </label>
-          <input
-            id="timezone"
-            name="timezone"
-            defaultValue={row.timezone}
-            style={customerInputStyle()}
-          />
+          <Field label={t('settings.locale')} htmlFor="defaultLocale">
+            <select
+              className="bs-control"
+              id="defaultLocale"
+              name="defaultLocale"
+              defaultValue={row.defaultLocale}
+              style={inputStyle()}
+            >
+              <option value="AR">AR</option>
+              <option value="EN">EN</option>
+            </select>
+          </Field>
 
-          <button
-            type="submit"
-            data-testid="settings-save"
-            style={{ ...customerButtonStyle(), marginBlockStart: spacingTokens.lg }}
-          >
-            {t('common.save')}
-          </button>
+          <Field label={t('settings.timezone')} htmlFor="timezone">
+            <input
+              className="bs-control"
+              id="timezone"
+              name="timezone"
+              defaultValue={row.timezone}
+              style={inputStyle()}
+            />
+          </Field>
+
+          <div>
+            <button type="submit" data-testid="settings-save" style={buttonStyle('primary')}>
+              {t('common.save')}
+            </button>
+          </div>
         </form>
-      </CustomerCard>
+      </Card>
     </WorkspaceShell>
   );
 }

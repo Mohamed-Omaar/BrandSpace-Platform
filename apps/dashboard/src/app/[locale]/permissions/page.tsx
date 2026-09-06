@@ -1,5 +1,5 @@
 import { ALL_PERMISSIONS } from '@brandspace/shared';
-import { colorTokens, scrollContainerStyle } from '@brandspace/ui';
+import { colorTokens, scrollContainerStyle, typographyTokens } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { translator } from '../../../i18n/messages';
 import {
@@ -58,7 +58,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                     <td style={customerTdStyle()}>
                       <code>{p.key}</code>
                       <br />
-                      <span style={{ color: colorTokens.textSecondary, fontSize: '0.8125rem' }}>
+                      <span style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}>
                         {p.description}
                       </span>
                     </td>

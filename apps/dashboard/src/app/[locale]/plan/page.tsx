@@ -1,4 +1,4 @@
-import { colorTokens, scrollContainerStyle } from '@brandspace/ui';
+import { colorTokens, scrollContainerStyle, typographyTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { translator } from '../../../i18n/messages';
 import {
@@ -49,16 +49,16 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       permissionKeys={workspace.permissionKeys}
     >
       <CustomerCard title={t('plan.current')} testId="plan-card">
-        <p data-testid="current-plan" style={{ marginBlockStart: 0, fontSize: '1.125rem' }}>
+        <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h2 }}>
           {effective.planKey ?? t('plan.none')}
         </p>
       </CustomerCard>
 
       {wallet && (
         <CustomerCard title={t('plan.credits')} testId="credits-card">
-          <p style={{ marginBlockStart: 0, fontSize: '1.75rem', fontWeight: 700 }}>
+          <p style={{ marginBlockStart: 0, ...typographyTokens.numeric }}>
             <span data-testid="credit-balance">{wallet.balanceCredits}</span>{' '}
-            <span style={{ fontSize: '0.875rem', color: colorTokens.textSecondary }}>
+            <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
               {locale === 'ar' ? 'وحدة' : 'credits'}
             </span>
           </p>

@@ -1,3 +1,4 @@
+import { typographyTokens, fontTokens } from '@brandspace/ui';
 import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
 import { getPlatformPrisma, requirePageActor } from '../../../../server/platform-context';
 
@@ -47,7 +48,9 @@ export default async function AuditPage({ params }: { params: Promise<{ locale: 
             <tr key={event.id} data-testid={`audit-${event.id}`}>
               <Cell>{event.occurredAt.toISOString().replace('T', ' ').slice(0, 19)}</Cell>
               <Cell>
-                <code style={{ fontSize: '0.8rem' }}>{event.action}</code>
+                <code style={{ ...typographyTokens.caption, fontFamily: fontTokens.mono }}>
+                  {event.action}
+                </code>
               </Cell>
               <Cell>{event.actorType}</Cell>
               <Cell>{event.outcome}</Cell>

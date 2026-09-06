@@ -3,11 +3,12 @@ import {
   StateMessage,
   StatusBadge,
   buttonStyle,
-  scrollContainerStyle,
   inputStyle as sharedInputStyle,
+  scrollContainerStyle,
   statusTone,
   tdStyle as sharedTdStyle,
   thStyle as sharedThStyle,
+  typographyTokens,
 } from '@brandspace/ui';
 
 /**
@@ -66,7 +67,7 @@ export function tableStyle(): CSSProperties {
   return {
     inlineSize: '100%',
     borderCollapse: 'collapse',
-    fontSize: '0.875rem',
+    fontSize: typographyTokens.bodySm.fontSize,
     // `text-align: start` rather than `left`, so Arabic mirrors correctly.
     textAlign: 'start',
   };
