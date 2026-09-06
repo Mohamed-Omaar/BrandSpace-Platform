@@ -343,6 +343,17 @@ export const typographyTokens = {
   },
   /** `.section-head h3` — 18px / -.035em, the title inside a surface card. */
   h3: { fontSize: '1.125rem', lineHeight: '1.4rem', fontWeight: 700, letterSpacing: '-0.035em' },
+  /**
+   * `.feature-card h3` — 15px / 700, `margin: 22px 0 7px`. The title of a card
+   * in a GRID of cards, a step under the title of a section: six of them in a
+   * row at the section step reads as six sections.
+   */
+  cardTitle: {
+    fontSize: '0.9375rem',
+    lineHeight: '1.25rem',
+    fontWeight: 700,
+    letterSpacing: 'normal',
+  },
   /** Body copy. `body { font-size: 15px }`, `.hero-copy p { line-height: 1.6 }`. */
   body: { fontSize: '0.9375rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: 'normal' },
   /** `.item-copy b`, `.nav-item`, `.quick-card b` — the demo's 11px workhorse. */
