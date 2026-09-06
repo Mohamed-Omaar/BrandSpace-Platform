@@ -148,7 +148,8 @@ export default defineConfig({
     // serial project and is excluded from the two viewport projects.
     {
       name: 'chromium-desktop',
-      testIgnore: /(admin-console|customer-app|design-system)\.(spec|screenshots\.spec)\.ts/,
+      testIgnore:
+        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -157,7 +158,8 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
-      testIgnore: /(admin-console|customer-app|design-system)\.(spec|screenshots\.spec)\.ts/,
+      testIgnore:
+        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -189,7 +191,7 @@ export default defineConfig({
       ? [
           {
             name: 'visual-review',
-            testMatch: /design-system\.screenshots\.spec\.ts/,
+            testMatch: /\.screenshots\.spec\.ts$/,
             fullyParallel: false,
             use: {
               ...devices['Desktop Chrome'],

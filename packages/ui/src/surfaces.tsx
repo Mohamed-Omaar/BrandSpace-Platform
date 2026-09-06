@@ -25,7 +25,9 @@ import { IconTile } from './primitives';
 export type SurfaceTone = 'plain' | 'soft' | 'warm' | 'lavender';
 
 const TONE_BACKGROUND: Record<SurfaceTone, string> = {
-  plain: colorTokens.surface,
+  // `.surface-card { background: rgba(255,255,255,.82) }` — translucent over
+  // the shell, so the ambient light reaches the card too.
+  plain: colorTokens.surfaceCardAlpha,
   soft: colorTokens.surfaceSoft,
   warm: colorTokens.surfaceWarm,
   lavender: colorTokens.surfaceLavender,
@@ -37,8 +39,7 @@ export function cardStyle(
   const { padded = true, tone = 'plain', elevated = true } = options;
   return {
     background: TONE_BACKGROUND[tone],
-    // 28px — `--radius-lg` in the approved reference. A card is a soft plane,
-    // not a panel.
+    // `.surface-card { border-radius: 18px }`.
     borderRadius: radiusTokens['2xl'],
     /*
      * NO RESTING BORDER AT ALL (D-59, tightening D-54).
@@ -54,7 +55,8 @@ export function cardStyle(
      */
     border: '1px solid transparent',
     boxShadow: elevated ? shadowTokens.card : 'none',
-    padding: padded ? spacingTokens.lg : 0,
+    // `.surface-card { padding: 22px }`.
+    padding: padded ? layoutTokens.surfacePad : 0,
     /*
      * A GRID OR FLEX ITEM DEFAULTS TO `min-width: auto`, which means it refuses
      * to shrink below its content. A card holding a table with a 40rem minimum
@@ -118,7 +120,7 @@ export function Card({
           >
             {icon ? <IconTile icon={icon} tone={iconTone} size="sm" /> : null}
             {title ? (
-              <h2 style={{ ...typographyTokens.h2, color: colorTokens.textPrimary }}>{title}</h2>
+              <h2 style={{ ...typographyTokens.h3, color: colorTokens.textPrimary }}>{title}</h2>
             ) : null}
           </div>
           {actions}
@@ -210,7 +212,14 @@ export function MetricCard({
    * step instead, which fits and still reads as the card's headline.
    */
   const longWord = typeof value === 'string' && value.trim().length > 9;
-  const valueType = longWord ? typographyTokens.h2 : typographyTokens.numeric;
+  /*
+   * The section step, not the view step. `h2` (29px) was the first answer and
+   * it was still too wide: "DEVELOPMENT" at 29px does not fit the 228px a
+   * four-across metric card leaves inside its padding, so it wrapped mid-word
+   * — the exact failure F-36 was meant to end, one step smaller. 18px fits
+   * with room to spare and still reads as the card's headline.
+   */
+  const valueType = longWord ? typographyTokens.h3 : typographyTokens.numeric;
 
   return (
     <div
@@ -221,7 +230,8 @@ export function MetricCard({
         // A statistic is a SMALLER plane than a section card: 18px rather than
         // 28px, and a lighter shadow, because four of them sit in a row and the
         // section shadow repeated four times stops being subliminal.
-        borderRadius: radiusTokens.lg,
+        borderRadius: radiusTokens.card,
+        background: colorTokens.metricAlpha,
         boxShadow: shadowTokens.metric,
         // `.metric { min-height: 118px; padding: 20px }`.
         minBlockSize: '7.375rem',
@@ -239,7 +249,7 @@ export function MetricCard({
             figure below it should be doing alone. */}
         <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>{label}</span>
       </div>
-      <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+      <div style={{ display: 'grid', gap: 0, marginBlockStart: spacingTokens.sm }}>
         {/*
          * THE VALUE MUST NEVER SET THE CARD'S WIDTH.
          *
@@ -452,10 +462,12 @@ export function SectionHeader({
             </span>
           ) : null}
           {/* `.section-head h3 { margin: 5px 0 0 }`. */}
+          {/* `.section-head h3 { margin: 4px 0 0; font-size: 18px }`. The 29px
+              step is `.view-toolbar h2`, the PAGE-level title, not this one. */}
           <h2
             style={{
-              marginBlockStart: eyebrow ? spacingTokens['2xs'] : 0,
-              ...typographyTokens.h2,
+              marginBlockStart: eyebrow ? spacingTokens.xs : 0,
+              ...typographyTokens.h3,
               color: colorTokens.textPrimary,
             }}
           >
@@ -552,6 +564,76 @@ export function HeroSurface({
       }}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * THE SETTINGS SPLIT (`.settings-grid`), §25.
+ *
+ * `grid-template-columns: 220px 1fr; gap: 13px`, with the nav and the form as
+ * two soft-shadowed surfaces — `.settings-nav, .settings-form { background:
+ * rgba(255,255,255,.8); border-radius: 19px; padding: 14px }`. The nav's rows
+ * are `border-radius: 10px; padding: 10px; text-align: start; font-size: 9px`,
+ * and the selected one takes the muted fill at weight 800.
+ *
+ * Every entry is a REAL destination the caller can actually reach. The demo's
+ * nav lists sections this phase does not have, and inventing rows that lead
+ * nowhere is the placeholder link §20 rules out — so the list is whatever the
+ * app passes, filtered by permission before it gets here.
+ */
+export function SettingsSplit({
+  navLabel,
+  items,
+  children,
+  testId,
+}: {
+  readonly navLabel: string;
+  readonly items: readonly {
+    readonly href: string;
+    readonly label: string;
+    readonly selected: boolean;
+  }[];
+  readonly children: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  return (
+    <div className="bs-settings-split" data-testid={testId ?? 'settings-split'}>
+      <nav
+        aria-label={navLabel}
+        data-testid="settings-nav"
+        style={{
+          display: 'grid',
+          alignContent: 'start',
+          gap: spacingTokens['3xs'],
+          padding: '0.875rem',
+          borderRadius: radiusTokens['2xl'],
+          background: colorTokens.surfaceCardAlpha,
+          boxShadow: shadowTokens.card,
+        }}
+      >
+        {items.map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            className="bs-pressable"
+            aria-current={item.selected ? 'page' : undefined}
+            style={{
+              display: 'block',
+              padding: spacingTokens.sm,
+              borderRadius: radiusTokens.md,
+              textDecoration: 'none',
+              ...typographyTokens.caption,
+              fontWeight: item.selected ? 800 : 400,
+              color: colorTokens.textPrimary,
+              background: item.selected ? colorTokens.surfaceMuted : 'transparent',
+            }}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+      <div style={{ minInlineSize: 0, display: 'grid', gap: spacingTokens.sm }}>{children}</div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { inlineEndOverhang } from './overflow';
+import { clippedInlineOverflow, expectNothingClippedAway, inlineEndOverhang } from './overflow';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { ADMIN_BASE_URL, DASHBOARD_BASE_URL } from './apps';
@@ -271,6 +271,16 @@ test.describe('the restyled pages hold their shape at every width', () => {
           await page.goto(`${DASHBOARD_BASE_URL}${path}`);
           const { px, offender } = await inlineEndOverhang(page);
           expect(px, `${path} at ${viewport.name}px: ${offender} overhangs by ${px}px`).toBe(0);
+
+          /*
+           * The shell clips its own rounded corners and the panel scrolls, as
+           * the demo does. Both fit the viewport, so the measurement above is
+           * defined to forgive anything they cut off — which is why the second
+           * half is asserted directly: neither container may be hiding page
+           * content along the inline axis.
+           */
+          await expectNothingClippedAway(page, '.bs-shell', `${path} at ${viewport.name}px`);
+          await expectNothingClippedAway(page, 'main', `${path} at ${viewport.name}px`);
         }
       });
     }
@@ -283,11 +293,33 @@ test.describe('the restyled pages hold their shape at every width', () => {
     await signInAndEnterWorkspace(page);
     expect((await inlineEndOverhang(page)).px).toBe(0);
 
+    /*
+     * Planted INSIDE the panel, which clips and scrolls its own box: this is
+     * the case `inlineEndOverhang` is defined to forgive, and the case the
+     * shell's `overflow: hidden` would otherwise let through unseen. The
+     * clipped-away measurement is what has to catch it.
+     */
     await page.evaluate(() => {
       const planted = document.createElement('div');
       planted.dataset['testid'] = 'planted-overflow';
       planted.style.cssText = 'inline-size:900px;block-size:20px;background:red';
       document.querySelector('main')?.appendChild(planted);
+    });
+    expect(await clippedInlineOverflow(page, 'main')).toBeGreaterThan(100);
+    expect(await clippedInlineOverflow(page, '.bs-shell')).toBeGreaterThan(100);
+
+    /*
+     * Planted where nothing clips it, so it genuinely hangs past the viewport:
+     * this is what `inlineEndOverhang` measures, and it must still be able to
+     * report a number and name the offender.
+     */
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="planted-overflow"]')?.remove();
+      const planted = document.createElement('div');
+      planted.dataset['testid'] = 'planted-overflow';
+      planted.style.cssText =
+        'position:absolute;inset-block-start:0;inset-inline-start:0;inline-size:900px;block-size:20px;background:red';
+      document.body.appendChild(planted);
     });
 
     const { px, offender } = await inlineEndOverhang(page);
@@ -747,5 +779,127 @@ test.describe('accessibility', () => {
         /^none\|0px\|none$/,
       );
     }
+  });
+});
+
+/**
+ * THE DEMO'S GEOMETRY, ASSERTED.
+ *
+ * `docs/visual-reference/full-demo/` is the visual authority (D-60), and the
+ * standard is reproduction, not resemblance. Every number below was measured
+ * from that demo rendered in this same browser at 1440×900 — not read off its
+ * stylesheet — and each is a value the fidelity pass moved. Asserting them
+ * turns "it looks right today" into something a future edit cannot quietly
+ * undo, which is the only reason a screenshot review has to happen once.
+ *
+ * A failure here is not necessarily a bug: it means a measurement changed, and
+ * the change has to be either wrong or recorded in
+ * `docs/visual-reference/README.md` with its reason.
+ */
+test.describe('the shell reproduces the demo geometry', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signInAndEnterWorkspace(page);
+  });
+
+  test('the shell, the rail and the ground', async ({ page }) => {
+    const shell = page.locator('.bs-shell');
+    // `.app-shell { width: min(1540px, calc(100% - 40px)); border-radius: 34px }`
+    await expect(shell).toHaveCSS('border-radius', '34px');
+    await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.78)');
+    await expect(shell).toHaveCSS('backdrop-filter', 'blur(24px)');
+    expect((await shell.boundingBox())?.width).toBe(1400);
+
+    // `.sidebar { --sidebar: 248px; background: rgba(250,250,251,.78) }`
+    const sidebar = page.locator('.bs-sidebar');
+    expect((await sidebar.boundingBox())?.width).toBe(248);
+    await expect(sidebar).toHaveCSS('background-color', 'rgba(250, 250, 251, 0.78)');
+
+    // `html { background: #f2f2f2 }`, `.ambient { background: #f3f3f3 }`,
+    // `body { font-size: 15px }`.
+    const ground = await page.evaluate(() => ({
+      html: getComputedStyle(document.documentElement).backgroundColor,
+      ambient: getComputedStyle(document.querySelector('.bs-ambient')!).backgroundColor,
+      body: getComputedStyle(document.body).fontSize,
+    }));
+    expect(ground).toEqual({
+      html: 'rgb(242, 242, 242)',
+      ambient: 'rgb(243, 243, 243)',
+      body: '15px',
+    });
+  });
+
+  test('the brand lockup', async ({ page }) => {
+    // `.brand-mark { width:34px; height:34px; border-radius:11px; font-size:15px }`
+    // inside `.brand { gap: 10px; font-weight: 850 }`.
+    const mark = page.getByTestId('brand-mark').first();
+    const box = await mark.boundingBox();
+    expect(box?.width).toBe(34);
+    expect(box?.height).toBe(34);
+    await expect(mark).toHaveCSS('border-radius', '11px');
+    await expect(mark).toHaveCSS('font-size', '15px');
+    await expect(mark).toHaveCSS('font-weight', '850');
+    await expect(page.getByTestId('brand').first()).toHaveCSS('gap', '10px');
+  });
+
+  test('the navigation rows', async ({ page }) => {
+    // `.nav-item { height:39px; border-radius:12px; padding:0 11px; gap:11px;
+    //  font-size:11px; font-weight:650 }` with a 20px `.nav-icon` slot.
+    const item = page.locator('.bs-sidebar').getByRole('link').first();
+    expect((await item.boundingBox())?.height).toBe(39);
+    await expect(item).toHaveCSS('border-radius', '12px');
+    await expect(item).toHaveCSS('padding', '0px 11px');
+    await expect(item).toHaveCSS('gap', '11px');
+    await expect(item).toHaveCSS('font-size', '11px');
+    await expect(item).toHaveCSS('font-weight', '650');
+    expect((await page.locator('.bs-nav-icon').first().boundingBox())?.width).toBe(20);
+  });
+
+  test('the top bar', async ({ page }) => {
+    // `.topbar { min-height:88px; gap:16px; padding-bottom:12px }`,
+    // `.eyebrow { font-size:9px; font-weight:800; letter-spacing:.08em }`,
+    // `.topbar h1 { font-size:24px; letter-spacing:-.04em }`.
+    const bar = page.locator('.bs-topbar');
+    expect((await bar.boundingBox())?.height).toBe(88);
+    await expect(bar).toHaveCSS('column-gap', '16px');
+    await expect(bar).toHaveCSS('padding-bottom', '12px');
+
+    const eyebrow = page.getByTestId('page-eyebrow');
+    await expect(eyebrow).toHaveCSS('font-size', '9px');
+    await expect(eyebrow).toHaveCSS('font-weight', '800');
+    await expect(eyebrow).toHaveCSS('letter-spacing', '0.72px');
+
+    const heading = page.getByTestId('heading');
+    await expect(heading).toHaveCSS('font-size', '24px');
+    await expect(heading).toHaveCSS('letter-spacing', '-0.96px');
+  });
+
+  test('the top bar controls', async ({ page }) => {
+    // `.search-button { width:230px; height:38px; border-radius:12px; font-size:10px }`
+    // and `.icon-button { width:38px; height:38px; border-radius:12px }`.
+    const search = page.getByTestId('topbar-search');
+    const searchBox = await search.boundingBox();
+    expect(searchBox?.width).toBe(230);
+    expect(searchBox?.height).toBe(38);
+    await expect(search).toHaveCSS('border-radius', '12px');
+    await expect(search).toHaveCSS('font-size', '10px');
+
+    const bell = page.getByTestId('topbar-notifications');
+    const bellBox = await bell.boundingBox();
+    expect(bellBox?.width).toBe(38);
+    expect(bellBox?.height).toBe(38);
+    await expect(bell).toHaveCSS('border-radius', '12px');
+  });
+
+  test('the rail cards and the surfaces', async ({ page }) => {
+    // `.experience-current` and `.profile-button` — 16px radius, 10px/8px padding.
+    for (const testId of ['workspace-switcher', 'profile-menu']) {
+      await expect(page.getByTestId(testId)).toHaveCSS('border-radius', '16px');
+    }
+    // `.metric { border-radius:20px; padding:20px; background:rgba(255,255,255,.72) }`
+    const metric = page.locator('[data-surface="card"]').first();
+    await expect(metric).toHaveCSS('border-radius', '20px');
+    await expect(metric).toHaveCSS('padding', '20px');
+    await expect(metric).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.72)');
   });
 });

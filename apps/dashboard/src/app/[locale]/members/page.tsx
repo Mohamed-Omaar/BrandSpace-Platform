@@ -1,4 +1,5 @@
 import {
+  Avatar,
   Banner,
   Button,
   Card,
@@ -11,11 +12,13 @@ import {
   StatusBadge,
   buttonStyle,
   colorTokens,
+  initialsFrom,
   inputStyle,
   spacingTokens,
   statusTone,
   typographyTokens,
   visuallyHiddenStyle,
+  type MediaSeed,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { statusMessage, translator } from '../../../i18n/messages';
@@ -43,6 +46,15 @@ export const dynamic = 'force-dynamic';
  * into 390px either overflows the page or loses its column headings; neither is
  * an acceptable way to show who has access to a workspace.
  */
+/**
+ * A stable palette per member, so the same address is the same colour on every
+ * render — the deterministic-artwork rule (D-57) applied to identity tiles.
+ */
+function avatarSeed(email: string): MediaSeed {
+  const index = [...email].reduce((total, character) => total + character.charCodeAt(0), 0) % 6;
+  return index as MediaSeed;
+}
+
 export default async function MembersPage({
   params,
   searchParams,
@@ -181,6 +193,7 @@ export default async function MembersPage({
       description={t('members.description')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={session.customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <Banner tone="error">{statusMessage(error, locale, ref)}</Banner>}
@@ -206,14 +219,23 @@ export default async function MembersPage({
               {members.map((m) => (
                 <tr key={m.membershipId} data-testid={`member-${m.email}`}>
                   <Cell>
+                    {/*
+                      `.record-main { display: flex; gap: 9px; align-items: center }`
+                      with `.record-main .avatar { border-radius: 11px }` — the
+                      demo's directory rows lead with a rounded identity tile,
+                      which is also what makes a long list of addresses
+                      scannable. The initials come from the address already
+                      shown beside them; nothing new is invented.
+                    */}
                     <span
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: spacingTokens.xs,
+                        gap: '0.5625rem',
                         flexWrap: 'wrap',
                       }}
                     >
+                      <Avatar initials={initialsFrom(m.email)} seed={avatarSeed(m.email)} />
                       {m.email}
                       {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
                     </span>

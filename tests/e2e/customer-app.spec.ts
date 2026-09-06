@@ -135,6 +135,13 @@ test.describe('customer authentication', () => {
     await enterWorkspace(page, customer.workspaceSlug);
     await expect(page).toHaveURL(/\/en\/overview/);
 
+    /*
+     * Sign-out now lives in the profile card's menu at the foot of the rail,
+     * which is where the full demo puts it (fidelity pass §8). The assertion is
+     * unchanged — signing out must end the session — only the route to the
+     * control moved, so the test opens the menu the person would open.
+     */
+    await page.getByTestId('profile-menu').click();
     await page.click('[data-testid="sign-out"]');
     await expect(page).toHaveURL(/\/en\/sign-in/);
 

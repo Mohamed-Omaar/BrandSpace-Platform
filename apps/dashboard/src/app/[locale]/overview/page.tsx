@@ -3,6 +3,8 @@ import {
   Card,
   ContentGrid,
   MetricCard,
+  HeroFloatCard,
+  HeroMiniChart,
   OverviewHero,
   SectionHeader,
   Stack,
@@ -76,6 +78,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       heading={t('overview.greeting')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
       hero={
         <OverviewHero
@@ -86,6 +89,28 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             <Link href={primaryHref} style={buttonStyle('primary')} data-testid="hero-primary">
               {primaryLabel}
             </Link>
+          }
+          visual={
+            /*
+             * The demo's two floating cards, at its exact geometry, carrying
+             * honest content: it captions them with engagement and schedule
+             * figures this phase cannot measure, so each says instead what it
+             * will hold and that it holds nothing yet (§33).
+             */
+            <>
+              <HeroFloatCard
+                placement="end"
+                title={t('overview.float.performance')}
+                detail={t('overview.metric.laterPhase')}
+              >
+                <HeroMiniChart />
+              </HeroFloatCard>
+              <HeroFloatCard
+                placement="start"
+                title={t('overview.float.next')}
+                detail={t('overview.upcomingEmptyTitle')}
+              />
+            </>
           }
           secondaryAction={
             <Link

@@ -4,7 +4,6 @@ import {
   layoutTokens,
   motionTokens,
   radiusTokens,
-  shadowTokens,
   spacingTokens,
   typographyTokens,
 } from './tokens';
@@ -34,8 +33,19 @@ import {
 export type ButtonVariant = 'primary' | 'brand' | 'accent' | 'neutral' | 'ghost' | 'danger';
 export type ControlSize = 'sm' | 'md' | 'lg';
 
+/*
+ * `.primary-button, .dark-button, .ghost-button, .soft-button { min-height:
+ *  40px; padding: 0 15px; font-size: 10px; font-weight: 800; radius: 12px }`
+ * with `.compact { min-height: 38px }` and
+ * `.filter-row button, .segmented button { min-height: 36px; padding: 0 11px;
+ *  font-size: 9px; font-weight: 750; radius: 10px }`.
+ *
+ * THREE HEIGHTS, DELIBERATELY. The demo does not run one control size, and
+ * flattening them into a single token is what makes a filter chip look like a
+ * primary action. §27 rules that out explicitly.
+ */
 const CONTROL_HEIGHT: Record<ControlSize, string> = {
-  sm: layoutTokens.controlHeightSm,
+  sm: layoutTokens.controlHeightXs,
   md: layoutTokens.controlHeight,
   lg: '3rem',
 };
@@ -47,14 +57,14 @@ function buttonBase(size: ControlSize): CSSProperties {
     justifyContent: 'center',
     gap: spacingTokens.sm,
     minBlockSize: CONTROL_HEIGHT[size],
-    paddingInline: size === 'sm' ? spacingTokens.md : spacingTokens.lg,
-    paddingBlock: spacingTokens.xs,
-    borderRadius: radiusTokens.md,
+    paddingInline: size === 'sm' ? '0.6875rem' : '0.9375rem',
+    paddingBlock: 0,
+    borderRadius: size === 'sm' ? radiusTokens.md : radiusTokens.control,
     fontFamily: 'inherit',
-    fontSize: size === 'sm' ? typographyTokens.caption.fontSize : typographyTokens.bodySm.fontSize,
-    fontWeight: 700,
-    letterSpacing: '-0.01em',
-    lineHeight: typographyTokens.bodySm.lineHeight,
+    fontSize: size === 'sm' ? '0.5625rem' : typographyTokens.button.fontSize,
+    fontWeight: size === 'sm' ? 750 : typographyTokens.button.fontWeight,
+    letterSpacing: 'normal',
+    lineHeight: typographyTokens.button.lineHeight,
     cursor: 'pointer',
     textDecoration: 'none',
     whiteSpace: 'nowrap',
@@ -94,21 +104,21 @@ export function buttonStyle(
       // system, which is the right place for the most important one.
       return { ...base, background: colorTokens.ink, color: colorTokens.inkInk };
     case 'brand':
-      // The single accent call to action. The soft purple glow beneath it is
-      // the reference's `box-shadow: 0 10px 24px rgba(121,53,254,.2)`.
+      // `.primary-button { background: var(--purple); color: #fff }`. The full
+      // demo gives it NO glow — the flat purple is the whole treatment.
       return {
         ...base,
         background: colorTokens.brandPurple,
         color: colorTokens.brandPurpleInk,
-        boxShadow: shadowTokens.brandGlow,
       };
     case 'accent':
       // Yellow with near-black ink at 15.3:1. Never white text on yellow.
       return { ...base, background: colorTokens.brandYellow, color: colorTokens.brandYellowInk };
     case 'neutral':
+      // `.soft-button { background: var(--soft) }`.
       return {
         ...base,
-        background: colorTokens.controlSurface,
+        background: colorTokens.surfaceMuted,
         color: colorTokens.textPrimary,
       };
     case 'ghost':
@@ -315,15 +325,23 @@ export function Field({
   readonly children: ReactNode;
 }) {
   return (
-    <div style={{ marginBlockEnd: spacingTokens.lg }}>
+    /* `.field { margin-bottom: 16px }`. */
+    <div style={{ marginBlockEnd: spacingTokens.md }}>
       <label
         htmlFor={htmlFor}
+        /*
+          `.field label { display: block; margin-bottom: 7px; font-size: 9px;
+           font-weight: 800 }` — the demo's form labels are SMALL AND HEAVY, a
+          step below body copy, not a 12px semibold line. At `label` (12px/700)
+          they read as headings and every form was a stack of headings.
+        */
         style={{
           display: 'flex',
           alignItems: 'baseline',
-          gap: spacingTokens.xs,
-          marginBlockEnd: spacingTokens.xs,
-          ...typographyTokens.label,
+          gap: spacingTokens['3xs'],
+          marginBlockEnd: '0.4375rem',
+          ...typographyTokens.caption,
+          fontWeight: 800,
           color: colorTokens.textPrimary,
         }}
       >

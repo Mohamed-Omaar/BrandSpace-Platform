@@ -6,6 +6,7 @@ import {
   LanguageSwitcher,
   buttonStyle,
   colorTokens,
+  gradientTokens,
   inputStyle,
   layoutTokens,
   radiusTokens,
@@ -170,6 +171,14 @@ export function AuthCard({
         </nav>
       </header>
 
+      {/*
+        THE STAGE (`.auth-stage`): `padding: 45px 20px; border-radius: 28px`
+        over an OPAQUE wash — two soft radials on a lavender-to-white base. It
+        is opaque on purpose: with the ambient orbs showing through, the
+        "forgot password" link landed on a yellow blend at 4.12:1 and axe
+        flagged it serious. The demo's stage is opaque for the same reason its
+        card is readable.
+      */}
       <main
         id="main"
         style={{
@@ -177,8 +186,12 @@ export function AuthCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: spacingTokens.lg,
-          paddingBlockEnd: spacingTokens['2xl'],
+          paddingBlock: '2.8125rem',
+          paddingInline: spacingTokens.md,
+          marginInline: spacingTokens.md,
+          marginBlockEnd: spacingTokens.md,
+          borderRadius: radiusTokens['3xl'],
+          background: gradientTokens.authStage,
         }}
       >
         <div
@@ -187,25 +200,26 @@ export function AuthCard({
         >
           <BrandPanel locale={locale} />
 
-          <div style={{ inlineSize: '100%', maxInlineSize: '26rem', marginInline: 'auto' }}>
+          <div style={{ inlineSize: '100%', maxInlineSize: '26.25rem', marginInline: 'auto' }}>
             {/*
-              THE FORM SURFACE, not a bordered box. On the white ground it is
-              separated by a soft shadow and its own generous padding; the
-              fields inside it are filled rather than outlined.
+              THE CARD (`.auth-card`): `width: min(420px, 100%); padding: 30px;
+              border-radius: 24px; background: rgba(255,255,255,.9);
+              box-shadow: 0 24px 70px rgba(44,25,82,.12)`. Not a bordered box —
+              a soft-shadowed surface floating on the stage.
             */}
             <div
               data-testid="auth-form-card"
               style={{
-                background: colorTokens.surface,
-                borderRadius: radiusTokens['2xl'],
-                boxShadow: shadowTokens.raised,
-                padding: spacingTokens.xl,
+                background: colorTokens.authCardAlpha,
+                borderRadius: radiusTokens['3xl'],
+                boxShadow: shadowTokens.authCard,
+                padding: '1.875rem',
                 display: 'grid',
                 gap: spacingTokens.md,
               }}
             >
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-                <h1 data-testid="heading" style={{ ...typographyTokens.h1, margin: 0 }}>
+                <h1 data-testid="heading" style={{ ...typographyTokens.authHeading, margin: 0 }}>
                   {heading}
                 </h1>
                 {description ? (
@@ -221,18 +235,24 @@ export function AuthCard({
                 ) : null}
               </div>
               {children}
+              {/*
+                `.auth-card > small` — centred, muted, `margin-top: 18px`, and
+                INSIDE the card. It used to sit outside it, on the stage, which
+                is both a departure from the demo and where the contrast
+                failure came from.
+              */}
+              {footer ? (
+                <div
+                  style={{
+                    marginBlockStart: '0.5rem',
+                    textAlign: 'center',
+                    ...typographyTokens.bodySm,
+                  }}
+                >
+                  {footer}
+                </div>
+              ) : null}
             </div>
-            {footer ? (
-              <div
-                style={{
-                  marginBlockStart: spacingTokens.md,
-                  textAlign: 'center',
-                  ...typographyTokens.bodySm,
-                }}
-              >
-                {footer}
-              </div>
-            ) : null}
           </div>
         </div>
       </main>

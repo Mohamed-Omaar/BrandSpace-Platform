@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 export default async function PlanPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { workspace } = await requireWorkspace(locale, 'billing.read');
+  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
 
   // Inside the tenant context: the overrides and the wallet are tenant-owned,
   // and the catalogue comes through the allow-listed configuration function.
@@ -46,6 +46,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       heading={t('plan.title')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       <CustomerCard title={t('plan.current')} testId="plan-card">

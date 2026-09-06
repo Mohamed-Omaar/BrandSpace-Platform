@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
+import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { Button, ButtonRow, IconButton } from './primitives';
 import { ChevronEndIcon, ChevronStartIcon } from './icons';
 import { CalendarPostChip, type PostCardLabels, type PostRecord } from './post-card';
@@ -79,12 +79,28 @@ function MonthGrid({
       aria-label={labels.calendarLabel}
       data-testid="calendar-month-grid"
       style={{
+        /*
+         * ONE CONTINUOUS SURFACE, NOT A GRID OF CARDS (§13).
+         *
+         * `.calendar { grid-template-columns: repeat(7, minmax(120px,1fr));
+         *  gap: 1px; padding: 1px; background: rgba(17,17,20,.06);
+         *  border-radius: 22px; overflow: auto; box-shadow: var(--soft-shadow) }`
+         * with `.weekday, .day { background: rgba(255,255,255,.92) }`.
+         *
+         * The 1px gap and 1px padding over a faint dark ground ARE the
+         * separators — the cells are opaque and the container shows through
+         * between them. That is why the demo's month reads as one calendar
+         * rather than as thirty-five rounded tiles floating apart, which is
+         * what the product had and what §13 rules out by name.
+         */
         display: 'grid',
         gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-        gap: spacingTokens['3xs'],
-        background: colorTokens.surfaceSoft,
-        borderRadius: radiusTokens.xl,
-        padding: spacingTokens.sm,
+        gap: '1px',
+        padding: '1px',
+        background: 'rgba(17, 17, 20, 0.06)',
+        borderRadius: '1.375rem',
+        boxShadow: shadowTokens.card,
+        overflow: 'hidden',
       }}
     >
       {/*
@@ -100,13 +116,16 @@ function MonthGrid({
             key={name}
             role="columnheader"
             style={{
-              padding: spacingTokens.xs,
-              ...typographyTokens.caption,
-              fontWeight: 700,
+              // `.weekday { padding: 11px; font-size: 8px; font-weight: 850 }`.
+              padding: '0.6875rem',
+              background: 'rgba(255, 255, 255, 0.92)',
+              fontSize: '0.5rem',
+              lineHeight: '0.75rem',
+              fontWeight: 850,
               textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              color: colorTokens.textSecondary,
-              textAlign: 'center',
+              letterSpacing: 'normal',
+              color: colorTokens.textMuted,
+              textAlign: 'start',
             }}
           >
             {name}
@@ -122,9 +141,12 @@ function MonthGrid({
               data-testid={`calendar-day-${day.key}`}
               aria-label={`${day.longLabel} — ${labels.postsOnDay(day.posts.length)}`}
               style={{
-                minBlockSize: '7.5rem',
-                padding: spacingTokens.xs,
-                borderRadius: radiusTokens.md,
+                // `.day { min-height: 132px; padding: 10px;
+                //  background: rgba(255,255,255,.92) }` — square-cornered,
+                // because the container's 1px gutter draws the grid.
+                minBlockSize: '8.25rem',
+                padding: '0.625rem',
+                borderRadius: 0,
                 // Today is a lavender cell; a day outside the month is quieter.
                 //
                 // QUIETER BY SURFACE, NOT BY OPACITY. A container opacity blends
@@ -132,11 +154,7 @@ function MonthGrid({
                 // contrast below AA — which is exactly how the feature cards'
                 // badges failed. A softer background and a muted (but still
                 // 4.6:1) number say the same thing honestly.
-                background: day.isToday
-                  ? colorTokens.surfaceLavenderStrong
-                  : day.inCurrentPeriod
-                    ? colorTokens.surface
-                    : colorTokens.surfaceMuted,
+                background: day.isToday ? 'rgba(238, 230, 255, 0.92)' : 'rgba(255, 255, 255, 0.92)',
                 display: 'grid',
                 gridTemplateRows: 'auto 1fr',
                 gap: spacingTokens['3xs'],
@@ -145,12 +163,22 @@ function MonthGrid({
             >
               <span
                 style={{
-                  ...typographyTokens.caption,
-                  fontWeight: day.isToday ? 700 : 600,
+                  /*
+                   * `.day > strong { font-size: 10px }` and
+                   * `.day.muted > strong { color: #bbb }`.
+                   *
+                   * DOCUMENTED DEVIATION: `#bbb` is 1.9:1 on the cell. An
+                   * out-of-month day is quieted with `textMuted` (4.9:1)
+                   * instead — the same device the F-28 lesson settled, and the
+                   * only property changed is the colour, not the geometry.
+                   */
+                  fontSize: '0.625rem',
+                  lineHeight: '0.875rem',
+                  fontWeight: day.isToday ? 800 : 700,
                   color: day.isToday
                     ? colorTokens.brandPurplePressed
                     : day.inCurrentPeriod
-                      ? colorTokens.textSecondary
+                      ? colorTokens.textPrimary
                       : colorTokens.textMuted,
                 }}
               >

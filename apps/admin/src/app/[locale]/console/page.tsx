@@ -1,10 +1,23 @@
+import Link from 'next/link';
 import { CONFIG_DOMAIN_KEYS } from '@brandspace/config';
-import { Card, ContentGrid, MetricCard, Stack, StateMessage } from '@brandspace/ui';
+import {
+  Card,
+  ContentGrid,
+  HeroFloatCard,
+  MetricCard,
+  OverviewHero,
+  Stack,
+  StateMessage,
+  buttonStyle,
+  colorTokens,
+} from '@brandspace/ui';
 import { PageIntro } from '../../../components/admin-shell';
+import { translator } from '../../../i18n/messages';
 import {
   currentEnvironment,
   getConfigService,
   getSecretService,
+  getWorkspaceService,
   requirePageActor,
   serviceActor,
 } from '../../../server/platform-context';
@@ -14,6 +27,7 @@ export const dynamic = 'force-dynamic';
 /** Overview — real counts from the platform database, not placeholders. */
 export default async function OverviewPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
+  const t = translator(locale);
   // Every admin-capable role may see the overview. WHAT it shows depends on the
   // actor's permissions: a role that may not read secrets does not learn how
   // many exist from a summary tile.
@@ -24,8 +38,10 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const environment = currentEnvironment();
   const config = getConfigService();
   const secrets = getSecretService();
+  const workspaceService = getWorkspaceService();
 
-  const [secretList, activeDomains] = await Promise.all([
+  const [workspaces, secretList, activeDomains] = await Promise.all([
+    workspaceService.list(serviceActor(actor), {}),
     mayReadSecrets ? secrets.listSecrets(serviceActor(actor), { environment }) : [],
     mayReadConfig
       ? Promise.all(
@@ -76,6 +92,54 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         }
       />
       <Stack>
+        {/*
+          THE CONTROL CENTER'S HERO (§24), at the demo's geometry: a label pill,
+          the display heading, a line of body copy, two actions and two floating
+          cards. Both actions lead to real console routes. The status card says
+          plainly that operational telemetry is not wired rather than claiming
+          "all systems operational"; the workspace count is a real count.
+        */}
+        <OverviewHero
+          eyebrow={t('console.hero.eyebrow')}
+          title={t('console.hero.title')}
+          description={t('console.hero.body')}
+          primaryAction={
+            <Link
+              href={`/${locale}/console/workspaces`}
+              style={buttonStyle('primary')}
+              data-testid="console-hero-primary"
+            >
+              {t('console.hero.primary')}
+            </Link>
+          }
+          secondaryAction={
+            <Link
+              href={`/${locale}/console/health`}
+              data-testid="console-hero-secondary"
+              style={{
+                ...buttonStyle('ghost'),
+                background: 'transparent',
+                color: colorTokens.textPrimary,
+              }}
+            >
+              {t('console.hero.secondary')}
+            </Link>
+          }
+          visual={
+            <>
+              <HeroFloatCard
+                placement="end"
+                title={t('console.float.status')}
+                detail={t('console.float.statusDetail')}
+              />
+              <HeroFloatCard
+                placement="start"
+                title={t('console.float.workspaces')}
+                detail={String(workspaces.length)}
+              />
+            </>
+          }
+        />
         <ContentGrid min="12rem" testId="overview-stats">
           {stats.map((stat) => (
             <MetricCard

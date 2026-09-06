@@ -113,13 +113,21 @@ export function PostDetailDrawer({
           position: 'fixed',
           insetBlock: layoutTokens.shellInset,
           insetInlineEnd: layoutTokens.shellInset,
-          inlineSize: `min(${layoutTokens.copilotPanelWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
+          /*
+            `.side-drawer { width: min(430px, calc(100vw - 40px)); padding: 22px;
+             background: rgba(255,255,255,.96); backdrop-filter: blur(24px);
+             border-radius: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.2) }`.
+            It was 300px — the Copilot panel's width — which is a different
+            component with a different job.
+          */
+          inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
           zIndex: zIndexTokens.overlay,
-          padding: spacingTokens.lg,
+          padding: '1.375rem',
           overflowY: 'auto',
-          background: colorTokens.surface,
-          borderRadius: radiusTokens['2xl'],
-          boxShadow: shadowTokens.overlay,
+          background: colorTokens.drawerAlpha,
+          backdropFilter: 'blur(24px)',
+          borderRadius: radiusTokens['3xl'],
+          boxShadow: shadowTokens.drawer,
           display: 'grid',
           gap: spacingTokens.md,
           alignContent: 'start',

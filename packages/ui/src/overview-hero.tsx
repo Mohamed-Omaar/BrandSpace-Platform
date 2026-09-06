@@ -5,6 +5,7 @@ import {
   gradientTokens,
   layoutTokens,
   radiusTokens,
+  shadowTokens,
   spacingTokens,
   typographyTokens,
 } from './tokens';
@@ -40,6 +41,7 @@ export function OverviewHero({
   primaryAction,
   secondaryAction,
   isPageTitle = false,
+  visual,
   testId = 'overview-hero',
 }: {
   /** A short scope label — "this week", the workspace name. Never a metric. */
@@ -58,6 +60,8 @@ export function OverviewHero({
    * Everywhere else the hero is a section and takes an `h2`.
    */
   readonly isPageTitle?: boolean;
+  /** The hero's right-hand column — two `HeroFloatCard`s in the demo. */
+  readonly visual?: ReactNode;
   readonly testId?: string | undefined;
 }) {
   const Title = isPageTitle ? 'h1' : 'h2';
@@ -69,9 +73,9 @@ export function OverviewHero({
         position: 'relative',
         overflow: 'hidden',
         display: 'grid',
-        borderRadius: radiusTokens['2xl'],
+        borderRadius: radiusTokens['3xl'],
         background: gradientTokens.hero,
-        boxShadow: '0 18px 50px rgba(48, 31, 88, 0.08)',
+        boxShadow: shadowTokens.card,
       }}
     >
       <div
@@ -80,24 +84,25 @@ export function OverviewHero({
           flexDirection: 'column',
           alignItems: 'flex-start',
           justifyContent: 'center',
-          // `.hero-copy { padding: clamp(32px, 4vw, 62px) }` — 57.6px at 1440.
+          // `.hero-copy { padding: 48px }` — a fixed inset, not a fluid one.
           gap: 0,
-          padding: 'clamp(2rem, 4vw, 3.875rem)',
+          padding: layoutTokens.heroPad,
           minInlineSize: 0,
         }}
       >
         {eyebrow ? (
           <span
             style={{
-              // `.label-pill { padding: 7px 10px; font-size: 11px; weight: 800 }`.
+              // `.label-pill { padding: 7px 10px; font-size: 9px; weight: 800;
+              //  background: rgba(255,255,255,.68) }`.
               padding: '0.4375rem 0.625rem',
               borderRadius: radiusTokens.full,
               // Translucent white on the wash, so the pill picks up whatever
               // the gradient is doing behind it rather than fighting it.
-              background: 'rgba(255, 255, 255, 0.72)',
-              fontSize: '0.6875rem',
-              lineHeight: '0.8125rem',
-              fontWeight: 800,
+              background: 'rgba(255, 255, 255, 0.68)',
+              ...typographyTokens.overline,
+              letterSpacing: 'normal',
+              textTransform: 'none',
               color: colorTokens.textPrimary,
             }}
           >
@@ -109,10 +114,10 @@ export function OverviewHero({
           data-testid={isPageTitle ? 'heading' : `${testId}-title`}
           style={{
             // 600px in the reference: two confident lines, not three.
-            // `.hero-copy h2 { max-width: 600px; margin: 16px 0 12px }`.
-            maxInlineSize: '37.5rem',
+            // `.hero-copy h2 { max-width: 620px; margin: 16px 0 10px }`.
+            maxInlineSize: '38.75rem',
             marginBlockStart: spacingTokens.md,
-            marginBlockEnd: '0.75rem',
+            marginBlockEnd: '0.625rem',
             ...typographyTokens.display,
             color: colorTokens.textPrimary,
           }}
@@ -124,9 +129,10 @@ export function OverviewHero({
           <p
             data-testid={isPageTitle ? 'description' : undefined}
             style={{
-              // `.hero-copy p { max-width: 480px }`, 16px / 1.6.
+              // `.hero-copy p { max-width: 500px; margin: 0 0 24px }`, 15px/1.6.
               margin: 0,
-              maxInlineSize: '30rem',
+              marginBlockEnd: spacingTokens.lg,
+              maxInlineSize: '31.25rem',
               ...typographyTokens.body,
               color: colorTokens.textSecondary,
             }}
@@ -141,9 +147,10 @@ export function OverviewHero({
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
-              // `.hero-actions { margin-top: 28px; gap: 18px }`.
-              gap: layoutTokens.sectionGap,
-              marginBlockStart: '1.75rem',
+              // `.hero-actions { gap: 12px }` — the copy's own bottom margin
+              // provides the space above, so there is no extra top margin.
+              gap: '0.75rem',
+              marginBlockStart: 0,
             }}
           >
             {primaryAction}
@@ -153,90 +160,102 @@ export function OverviewHero({
       </div>
 
       {/*
-       * Decoration, and nothing else. `aria-hidden` because there is nothing
-       * here for a screen reader to be told about — it is the shape of the
-       * approved composition, not information.
+       * `.hero-visual` — two `.float-card`s, 220px wide, 15px padding, 20px
+       * radius, `rgba(255,255,255,.8)` with a 14px backdrop blur and a
+       * violet-tinted shadow. `:first-child { right: 12%; top: 20% }`,
+       * `:nth-child(2) { left: 4%; bottom: 16% }`.
+       *
+       * The demo captions them "Performance this month / Engagement is up
+       * 18.4%" and "Next to publish / Collection launch · Today 09:00". Those
+       * are measurements of a publishing pipeline this phase does not have, so
+       * the BOXES are reproduced exactly and the CONTENT is honest (§33): each
+       * card says what it will hold and that it holds nothing yet.
        */}
-      <div className="bs-hero-orbit" aria-hidden="true" style={{ position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            inlineSize: '21.25rem',
-            blockSize: '21.25rem',
-            insetInlineEnd: '10%',
-            insetBlockStart: '6%',
-            borderRadius: '50%',
-            background: 'rgba(255, 255, 255, 0.3)',
-            boxShadow: 'inset 0 0 0 50px rgba(255, 255, 255, 0.15)',
-          }}
-        />
-        <FloatingTile
-          gradient={`linear-gradient(145deg, ${colorTokens.brandPurple}, #D3BAFF)`}
-          style={{ insetBlockStart: '3rem', insetInlineStart: '12%', transform: 'rotate(-4deg)' }}
-        />
-        <FloatingTile
-          gradient={`linear-gradient(145deg, ${colorTokens.brandYellow}, #FFF4A7)`}
-          style={{ insetBlockEnd: '2.625rem', insetInlineEnd: '8%', transform: 'rotate(5deg)' }}
-        />
+      <div className="bs-hero-orbit" style={{ position: 'relative' }}>
+        {visual}
       </div>
     </section>
   );
 }
 
-/** One of the two abstract cards floating in the orbit. Shapes, not content. */
-function FloatingTile({
-  gradient,
-  style,
+/**
+ * One of the hero's two floating cards.
+ *
+ * `.float-card b, .float-card small { display: block }`,
+ * `.float-card small { color: var(--muted); font-size: 9px; margin-top: 5px }`.
+ */
+export function HeroFloatCard({
+  title,
+  detail,
+  placement,
+  children,
 }: {
-  readonly gradient: string;
-  readonly style: React.CSSProperties;
+  readonly title: string;
+  readonly detail: string;
+  readonly placement: 'start' | 'end';
+  readonly children?: ReactNode;
 }) {
   return (
-    <span
+    <div
       style={{
         position: 'absolute',
-        zIndex: 2,
-        inlineSize: '13.125rem',
-        minBlockSize: '6.125rem',
-        padding: spacingTokens.md,
-        display: 'grid',
-        gridTemplateColumns: '2.125rem 1fr',
-        gap: `${spacingTokens['3xs']} ${spacingTokens.sm}`,
-        alignItems: 'center',
-        background: 'rgba(255, 255, 255, 0.87)',
-        borderRadius: radiusTokens.xl,
-        boxShadow: '0 20px 40px rgba(44, 20, 90, 0.12)',
-        ...style,
+        inlineSize: '13.75rem',
+        padding: '0.9375rem',
+        borderRadius: radiusTokens.card,
+        background: colorTokens.floatCardAlpha,
+        backdropFilter: 'blur(14px)',
+        boxShadow: shadowTokens.float,
+        ...(placement === 'end'
+          ? { insetInlineEnd: '12%', insetBlockStart: '20%' }
+          : { insetInlineStart: '4%', insetBlockEnd: '16%' }),
       }}
     >
-      <span
+      <b style={{ display: 'block', ...typographyTokens.bodySm, fontWeight: 700 }}>{title}</b>
+      <small
         style={{
-          gridRow: 'span 2',
-          inlineSize: '2.125rem',
-          blockSize: '3.125rem',
-          borderRadius: radiusTokens.sm,
-          background: gradient,
+          display: 'block',
+          marginBlockStart: '0.3125rem',
+          ...typographyTokens.caption,
+          color: colorTokens.textMuted,
         }}
-      />
-      {/* Two neutral bars where the reference puts a title and a timestamp.
-          A shape cannot claim a post exists; a caption would. */}
-      <span
-        style={{
-          blockSize: '0.5rem',
-          inlineSize: '75%',
-          borderRadius: radiusTokens.full,
-          background: colorTokens.surfaceMuted,
-        }}
-      />
-      <span
-        style={{
-          gridColumn: 2,
-          blockSize: '0.5rem',
-          inlineSize: '50%',
-          borderRadius: radiusTokens.full,
-          background: colorTokens.surfaceSoft,
-        }}
-      />
-    </span>
+      >
+        {detail}
+      </small>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * `.mini-chart` — four bars at fixed CSS heights, 60px tall, 5px apart, the
+ * fourth in purple. DECORATION, and `aria-hidden`: the heights are literals in
+ * the demo's stylesheet, not values, and the card above it says in words that
+ * there is nothing measured yet.
+ */
+export function HeroMiniChart() {
+  const bars = ['45%', '82%', '55%', '95%'];
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        blockSize: '3.75rem',
+        marginBlockStart: '0.625rem',
+        display: 'flex',
+        alignItems: 'end',
+        gap: '0.3125rem',
+      }}
+    >
+      {bars.map((height, index) => (
+        <i
+          key={height}
+          style={{
+            flex: 1,
+            blockSize: height,
+            borderRadius: '6px 6px 2px 2px',
+            background: index === 3 ? colorTokens.brandPurple : colorTokens.ink,
+          }}
+        />
+      ))}
+    </div>
   );
 }

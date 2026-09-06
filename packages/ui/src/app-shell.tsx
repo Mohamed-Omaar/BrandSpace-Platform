@@ -160,23 +160,29 @@ function navLinkStyle(active: boolean, collapsed: boolean): CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
-    // Measured: `gap: 12px`, `padding: 0 12px`, `height: 44px`, `radius: 13px`,
-    // label at 13px/650. The gap in particular is what stops the icon and the
-    // label reading as one crowded token.
+    /*
+     * `.nav-item { height: 39px; border-radius: 12px; padding: 0 11px;
+     *  gap: 11px; font-size: 11px; font-weight: 650; color: #45454b }`
+     * and `.nav-item.active { background: var(--ink); color: #fff;
+     *  box-shadow: 0 8px 18px rgba(17,17,20,.15) }`.
+     *
+     * 39px, not 44px. The full demo runs a denser rail than the simplified
+     * three-file reference did, and the density is a large part of why it holds
+     * twenty-three items in four groups without scrolling.
+     */
     gap: layoutTokens.navItemGap,
     justifyContent: collapsed ? 'center' : 'flex-start',
-    minBlockSize: layoutTokens.controlHeight,
-    blockSize: layoutTokens.controlHeight,
+    blockSize: layoutTokens.navItemHeight,
+    minBlockSize: layoutTokens.navItemHeight,
+    inlineSize: '100%',
     paddingInline: collapsed ? 0 : layoutTokens.navItemPadInline,
     paddingBlock: 0,
-    borderRadius: radiusTokens.md,
+    borderRadius: radiusTokens.control,
     textDecoration: 'none',
-    ...typographyTokens.label,
-    // The reference weights the label 650 whether or not the item is active;
-    // the state is the fill, not the weight.
-    fontWeight: 650,
+    ...typographyTokens.navLabel,
     color: active ? colorTokens.inkInk : colorTokens.textSecondary,
     background: active ? colorTokens.ink : 'transparent',
+    boxShadow: active ? shadowTokens.navActive : 'none',
     border: '1px solid transparent',
     position: 'relative',
     whiteSpace: 'nowrap',
@@ -213,7 +219,25 @@ function NavLink({
       {...(onNavigate ? { onClick: onNavigate } : {})}
       style={navLinkStyle(active, collapsed)}
     >
-      <span style={{ display: 'inline-flex', flexShrink: 0 }}>{item.icon}</span>
+      {/*
+       * `.nav-icon { width: 20px; display: grid; place-items: center;
+       *  font-size: 14px }` — a 20px SLOT holding a ~14px glyph, not a 20px
+       * glyph. The demo's rail reads light because its symbols are small
+       * inside a generous slot; matching the slot but not the glyph is what
+       * made ours look heavier at the same width (§7).
+       */}
+      <span
+        className="bs-nav-icon"
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          inlineSize: layoutTokens.navIconSlot,
+          blockSize: layoutTokens.navIconSlot,
+          flexShrink: 0,
+        }}
+      >
+        {item.icon}
+      </span>
       {collapsed ? null : (
         <span style={{ minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {item.label}
@@ -248,7 +272,7 @@ function NavList({
   readonly onNavigate?: (() => void) | undefined;
 }) {
   return (
-    <div style={{ display: 'grid', gap: layoutTokens.sectionGap }}>
+    <div style={{ display: 'grid', gap: layoutTokens.navGroupGap }}>
       {sections.map((section, sectionIndex) => (
         <div key={section.title ?? `section-${sectionIndex}`}>
           {/* A section heading is meaningless next to icons with no labels, so
@@ -267,11 +291,13 @@ function NavList({
             ) : (
               <h2
                 style={{
-                  paddingInline: spacingTokens.sm,
-                  marginBlockEnd: spacingTokens.xs,
+                  // `.nav-group-title { padding: 0 12px 7px; font-size: 9px;
+                  //  font-weight: 800; letter-spacing: .08em }`.
+                  padding: layoutTokens.navGroupTitlePad,
                   ...typographyTokens.overline,
                   textTransform: 'uppercase',
-                  color: colorTokens.textMuted,
+                  whiteSpace: 'nowrap',
+                  color: colorTokens.textSubtle,
                 }}
               >
                 {section.title}
@@ -284,8 +310,8 @@ function NavList({
               margin: 0,
               padding: 0,
               display: 'grid',
-              // `.nav-list { gap: 5px }`.
-              gap: layoutTokens.navGap,
+              // The demo's nav items sit flush; the group gap does the spacing.
+              gap: 0,
             }}
           >
             {section.items.map((item) => (
@@ -439,10 +465,10 @@ export function AppShell({
       <div
         style={{
           display: 'grid',
-          // `.sidebar-top { margin: 0 3px 18px }` then the switcher.
-          gap: layoutTokens.sectionGap,
+          // `.experience-switcher { margin: 9px 0 12px }`.
+          gap: '0.5625rem',
           flexShrink: 0,
-          marginBlockEnd: 0,
+          marginBlockEnd: '0.75rem',
         }}
       >
         <div
@@ -451,11 +477,13 @@ export function AppShell({
             alignItems: 'center',
             // `.app-shell.sidebar-collapsed .sidebar-top { flex-direction:
             //  column; height: 88px }` — the mark stays, the wordmark goes.
+            // `.sidebar-top { height: 54px; padding: 0 5px }` and collapsed
+            // `{ flex-direction: column; height: 90px; gap: 8px }`.
             flexDirection: collapsed ? 'column' : 'row',
             justifyContent: collapsed ? 'center' : 'space-between',
             gap: spacingTokens.sm,
-            blockSize: collapsed ? '5.5rem' : layoutTokens.railTopHeight,
-            marginInline: spacingTokens['2xs'],
+            blockSize: collapsed ? layoutTokens.railTopHeightCollapsed : layoutTokens.railTopHeight,
+            paddingInline: layoutTokens.railTopPadInline,
           }}
         >
           {brand}
@@ -470,14 +498,13 @@ export function AppShell({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              // `.collapse-button { flex: 0 0 38px; width: 38px; height: 38px }`
-              inlineSize: '2.375rem',
-              blockSize: '2.375rem',
+              // `.icon-button { width: 38px; height: 38px; border-radius: 12px;
+              //  background: var(--soft) }`, `.collapse-button { font-size: 17px }`.
+              inlineSize: layoutTokens.iconButton,
+              blockSize: layoutTokens.iconButton,
               flexShrink: 0,
-              borderRadius: radiusTokens.md,
+              borderRadius: radiusTokens.control,
               border: '1px solid transparent',
-              // `.collapse-button` IS an `.icon-button` in the reference: a
-              // soft filled square, not a bare chevron in the corner.
               color: colorTokens.textPrimary,
               cursor: 'pointer',
               fontFamily: 'inherit',
@@ -508,7 +535,23 @@ export function AppShell({
        * the page scrolls — which is what the reference does.
        */}
       {/* `.nav-list { margin-top: 18px }`. */}
-      <div style={{ flexShrink: 0, marginBlockStart: layoutTokens.sectionGap }}>
+      {/*
+       * `.nav-scroll { flex: 1; overflow: auto; padding: 2px 0 10px }`.
+       *
+       * The NAVIGATION scrolls, not the rail, so the identity card above it and
+       * the profile card below it stay put. The rail itself is a fixed
+       * viewport-height column (see `.bs-shell > .bs-sidebar` in tokens.css).
+       */}
+      <div
+        style={{
+          flex: '1 1 auto',
+          minBlockSize: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingBlock: `${spacingTokens['3xs']} 0.625rem`,
+          scrollbarWidth: 'none',
+        }}
+      >
         <NavList sections={resolvedSections} collapsed={collapsed} />
       </div>
 
@@ -517,6 +560,7 @@ export function AppShell({
       {profile ? (
         <div
           style={{
+            // `.sidebar-bottom { padding-top: 8px }`.
             marginBlockStart: 'auto',
             flexShrink: 0,
             paddingBlockStart: spacingTokens.sm,
@@ -583,8 +627,11 @@ export function AppShell({
              */
             minBlockSize: `calc(100vh - ${layoutTokens.shellInset} * 2)`,
             paddingInline: layoutTokens.railPadInline,
-            paddingBlock: layoutTokens.railPadBlock,
-            background: colorTokens.shellSidebar,
+            paddingBlockStart: layoutTokens.railPadBlockStart,
+            paddingBlockEnd: layoutTokens.railPadBlockEnd,
+            // `.sidebar { background: rgba(250,250,251,.78) }` — translucent,
+            // like the shell it sits inside.
+            background: colorTokens.shellSidebarAlpha,
           }}
         >
           {sidebarBody}
@@ -596,7 +643,6 @@ export function AppShell({
             minInlineSize: 0,
             display: 'flex',
             flexDirection: 'column',
-            background: colorTokens.shellPanel,
           }}
         >
           {/*
@@ -615,16 +661,18 @@ export function AppShell({
            * through twenty-nine pages.
            */}
           <header
+            className="bs-topbar"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
+              // `.topbar { min-height: 88px; gap: 16px; padding-bottom: 12px }`.
               gap: layoutTokens.topbarGap,
               rowGap: spacingTokens.sm,
               minBlockSize: layoutTokens.headerHeight,
               paddingInline: layoutTokens.panelPadInline,
-              paddingBlock: spacingTokens.sm,
+              paddingBlockEnd: '0.75rem',
             }}
           >
             <div
@@ -665,7 +713,9 @@ export function AppShell({
                     <p
                       data-testid="page-eyebrow"
                       style={{
+                        // `.eyebrow { margin: 0 0 4px }`.
                         margin: 0,
+                        marginBlockEnd: spacingTokens.xs,
                         ...typographyTokens.overline,
                         textTransform: 'uppercase',
                         color: colorTokens.textMuted,
@@ -680,9 +730,8 @@ export function AppShell({
                   <h1
                     data-testid="heading"
                     style={{
-                      // `.topbar h1 { margin: 4px 0 0 }`.
+                      // `.topbar h1 { margin: 0 }` — the eyebrow owns the gap.
                       margin: 0,
-                      marginBlockStart: spacingTokens.xs,
                       ...typographyTokens.h1,
                       color: colorTokens.textPrimary,
                       overflowWrap: 'anywhere',
@@ -718,7 +767,8 @@ export function AppShell({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: spacingTokens.sm,
+                // `.topbar-actions { gap: 7px }`.
+                gap: layoutTokens.topbarActionGap,
                 minInlineSize: 0,
                 flexShrink: 0,
               }}
@@ -830,29 +880,39 @@ export function BrandMark({
 }) {
   return (
     <span
+      data-testid="brand"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: spacingTokens.sm,
+        // `.brand { gap: 10px }`.
+        gap: layoutTokens.brandGap,
         minInlineSize: 0,
       }}
     >
       <span
         aria-hidden="true"
+        data-testid="brand-mark"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '1.875rem',
-          blockSize: '1.875rem',
-          // INK, not purple. In the approved direction the mark is near-black
-          // like every other filled surface, and the brand colours are reserved
-          // for the ambient background — that restraint is the direction.
-          borderRadius: radiusTokens.sm,
+          /*
+           * `.brand-mark { width: 34px; height: 34px; border-radius: 11px;
+           *  background: var(--ink); color: #fff; font-size: 15px }` with
+           * `.brand { font-weight: 850 }` inherited by the glyph.
+           *
+           * PURPOSE-SPECIFIC TOKENS, not the type scale: routing the "B"
+           * through a generic label token rendered it visibly smaller than the
+           * demo, which is exactly the substitution §4 rules out.
+           */
+          inlineSize: layoutTokens.brandMark,
+          blockSize: layoutTokens.brandMark,
+          borderRadius: radiusTokens.lg,
           background: colorTokens.ink,
           color: colorTokens.inkInk,
-          ...typographyTokens.label,
-          fontWeight: 800,
+          fontSize: layoutTokens.brandMarkGlyph,
+          lineHeight: 1,
+          fontWeight: 850,
           flexShrink: 0,
         }}
       >
@@ -865,10 +925,8 @@ export function BrandMark({
       <span className="bs-brand-text" style={{ display: 'grid', minInlineSize: 0 }}>
         <span
           style={{
-            fontSize: '1rem',
-            lineHeight: '1.25rem',
-            fontWeight: 800,
-            letterSpacing: '-0.02em',
+            // `.brand { font-size: 16px; font-weight: 850 }`, no tracking.
+            ...typographyTokens.wordmark,
             color: colorTokens.textPrimary,
             whiteSpace: 'nowrap',
             overflow: 'hidden',

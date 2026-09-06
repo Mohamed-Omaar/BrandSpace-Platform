@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { colorTokens, layoutTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
-import { BuildingIcon, CheckIcon, GlobeIcon } from './icons';
+import { BuildingIcon, CheckIcon } from './icons';
 import { DropdownMenu } from './overlays';
 import { menuItemStyle } from './menu-style';
 
@@ -66,12 +67,17 @@ export function WorkspaceSwitcher({
               //  background: linear-gradient(145deg, purple, #a878ff) }` — the
               // one place in the rail the brand colour appears, and the reason
               // the switcher reads as an identity rather than another button.
+              /*
+               * `.experience-icon { width: 38px; height: 38px; radius: 12px;
+               *  background: linear-gradient(145deg,#eee5ff,#fff5b3) }` — a
+               * pale lavender-to-cream tile, not a saturated purple one.
+               */
               inlineSize: layoutTokens.railAvatar,
               blockSize: layoutTokens.railAvatar,
               flexShrink: 0,
-              borderRadius: '0.6875rem',
-              background: `linear-gradient(145deg, ${colorTokens.brandPurple}, #A878FF)`,
-              color: colorTokens.brandPurpleInk,
+              borderRadius: radiusTokens.control,
+              background: 'linear-gradient(145deg, #EEE5FF, #FFF5B3)',
+              color: colorTokens.textPrimary,
             }}
           >
             <BuildingIcon size={16} />
@@ -83,6 +89,7 @@ export function WorkspaceSwitcher({
             <span
               data-testid="active-workspace"
               style={{
+                // `.workspace-copy strong { font-size: 12px }` at weight 700.
                 ...typographyTokens.label,
                 color: colorTokens.textPrimary,
                 overflow: 'hidden',
@@ -95,8 +102,9 @@ export function WorkspaceSwitcher({
             <span
               data-testid="active-role"
               style={{
+                // `.workspace-copy small { font-size: 9px; margin-top: 2px }`.
                 ...typographyTokens.caption,
-                fontWeight: 500,
+                marginBlockStart: spacingTokens['3xs'],
                 color: colorTokens.textMuted,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -160,6 +168,15 @@ export function WorkspaceSwitcher({
  * — "العربية", not "Arabic" — so a reader who cannot read the current interface
  * can still find their own.
  */
+/**
+ * The language action, as the full demo's `.language-button` renders it.
+ *
+ * `.ghost-button.language-button { width: 38px; padding: 0; background:
+ *  var(--soft); border-radius: 12px; font-size: 10px; font-weight: 800 }` — a
+ * 38px soft square carrying two letters, matching the icon buttons beside it.
+ * It used to be an outlined pill, which is the only outlined control that was
+ * left in the top bar and read as borrowed from a different system.
+ */
 export function LanguageSwitcher({
   href,
   targetLocale,
@@ -177,23 +194,24 @@ export function LanguageSwitcher({
       hrefLang={targetLocale}
       lang={targetLocale}
       aria-label={ariaLabel}
+      title={targetLabel}
       data-testid="locale-switch"
+      className="bs-control"
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: spacingTokens.xs,
-        minBlockSize: '2.25rem',
-        paddingInline: spacingTokens.sm,
-        borderRadius: radiusTokens.md,
-        border: `1px solid ${colorTokens.borderStrong}`,
+        display: 'inline-grid',
+        placeItems: 'center',
+        inlineSize: layoutTokens.iconButton,
+        blockSize: layoutTokens.iconButton,
+        flexShrink: 0,
+        borderRadius: radiusTokens.control,
+        border: '1px solid transparent',
         color: colorTokens.textPrimary,
         textDecoration: 'none',
-        ...typographyTokens.caption,
-        fontWeight: 600,
+        ...typographyTokens.button,
+        textTransform: 'uppercase',
       }}
     >
-      <GlobeIcon size={16} />
-      {targetLabel}
+      {targetLocale}
     </a>
   );
 }
@@ -245,5 +263,110 @@ export function SupportModeBanner({
       <span>{text}</span>
       {detail ? <span style={{ fontWeight: 500 }}>{detail}</span> : null}
     </div>
+  );
+}
+
+/**
+ * THE PROFILE CARD at the foot of the rail (§8).
+ *
+ * `.profile-button { background: #fff; border-radius: 16px; padding: 8px;
+ *  grid-template-columns: 38px minmax(0,1fr) 22px; gap: 8px }` with
+ * `.profile-avatar { width: 38px; height: 38px; border-radius: 12px;
+ *  background: linear-gradient(145deg, var(--purple), #5223b8); font-size: 10px;
+ *  font-weight: 800 }` and a `•••` affordance.
+ *
+ * The `•••` is REAL: it opens a menu holding sign-out and anything else that
+ * belongs to the signed-in person. A standalone sign-out row was the previous
+ * shape, and it is visually unrelated to the demo — §8 rules it out by name.
+ */
+export function ProfileCard({
+  label,
+  name,
+  nameTestId = 'profile-name',
+  role,
+  initials,
+  children,
+}: {
+  /** The menu's accessible name — the card's copy can be hidden when collapsed. */
+  readonly label: string;
+  readonly name: string;
+  /**
+   * The test hook on the name line. The Control Center identifies the operator
+   * here — the same element the old standalone identity row carried — so the
+   * "who is signed in" assertion keeps pointing at the one place that answers
+   * it, rather than at markup the demo does not have.
+   */
+  readonly nameTestId?: string;
+  readonly role: string;
+  readonly initials: string;
+  /** Menu items: sign out, and whatever else belongs to the person. */
+  readonly children: ReactNode;
+}) {
+  return (
+    <DropdownMenu
+      label={label}
+      testId="profile-menu"
+      align="start"
+      trigger="card"
+      placement="block-start"
+      triggerContent={
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacingTokens.sm,
+            minInlineSize: 0,
+            flex: '1 1 auto',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-grid',
+              placeItems: 'center',
+              inlineSize: layoutTokens.railAvatar,
+              blockSize: layoutTokens.railAvatar,
+              flexShrink: 0,
+              borderRadius: radiusTokens.control,
+              background: `linear-gradient(145deg, ${colorTokens.brandPurple}, #5223B8)`,
+              color: colorTokens.brandPurpleInk,
+              fontSize: '0.625rem',
+              fontWeight: 800,
+            }}
+          >
+            {initials}
+          </span>
+          <span className="bs-rail-copy" style={{ display: 'grid', minInlineSize: 0 }}>
+            <span
+              data-testid={nameTestId}
+              style={{
+                ...typographyTokens.label,
+                color: colorTokens.textPrimary,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {name}
+            </span>
+            <span
+              data-testid="profile-role"
+              style={{
+                ...typographyTokens.caption,
+                marginBlockStart: spacingTokens['3xs'],
+                color: colorTokens.textMuted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {role}
+            </span>
+          </span>
+        </span>
+      }
+    >
+      {children}
+    </DropdownMenu>
   );
 }

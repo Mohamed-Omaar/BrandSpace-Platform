@@ -23,4 +23,5 @@ export * from './social-post-types';
 export * from './studio-presets';
 export * from './surfaces';
 export * from './switchers';
+export * from './topbar-actions';
 export * from './tokens';

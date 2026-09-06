@@ -220,6 +220,7 @@ export function DropdownMenu({
   testId,
   trigger = 'control',
   fullWidth = false,
+  placement = 'block-end',
 }: {
   readonly label: string;
   readonly triggerContent: ReactNode;
@@ -237,6 +238,8 @@ export function DropdownMenu({
    */
   readonly trigger?: 'control' | 'card';
   readonly fullWidth?: boolean;
+  /** `block-start` opens upward — for a menu pinned to the foot of the rail. */
+  readonly placement?: 'block-start' | 'block-end';
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -281,11 +284,11 @@ export function DropdownMenu({
                 // `.workspace-switcher { padding: 10px; radius: 15px;
                 //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
                 padding: layoutTokens.railCardPad,
-                minBlockSize: layoutTokens.railCardHeight,
+                minBlockSize: '3.625rem',
                 border: '1px solid transparent',
                 borderRadius: radiusTokens.rail,
                 background: colorTokens.surface,
-                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.035)',
+                boxShadow: shadowTokens.rail,
                 color: colorTokens.textPrimary,
                 fontFamily: 'inherit',
                 textAlign: 'start',
@@ -302,7 +305,15 @@ export function DropdownMenu({
         }
       >
         {triggerContent}
-        <ChevronDownIcon size={16} />
+        {trigger === 'card' && placement === 'block-start' ? (
+          // `.more { color: var(--muted); font-size: 11px }` — the demo's
+          // profile affordance is an ellipsis, not a chevron.
+          <span aria-hidden="true" style={{ color: colorTokens.textMuted, fontSize: '0.6875rem' }}>
+            {'\u2022\u2022\u2022'}
+          </span>
+        ) : (
+          <ChevronDownIcon size={16} />
+        )}
       </button>
       {open ? (
         <div
@@ -325,7 +336,8 @@ export function DropdownMenu({
           }}
           style={{
             position: 'absolute',
-            insetBlockStart: 'calc(100% + 6px)',
+            insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
+            insetBlockEnd: placement === 'block-start' ? 'calc(100% + 6px)' : undefined,
             insetInlineEnd: align === 'end' ? 0 : undefined,
             insetInlineStart: align === 'start' ? 0 : undefined,
             zIndex: zIndexTokens.overlay,

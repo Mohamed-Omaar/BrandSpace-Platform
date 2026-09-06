@@ -640,9 +640,13 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
               captionDirection: ar ? 'ltr' : 'rtl',
             }}
           />
+          {/*
+            A landscape post. The preview no longer has a "desktop surface"
+            width: the demo draws it at 340px in a fixed column and the
+            composition was measured there, so it holds that width everywhere.
+          */}
           <SocialPostPreview
-            testId="preview-desktop-surface"
-            surface="desktop"
+            testId="preview-landscape"
             labels={labels}
             content={{ ...post, platform: 'linkedin', aspect: '16:9' }}
           />

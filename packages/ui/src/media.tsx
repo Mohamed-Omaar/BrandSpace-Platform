@@ -303,3 +303,20 @@ export function CarouselDots({
     </span>
   );
 }
+
+/**
+ * INITIALS FOR AN IDENTITY TILE.
+ *
+ * An email address is a legitimate identity in this phase — the product does
+ * not collect a display name yet — so the local part before the `@` supplies
+ * the letters rather than a name being invented for a decorative tile.
+ *
+ * Lives here, beside `Avatar`, because three call sites had grown their own
+ * copy: the customer rail, the Control Center rail and the team directory.
+ */
+export function initialsFrom(value: string): string {
+  const local = value.split('@')[0] ?? value;
+  const parts = local.split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.length > 1 ? `${parts[0]![0]}${parts[1]![0]}` : local.slice(0, 2);
+  return letters.toUpperCase();
+}

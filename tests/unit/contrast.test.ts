@@ -344,7 +344,10 @@ describe('the Phase 2C foundation meets AA', () => {
       brandYellowTint: colorTokens.brandYellowTint,
       shellSurface: colorTokens.shellSurface,
       shellSidebar: colorTokens.shellSidebar,
-      shellPanel: colorTokens.shellPanel,
+      // `shellPanel` is `transparent` in the full-demo alignment — the panel
+      // takes the shell's own translucency — so the ground under it is the
+      // shell, already asserted above.
+      ambientGround: colorTokens.ambientGround,
     })) {
       const ratio = contrastRatio(colorTokens.textMuted, background);
       if (ratio < AA_NORMAL) failures.push(`textMuted on ${name}: ${ratio.toFixed(2)}`);
@@ -355,8 +358,17 @@ describe('the Phase 2C foundation meets AA', () => {
   it('the reference palette it replaced genuinely failed, which is why it was not copied', () => {
     // Recorded so the deviation cannot be mistaken for drift: the approved
     // demo's own `--muted` is below AA on the demo's own page ground.
-    expect(contrastRatio('#707077', colorTokens.appBackground)).toBeLessThan(AA_NORMAL);
-    expect(contrastRatio('#707077', colorTokens.surfaceLavenderStrong)).toBeLessThan(AA_NORMAL);
+    // The FULL demo's `--muted: #717179` and `--subtle: #a3a3aa`, both of which
+    // fail on surfaces the demo itself puts them on.
+    expect(contrastRatio('#717179', colorTokens.surfaceMuted)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio('#A3A3AA', colorTokens.shellSidebar)).toBeLessThan(AA_NORMAL);
+    // …and the values that replaced them clear it.
+    expect(contrastRatio(colorTokens.textMuted, colorTokens.surfaceMuted)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
+    expect(contrastRatio(colorTokens.textSubtle, colorTokens.shellSidebar)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
   });
 
   it('no soft tint is a perceivable boundary, which is why none carries a state alone', () => {

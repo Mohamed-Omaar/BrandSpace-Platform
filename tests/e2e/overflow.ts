@@ -89,3 +89,41 @@ export async function expectNoHorizontalOverflow(page: Page, label: string): Pro
     `${label}: ${overhang.offender} extends ${overhang.px}px past the inline-end edge`,
   ).toBeLessThanOrEqual(1);
 }
+
+/**
+ * CLIPPED-AWAY CONTENT, which the measurement above cannot see. (fidelity pass §29)
+ *
+ * The demo's shell owns its rounded corners with `.app-shell { overflow: hidden }`,
+ * and the panel inside it scrolls (`.main-panel { overflow: auto }`). Reproducing
+ * that geometry — which §0 requires — hands the page two ancestors that fit the
+ * viewport and clip their own content, and `inlineEndOverhang` is defined to
+ * treat exactly that as intended behaviour. A component 200px too wide would
+ * therefore be silently cut instead of reported.
+ *
+ * So measure the other half directly: for a container that clips or scrolls its
+ * inline axis, `scrollWidth - clientWidth` is the amount of content the reader
+ * cannot reach without a scrollbar the layout never promised. Zero is the
+ * contract for the shell and the page's main region; a wide table with its OWN
+ * scroll container is not covered here, because that one is deliberate.
+ */
+export async function clippedInlineOverflow(page: Page, selector: string): Promise<number> {
+  return page.evaluate((sel) => {
+    const element = document.querySelector(sel);
+    if (!element) return -1;
+    return Math.round(element.scrollWidth - element.clientWidth);
+  }, selector);
+}
+
+/** Assert that a clipping or scrolling container is not hiding page content. */
+export async function expectNothingClippedAway(
+  page: Page,
+  selector: string,
+  label: string,
+): Promise<void> {
+  const px = await clippedInlineOverflow(page, selector);
+  expect(px, `${label}: "${selector}" was not found on the page`).toBeGreaterThanOrEqual(0);
+  expect(
+    px,
+    `${label}: ${selector} hides ${px}px of content past its inline-end edge`,
+  ).toBeLessThanOrEqual(1);
+}

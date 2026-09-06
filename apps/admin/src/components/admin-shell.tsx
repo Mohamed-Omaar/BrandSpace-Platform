@@ -7,23 +7,25 @@ import {
   HomeIcon,
   KeyIcon,
   LanguageSwitcher,
+  ProfileCard,
+  TopbarActions,
   LayersIcon,
   LifebuoyIcon,
   ListIcon,
   PulseIcon,
   RouteIcon,
-  SignOutIcon,
   SlidersIcon,
   SparkIcon,
   StateMessage,
   StatusBadge,
   SupportModeBanner,
   colorTokens,
-  layoutTokens,
+  menuItemStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
   type ShellNavSection,
+  initialsFrom,
 } from '@brandspace/ui';
 import { translator, type MessageKey } from '../i18n/messages';
 
@@ -304,11 +306,24 @@ export function AdminShell({
         </span>
       }
       headerEnd={
-        <LanguageSwitcher
-          href={`/${other}/console${activePath ?? ''}`}
-          targetLocale={other}
-          targetLabel={other === 'ar' ? 'العربية' : 'English'}
-          ariaLabel={t('nav.language')}
+        <TopbarActions
+          labels={{
+            search: t('topbar.search'),
+            searchShortcut: t('topbar.searchShortcut'),
+            notifications: t('topbar.notifications'),
+            close: t('common.close'),
+            previewTitle: t('topbar.previewTitle'),
+            previewBody: t('topbar.previewBody'),
+            create: t('topbar.create'),
+          }}
+          language={
+            <LanguageSwitcher
+              href={`/${other}/console${activePath ?? ''}`}
+              targetLocale={other}
+              targetLabel={other === 'ar' ? 'العربية' : 'English'}
+              ariaLabel={t('nav.language')}
+            />
+          }
         />
       }
       /* The scope word above every console title — always, because the
@@ -328,61 +343,21 @@ export function AdminShell({
         ) : undefined
       }
       profile={
-        /*
-         * THE OPERATOR'S IDENTITY AND THE WAY OUT, at the foot of the rail
-         * (§6). It used to sit in the top bar, where a 16rem clamp truncated
-         * the platform role to "platform_…" — the one fact an operator most
-         * needs to be sure of before acting. Here it has a full column to
-         * itself and wraps instead of being cut.
-         */
-        <div style={{ display: 'grid', gap: spacingTokens.xs, inlineSize: '100%' }}>
-          <span
-            className="bs-rail-copy"
-            data-testid="actor-identity"
-            style={{
-              ...typographyTokens.caption,
-              color: colorTokens.textSecondary,
-              overflowWrap: 'anywhere',
-            }}
-          >
-            {actorEmail} · {actorRole}
-          </span>
+        /* The same profile card the customer rail uses, with the operator's
+           real identity and platform role. Sign-out lives in its menu. */
+        <ProfileCard
+          label={t('nav.account')}
+          name={actorEmail}
+          nameTestId="actor-identity"
+          role={actorRole}
+          initials={initialsFrom(actorEmail)}
+        >
           <form action={`/${locale}/sign-out`} method="post">
-            <button
-              type="submit"
-              data-testid="sign-out"
-              /*
-               * NAMED EXPLICITLY, because its label is hidden in a collapsed
-               * rail. `.bs-rail-copy` takes the word "Sign out" out of the DOM
-               * at 78px, and the only child left is an `aria-hidden` icon — a
-               * button with no discernible text, which is exactly what axe
-               * reported the moment the rail learned to collapse its copy.
-               */
-              aria-label={t('nav.signOut')}
-              className="bs-pressable bs-control"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: spacingTokens.sm,
-                inlineSize: '100%',
-                minBlockSize: layoutTokens.controlHeight,
-                paddingInline: spacingTokens.sm,
-                borderRadius: radiusTokens.md,
-                border: '1px solid transparent',
-                color: colorTokens.textSecondary,
-                fontFamily: 'inherit',
-                ...typographyTokens.bodySm,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              <SignOutIcon size={18} />
-              <span className="bs-rail-copy" style={{ whiteSpace: 'nowrap' }}>
-                {t('nav.signOut')}
-              </span>
+            <button type="submit" role="menuitem" data-testid="sign-out" style={menuItemStyle()}>
+              {t('nav.signOut')}
             </button>
           </form>
-        </div>
+        </ProfileCard>
       }
     >
       {/*

@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react';
-
 import { ambientTokens } from './tokens';
 
 /**
@@ -28,44 +26,44 @@ import { ambientTokens } from './tokens';
  * renders it directly, and it costs the client bundle nothing.
  */
 export function AmbientBackground() {
-  const orb = (extra: CSSProperties): CSSProperties => ({
-    inlineSize: ambientTokens.size,
-    blockSize: ambientTokens.size,
-    ...extra,
-  });
-
   return (
     <div className="bs-ambient" aria-hidden="true" data-testid="ambient-background">
       <div
         className="bs-orb"
-        style={orb({
+        style={{
+          inlineSize: ambientTokens.size,
+          blockSize: ambientTokens.size,
           background: ambientTokens.purple,
           opacity: ambientTokens.purpleOpacity,
-          insetInlineStart: '-15vw',
-          insetBlockStart: '-30vw',
-        })}
+          insetInlineStart: ambientTokens.purpleInsetInline,
+          insetBlockStart: ambientTokens.purpleInsetBlock,
+        }}
       />
       <div
         className="bs-orb"
-        style={orb({
+        style={{
+          inlineSize: ambientTokens.size,
+          blockSize: ambientTokens.size,
           background: ambientTokens.yellow,
           opacity: ambientTokens.yellowOpacity,
-          insetInlineEnd: '-20vw',
-          insetBlockEnd: '-35vw',
-          animationDelay: '-6s',
-        })}
+          insetInlineEnd: ambientTokens.yellowInsetInline,
+          insetBlockEnd: ambientTokens.yellowInsetBlock,
+          animationDelay: '-7s',
+        }}
       />
+      {/* The third orb sits INSIDE the viewport, which is what puts warm light
+          behind the middle of a translucent shell rather than only at a corner. */}
       <div
         className="bs-orb"
-        style={orb({
-          inlineSize: ambientTokens.sizeSmall,
-          blockSize: ambientTokens.sizeSmall,
+        style={{
+          inlineSize: ambientTokens.size,
+          blockSize: ambientTokens.size,
           background: ambientTokens.blush,
           opacity: ambientTokens.blushOpacity,
-          insetInlineEnd: '18vw',
-          insetBlockStart: '-12vw',
+          insetInlineEnd: ambientTokens.blushInsetInline,
+          insetBlockStart: ambientTokens.blushInsetBlock,
           animationDelay: '-11s',
-        })}
+        }}
       />
     </div>
   );

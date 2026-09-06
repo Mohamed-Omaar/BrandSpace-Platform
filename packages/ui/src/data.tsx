@@ -366,7 +366,13 @@ export function SearchField({
   readonly name?: string;
 }) {
   return (
-    <div style={{ position: 'relative', flex: '1 1 14rem', minInlineSize: 0 }}>
+    /*
+      `.search-field { min-width: 240px; height: 36px; border-radius: 11px }` —
+      a control in a toolbar, not a full-width band. `flex: 1 1 14rem` let it
+      swallow every spare pixel of the calendar's toolbar, which the demo's
+      does not.
+    */
+    <div style={{ position: 'relative', flex: '0 1 15rem', minInlineSize: '15rem' }}>
       <label htmlFor={id} style={visuallyHiddenLabel()}>
         {label}
       </label>

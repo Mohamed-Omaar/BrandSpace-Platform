@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
+import {
+  colorTokens,
+  layoutTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from './tokens';
 import { AlertIcon, CalendarIcon, ImageIcon, PlayIcon } from './icons';
 import { StatusBadge, statusTone } from './data';
 import { Skeleton } from './feedback';
@@ -14,7 +21,6 @@ import {
   defaultFormat,
   resolveAspect,
   type PostAspect,
-  type PreviewSurface,
   type SocialFormat,
   type SocialPlatform,
   type SocialPostPreviewContent,
@@ -102,7 +108,14 @@ function ActionStrip({
   readonly variant: 'feed' | 'vertical';
   readonly labels: SocialPostPreviewLabels;
 }) {
-  const glyphs = variant === 'feed' ? ['♡', '💬', '↗'] : ['♡', '💬', '↗', '⋯'];
+  /*
+   * `.social-actions { display:flex; gap:14px; padding:11px; font-size:17px }`
+   * with `span:last-child { margin-left:auto }` — four monochrome glyphs, the
+   * last one pushed to the trailing edge. The emoji that stood here before
+   * rendered in full colour and broke the strip's line, which is the kind of
+   * substitution §0 rules out.
+   */
+  const glyphs = variant === 'feed' ? ['♡', '○', '⌁', '⌑'] : ['♡', '○', '⌁', '⋯'];
   return (
     <div
       aria-label={labels.actionsLabel}
@@ -110,16 +123,24 @@ function ActionStrip({
       data-testid="preview-actions"
       style={{
         display: 'flex',
-        gap: variant === 'feed' ? spacingTokens.md : spacingTokens.sm,
+        gap: variant === 'feed' ? '0.875rem' : spacingTokens.sm,
         flexDirection: variant === 'feed' ? 'row' : 'column',
         alignItems: 'center',
         color: variant === 'feed' ? colorTokens.textSecondary : colorTokens.textInverse,
-        fontSize: '1rem',
+        fontSize: variant === 'feed' ? '1.0625rem' : '1rem',
         lineHeight: 1,
       }}
     >
-      {glyphs.map((glyph) => (
-        <span key={glyph} aria-hidden="true" style={{ opacity: 0.85 }}>
+      {glyphs.map((glyph, index) => (
+        <span
+          key={glyph}
+          aria-hidden="true"
+          style={
+            variant === 'feed' && index === glyphs.length - 1
+              ? { opacity: 0.85, marginInlineStart: 'auto' }
+              : { opacity: 0.85 }
+          }
+        >
           {glyph}
         </span>
       ))}
@@ -267,7 +288,9 @@ function Caption({
         dir={content.captionDirection}
         style={{
           margin: 0,
-          ...typographyTokens.bodySm,
+          /* `.social-caption { font-size: 9px; line-height: 1.5 }`. */
+          ...typographyTokens.caption,
+          lineHeight: 1.5,
           color: textColor,
           whiteSpace: 'pre-wrap',
           overflowWrap: 'anywhere',
@@ -281,7 +304,8 @@ function Caption({
           dir={content.captionDirection}
           style={{
             margin: 0,
-            ...typographyTokens.bodySm,
+            ...typographyTokens.caption,
+            lineHeight: 1.5,
             color: tone === 'onMedia' ? colorTokens.textInverse : colorTokens.brandPurple,
             opacity: tone === 'onMedia' ? 0.9 : 1,
             overflowWrap: 'anywhere',
@@ -330,13 +354,19 @@ function StatusRow({
         flexWrap: 'wrap',
         alignItems: 'center',
         gap: spacingTokens.xs,
-        paddingBlock: spacingTokens.sm,
-        paddingInline: spacingTokens.md,
-        borderBlockStart: `1px solid ${colorTokens.hairline}`,
+        paddingBlock: spacingTokens.xs,
+        paddingInline: spacingTokens['3xs'],
         ...typographyTokens.caption,
         color: colorTokens.textSecondary,
       }}
     >
+      {/*
+        The platform mark moved out of the post's header and into this strip
+        (§22). It still names what is being previewed — which a workspace with
+        several connected accounts needs — without putting a badge inside a
+        composition that has none.
+      */}
+      <PlatformBadge platform={content.platform} labels={labels} />
       <StatusBadge
         label={labels.statusLabels[content.status]}
         tone={statusTone(content.status)}
@@ -380,23 +410,22 @@ function FeedPreview({
   content,
   labels,
   aspect,
-  surface,
   expanded,
   onToggle,
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
   readonly aspect: PostAspect;
-  readonly surface: PreviewSurface;
   readonly expanded: boolean;
   readonly onToggle: () => void;
 }) {
   const captionLeads = content.platform === 'x' || content.platform === 'linkedin';
+  /* `.social-caption { padding: 0 11px 15px }`. */
   const caption = (
     <div
       style={{
-        padding: spacingTokens.md,
-        paddingBlockEnd: captionLeads ? spacingTokens.sm : spacingTokens.md,
+        paddingInline: '0.6875rem',
+        paddingBlockEnd: captionLeads ? '0.6875rem' : '0.9375rem',
       }}
     >
       <Caption content={content} labels={labels} expanded={expanded} onToggle={onToggle} />
@@ -405,24 +434,33 @@ function FeedPreview({
 
   return (
     <>
+      {/*
+        `.social-preview header { padding:12px; display:grid;
+         grid-template-columns:34px 1fr auto; gap:8px; align-items:center }`
+        with a 34px round `.avatar`, a 9px name over an 8px handle, and a `•••`
+        in the trailing slot. The platform badge that used to sit there is gone
+        (§22): the panel around the preview already says which platform is
+        selected, and a badge inside the post is not part of the composition.
+      */}
       <header
         style={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: `${layoutTokens.previewAvatar} minmax(0, 1fr) auto`,
           alignItems: 'center',
           gap: spacingTokens.sm,
           padding: spacingTokens.md,
-          paddingBlockEnd: spacingTokens.sm,
         }}
       >
         <Avatar
           initials={content.account.initials}
           seed={content.account.avatarSeed ?? 0}
-          size={surface === 'desktop' ? '2.5rem' : '2.25rem'}
+          size={layoutTokens.previewAvatar}
         />
         <span style={{ display: 'grid', minInlineSize: 0 }}>
           <span
             style={{
-              ...typographyTokens.label,
+              ...typographyTokens.caption,
+              fontWeight: 700,
               color: colorTokens.textPrimary,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -433,7 +471,7 @@ function FeedPreview({
           </span>
           <span
             style={{
-              ...typographyTokens.caption,
+              ...typographyTokens.micro,
               color: colorTokens.textMuted,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -443,18 +481,21 @@ function FeedPreview({
             {content.account.handle}
           </span>
         </span>
-        <span style={{ marginInlineStart: 'auto', flexShrink: 0 }}>
-          <PlatformBadge platform={content.platform} labels={labels} />
+        <span
+          aria-hidden="true"
+          style={{ color: colorTokens.textMuted, fontStyle: 'normal', lineHeight: 1 }}
+        >
+          •••
         </span>
       </header>
 
       {captionLeads ? caption : null}
       <MediaFrame content={content} labels={labels} aspect={aspect} />
-      <div style={{ padding: spacingTokens.md, paddingBlockEnd: 0 }}>
+      {/* `.social-actions { padding: 11px }` — the strip's own padding, not a wrapper's. */}
+      <div style={{ padding: '0.6875rem' }}>
         <ActionStrip variant="feed" labels={labels} />
       </div>
       {captionLeads ? null : caption}
-      <StatusRow content={content} labels={labels} />
     </>
   );
 }
@@ -589,7 +630,6 @@ function VerticalPreview({
           />
         </div>
       </MediaFrame>
-      <StatusRow content={content} labels={labels} />
     </div>
   );
 }
@@ -597,12 +637,17 @@ function VerticalPreview({
 export function SocialPostPreview({
   content,
   labels,
-  surface = 'mobile',
+  head,
   testId,
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
-  readonly surface?: PreviewSurface;
+  /**
+   * `.preview-head` — the panel's own strip above the post, which in the demo
+   * carries the panel's name on one side and a Feed/Story segmented control on
+   * the other. Optional: a preview shown on its own has no panel chrome.
+   */
+  readonly head?: ReactNode;
   readonly testId?: string | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -611,43 +656,81 @@ export function SocialPostPreview({
   const vertical = format === 'story' || format === 'reel' || format === 'video';
 
   return (
-    <article
-      data-testid={testId ?? 'social-post-preview'}
-      data-platform={content.platform}
-      data-format={format}
-      data-aspect={aspect}
-      data-status={content.status}
+    /*
+      THE PANEL, then the post. `.preview-panel { background:
+      rgba(255,255,255,.88); border-radius: 22px; overflow: hidden }` around a
+      bare `article.social-preview` that carries no chrome of its own.
+      340px is the width of the demo's preview column and the width the
+      composition was drawn at, so it does not widen on a desktop surface.
+
+      The status, approval and schedule sit BELOW the article rather than
+      inside it (§22). They are real workspace state and are not dropped — but
+      the demo's post has no status row in it, and a badge inside the post
+      misrepresents what will be published.
+    */
+    <div
       style={{
+        display: 'grid',
+        gap: spacingTokens.sm,
+        justifyItems: 'stretch',
         inlineSize: '100%',
-        maxInlineSize: vertical ? '17rem' : surface === 'mobile' ? '21rem' : '30rem',
-        background: colorTokens.surface,
-        // Borderless: radius and a soft shadow, like every other card (D-54).
-        border: '1px solid transparent',
-        borderRadius: radiusTokens.xl,
-        boxShadow: shadowTokens.card,
-        overflow: 'hidden',
+        maxInlineSize: vertical ? '17rem' : layoutTokens.socialPreviewWidth,
       }}
     >
-      {vertical ? (
-        <VerticalPreview
-          content={content}
-          labels={labels}
-          format={format}
-          labelsForFormat={labels.formatNames[format]}
-          expanded={expanded}
-          onToggle={() => setExpanded((value) => !value)}
-        />
-      ) : (
-        <FeedPreview
-          content={content}
-          labels={labels}
-          aspect={aspect}
-          surface={surface}
-          expanded={expanded}
-          onToggle={() => setExpanded((value) => !value)}
-        />
-      )}
-    </article>
+      <div
+        style={{
+          background: colorTokens.previewPanelAlpha,
+          borderRadius: radiusTokens['2xl'],
+          boxShadow: shadowTokens.card,
+          overflow: 'hidden',
+        }}
+      >
+        {/* `.preview-head { padding: 14px; font-size: 10px; font-weight: 800 }`. */}
+        {head ? (
+          <div
+            data-testid="preview-head"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: spacingTokens.sm,
+              padding: '0.875rem',
+              ...typographyTokens.button,
+              color: colorTokens.textPrimary,
+            }}
+          >
+            {head}
+          </div>
+        ) : null}
+        <article
+          data-testid={testId ?? 'social-post-preview'}
+          data-platform={content.platform}
+          data-format={format}
+          data-aspect={aspect}
+          data-status={content.status}
+        >
+          {vertical ? (
+            <VerticalPreview
+              content={content}
+              labels={labels}
+              format={format}
+              labelsForFormat={labels.formatNames[format]}
+              expanded={expanded}
+              onToggle={() => setExpanded((value) => !value)}
+            />
+          ) : (
+            <FeedPreview
+              content={content}
+              labels={labels}
+              aspect={aspect}
+              expanded={expanded}
+              onToggle={() => setExpanded((value) => !value)}
+            />
+          )}
+        </article>
+      </div>
+      <StatusRow content={content} labels={labels} />
+    </div>
   );
 }
 
@@ -663,13 +746,11 @@ export function SocialPostPreviewer({
   content,
   labels,
   platforms,
-  surface = 'mobile',
   notice,
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
   readonly platforms: readonly SocialPlatform[];
-  readonly surface?: PreviewSurface;
   readonly notice?: ReactNode;
 }) {
   const [platform, setPlatform] = useState<SocialPlatform>(content.platform);
@@ -763,11 +844,7 @@ export function SocialPostPreviewer({
         ))}
       </div>
 
-      <SocialPostPreview
-        content={{ ...content, platform, format, aspect }}
-        labels={labels}
-        surface={surface}
-      />
+      <SocialPostPreview content={{ ...content, platform, format, aspect }} labels={labels} />
 
       {notice ?? (
         <p

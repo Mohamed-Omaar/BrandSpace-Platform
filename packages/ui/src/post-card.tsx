@@ -173,7 +173,8 @@ export function PostGridCard({
       className="bs-liftable"
       style={{
         background: colorTokens.surface,
-        borderRadius: radiusTokens.xl,
+        /* `.post-card { border-radius: 19px }`. */
+        borderRadius: radiusTokens['2xl'],
         // Selection is a purple ring, not a permanent outline on every card.
         boxShadow: selected
           ? `0 0 0 2px ${colorTokens.brandPurple}, ${shadowTokens.card}`
@@ -189,7 +190,10 @@ export function PostGridCard({
         caption={post.caption}
         testId={`open-post-${post.id}`}
       >
-        <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
+        {/* `.post-art { aspect-ratio: 1 }` — SQUARE. A 4:5 frame made a row of
+            four cards a third taller than the demo's and changed the page's
+            whole rhythm. */}
+        <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
           <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
           {post.isVideo ? <MediaChip placement="start-end">▶</MediaChip> : null}
           {post.mediaCount && post.mediaCount > 1 ? (
@@ -201,17 +205,23 @@ export function PostGridCard({
           ) : null}
         </div>
 
-        <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.xs }}>
+        {/*
+          `.post-info { padding: 13px }` with `b { font-size: 10px }` over
+          `small { font-size: 8px; color: var(--muted); margin-top: 4px }` —
+          one line of title, one line of channel and date. Two clamped lines of
+          11px caption made every card a different height.
+        */}
+        <div style={{ padding: '0.8125rem', display: 'grid', gap: spacingTokens['3xs'] }}>
           <p
             dir={post.captionDirection}
             style={{
               margin: 0,
-              ...typographyTokens.bodySm,
+              ...typographyTokens.button,
+              fontWeight: 700,
               color: colorTokens.textPrimary,
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
             {post.caption}
@@ -220,15 +230,15 @@ export function PostGridCard({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: spacingTokens.xs,
-              ...typographyTokens.caption,
+              gap: spacingTokens['3xs'],
+              ...typographyTokens.micro,
               color: colorTokens.textMuted,
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
             }}
           >
             <PlatformDots platforms={post.platforms} labels={labels} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {post.accountName}
-            </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{post.accountName}</span>
           </div>
         </div>
       </OpenRegion>
@@ -238,29 +248,31 @@ export function PostGridCard({
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          gap: spacingTokens.xs,
-          paddingInline: spacingTokens.md,
-          paddingBlockEnd: spacingTokens.md,
+          gap: spacingTokens['3xs'],
+          paddingInline: '0.8125rem',
+          paddingBlockEnd: '0.8125rem',
         }}
       >
+        {/*
+          `.post-info .status { display: inline-block; margin-top: 10px }` — the
+          demo's card carries ONE pill. The approval pill and the date joined it
+          here and wrapped the footer onto a second row on every other card.
+          Both are real state, so they move to where they read better: the
+          date onto the meta line's tooltip-free `title`, and approval onto the
+          list row and the detail drawer, which have room for it.
+        */}
         <StatusBadge label={labels.statusLabels[post.status]} tone={statusTone(post.status)} dot />
-        {post.approval !== 'NOT_REQUIRED' ? (
-          <StatusBadge
-            label={labels.approvalLabels[post.approval]}
-            tone={approvalTone(post.approval)}
-          />
-        ) : null}
         <span
           style={{
             marginInlineStart: 'auto',
             display: 'inline-flex',
             alignItems: 'center',
             gap: spacingTokens['3xs'],
-            ...typographyTokens.caption,
+            ...typographyTokens.micro,
             color: colorTokens.textMuted,
           }}
         >
-          <CalendarIcon size={13} />
+          <CalendarIcon size={11} />
           {post.whenLabel}
         </span>
         {actions}
@@ -378,26 +390,26 @@ export function CalendarPostChip({
 }) {
   const body = (
     <>
-      <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="1.75rem" />
+      <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="1.875rem" />
+      {/*
+        THE TITLE LEADS. `.calendar-post b { font-size: 8px }` carries the post,
+        `.calendar-post small { font-size: 7px; color: var(--muted) }` carries
+        the channel and the time — in that order. It was inverted here: the
+        timestamp was bold on the first line and the post itself was the quiet
+        second, which made a month of chips read as a list of times.
+
+        The trailing status bar is gone with it. The demo's chip has no such
+        element, and a 6px colour bar is status expressed by colour alone
+        (WCAG 1.4.1) — the status belongs in the row's text, which is where
+        `whenLabel` already puts it for a draft, and on the post's own card.
+      */}
       <span style={{ minInlineSize: 0, display: 'grid', gap: '1px', flex: 1, textAlign: 'start' }}>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: spacingTokens['3xs'],
-            ...typographyTokens.caption,
-            fontWeight: 700,
-            color: colorTokens.textPrimary,
-          }}
-        >
-          <PlatformDots platforms={post.platforms} labels={labels} />
-          {post.whenLabel}
-        </span>
         <span
           dir={post.captionDirection}
           style={{
-            ...typographyTokens.caption,
-            color: colorTokens.textSecondary,
+            ...typographyTokens.micro,
+            fontWeight: 700,
+            color: colorTokens.textPrimary,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -405,36 +417,38 @@ export function CalendarPostChip({
         >
           {post.caption}
         </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: spacingTokens['3xs'],
+            ...typographyTokens.micro,
+            color: colorTokens.textMuted,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <PlatformDots platforms={post.platforms} labels={labels} />
+          {post.whenLabel}
+        </span>
       </span>
-      <span
-        aria-hidden="true"
-        title={labels.statusLabels[post.status]}
-        style={{
-          inlineSize: '0.375rem',
-          blockSize: '1.5rem',
-          borderRadius: radiusTokens.full,
-          flexShrink: 0,
-          background:
-            post.status === 'PUBLISHED'
-              ? colorTokens.success
-              : post.status === 'FAILED'
-                ? colorTokens.danger
-                : post.status === 'DRAFT'
-                  ? colorTokens.textMuted
-                  : colorTokens.brandPurple,
-        }}
-      />
     </>
   );
 
   const style = {
+    /*
+     * `.calendar-post { margin-top: 8px; padding: 7px; border-radius: 11px;
+     *  background: var(--soft); gap: 7px }` with `.calendar-post .thumb
+     *  { width: 30px; height: 30px; border-radius: 8px }`.
+     */
     display: 'flex',
     alignItems: 'center',
-    gap: spacingTokens.xs,
+    gap: '0.4375rem',
     inlineSize: '100%',
-    padding: spacingTokens.xs,
-    borderRadius: radiusTokens.sm,
-    background: colorTokens.surfaceSoft,
+    marginBlockStart: spacingTokens.sm,
+    padding: '0.4375rem',
+    borderRadius: radiusTokens.lg,
+    background: colorTokens.surfaceMuted,
     border: '1px solid transparent',
     cursor: onOpen ? 'pointer' : 'default',
     fontFamily: 'inherit',

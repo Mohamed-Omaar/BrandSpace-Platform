@@ -154,21 +154,32 @@ in CI and offline alike — depend on a third party. That is F-06 in a new costu
 `webfontHref()` emits a stylesheet link only when `BRANDSPACE_WEBFONTS=google`, and every stack ends in
 system faces that ship with the operating system, so both scripts render correctly with no network.
 
-| Step       | Size      | Use                                   |
-| ---------- | --------- | ------------------------------------- |
-| `display`  | 1.875rem  | Marketing-scale headline              |
-| `h1`       | 1.5rem    | Page title — exactly one per page     |
-| `h2`       | 1.125rem  | Card and section title                |
-| `h3`       | 1rem      | Subsection, record title              |
-| `body`     | 0.9375rem | Default                               |
-| `bodySm`   | 0.875rem  | Dense surfaces: tables, forms, cards  |
-| `label`    | 0.8125rem | Form labels, table headers, key names |
-| `caption`  | 0.75rem   | Hints, metadata, badges               |
-| `overline` | 0.6875rem | Sidebar section headings              |
-| `numeric`  | 1.5rem    | Metric-card figures                   |
+**Every step below is the demo's, measured in a browser** (D-60) — not a scale of our own that
+happens to look similar. The demo's rule is quoted beside each one.
 
-Before this phase these were literals scattered across a dozen files (`1.35rem`, `1.05rem`,
-`0.6875rem`…), which is why two pages that both meant "section heading" rendered at different sizes.
+| Step          | Size                          | Demo rule                                     | Use                                       |
+| ------------- | ----------------------------- | --------------------------------------------- | ----------------------------------------- |
+| `display`     | clamp(2.375rem, 5vw, 4.25rem) | `.hero-copy h2`, lh .94, −.065em              | Hero headline                             |
+| `authHeading` | 2.125rem                      | `.auth-card h2` 34px, −.05em                  | Sign-in, reset, invitation                |
+| `h2`          | 1.8125rem                     | `.view-toolbar h2` 29px, −.045em              | In-page view title                        |
+| `h1`          | 1.5rem                        | `.topbar h1` 24px, −.04em                     | Top-bar page title — exactly one per page |
+| `numeric`     | 1.875rem                      | `.metric strong` 30px, −.05em                 | Metric figures under ten characters       |
+| `h3`          | 1.125rem                      | `.section-head h3` 18px, −.035em              | Section title; long metric values         |
+| `wordmark`    | 1rem / 850                    | `.brand` 16px                                 | The wordmark, never a heading             |
+| `body`        | 0.9375rem                     | `body { font-size: 15px }`                    | Default inherited size                    |
+| `label`       | 0.75rem / 700                 | `.workspace-copy strong` 12px                 | Rail identity, studio panel titles        |
+| `navLabel`    | 0.6875rem / 650               | `.nav-item` 11px                              | Navigation rows                           |
+| `bodySm`      | 0.6875rem                     | `.item-copy b` 11px                           | Dense list and card copy                  |
+| `button`      | 0.625rem / 800                | `.primary-button` 10px                        | Every button, and the post-card title     |
+| `caption`     | 0.5625rem                     | `.metric span` 9px                            | Hints, metadata, form labels at 800       |
+| `overline`    | 0.5625rem / 800 / .08em       | `.eyebrow`, `.section-kicker` 9px             | Eyebrows and rail group headings          |
+| `micro`       | 0.5rem                        | `.calendar-post b`, `.status`, `.weekday` 8px | Secondary metadata, only on an AA ground  |
+
+Two of these are corrections the fidelity pass made rather than sizes that were already right:
+form labels were `label` (12px/700) where the demo has `.field label { font-size: 9px;
+font-weight: 800 }`, which made every form read as a stack of headings; and `body` inherited the
+browser's 16px rather than the demo's 15px. The ROOT stays at 16px in both cases, so every rem
+token still resolves to the pixel size it was measured at.
 
 ---
 
@@ -240,6 +251,27 @@ Verified at **390, 768, 1280 and 1440** in both directions.
   produces a negative offset rather than a larger scroll width. `tests/e2e/overflow.ts` walks the DOM,
   skips anything already clipped by a scrolling ancestor, and names the offending element. All four
   suites now use it (F-26 closed).
+- **And overflow that is CLIPPED rather than overhanging is measured separately.** The demo's shell
+  keeps its 34px corners with `.app-shell { overflow: hidden }` and its panel scrolls with
+  `.main-panel { overflow: auto }`. Both fit the viewport, so the measurement above is defined to
+  forgive anything they cut off — which made a planted 900px element measure zero (F-42).
+  `clippedInlineOverflow` reports `scrollWidth − clientWidth` for a named container, and the suite
+  asserts it is zero for `.bs-shell` and `main` at every width in both directions. The self-check
+  now plants twice: inside the panel, to prove the second measurement catches what the first cannot,
+  and on `body`, to prove the first still reports and names an offender.
+
+### The demo's own breakpoints
+
+The demo is written with `max-width` queries; the same steps are written mobile-first here.
+
+| Component     | ≤ 640                                  | 641–900                                | 901–1200                               | > 1200                             |
+| ------------- | -------------------------------------- | -------------------------------------- | -------------------------------------- | ---------------------------------- |
+| Shell         | drawer (ours) / full-bleed rail (demo) | 78px rail                              | 248px rail                             | 248px rail                         |
+| Composer      | one column                             | editor + 330 preview, Copilot full row | editor + 330 preview, Copilot full row | editor + 340 preview + 300 Copilot |
+| Design Studio | 62px tools + canvas                    | 75 + 200 + canvas                      | 75 + 200 + canvas                      | 84 + 240 + canvas + 230            |
+| Settings      | one column                             | one column                             | 220px nav + form                       | 220px nav + form                   |
+| Form row      | one column                             | two columns                            | two columns                            | two columns                        |
+| Post grid     | 1                                      | 2                                      | 3                                      | 4                                  |
 
 ---
 
@@ -265,15 +297,15 @@ Verified at **390, 768, 1280 and 1440** in both directions.
 `SocialPostPreview` is a **visual contract for later phases**, not a connection to anything. No
 persistence, no OAuth, no platform API, no publish button, and it never fetches remote media.
 
-| Supported       | Values                                                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Platforms       | Instagram, Facebook, LinkedIn, X, TikTok                                                                                                                                  |
-| **Formats**     | `feed`, `story`, `reel`, `video` — **per platform**, from `PLATFORM_FORMATS`                                                                                              |
-| Aspect ratios   | `1:1`, `4:5`, `16:9`, `9:16` — **per platform**, from `PLATFORM_ASPECTS`; a format may force one                                                                          |
-| Media states    | image, carousel with indicator, video with play affordance and duration, loading, missing                                                                                 |
-| Post states     | `DRAFT`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`, `FAILED`                                                                                                                 |
-| Approval states | `NOT_REQUIRED`, `NEEDS_APPROVAL`, `APPROVED`, `CHANGES_REQUESTED` — independent of publishing state                                                                       |
-| Also            | account identity and avatar, hashtags, caption truncation and expansion, a familiar action strip, scheduled time, mobile and desktop surfaces, Arabic and English content |
+| Supported       | Values                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Platforms       | Instagram, Facebook, LinkedIn, X, TikTok                                                                                              |
+| **Formats**     | `feed`, `story`, `reel`, `video` — **per platform**, from `PLATFORM_FORMATS`                                                          |
+| Aspect ratios   | `1:1`, `4:5`, `16:9`, `9:16` — **per platform**, from `PLATFORM_ASPECTS`; a format may force one                                      |
+| Media states    | image, carousel with indicator, video with play affordance and duration, loading, missing                                             |
+| Post states     | `DRAFT`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`, `FAILED`                                                                             |
+| Approval states | `NOT_REQUIRED`, `NEEDS_APPROVAL`, `APPROVED`, `CHANGES_REQUESTED` — independent of publishing state                                   |
+| Also            | account identity and avatar, hashtags, caption truncation and expansion, the action strip, scheduled time, Arabic and English content |
 
 **Format is modelled separately from platform, and that is the point of the revision.** An Instagram
 feed post, a Story and a Reel are three different compositions with different chrome, aspect ratios and
@@ -290,9 +322,21 @@ It fetches nothing, renders identically on every run — so a screenshot means t
 a preview with no media says "No media yet" on a lavender surface rather than showing a grey rectangle
 that reads as a broken image.
 
-The chrome is deliberately BrandSpace-shaped: a platform is identified by its name and a small accent
-badge, and the frame is our own. Reproducing a platform's interface pixel-for-pixel is both a trademark
-problem and a maintenance treadmill.
+**The geometry is the demo's, measured (D-60).** `.preview-panel { background: rgba(255,255,255,.88);
+border-radius: 22px; overflow: hidden }` wraps an optional `.preview-head` (14px padding, 10px/800) and
+a bare `article.social-preview`, drawn at the 340px of the demo's composer column and never wider —
+there is no longer a "desktop surface" that widens it, because the composition was measured at that
+width. Inside: a 12px-padded `34px | 1fr | auto` header with a 34px round avatar, a 9px name over an
+8px handle and a `•••`; a square media frame at 23px padding; `.social-actions` at `gap: 14px;
+padding: 11px; font-size: 17px` with the fourth glyph pushed to the trailing edge; and
+`.social-caption` at `padding: 0 11px 15px; font-size: 9px; line-height: 1.5`.
+
+**Nothing that is not in the demo's post sits inside the post.** The platform badge and the
+status/approval/schedule row are real workspace state and are not dropped — they moved OUT of the
+article into the panel around it. A badge inside the post misrepresents what will be published.
+
+The caption's direction follows the CONTENT, not the interface: an Arabic caption previewed in an
+English console still reads right-to-left.
 
 ---
 

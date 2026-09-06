@@ -923,6 +923,10 @@ export function studioLabels(locale: string): StudioLabels {
       background: ar ? 'خلفية' : 'Background',
     },
     canvasLabel: ar ? 'لوح التصميم' : 'Artboard',
+    assetsLabel: ar ? 'العناصر' : 'Assets',
+    assetsEmpty: ar
+      ? 'لا توجد مكتبة وسائط بعد. تصل في المرحلة الثالثة.'
+      : 'No media library yet. It arrives in Phase 3.',
     propertiesLabel: ar ? 'الخصائص' : 'Properties',
     sizeLabel: ar ? 'المقاس' : 'Size',
     positionLabel: ar ? 'الموضع' : 'Position',

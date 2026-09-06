@@ -217,6 +217,8 @@ test.describe('sign-in requires a password AND a second factor', () => {
 
   test('signing out ends the session immediately', async ({ page }) => {
     await signIn(page, 'en');
+    /* Sign-out sits inside the operator's profile-card menu (fidelity pass §8). */
+    await page.getByTestId('profile-menu').click();
     await page.getByTestId('sign-out').click();
 
     await expect(page).toHaveURL(`${ADMIN_BASE_URL}/en/login`);

@@ -2,29 +2,30 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   AppShell,
   BrandMark,
+  ProfileCard,
+  TopbarActions,
+  menuItemStyle,
   CreditIcon,
   HomeIcon,
   LanguageSwitcher,
   SettingsIcon,
   ShieldIcon,
-  SignOutIcon,
   TeamIcon,
   WorkspaceSwitcher,
   Banner,
   StateMessage,
   buttonStyle,
-  colorTokens,
   inputStyle,
-  layoutTokens,
-  radiusTokens,
   spacingTokens,
   typographyTokens,
   tdStyle,
   thStyle,
   type ShellNavSection,
   type WorkspaceOption,
+  initialsFrom,
 } from '@brandspace/ui';
 import { translator, type MessageKey } from '../i18n/messages';
+
 import { signOutAction } from '../app/[locale]/(auth)/actions';
 
 /**
@@ -68,6 +69,7 @@ export function WorkspaceShell({
   activePath,
   workspaceName,
   roleName,
+  customerName,
   permissionKeys,
   availableWorkspaces = [],
   children,
@@ -98,6 +100,8 @@ export function WorkspaceShell({
   activePath?: string | undefined;
   workspaceName: string;
   roleName: string;
+  /** The signed-in person, for the rail's profile card. Their email if unnamed. */
+  customerName?: string | undefined;
   permissionKeys: readonly string[];
   availableWorkspaces?: ReadonlyArray<{
     id: string;
@@ -109,6 +113,7 @@ export function WorkspaceShell({
 }) {
   const t = translator(locale);
   const other = locale === 'ar' ? 'en' : 'ar';
+  const identity = customerName ?? workspaceName;
 
   const sections: readonly ShellNavSection[] = [
     {
@@ -156,11 +161,31 @@ export function WorkspaceShell({
         />
       }
       headerEnd={
-        <LanguageSwitcher
-          href={`/${other}${activePath ?? '/overview'}`}
-          targetLocale={other}
-          targetLabel={other === 'ar' ? 'العربية' : 'English'}
-          ariaLabel={t('nav.language')}
+        /*
+         * THE DEMO'S TOP-BAR ACTION SET (§9, §10): search, notifications, the
+         * language square and the purple create action. Search and
+         * notifications open an honest panel saying they are not connected yet
+         * rather than being greyed out — §10 asks for the composition to
+         * survive without the functionality being faked.
+         */
+        <TopbarActions
+          labels={{
+            search: t('topbar.search'),
+            searchShortcut: t('topbar.searchShortcut'),
+            notifications: t('topbar.notifications'),
+            close: t('common.close'),
+            previewTitle: t('topbar.previewTitle'),
+            previewBody: t('topbar.previewBody'),
+            create: t('topbar.create'),
+          }}
+          language={
+            <LanguageSwitcher
+              href={`/${other}${activePath ?? '/overview'}`}
+              targetLocale={other}
+              targetLabel={other === 'ar' ? 'العربية' : 'English'}
+              ariaLabel={t('nav.language')}
+            />
+          }
         />
       }
       /*
@@ -175,52 +200,23 @@ export function WorkspaceShell({
       pageMeta={meta}
       profile={
         /*
-         * THE IDENTITY LIVES AT THE FOOT OF THE SIDEBAR (§6), not in the top
-         * bar. The reference puts it there, and it is also where it belongs:
-         * signing out is a rare action, and a header carrying brand, workspace,
-         * language, notifications, account AND sign-out is the cluttered strip
-         * §7 asks to avoid.
+         * THE DEMO'S PROFILE CARD (§8): avatar, name, role and a real `•••`
+         * menu holding sign-out. It replaces the standalone sign-out row, which
+         * was visually unrelated to the demo.
          */
-        <form action={signOutAction} style={{ inlineSize: '100%', minInlineSize: 0 }}>
-          <input type="hidden" name="locale" value={locale} />
-          <button
-            type="submit"
-            data-testid="sign-out"
-            /*
-             * NAMED EXPLICITLY, because its label is hidden in a collapsed
-             * rail. `.bs-rail-copy` takes the word "Sign out" out of the DOM
-             * at 78px, and the only child left is an `aria-hidden` icon — a
-             * button with no discernible text, which is exactly what axe
-             * reported the moment the rail learned to collapse its copy.
-             */
-            aria-label={t('nav.signOut')}
-            className="bs-pressable bs-control"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: spacingTokens.sm,
-              inlineSize: '100%',
-              minInlineSize: 0,
-              minBlockSize: layoutTokens.controlHeight,
-              paddingInline: spacingTokens.sm,
-              borderRadius: radiusTokens.md,
-              border: '1px solid transparent',
-              color: colorTokens.textSecondary,
-              fontFamily: 'inherit',
-              ...typographyTokens.bodySm,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <SignOutIcon size={18} />
-            <span
-              className="bs-rail-copy"
-              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
+        <ProfileCard
+          label={t('nav.account')}
+          name={identity}
+          role={roleName}
+          initials={initialsFrom(identity)}
+        >
+          <form action={signOutAction}>
+            <input type="hidden" name="locale" value={locale} />
+            <button type="submit" role="menuitem" data-testid="sign-out" style={menuItemStyle()}>
               {t('nav.signOut')}
-            </span>
-          </button>
-        </form>
+            </button>
+          </form>
+        </ProfileCard>
       }
     >
       {/*

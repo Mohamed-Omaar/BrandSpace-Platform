@@ -1,20 +1,18 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 import {
-  Button,
-  ButtonRow,
-  CONTROL_CLASS,
-  Field,
-  IconTile,
-  inputStyle,
-  textareaStyle,
-} from './primitives';
+  colorTokens,
+  layoutTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from './tokens';
+import { Button, ButtonRow, CONTROL_CLASS, Field, inputStyle, textareaStyle } from './primitives';
 import { Card } from './surfaces';
-import { StatusBadge } from './data';
 import { AbstractMedia, Avatar, MediaChip } from './media';
-import { AlertIcon, ImageIcon, PaperclipIcon, SparkIcon } from './icons';
+import { AlertIcon, PaperclipIcon } from './icons';
 import { SocialPostPreview } from './social-post-preview';
 import {
   PLATFORM_FORMATS,
@@ -150,6 +148,48 @@ function AccountChip({
   );
 }
 
+/**
+ * A GROUP INSIDE THE EDITOR CARD, not a card of its own.
+ *
+ * The demo's composer editor is ONE surface (`.composer > .surface-card`) with
+ * `.field` groups stacked inside it — `label { margin-bottom: 7px; font-size:
+ * 9px; font-weight: 800 }`. Five separate cards made the editor four times
+ * taller than the preview beside it and turned a single form into a stack of
+ * boxes, which is the surface balance §0 rules out.
+ */
+function EditorSection({
+  title,
+  description,
+  children,
+}: {
+  readonly title: string;
+  readonly description?: string | undefined;
+  readonly children: ReactNode;
+}) {
+  return (
+    <section style={{ display: 'grid', gap: spacingTokens.sm, minInlineSize: 0 }}>
+      <div style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
+        <h3
+          style={{
+            margin: 0,
+            ...typographyTokens.caption,
+            fontWeight: 800,
+            color: colorTokens.textPrimary,
+          }}
+        >
+          {title}
+        </h3>
+        {description ? (
+          <p style={{ margin: 0, ...typographyTokens.micro, color: colorTokens.textMuted }}>
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function PostComposer({
   accounts,
   labels,
@@ -232,281 +272,296 @@ export function PostComposer({
   };
 
   return (
+    /*
+      `.composer { display:grid; grid-template-columns: minmax(350px,1fr) 340px
+       300px; gap:12px; align-items:start }` — THREE columns: editor, live
+      preview, Copilot. The auto-fit two-column grid that stood here nested the
+      Copilot under the preview, which is not the demo's composition. The
+      breakpoints (1200 / 900 / 640) live in `.bs-composer`.
+    */
     <div
+      className="bs-composer"
       data-testid={testId ?? 'post-composer'}
-      style={{
-        display: 'grid',
-        gap: spacingTokens.lg,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(22rem, 100%), 1fr))',
-        alignItems: 'start',
-      }}
+      style={{ display: 'grid', gap: spacingTokens.sm, alignItems: 'start' }}
     >
       {/* ----------------------------------------------------- Editor --- */}
       <div style={{ display: 'grid', gap: spacingTokens.lg, minInlineSize: 0 }}>
-        <Card
-          title={labels.accountsTitle}
-          description={labels.accountsHint}
-          icon={<ImageIcon size={16} />}
-        >
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-            {accounts.map((account) => (
-              <AccountChip
-                key={account.id}
-                account={account}
-                platformName={labels.platformNames[account.platform]}
-                selected={selectedAccounts.includes(account.id)}
-                onToggle={() =>
-                  setSelectedAccounts((current) =>
-                    current.includes(account.id)
-                      ? current.filter((id) => id !== account.id)
-                      : [...current, account.id],
-                  )
-                }
-              />
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: spacingTokens.xs,
-              marginBlockStart: spacingTokens.md,
-            }}
-          >
-            {PLATFORM_FORMATS[platform].map((option) => (
-              <button
-                key={option}
-                type="button"
-                className="bs-pressable"
-                data-testid={`composer-format-${option}`}
-                aria-pressed={option === format}
-                onClick={() => setFormat(option)}
-                style={{
-                  minBlockSize: '2.25rem',
-                  paddingInline: spacingTokens.md,
-                  borderRadius: radiusTokens.full,
-                  border: '1px solid transparent',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  ...typographyTokens.caption,
-                  fontWeight: 600,
-                  background:
-                    option === format ? colorTokens.brandPurple : colorTokens.controlSurface,
-                  color: option === format ? colorTokens.brandPurpleInk : colorTokens.textSecondary,
-                }}
-              >
-                {labels.formatNames[option]}
-              </button>
-            ))}
-          </div>
-
-          {!supported ? (
-            <p
-              data-testid="composer-unsupported"
-              style={{
-                display: 'flex',
-                gap: spacingTokens.xs,
-                alignItems: 'flex-start',
-                marginBlockStart: spacingTokens.md,
-                marginBlockEnd: 0,
-                padding: spacingTokens.sm,
-                borderRadius: radiusTokens.md,
-                background: colorTokens.warningTint,
-                color: colorTokens.warning,
-                ...typographyTokens.caption,
-                fontWeight: 600,
-              }}
-            >
-              <AlertIcon size={14} />
-              <span>
-                <strong>{labels.unsupportedTitle}</strong> {labels.unsupportedBody}
-              </span>
-            </p>
-          ) : null}
-        </Card>
-
-        <Card title={labels.contentTitle}>
-          <Field
-            label={labels.captionLabel}
-            htmlFor="composer-caption"
-            hint={labels.characterCount(caption.length, limit)}
-            error={over ? labels.overLimit : undefined}
-          >
-            <textarea
-              id="composer-caption"
-              className={CONTROL_CLASS}
-              value={caption}
-              onChange={(event) => setCaption(event.target.value)}
-              placeholder={labels.captionPlaceholder}
-              style={textareaStyle(over ? { tone: 'error' } : {})}
-            />
-          </Field>
-
-          <Field
-            label={labels.hashtagsLabel}
-            htmlFor="composer-hashtags"
-            hint={labels.hashtagsHint}
-          >
-            <input
-              id="composer-hashtags"
-              className={CONTROL_CLASS}
-              defaultValue="#brandspace #socialmedia #contentstrategy"
-              style={inputStyle()}
-            />
-          </Field>
-
-          <Field label={labels.mentionsLabel} htmlFor="composer-mentions">
-            <input
-              id="composer-mentions"
-              className={CONTROL_CLASS}
-              defaultValue="@brandspace.hq"
-              style={inputStyle()}
-            />
-          </Field>
-        </Card>
-
-        <Card
-          title={labels.mediaTitle}
-          description={labels.mediaHint}
-          icon={<ImageIcon size={16} />}
-        >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(6rem, 1fr))',
-              gap: spacingTokens.sm,
-            }}
-          >
-            {[1, 2, 4].map((seed, index) => (
-              <div
-                key={seed}
-                data-testid={`composer-media-${index}`}
-                style={{
-                  position: 'relative',
-                  aspectRatio: '1 / 1',
-                  borderRadius: radiusTokens.md,
-                  overflow: 'hidden',
-                }}
-              >
-                <AbstractMedia seed={seed as 1 | 2 | 4} alt={`Media ${index + 1}`} />
-                <MediaChip placement="start-start">{index + 1}</MediaChip>
+        <Card testId="composer-editor">
+          {/* One surface, its groups separated by space rather than by boxes. */}
+          <div style={{ display: 'grid', gap: spacingTokens.xl, minInlineSize: 0 }}>
+            <EditorSection title={labels.accountsTitle} description={labels.accountsHint}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
+                {accounts.map((account) => (
+                  <AccountChip
+                    key={account.id}
+                    account={account}
+                    platformName={labels.platformNames[account.platform]}
+                    selected={selectedAccounts.includes(account.id)}
+                    onToggle={() =>
+                      setSelectedAccounts((current) =>
+                        current.includes(account.id)
+                          ? current.filter((id) => id !== account.id)
+                          : [...current, account.id],
+                      )
+                    }
+                  />
+                ))}
               </div>
-            ))}
-            {/* The upload well: a soft dashed target is correct HERE, because
+
+              {!supported ? (
+                <p
+                  data-testid="composer-unsupported"
+                  style={{
+                    display: 'flex',
+                    gap: spacingTokens.xs,
+                    alignItems: 'flex-start',
+                    marginBlockStart: spacingTokens.md,
+                    marginBlockEnd: 0,
+                    padding: spacingTokens.sm,
+                    borderRadius: radiusTokens.md,
+                    background: colorTokens.warningTint,
+                    color: colorTokens.warning,
+                    ...typographyTokens.caption,
+                    fontWeight: 600,
+                  }}
+                >
+                  <AlertIcon size={14} />
+                  <span>
+                    <strong>{labels.unsupportedTitle}</strong> {labels.unsupportedBody}
+                  </span>
+                </p>
+              ) : null}
+            </EditorSection>
+
+            <EditorSection title={labels.contentTitle}>
+              <Field
+                label={labels.captionLabel}
+                htmlFor="composer-caption"
+                hint={labels.characterCount(caption.length, limit)}
+                error={over ? labels.overLimit : undefined}
+              >
+                <textarea
+                  id="composer-caption"
+                  className={CONTROL_CLASS}
+                  value={caption}
+                  onChange={(event) => setCaption(event.target.value)}
+                  placeholder={labels.captionPlaceholder}
+                  style={textareaStyle(over ? { tone: 'error' } : {})}
+                />
+              </Field>
+
+              <Field
+                label={labels.hashtagsLabel}
+                htmlFor="composer-hashtags"
+                hint={labels.hashtagsHint}
+              >
+                <input
+                  id="composer-hashtags"
+                  className={CONTROL_CLASS}
+                  defaultValue="#brandspace #socialmedia #contentstrategy"
+                  style={inputStyle()}
+                />
+              </Field>
+
+              <Field label={labels.mentionsLabel} htmlFor="composer-mentions">
+                <input
+                  id="composer-mentions"
+                  className={CONTROL_CLASS}
+                  defaultValue="@brandspace.hq"
+                  style={inputStyle()}
+                />
+              </Field>
+            </EditorSection>
+
+            <EditorSection title={labels.mediaTitle} description={labels.mediaHint}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(6rem, 1fr))',
+                  gap: spacingTokens.sm,
+                }}
+              >
+                {[1, 2, 4].map((seed, index) => (
+                  <div
+                    key={seed}
+                    data-testid={`composer-media-${index}`}
+                    style={{
+                      position: 'relative',
+                      aspectRatio: '1 / 1',
+                      borderRadius: radiusTokens.md,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <AbstractMedia seed={seed as 1 | 2 | 4} alt={`Media ${index + 1}`} />
+                    <MediaChip placement="start-start">{index + 1}</MediaChip>
+                  </div>
+                ))}
+                {/* The upload well: a soft dashed target is correct HERE, because
                 this is genuinely a drop zone rather than a decorative box. */}
-            <button
-              type="button"
-              data-testid="composer-add-media"
-              style={{
-                aspectRatio: '1 / 1',
-                borderRadius: radiusTokens.md,
-                border: `1px dashed ${colorTokens.brandPurpleBorder}`,
-                background: colorTokens.surfaceLavender,
-                color: colorTokens.brandPurplePressed,
-                cursor: 'pointer',
-                display: 'grid',
-                placeItems: 'center',
-                gap: spacingTokens['3xs'],
-                fontFamily: 'inherit',
-                ...typographyTokens.caption,
-                fontWeight: 600,
-              }}
-            >
-              <PaperclipIcon size={20} />
-              {labels.addMedia}
-            </button>
+                <button
+                  type="button"
+                  data-testid="composer-add-media"
+                  style={{
+                    aspectRatio: '1 / 1',
+                    borderRadius: radiusTokens.md,
+                    border: `1px dashed ${colorTokens.brandPurpleBorder}`,
+                    background: colorTokens.surfaceLavender,
+                    color: colorTokens.brandPurplePressed,
+                    cursor: 'pointer',
+                    display: 'grid',
+                    placeItems: 'center',
+                    gap: spacingTokens['3xs'],
+                    fontFamily: 'inherit',
+                    ...typographyTokens.caption,
+                    fontWeight: 600,
+                  }}
+                >
+                  <PaperclipIcon size={20} />
+                  {labels.addMedia}
+                </button>
+              </div>
+              <p
+                style={{
+                  margin: 0,
+                  marginBlockStart: spacingTokens.sm,
+                  ...typographyTokens.caption,
+                  color: colorTokens.textMuted,
+                }}
+              >
+                {labels.reorderHint} · {labels.carouselLabel}
+              </p>
+            </EditorSection>
+
+            <EditorSection title={labels.optionsTitle}>
+              <Field
+                label={labels.firstCommentLabel}
+                htmlFor="composer-first-comment"
+                hint={labels.firstCommentHint}
+              >
+                <input id="composer-first-comment" className={CONTROL_CLASS} style={inputStyle()} />
+              </Field>
+              <Field label={labels.locationLabel} htmlFor="composer-location">
+                <input
+                  id="composer-location"
+                  className={CONTROL_CLASS}
+                  defaultValue="Riyadh"
+                  style={inputStyle()}
+                />
+              </Field>
+              <Field label={labels.campaignLabel} htmlFor="composer-campaign">
+                <select id="composer-campaign" className={CONTROL_CLASS} style={inputStyle()}>
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={labels.approvalLabel} htmlFor="composer-approver">
+                <select id="composer-approver" className={CONTROL_CLASS} style={inputStyle()}>
+                  {approvers.map((approver) => (
+                    <option key={approver.id} value={approver.id}>
+                      {approver.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </EditorSection>
+
+            <EditorSection title={labels.scheduleTitle}>
+              <ButtonRow>
+                <Button variant="primary" data-testid="composer-publish">
+                  {labels.publishNow}
+                </Button>
+                <Button variant="neutral" data-testid="composer-schedule">
+                  {labels.schedule}
+                </Button>
+                <Button variant="ghost" data-testid="composer-draft">
+                  {labels.saveDraft}
+                </Button>
+              </ButtonRow>
+              <p
+                data-testid="composer-prototype-notice"
+                style={{
+                  display: 'flex',
+                  gap: spacingTokens.xs,
+                  alignItems: 'center',
+                  margin: 0,
+                  marginBlockStart: spacingTokens.md,
+                  ...typographyTokens.caption,
+                  color: colorTokens.textSecondary,
+                }}
+              >
+                <AlertIcon size={14} />
+                {labels.prototypeNotice}
+              </p>
+            </EditorSection>
           </div>
-          <p
-            style={{
-              margin: 0,
-              marginBlockStart: spacingTokens.sm,
-              ...typographyTokens.caption,
-              color: colorTokens.textMuted,
-            }}
-          >
-            {labels.reorderHint} · {labels.carouselLabel}
-          </p>
-        </Card>
-
-        <Card title={labels.optionsTitle}>
-          <Field
-            label={labels.firstCommentLabel}
-            htmlFor="composer-first-comment"
-            hint={labels.firstCommentHint}
-          >
-            <input id="composer-first-comment" className={CONTROL_CLASS} style={inputStyle()} />
-          </Field>
-          <Field label={labels.locationLabel} htmlFor="composer-location">
-            <input
-              id="composer-location"
-              className={CONTROL_CLASS}
-              defaultValue="Riyadh"
-              style={inputStyle()}
-            />
-          </Field>
-          <Field label={labels.campaignLabel} htmlFor="composer-campaign">
-            <select id="composer-campaign" className={CONTROL_CLASS} style={inputStyle()}>
-              {campaigns.map((campaign) => (
-                <option key={campaign.id} value={campaign.id}>
-                  {campaign.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={labels.approvalLabel} htmlFor="composer-approver">
-            <select id="composer-approver" className={CONTROL_CLASS} style={inputStyle()}>
-              {approvers.map((approver) => (
-                <option key={approver.id} value={approver.id}>
-                  {approver.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </Card>
-
-        <Card title={labels.scheduleTitle} tone="lavender" elevated={false}>
-          <ButtonRow>
-            <Button variant="primary" data-testid="composer-publish">
-              {labels.publishNow}
-            </Button>
-            <Button variant="neutral" data-testid="composer-schedule">
-              {labels.schedule}
-            </Button>
-            <Button variant="ghost" data-testid="composer-draft">
-              {labels.saveDraft}
-            </Button>
-          </ButtonRow>
-          <p
-            data-testid="composer-prototype-notice"
-            style={{
-              display: 'flex',
-              gap: spacingTokens.xs,
-              alignItems: 'center',
-              margin: 0,
-              marginBlockStart: spacingTokens.md,
-              ...typographyTokens.caption,
-              color: colorTokens.textSecondary,
-            }}
-          >
-            <AlertIcon size={14} />
-            {labels.prototypeNotice}
-          </p>
         </Card>
       </div>
 
       {/* ---------------------------------------------------- Preview --- */}
-      <div
-        style={{ display: 'grid', gap: spacingTokens.lg, minInlineSize: 0, justifyItems: 'start' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm }}>
-          <IconTile icon={<SparkIcon size={16} />} size="sm" />
-          <h2 style={{ ...typographyTokens.h2, color: colorTokens.textPrimary }}>
-            {labels.previewTitle}
-          </h2>
-          <StatusBadge label={labels.platformNames[platform]} tone="neutral" />
-        </div>
-        <SocialPostPreview content={preview} labels={previewLabels} testId="composer-preview" />
+      <div style={{ display: 'grid', gap: spacingTokens.sm, minInlineSize: 0 }}>
+        {/*
+          The panel names itself in its own head (`.preview-head`, 10px / 800)
+          rather than under a 29px view heading — the preview is a panel inside
+          the composer, not a section of the page.
+        */}
+        <SocialPostPreview
+          content={preview}
+          labels={previewLabels}
+          testId="composer-preview"
+          head={
+            <>
+              <span>{labels.previewTitle}</span>
+              {/*
+                `.segmented { padding: 4px; border-radius: 13px; background:
+                 var(--soft) }` with `button.selected { background: #fff;
+                 box-shadow: 0 5px 14px rgba(0,0,0,.05) }`. The demo puts the
+                Feed/Story switch in the PREVIEW HEAD, next to what it changes,
+                rather than among the publishing options.
+              */}
+              <span
+                style={{
+                  display: 'inline-flex',
+                  padding: spacingTokens['3xs'],
+                  borderRadius: radiusTokens.xl,
+                  background: colorTokens.surfaceMuted,
+                }}
+              >
+                {PLATFORM_FORMATS[platform].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className="bs-pressable"
+                    data-testid={`composer-format-${option}`}
+                    aria-pressed={option === format}
+                    onClick={() => setFormat(option)}
+                    style={{
+                      minBlockSize: layoutTokens.controlHeightXs,
+                      paddingInline: '0.6875rem',
+                      borderRadius: radiusTokens.md,
+                      border: '1px solid transparent',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      ...typographyTokens.caption,
+                      fontWeight: 750,
+                      background: option === format ? colorTokens.surface : 'transparent',
+                      boxShadow: option === format ? shadowTokens.raised : 'none',
+                      color: colorTokens.textPrimary,
+                    }}
+                  >
+                    {labels.formatNames[option]}
+                  </button>
+                ))}
+              </span>
+            </>
+          }
+        />
+      </div>
+
+      {/* ---------------------------------------------------- Copilot --- */}
+      <div className="bs-composer-copilot" style={{ minInlineSize: 0 }}>
         {copilot}
       </div>
     </div>

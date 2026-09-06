@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
+import {
+  colorTokens,
+  layoutTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from './tokens';
 import { Button, ButtonRow, CONTROL_CLASS, IconButton, IconTile, inputStyle } from './primitives';
 import { StatusBadge } from './data';
 import { PRESET_SIZES } from './studio-presets';
@@ -52,6 +59,14 @@ export interface StudioLabels {
   readonly toolsLabel: string;
   readonly toolNames: Record<StudioTool, string>;
   readonly canvasLabel: string;
+  /** The asset column's landmark name — `.studio-assets`. */
+  readonly assetsLabel: string;
+  /**
+   * What the asset column says while there is no media library. The workspace
+   * has no stored media in this phase, and inventing a grid of assets to fill
+   * the column would be exactly the fake data §33 rules out.
+   */
+  readonly assetsEmpty: string;
   readonly propertiesLabel: string;
   readonly sizeLabel: string;
   readonly positionLabel: string;
@@ -125,11 +140,15 @@ export function StudioToolRail({
         beats the stylesheet, which is exactly what kept the rail horizontal on
         the desktop screenshot while the shell had already gone three-column.
       */
+      /*
+        `.studio-tools { background: #fafafa; padding: 13px }` — a PANEL inside
+        the studio's one continuous surface, so it is square-cornered and its
+        own radius is gone.
+      */
       style={{
         display: 'flex',
-        gap: spacingTokens.xs,
-        padding: spacingTokens.xs,
-        borderRadius: radiusTokens.lg,
+        gap: spacingTokens['3xs'],
+        padding: '0.8125rem',
         background: colorTokens.surfaceSoft,
         overflowX: 'auto',
       }}
@@ -145,21 +164,29 @@ export function StudioToolRail({
             data-testid={`studio-tool-${tool}`}
             aria-pressed={selected}
             onClick={() => onSelect(tool)}
+            /*
+              `.studio-tools button { border-radius: 10px; padding: 10px 3px;
+               margin-bottom: 5px; font-size: 8px }` with
+              `button.selected { background: #ece4ff; color: #5420bb }`.
+              At 9px the labels overran the 84px column; the demo's 8px is what
+              the column was sized for.
+            */
             style={{
               display: 'grid',
               justifyItems: 'center',
               gap: spacingTokens['3xs'],
-              minInlineSize: '4rem',
+              inlineSize: '100%',
               paddingBlock: spacingTokens.sm,
-              paddingInline: spacingTokens.xs,
+              paddingInline: '0.1875rem',
               borderRadius: radiusTokens.md,
               border: '1px solid transparent',
               cursor: 'pointer',
               fontFamily: 'inherit',
+              textAlign: 'center',
               background: selected ? colorTokens.surfaceLavenderStrong : 'transparent',
               color: selected ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
-              ...typographyTokens.caption,
-              fontWeight: 600,
+              ...typographyTokens.micro,
+              fontWeight: 700,
             }}
           >
             <span aria-hidden="true" style={{ display: 'inline-flex' }}>
@@ -334,6 +361,51 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
 }
 
 /** The properties panel. Sections by heading, controls with no outlines. */
+/**
+ * THE ASSET COLUMN (`.studio-assets`), 240px of the demo's four.
+ *
+ * `background: #fafafa; padding: 13px`, a 12px heading, and — in the demo — an
+ * `.asset-grid` of gradient tiles. There is no media library in this phase and
+ * no `Media` model to read one from (§39), so the column keeps its width, its
+ * ground, its padding and its heading, and says plainly that it is empty. The
+ * demo has its own component for exactly this: `.empty-box { padding: 30px;
+ * border-radius: 15px; background: var(--soft); text-align: center }`.
+ */
+export function StudioAssets({ labels }: { readonly labels: StudioLabels }) {
+  return (
+    <aside
+      aria-label={labels.assetsLabel}
+      data-testid="studio-assets"
+      style={{
+        display: 'grid',
+        alignContent: 'start',
+        gap: spacingTokens.sm,
+        padding: '0.8125rem',
+        background: colorTokens.surfaceSoft,
+        minInlineSize: 0,
+      }}
+    >
+      <h3 style={{ margin: 0, ...typographyTokens.label, color: colorTokens.textPrimary }}>
+        {labels.assetsLabel}
+      </h3>
+      <p
+        data-testid="studio-assets-empty"
+        style={{
+          margin: 0,
+          padding: spacingTokens.lg,
+          borderRadius: radiusTokens['2xl'],
+          background: colorTokens.surfaceMuted,
+          textAlign: 'center',
+          ...typographyTokens.caption,
+          color: colorTokens.textMuted,
+        }}
+      >
+        {labels.assetsEmpty}
+      </p>
+    </aside>
+  );
+}
+
 export function StudioProperties({ labels }: { readonly labels: StudioLabels }) {
   const section = (title: string, children: ReactNode) => (
     <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -371,12 +443,12 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
     <aside
       aria-label={labels.propertiesLabel}
       data-testid="studio-properties"
+      /* `.studio-props { background: #fafafa; padding: 13px }`. */
       style={{
         display: 'grid',
-        gap: spacingTokens.lg,
+        gap: spacingTokens.md,
         alignContent: 'start',
-        padding: spacingTokens.md,
-        borderRadius: radiusTokens.xl,
+        padding: '0.8125rem',
         background: colorTokens.surfaceSoft,
         minInlineSize: 0,
       }}
@@ -577,34 +649,43 @@ export function DesignStudio({
       </header>
 
       {/*
-        THE THREE PANELS. Rail, canvas and properties are siblings in one grid
-        so the desktop layout is a real three-column editor, while the same
-        markup stacks on a phone rather than being squeezed sideways.
-      */}
-      <div className="bs-studio-shell" style={{ display: 'grid', gap: spacingTokens.md }}>
-        <StudioToolRail labels={labels} active={tool} onSelect={setTool} />
+        THE FOUR PANELS, in ONE SURFACE.
 
-        {/* ---------------------------------------- Canvas + properties --- */}
-        <div
-          className="bs-studio-body"
-          style={{
-            display: 'grid',
-            gap: spacingTokens.md,
-            alignItems: 'start',
-          }}
-        >
+        `.studio { min-height: 660px; display: grid; grid-template-columns: 84px
+         240px 1fr 230px; background: #fff; border-radius: 25px;
+         overflow: hidden; box-shadow: var(--soft-shadow) }` — tools, assets,
+        canvas and properties are panels inside a single rounded editor, not
+        four cards with gaps between them. The columns and their step-downs
+        (1200 → three, 640 → two) live in `.bs-studio-shell`.
+      */}
+      <div
+        className="bs-studio-shell"
+        style={{
+          display: 'grid',
+          minBlockSize: layoutTokens.studioMinHeight,
+          borderRadius: radiusTokens.studio,
+          background: colorTokens.surface,
+          boxShadow: shadowTokens.card,
+          overflow: 'hidden',
+        }}
+      >
+        <StudioToolRail labels={labels} active={tool} onSelect={setTool} />
+        <StudioAssets labels={labels} />
+
+        {/* ------------------------------------------------- Canvas --- */}
+        <div className="bs-studio-body" style={{ display: 'grid', minInlineSize: 0 }}>
           <div
             data-testid="studio-canvas"
             style={{
               display: 'grid',
               justifyItems: 'center',
               gap: spacingTokens.sm,
-              padding: spacingTokens.lg,
-              borderRadius: radiusTokens.xl,
-              // A controlled dark canvas ground, so the artboard reads as a
-              // document on a work surface rather than as another white card.
+              /* `.canvas-wrap { background: #18161f; place-items: center; padding: 30px }`. */
+              padding: '1.875rem',
               background: colorTokens.surfaceInk,
               containerType: 'inline-size',
+              blockSize: '100%',
+              alignContent: 'center',
             }}
           >
             <SampleArtboard labels={labels} />
@@ -643,9 +724,9 @@ export function DesignStudio({
               ))}
             </div>
           </div>
-
-          <StudioProperties labels={labels} />
         </div>
+
+        <StudioProperties labels={labels} />
       </div>
 
       {copilot}

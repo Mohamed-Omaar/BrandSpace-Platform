@@ -91,8 +91,35 @@ export const colorTokens = {
 
   /** The canvas, and any card that must read as raised white on white. */
   surface: '#FFFFFF',
+  /**
+   * THE TRANSLUCENT SURFACES, RESOLVED.
+   *
+   * The full demo builds nearly every plane from white at partial alpha over
+   * the ambient ground, with `backdrop-filter: blur(24px)` on the shell. React
+   * inline styles carry the alpha directly, so these are the RESOLVED opaque
+   * equivalents, used only where a solid value is needed (contrast maths, a
+   * sticky header's gradient, a browser without backdrop-filter).
+   *
+   * `rgba(255,255,255,.78)` over `#F3F3F3` = `#FCFCFC`; the sidebar's
+   * `rgba(250,250,251,.78)` = `#F8F8F9`; a metric's `.72` and a surface card's
+   * `.82` over the shell both resolve to `#FEFEFE`.
+   */
+  shellAlpha: 'rgba(255, 255, 255, 0.78)',
+  shellSidebarAlpha: 'rgba(250, 250, 251, 0.78)',
+  metricAlpha: 'rgba(255, 255, 255, 0.72)',
+  surfaceCardAlpha: 'rgba(255, 255, 255, 0.82)',
+  floatCardAlpha: 'rgba(255, 255, 255, 0.8)',
+  drawerAlpha: 'rgba(255, 255, 255, 0.96)',
+  /**
+   * `.auth-card { background: rgba(255,255,255,.9) }`. Ninety per cent white on
+   * the opaque auth stage resolves to about #FDFCFF, so purple link text on it
+   * measures 5.5:1 — comfortably clear of AA.
+   */
+  authCardAlpha: 'rgba(255, 255, 255, 0.9)',
+  /** `.preview-panel, .copilot-panel { background: rgba(255,255,255,.88) }`. */
+  previewPanelAlpha: 'rgba(255, 255, 255, 0.88)',
   /** Off-white card fill. The default card surface — near-white, not grey. */
-  surfaceSoft: '#F9F9FA',
+  surfaceSoft: '#F8F8F9',
   /** Warm grey section surface, for grouping without drawing a box. */
   surfaceWarm: '#F7F6F4',
   /**
@@ -119,6 +146,8 @@ export const colorTokens = {
    * than as a grey utility.
    */
   appBackground: '#F2F2F2',
+  /** `.ambient { background: #f3f3f3 }` — a shade above the html ground. */
+  ambientGround: '#F3F3F3',
 
   /* ------------------------------------------------------------------ */
   /* Controls                                                            */
@@ -166,9 +195,29 @@ export const colorTokens = {
   /** Body text. 17.9:1 on white. */
   textPrimary: '#111114',
   /** Secondary text, labels, captions. 7.55:1 on white — AA at every size. */
-  textSecondary: '#5B5B62',
-  /** Placeholder and disabled text. 4.61:1 on white — still AA for normal text. */
-  textMuted: '#6A6A71',
+  /** `.nav-item { color: #45454b }` and `.hero-copy p { color: #4d4c53 }`. */
+  textSecondary: '#4D4C53',
+  /**
+   * `--muted`, the demo's supporting text colour.
+   *
+   * DOCUMENTED DEVIATION, and a small one: the demo's `#717179` is 4.44:1 on
+   * its own `--soft` (`#F5F5F6`), which is where the search placeholder and the
+   * draft status pill sit — just under AA, and 4.29:1 on the lavender the
+   * composer's selected account chip uses (the F-32 pairing). Seven steps
+   * darker clears 4.5:1 on all thirteen surfaces this system has, with 4.54:1
+   * as the floor, and is not perceptibly different from the demo's value.
+   */
+  textMuted: '#6A6A72',
+  /**
+   * `--subtle`, the demo's navigation group headings.
+   *
+   * DOCUMENTED DEVIATION, and the largest colour one: the demo's `#A3A3AA` is
+   * **2.36:1** on the sidebar, well under AA, at 9px uppercase. These are the
+   * only labels telling a reader what a group of navigation items is for, so
+   * they cannot be decorative. Darkened to the same value as `--muted`'s hue
+   * family at 4.56:1 on the sidebar.
+   */
+  textSubtle: '#717178',
   /** Foreground on a dark or saturated surface. */
   textInverse: '#FFFFFF',
 
@@ -191,12 +240,12 @@ export const colorTokens = {
   inkInk: '#FFFFFF',
 
   /* The floating application shell, over the ambient page. */
-  /** `rgba(255,255,255,.94)` over `#F2F2F2`, resolved. */
+  /** `rgba(255,255,255,.78)` over the ambient ground, resolved. */
   shellSurface: '#FCFCFC',
-  /** The sidebar's own slightly cooler plane. */
-  shellSidebar: '#F9F9FA',
-  /** The main panel inside the shell. */
-  shellPanel: '#FDFDFD',
+  /** `rgba(250,250,251,.78)` — the sidebar's own plane. */
+  shellSidebar: '#F8F8F9',
+  /** The main panel takes the shell's own translucency; nothing extra. */
+  shellPanel: 'transparent',
 
   /* ---------------------------------------------------------------------- */
   /* Semantic                                                               */
@@ -206,14 +255,14 @@ export const colorTokens = {
    * Error text. Darkened from `#D92D20`, which reached only 4.44:1 against its
    * own tint — a banner whose text was the one thing in it that failed AA.
    */
-  danger: '#B42318',
-  dangerTint: '#FEF3F2',
+  danger: '#B83245',
+  dangerTint: '#FDECEF',
   dangerBorder: '#FDA29B',
-  warning: '#B54708',
-  warningTint: '#FFFAEB',
+  warning: '#875F00',
+  warningTint: '#FFF6D3',
   warningBorder: '#FEC84B',
-  success: '#067647',
-  successTint: '#ECFDF3',
+  success: '#16794B',
+  successTint: '#E8F8EF',
   successBorder: '#6CE9A6',
   info: '#175CD3',
   infoTint: '#EFF8FF',
@@ -266,65 +315,91 @@ export const spacingTokens = {
  * into four lines.
  */
 export const typographyTokens = {
-  /** The hero statement. Measured: 57.6px / 56.45 / 700 / -3.456px at 1440. */
+  /**
+   * `.hero-copy h2` — `clamp(38px, 5vw, 68px)`, line-height .94,
+   * letter-spacing -.065em, weight 700. Measured at 1440: 68px / 63.92.
+   */
   display: {
-    fontSize: 'clamp(2.125rem, 4vw, 3.75rem)',
-    lineHeight: '0.98',
+    fontSize: 'clamp(2.375rem, 5vw, 4.25rem)',
+    lineHeight: '0.94',
     fontWeight: 700,
-    letterSpacing: '-0.06em',
+    letterSpacing: '-0.065em',
   },
-  /** The page title in the top bar. `clamp(24px, 2.4vw, 35px)`. */
-  h1: {
-    fontSize: 'clamp(1.5rem, 2.4vw, 2.1875rem)',
-    // Measured: 34.56px with line-height 34.56 — exactly 1. The tight leading
-    // is what lets the eyebrow sit 4px above the cap height rather than
-    // floating off it, which is most of why the reference's top bar reads as
-    // one block instead of two stacked lines.
-    lineHeight: '1',
+  /** `.topbar h1` — 24px, weight 700, -.04em. Fixed, not fluid. */
+  h1: { fontSize: '1.5rem', lineHeight: '1.75rem', fontWeight: 700, letterSpacing: '-0.04em' },
+  /** `.view-toolbar h2` — the in-page view title, 29px / -.035em. */
+  h2: { fontSize: '1.8125rem', lineHeight: '2.125rem', fontWeight: 700, letterSpacing: '-0.035em' },
+  /**
+   * `.auth-card h2` — 34px / -.05em. The entry screens carry a heading a full
+   * step above the in-app view title, which is what makes sign-in read as a
+   * front door rather than another panel. Named for its purpose (§37) because
+   * no other surface uses this size.
+   */
+  authHeading: {
+    fontSize: '2.125rem',
+    lineHeight: '2.375rem',
     fontWeight: 700,
-    letterSpacing: '-0.045em',
+    letterSpacing: '-0.05em',
   },
-  /** A section title inside a surface. `.section-head h3`: 20px / 700 / -0.6px. */
-  h2: { fontSize: '1.25rem', lineHeight: '1.5rem', fontWeight: 700, letterSpacing: '-0.03em' },
-  /** A card or group title. */
-  h3: { fontSize: '0.9375rem', lineHeight: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' },
-  /** `.hero-copy p`: 16px / 25.6 (1.6) / 400, no tracking. */
-  body: { fontSize: '1rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: 'normal' },
-  bodySm: { fontSize: '0.875rem', lineHeight: '1.5', fontWeight: 400, letterSpacing: '0' },
-  /** `.nav-item span` and `.workspace-copy strong`: 13px, 650, no tracking. */
-  label: {
-    fontSize: '0.8125rem',
-    lineHeight: '1.25rem',
+  /** `.section-head h3` — 18px / -.035em, the title inside a surface card. */
+  h3: { fontSize: '1.125rem', lineHeight: '1.4rem', fontWeight: 700, letterSpacing: '-0.035em' },
+  /** Body copy. `body { font-size: 15px }`, `.hero-copy p { line-height: 1.6 }`. */
+  body: { fontSize: '0.9375rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: 'normal' },
+  /** `.item-copy b`, `.nav-item`, `.quick-card b` — the demo's 11px workhorse. */
+  bodySm: { fontSize: '0.6875rem', lineHeight: '1rem', fontWeight: 400, letterSpacing: 'normal' },
+  /** `.workspace-copy strong`, `.profile-copy strong` — 12px / 700. */
+  label: { fontSize: '0.75rem', lineHeight: '0.875rem', fontWeight: 700, letterSpacing: 'normal' },
+  /** `.metric span`, `.item-copy small`, `.quick-card small` — 9px / 400. */
+  caption: {
+    fontSize: '0.5625rem',
+    lineHeight: '0.75rem',
+    fontWeight: 400,
+    letterSpacing: 'normal',
+  },
+  /**
+   * The demo's 8px tier: `.social-preview header small`, `.calendar-post b`,
+   * `.status`, `.weekday`, `.table-row.header`, `.toggle-row small`. Small
+   * enough that it is only ever used for secondary metadata, and only against
+   * a colour that clears AA — `textMuted`, never `textSubtle`.
+   */
+  micro: { fontSize: '0.5rem', lineHeight: '0.6875rem', fontWeight: 400, letterSpacing: 'normal' },
+  /**
+   * `.eyebrow`, `.section-kicker`, `.nav-group-title` — 9px, weight 800,
+   * letter-spacing .08em, uppercase.
+   */
+  overline: {
+    fontSize: '0.5625rem',
+    lineHeight: '0.625rem',
+    fontWeight: 800,
+    letterSpacing: '0.08em',
+  },
+  /** `.metric strong` — 30px / 700 / -.05em. */
+  numeric: {
+    fontSize: '1.875rem',
+    lineHeight: '2.125rem',
+    fontWeight: 700,
+    letterSpacing: '-0.05em',
+  },
+  /**
+   * `.primary-button, .dark-button, .ghost-button, .soft-button` — 10px / 800.
+   * The demo's buttons are small and heavy; that pairing is deliberate and is
+   * what keeps a 40px control from reading as an enterprise form field.
+   */
+  button: {
+    fontSize: '0.625rem',
+    lineHeight: '0.875rem',
+    fontWeight: 800,
+    letterSpacing: 'normal',
+  },
+  /** `.nav-item` — 11px / 650. */
+  navLabel: {
+    fontSize: '0.6875rem',
+    lineHeight: '1rem',
     fontWeight: 650,
     letterSpacing: 'normal',
   },
-  /** `.metric > span`: 12px / 400. The reference sets no weight on a caption. */
-  caption: { fontSize: '0.75rem', lineHeight: '1.15rem', fontWeight: 400, letterSpacing: 'normal' },
-  /**
-   * The eyebrow/kicker above a title.
-   *
-   * `.eyebrow` and `.section-kicker`, measured: 10px, weight 800, tracking
-   * 1.1px (0.11em), uppercase, leading 11px.
-   *
-   * The size was held at 11px in the first demo alignment and the fidelity pass
-   * restored the reference's 10px: no accessibility rule sets a minimum font
-   * size, so that exception was not carrying its weight. The exception that IS
-   * necessary is kept — the reference's own `#707077` fails AA on its own
-   * ground, so this sits on `textMuted` instead.
-   */
-  overline: {
-    fontSize: '0.625rem',
-    lineHeight: '0.6875rem',
-    fontWeight: 800,
-    letterSpacing: '0.11em',
-  },
-  /** `.metric strong`: 32px / 700 / -1.28px (-0.04em). */
-  numeric: {
-    fontSize: '2rem',
-    lineHeight: '2.375rem',
-    fontWeight: 700,
-    letterSpacing: '-0.04em',
-  },
+  /** `.brand` — 16px / 850. A wordmark, not a heading. */
+  wordmark: { fontSize: '1rem', lineHeight: '1.125rem', fontWeight: 850, letterSpacing: 'normal' },
 } as const;
 
 export type TypographyToken = keyof typeof typographyTokens;
@@ -344,17 +419,29 @@ export type TypographyToken = keyof typeof typographyTokens;
  * a scrim.
  */
 export const shadowTokens = {
-  /** The application shell itself, floating over the ambient ground. */
+  /** `.auth-card` — `0 24px 70px rgba(44,25,82,.12)`. Violet-tinted, not grey. */
+  authCard: '0 24px 70px rgba(44, 25, 82, 0.12)',
+  /** `--shadow` — the application shell. */
   shell: '0 24px 70px rgba(20, 16, 35, 0.1)',
-  /** The default surface lift. Felt, not seen. */
-  card: '0 12px 40px rgba(0, 0, 0, 0.05)',
-  /** A small statistic surface — lighter still, because there are four in a row. */
-  metric: '0 8px 30px rgba(0, 0, 0, 0.045)',
-  /** Hover, and a surface that must sit above its neighbours. */
-  raised: '0 18px 42px rgba(0, 0, 0, 0.1)',
-  /** Drawers and dialogs, which float above a scrim. */
-  overlay: '0 30px 80px rgba(0, 0, 0, 0.2)',
-  /** The purple glow under the single accent call to action. */
+  /** `--soft-shadow` — the hero and every surface card. */
+  card: '0 12px 35px rgba(16, 14, 28, 0.06)',
+  /** `.metric` — lighter still, because four sit in a row. */
+  metric: '0 8px 25px rgba(0, 0, 0, 0.035)',
+  /** `.experience-current` — the rail's identity card. */
+  rail: '0 7px 20px rgba(0, 0, 0, 0.035)',
+  /** `.nav-item.active` — the ink pill lifts off the rail. */
+  navActive: '0 8px 18px rgba(17, 17, 20, 0.15)',
+  /** `.float-card` — the hero's floating cards, tinted violet. */
+  float: '0 18px 45px rgba(73, 48, 112, 0.12)',
+  /** `.segmented button.selected` — a selected segment on a soft track. */
+  raised: '0 5px 14px rgba(0, 0, 0, 0.05)',
+  /** `.experience-menu`, drawers and dialogs. */
+  overlay: '0 22px 55px rgba(0, 0, 0, 0.16)',
+  /** `.side-drawer` — `0 30px 80px rgba(0,0,0,.2)`. Deeper than a menu's. */
+  drawer: '0 30px 80px rgba(0, 0, 0, 0.2)',
+  /** `.command-dialog` — `0 35px 90px rgba(0,0,0,.24)`. The deepest in the system. */
+  commandDialog: '0 35px 90px rgba(0, 0, 0, 0.24)',
+  /** A brand-tinted glow. Used sparingly; the demo has no purple glow. */
   brandGlow: '0 10px 24px rgba(121, 53, 254, 0.2)',
   /** The focus ring, as a shadow, for controls that cannot use `outline`. */
   focus: `0 0 0 2px ${colorTokens.focusRingContrast}, 0 0 0 4px ${colorTokens.focusRing}`,
@@ -374,21 +461,35 @@ export const shadowTokens = {
  * as colour does, and it costs nothing.
  */
 export const radiusTokens = {
-  xs: '0.375rem',
-  /** `.brand-mark`, 10px. */
-  sm: '0.625rem',
-  /** `.workspace-switcher` / `.profile-button`, 15px. */
-  rail: '0.9375rem',
-  /** Controls: inputs, buttons, chips, nav items. 13px in the reference. */
-  md: '0.8125rem',
-  /** Statistics, small surfaces, media wells. `--radius-md`, 18px. */
-  lg: '1.125rem',
-  /** Post cards and tiles. 22px. */
-  xl: '1.375rem',
-  /** Large surfaces, hero areas and drawers. `--radius-lg`, 28px. */
-  '2xl': '1.75rem',
-  /** The application shell itself. 32px. */
-  '3xl': '2rem',
+  /** `.search-button kbd`, 5px. */
+  xs: '0.3125rem',
+  /** `.nav-item:hover::after` tooltip, 8px. */
+  sm: '0.5rem',
+  /** Controls: `.filter-row button`, `.segmented button`, 10px. */
+  md: '0.625rem',
+  /** `.search-field`, 11px; `.brand-mark`, 11px. */
+  lg: '0.6875rem',
+  /**
+   * THE DEMO'S DEFAULT CONTROL RADIUS, 12px. `.icon-button`, `.nav-item`,
+   * `.primary-button`, `.dark-button`, `.search-button`, `.experience-icon`,
+   * `.profile-avatar` — almost everything a finger touches.
+   */
+  control: '0.75rem',
+  /** `.segmented`, `.tabs` container, 13px; `.thumb`, 13px. */
+  xl: '0.8125rem',
+  /** `.experience-current`, `.profile-button`, `.quick-card`, 16px. */
+  rail: '1rem',
+  /** `.surface-card`, 18px. */
+  '2xl': '1.125rem',
+  /** `.float-card`, `.metric`, 20px. */
+  card: '1.25rem',
+  /** `.hero-card`, 28px. */
+  '3xl': '1.75rem',
+  /** `.studio { border-radius: 25px }` — the editor surface, one step under the shell. */
+  studio: '1.5625rem',
+  /** `.app-shell`, 34px. */
+  shell: '2.125rem',
+  /** `.label-pill`, `.status`, `.nav-badge`, 99px. */
   full: '9999px',
 } as const;
 
@@ -455,63 +556,112 @@ export const zIndexTokens = {
  * the ambient ground rather than filling the window.
  */
 export const layoutTokens = {
-  /** `grid-template-columns: 250px minmax(0, 1fr)` in the reference. */
-  sidebarExpanded: '15.625rem',
-  /** The collapsed rail. 78px — wide enough for a 44px target, centred. */
+  /* ---------------------------------------------------------------------- */
+  /* MEASURED FROM THE FULL DEMO at the pinned commit, in Chromium, at        */
+  /* 1440x900. Named here so no page invents an approximation (§37).          */
+  /* ---------------------------------------------------------------------- */
+
+  /** `--sidebar: 248px`. */
+  sidebarExpanded: '15.5rem',
+  /** `.app-shell.sidebar-collapsed { grid-template-columns: 78px … }`. */
   sidebarCollapsed: '4.875rem',
-  /** `min-height: 92px` on the reference top bar. Generous on purpose. */
-  headerHeight: '5.75rem',
-  /** The gap between the shell and the window edge, on all four sides. */
+  /** `.topbar { min-height: 88px }`. */
+  headerHeight: '5.5rem',
+  /** `.app-shell { margin: 20px auto }`. */
   shellInset: '1.25rem',
-
-  /* --------------------------------------------------------------------- */
-  /* MEASURED FROM THE RENDERED REFERENCE, not read off its stylesheet.     */
-  /*                                                                        */
-  /* The fidelity pass put the demo in a browser at 1440x900 beside the     */
-  /* product and compared boxes, because a stylesheet tells you what an     */
-  /* author typed and a bounding box tells you what a reader sees. These    */
-  /* are the numbers that came back, named once here so no page invents an  */
-  /* approximation of them (§17).                                           */
-  /* --------------------------------------------------------------------- */
-
-  /** `.sidebar { padding: 20px 14px }`. */
+  /** `.app-shell { width: min(1540px, calc(100% - 40px)) }`. */
+  shellMaxWidth: '96.25rem',
+  /** `.sidebar { padding: 18px 14px 14px }`. */
   railPadInline: '0.875rem',
-  railPadBlock: '1.25rem',
-  /** `.sidebar-top { height: 42px; margin: 0 3px 18px }`. */
-  railTopHeight: '2.625rem',
-  /** `.nav-list { gap: 5px; margin-top: 18px }`. */
-  navGap: '0.3125rem',
-  /** `.nav-item { padding: 0 12px; gap: 12px }`. */
-  navItemPadInline: '0.75rem',
-  navItemGap: '0.75rem',
-  /** `.workspace-switcher`, `.profile-button` — 54px tall, 10px padding. */
-  railCardHeight: '3.375rem',
+  railPadBlockStart: '1.125rem',
+  railPadBlockEnd: '0.875rem',
+  /** `.sidebar-top { height: 54px; padding: 0 5px }`. */
+  railTopHeight: '3.375rem',
+  railTopPadInline: '0.3125rem',
+  /** `.sidebar-collapsed .sidebar-top { height: 90px; gap: 8px }`. */
+  railTopHeightCollapsed: '5.625rem',
+  /** `.nav-group { margin-bottom: 17px }`. */
+  navGroupGap: '1.0625rem',
+  /** `.nav-group-title { padding: 0 12px 7px }`. */
+  navGroupTitlePad: '0 0.75rem 0.4375rem',
+  /** `.nav-item { height: 39px; padding: 0 11px; gap: 11px }`. */
+  navItemHeight: '2.4375rem',
+  navItemPadInline: '0.6875rem',
+  navItemGap: '0.6875rem',
+  /** `.nav-icon { width: 20px; font-size: 14px }`. */
+  navIconSlot: '1.25rem',
+  navIconGlyph: '0.875rem',
+  /** `.experience-current`, `.profile-button` — 38px identity block. */
+  railAvatar: '2.375rem',
   railCardPad: '0.625rem',
-  /** The avatar column in a rail card. */
-  railAvatar: '2.125rem',
-  /** `.main-panel { padding: 0 28px 34px }`. */
+  railCardPadTight: '0.5rem',
+  railCardGap: '0.5625rem',
+  /** `.main-panel { padding: 0 28px 36px }`. */
   panelPadInline: '1.75rem',
-  panelPadBlockEnd: '2.125rem',
-  /** `.topbar { gap: 20px }`. */
-  topbarGap: '1.25rem',
-  /** `.dashboard-grid`, `.metric-row` and `.section-head` all use 18px. */
-  sectionGap: '1.125rem',
-  /** `.icon-button` — 40px square, 13px radius. */
-  iconButton: '2.5rem',
-  /** `.metric { padding: 20px }` — between the `md` and `lg` spacing steps. */
+  panelPadBlockEnd: '2.25rem' /* `.main-panel { padding: 0 28px 36px }`. */,
+  /** `.topbar { gap: 16px }`, `.topbar-actions { gap: 7px }`. */
+  topbarGap: '1rem',
+  topbarActionGap: '0.4375rem',
+  /** `.icon-button` — 38px square. */
+  iconButton: '2.375rem',
+  /** `.search-button { width: 230px; height: 38px }`. */
+  searchWidth: '14.375rem',
+  /** `.social-preview .avatar` — 34px, round. */
+  previewAvatar: '2.125rem',
+  /**
+   * The composer's preview column — `.composer { grid-template-columns:
+   * minmax(350px,1fr) 340px 300px }`. The post preview is drawn at 340px and
+   * does not widen, because that is the width its composition was drawn at.
+   */
+  socialPreviewWidth: '21.25rem',
+  /** `.studio { min-height: 660px }`. */
+  studioMinHeight: '41.25rem',
+  /** `.composer` middle column, the live preview panel. */
+  composerPreviewColumn: '21.25rem',
+  /** `.composer` trailing column, the Copilot panel. */
+  composerCopilotColumn: '18.75rem',
+  /** `.studio { grid-template-columns: 84px 240px 1fr 230px }`. */
+  studioToolRailWidth: '5.25rem',
+  studioAssetsWidth: '15rem',
+  studioPropsWidth: '14.375rem',
+  /** `.settings-grid { grid-template-columns: 220px 1fr }`. */
+  settingsNavWidth: '13.75rem',
+  /** `.side-drawer { width: min(430px, calc(100vw - 40px)) }`. */
+  drawerWidth: '26.875rem',
+  /** `.command-dialog { width: min(570px, calc(100% - 30px)) }`. */
+  commandDialogWidth: '35.625rem',
+  /** `.brand-mark { width: 34px; height: 34px; font-size: 15px }`. */
+  brandMark: '2.125rem',
+  brandMarkGlyph: '0.9375rem',
+  /** `.brand { gap: 10px }`. */
+  brandGap: '0.625rem',
+  /** `.hero-card { min-height: 330px }`, `.hero-copy { padding: 48px }`. */
+  heroMinHeight: '20.625rem',
+  heroPad: '3rem',
+  /** `.metric { padding: 20px }`, `.metric-row { gap: 10px; margin: 14px 0 }`. */
   metricPad: '1.25rem',
-  contentMaxWidth: '88rem',
-  copilotPanelWidth: '24.375rem',
+  metricGap: '0.625rem',
+  metricRowMargin: '0.875rem',
+  /** `.surface-card { padding: 22px }`, `.dashboard-grid { gap: 14px }`. */
+  surfacePad: '1.375rem',
+  sectionGap: '0.875rem',
+  /** `.section-head { margin-bottom: 15px; gap: 15px }`. */
+  sectionHeadGap: '0.9375rem',
+  /** `.view-toolbar { min-height: 74px; margin-bottom: 12px }`. */
+  viewToolbarHeight: '4.625rem',
   /** WCAG 2.2 target size (2.5.8) minimum for a pointer target. */
   minTargetSize: '24px',
   /**
-   * The comfortable control height. 44px — the brief's 44–48px band, and the
-   * size a thumb can hit without aiming. The previous 36px was a desktop-only
-   * assumption.
+   * `.primary-button, .dark-button, … { min-height: 40px }` and
+   * `.compact { min-height: 38px }`. The demo runs TWO control heights and the
+   * difference is deliberate, so both are named rather than averaged.
    */
-  controlHeight: '2.75rem',
-  /** A compact control, for toolbars and table rows. Still 36px. */
-  controlHeightSm: '2.25rem',
+  controlHeight: '2.5rem',
+  controlHeightSm: '2.375rem',
+  /** `.filter-row button, .segmented button { min-height: 36px }`. */
+  controlHeightXs: '2.25rem',
+  contentMaxWidth: '96.25rem',
+  copilotPanelWidth: '18.75rem',
 } as const;
 
 /**
@@ -528,22 +678,33 @@ export const layoutTokens = {
  * Nothing here ever sits behind text. The shell is opaque above it.
  */
 export const ambientTokens = {
-  /** The page ground the shell floats on. */
-  ground: colorTokens.appBackground,
-  /** Inline-start, top. The dominant one. */
+  /*
+   * `.ambient { background: #f3f3f3 }` with three 56vw orbs at
+   * `filter: blur(100px)`:
+   *   `.orb-purple { left: -18vw; top: -28vw; opacity: .38 }`
+   *   `.orb-yellow { right: -20vw; bottom: -29vw; opacity: .38; delay -7s }`
+   *   `.orb-mix    { right: 12vw;  top: 25vh;   opacity: .22; delay -11s }`
+   * drifting `translate(5vw, 4vh) scale(1.08)` over 16s.
+   *
+   * The third orb sits INSIDE the viewport at 25vh, not off the top corner —
+   * it is what puts warm pink light behind the middle of the shell, and it is
+   * only visible at all because the shell is translucent.
+   */
+  ground: '#F3F3F3',
   purple: colorTokens.brandPurple,
   purpleOpacity: 0.38,
-  /** Inline-end, bottom. */
+  purpleInsetInline: '-18vw',
+  purpleInsetBlock: '-28vw',
   yellow: colorTokens.brandYellow,
   yellowOpacity: 0.38,
-  /** The smaller third orb, where the two meet. */
+  yellowInsetInline: '-20vw',
+  yellowInsetBlock: '-29vw',
   blush: '#FF99B9',
-  blushOpacity: 0.24,
-  /** Large enough that no edge of an orb is ever visible. */
+  blushOpacity: 0.22,
+  blushInsetInline: '12vw',
+  blushInsetBlock: '25vh',
   size: '56vw',
-  sizeSmall: '30vw',
   blur: '100px',
-  /** A very slow drift. Neutralised entirely by `prefers-reduced-motion`. */
   driftDuration: '16s',
 } as const;
 
@@ -557,7 +718,21 @@ export const ambientTokens = {
  */
 export const gradientTokens = {
   /** The Overview hero. Yellow → white → purple, all under 35% opacity. */
-  hero: 'linear-gradient(120deg, rgba(255, 221, 21, 0.35), rgba(255, 255, 255, 0.65) 42%, rgba(121, 53, 254, 0.34))',
+  hero:
+    'radial-gradient(circle at 72% 28%, rgba(255, 153, 185, 0.55), transparent 30%),' +
+    ' radial-gradient(circle at 28% 80%, rgba(255, 221, 21, 0.52), transparent 35%),' +
+    ' linear-gradient(135deg, #F7F3FF, #FFF)',
+  /**
+   * `.auth-stage` — the entry screens' ground. An OPAQUE base under two soft
+   * washes, which is the reason it exists rather than letting the ambient orbs
+   * show through: a translucent stage put the "forgot password" link on a
+   * yellow blend at 4.12:1 (axe `color-contrast`, serious). The demo has the
+   * same opaque stage.
+   */
+  authStage:
+    'radial-gradient(circle at 72% 25%, rgba(255, 153, 185, 0.42), transparent 27%),' +
+    ' radial-gradient(circle at 25% 78%, rgba(255, 221, 21, 0.5), transparent 30%),' +
+    ' linear-gradient(145deg, #F8F4FF, #FFF)',
   /** Artwork A — light lavender rising into purple, warmed by yellow. */
   artLight: 'linear-gradient(145deg, #F2E9FF 0%, #B686FF 38%, #7935FE 65%, #FFDD15 135%)',
   /** Artwork B — near-black into purple. Carries white text. */

@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 export default async function PermissionsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { workspace } = await requireWorkspace(locale);
+  const { customer, workspace } = await requireWorkspace(locale);
 
   const workspacePermissions = ALL_PERMISSIONS.filter((p) => p.minScope !== 'platform');
 
@@ -32,6 +32,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
       heading={t('perms.title')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       <CustomerCard testId="permissions-card">

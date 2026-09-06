@@ -169,16 +169,17 @@ export function Toast({
 
 type StateKind = 'empty' | 'no-results' | 'error' | 'forbidden';
 
+/* Sized to the demo's `.empty-box` type, not to an illustration. */
 function stateIcon(kind: StateKind): ReactNode {
   switch (kind) {
     case 'no-results':
-      return <SearchIcon size={22} />;
+      return <SearchIcon size={16} />;
     case 'error':
-      return <AlertIcon size={22} />;
+      return <AlertIcon size={16} />;
     case 'forbidden':
-      return <LockIcon size={22} />;
+      return <LockIcon size={16} />;
     case 'empty':
-      return <EmptyBoxIcon size={22} />;
+      return <EmptyBoxIcon size={16} />;
   }
 }
 
@@ -224,39 +225,48 @@ export function StateMessage({
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
-        gap: spacingTokens.sm,
-        paddingBlock: spacingTokens.xl,
-        paddingInline: spacingTokens.md,
+        gap: spacingTokens.xs,
         /*
-         * NO SURFACE OF ITS OWN (D-59). It used to be a soft filled well, and
-         * inside a card that produced exactly the nested card §3 of the brief
-         * forbids: a grey rounded rectangle sitting inside a white rounded
-         * rectangle, two boxes deep, on a page whose whole direction is that
-         * boxes are not how structure is expressed.
+         * `.empty-box { padding: 30px; border-radius: 15px; background:
+         *  var(--soft); text-align: center; color: var(--muted);
+         *  font-size: 9px }` — the demo has its own component for this, and it
+         * is SMALL AND QUIET. What stood here was a 44px icon tile above an
+         * 18px heading: a full illustrated empty state, three type steps above
+         * the rows it stands in for, which made "nothing scheduled" the
+         * loudest thing on the Overview.
          *
-         * An empty state is quiet because of its space, its centring and its
-         * muted type — it does not need a container to be one.
+         * The muted fill is not the nested card D-59 rules out — it is a
+         * placeholder standing in for content, not a surface expressing
+         * structure, and the demo draws it exactly this way.
          */
-        color: colorTokens.textSecondary,
+        padding: spacingTokens.lg,
+        borderRadius: radiusTokens['2xl'],
+        background: kind === 'error' ? colorTokens.dangerTint : colorTokens.surfaceMuted,
+        color: colorTokens.textMuted,
       }}
     >
       <span
+        aria-hidden="true"
         style={{
           display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          inlineSize: '2.75rem',
-          blockSize: '2.75rem',
-          borderRadius: radiusTokens.lg,
-          background: kind === 'error' ? colorTokens.dangerTint : colorTokens.surfaceLavenderStrong,
-          color: kind === 'error' ? colorTokens.danger : colorTokens.brandPurplePressed,
+          color: kind === 'error' ? colorTokens.danger : colorTokens.textMuted,
         }}
       >
         {stateIcon(kind)}
       </span>
-      <span style={{ ...typographyTokens.h3, color: colorTokens.textPrimary }}>{title}</span>
+      <span
+        style={{
+          ...typographyTokens.caption,
+          fontWeight: 700,
+          color: kind === 'error' ? colorTokens.danger : colorTokens.textPrimary,
+        }}
+      >
+        {title}
+      </span>
       {description ? (
-        <span style={{ ...typographyTokens.bodySm, maxInlineSize: '44ch' }}>{description}</span>
+        <span style={{ ...typographyTokens.caption, lineHeight: 1.5, maxInlineSize: '44ch' }}>
+          {description}
+        </span>
       ) : null}
       {action ? <span style={{ marginBlockStart: spacingTokens.xs }}>{action}</span> : null}
     </div>

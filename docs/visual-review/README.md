@@ -1,13 +1,53 @@
-# Visual review — Phase 2C-A (aligned to the approved demo)
+# Visual review — Phase 2C-A (aligned to the full demo)
 
-Evidence for the visual-direction approval. Every image here is produced by
-`tests/e2e/design-system.screenshots.spec.ts` against **freshly built applications** and the
-throwaway estate `pnpm e2e:seed` creates, never by hand:
+Evidence for the visual-direction approval, in two halves:
+
+- **`reference/`** — the DEMO, captured screen by screen from
+  `docs/visual-reference/full-demo/`, which is the visual authority (D-60).
+  Produced by `tests/e2e/demo-reference.screenshots.spec.ts`.
+- **everything else** — the PRODUCT, captured from freshly built applications
+  against the throwaway estate `pnpm e2e:seed` creates. Produced by
+  `tests/e2e/design-system.screenshots.spec.ts`.
+
+Both halves are captured at 1440×900 in the same browser, so a fidelity review
+compares two images rather than an image against a memory of one. Nothing here
+is produced by hand.
 
 ```
 pnpm e2e:build
+
+# the demo half needs the vendored demo served locally; without it that one
+# capture skips and the product half still runs
+python3 -m http.server 8900 --directory docs/visual-reference/full-demo &
+
 pnpm e2e:screenshots
 ```
+
+| Product capture                        | Its reference                            |
+| -------------------------------------- | ---------------------------------------- |
+| `01-customer-dashboard-desktop-en`     | `reference/customer-overview-en`         |
+| `02-customer-dashboard-desktop-ar-rtl` | `reference/customer-overview-ar`         |
+| `28-calendar-month-desktop`            | `reference/customer-calendar-en`         |
+| `31-calendar-month-ar-rtl`             | `reference/customer-calendar-ar`         |
+| `32-posts-library-all`                 | `reference/customer-posts-en`            |
+| `36-composer-desktop`                  | `reference/customer-composer-en`         |
+| `37-composer-ar-rtl`                   | `reference/customer-composer-ar`         |
+| `39-design-studio-desktop`             | `reference/customer-studio-en`           |
+| `05-customer-team-desktop`             | `reference/customer-team-en`             |
+| `60-customer-permissions`              | `reference/customer-roles-en`            |
+| `61-customer-plan`                     | `reference/customer-plan-en`             |
+| `62-customer-settings`                 | `reference/customer-settings-en`         |
+| `09-customer-sign-in-en`               | `reference/customer-customer-signin-en`  |
+| `63-customer-workspaces`               | `reference/customer-workspace-picker-en` |
+| `14-admin-overview`                    | `reference/admin-admin-overview-en`      |
+| `15-admin-workspaces-directory`        | `reference/admin-workspaces-en`          |
+| `16-admin-workspace-detail-*`          | `reference/admin-workspace-detail-en`    |
+| `53-admin-plans`                       | `reference/admin-plans-en`               |
+| `54-admin-providers`                   | `reference/admin-providers-en`           |
+
+Where a product screen has no reference row, the demo has no equivalent screen
+(the two mobile breakpoints, the Copilot states, the component gallery) or the
+route belongs to a phase the demo draws but this one does not implement.
 
 Nothing in these images is a credential or a customer: the accounts are the disposable
 `@brandspace.test` ones the seed generates and discards, and every value on the design showcase is a

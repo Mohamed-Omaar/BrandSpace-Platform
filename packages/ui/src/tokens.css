@@ -32,7 +32,7 @@
   --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
-  --bs-surface-soft: #f9f9fa;
+  --bs-surface-soft: #f8f8f9;
   --bs-surface-warm: #f7f6f4;
   --bs-surface-lavender: #f8f5ff;
   --bs-surface-lavender-strong: #f0e9ff;
@@ -58,8 +58,9 @@
   --bs-border-strong: #818c9c;
 
   --bs-text-primary: #111114;
-  --bs-text-secondary: #5b5b62;
-  --bs-text-muted: #6a6a71;
+  --bs-text-secondary: #4d4c53;
+  --bs-text-muted: #6a6a72;
+  --bs-text-subtle: #717178;
   --bs-text-inverse: #ffffff;
 
   /* INK — the approved demo's workhorse primary. Black carries almost every
@@ -70,17 +71,18 @@
 
   /* The floating application shell, resolved over the ambient ground. */
   --bs-shell-surface: #fcfcfc;
-  --bs-shell-sidebar: #f9f9fa;
-  --bs-shell-panel: #fdfdfd;
+  --bs-shell-sidebar: #f8f8f9;
+  --bs-shell-panel: transparent;
+  --bs-ambient-ground: #f3f3f3;
 
-  --bs-danger: #b42318;
-  --bs-danger-tint: #fef3f2;
+  --bs-danger: #b83245;
+  --bs-danger-tint: #fdecef;
   --bs-danger-border: #fda29b;
-  --bs-warning: #b54708;
-  --bs-warning-tint: #fffaeb;
+  --bs-warning: #875f00;
+  --bs-warning-tint: #fff6d3;
   --bs-warning-border: #fec84b;
-  --bs-success: #067647;
-  --bs-success-tint: #ecfdf3;
+  --bs-success: #16794b;
+  --bs-success-tint: #e8f8ef;
   --bs-success-border: #6ce9a6;
   --bs-info: #175cd3;
   --bs-info-tint: #eff8ff;
@@ -92,10 +94,12 @@
   /* Wide, far and very low in opacity — that is what lets a surface carry no
      border and still read as a separate plane. */
   --bs-shadow-shell: 0 24px 70px rgba(20, 16, 35, 0.1);
-  --bs-shadow-card: 0 12px 40px rgba(0, 0, 0, 0.05);
-  --bs-shadow-metric: 0 8px 30px rgba(0, 0, 0, 0.045);
-  --bs-shadow-raised: 0 18px 42px rgba(0, 0, 0, 0.1);
-  --bs-shadow-overlay: 0 30px 80px rgba(0, 0, 0, 0.2);
+  --bs-shadow-card: 0 12px 35px rgba(16, 14, 28, 0.06);
+  --bs-shadow-metric: 0 8px 25px rgba(0, 0, 0, 0.035);
+  --bs-shadow-rail: 0 7px 20px rgba(0, 0, 0, 0.035);
+  --bs-shadow-nav-active: 0 8px 18px rgba(17, 17, 20, 0.15);
+  --bs-shadow-raised: 0 5px 14px rgba(0, 0, 0, 0.05);
+  --bs-shadow-overlay: 0 22px 55px rgba(0, 0, 0, 0.16);
   --bs-shadow-brand-glow: 0 10px 24px rgba(121, 53, 254, 0.2);
 
   --bs-space-3xs: 0.125rem;
@@ -108,14 +112,17 @@
   --bs-space-2xl: 3rem;
   --bs-space-3xl: 4rem;
 
-  --bs-radius-xs: 0.375rem;
-  --bs-radius-sm: 0.625rem;
-  --bs-radius-rail: 0.9375rem;
-  --bs-radius-md: 0.8125rem;
-  --bs-radius-lg: 1.125rem;
-  --bs-radius-xl: 1.375rem;
-  --bs-radius-2xl: 1.75rem;
-  --bs-radius-3xl: 2rem;
+  --bs-radius-xs: 0.3125rem;
+  --bs-radius-sm: 0.5rem;
+  --bs-radius-md: 0.625rem;
+  --bs-radius-lg: 0.6875rem;
+  --bs-radius-control: 0.75rem;
+  --bs-radius-xl: 0.8125rem;
+  --bs-radius-rail: 1rem;
+  --bs-radius-2xl: 1.125rem;
+  --bs-radius-card: 1.25rem;
+  --bs-radius-3xl: 1.75rem;
+  --bs-radius-shell: 2.125rem;
   --bs-radius-full: 9999px;
 
   --bs-duration-instant: 80ms;
@@ -133,15 +140,16 @@
   --bs-z-tooltip: 80;
   --bs-z-skip-link: 100;
 
-  --bs-sidebar-expanded: 15.625rem;
+  --bs-sidebar-expanded: 15.5rem;
   --bs-sidebar-collapsed: 4.875rem;
-  --bs-header-height: 5.75rem;
+  --bs-header-height: 5.5rem;
+  --bs-shell-max-width: 96.25rem;
   --bs-shell-inset: 1.25rem;
   --bs-rail-pad-inline: 0.875rem;
   --bs-rail-pad-block: 1.25rem;
   --bs-panel-pad-inline: 1.75rem;
-  --bs-panel-pad-block-end: 2.125rem;
-  --bs-section-gap: 1.125rem;
+  --bs-panel-pad-block-end: 2.25rem;
+  --bs-section-gap: 0.875rem;
 
   /* The ambient orbs. Full-saturation brand colour appears ONLY here, at 24–38%
      opacity behind a 100px blur, where it reads as light rather than as a
@@ -149,7 +157,6 @@
   --bs-ambient-blush: #ff99b9;
   --bs-ambient-blur: 100px;
   --bs-ambient-size: 56vw;
-  --bs-ambient-size-sm: 30vw;
   --bs-ambient-drift: 16s;
 
   --bs-gradient-hero: linear-gradient(
@@ -193,9 +200,24 @@ body {
    */
   background: var(--bs-app-background);
   color: var(--bs-text-primary);
-  font-size: 1rem;
+  /*
+   * `body { font-size: 15px }`. The ROOT stays at the browser's 16px, so every
+   * rem token still resolves to the size it was measured at; this sets only the
+   * inherited size for text that names none of its own, which the demo puts a
+   * step below the browser default.
+   */
+  font-size: 0.9375rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * `html { background: #f2f2f2 }`. The ambient layer paints the same ground, but
+ * it is `position: fixed` and does not extend into overscroll — without this,
+ * pulling past the end of a page shows white behind a grey design.
+ */
+html {
+  background: var(--bs-app-background);
 }
 
 *,
@@ -288,9 +310,11 @@ h4 {
 .bs-ambient {
   position: fixed;
   inset: 0;
-  z-index: -2;
+  /* `.ambient { z-index: -1 }` — behind the translucent shell, not behind
+     the page background. */
+  z-index: -1;
   overflow: hidden;
-  background: var(--bs-app-background);
+  background: var(--bs-ambient-ground);
   pointer-events: none;
 }
 
@@ -307,12 +331,23 @@ h4 {
     transform: translate3d(0, 0, 0) scale(1);
   }
   to {
-    transform: translate3d(3vw, 4vw, 0) scale(1.08);
+    /* `@keyframes float { to { transform: translate(5vw,4vh) scale(1.08) } }`. */
+    transform: translate3d(5vw, 4vh, 0) scale(1.08);
   }
 }
 
 /*
  * The shell.
+ *
+ * `.app-shell { width: min(1540px, calc(100% - 40px)); min-height: calc(100vh
+ *  - 40px); margin: 20px auto; grid-template-columns: 248px minmax(0,1fr);
+ *  background: rgba(255,255,255,.78); backdrop-filter: blur(24px);
+ *  border-radius: 34px; box-shadow: var(--shadow); overflow: hidden }`
+ *
+ * The translucency and the 24px backdrop blur are the point: the ambient orbs
+ * are meant to be VISIBLE THROUGH the shell, softened. An opaque shell over the
+ * same orbs is a different picture entirely, and it was the single largest
+ * difference between the product and the full demo.
  *
  * A phone gets the full window — an inset frame on a 390px screen wastes 40px
  * of the only dimension that is scarce, and the rounded corner is invisible
@@ -326,30 +361,49 @@ h4 {
   margin: 0;
   background: var(--bs-shell-surface);
   border-radius: 0;
+  overflow: hidden;
 }
 
 @media (min-width: 768px) {
   .bs-shell {
     grid-template-columns: var(--bs-shell-sidebar-width, var(--bs-sidebar-expanded)) minmax(0, 1fr);
-    inline-size: calc(100% - var(--bs-shell-inset) * 2);
+    inline-size: min(var(--bs-shell-max-width), calc(100% - var(--bs-shell-inset) * 2));
     min-block-size: calc(100vh - var(--bs-shell-inset) * 2);
-    margin: var(--bs-shell-inset);
-    border-radius: var(--bs-radius-3xl);
+    margin: var(--bs-shell-inset) auto;
+    border-radius: var(--bs-radius-shell);
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(24px);
     box-shadow: var(--bs-shadow-shell);
     transition: grid-template-columns var(--bs-duration-slow) var(--bs-ease-out);
   }
+
+  /*
+   * The rail and the panel each own a viewport-height scroll region, as the
+   * demo does (`height: calc(100vh - 40px); overflow: auto`). The shell frame
+   * itself never scrolls, which is what keeps its rounded corners and its
+   * shadow fixed while a long page moves underneath them.
+   */
+  .bs-shell > .bs-sidebar {
+    block-size: calc(100vh - var(--bs-shell-inset) * 2);
+    position: sticky;
+    inset-block-start: var(--bs-shell-inset);
+  }
+
+  .bs-shell > .bs-panel {
+    block-size: calc(100vh - var(--bs-shell-inset) * 2);
+    overflow: auto;
+  }
 }
 
-/* The sidebar takes the shell's inline-start corners, so the rounded frame
-   survives without `overflow: hidden` — which would break the sticky rail. */
-.bs-shell > .bs-sidebar {
-  border-start-start-radius: inherit;
-  border-end-start-radius: inherit;
-}
-
-.bs-shell > .bs-panel {
-  border-start-end-radius: inherit;
-  border-end-end-radius: inherit;
+/*
+ * `.topbar` is sticky inside the panel's own scroll region, with a gradient
+ * that fades the content out beneath it rather than a hard edge or a border.
+ */
+.bs-topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--bs-z-sticky);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.96) 70%, rgba(255, 255, 255, 0));
 }
 
 /*
@@ -431,6 +485,24 @@ h4 {
 @media (min-width: 768px) {
   .bs-wide-only-inline {
     display: inline-block;
+  }
+}
+
+/*
+ * The top bar's search control — same visibility rule, but a FLEX ROW.
+ *
+ * `.search-button { display: flex; gap: 8px }` with a `kbd` pushed to the
+ * trailing edge. Under `.bs-wide-only-inline` it was `inline-block`, so the
+ * gap, the `flex: 1` on the label and the chip's position all did nothing and
+ * the shortcut ran straight on after the placeholder.
+ */
+.bs-search-button {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .bs-search-button {
+    display: inline-flex;
   }
 }
 
@@ -601,26 +673,49 @@ h4 {
 }
 
 /*
- * Design Studio layout.
+ * DESIGN STUDIO LAYOUT — `.studio`, written mobile-first.
  *
- * On a narrow screen the tool rail is a horizontal scroller above a stacked
- * canvas and properties panel — a phone cannot usefully show three columns, and
- * squeezing them is the failure the brief calls out. From the tablet breakpoint
- * the rail becomes a vertical column and the canvas sits beside the properties.
+ *   demo: `grid-template-columns: 84px 240px 1fr 230px`
+ *   <= 1200px: `75px 200px 1fr`, `.studio-props { display: none }`
+ *   <=  640px: `62px 1fr`, assets AND properties hidden, `min-height: 620px`
+ *
+ * On a phone the tool rail is a horizontal scroller above the canvas, because
+ * a 62px vertical column of labelled tools does not fit beside anything.
  */
-@media (min-width: 768px) {
+.bs-studio-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bs-studio-shell > [data-testid='studio-assets'],
+.bs-studio-shell > [data-testid='studio-properties'] {
+  display: none;
+}
+
+@media (min-width: 641px) {
   .bs-studio-shell {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
+    /* 75px tools, 200px assets, canvas. Properties still hidden. */
+    grid-template-columns: 4.6875rem 12.5rem minmax(0, 1fr);
+  }
+
+  .bs-studio-shell > [data-testid='studio-assets'] {
+    display: grid;
   }
 
   .bs-studio-rail {
     flex-direction: column;
     overflow-x: visible;
+    align-content: start;
+  }
+}
+
+@media (min-width: 1201px) {
+  .bs-studio-shell {
+    /* 84px tools, 240px assets, canvas, 230px properties. */
+    grid-template-columns: 5.25rem 15rem minmax(0, 1fr) 14.375rem;
   }
 
-  .bs-studio-body {
-    grid-template-columns: minmax(0, 1fr) 18rem;
+  .bs-studio-shell > [data-testid='studio-properties'] {
+    display: grid;
   }
 }
 
@@ -674,8 +769,9 @@ h4 {
 
 @media (min-width: 1024px) {
   .bs-hero {
-    grid-template-columns: 1.05fr 0.95fr;
-    min-block-size: 19.375rem;
+    /* `.hero-card { grid-template-columns: 1.15fr .85fr; min-height: 330px }`. */
+    grid-template-columns: 1.15fr 0.85fr;
+    min-block-size: 20.625rem;
   }
 
   .bs-hero-orbit {
@@ -699,8 +795,86 @@ h4 {
 
 @media (min-width: 1024px) {
   .bs-split-main {
-    grid-template-columns: 1.45fr 0.8fr;
-    gap: var(--bs-space-lg);
+    /* `.dashboard-grid { grid-template-columns: 1.25fr .75fr; gap: 14px }`. */
+    grid-template-columns: 1.25fr 0.75fr;
+    gap: var(--bs-section-gap);
+  }
+}
+
+/*
+ * `.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }`,
+ * with the demo's own `@media(max-width:640px) { grid-template-columns: 1fr }`.
+ */
+.bs-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+}
+
+@media (min-width: 641px) {
+  .bs-form-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/*
+ * `.settings-grid { grid-template-columns: 220px 1fr; gap: 13px }`.
+ *
+ * One column on a phone, where a 220px nav beside a form leaves neither enough
+ * room — which is what the demo does too (`@media(max-width:900px)`).
+ */
+.bs-settings-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.8125rem;
+  align-items: start;
+}
+
+@media (min-width: 901px) {
+  .bs-settings-split {
+    grid-template-columns: 13.75rem minmax(0, 1fr);
+  }
+}
+
+/*
+ * THE COMPOSER'S THREE COLUMNS.
+ *
+ * `.composer { grid-template-columns: minmax(350px,1fr) 340px 300px; gap: 12px }`
+ * — the editor, the live preview and the Copilot side by side, with the demo's
+ * own three step-downs written mobile-first:
+ *
+ *   > 1200px  editor | preview 340 | copilot 300
+ *   901–1200  editor | preview 330, copilot spans the full row
+ *   641–900   editor | preview 330, copilot spans the full row
+ *   <= 640    one column
+ */
+.bs-composer {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 641px) {
+  .bs-composer {
+    grid-template-columns: minmax(0, 1fr) 20.625rem;
+  }
+
+  .bs-composer-copilot {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 901px) {
+  .bs-composer {
+    grid-template-columns: minmax(21.25rem, 1fr) 20.625rem;
+  }
+}
+
+@media (min-width: 1201px) {
+  .bs-composer {
+    grid-template-columns: minmax(21.875rem, 1fr) 21.25rem 18.75rem;
+  }
+
+  .bs-composer-copilot {
+    grid-column: auto;
   }
 }
 
@@ -724,4 +898,24 @@ h4 {
  */
 [data-sidebar-state='collapsed'] .bs-brand-text {
   display: none;
+}
+
+/*
+ * NAVIGATION ICONS AT THE DEMO'S WEIGHT (§7).
+ *
+ * The full demo draws its rail with light symbolic glyphs at 14px inside a
+ * 20px slot. The product's icon family is a 24x24 grid at stroke 1.75, which
+ * at 20px renders visibly heavier and larger than the demo at the same nav
+ * width — the icon looked like a different product's even where the silhouette
+ * matched.
+ *
+ * Applied here rather than at every call site so one rule governs both
+ * applications' rails, and so the SVGs stay accessible implementations of the
+ * demo's appearance rather than being replaced by literal Unicode characters
+ * whose rendering depends on the reader's installed fonts.
+ */
+.bs-nav-icon > svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.55;
 }
