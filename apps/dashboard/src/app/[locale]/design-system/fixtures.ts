@@ -130,7 +130,7 @@ export function samplePost(locale: string): SocialPostPreviewContent {
     caption: ar ? SAMPLE_CAPTION_AR : SAMPLE_CAPTION_EN,
     captionDirection: ar ? 'rtl' : 'ltr',
     hashtags: ['brandspace', 'contentstrategy', 'socialmedia'],
-    scheduledLabel: ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00',
+    scheduledLabel: ar ? '12 مارس · 9:00 ص' : '12 Mar · 09:00',
     media: {
       kind: 'image',
       alt: ar ? 'صورة المنتج' : 'Product photograph',
@@ -398,8 +398,8 @@ function changePreview(locale: string): readonly CopilotChangePreview[] {
     },
     {
       label: ar ? 'وقت النشر' : 'Publishing time',
-      before: ar ? 'الخميس ٢:٠٠ م' : 'Thursday 14:00',
-      after: ar ? 'الخميس ٩:٠٠ ص' : 'Thursday 09:00',
+      before: ar ? 'الخميس 2:00 م' : 'Thursday 14:00',
+      after: ar ? 'الخميس 9:00 ص' : 'Thursday 09:00',
     },
   ];
 }
@@ -408,7 +408,7 @@ export function sampleProposedAction(locale: string): CopilotProposedAction {
   const ar = locale === 'ar';
   return {
     id: 'a1',
-    title: ar ? 'جدولة المنشور ليوم الخميس ٩:٠٠ ص' : 'Schedule the post for Thursday 09:00',
+    title: ar ? 'جدولة المنشور ليوم الخميس 9:00 ص' : 'Schedule the post for Thursday 09:00',
     description: ar
       ? 'سيُضاف المنشور إلى تقويم النشر لحساب Instagram المرتبط.'
       : 'The post would be added to the publishing calendar for the connected Instagram account.',
@@ -599,7 +599,7 @@ export function postFixtures(locale: string): readonly PostRecord[] {
       accountName: account,
       status: 'SCHEDULED',
       approval: 'APPROVED',
-      whenLabel: ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00',
+      whenLabel: ar ? '12 مارس · 9:00 ص' : '12 Mar · 09:00',
       mediaSeed: 0,
       mediaAlt: alt,
       mediaCount: 3,
@@ -626,14 +626,14 @@ export function postFixtures(locale: string): readonly PostRecord[] {
       accountName: account,
       status: 'PUBLISHED',
       approval: 'NOT_REQUIRED',
-      whenLabel: ar ? '٤ مارس · ١١:٣٠ ص' : '4 Mar · 11:30',
+      whenLabel: ar ? '4 مارس · 11:30 ص' : '4 Mar · 11:30',
       mediaSeed: 2,
       mediaAlt: alt,
     },
     {
       id: 'p4',
       caption: ar
-        ? 'خلف الكواليس: يوم تصوير كامل في ٦٠ ثانية.'
+        ? 'خلف الكواليس: يوم تصوير كامل في 60 ثانية.'
         : 'Behind the scenes: a full shoot day in 60 seconds.',
       captionDirection: dir,
       platforms: ['tiktok', 'instagram'],
@@ -655,7 +655,7 @@ export function postFixtures(locale: string): readonly PostRecord[] {
       accountName: account,
       status: 'FAILED',
       approval: 'CHANGES_REQUESTED',
-      whenLabel: ar ? '٢ مارس · ٤:٠٠ م' : '2 Mar · 16:00',
+      whenLabel: ar ? '2 مارس · 4:00 م' : '2 Mar · 16:00',
       mediaSeed: 5,
       mediaAlt: alt,
     },
@@ -669,7 +669,7 @@ export function postFixtures(locale: string): readonly PostRecord[] {
       accountName: account,
       status: 'SCHEDULED',
       approval: 'NEEDS_APPROVAL',
-      whenLabel: ar ? '١٤ مارس · ١:٠٠ م' : '14 Mar · 13:00',
+      whenLabel: ar ? '14 مارس · 1:00 م' : '14 Mar · 13:00',
       mediaSeed: 3,
       mediaAlt: alt,
       mediaCount: 2,
@@ -684,7 +684,7 @@ export function postFixtures(locale: string): readonly PostRecord[] {
       accountName: account,
       status: 'PUBLISHED',
       approval: 'APPROVED',
-      whenLabel: ar ? '٢٨ فبراير · ١٠:٠٠ ص' : '28 Feb · 10:00',
+      whenLabel: ar ? '28 فبراير · 10:00 ص' : '28 Feb · 10:00',
       mediaSeed: 1,
       mediaAlt: alt,
     },
@@ -743,8 +743,13 @@ export function calendarDays(locale: string): readonly CalendarDay[] {
   const ar = locale === 'ar';
   const posts = postFixtures(locale);
   const monthName = ar ? 'مارس' : 'March';
-  const digits = (n: number) =>
-    ar ? String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)]!) : String(n);
+  /*
+   * WESTERN ARABIC NUMERALS IN ARABIC, per CLAUDE.md §4 — and per the demo,
+   * whose Arabic mode mirrors the layout and keeps `12`, not `١٢`. The fixture
+   * used to transliterate every figure to Eastern Arabic-Indic digits, which
+   * is neither the project's stated default nor what the reference shows.
+   */
+  const digits = (n: number) => String(n);
 
   // Day 1 falls on the fourth weekday cell, so the grid opens with three
   // trailing days from the previous month — the shape a real month has.
@@ -776,7 +781,7 @@ export function calendarDays(locale: string): readonly CalendarDay[] {
 }
 
 export function calendarPeriodLabel(locale: string): string {
-  return locale === 'ar' ? 'مارس ٢٠٢٦' : 'March 2026';
+  return locale === 'ar' ? 'مارس 2026' : 'March 2026';
 }
 
 /* ------------------------------------------------------------------ */

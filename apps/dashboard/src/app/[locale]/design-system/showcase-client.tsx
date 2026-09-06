@@ -298,7 +298,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       tools={sampleTools(locale)}
       context={{
         surface,
-        subject: ar ? 'إطلاق المجموعة — ١٢ مارس' : 'Collection launch — 12 Mar',
+        subject: ar ? 'إطلاق المجموعة — 12 مارس' : 'Collection launch — 12 Mar',
       }}
       attachments={testId ? [ar ? 'دليل-العلامة.pdf' : 'brand-guide.pdf'] : []}
       proposedAction={copilotState === 'approval' ? sampleProposedAction(locale) : undefined}
@@ -579,7 +579,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             navigation: ar ? 'ترقيم الصفحات' : 'Pagination',
             previous: ar ? 'السابق' : 'Previous',
             next: ar ? 'التالي' : 'Next',
-            summary: ar ? 'صفحة ٢ من ٥' : 'Page 2 of 5',
+            summary: ar ? 'صفحة 2 من 5' : 'Page 2 of 5',
           }}
         />
       </Card>
@@ -1063,7 +1063,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             approvers={composerApprovers(locale)}
             initialCaption={editingPost?.caption ?? composerCaption(locale)}
             captionDirection={editingPost?.captionDirection ?? (ar ? 'rtl' : 'ltr')}
-            scheduledLabel={editingPost?.whenLabel ?? (ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00')}
+            scheduledLabel={editingPost?.whenLabel ?? (ar ? '12 مارس · 9:00 ص' : '12 Mar · 09:00')}
             mediaAlt={editingPost?.mediaAlt ?? (ar ? 'عمل فني للمنشور' : 'Composed artwork')}
             mediaSeed={editingPost?.mediaSeed ?? 1}
             copilot={

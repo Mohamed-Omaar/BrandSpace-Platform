@@ -161,7 +161,7 @@ export default async function ConfigurationPage({
           <Field
             label={isArabic ? 'سبب التغيير' : 'Change reason'}
             htmlFor="reason"
-            hint={isArabic ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
+            hint={isArabic ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
           >
             <input
               className="bs-control"

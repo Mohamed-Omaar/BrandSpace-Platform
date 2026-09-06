@@ -130,7 +130,14 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       }
     >
       <Stack>
-        <ContentGrid min="12rem" testId="overview-metrics">
+        {/*
+          `.metric-row { grid-template-columns: repeat(4,1fr) }`, stepping to
+          TWO columns at 900 and staying at two down to 390 — the demo never
+          gives a phone a single column of statistics. A 12rem floor could not
+          fit two inside 366px and collapsed to one, which made the Overview
+          four tall cards deep before the first section.
+        */}
+        <ContentGrid min="10rem" testId="overview-metrics">
           <MetricCard
             label={t('overview.metric.plan')}
             value={effective?.planKey ?? undefined}

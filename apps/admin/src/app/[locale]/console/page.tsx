@@ -140,7 +140,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             </>
           }
         />
-        <ContentGrid min="12rem" testId="overview-stats">
+        <ContentGrid min="10rem" testId="overview-stats">
           {stats.map((stat) => (
             <MetricCard
               key={stat.testid}

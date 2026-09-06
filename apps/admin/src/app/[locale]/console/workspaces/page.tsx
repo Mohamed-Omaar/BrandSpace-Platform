@@ -233,7 +233,7 @@ export default async function WorkspacesPage({
               htmlFor="slug"
               hint={
                 locale === 'ar'
-                  ? '٣ إلى ٥٠ حرفًا صغيرًا أو رقمًا أو شرطة.'
+                  ? '3 إلى 50 حرفًا صغيرًا أو رقمًا أو شرطة.'
                   : '3–50 lower-case letters, digits or hyphens.'
               }
             >

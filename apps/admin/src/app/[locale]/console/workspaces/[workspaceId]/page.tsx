@@ -274,7 +274,7 @@ export default async function WorkspaceDetailPage({
             <Field
               label={t('ws.statusReason')}
               htmlFor="status-reason"
-              hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
+              hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
             >
               <input
                 className="bs-control"
@@ -464,7 +464,7 @@ export default async function WorkspaceDetailPage({
             <Field
               label={t('ws.reason')}
               htmlFor="override-reason"
-              hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
+              hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
             >
               <input
                 className="bs-control"
@@ -511,7 +511,7 @@ export default async function WorkspaceDetailPage({
             <Field
               label={t('ws.reason')}
               htmlFor="credits-reason"
-              hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
+              hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
             >
               <input
                 className="bs-control"

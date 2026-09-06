@@ -64,7 +64,7 @@ export default async function DesignSystemPage({
             ? 'وضع الدعم — قراءة فقط · أنت موظف منصة ولستَ العميل'
             : 'SUPPORT MODE — read only · you are platform staff, not the customer'
         }
-        detail={ar ? 'متجر نموذجي · تبقّى ٢٤ دقيقة' : 'Sample Brand · 24 min left'}
+        detail={ar ? 'متجر نموذجي · تبقّى 24 دقيقة' : 'Sample Brand · 24 min left'}
       />
 
       <header

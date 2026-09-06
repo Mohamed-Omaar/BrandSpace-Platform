@@ -26,7 +26,7 @@ export default async function AuditPage({ params }: { params: Promise<{ locale: 
       <PageIntro
         description={
           isArabic
-            ? 'سجل غير قابل للتعديل. آخر ١٠٠ حدث.'
+            ? 'سجل غير قابل للتعديل. آخر 100 حدث.'
             : 'Append-only record. The 100 most recent events.'
         }
       />

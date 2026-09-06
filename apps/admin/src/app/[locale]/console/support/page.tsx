@@ -186,7 +186,7 @@ export default async function SupportModePage({
               <Field
                 label={t('support.reason')}
                 htmlFor="support-reason-input"
-                hint={locale === 'ar' ? '٨ أحرف على الأقل.' : 'At least 8 characters.'}
+                hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
               >
                 <input
                   className="bs-control"
