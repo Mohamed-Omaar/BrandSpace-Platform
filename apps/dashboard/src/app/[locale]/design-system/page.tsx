@@ -147,15 +147,27 @@ export default async function DesignSystemPage({
             <Stack gap={spacingTokens.sm}>
               {(
                 [
+                  /*
+                    EVERY step, in descending order. Six were added by the
+                    fidelity pass and none of them appeared here, so the
+                    gallery showed a scale the product no longer used.
+                  */
                   ['display', ar ? 'عنوان كبير' : 'Display'],
+                  ['authHeading', ar ? 'عنوان الدخول' : 'Entry heading'],
+                  ['h2', ar ? 'عنوان العرض' : 'View title'],
                   ['h1', ar ? 'عنوان الصفحة' : 'Page title'],
-                  ['h2', ar ? 'عنوان قسم' : 'Section title'],
-                  ['h3', ar ? 'عنوان فرعي' : 'Subsection'],
+                  ['numeric', ar ? 'رقم' : '1,240'],
+                  ['h3', ar ? 'عنوان قسم' : 'Section title'],
+                  ['cardTitle', ar ? 'عنوان بطاقة' : 'Card title'],
+                  ['wordmark', ar ? 'الشعار النصي' : 'BrandSpace'],
                   ['body', ar ? 'نص أساسي' : 'Body text'],
-                  ['bodySm', ar ? 'نص صغير' : 'Small body'],
                   ['label', ar ? 'تسمية' : 'Label'],
+                  ['navLabel', ar ? 'عنصر تنقل' : 'Navigation row'],
+                  ['bodySm', ar ? 'نص صغير' : 'Small body'],
+                  ['button', ar ? 'زر' : 'Button'],
                   ['caption', ar ? 'تعليق' : 'Caption'],
                   ['overline', ar ? 'فوق السطر' : 'Overline'],
+                  ['micro', ar ? 'بيانات دقيقة' : 'Micro metadata'],
                 ] as const
               ).map(([token, sample]) => (
                 <div
