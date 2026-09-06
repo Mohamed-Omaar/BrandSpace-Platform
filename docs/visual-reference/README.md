@@ -95,3 +95,31 @@ Accessibility is **not** a reason to change logo size, wordmark gap, sidebar
 width, nav-row geometry, heading position, card radius, card layout, Calendar
 geometry, Social Preview geometry, Composer column proportions, Studio
 proportions or spacing — and none of the rows above does.
+
+## What the demo has that this phase does not
+
+Not deviations — screens and content the demo draws for phases that have not
+shipped. Each is absent rather than mocked up, because a screen that looks
+finished and does nothing is worse than one that is not there.
+
+| Demo screen | Status here |
+| --- | --- |
+| Analytics, Reports, AI usage, Content ideas, Campaigns, Media library, Approvals, Social accounts | No route. They belong to Phase 3 and later. |
+| Brand kit / Brand Brain | Phase 5. `brand-brain-preview.index.html` is recorded above as its future authority. |
+| Billing, Credits, Plans as commercial screens | The plan page shows RESOLVED entitlements and the real credit balance; prices, quotas and trial terms are configuration the owner has not approved. |
+| The demo's numbers — 28 published, 76% of credits, 24 workspaces, 186 users, 64% margin, 2.8 GB, "All systems operational" | Never reproduced. Real where the workspace has them, an honest empty or unavailable state otherwise, at the demo's box count and dimensions. |
+| A `•••` menu on every directory row | The row's own controls are inline where they exist. The demo's menu opens nothing. |
+| The `.public-*` marketing screens | `apps/web` owns those, and this phase did not touch it. |
+
+Two smaller differences remain on screens that DO exist, and both are listed
+here rather than fixed:
+
+- **The top bar keeps its icon buttons and the language switcher on a phone.**
+  The demo hides them below 640px. The language switcher is the only way to
+  change language on a phone, so hiding it would remove a function rather than
+  a decoration; the bar wraps to two rows instead.
+- **Identity tiles use the seeded brand palette, not the demo's solid ink.**
+  The demo has one avatar and never needs to tell two apart; a workspace
+  directory has many, and a stable colour per row is what makes a long list
+  scannable. Everything else about the tile — its size, radius, gap and
+  position — is the demo's.
