@@ -319,7 +319,7 @@ function NavList({
                 {/* Collapsed to icons, the label survives only as a tooltip and
                     as the link's accessible name — both, never one. */}
                 {collapsed ? (
-                  <Tooltip label={item.label} placement="inline-end">
+                  <Tooltip label={item.label} placement="inline-end" stretch>
                     <NavLink item={item} collapsed onNavigate={onNavigate} />
                   </Tooltip>
                 ) : (

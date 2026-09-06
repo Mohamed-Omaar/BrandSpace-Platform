@@ -142,10 +142,21 @@ export function useDismissOnOutsidePointer(
 export function Tooltip({
   label,
   placement = 'block-end',
+  stretch = false,
   children,
 }: {
   readonly label: string;
   readonly placement?: 'block-end' | 'inline-end';
+  /**
+   * Stretch to the trigger's container instead of shrink-wrapping it.
+   *
+   * The wrapper is `inline-flex`, so a child sized `inline-size: 100%` resolves
+   * against the wrapper's own shrink-wrapped width — which is how the collapsed
+   * rail's nav rows ended up 22px wide and sixteen pixels left of the rail's
+   * centre line, while the workspace and profile cards beside them were
+   * correctly centred.
+   */
+  readonly stretch?: boolean;
   readonly children: ReactNode;
 }) {
   const id = useId();
@@ -166,7 +177,11 @@ export function Tooltip({
 
   return (
     <span
-      style={{ position: 'relative', display: 'inline-flex' }}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        ...(stretch ? { inlineSize: '100%' } : {}),
+      }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -176,7 +191,10 @@ export function Tooltip({
         if (event.key === 'Escape') setOpen(false);
       }}
     >
-      <span aria-describedby={open ? id : undefined} style={{ display: 'inline-flex' }}>
+      <span
+        aria-describedby={open ? id : undefined}
+        style={{ display: 'inline-flex', ...(stretch ? { inlineSize: '100%' } : {}) }}
+      >
         {children}
       </span>
       <span
