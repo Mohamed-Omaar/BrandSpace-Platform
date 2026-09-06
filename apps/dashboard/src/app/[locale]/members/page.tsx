@@ -235,7 +235,11 @@ export default async function MembersPage({
                         flexWrap: 'wrap',
                       }}
                     >
-                      <Avatar initials={initialsFrom(m.email)} seed={avatarSeed(m.email)} />
+                      <Avatar
+                        initials={initialsFrom(m.email)}
+                        seed={avatarSeed(m.email)}
+                        shape="tile"
+                      />
                       {m.email}
                       {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
                     </span>

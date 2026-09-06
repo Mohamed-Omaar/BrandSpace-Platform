@@ -150,11 +150,18 @@ export function Avatar({
   initials,
   seed = 0,
   size = '2.25rem',
+  shape = 'circle',
   testId,
 }: {
   readonly initials: string;
   readonly seed?: MediaSeed;
   readonly size?: string;
+  /**
+   * `.avatar { border-radius: 50% }` in the social preview, and
+   * `.record-main .avatar { border-radius: 11px }` in a directory row — the
+   * demo uses the same tile squared off in a table and round on a post.
+   */
+  readonly shape?: 'circle' | 'tile';
   readonly testId?: string | undefined;
 }) {
   const palette = mediaPalette(seed);
@@ -169,7 +176,7 @@ export function Avatar({
         inlineSize: size,
         blockSize: size,
         flexShrink: 0,
-        borderRadius: radiusTokens.full,
+        borderRadius: shape === 'tile' ? radiusTokens.lg : radiusTokens.full,
         background: `linear-gradient(140deg, ${palette.from}, ${palette.to})`,
         color: palette.ink,
         ...typographyTokens.caption,

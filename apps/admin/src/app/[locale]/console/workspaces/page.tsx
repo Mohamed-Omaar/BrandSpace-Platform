@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  Avatar,
   Cell,
   DataTable,
   PageHeader,
@@ -10,7 +11,9 @@ import {
   Toolbar,
   buttonStyle,
   colorTokens,
+  initialsFrom,
   statusTone,
+  type MediaSeed,
 } from '@brandspace/ui';
 import {
   getEntitlementService,
@@ -40,6 +43,15 @@ export const dynamic = 'force-dynamic';
  * filled with a plausible-looking zero: a fabricated number in an admin console
  * is worse than a missing one, because somebody will act on it.
  */
+/**
+ * A stable palette per workspace, keyed by its slug — the deterministic-artwork
+ * rule (D-57) applied to identity tiles, so a directory looks the same twice.
+ */
+function avatarSeed(slug: string): MediaSeed {
+  const index = [...slug].reduce((total, character) => total + character.charCodeAt(0), 0) % 6;
+  return index as MediaSeed;
+}
+
 export default async function WorkspacesPage({
   params,
   searchParams,
@@ -163,7 +175,31 @@ export default async function WorkspacesPage({
                 >
                   {workspaces.map((w) => (
                     <tr key={w.id} data-testid={`workspace-row-${w.slug}`}>
-                      <Cell>{workspaceLink(w.id, w.name)}</Cell>
+                      <Cell>
+                        {/*
+                          `.record-main { display: flex; gap: 9px;
+                           align-items: center }` with a squared-off
+                          `.record-main .avatar { border-radius: 11px }` — the
+                          demo's directory rows lead with an identity tile,
+                          which is what makes a long list scannable. The
+                          initials come from the workspace's own name.
+                        */}
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5625rem',
+                            minInlineSize: 0,
+                          }}
+                        >
+                          <Avatar
+                            initials={initialsFrom(w.name)}
+                            seed={avatarSeed(w.slug)}
+                            shape="tile"
+                          />
+                          {workspaceLink(w.id, w.name)}
+                        </span>
+                      </Cell>
                       <Cell>{w.slug}</Cell>
                       <Cell>
                         <StatusBadge
