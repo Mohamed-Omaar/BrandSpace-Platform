@@ -7,13 +7,19 @@ import {
   LanguageSwitcher,
   SettingsIcon,
   ShieldIcon,
+  SignOutIcon,
   TeamIcon,
   WorkspaceSwitcher,
   Banner,
   PageHeader,
   StateMessage,
   buttonStyle,
+  colorTokens,
   inputStyle,
+  layoutTokens,
+  radiusTokens,
+  spacingTokens,
+  typographyTokens,
   tdStyle,
   thStyle,
   type ShellNavSection,
@@ -151,20 +157,50 @@ export function WorkspaceShell({
         />
       }
       headerEnd={
-        <>
-          <LanguageSwitcher
-            href={`/${other}${activePath ?? '/overview'}`}
-            targetLocale={other}
-            targetLabel={other === 'ar' ? 'العربية' : 'English'}
-            ariaLabel={t('nav.language')}
-          />
-          <form action={signOutAction}>
-            <input type="hidden" name="locale" value={locale} />
-            <button type="submit" data-testid="sign-out" style={buttonStyle('neutral', 'sm')}>
+        <LanguageSwitcher
+          href={`/${other}${activePath ?? '/overview'}`}
+          targetLocale={other}
+          targetLabel={other === 'ar' ? 'العربية' : 'English'}
+          ariaLabel={t('nav.language')}
+        />
+      }
+      profile={
+        /*
+         * THE IDENTITY LIVES AT THE FOOT OF THE SIDEBAR (§6), not in the top
+         * bar. The reference puts it there, and it is also where it belongs:
+         * signing out is a rare action, and a header carrying brand, workspace,
+         * language, notifications, account AND sign-out is the cluttered strip
+         * §7 asks to avoid.
+         */
+        <form action={signOutAction} style={{ inlineSize: '100%', minInlineSize: 0 }}>
+          <input type="hidden" name="locale" value={locale} />
+          <button
+            type="submit"
+            data-testid="sign-out"
+            className="bs-pressable bs-control"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacingTokens.sm,
+              inlineSize: '100%',
+              minInlineSize: 0,
+              minBlockSize: layoutTokens.controlHeight,
+              paddingInline: spacingTokens.sm,
+              borderRadius: radiusTokens.md,
+              border: '1px solid transparent',
+              color: colorTokens.textSecondary,
+              fontFamily: 'inherit',
+              ...typographyTokens.bodySm,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <SignOutIcon size={18} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {t('nav.signOut')}
-            </button>
-          </form>
-        </>
+            </span>
+          </button>
+        </form>
       }
     >
       {hero ?? (

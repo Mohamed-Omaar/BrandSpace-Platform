@@ -225,12 +225,18 @@ export function StateMessage({
         alignItems: 'center',
         textAlign: 'center',
         gap: spacingTokens.sm,
-        padding: spacingTokens['2xl'],
+        paddingBlock: spacingTokens.xl,
         paddingInline: spacingTokens.md,
-        // A soft filled well, not a dashed box. A dashed outline reads as a
-        // drop target or an unfinished screen; this reads as a calm blank.
-        background: colorTokens.surfaceSoft,
-        borderRadius: radiusTokens.xl,
+        /*
+         * NO SURFACE OF ITS OWN (D-59). It used to be a soft filled well, and
+         * inside a card that produced exactly the nested card §3 of the brief
+         * forbids: a grey rounded rectangle sitting inside a white rounded
+         * rectangle, two boxes deep, on a page whose whole direction is that
+         * boxes are not how structure is expressed.
+         *
+         * An empty state is quiet because of its space, its centring and its
+         * muted type — it does not need a container to be one.
+         */
         color: colorTokens.textSecondary,
       }}
     >
@@ -239,9 +245,9 @@ export function StateMessage({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '3rem',
-          blockSize: '3rem',
-          borderRadius: radiusTokens.full,
+          inlineSize: '2.75rem',
+          blockSize: '2.75rem',
+          borderRadius: radiusTokens.lg,
           background: kind === 'error' ? colorTokens.dangerTint : colorTokens.surfaceLavenderStrong,
           color: kind === 'error' ? colorTokens.danger : colorTokens.brandPurplePressed,
         }}

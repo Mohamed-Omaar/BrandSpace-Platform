@@ -429,7 +429,18 @@ export function AppShell({
             position: 'sticky',
             insetBlockStart: 0,
             alignSelf: 'start',
-            maxBlockSize: '100vh',
+            /*
+             * A FIXED HEIGHT, not a content height. The profile at the foot is
+             * pinned with `margin-block-start: auto`, which does nothing at all
+             * unless the column it sits in is taller than its content — the
+             * sign-out button was landing directly under the last navigation
+             * item instead of at the bottom of the rail.
+             *
+             * `100vh` less the shell's inset on both sides, matching the shell
+             * itself. The rail scrolls inside this box if the navigation ever
+             * outgrows it.
+             */
+            blockSize: `calc(100vh - ${layoutTokens.shellInset} * 2)`,
             overflowY: 'auto',
             overflowX: 'hidden',
             paddingInline: spacingTokens.sm,

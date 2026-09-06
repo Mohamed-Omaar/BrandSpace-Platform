@@ -192,6 +192,19 @@ export function MetricCard({
         ? colorTokens.danger
         : colorTokens.textSecondary;
 
+  /*
+   * A LONG WORD IS NOT A HEADLINE FIGURE.
+   *
+   * `value` is a formatted string, and it is not always a number: a plan key
+   * and an environment name render here too. At the reference's 32px numeric
+   * step "DEVELOPMENT" broke across two lines mid-word. Wrapping keeps the
+   * layout intact, but "DEVELOPME / NT" is not a fixed card — it is a broken
+   * one that no longer overflows. A word this long simply gets the section
+   * step instead, which fits and still reads as the card's headline.
+   */
+  const longWord = typeof value === 'string' && value.trim().length > 9;
+  const valueType = longWord ? typographyTokens.h2 : typographyTokens.numeric;
+
   return (
     <div
       data-surface="card"
@@ -240,7 +253,7 @@ export function MetricCard({
         ) : (
           <span
             style={{
-              ...typographyTokens.numeric,
+              ...valueType,
               color: colorTokens.textPrimary,
               minInlineSize: 0,
               overflowWrap: 'anywhere',

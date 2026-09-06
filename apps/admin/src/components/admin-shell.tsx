@@ -13,13 +13,14 @@ import {
   PageHeader,
   PulseIcon,
   RouteIcon,
+  SignOutIcon,
   SlidersIcon,
   SparkIcon,
   StateMessage,
   StatusBadge,
   SupportModeBanner,
-  buttonStyle,
   colorTokens,
+  layoutTokens,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -269,32 +270,58 @@ export function AdminShell({
         </span>
       }
       headerEnd={
-        <>
+        <LanguageSwitcher
+          href={`/${other}/console${activePath ?? ''}`}
+          targetLocale={other}
+          targetLabel={other === 'ar' ? 'العربية' : 'English'}
+          ariaLabel={t('nav.language')}
+        />
+      }
+      profile={
+        /*
+         * THE OPERATOR'S IDENTITY AND THE WAY OUT, at the foot of the rail
+         * (§6). It used to sit in the top bar, where a 16rem clamp truncated
+         * the platform role to "platform_…" — the one fact an operator most
+         * needs to be sure of before acting. Here it has a full column to
+         * itself and wraps instead of being cut.
+         */
+        <div style={{ display: 'grid', gap: spacingTokens.xs, inlineSize: '100%' }}>
           <span
             data-testid="actor-identity"
             style={{
               ...typographyTokens.caption,
               color: colorTokens.textSecondary,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxInlineSize: '16rem',
+              overflowWrap: 'anywhere',
             }}
           >
             {actorEmail} · {actorRole}
           </span>
-          <LanguageSwitcher
-            href={`/${other}/console${activePath ?? ''}`}
-            targetLocale={other}
-            targetLabel={other === 'ar' ? 'العربية' : 'English'}
-            ariaLabel={t('nav.language')}
-          />
           <form action={`/${locale}/sign-out`} method="post">
-            <button type="submit" data-testid="sign-out" style={buttonStyle('neutral', 'sm')}>
-              {t('nav.signOut')}
+            <button
+              type="submit"
+              data-testid="sign-out"
+              className="bs-pressable bs-control"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacingTokens.sm,
+                inlineSize: '100%',
+                minBlockSize: layoutTokens.controlHeight,
+                paddingInline: spacingTokens.sm,
+                borderRadius: radiusTokens.md,
+                border: '1px solid transparent',
+                color: colorTokens.textSecondary,
+                fontFamily: 'inherit',
+                ...typographyTokens.bodySm,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <SignOutIcon size={18} />
+              <span style={{ whiteSpace: 'nowrap' }}>{t('nav.signOut')}</span>
             </button>
           </form>
-        </>
+        </div>
       }
     >
       {heading ? (

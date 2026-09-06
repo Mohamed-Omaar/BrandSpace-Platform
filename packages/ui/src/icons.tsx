@@ -359,6 +359,17 @@ export function LockIcon(props: IconProps) {
   );
 }
 
+/** Leaving the workspace: a door with an arrow going out through it. */
+export function SignOutIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 4.5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-3" />
+      <path d="M10 8.5 6 12l4 3.5" />
+      <path d="M6 12h8.5" />
+    </Icon>
+  );
+}
+
 export function EmptyBoxIcon(props: IconProps) {
   return (
     <Icon {...props}>

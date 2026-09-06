@@ -104,7 +104,8 @@ export function OverviewHero({
         <Title
           data-testid={isPageTitle ? 'heading' : `${testId}-title`}
           style={{
-            maxInlineSize: '18ch',
+            // 600px in the reference: two confident lines, not three.
+            maxInlineSize: '37.5rem',
             marginBlock: spacingTokens.xs,
             ...typographyTokens.display,
             color: colorTokens.textPrimary,
