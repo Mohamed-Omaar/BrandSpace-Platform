@@ -1,4 +1,4 @@
-import { colorTokens, scrollContainerStyle, typographyTokens } from '@brandspace/ui';
+import { colorTokens, scrollContainerStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { translator } from '../../../i18n/messages';
 import {
@@ -40,6 +40,41 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     }),
   );
 
+  const memberCount = await inWorkspace(workspace.workspaceId, async ({ db }) =>
+    db.membership.count({ where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' } }),
+  );
+
+  const laterPhase = t('overview.metric.laterPhase');
+  const usageRows: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly value: string | null;
+    readonly unavailable: string;
+    /* The hook stays on the value that answers "what is the balance". */
+    readonly valueTestId?: string;
+  }[] = [
+    {
+      key: 'credits',
+      label: t('plan.credits'),
+      value: wallet ? String(wallet.balanceCredits) : null,
+      unavailable: t('overview.metric.hidden'),
+      valueTestId: 'credit-balance',
+    },
+    {
+      key: 'members',
+      label: t('overview.metric.members'),
+      value: String(memberCount),
+      unavailable: laterPhase,
+    },
+    {
+      key: 'scheduled',
+      label: t('plan.usageScheduled'),
+      value: null,
+      unavailable: laterPhase,
+    },
+    { key: 'storage', label: t('plan.usageStorage'), value: null, unavailable: laterPhase },
+  ];
+
   return (
     <WorkspaceShell
       locale={locale}
@@ -49,22 +84,61 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <CustomerCard title={t('plan.current')} testId="plan-card">
-        <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h2 }}>
-          {effective.planKey ?? t('plan.none')}
-        </p>
-      </CustomerCard>
+      {/*
+        `.dashboard-grid { grid-template-columns: 1.25fr .75fr }` — the plan on
+        one side, this cycle's usage on the other, which is how the demo
+        composes this screen. Three full-width cards stacked down the page was
+        neither its shape nor its rhythm.
 
-      {wallet && (
-        <CustomerCard title={t('plan.credits')} testId="credits-card">
-          <p style={{ marginBlockStart: 0, ...typographyTokens.numeric }}>
-            <span data-testid="credit-balance">{wallet.balanceCredits}</span>{' '}
-            <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-              {locale === 'ar' ? 'وحدة' : 'credits'}
-            </span>
+        The demo fills its usage list with figures (700/1,000 credits, 12
+        scheduled posts, 2.8 GB) that this workspace does not have. Only the
+        two that are REAL are shown as numbers — the credit balance from the
+        ledger and the member count — and the rest say what they will hold and
+        that nothing holds it yet (§33). The rows keep the demo's `.list-item`
+        geometry either way.
+      */}
+      <div className="bs-split-main">
+        <CustomerCard title={t('plan.current')} testId="plan-card">
+          <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h3 }}>
+            {effective.planKey ?? t('plan.none')}
           </p>
         </CustomerCard>
-      )}
+
+        <CustomerCard title={t('plan.usageTitle')} testId="usage-card">
+          <dl style={{ margin: 0, display: 'grid' }}>
+            {usageRows.map((row, index) => (
+              <div
+                key={row.key}
+                data-testid={`usage-${row.key}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: spacingTokens.sm,
+                  paddingBlock: spacingTokens.sm,
+                  borderBlockStart: index === 0 ? 'none' : `1px solid ${colorTokens.hairline}`,
+                }}
+              >
+                <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+                  {row.label}
+                </dt>
+                <dd
+                  data-testid={row.value === null ? undefined : row.valueTestId}
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    color: row.value === null ? colorTokens.textMuted : colorTokens.textPrimary,
+                    fontWeight: row.value === null ? 400 : 700,
+                    textAlign: 'end',
+                  }}
+                >
+                  {row.value ?? row.unavailable}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </CustomerCard>
+      </div>
 
       <CustomerCard title={t('plan.features')} testId="features-card">
         {effective.decisions.length === 0 ? (
