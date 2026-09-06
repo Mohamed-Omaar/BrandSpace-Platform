@@ -402,6 +402,151 @@ test.describe('the showcase renders every component state', () => {
   });
 });
 
+/**
+ * §9 and §20, in a browser: every visible post must be clickable, clicking it
+ * must open its real details, and the details must lead somewhere.
+ *
+ * These assertions are deliberately about STATE rather than appearance. A chip
+ * that opens a panel showing a DIFFERENT post's caption would look perfect in a
+ * screenshot and be useless; the only way to know the chain is real is to open
+ * a specific record and read what came back.
+ */
+const CALENDAR_CHIP = '[data-testid="prototype-calendar"] [data-testid^="calendar-post-"]';
+
+test.describe('a post can be opened from the calendar and taken somewhere', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(SHOWCASE('en'));
+  });
+
+  test('every calendar chip is a real control, and none of them is dead', async ({ page }) => {
+    const chips = page.locator(CALENDAR_CHIP);
+    const count = await chips.count();
+    expect(count, 'the calendar renders no openable posts at all').toBeGreaterThan(3);
+
+    for (let index = 0; index < count; index += 1) {
+      const chip = chips.nth(index);
+      // A real BUTTON — not a div with a click handler, which is unreachable
+      // by keyboard and invisible to assistive technology.
+      await expect(chip).toHaveJSProperty('tagName', 'BUTTON');
+      // …named by the post it opens, not by the verb, so eight of them are
+      // eight different controls to a screen-reader user.
+      const name = await chip.getAttribute('aria-label');
+      expect(name, `calendar chip ${index} has no accessible name`).toBeTruthy();
+      expect(name!.length, `calendar chip ${index} is named only by its verb`).toBeGreaterThan(20);
+    }
+  });
+
+  test('opening a chip shows THAT post, not a generic panel', async ({ page }) => {
+    const chip = page.locator(CALENDAR_CHIP).first();
+    // `calendar-post-<id>` — the identity of the record the chip stands for.
+    const chipId = (await chip.getAttribute('data-testid'))!.replace('calendar-post-', '');
+    const name = (await chip.getAttribute('aria-label')) ?? '';
+
+    await chip.click();
+    const drawer = page.getByTestId('post-detail-drawer');
+    await expect(drawer).toBeVisible();
+
+    // The panel opened for THAT record, not for a generic one. This is the
+    // assertion a screenshot cannot make: a panel showing a different post's
+    // caption would look perfect and be useless.
+    await expect(drawer).toHaveAttribute('data-post-id', chipId);
+
+    // …and its caption is the chip's caption, not a placeholder.
+    const caption = (await drawer.locator('p').first().innerText()).trim();
+    expect(caption.length).toBeGreaterThan(5);
+    expect(name, 'the panel shows a caption the chip never mentioned').toContain(caption);
+
+    // The facts panel is populated, not an empty shell.
+    await expect(drawer.locator('dt')).not.toHaveCount(0);
+  });
+
+  test('the details panel takes the keyboard and gives it back', async ({ page }) => {
+    const chip = page.locator(CALENDAR_CHIP).first();
+    const chipTestId = await chip.getAttribute('data-testid');
+    await chip.click();
+
+    const drawer = page.getByTestId('post-detail-drawer');
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveAttribute('aria-modal', 'true');
+
+    // Focus moved INTO the panel.
+    const focusedInside = await page.evaluate(
+      () =>
+        document
+          .querySelector('[data-testid="post-detail-drawer"]')
+          ?.contains(document.activeElement) ?? false,
+    );
+    expect(focusedInside, 'focus stayed outside the panel that just opened').toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(drawer).toBeHidden();
+
+    // …and came back to the chip that opened it, not to the top of the page.
+    const restored = await page.evaluate(
+      (id) => document.activeElement?.getAttribute('data-testid') === id,
+      chipTestId,
+    );
+    expect(restored, 'focus was not returned to the control that opened the panel').toBe(true);
+  });
+
+  test('"view in library" lands on a tab that actually contains the post', async ({ page }) => {
+    await page.locator(CALENDAR_CHIP).first().click();
+    const drawer = page.getByTestId('post-detail-drawer');
+    const postId = await drawer.getAttribute('data-post-id');
+
+    await page.getByTestId('post-detail-view-in-library').click();
+    await expect(drawer).toBeHidden();
+
+    // The record is present in the library, and marked.
+    const card = page.locator(
+      `[data-testid="post-card-${postId}"], [data-testid="post-row-${postId}"]`,
+    );
+    await expect(card.first()).toBeVisible();
+    await expect(card.first()).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('"edit post" loads that post into the composer', async ({ page }) => {
+    await page.locator(CALENDAR_CHIP).first().click();
+    const drawer = page.getByTestId('post-detail-drawer');
+    const label = await drawer.locator('p').first().innerText();
+
+    await page.getByTestId('post-detail-edit').click();
+    await expect(drawer).toBeHidden();
+
+    await expect(page.getByTestId('composer-editing-notice')).toBeVisible();
+    const caption = page.locator('[data-testid="prototype-composer"] textarea').first();
+    await expect(caption).toHaveValue(label.trim());
+  });
+
+  test('the composer preview follows what is typed and which format is chosen', async ({
+    page,
+  }) => {
+    const composer = page.getByTestId('prototype-composer');
+    const caption = composer.locator('textarea').first();
+    await caption.fill('A caption typed by the interaction suite.');
+    await expect(composer).toContainText('A caption typed by the interaction suite.');
+
+    // Changing the format changes the PREVIEW, not just a chip's colour: the
+    // rendered composition and its aspect ratio both follow.
+    const preview = composer.getByTestId('composer-preview');
+    await expect(preview).toHaveAttribute('data-format', 'feed');
+    const feedAspect = await preview.getAttribute('data-aspect');
+
+    await composer.getByTestId('composer-format-story').click();
+    await expect(preview).toHaveAttribute('data-format', 'story');
+    await expect(preview).not.toHaveAttribute('data-aspect', feedAspect ?? '');
+  });
+
+  test('nothing on the prototype screens is a placeholder link', async ({ page }) => {
+    // §20: "No placeholder link uses `#`."
+    const hrefs = await page.$$eval('a[href]', (nodes) =>
+      nodes.map((node) => node.getAttribute('href') ?? ''),
+    );
+    expect(hrefs.filter((href) => href === '#' || href === '')).toEqual([]);
+  });
+});
+
 test.describe('the social post preview keeps its visual contract', () => {
   test('renders the ratios each platform actually offers', async ({ page }) => {
     await page.goto(SHOWCASE('en'));

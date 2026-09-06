@@ -160,6 +160,7 @@ export function PostComposer({
   captionDirection = 'ltr',
   scheduledLabel,
   mediaAlt,
+  mediaSeed = 1,
   copilot,
   testId,
 }: {
@@ -180,6 +181,15 @@ export function PostComposer({
   readonly scheduledLabel: string;
   /** Alternative text for the preview's artwork. */
   readonly mediaAlt: string;
+  /**
+   * Which artwork the preview shows.
+   *
+   * Supplied by the caller so that opening a post in the composer shows THAT
+   * post's artwork. Without it the link from the calendar is only half real:
+   * the caption changes and the picture does not, which is exactly the
+   * "decorative prototype element" §9 rules out.
+   */
+  readonly mediaSeed?: 0 | 1 | 2 | 3 | 4 | 5;
   /** The contextual Copilot panel. Optional so the composer stands alone. */
   readonly copilot?: ReactNode;
   readonly testId?: string | undefined;
@@ -218,7 +228,7 @@ export function PostComposer({
     captionDirection,
     hashtags: ['brandspace', 'socialmedia', 'contentstrategy'],
     scheduledLabel,
-    media: { kind: 'image', alt: mediaAlt, seed: 1, count: 3 },
+    media: { kind: 'image', alt: mediaAlt, seed: mediaSeed, count: 3 },
   };
 
   return (

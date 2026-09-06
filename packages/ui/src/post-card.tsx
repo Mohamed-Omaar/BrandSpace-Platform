@@ -25,6 +25,14 @@ export interface PostCardLabels {
   readonly approvalLabels: Record<ApprovalStatus, string>;
   readonly platformNames: Record<SocialPlatform, string>;
   readonly selectLabel: string;
+  /**
+   * "Open post details" — the accessible name of the openable region.
+   *
+   * Required so a card is never a nameless button: the caption is appended to
+   * it, so a screen-reader user hears which post they are opening rather than
+   * eight identical "Open post details" in a row.
+   */
+  readonly openLabel: string;
 }
 
 export interface PostRecord {
@@ -40,6 +48,67 @@ export interface PostRecord {
   readonly mediaAlt: string;
   readonly mediaCount?: number;
   readonly isVideo?: boolean;
+}
+
+/**
+ * The invisible button that makes a post card openable.
+ *
+ * WHY NOT WRAP THE WHOLE CARD. A card carries its own controls — a select
+ * button, an actions menu — and a button inside a button is invalid markup that
+ * browsers repair unpredictably and screen readers announce twice. So the
+ * OPENABLE REGION is the media and the caption, which is what a reader would
+ * click anyway, and the footer's controls stay siblings of it.
+ *
+ * A real `<button>`, not a click handler on a div: it is in the tab order, it
+ * responds to Enter and Space, and it takes the focus ring for free.
+ */
+function OpenRegion({
+  onOpen,
+  label,
+  caption,
+  testId,
+  inline = false,
+  children,
+}: {
+  readonly onOpen?: (() => void) | undefined;
+  readonly label: string;
+  readonly caption: string;
+  readonly testId: string;
+  /** A row lays its region out inline; a card stacks it. */
+  readonly inline?: boolean;
+  readonly children: ReactNode;
+}) {
+  // No destination, no button. A control that looks interactive and does
+  // nothing is worse than a plain card — §20 forbids exactly that.
+  if (!onOpen) return <>{children}</>;
+
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onOpen}
+      // The caption is part of the name, so eight cards do not all announce
+      // themselves as "Open post details".
+      aria-label={`${label}: ${caption}`}
+      style={{
+        display: inline ? 'flex' : 'grid',
+        alignItems: inline ? 'center' : undefined,
+        gap: inline ? spacingTokens.md : undefined,
+        inlineSize: '100%',
+        minInlineSize: 0,
+        flex: inline ? '1 1 auto' : undefined,
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        textAlign: 'start',
+        font: 'inherit',
+        color: 'inherit',
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 function PlatformDots({
@@ -85,12 +154,15 @@ export function PostGridCard({
   labels,
   selected = false,
   actions,
+  onOpen,
   testId,
 }: {
   readonly post: PostRecord;
   readonly labels: PostCardLabels;
   readonly selected?: boolean;
   readonly actions?: ReactNode;
+  /** Opens the post's details. Supplied wherever the post has a destination. */
+  readonly onOpen?: (() => void) | undefined;
   readonly testId?: string | undefined;
 }) {
   return (
@@ -111,48 +183,55 @@ export function PostGridCard({
         gridTemplateRows: 'auto 1fr auto',
       }}
     >
-      <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
-        <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
-        {post.isVideo ? <MediaChip placement="start-end">▶</MediaChip> : null}
-        {post.mediaCount && post.mediaCount > 1 ? (
-          <MediaChip placement="start-end">{`1/${post.mediaCount}`}</MediaChip>
-        ) : null}
-        {post.status === 'DRAFT' ? <MediaStateOverlay label={labels.statusLabels.DRAFT} /> : null}
-        {post.status === 'FAILED' ? (
-          <MediaStateOverlay label={labels.statusLabels.FAILED} tone="danger" />
-        ) : null}
-      </div>
-
-      <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.xs }}>
-        <p
-          dir={post.captionDirection}
-          style={{
-            margin: 0,
-            ...typographyTokens.bodySm,
-            color: colorTokens.textPrimary,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          {post.caption}
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: spacingTokens.xs,
-            ...typographyTokens.caption,
-            color: colorTokens.textMuted,
-          }}
-        >
-          <PlatformDots platforms={post.platforms} labels={labels} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {post.accountName}
-          </span>
+      <OpenRegion
+        onOpen={onOpen}
+        label={labels.openLabel}
+        caption={post.caption}
+        testId={`open-post-${post.id}`}
+      >
+        <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
+          <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
+          {post.isVideo ? <MediaChip placement="start-end">▶</MediaChip> : null}
+          {post.mediaCount && post.mediaCount > 1 ? (
+            <MediaChip placement="start-end">{`1/${post.mediaCount}`}</MediaChip>
+          ) : null}
+          {post.status === 'DRAFT' ? <MediaStateOverlay label={labels.statusLabels.DRAFT} /> : null}
+          {post.status === 'FAILED' ? (
+            <MediaStateOverlay label={labels.statusLabels.FAILED} tone="danger" />
+          ) : null}
         </div>
-      </div>
+
+        <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.xs }}>
+          <p
+            dir={post.captionDirection}
+            style={{
+              margin: 0,
+              ...typographyTokens.bodySm,
+              color: colorTokens.textPrimary,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {post.caption}
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: spacingTokens.xs,
+              ...typographyTokens.caption,
+              color: colorTokens.textMuted,
+            }}
+          >
+            <PlatformDots platforms={post.platforms} labels={labels} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {post.accountName}
+            </span>
+          </div>
+        </div>
+      </OpenRegion>
 
       <footer
         style={{
@@ -196,12 +275,14 @@ export function PostListRow({
   labels,
   selected = false,
   actions,
+  onOpen,
   testId,
 }: {
   readonly post: PostRecord;
   readonly labels: PostCardLabels;
   readonly selected?: boolean;
   readonly actions?: ReactNode;
+  readonly onOpen?: (() => void) | undefined;
   readonly testId?: string | undefined;
 }) {
   return (
@@ -220,34 +301,42 @@ export function PostListRow({
         background: selected ? colorTokens.surfaceLavender : colorTokens.surface,
       }}
     >
-      <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="3rem" />
-      <div style={{ minInlineSize: 0, flex: 1, display: 'grid', gap: spacingTokens['3xs'] }}>
-        <p
-          dir={post.captionDirection}
-          style={{
-            margin: 0,
-            ...typographyTokens.bodySm,
-            color: colorTokens.textPrimary,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {post.caption}
-        </p>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: spacingTokens.xs,
-            ...typographyTokens.caption,
-            color: colorTokens.textMuted,
-          }}
-        >
-          <PlatformDots platforms={post.platforms} labels={labels} />
-          {post.accountName} · {post.whenLabel}
-        </span>
-      </div>
+      <OpenRegion
+        onOpen={onOpen}
+        label={labels.openLabel}
+        caption={post.caption}
+        testId={`open-post-${post.id}`}
+        inline
+      >
+        <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="3rem" />
+        <div style={{ minInlineSize: 0, flex: 1, display: 'grid', gap: spacingTokens['3xs'] }}>
+          <p
+            dir={post.captionDirection}
+            style={{
+              margin: 0,
+              ...typographyTokens.bodySm,
+              color: colorTokens.textPrimary,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {post.caption}
+          </p>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: spacingTokens.xs,
+              ...typographyTokens.caption,
+              color: colorTokens.textMuted,
+            }}
+          >
+            <PlatformDots platforms={post.platforms} labels={labels} />
+            {post.accountName} · {post.whenLabel}
+          </span>
+        </div>
+      </OpenRegion>
       <div
         style={{
           display: 'flex',

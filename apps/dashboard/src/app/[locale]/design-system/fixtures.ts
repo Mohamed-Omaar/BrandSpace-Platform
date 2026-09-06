@@ -14,6 +14,7 @@ import type {
   FeatureCardLabels,
   FeatureState,
   PostCardLabels,
+  PostDetailLabels,
   PostRecord,
   PostStatus,
   SocialPlatform,
@@ -558,6 +559,21 @@ export function postCardLabels(locale: string): PostCardLabels {
     approvalLabels: approvalLabels(ar),
     platformNames: PLATFORM_NAMES,
     selectLabel: ar ? 'تحديد المنشور' : 'Select post',
+    openLabel: ar ? 'فتح تفاصيل المنشور' : 'Open post details',
+  };
+}
+
+/** Labels for the post-details panel a calendar chip or a card opens. */
+export function postDetailLabels(locale: string): PostDetailLabels {
+  const ar = locale === 'ar';
+  return {
+    title: ar ? 'تفاصيل المنشور (بيانات عرض)' : 'Post details (preview data)',
+    close: ar ? 'إغلاق التفاصيل' : 'Close details',
+    account: ar ? 'الحساب' : 'Account',
+    platforms: ar ? 'المنصات' : 'Platforms',
+    schedule: ar ? 'الموعد' : 'Schedule',
+    status: ar ? 'الحالة' : 'Status',
+    approval: ar ? 'الاعتماد' : 'Approval',
   };
 }
 

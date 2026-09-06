@@ -94,9 +94,24 @@ const COLLAPSE_STORAGE_KEY = 'brandspace.sidebar.collapsed';
 function useCollapsePreference(): readonly [boolean, (next: boolean) => void, boolean] {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  /*
+   * HAS THE READER ALREADY DECIDED?
+   *
+   * The mount effect below applies the STORED preference, and it necessarily
+   * runs after the first paint — which means the toggle is clickable for a
+   * frame before it fires. A click landing in that window used to be silently
+   * undone by the effect: the sidebar collapsed and then sprang open again.
+   *
+   * Rare in a browser and rare in a test, but "rare and silent" is the worst
+   * kind of bug to leave in a control, so an explicit choice always wins over
+   * the stored one. A ref rather than state: reading it must not schedule a
+   * render, and it is only ever consulted inside the effect.
+   */
+  const chosen = useRef(false);
 
   useEffect(() => {
     setHydrated(true);
+    if (chosen.current) return;
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1');
     } catch {
@@ -106,6 +121,7 @@ function useCollapsePreference(): readonly [boolean, (next: boolean) => void, bo
   }, []);
 
   const update = useCallback((next: boolean) => {
+    chosen.current = true;
     setCollapsed(next);
     try {
       window.localStorage.setItem(COLLAPSE_STORAGE_KEY, next ? '1' : '0');

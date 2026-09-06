@@ -547,6 +547,7 @@ describe('the design showcase cannot reach production', () => {
       'DesignStudio',
       'PostGridCard',
       'PostListRow',
+      'PostDetailDrawer',
       'FeatureCard',
     ];
     const showcase = 'apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx';

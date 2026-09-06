@@ -29,6 +29,7 @@ import {
   MetricCard,
   Pagination,
   PostComposer,
+  PostDetailDrawer,
   PostGridCard,
   PostListRow,
   PulseIcon,
@@ -78,6 +79,7 @@ import {
   featureFixtures,
   featureLabels,
   postCardLabels,
+  postDetailLabels,
   postFixtures,
   previewVariants,
   sampleConversation,
@@ -165,6 +167,28 @@ function libraryTabLabel(tab: LibraryTab, ar: boolean): string {
   }
 }
 
+/**
+ * The library tab that actually contains a record.
+ *
+ * "View in library" must never land on an empty panel, so the tab is derived
+ * from the record rather than assumed — and `all` is the honest fallback for a
+ * status the library does not give a tab of its own.
+ */
+function tabForStatus(post: PostRecord): LibraryTab {
+  switch (post.status) {
+    case 'DRAFT':
+      return 'drafts';
+    case 'SCHEDULED':
+      return 'scheduled';
+    case 'PUBLISHED':
+      return 'published';
+    case 'FAILED':
+      return 'failed';
+    default:
+      return 'all';
+  }
+}
+
 function filterPosts(posts: readonly PostRecord[], tab: LibraryTab): readonly PostRecord[] {
   switch (tab) {
     case 'all':
@@ -206,11 +230,58 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
   const [libraryTab, setLibraryTab] = useState<LibraryTab>('all');
   const [selectedPosts, setSelectedPosts] = useState<readonly string[]>([]);
 
+  /*
+   * CALENDAR → POST DETAILS → COMPOSER, wired for real.
+   *
+   * §9 is explicit: every visible post must be clickable, clicking it must
+   * open its details, and the details must lead somewhere — "no dead cards or
+   * buttons". Inside this gated prototype that chain is genuine state rather
+   * than a mock-up of one: opening a chip opens the panel for THAT record,
+   * "view in library" switches the library to the tab that contains it and
+   * highlights it, and "edit post" loads its caption, its direction and its
+   * artwork into the composer.
+   *
+   * WHAT IT IS NOT is a substitute for a backend. There is no Post model, no
+   * migration and no route — the records are the same clearly-labelled preview
+   * fixtures the rest of this page uses, and nothing here writes anything.
+   */
+  const [openPostId, setOpenPostId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null);
+
   const post = samplePost(locale);
   const labels = socialLabels(locale);
   const cLabels = copilotLabels(locale);
   const posts = postFixtures(locale);
   const pcLabels = postCardLabels(locale);
+  const pdLabels = postDetailLabels(locale);
+
+  const openPost = posts.find((record) => record.id === openPostId) ?? null;
+  const editingPost = posts.find((record) => record.id === editingPostId) ?? null;
+
+  /** Scroll a section into view after the state that reveals it has settled. */
+  const revealSection = (id: string) => {
+    // `requestAnimationFrame` rather than a timeout: the target may only exist
+    // after the state change above renders, and a fixed delay is a guess.
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+  };
+
+  const viewInLibrary = (record: PostRecord) => {
+    // Switch to a tab that actually contains the record, so "view in library"
+    // never lands on an empty panel.
+    setLibraryTab(tabForStatus(record));
+    setHighlightedPostId(record.id);
+    setOpenPostId(null);
+    revealSection('showcase-library-anchor');
+  };
+
+  const editInComposer = (record: PostRecord) => {
+    setEditingPostId(record.id);
+    setOpenPostId(null);
+    revealSection('showcase-composer-anchor');
+  };
 
   const toggleSelected = (id: string) =>
     setSelectedPosts((current) =>
@@ -736,7 +807,20 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             periodLabel={calendarPeriodLabel(locale)}
             days={calendarDays(locale)}
             labels={calendarLabels(locale)}
-            createAction={<Button size="sm">{ar ? 'إنشاء منشور' : 'Create post'}</Button>}
+            onOpenPost={(record) => setOpenPostId(record.id)}
+            createAction={
+              // Not decorative: it opens the composer, which is on this page.
+              <Button
+                size="sm"
+                data-testid="calendar-create-post"
+                onClick={() => {
+                  setEditingPostId(null);
+                  revealSection('showcase-composer-anchor');
+                }}
+              >
+                {ar ? 'إنشاء منشور' : 'Create post'}
+              </Button>
+            }
             filters={
               <>
                 <SearchField id="calendar-search" label={ar ? 'بحث' : 'Search'} />
@@ -757,6 +841,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       </Card>
 
       {/* --------------------------------------------- Posts library --- */}
+      <span id="showcase-library-anchor" aria-hidden="true" />
       <Card title={ar ? 'مكتبة المنشورات' : 'Posts library'} testId="showcase-library">
         <PrototypeNotice ar={ar} testId="library-prototype-notice" />
         <Toolbar>
@@ -856,7 +941,10 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
                         key={record.id}
                         post={record}
                         labels={pcLabels}
-                        selected={selectedPosts.includes(record.id)}
+                        onOpen={() => setOpenPostId(record.id)}
+                        selected={
+                          selectedPosts.includes(record.id) || highlightedPostId === record.id
+                        }
                         actions={
                           <Button
                             size="sm"
@@ -885,7 +973,10 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
                             key={record.id}
                             post={record}
                             labels={pcLabels}
-                            selected={selectedPosts.includes(record.id)}
+                            onOpen={() => setOpenPostId(record.id)}
+                            selected={
+                              selectedPosts.includes(record.id) || highlightedPostId === record.id
+                            }
                             actions={
                               <DropdownMenu
                                 label={ar ? 'إجراءات المنشور' : 'Post actions'}
@@ -916,20 +1007,61 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
       </Card>
 
       {/* --------------------------------------------------- Composer --- */}
-      <Card title={ar ? 'إنشاء منشور' : 'Create post'} testId="showcase-composer" padded={false}>
+      <span id="showcase-composer-anchor" aria-hidden="true" />
+      <Card
+        title={
+          editingPost ? (ar ? 'تعديل منشور' : 'Edit post') : ar ? 'إنشاء منشور' : 'Create post'
+        }
+        testId="showcase-composer"
+        padded={false}
+      >
         <div style={{ padding: spacingTokens.md, display: 'grid', gap: spacingTokens.md }}>
           <PrototypeNotice ar={ar} testId="composer-prototype-notice" />
+          {editingPost ? (
+            <Banner tone="info" testId="composer-editing-notice">
+              {ar
+                ? `يجري تعديل «${editingPost.caption.slice(0, 40)}…» — بيانات عرض.`
+                : `Editing “${editingPost.caption.slice(0, 40)}…” — preview data.`}{' '}
+              <button
+                type="button"
+                data-testid="composer-stop-editing"
+                onClick={() => setEditingPostId(null)}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  padding: 0,
+                  font: 'inherit',
+                  fontWeight: 700,
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  color: 'inherit',
+                }}
+              >
+                {ar ? 'إنشاء منشور جديد بدلًا من ذلك' : 'Start a new post instead'}
+              </button>
+            </Banner>
+          ) : null}
           <PostComposer
+            /*
+             * REMOUNTS when the post being edited changes. The composer owns
+             * its own caption, format and selection state, and `initialCaption`
+             * is exactly that — an INITIAL value. Without the key, choosing
+             * "edit post" on a second record would leave the first one's text
+             * in the editor, which is the class of bug that makes an interface
+             * feel haunted.
+             */
+            key={editingPost?.id ?? 'new'}
             testId="prototype-composer"
             accounts={composerAccounts(locale)}
             labels={composerLabels(locale)}
             previewLabels={labels}
             campaigns={composerCampaigns(locale)}
             approvers={composerApprovers(locale)}
-            initialCaption={composerCaption(locale)}
-            captionDirection={ar ? 'rtl' : 'ltr'}
-            scheduledLabel={ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00'}
-            mediaAlt={ar ? 'عمل فني للمنشور' : 'Composed artwork'}
+            initialCaption={editingPost?.caption ?? composerCaption(locale)}
+            captionDirection={editingPost?.captionDirection ?? (ar ? 'rtl' : 'ltr')}
+            scheduledLabel={editingPost?.whenLabel ?? (ar ? '١٢ مارس · ٩:٠٠ ص' : '12 Mar · 09:00')}
+            mediaAlt={editingPost?.mediaAlt ?? (ar ? 'عمل فني للمنشور' : 'Composed artwork')}
+            mediaSeed={editingPost?.mediaSeed ?? 1}
             copilot={
               <div
                 data-testid="composer-copilot"
@@ -963,6 +1095,33 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           />
         </div>
       </Card>
+      {/*
+       * The post-details panel, rendered once for the whole page. Whichever
+       * chip, card or row was clicked, the same panel opens for it — which is
+       * why the calendar and the library agree about what a post is.
+       */}
+      <PostDetailDrawer
+        post={openPost}
+        labels={pdLabels}
+        postLabels={pcLabels}
+        onClose={() => setOpenPostId(null)}
+        actions={
+          openPost ? (
+            <>
+              <Button
+                variant="neutral"
+                data-testid="post-detail-view-in-library"
+                onClick={() => viewInLibrary(openPost)}
+              >
+                {ar ? 'عرض في المكتبة' : 'View in library'}
+              </Button>
+              <Button data-testid="post-detail-edit" onClick={() => editInComposer(openPost)}>
+                {ar ? 'تعديل المنشور' : 'Edit post'}
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
     </Stack>
   );
 }
