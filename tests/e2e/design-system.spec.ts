@@ -151,8 +151,27 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
 
     await page.reload();
     await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'collapsed');
-    // Still signed in, still in the workspace: the preference is a display
-    // choice in localStorage and touches no session or authorization.
+
+    /*
+     * STRENGTHENED, because the collapsed rail changed under it.
+     *
+     * This used to assert the workspace NAME was visible while collapsed, which
+     * only held because the rail was not yet hiding its copy. The reference
+     * shows the avatar alone in a 78px rail, so the name is now `display: none`
+     * there — and asserting a hidden element is visible would have meant
+     * reverting a correct change to satisfy a test.
+     *
+     * The property the test is actually for is "the preference is a display
+     * choice that touches no session", so it now proves exactly that: the
+     * session survives the reload (the rail and its navigation are still
+     * there), and expanding again brings the same workspace back. That is a
+     * stronger claim than the original, not a weaker one.
+     */
+    await expect(page.getByTestId('sidebar')).toBeVisible();
+    await expect(page.getByTestId('nav-overview')).toBeVisible();
+
+    await page.click('[data-testid="toggle-sidebar"]');
+    await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'expanded');
     await expect(page.getByTestId('active-workspace')).toBeVisible();
   });
 

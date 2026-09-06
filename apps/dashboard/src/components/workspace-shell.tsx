@@ -11,7 +11,6 @@ import {
   TeamIcon,
   WorkspaceSwitcher,
   Banner,
-  PageHeader,
   StateMessage,
   buttonStyle,
   colorTokens,
@@ -164,6 +163,16 @@ export function WorkspaceShell({
           ariaLabel={t('nav.language')}
         />
       }
+      /*
+       * EVERY route gets the top-bar title, the Overview included: the
+       * reference's home view has BOTH an `h1` in the bar ("Good morning, …")
+       * and an `h2` hero statement below it. The hero is a second block, never
+       * a replacement for the first.
+       */
+      pageEyebrow={t('page.eyebrow')}
+      pageTitle={heading}
+      pageDescription={description}
+      pageMeta={meta}
       profile={
         /*
          * THE IDENTITY LIVES AT THE FOOT OF THE SIDEBAR (§6), not in the top
@@ -177,6 +186,14 @@ export function WorkspaceShell({
           <button
             type="submit"
             data-testid="sign-out"
+            /*
+             * NAMED EXPLICITLY, because its label is hidden in a collapsed
+             * rail. `.bs-rail-copy` takes the word "Sign out" out of the DOM
+             * at 78px, and the only child left is an `aria-hidden` icon — a
+             * button with no discernible text, which is exactly what axe
+             * reported the moment the rail learned to collapse its copy.
+             */
+            aria-label={t('nav.signOut')}
             className="bs-pressable bs-control"
             style={{
               display: 'flex',
@@ -196,16 +213,42 @@ export function WorkspaceShell({
             }}
           >
             <SignOutIcon size={18} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span
+              className="bs-rail-copy"
+              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
               {t('nav.signOut')}
             </span>
           </button>
         </form>
       }
     >
-      {hero ?? (
-        <PageHeader title={heading} description={description} actions={actions} meta={meta} />
-      )}
+      {/*
+        THE TITLE IS IN THE TOP BAR NOW (fidelity pass §4/§5).
+
+        `PageHeader` used to render it here, one block below the bar, which is
+        exactly the "visually lower or detached" composition the reference does
+        not have. The shell passes the title up instead, so every route gets the
+        reference's single `eyebrow → h1 → actions` block and the first content
+        surface starts immediately underneath it.
+
+        Page-level actions still render here when a page has them, because the
+        reference's top-bar actions are global (search, notifications, create)
+        rather than page-specific.
+      */}
+      {hero ?? null}
+      {actions ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: spacingTokens.sm,
+            marginBlockEnd: spacingTokens.md,
+          }}
+        >
+          {actions}
+        </div>
+      ) : null}
       {children}
     </AppShell>
   );

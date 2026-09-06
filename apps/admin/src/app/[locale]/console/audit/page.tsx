@@ -1,5 +1,5 @@
 import { typographyTokens, fontTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
+import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import { getPlatformPrisma, requirePageActor } from '../../../../server/platform-context';
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +23,7 @@ export default async function AuditPage({ params }: { params: Promise<{ locale: 
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'سجل التدقيق' : 'Audit log'}
+      <PageIntro
         description={
           isArabic
             ? 'سجل غير قابل للتعديل. آخر ١٠٠ حدث.'

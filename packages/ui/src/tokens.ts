@@ -266,52 +266,62 @@ export const spacingTokens = {
  * into four lines.
  */
 export const typographyTokens = {
-  /** The hero statement. `clamp(34px, 4vw, 60px)` in the reference. */
+  /** The hero statement. Measured: 57.6px / 56.45 / 700 / -3.456px at 1440. */
   display: {
     fontSize: 'clamp(2.125rem, 4vw, 3.75rem)',
     lineHeight: '0.98',
-    fontWeight: 750,
+    fontWeight: 700,
     letterSpacing: '-0.06em',
   },
   /** The page title in the top bar. `clamp(24px, 2.4vw, 35px)`. */
   h1: {
     fontSize: 'clamp(1.5rem, 2.4vw, 2.1875rem)',
-    lineHeight: '1.08',
+    // Measured: 34.56px with line-height 34.56 — exactly 1. The tight leading
+    // is what lets the eyebrow sit 4px above the cap height rather than
+    // floating off it, which is most of why the reference's top bar reads as
+    // one block instead of two stacked lines.
+    lineHeight: '1',
     fontWeight: 700,
     letterSpacing: '-0.045em',
   },
-  /** A section title inside a surface. */
-  h2: { fontSize: '1.125rem', lineHeight: '1.6rem', fontWeight: 700, letterSpacing: '-0.03em' },
+  /** A section title inside a surface. `.section-head h3`: 20px / 700 / -0.6px. */
+  h2: { fontSize: '1.25rem', lineHeight: '1.5rem', fontWeight: 700, letterSpacing: '-0.03em' },
   /** A card or group title. */
   h3: { fontSize: '0.9375rem', lineHeight: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' },
-  body: { fontSize: '1rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: '-0.005em' },
+  /** `.hero-copy p`: 16px / 25.6 (1.6) / 400, no tracking. */
+  body: { fontSize: '1rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: 'normal' },
   bodySm: { fontSize: '0.875rem', lineHeight: '1.5', fontWeight: 400, letterSpacing: '0' },
+  /** `.nav-item span` and `.workspace-copy strong`: 13px, 650, no tracking. */
   label: {
     fontSize: '0.8125rem',
     lineHeight: '1.25rem',
     fontWeight: 650,
-    letterSpacing: '-0.005em',
+    letterSpacing: 'normal',
   },
-  caption: { fontSize: '0.75rem', lineHeight: '1.15rem', fontWeight: 500, letterSpacing: '0' },
+  /** `.metric > span`: 12px / 400. The reference sets no weight on a caption. */
+  caption: { fontSize: '0.75rem', lineHeight: '1.15rem', fontWeight: 400, letterSpacing: 'normal' },
   /**
-   * The eyebrow/kicker above a title: uppercase, heavily tracked, quiet.
+   * The eyebrow/kicker above a title.
    *
-   * DELIBERATE DEVIATION: the reference sets this at 10px. Held at 11px here.
-   * Uppercase text at 10px is hard work for anyone with low vision, the
-   * difference is imperceptible as a visual direction, and the reference also
-   * uses 8–9px in three places that are not reproduced at all for the same
-   * reason. Recorded in `docs/DECISIONS.md`.
+   * `.eyebrow` and `.section-kicker`, measured: 10px, weight 800, tracking
+   * 1.1px (0.11em), uppercase, leading 11px.
+   *
+   * The size was held at 11px in the first demo alignment and the fidelity pass
+   * restored the reference's 10px: no accessibility rule sets a minimum font
+   * size, so that exception was not carrying its weight. The exception that IS
+   * necessary is kept — the reference's own `#707077` fails AA on its own
+   * ground, so this sits on `textMuted` instead.
    */
   overline: {
-    fontSize: '0.6875rem',
-    lineHeight: '1rem',
+    fontSize: '0.625rem',
+    lineHeight: '0.6875rem',
     fontWeight: 800,
     letterSpacing: '0.11em',
   },
-  /** Tabular figures for money, credits and counts, so columns align. */
+  /** `.metric strong`: 32px / 700 / -1.28px (-0.04em). */
   numeric: {
     fontSize: '2rem',
-    lineHeight: '2.25rem',
+    lineHeight: '2.375rem',
     fontWeight: 700,
     letterSpacing: '-0.04em',
   },
@@ -365,7 +375,10 @@ export const shadowTokens = {
  */
 export const radiusTokens = {
   xs: '0.375rem',
-  sm: '0.5rem',
+  /** `.brand-mark`, 10px. */
+  sm: '0.625rem',
+  /** `.workspace-switcher` / `.profile-button`, 15px. */
+  rail: '0.9375rem',
   /** Controls: inputs, buttons, chips, nav items. 13px in the reference. */
   md: '0.8125rem',
   /** Statistics, small surfaces, media wells. `--radius-md`, 18px. */
@@ -450,6 +463,43 @@ export const layoutTokens = {
   headerHeight: '5.75rem',
   /** The gap between the shell and the window edge, on all four sides. */
   shellInset: '1.25rem',
+
+  /* --------------------------------------------------------------------- */
+  /* MEASURED FROM THE RENDERED REFERENCE, not read off its stylesheet.     */
+  /*                                                                        */
+  /* The fidelity pass put the demo in a browser at 1440x900 beside the     */
+  /* product and compared boxes, because a stylesheet tells you what an     */
+  /* author typed and a bounding box tells you what a reader sees. These    */
+  /* are the numbers that came back, named once here so no page invents an  */
+  /* approximation of them (§17).                                           */
+  /* --------------------------------------------------------------------- */
+
+  /** `.sidebar { padding: 20px 14px }`. */
+  railPadInline: '0.875rem',
+  railPadBlock: '1.25rem',
+  /** `.sidebar-top { height: 42px; margin: 0 3px 18px }`. */
+  railTopHeight: '2.625rem',
+  /** `.nav-list { gap: 5px; margin-top: 18px }`. */
+  navGap: '0.3125rem',
+  /** `.nav-item { padding: 0 12px; gap: 12px }`. */
+  navItemPadInline: '0.75rem',
+  navItemGap: '0.75rem',
+  /** `.workspace-switcher`, `.profile-button` — 54px tall, 10px padding. */
+  railCardHeight: '3.375rem',
+  railCardPad: '0.625rem',
+  /** The avatar column in a rail card. */
+  railAvatar: '2.125rem',
+  /** `.main-panel { padding: 0 28px 34px }`. */
+  panelPadInline: '1.75rem',
+  panelPadBlockEnd: '2.125rem',
+  /** `.topbar { gap: 20px }`. */
+  topbarGap: '1.25rem',
+  /** `.dashboard-grid`, `.metric-row` and `.section-head` all use 18px. */
+  sectionGap: '1.125rem',
+  /** `.icon-button` — 40px square, 13px radius. */
+  iconButton: '2.5rem',
+  /** `.metric { padding: 20px }` — between the `md` and `lg` spacing steps. */
+  metricPad: '1.25rem',
   contentMaxWidth: '88rem',
   copilotPanelWidth: '24.375rem',
   /** WCAG 2.2 target size (2.5.8) minimum for a pointer target. */

@@ -109,7 +109,8 @@
   --bs-space-3xl: 4rem;
 
   --bs-radius-xs: 0.375rem;
-  --bs-radius-sm: 0.5rem;
+  --bs-radius-sm: 0.625rem;
+  --bs-radius-rail: 0.9375rem;
   --bs-radius-md: 0.8125rem;
   --bs-radius-lg: 1.125rem;
   --bs-radius-xl: 1.375rem;
@@ -136,6 +137,11 @@
   --bs-sidebar-collapsed: 4.875rem;
   --bs-header-height: 5.75rem;
   --bs-shell-inset: 1.25rem;
+  --bs-rail-pad-inline: 0.875rem;
+  --bs-rail-pad-block: 1.25rem;
+  --bs-panel-pad-inline: 1.75rem;
+  --bs-panel-pad-block-end: 2.125rem;
+  --bs-section-gap: 1.125rem;
 
   /* The ambient orbs. Full-saturation brand colour appears ONLY here, at 24–38%
      opacity behind a 100px blur, where it reads as light rather than as a
@@ -696,4 +702,26 @@ h4 {
     grid-template-columns: 1.45fr 0.8fr;
     gap: var(--bs-space-lg);
   }
+}
+
+/*
+ * A collapsed rail shows the avatar and nothing else.
+ *
+ * `.app-shell.sidebar-collapsed .workspace-copy { opacity: 0; width: 0 }` in
+ * the reference. `display: none` here rather than a zero-width element,
+ * because a zero-width element is still in the accessibility tree — announced
+ * but unreachable, which is the worst of both. The trigger carries its own
+ * `aria-label`, so the workspace is still named when its text is not shown.
+ */
+[data-sidebar-state='collapsed'] .bs-rail-copy {
+  display: none;
+}
+
+/*
+ * A collapsed rail keeps the brand MARK and drops the wordmark, exactly as
+ * `.app-shell.sidebar-collapsed .brand-name` does. Hiding the whole brand left
+ * the rail headed by nothing but a chevron.
+ */
+[data-sidebar-state='collapsed'] .bs-brand-text {
+  display: none;
 }

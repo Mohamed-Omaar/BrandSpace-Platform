@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   colorTokens,
   gradientTokens,
+  layoutTokens,
   radiusTokens,
   spacingTokens,
   typographyTokens,
@@ -79,20 +80,23 @@ export function OverviewHero({
           flexDirection: 'column',
           alignItems: 'flex-start',
           justifyContent: 'center',
-          gap: spacingTokens.sm,
-          padding: 'clamp(1.75rem, 4vw, 3.875rem)',
+          // `.hero-copy { padding: clamp(32px, 4vw, 62px) }` — 57.6px at 1440.
+          gap: 0,
+          padding: 'clamp(2rem, 4vw, 3.875rem)',
           minInlineSize: 0,
         }}
       >
         {eyebrow ? (
           <span
             style={{
-              padding: `${spacingTokens['2xs']} ${spacingTokens.sm}`,
+              // `.label-pill { padding: 7px 10px; font-size: 11px; weight: 800 }`.
+              padding: '0.4375rem 0.625rem',
               borderRadius: radiusTokens.full,
               // Translucent white on the wash, so the pill picks up whatever
               // the gradient is doing behind it rather than fighting it.
               background: 'rgba(255, 255, 255, 0.72)',
-              ...typographyTokens.caption,
+              fontSize: '0.6875rem',
+              lineHeight: '0.8125rem',
               fontWeight: 800,
               color: colorTokens.textPrimary,
             }}
@@ -105,8 +109,10 @@ export function OverviewHero({
           data-testid={isPageTitle ? 'heading' : `${testId}-title`}
           style={{
             // 600px in the reference: two confident lines, not three.
+            // `.hero-copy h2 { max-width: 600px; margin: 16px 0 12px }`.
             maxInlineSize: '37.5rem',
-            marginBlock: spacingTokens.xs,
+            marginBlockStart: spacingTokens.md,
+            marginBlockEnd: '0.75rem',
             ...typographyTokens.display,
             color: colorTokens.textPrimary,
           }}
@@ -118,8 +124,9 @@ export function OverviewHero({
           <p
             data-testid={isPageTitle ? 'description' : undefined}
             style={{
+              // `.hero-copy p { max-width: 480px }`, 16px / 1.6.
               margin: 0,
-              maxInlineSize: '46ch',
+              maxInlineSize: '30rem',
               ...typographyTokens.body,
               color: colorTokens.textSecondary,
             }}
@@ -134,8 +141,9 @@ export function OverviewHero({
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
-              gap: spacingTokens.md,
-              marginBlockStart: spacingTokens.md,
+              // `.hero-actions { margin-top: 28px; gap: 18px }`.
+              gap: layoutTokens.sectionGap,
+              marginBlockStart: '1.75rem',
             }}
           >
             {primaryAction}

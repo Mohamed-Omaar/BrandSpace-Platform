@@ -1,6 +1,6 @@
 import { CONFIG_DOMAIN_KEYS } from '@brandspace/config';
 import { Card, ContentGrid, MetricCard, Stack, StateMessage } from '@brandspace/ui';
-import { PageHeading } from '../../../components/admin-shell';
+import { PageIntro } from '../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
@@ -68,8 +68,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
 
   return (
     <>
-      <PageHeading
-        title={locale === 'ar' ? 'نظرة عامة' : 'Overview'}
+      <PageIntro
         description={
           locale === 'ar'
             ? 'حالة إعدادات المنصة والمفاتيح السرية في هذه البيئة.'

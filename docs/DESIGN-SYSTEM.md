@@ -406,6 +406,31 @@ production build, including in the end-to-end suite, which is exactly what happe
 
 ## 11. What remains for Phase 2C-B
 
+### The fidelity pass
+
+The first demo alignment matched the direction; a side-by-side pass matched the
+MEASUREMENTS. The reference was rendered in Chromium at 1440×900 beside the
+product and their boxes compared, because a stylesheet says what an author typed
+and a bounding box says what a reader sees. What came back is named in
+`layoutTokens` — 250px rail with `20px 14px` padding, 44px nav items with 12px
+gaps and 5px between them, a 92px top bar with a 20px gap, `0 28px 34px` panel
+padding, 18px section rhythm, 118px statistics with 20px padding.
+
+**The page title moved into the top bar**, which is the change that matters
+most. The reference composes `eyebrow → h1 → actions` as one block; rendering
+the title below the bar instead is what made every heading read as detached from
+it. `AppShell` owns the `h1` now, so all twenty-nine routes get the same
+composition and no page can forget one. Console pages that used to render their
+own heading render only their lead paragraph, and their titles live beside their
+routes in `NAV_SECTIONS`, which is the only place a layout-rendered shell can
+read them from.
+
+Typography was re-measured rather than re-designed: the h1 leads at exactly 1
+(not 1.08), the hero statement is weight 700 (not 750), a section title is 20px
+(not 18px), body copy has no tracking, and the eyebrow returned to the
+reference's 10px — that exception was not carrying its weight, while the
+contrast exception under it still is.
+
 ### What the demo alignment reached (D-59)
 
 This revision rebuilt the system on the owner-approved reference vendored at

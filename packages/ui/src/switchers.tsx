@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
+import { colorTokens, layoutTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 import { BuildingIcon, CheckIcon, GlobeIcon } from './icons';
 import { DropdownMenu } from './overlays';
 import { menuItemStyle } from './menu-style';
@@ -62,17 +62,24 @@ export function WorkspaceSwitcher({
             style={{
               display: 'inline-grid',
               placeItems: 'center',
-              inlineSize: '2.125rem',
-              blockSize: '2.125rem',
+              // `.workspace-avatar { width: 34px; height: 34px; radius: 11px;
+              //  background: linear-gradient(145deg, purple, #a878ff) }` — the
+              // one place in the rail the brand colour appears, and the reason
+              // the switcher reads as an identity rather than another button.
+              inlineSize: layoutTokens.railAvatar,
+              blockSize: layoutTokens.railAvatar,
               flexShrink: 0,
-              borderRadius: radiusTokens.sm,
-              background: colorTokens.ink,
-              color: colorTokens.inkInk,
+              borderRadius: '0.6875rem',
+              background: `linear-gradient(145deg, ${colorTokens.brandPurple}, #A878FF)`,
+              color: colorTokens.brandPurpleInk,
             }}
           >
             <BuildingIcon size={16} />
           </span>
-          <span style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}>
+          <span
+            className="bs-rail-copy"
+            style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
+          >
             <span
               data-testid="active-workspace"
               style={{

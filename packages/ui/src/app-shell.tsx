@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import {
   useCallback,
@@ -59,6 +60,13 @@ export interface ShellNavItem {
   /** Marks the item active. The caller compares against the current path. */
   readonly active?: boolean;
   readonly badge?: string | undefined;
+  /**
+   * The page title for the top bar, when the route's own title is longer than
+   * its navigation label — "AI model registry" under a nav item reading "AI
+   * models". Centralising it beside the route is what lets a layout-rendered
+   * shell title sixteen pages it never sees.
+   */
+  readonly pageTitle?: string | undefined;
   /**
    * Test hook. Supplied by the host application because the two consoles use
    * different conventions and the end-to-end suites already depend on them —
@@ -152,16 +160,21 @@ function navLinkStyle(active: boolean, collapsed: boolean): CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
-    gap: spacingTokens.sm,
+    // Measured: `gap: 12px`, `padding: 0 12px`, `height: 44px`, `radius: 13px`,
+    // label at 13px/650. The gap in particular is what stops the icon and the
+    // label reading as one crowded token.
+    gap: layoutTokens.navItemGap,
     justifyContent: collapsed ? 'center' : 'flex-start',
-    // 44px: the reference's nav height, and the WCAG 2.5.8 comfortable target.
     minBlockSize: layoutTokens.controlHeight,
-    paddingInline: collapsed ? 0 : spacingTokens.sm,
-    paddingBlock: spacingTokens.xs,
+    blockSize: layoutTokens.controlHeight,
+    paddingInline: collapsed ? 0 : layoutTokens.navItemPadInline,
+    paddingBlock: 0,
     borderRadius: radiusTokens.md,
     textDecoration: 'none',
-    ...typographyTokens.bodySm,
-    fontWeight: active ? 650 : 550,
+    ...typographyTokens.label,
+    // The reference weights the label 650 whether or not the item is active;
+    // the state is the fill, not the weight.
+    fontWeight: 650,
     color: active ? colorTokens.inkInk : colorTokens.textSecondary,
     background: active ? colorTokens.ink : 'transparent',
     border: '1px solid transparent',
@@ -235,7 +248,7 @@ function NavList({
   readonly onNavigate?: (() => void) | undefined;
 }) {
   return (
-    <div style={{ display: 'grid', gap: spacingTokens.md }}>
+    <div style={{ display: 'grid', gap: layoutTokens.sectionGap }}>
       {sections.map((section, sectionIndex) => (
         <div key={section.title ?? `section-${sectionIndex}`}>
           {/* A section heading is meaningless next to icons with no labels, so
@@ -271,7 +284,8 @@ function NavList({
               margin: 0,
               padding: 0,
               display: 'grid',
-              gap: spacingTokens['3xs'],
+              // `.nav-list { gap: 5px }`.
+              gap: layoutTokens.navGap,
             }}
           >
             {section.items.map((item) => (
@@ -294,12 +308,47 @@ function NavList({
   );
 }
 
+/**
+ * The navigation item the current URL is on, by longest matching href.
+ *
+ * WHY THE SHELL RESOLVES THIS. The Control Center's layout renders the shell
+ * and its PAGES render their own content, so the layout never learned which
+ * route it was on — `activePath` was simply never passed, and the comparison
+ * `(activePath ?? '') === item.href` matched the console root on every single
+ * page. Every console screen showed "Overview" as the active item.
+ *
+ * A layout cannot read the pathname on the server, but this shell is already a
+ * client component, so it can. A caller that knows better still wins: the
+ * customer dashboard sets `item.active` explicitly and that is respected.
+ *
+ * Longest match, not equality: `/en/console/workspaces/<id>` belongs to the
+ * workspaces item, and `/en/console` must not swallow it.
+ */
+function matchNavItem(
+  sections: readonly ShellNavSection[],
+  pathname: string | null,
+): ShellNavItem | null {
+  if (!pathname) return null;
+  let best: ShellNavItem | null = null;
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (pathname !== item.href && !pathname.startsWith(`${item.href}/`)) continue;
+      if (!best || item.href.length > best.href.length) best = item;
+    }
+  }
+  return best;
+}
+
 export function AppShell({
   brand,
   sections,
   labels,
   headerStart,
   headerEnd,
+  pageEyebrow,
+  pageTitle,
+  pageDescription,
+  pageMeta,
   banner,
   profile,
   children,
@@ -312,6 +361,23 @@ export function AppShell({
   readonly headerStart?: ReactNode;
   /** Language switcher, notifications, account menu. */
   readonly headerEnd?: ReactNode;
+  /**
+   * THE PAGE TITLE, AND IT LIVES IN THE TOP BAR.
+   *
+   * The reference composes `eyebrow → h1 → actions` as one 92px block, and
+   * rendering the title below the bar instead is what made every heading read
+   * as detached from it. The shell owns the `h1` — there is exactly one per
+   * page, it always carries `data-testid="heading"`, and no page has to
+   * remember to render one.
+   *
+   * A page that supplies its own title surface (the Overview's hero) passes no
+   * `pageTitle`; it is then responsible for the single `h1`.
+   */
+  readonly pageEyebrow?: string | undefined;
+  readonly pageTitle?: string | undefined;
+  readonly pageDescription?: string | undefined;
+  /** Status badges that belong beside the page-level actions. */
+  readonly pageMeta?: ReactNode;
   /** Support Mode banner — rendered above everything and never scrolled away. */
   readonly banner?: ReactNode;
   /**
@@ -325,6 +391,27 @@ export function AppShell({
   readonly children: ReactNode;
   readonly contentMaxWidth?: string;
 }) {
+  const pathname = usePathname();
+  const matched = matchNavItem(sections, pathname);
+
+  /*
+   * The caller's `active` flag wins where it is set; otherwise the shell marks
+   * the item the URL is actually on. Same for the title: an explicit
+   * `pageTitle` wins, and a route that supplies none falls back to the label of
+   * the navigation item it belongs to — which is how sixteen Control Center
+   * routes get the reference's top-bar title without each page passing one.
+   */
+  const resolvedSections: readonly ShellNavSection[] = sections.some((section) =>
+    section.items.some((item) => item.active !== undefined),
+  )
+    ? sections
+    : sections.map((section) => ({
+        ...section,
+        items: section.items.map((item) => ({ ...item, active: item === matched })),
+      }));
+
+  const resolvedTitle = pageTitle ?? matched?.pageTitle ?? matched?.label;
+
   const [collapsed, setCollapsed, hydrated] = useCollapsePreference();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
@@ -352,24 +439,29 @@ export function AppShell({
       <div
         style={{
           display: 'grid',
-          gap: spacingTokens.sm,
+          // `.sidebar-top { margin: 0 3px 18px }` then the switcher.
+          gap: layoutTokens.sectionGap,
           flexShrink: 0,
-          marginBlockEnd: spacingTokens.md,
+          marginBlockEnd: 0,
         }}
       >
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
+            // `.app-shell.sidebar-collapsed .sidebar-top { flex-direction:
+            //  column; height: 88px }` — the mark stays, the wordmark goes.
+            flexDirection: collapsed ? 'column' : 'row',
             justifyContent: collapsed ? 'center' : 'space-between',
-            gap: spacingTokens.xs,
-            minBlockSize: '2.625rem',
+            gap: spacingTokens.sm,
+            blockSize: collapsed ? '5.5rem' : layoutTokens.railTopHeight,
+            marginInline: spacingTokens['2xs'],
           }}
         >
-          {collapsed ? null : brand}
+          {brand}
           <button
             type="button"
-            className="bs-pressable"
+            className="bs-pressable bs-control"
             data-testid="toggle-sidebar"
             aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
             aria-pressed={collapsed}
@@ -378,13 +470,15 @@ export function AppShell({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              inlineSize: '2.5rem',
-              blockSize: '2.5rem',
+              // `.collapse-button { flex: 0 0 38px; width: 38px; height: 38px }`
+              inlineSize: '2.375rem',
+              blockSize: '2.375rem',
               flexShrink: 0,
               borderRadius: radiusTokens.md,
               border: '1px solid transparent',
-              background: 'transparent',
-              color: colorTokens.textMuted,
+              // `.collapse-button` IS an `.icon-button` in the reference: a
+              // soft filled square, not a bare chevron in the corner.
+              color: colorTokens.textPrimary,
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}
@@ -413,8 +507,9 @@ export function AppShell({
        * Refusing to shrink makes the column grow past the viewport instead, and
        * the page scrolls — which is what the reference does.
        */}
-      <div style={{ flexShrink: 0 }}>
-        <NavList sections={sections} collapsed={collapsed} />
+      {/* `.nav-list { margin-top: 18px }`. */}
+      <div style={{ flexShrink: 0, marginBlockStart: layoutTokens.sectionGap }}>
+        <NavList sections={resolvedSections} collapsed={collapsed} />
       </div>
 
       {/* The identity sits at the FOOT, pinned by `margin-block-start: auto`,
@@ -424,7 +519,7 @@ export function AppShell({
           style={{
             marginBlockStart: 'auto',
             flexShrink: 0,
-            paddingBlockStart: spacingTokens.md,
+            paddingBlockStart: spacingTokens.sm,
             display: 'flex',
             alignItems: 'center',
             justifyContent: collapsed ? 'center' : 'flex-start',
@@ -487,8 +582,8 @@ export function AppShell({
              * position.
              */
             minBlockSize: `calc(100vh - ${layoutTokens.shellInset} * 2)`,
-            paddingInline: spacingTokens.sm,
-            paddingBlock: spacingTokens.md,
+            paddingInline: layoutTokens.railPadInline,
+            paddingBlock: layoutTokens.railPadBlock,
             background: colorTokens.shellSidebar,
           }}
         >
@@ -505,62 +600,130 @@ export function AppShell({
           }}
         >
           {/*
-           * A LIGHT TOP BAR. No border, no fill of its own, no shadow — §7. It
-           * carries the drawer trigger on a phone and the page-level actions
-           * everywhere; the page title itself is rendered by `PageHeader`
-           * immediately below, at display scale.
+           * THE TOP BAR CARRIES THE PAGE TITLE (§4 of the fidelity pass).
+           *
+           * `<header class="topbar"><div><p class="eyebrow"><h1></div><div
+           * class="topbar-actions">` — measured at 1440: 92px tall,
+           * `justify-content: space-between`, `align-items: center`, gap 20px,
+           * eyebrow at y=41 and the h1 baseline block at y=56.
+           *
+           * It used to hold only the actions, with the title rendered by
+           * `PageHeader` below it. That is what made the heading read as
+           * detached from the bar on every route: the reference has one block,
+           * not a strip and then a title. The shell owns the `h1` now, so
+           * every route gets the same composition without threading a prop
+           * through twenty-nine pages.
            */}
           <header
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'space-between',
               flexWrap: 'wrap',
-              gap: spacingTokens.sm,
-              rowGap: spacingTokens.xs,
+              gap: layoutTokens.topbarGap,
+              rowGap: spacingTokens.sm,
               minBlockSize: layoutTokens.headerHeight,
-              paddingInline: spacingTokens.lg,
+              paddingInline: layoutTokens.panelPadInline,
               paddingBlock: spacingTokens.sm,
             }}
           >
-            <button
-              type="button"
-              className="bs-drawer-trigger bs-control"
-              aria-label={labels.openNavigation}
-              aria-expanded={drawerOpen}
-              aria-controls={drawerId}
-              data-testid="open-navigation"
-              onClick={() => setDrawerOpen(true)}
-              style={{
-                display: 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-                inlineSize: '2.5rem',
-                blockSize: '2.5rem',
-                flexShrink: 0,
-                borderRadius: radiusTokens.md,
-                color: colorTokens.textPrimary,
-                cursor: 'pointer',
-              }}
-            >
-              <MenuIcon size={20} />
-            </button>
-
-            {/* Below `md` the sidebar is gone, so the brand has nowhere else to
-                live. Above it, the sidebar already shows it and a second copy
-                would be a duplicate landmark. */}
-            <span className="bs-narrow-only" style={{ minInlineSize: 0 }}>
-              {brand}
-            </span>
-
             <div
               style={{
-                marginInlineStart: 'auto',
                 display: 'flex',
                 alignItems: 'center',
                 gap: spacingTokens.sm,
                 minInlineSize: 0,
+                flex: '1 1 16rem',
               }}
             >
+              <button
+                type="button"
+                className="bs-drawer-trigger bs-control"
+                aria-label={labels.openNavigation}
+                aria-expanded={drawerOpen}
+                aria-controls={drawerId}
+                data-testid="open-navigation"
+                onClick={() => setDrawerOpen(true)}
+                style={{
+                  display: 'none',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  inlineSize: layoutTokens.iconButton,
+                  blockSize: layoutTokens.iconButton,
+                  flexShrink: 0,
+                  borderRadius: radiusTokens.md,
+                  color: colorTokens.textPrimary,
+                  cursor: 'pointer',
+                }}
+              >
+                <MenuIcon size={20} />
+              </button>
+
+              {resolvedTitle ? (
+                <div style={{ minInlineSize: 0 }}>
+                  {pageEyebrow ? (
+                    <p
+                      data-testid="page-eyebrow"
+                      style={{
+                        margin: 0,
+                        ...typographyTokens.overline,
+                        textTransform: 'uppercase',
+                        color: colorTokens.textMuted,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {pageEyebrow}
+                    </p>
+                  ) : null}
+                  <h1
+                    data-testid="heading"
+                    style={{
+                      // `.topbar h1 { margin: 4px 0 0 }`.
+                      margin: 0,
+                      marginBlockStart: spacingTokens.xs,
+                      ...typographyTokens.h1,
+                      color: colorTokens.textPrimary,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {resolvedTitle}
+                  </h1>
+                  {pageDescription ? (
+                    <p
+                      data-testid="description"
+                      style={{
+                        margin: 0,
+                        marginBlockStart: spacingTokens.xs,
+                        maxInlineSize: '62ch',
+                        ...typographyTokens.bodySm,
+                        color: colorTokens.textSecondary,
+                      }}
+                    >
+                      {pageDescription}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                /* Below `md` the sidebar is gone, so the brand has nowhere else
+                   to live. Above it, the sidebar already shows it. */
+                <span className="bs-narrow-only" style={{ minInlineSize: 0 }}>
+                  {brand}
+                </span>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacingTokens.sm,
+                minInlineSize: 0,
+                flexShrink: 0,
+              }}
+            >
+              {pageMeta}
               {headerEnd}
             </div>
           </header>
@@ -570,8 +733,8 @@ export function AppShell({
             style={{
               flex: '1 1 auto',
               minInlineSize: 0,
-              paddingInline: spacingTokens.lg,
-              paddingBlockEnd: spacingTokens['2xl'],
+              paddingInline: layoutTokens.panelPadInline,
+              paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >
             <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
@@ -648,7 +811,7 @@ export function AppShell({
             {headerStart}
             {/* Never collapsed in the drawer: the whole point of the drawer is
                 that there is room for labels. */}
-            <NavList sections={sections} collapsed={false} onNavigate={closeDrawer} />
+            <NavList sections={resolvedSections} collapsed={false} onNavigate={closeDrawer} />
             {profile}
           </div>
         </div>
@@ -695,7 +858,11 @@ export function BrandMark({
       >
         B
       </span>
-      <span style={{ display: 'grid', minInlineSize: 0 }}>
+      {/* Tagged so a collapsed rail can drop the wordmark and keep the mark,
+          like `.app-shell.sidebar-collapsed .brand-name`. A class rather than a
+          positional selector: `> span:last-child` is a guess about structure,
+          and it was wrong. */}
+      <span className="bs-brand-text" style={{ display: 'grid', minInlineSize: 0 }}>
         <span
           style={{
             fontSize: '1rem',

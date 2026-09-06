@@ -9,7 +9,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
-import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
+import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import {
   inputStyle as sharedInputStyle,
   primaryButtonStyle,
@@ -51,8 +51,7 @@ export default async function SecretsPage({
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'إدارة المفاتيح السرية' : 'Secret management'}
+      <PageIntro
         description={
           isArabic
             ? 'تُخزَّن مشفّرة بتشفير موثَّق. لا توجد أي طريقة لإظهار القيمة بعد الحفظ.'

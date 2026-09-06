@@ -10,7 +10,7 @@ import {
 } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import Link from 'next/link';
-import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
+import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import {
   Card,
   Field,
@@ -78,8 +78,7 @@ export default async function ConfigurationPage({
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'إدارة الإعدادات' : 'Configuration management'}
+      <PageIntro
         description={
           isArabic
             ? 'مسودة ← تحقق ← معاينة الأثر ← تفعيل. التاريخ غير قابل للتعديل، والتراجع ينشئ إصدارًا جديدًا.'

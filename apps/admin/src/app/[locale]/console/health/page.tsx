@@ -7,7 +7,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { Cell, DataTable, PageHeading } from '../../../../components/admin-shell';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getPlatformPrisma,
@@ -78,8 +78,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'صحة النظام' : 'System health'}
+      <PageIntro
         description={
           isArabic
             ? 'حالة فعلية للاعتماديات. الحالة "غير مُهيّأ" تعني أنها فعلاً غير مُهيّأة.'

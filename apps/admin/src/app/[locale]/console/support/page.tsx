@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { colorTokens, spacingTokens } from '@brandspace/ui';
-import { PageHeading } from '../../../../components/admin-shell';
+import { PageIntro } from '../../../../components/admin-shell';
 import {
   getSupportModeService,
   getWorkspaceService,
@@ -65,16 +65,11 @@ export default async function SupportModePage({
   return (
     <div>
       {/*
-        THE LAST RAW HEADING IN EITHER APPLICATION (§15).
-        It was an `h1` with a hard-coded `1.35rem`, from before the design
-        system existed — no eyebrow, no description, no `data-testid="heading"`,
-        and a size that matched no step in the type scale. Every other console
-        page uses `PageHeading`; this one was simply missed, and it is exactly
-        the "previous outlined admin console" residue the brief says must not
-        survive.
+        This page carried the last raw `<h1 style={{ fontSize: '1.35rem' }}>` in
+        either application, from before the design system existed. Its title now
+        comes from the top bar like every other route's.
       */}
-      <PageHeading
-        title={t('support.title')}
+      <PageIntro
         description={
           locale === 'ar'
             ? 'وصول مؤقت للقراءة فقط، مرتبط بسبب مسجَّل ومحدود بمدة.'

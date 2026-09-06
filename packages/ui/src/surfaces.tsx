@@ -1,5 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
+import {
+  colorTokens,
+  layoutTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from './tokens';
 import { IconTile } from './primitives';
 
 /**
@@ -216,16 +223,21 @@ export function MetricCard({
         // section shadow repeated four times stops being subliminal.
         borderRadius: radiusTokens.lg,
         boxShadow: shadowTokens.metric,
+        // `.metric { min-height: 118px; padding: 20px }`.
         minBlockSize: '7.375rem',
+        padding: layoutTokens.metricPad,
         display: 'flex',
         flexDirection: 'column',
-        gap: spacingTokens.xs,
-        justifyContent: 'space-between',
+        gap: spacingTokens.sm,
+        justifyContent: 'flex-start',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm }}>
         {icon ? <IconTile icon={icon} tone={accent ? 'accent' : iconTone} size="sm" /> : null}
-        <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>{label}</span>
+        {/* `.metric > span { color: var(--muted); font-size: 12px }` — a quiet
+            caption, not a semibold label. The weight was doing work the 32px
+            figure below it should be doing alone. */}
+        <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>{label}</span>
       </div>
       <div style={{ display: 'grid', gap: spacingTokens.xs }}>
         {/*
@@ -410,14 +422,20 @@ export function SectionHeader({
       style={{
         display: 'flex',
         flexWrap: 'wrap',
+        // `.section-head { align-items: flex-start; gap: 12px; margin-bottom: 18px }`.
         gap: spacingTokens.sm,
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        marginBlockEnd: spacingTokens.md,
+        marginBlockEnd: layoutTokens.sectionGap,
       }}
     >
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm, minInlineSize: 0 }}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: spacingTokens.sm,
+          minInlineSize: 0,
+        }}
       >
         {icon ? <IconTile icon={icon} size="sm" tone="neutral" /> : null}
         <div>
@@ -425,7 +443,6 @@ export function SectionHeader({
             <span
               style={{
                 display: 'block',
-                marginBlockEnd: spacingTokens['3xs'],
                 ...typographyTokens.overline,
                 textTransform: 'uppercase',
                 color: colorTokens.textMuted,
@@ -434,7 +451,16 @@ export function SectionHeader({
               {eyebrow}
             </span>
           ) : null}
-          <h2 style={{ ...typographyTokens.h2, color: colorTokens.textPrimary }}>{title}</h2>
+          {/* `.section-head h3 { margin: 5px 0 0 }`. */}
+          <h2
+            style={{
+              marginBlockStart: eyebrow ? spacingTokens['2xs'] : 0,
+              ...typographyTokens.h2,
+              color: colorTokens.textPrimary,
+            }}
+          >
+            {title}
+          </h2>
           {description ? (
             <p
               style={{
@@ -464,7 +490,8 @@ export function SectionHeader({
  */
 export function ContentGrid({
   min = '16rem',
-  gap = spacingTokens.md,
+  // `.metric-row { gap: 12px }`.
+  gap = spacingTokens.sm,
   children,
   testId,
 }: {
@@ -489,7 +516,8 @@ export function ContentGrid({
 
 /** Vertical rhythm between page sections, so pages do not each invent a margin. */
 export function Stack({
-  gap = spacingTokens.lg,
+  // `.metric-row { margin: 18px 0 }` and `.dashboard-grid { gap: 18px }`.
+  gap = layoutTokens.sectionGap,
   children,
 }: {
   readonly gap?: string;

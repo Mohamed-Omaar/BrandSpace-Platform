@@ -10,7 +10,6 @@ import {
   LayersIcon,
   LifebuoyIcon,
   ListIcon,
-  PageHeader,
   PulseIcon,
   RouteIcon,
   SignOutIcon,
@@ -30,7 +29,11 @@ import { translator, type MessageKey } from '../i18n/messages';
 
 interface NavItem {
   readonly href: string;
+  /** The navigation label. Short, because the rail is 250px wide. */
   readonly key: MessageKey;
+  /** The top-bar page title. Longer, and centralised here so a
+      layout-rendered shell can title pages it never sees. */
+  readonly titleKey: MessageKey;
   readonly permission: string;
   readonly icon: ReactNode;
 }
@@ -57,18 +60,21 @@ const NAV_SECTIONS: ReadonlyArray<{
       {
         href: '',
         key: 'nav.overview',
+        titleKey: 'page.overview',
         permission: 'platform.workspace.read',
         icon: <HomeIcon size={20} />,
       },
       {
         href: '/workspaces',
         key: 'nav.workspaces',
+        titleKey: 'page.workspaces',
         permission: 'platform.workspace.read',
         icon: <BuildingIcon size={20} />,
       },
       {
         href: '/support',
         key: 'nav.support',
+        titleKey: 'page.support',
         permission: 'platform.support_mode.enter',
         icon: <LifebuoyIcon size={20} />,
       },
@@ -81,24 +87,28 @@ const NAV_SECTIONS: ReadonlyArray<{
       {
         href: '/configuration',
         key: 'nav.configuration',
+        titleKey: 'page.configuration',
         permission: 'platform.configuration.read',
         icon: <SlidersIcon size={20} />,
       },
       {
         href: '/secrets',
         key: 'nav.secrets',
+        titleKey: 'page.secrets',
         permission: 'platform.secret.read',
         icon: <KeyIcon size={20} />,
       },
       {
         href: '/flags',
         key: 'nav.flags',
+        titleKey: 'page.flags',
         permission: 'platform.configuration.read',
         icon: <FlagIcon size={20} />,
       },
       {
         href: '/plans',
         key: 'nav.plans',
+        titleKey: 'page.plans',
         permission: 'platform.configuration.read',
         icon: <LayersIcon size={20} />,
       },
@@ -111,18 +121,21 @@ const NAV_SECTIONS: ReadonlyArray<{
       {
         href: '/providers',
         key: 'nav.providers',
+        titleKey: 'page.providers',
         permission: 'platform.configuration.read',
         icon: <LayersIcon size={20} />,
       },
       {
         href: '/ai-models',
         key: 'nav.aiRegistry',
+        titleKey: 'page.aiRegistry',
         permission: 'platform.configuration.read',
         icon: <SparkIcon size={20} />,
       },
       {
         href: '/routing',
         key: 'nav.routing',
+        titleKey: 'page.routing',
         permission: 'platform.configuration.read',
         icon: <RouteIcon size={20} />,
       },
@@ -135,12 +148,14 @@ const NAV_SECTIONS: ReadonlyArray<{
       {
         href: '/audit',
         key: 'nav.audit',
+        titleKey: 'page.audit',
         permission: 'platform.audit.read',
         icon: <ListIcon size={20} />,
       },
       {
         href: '/health',
         key: 'nav.health',
+        titleKey: 'page.health',
         permission: 'platform.workspace.read',
         icon: <PulseIcon size={20} />,
       },
@@ -201,7 +216,22 @@ export function AdminShell({
         href: `/${locale}/console${item.href}`,
         label: t(item.key),
         icon: item.icon,
-        active: (activePath ?? '') === item.href,
+        /*
+         * `active` is left to the shell, which resolves it from the real
+         * pathname by longest match.
+         *
+         * This comparison used to be `(activePath ?? '') === item.href`, and
+         * the console LAYOUT never passed `activePath` — so the empty string
+         * matched the console root's empty href and every one of the sixteen
+         * console screens showed "Overview" as the current page. A layout
+         * cannot read the pathname on the server; the shell is a client
+         * component and can.
+         */
+        ...(activePath === undefined ? {} : { active: activePath === item.href }),
+        /* The longer page title, for the top bar. The nav says "AI models";
+           the page is "AI model registry". Both are true, and the reference
+           puts the longer one in the bar. */
+        pageTitle: t(item.titleKey),
         // The existing convention, preserved: the end-to-end suite selects
         // `nav-nav.configuration` and `nav-nav.secrets`.
         testId: `nav-${item.key}`,
@@ -210,7 +240,11 @@ export function AdminShell({
 
   return (
     <AppShell
-      brand={<BrandMark title={t('app.title')} subtitle={t('app.subtitle')} />}
+      /* No subtitle in the rail: `.sidebar-top` is a fixed 42px, and
+         "Platform administration" wrapped to a second line there, pushing every
+         nav item down and out of alignment with the customer application. The
+         same words are the top-bar eyebrow, where they have a full row. */
+      brand={<BrandMark title={t('app.mark')} />}
       sections={sections}
       labels={{
         primaryNavigation: t('nav.primary'),
@@ -277,6 +311,22 @@ export function AdminShell({
           ariaLabel={t('nav.language')}
         />
       }
+      /* The scope word above every console title — always, because the
+         console LAYOUT renders the shell and never knows the page's own
+         heading. Gating it on `heading` meant sixteen routes had a title with
+         nothing above it and a top bar that read as half-empty. */
+      pageEyebrow={t('app.subtitle')}
+      pageTitle={heading}
+      pageDescription={description}
+      pageMeta={
+        support ? (
+          <StatusBadge
+            label={locale === 'ar' ? 'وضع الدعم' : 'Support mode'}
+            tone="accent"
+            testId="support-mode-page-badge"
+          />
+        ) : undefined
+      }
       profile={
         /*
          * THE OPERATOR'S IDENTITY AND THE WAY OUT, at the foot of the rail
@@ -287,6 +337,7 @@ export function AdminShell({
          */
         <div style={{ display: 'grid', gap: spacingTokens.xs, inlineSize: '100%' }}>
           <span
+            className="bs-rail-copy"
             data-testid="actor-identity"
             style={{
               ...typographyTokens.caption,
@@ -300,6 +351,14 @@ export function AdminShell({
             <button
               type="submit"
               data-testid="sign-out"
+              /*
+               * NAMED EXPLICITLY, because its label is hidden in a collapsed
+               * rail. `.bs-rail-copy` takes the word "Sign out" out of the DOM
+               * at 78px, and the only child left is an `aria-hidden` icon — a
+               * button with no discernible text, which is exactly what axe
+               * reported the moment the rail learned to collapse its copy.
+               */
+              aria-label={t('nav.signOut')}
               className="bs-pressable bs-control"
               style={{
                 display: 'flex',
@@ -318,27 +377,30 @@ export function AdminShell({
               }}
             >
               <SignOutIcon size={18} />
-              <span style={{ whiteSpace: 'nowrap' }}>{t('nav.signOut')}</span>
+              <span className="bs-rail-copy" style={{ whiteSpace: 'nowrap' }}>
+                {t('nav.signOut')}
+              </span>
             </button>
           </form>
         </div>
       }
     >
-      {heading ? (
-        <PageHeader
-          title={heading}
-          description={description}
-          actions={actions}
-          meta={
-            support ? (
-              <StatusBadge
-                label={locale === 'ar' ? 'وضع الدعم' : 'Support mode'}
-                tone="accent"
-                testId="support-mode-page-badge"
-              />
-            ) : undefined
-          }
-        />
+      {/*
+        The title moved into the top bar (fidelity pass §4/§5), so the console
+        gets the reference's single `eyebrow → h1 → actions` block rather than a
+        strip followed by a detached heading. Page-level actions stay here.
+      */}
+      {actions ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: spacingTokens.sm,
+            marginBlockEnd: spacingTokens.md,
+          }}
+        >
+          {actions}
+        </div>
       ) : null}
       {children}
     </AppShell>
@@ -354,7 +416,38 @@ export function AdminShell({
  * Phase 2C-B replaces the call sites and deletes this block.
  * ------------------------------------------------------------------------- */
 
-export { PageHeader as PageHeading, DataTable, Cell } from '@brandspace/ui';
+export { DataTable, Cell } from '@brandspace/ui';
+
+/**
+ * The lead paragraph under a console page's title.
+ *
+ * REPLACES `PageHeading`, and the rename is the point. Every console page used
+ * to render its own `<PageHeading title=… description=… />` one block below the
+ * top bar, which is exactly the detached-heading composition the reference does
+ * not have. The title now lives in the top bar, resolved from the route, so a
+ * page that still tried to render one would produce a second `h1` — and a page
+ * that quietly dropped its title would lose the authored copy.
+ *
+ * So the type changed rather than the behaviour being patched: `title` is gone,
+ * TypeScript named all ten call sites, and each page's title moved to
+ * `NAV_SECTIONS` beside its route where a layout-rendered shell can read it.
+ */
+export function PageIntro({ description }: { readonly description: string }) {
+  return (
+    <p
+      data-testid="description"
+      style={{
+        margin: 0,
+        marginBlockEnd: spacingTokens.md,
+        maxInlineSize: '68ch',
+        ...typographyTokens.bodySm,
+        color: colorTokens.textSecondary,
+      }}
+    >
+      {description}
+    </p>
+  );
+}
 
 export function EmptyState({ message }: { message: string }) {
   return <StateMessage title={message} />;

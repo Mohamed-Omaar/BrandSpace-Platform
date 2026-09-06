@@ -79,7 +79,6 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       permissionKeys={workspace.permissionKeys}
       hero={
         <OverviewHero
-          isPageTitle
           eyebrow={workspace.workspaceName}
           title={t('overview.hero.title')}
           description={t('overview.hero.body')}

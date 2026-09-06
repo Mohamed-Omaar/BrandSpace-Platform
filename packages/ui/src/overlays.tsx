@@ -11,6 +11,7 @@ import {
 } from 'react';
 import {
   colorTokens,
+  layoutTokens,
   motionTokens,
   radiusTokens,
   shadowTokens,
@@ -260,6 +261,14 @@ export function DropdownMenu({
         data-testid={testId}
         onClick={() => setOpen((value) => !value)}
         className={trigger === 'card' ? 'bs-pressable' : undefined}
+        /*
+         * A CARD TRIGGER IS NAMED EXPLICITLY, because its visible copy can be
+         * hidden. In a collapsed 78px rail the reference shows only the avatar,
+         * so the text that would otherwise name this button is `display: none`
+         * — and a button whose only remaining child is an `aria-hidden` avatar
+         * has no accessible name at all. The label carries it either way.
+         */
+        aria-label={trigger === 'card' ? label : undefined}
         style={
           trigger === 'card'
             ? {
@@ -269,11 +278,14 @@ export function DropdownMenu({
                 inlineSize: '100%',
                 minInlineSize: 0,
                 overflow: 'hidden',
-                padding: spacingTokens.sm,
+                // `.workspace-switcher { padding: 10px; radius: 15px;
+                //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
+                padding: layoutTokens.railCardPad,
+                minBlockSize: layoutTokens.railCardHeight,
                 border: '1px solid transparent',
-                borderRadius: radiusTokens.lg,
+                borderRadius: radiusTokens.rail,
                 background: colorTokens.surface,
-                boxShadow: shadowTokens.metric,
+                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.035)',
                 color: colorTokens.textPrimary,
                 fontFamily: 'inherit',
                 textAlign: 'start',
