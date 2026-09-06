@@ -2,7 +2,6 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   AmbientBackground,
   BrandMark,
-  CheckIcon,
   LanguageSwitcher,
   buttonStyle,
   colorTokens,
@@ -15,115 +14,6 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { translator } from '../i18n/messages';
-
-/**
- * The unauthenticated shell: sign-in, password reset, invitation acceptance.
- *
- * WHAT CHANGED, AND WHY. It used to be a single bordered card floating near the
- * top of an otherwise empty white page — the whole screen was one outline and a
- * lot of nothing. It is now a SPLIT: a soft lavender brand panel carrying the
- * product's identity and three plain statements of what it does, beside a
- * borderless form.
- *
- * The panel is the one place outside the Copilot's header where the restrained
- * purple glow is used, and the only yellow is a small accent rule — never a
- * surface behind text, because yellow is 1.35:1 on white and can carry none.
- *
- * The panel is hidden below 1024px rather than stacked above the form: on a
- * phone the fields are the only thing that matters, and pushing them under a
- * marketing block is how a sign-in page gets slower to use.
- *
- * The landmarks the accessibility suite asserts are unchanged: a single `main`
- * that the skip link targets, exactly one `h1`, and a focus ring that is never
- * removed. All layout properties are logical, so Arabic RTL mirrors with no
- * second stylesheet.
- */
-function BrandPanel({ locale }: { readonly locale: string }) {
-  const t = translator(locale);
-  const benefits = [t('auth.benefit.plan'), t('auth.benefit.brand'), t('auth.benefit.team')];
-
-  return (
-    <aside
-      className="bs-auth-panel"
-      aria-label={t('auth.panelLabel')}
-      data-testid="auth-brand-panel"
-      style={{
-        gap: spacingTokens.lg,
-        alignContent: 'center',
-        padding: spacingTokens['2xl'],
-        borderRadius: radiusTokens['2xl'],
-        background: `radial-gradient(90% 110% at 100% 0%, ${colorTokens.surfaceLavenderStrong} 0%, ${colorTokens.surfaceLavender} 55%, ${colorTokens.surfaceSoft} 100%)`,
-        boxShadow: shadowTokens.brandGlow,
-        minBlockSize: '30rem',
-      }}
-    >
-      {/* A small yellow rule, the accent's whole appearance on this page. */}
-      <span
-        aria-hidden="true"
-        style={{
-          inlineSize: '3rem',
-          blockSize: '0.375rem',
-          borderRadius: radiusTokens.full,
-          background: colorTokens.brandYellow,
-        }}
-      />
-      <p
-        style={{
-          margin: 0,
-          ...typographyTokens.display,
-          color: colorTokens.textPrimary,
-          maxInlineSize: '18ch',
-        }}
-      >
-        {t('auth.panelTitle')}
-      </p>
-      <ul
-        style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: spacingTokens.sm }}
-      >
-        {benefits.map((benefit) => (
-          <li
-            key={benefit}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'auto minmax(0, 1fr)',
-              gap: spacingTokens.sm,
-              alignItems: 'start',
-              ...typographyTokens.body,
-              color: colorTokens.textSecondary,
-            }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                inlineSize: '1.5rem',
-                blockSize: '1.5rem',
-                borderRadius: radiusTokens.full,
-                background: colorTokens.brandPurple,
-                color: colorTokens.brandPurpleInk,
-                marginBlockStart: '0.125rem',
-              }}
-            >
-              <CheckIcon size={14} />
-            </span>
-            {benefit}
-          </li>
-        ))}
-      </ul>
-      <p
-        style={{
-          margin: 0,
-          ...typographyTokens.caption,
-          color: colorTokens.textSecondary,
-        }}
-      >
-        {t('auth.panelFootnote')}
-      </p>
-    </aside>
-  );
-}
 
 export function AuthCard({
   locale,
@@ -138,6 +28,7 @@ export function AuthCard({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const t = translator(locale);
   const other = locale === 'ar' ? 'en' : 'ar';
   return (
     <div
@@ -194,13 +85,20 @@ export function AuthCard({
           background: gradientTokens.authStage,
         }}
       >
-        <div
-          className="bs-auth-split"
-          style={{ inlineSize: '100%', maxInlineSize: layoutTokens.contentMaxWidth }}
-        >
-          <BrandPanel locale={locale} />
+        {/*
+          ONE CENTRED CARD, not a two-column split.
 
-          <div style={{ inlineSize: '100%', maxInlineSize: '26.25rem', marginInline: 'auto' }}>
+          The demo's entry screens are a single `min(420px, 100%)` card centred
+          on the stage (`.auth-stage { display: grid; place-items: center }`).
+          The brand panel beside it was written against the superseded
+          reference to fill what looked like an empty half-screen; the full
+          demo (D-60) answers that differently and better — the stage's own
+          wash carries the space, and the card carries the brand MARK, an
+          overline and a 34px heading, which is what stops it reading as a bare
+          form. That copy belongs on the public website, which is its audience.
+        */}
+        <div style={{ inlineSize: '100%', display: 'grid', placeItems: 'center' }}>
+          <div style={{ inlineSize: '100%', maxInlineSize: '26.25rem' }}>
             {/*
               THE CARD (`.auth-card`): `width: min(420px, 100%); padding: 30px;
               border-radius: 24px; background: rgba(255,255,255,.9);
@@ -218,7 +116,43 @@ export function AuthCard({
                 gap: spacingTokens.md,
               }}
             >
+              {/*
+                `.auth-card > .brand-mark { margin-bottom: 24px }` above an
+                overline and the heading. The mark inside the card is what
+                makes it the product's front door rather than a bare form.
+              */}
+              <span
+                aria-hidden="true"
+                data-testid="auth-brand-mark"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  inlineSize: layoutTokens.brandMark,
+                  blockSize: layoutTokens.brandMark,
+                  borderRadius: radiusTokens.lg,
+                  background: colorTokens.ink,
+                  color: colorTokens.inkInk,
+                  fontSize: layoutTokens.brandMarkGlyph,
+                  lineHeight: 1,
+                  fontWeight: 850,
+                  marginBlockEnd: spacingTokens.sm,
+                }}
+              >
+                B
+              </span>
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+                <p
+                  data-testid="auth-eyebrow"
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.overline,
+                    textTransform: 'uppercase',
+                    color: colorTokens.textMuted,
+                  }}
+                >
+                  {t('app.title')}
+                </p>
                 <h1 data-testid="heading" style={{ ...typographyTokens.authHeading, margin: 0 }}>
                   {heading}
                 </h1>

@@ -191,13 +191,15 @@ test.describe('visual review evidence', () => {
   test('customer sign-in — both directions and mobile', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
-    await expect(page.getByTestId('auth-brand-panel')).toBeVisible();
+    // One centred card on the stage, carrying the brand mark (D-60).
+    await expect(page.getByTestId('auth-brand-mark')).toBeVisible();
+    await expect(page.getByTestId('auth-form-card')).toBeVisible();
     await capture(page, '09-customer-sign-in-en');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
     await capture(page, '10-customer-sign-in-ar');
     await expect(page.getByTestId('signin-submit')).toBeVisible();
 
-    // The phone drops the brand panel entirely; the form is the whole screen.
+    // The same card on a phone: it is the whole screen at any width.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
     await capture(page, '11-customer-sign-in-mobile');

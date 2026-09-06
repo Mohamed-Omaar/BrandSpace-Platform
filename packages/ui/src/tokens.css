@@ -720,37 +720,6 @@ h4 {
 }
 
 /*
- * The unauthenticated split.
- *
- * One column on a phone — the form is the only thing that matters there, and a
- * brand panel above it would push the fields below the fold. From the large
- * breakpoint the brand panel takes the inline-start half. The breakpoint is
- * 1024px rather than 768px because on a tablet the form still deserves the
- * full width.
- */
-.bs-auth-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--bs-space-lg);
-  align-items: center;
-}
-
-.bs-auth-panel {
-  display: none;
-}
-
-@media (min-width: 1024px) {
-  .bs-auth-split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
-    gap: var(--bs-space-3xl);
-  }
-
-  .bs-auth-panel {
-    display: grid;
-  }
-}
-
-/*
  * The Overview hero (§5).
  *
  * One column on a phone with the decorative orbit removed entirely — a 340px

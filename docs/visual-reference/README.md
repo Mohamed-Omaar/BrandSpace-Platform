@@ -83,6 +83,14 @@ the brief allows.
 | A grid of media assets in the Studio's asset column | the column, its heading, and an honest empty state | There is no `Media` model and no media library in this phase. The column keeps its width, ground, padding and heading. |
 | A settings nav listing sections that do not exist | a settings nav of the real pages this member can open | A row that leads nowhere is a placeholder link. |
 
+The reverse also happened once, and is worth naming: a **brand panel beside the
+sign-in form** was added in an earlier round to fill what looked like an empty
+half-screen in the superseded reference. The full demo answers that differently
+— one `min(420px, 100%)` card centred on the stage, carrying the brand mark, an
+overline and a 34px heading — so the panel is gone and the card is the whole
+composition. That marketing copy belongs on the public website, which is its
+audience.
+
 Accessibility is **not** a reason to change logo size, wordmark gap, sidebar
 width, nav-row geometry, heading position, card radius, card layout, Calendar
 geometry, Social Preview geometry, Composer column proportions, Studio

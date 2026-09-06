@@ -71,19 +71,6 @@ export const messages = {
     'members.owner': 'المالك',
     'members.noInvitations': 'لا توجد دعوات',
     'members.noInvitationsHint': 'ادعُ زميلًا بالبريد الإلكتروني أدناه.',
-    /*
-     * The sign-in page's brand panel (§10).
-     *
-     * Three short statements of what the product IS, not a marketing pitch and
-     * not a claim about a feature that does not exist yet. They replace an
-     * empty half-screen with the reason someone is signing in.
-     */
-    'auth.panelLabel': 'عن براندسبيس',
-    'auth.panelTitle': 'مساحة عمل واحدة لعلامتك على كل المنصات',
-    'auth.benefit.plan': 'خطّط المحتوى وراجعه واعتمده في تقويم واحد.',
-    'auth.benefit.brand': 'نبرة علامتك وألوانها وخطوطها في كل منشور.',
-    'auth.benefit.team': 'فريقك وصلاحياته ومسار الاعتماد، بلا جداول بيانات.',
-    'auth.panelFootnote': 'عربي وإنجليزي، من اليمين ومن اليسار، بالجودة نفسها.',
     'signIn.title': 'تسجيل الدخول',
     'signIn.description': 'ادخل إلى مساحة عملك في براندسبيس.',
     'signIn.email': 'البريد الإلكتروني',
@@ -205,13 +192,6 @@ export const messages = {
     'members.owner': 'Owner',
     'members.noInvitations': 'No invitations',
     'members.noInvitationsHint': 'Invite a colleague by email below.',
-    'auth.panelLabel': 'About BrandSpace',
-    'auth.panelTitle': 'One workspace for your brand, across every platform',
-    'auth.benefit.plan': 'Plan, review and approve content on a single calendar.',
-    'auth.benefit.brand': 'Your brand’s voice, colours and typefaces on every post.',
-    'auth.benefit.team': 'Your team, their permissions and the approval path — no spreadsheets.',
-    'auth.panelFootnote':
-      'Arabic and English, right-to-left and left-to-right, held to the same standard.',
     'signIn.title': 'Sign in',
     'signIn.description': 'Access your BrandSpace workspace.',
     'signIn.email': 'Email',
