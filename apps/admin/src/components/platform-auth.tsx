@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  AmbientBackground,
   BrandMark,
   ShieldIcon,
   colorTokens,
@@ -48,9 +49,11 @@ export function PlatformAuthShell({
         alignItems: 'center',
         justifyContent: 'center',
         padding: spacingTokens.lg,
-        background: colorTokens.appBackground,
       }}
     >
+      {/* Platform Admin shares the ground and the geometry, never the layout:
+          the realms stay visually distinct, which is the point of D-58. */}
+      <AmbientBackground />
       <div
         style={{
           inlineSize: '100%',

@@ -11,3 +11,6 @@ packages/database/prisma/migrations/
 
 playwright-report/
 test-results/
+
+# The owner-approved visual reference, vendored verbatim (see docs/visual-reference/README.md).
+docs/visual-reference/

@@ -1,4 +1,5 @@
 export * from './a11y';
+export * from './ambient';
 export * from './app-shell';
 export * from './calendar';
 export * from './composer';

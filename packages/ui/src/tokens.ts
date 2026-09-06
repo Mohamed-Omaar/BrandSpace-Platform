@@ -51,7 +51,7 @@ export const colorTokens = {
   /** Foreground on brandPurple. 5.60:1. */
   brandPurpleInk: '#FFFFFF',
   /** Selected-row and active-nav tint. Carries textPrimary and brandPurple. */
-  brandPurpleTint: '#F3EDFF',
+  brandPurpleTint: '#F0E9FF',
   /** Border for a tinted selected surface — visible against white and tint. */
   brandPurpleBorder: '#D6C2FF',
 
@@ -92,7 +92,7 @@ export const colorTokens = {
   /** The canvas, and any card that must read as raised white on white. */
   surface: '#FFFFFF',
   /** Off-white card fill. The default card surface — near-white, not grey. */
-  surfaceSoft: '#FBFBFC',
+  surfaceSoft: '#F9F9FA',
   /** Warm grey section surface, for grouping without drawing a box. */
   surfaceWarm: '#F7F6F4',
   /**
@@ -107,18 +107,18 @@ export const colorTokens = {
    * A faint neutral for insets that must read as recessed: table headers,
    * code blocks, skeletons, disabled controls.
    */
-  surfaceMuted: '#F5F6F8',
+  surfaceMuted: '#F5F5F6',
   /** Slightly deeper inset, for a nested surface on an already-muted one. */
   surfaceSunken: '#EDEFF3',
   /** A dark surface, for the Design Studio canvas frame and media chrome. */
-  surfaceInk: '#171528',
+  surfaceInk: '#181620',
   /**
    * THE APPLICATION GROUND IS WHITE (D-49, reaffirmed in D-54). Structure now
    * comes from tinted surfaces, spacing and radius rather than from borders —
    * but the ground itself is still white, so the product reads as open rather
    * than as a grey utility.
    */
-  appBackground: '#FFFFFF',
+  appBackground: '#F2F2F2',
 
   /* ------------------------------------------------------------------ */
   /* Controls                                                            */
@@ -131,13 +131,13 @@ export const colorTokens = {
   /* ------------------------------------------------------------------ */
 
   /** Resting fill for inputs, selects, textareas and search fields. */
-  controlSurface: '#F4F4F7',
+  controlSurface: '#F5F5F6',
   /** Hover fill. Perceptible without becoming a second state to read. */
-  controlSurfaceHover: '#EDEDF3',
+  controlSurfaceHover: '#ECECEF',
   /** Focused fill: white, so the purple ring reads at full strength. */
   controlSurfaceFocus: '#FFFFFF',
   /** Disabled fill. Paired with `textMuted`, never with `textPrimary`. */
-  controlSurfaceDisabled: '#F7F7F9',
+  controlSurfaceDisabled: '#F7F7F8',
   /** Resting control border. Transparent by design — see D-55. */
   controlBorder: 'transparent',
   /** The 3:1 boundary used under `prefers-contrast: more` and forced colours. */
@@ -149,11 +149,11 @@ export const colorTokens = {
    * non-text threshold because it is DECORATION, not the way a component is
    * identified.
    */
-  hairline: '#F0F1F4',
+  hairline: '#F0F0F2',
   /** Card border. Subtle by design; the shadow carries the rest. 1.28:1. */
-  cardBorder: '#EAECF0',
+  cardBorder: '#EEEEF0',
   /** Default border for dividers. 1.44:1 — decorative. */
-  border: '#E3E8EF',
+  border: '#E8E8EA',
   /**
    * A boundary that must be PERCEIVABLE — WCAG 1.4.11 wants 3:1 for a UI
    * component boundary, and `#98A2B3`, the obvious mid-grey and the first
@@ -164,13 +164,39 @@ export const colorTokens = {
   borderStrong: '#818C9C',
 
   /** Body text. 17.9:1 on white. */
-  textPrimary: '#0F172A',
+  textPrimary: '#111114',
   /** Secondary text, labels, captions. 7.55:1 on white — AA at every size. */
-  textSecondary: '#475569',
+  textSecondary: '#5B5B62',
   /** Placeholder and disabled text. 4.61:1 on white — still AA for normal text. */
-  textMuted: '#667085',
+  textMuted: '#6A6A71',
   /** Foreground on a dark or saturated surface. */
   textInverse: '#FFFFFF',
+
+  /* ------------------------------------------------------------------ */
+  /* INK — the approved demo's primary action colour.                     */
+  /*                                                                      */
+  /* The reference has TWO primary treatments, and reproducing only one   */
+  /* would lose half the direction: `.dark-button` (near-black) carries   */
+  /* almost every action — the hero CTA, Schedule post, Export, Edit post */
+  /* — while `.primary-button` (purple) is reserved for the single        */
+  /* "+ Create" entry point. Black is the workhorse; purple is the        */
+  /* accent that starts something new.                                    */
+  /* ------------------------------------------------------------------ */
+
+  /** `--ink`. Near-black, not pure black. 18.85:1 against white. */
+  ink: '#111114',
+  /** Hover for a filled ink surface. */
+  inkHover: '#26262B',
+  /** Foreground on `ink`. */
+  inkInk: '#FFFFFF',
+
+  /* The floating application shell, over the ambient page. */
+  /** `rgba(255,255,255,.94)` over `#F2F2F2`, resolved. */
+  shellSurface: '#FCFCFC',
+  /** The sidebar's own slightly cooler plane. */
+  shellSidebar: '#F9F9FA',
+  /** The main panel inside the shell. */
+  shellPanel: '#FDFDFD',
 
   /* ---------------------------------------------------------------------- */
   /* Semantic                                                               */
@@ -227,63 +253,99 @@ export const spacingTokens = {
 /**
  * Type scale. One ramp for both scripts.
  *
- * Sizes were literals scattered across a dozen files before this phase
- * (`1.35rem`, `1.05rem`, `0.8125rem`, `0.6875rem`…), which is why two pages
- * that meant "section heading" rendered at different sizes. Every heading and
- * label now names a step.
+ * RETUNED TO THE APPROVED DEMO. The direction's typography is not a size
+ * choice, it is a TRACKING choice: the reference sets its titles at strongly
+ * negative letter-spacing (-0.045em on a page title, -0.06em on the hero
+ * statement) with leading close to 1, which is what makes a large heading read
+ * as a confident statement rather than as a banner. Supporting text stays
+ * small, quiet and generously led, so the contrast between the two is the
+ * hierarchy — no rules, no boxes, no colour needed.
+ *
+ * The two title steps are FLUID (`clamp`) exactly as the reference is, so a
+ * heading is large on a desktop and still fits a 390px phone without wrapping
+ * into four lines.
  */
 export const typographyTokens = {
+  /** The hero statement. `clamp(34px, 4vw, 60px)` in the reference. */
   display: {
-    fontSize: '1.875rem',
-    lineHeight: '2.25rem',
-    fontWeight: 700,
-    letterSpacing: '-0.02em',
+    fontSize: 'clamp(2.125rem, 4vw, 3.75rem)',
+    lineHeight: '0.98',
+    fontWeight: 750,
+    letterSpacing: '-0.06em',
   },
-  h1: { fontSize: '1.5rem', lineHeight: '2rem', fontWeight: 700, letterSpacing: '-0.015em' },
-  h2: { fontSize: '1.125rem', lineHeight: '1.75rem', fontWeight: 650, letterSpacing: '-0.01em' },
-  h3: { fontSize: '1rem', lineHeight: '1.5rem', fontWeight: 650, letterSpacing: '0' },
-  body: { fontSize: '0.9375rem', lineHeight: '1.5rem', fontWeight: 400, letterSpacing: '0' },
-  bodySm: { fontSize: '0.875rem', lineHeight: '1.375rem', fontWeight: 400, letterSpacing: '0' },
-  label: { fontSize: '0.8125rem', lineHeight: '1.25rem', fontWeight: 600, letterSpacing: '0' },
-  caption: { fontSize: '0.75rem', lineHeight: '1.125rem', fontWeight: 400, letterSpacing: '0' },
+  /** The page title in the top bar. `clamp(24px, 2.4vw, 35px)`. */
+  h1: {
+    fontSize: 'clamp(1.5rem, 2.4vw, 2.1875rem)',
+    lineHeight: '1.08',
+    fontWeight: 700,
+    letterSpacing: '-0.045em',
+  },
+  /** A section title inside a surface. */
+  h2: { fontSize: '1.125rem', lineHeight: '1.6rem', fontWeight: 700, letterSpacing: '-0.03em' },
+  /** A card or group title. */
+  h3: { fontSize: '0.9375rem', lineHeight: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' },
+  body: { fontSize: '1rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: '-0.005em' },
+  bodySm: { fontSize: '0.875rem', lineHeight: '1.5', fontWeight: 400, letterSpacing: '0' },
+  label: {
+    fontSize: '0.8125rem',
+    lineHeight: '1.25rem',
+    fontWeight: 650,
+    letterSpacing: '-0.005em',
+  },
+  caption: { fontSize: '0.75rem', lineHeight: '1.15rem', fontWeight: 500, letterSpacing: '0' },
+  /**
+   * The eyebrow/kicker above a title: uppercase, heavily tracked, quiet.
+   *
+   * DELIBERATE DEVIATION: the reference sets this at 10px. Held at 11px here.
+   * Uppercase text at 10px is hard work for anyone with low vision, the
+   * difference is imperceptible as a visual direction, and the reference also
+   * uses 8–9px in three places that are not reproduced at all for the same
+   * reason. Recorded in `docs/DECISIONS.md`.
+   */
   overline: {
     fontSize: '0.6875rem',
     lineHeight: '1rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
+    fontWeight: 800,
+    letterSpacing: '0.11em',
   },
   /** Tabular figures for money, credits and counts, so columns align. */
   numeric: {
-    fontSize: '1.5rem',
-    lineHeight: '2rem',
+    fontSize: '2rem',
+    lineHeight: '2.25rem',
     fontWeight: 700,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.04em',
   },
 } as const;
 
 export type TypographyToken = keyof typeof typographyTokens;
 
 /**
- * Elevation. Restrained by direction: two steps, plus one for overlays.
- * A stack of heavy shadows is the thing this system is explicitly avoiding.
- */
-/**
  * Elevation.
  *
- * Restrained and LARGE-RADIUS rather than tight and dark: a soft, wide,
- * low-opacity shadow lifts a surface off white without drawing an edge, which
- * is precisely the job the borders used to be doing. `card` is almost
- * subliminal on purpose — it should be felt, not seen.
+ * RETUNED TO THE APPROVED DEMO. The reference lifts a surface with a shadow
+ * that is WIDE, FAR and very low in opacity — `0 12px 40px rgba(0,0,0,.05)` on
+ * a card — rather than with a tight dark one. That is what lets a card carry no
+ * border at all and still read as a separate plane: the eye reads the gradient
+ * of light under it, not an edge. A tight shadow at the same opacity is
+ * invisible; a tight shadow dark enough to see reads as a cheap drop shadow.
+ *
+ * Nothing here is "heavy". §3 of the brief forbids excessive shadow, and the
+ * largest value in the set is reserved for a drawer that genuinely floats above
+ * a scrim.
  */
 export const shadowTokens = {
-  /** The default card lift. Two very soft layers, no visible edge. */
-  card: '0 1px 2px 0 rgba(23, 21, 40, 0.03), 0 6px 16px -8px rgba(23, 21, 40, 0.08)',
-  /** Hover, and a card that must sit above its neighbours. */
-  raised: '0 2px 4px -1px rgba(23, 21, 40, 0.04), 0 12px 28px -12px rgba(23, 21, 40, 0.12)',
-  /** Menus, dialogs, drawers, the Copilot panel. */
-  overlay: '0 8px 16px -8px rgba(23, 21, 40, 0.10), 0 24px 48px -16px rgba(23, 21, 40, 0.18)',
-  /** A brand-tinted glow, for the sign-in hero and the Copilot header only. */
-  brandGlow: '0 18px 48px -18px rgba(121, 53, 254, 0.35)',
+  /** The application shell itself, floating over the ambient ground. */
+  shell: '0 24px 70px rgba(20, 16, 35, 0.1)',
+  /** The default surface lift. Felt, not seen. */
+  card: '0 12px 40px rgba(0, 0, 0, 0.05)',
+  /** A small statistic surface — lighter still, because there are four in a row. */
+  metric: '0 8px 30px rgba(0, 0, 0, 0.045)',
+  /** Hover, and a surface that must sit above its neighbours. */
+  raised: '0 18px 42px rgba(0, 0, 0, 0.1)',
+  /** Drawers and dialogs, which float above a scrim. */
+  overlay: '0 30px 80px rgba(0, 0, 0, 0.2)',
+  /** The purple glow under the single accent call to action. */
+  brandGlow: '0 10px 24px rgba(121, 53, 254, 0.2)',
   /** The focus ring, as a shadow, for controls that cannot use `outline`. */
   focus: `0 0 0 2px ${colorTokens.focusRingContrast}, 0 0 0 4px ${colorTokens.focusRing}`,
 } as const;
@@ -291,23 +353,29 @@ export const shadowTokens = {
 /**
  * Corner radius.
  *
- * The scale moved up in the 2C-A revision (D-54): controls sit at 12px and
- * cards at 18–20px, because a 6px corner on a 44px control reads as a form
- * field in a database tool, and a 12px corner on a card reads as a panel. The
- * softer geometry is a large part of what separates "premium product" from
- * "admin template", and it costs nothing.
+ * RETUNED TO THE APPROVED DEMO, which is markedly softer than the previous
+ * scale: a 13px control, an 18px statistic, a 22px post card, a 28px surface
+ * and a 32px application shell. The reference's `--radius-lg: 28px` and
+ * `--radius-md: 18px` are the two anchors; the rest fall between them.
+ *
+ * This is not decoration. A 6px corner on a 44px control reads as a database
+ * form field, and it was a large part of why the first draft read as an admin
+ * template. Geometry carries as much of the "premium, soft, modern" direction
+ * as colour does, and it costs nothing.
  */
 export const radiusTokens = {
   xs: '0.375rem',
   sm: '0.5rem',
-  /** Controls: inputs, buttons, chips. 12px. */
-  md: '0.75rem',
-  /** Slightly larger control, and small surfaces. 14px. */
-  lg: '0.875rem',
-  /** Cards and panels. 18px. */
-  xl: '1.125rem',
-  /** Hero surfaces, sheets and the composer's media well. 24px. */
-  '2xl': '1.5rem',
+  /** Controls: inputs, buttons, chips, nav items. 13px in the reference. */
+  md: '0.8125rem',
+  /** Statistics, small surfaces, media wells. `--radius-md`, 18px. */
+  lg: '1.125rem',
+  /** Post cards and tiles. 22px. */
+  xl: '1.375rem',
+  /** Large surfaces, hero areas and drawers. `--radius-lg`, 28px. */
+  '2xl': '1.75rem',
+  /** The application shell itself. 32px. */
+  '3xl': '2rem',
   full: '9999px',
 } as const;
 
@@ -366,14 +434,24 @@ export const zIndexTokens = {
   skipLink: 100,
 } as const;
 
-/** Fixed layout measurements the shell and its tests both need. */
-/** Fixed layout measurements the shell and its tests both need. */
+/**
+ * Fixed layout measurements the shell and its tests both need.
+ *
+ * MEASURED FROM THE APPROVED DEMO: a 250px expanded sidebar, a 78px collapsed
+ * rail, a 92px top bar, and a 20px inset all round because the shell FLOATS on
+ * the ambient ground rather than filling the window.
+ */
 export const layoutTokens = {
-  sidebarExpanded: '17rem',
-  sidebarCollapsed: '4.5rem',
-  headerHeight: '4rem',
+  /** `grid-template-columns: 250px minmax(0, 1fr)` in the reference. */
+  sidebarExpanded: '15.625rem',
+  /** The collapsed rail. 78px — wide enough for a 44px target, centred. */
+  sidebarCollapsed: '4.875rem',
+  /** `min-height: 92px` on the reference top bar. Generous on purpose. */
+  headerHeight: '5.75rem',
+  /** The gap between the shell and the window edge, on all four sides. */
+  shellInset: '1.25rem',
   contentMaxWidth: '88rem',
-  copilotPanelWidth: '26rem',
+  copilotPanelWidth: '24.375rem',
   /** WCAG 2.2 target size (2.5.8) minimum for a pointer target. */
   minTargetSize: '24px',
   /**
@@ -385,6 +463,62 @@ export const layoutTokens = {
   /** A compact control, for toolbars and table rows. Still 36px. */
   controlHeightSm: '2.25rem',
 } as const;
+
+/**
+ * THE AMBIENT BACKGROUND — the single most identifying element of the approved
+ * direction, and the one that must not be mistaken for a colourful theme.
+ *
+ * The brand purple and yellow appear at full saturation exactly once in the
+ * product: as three enormous, heavily blurred, low-opacity orbs drifting behind
+ * a floating white shell. At 56vw across with a 100px blur they never read as
+ * shapes — they read as light. That is what §3 means by "brand colour as a
+ * soft, blurred, atmospheric background gradient" rather than as a UI theme,
+ * and it is why the interface itself can stay almost entirely black and white.
+ *
+ * Nothing here ever sits behind text. The shell is opaque above it.
+ */
+export const ambientTokens = {
+  /** The page ground the shell floats on. */
+  ground: colorTokens.appBackground,
+  /** Inline-start, top. The dominant one. */
+  purple: colorTokens.brandPurple,
+  purpleOpacity: 0.38,
+  /** Inline-end, bottom. */
+  yellow: colorTokens.brandYellow,
+  yellowOpacity: 0.38,
+  /** The smaller third orb, where the two meet. */
+  blush: '#FF99B9',
+  blushOpacity: 0.24,
+  /** Large enough that no edge of an orb is ever visible. */
+  size: '56vw',
+  sizeSmall: '30vw',
+  blur: '100px',
+  /** A very slow drift. Neutralised entirely by `prefers-reduced-motion`. */
+  driftDuration: '16s',
+} as const;
+
+/**
+ * Gradients, named once.
+ *
+ * Two jobs: the hero wash behind the Overview's welcome area, and the
+ * deterministic artwork that stands in for media (D-57). Both are built from
+ * the brand pair, both are soft, and neither is ever a background for body
+ * text without an opaque surface between them.
+ */
+export const gradientTokens = {
+  /** The Overview hero. Yellow → white → purple, all under 35% opacity. */
+  hero: 'linear-gradient(120deg, rgba(255, 221, 21, 0.35), rgba(255, 255, 255, 0.65) 42%, rgba(121, 53, 254, 0.34))',
+  /** Artwork A — light lavender rising into purple, warmed by yellow. */
+  artLight: 'linear-gradient(145deg, #F2E9FF 0%, #B686FF 38%, #7935FE 65%, #FFDD15 135%)',
+  /** Artwork B — near-black into purple. Carries white text. */
+  artInk: 'linear-gradient(145deg, #17111F, #7935FE 72%, #FFDD15 145%)',
+  /** Artwork C — cream into pale lavender. The quietest of the four. */
+  artCream: 'linear-gradient(145deg, #FFFDE9, #F7EFFF 60%, #CBAEFF)',
+  /** Artwork D — ink into deep violet. Carries white text. */
+  artDeep: 'linear-gradient(145deg, #111114, #3C216D 56%, #7935FE)',
+} as const;
+
+export type GradientToken = keyof typeof gradientTokens;
 
 /**
  * Font stacks. Arabic and Latin are paired so both scripts render at comparable

@@ -217,12 +217,25 @@ export function DropdownMenu({
   children,
   align = 'end',
   testId,
+  trigger = 'control',
+  fullWidth = false,
 }: {
   readonly label: string;
   readonly triggerContent: ReactNode;
   readonly children: ReactNode;
   readonly align?: 'start' | 'end';
   readonly testId?: string | undefined;
+  /**
+   * How the trigger presents itself.
+   *
+   * `control` is the compact filled chip used in a toolbar. `card` is the
+   * approved direction's SIDEBAR CARD: a full-width white surface with a large
+   * radius and a very soft shadow, holding an avatar, two lines of text and a
+   * chevron. The workspace switcher and the account button are cards; a
+   * language menu in a top bar is a control.
+   */
+  readonly trigger?: 'control' | 'card';
+  readonly fullWidth?: boolean;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -246,13 +259,35 @@ export function DropdownMenu({
         aria-controls={open ? id : undefined}
         data-testid={testId}
         onClick={() => setOpen((value) => !value)}
-        style={{
-          ...buttonStyle('neutral', 'sm'),
-          gap: spacingTokens.xs,
-          maxInlineSize: '100%',
-          minInlineSize: 0,
-          overflow: 'hidden',
-        }}
+        className={trigger === 'card' ? 'bs-pressable' : undefined}
+        style={
+          trigger === 'card'
+            ? {
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacingTokens.sm,
+                inlineSize: '100%',
+                minInlineSize: 0,
+                overflow: 'hidden',
+                padding: spacingTokens.sm,
+                border: '1px solid transparent',
+                borderRadius: radiusTokens.lg,
+                background: colorTokens.surface,
+                boxShadow: shadowTokens.metric,
+                color: colorTokens.textPrimary,
+                fontFamily: 'inherit',
+                textAlign: 'start',
+                cursor: 'pointer',
+              }
+            : {
+                ...buttonStyle('neutral', 'sm'),
+                gap: spacingTokens.xs,
+                maxInlineSize: '100%',
+                inlineSize: fullWidth ? '100%' : undefined,
+                minInlineSize: 0,
+                overflow: 'hidden',
+              }
+        }
       >
         {triggerContent}
         <ChevronDownIcon size={16} />

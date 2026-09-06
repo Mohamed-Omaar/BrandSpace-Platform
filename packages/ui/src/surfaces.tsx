@@ -30,10 +30,22 @@ export function cardStyle(
   const { padded = true, tone = 'plain', elevated = true } = options;
   return {
     background: TONE_BACKGROUND[tone],
-    borderRadius: radiusTokens.xl,
-    // A hairline, not a border: on a white card it is invisible at rest and
-    // becomes a real 3:1 edge under `prefers-contrast: more` (tokens.css).
-    border: `1px solid ${tone === 'plain' ? colorTokens.hairline : 'transparent'}`,
+    // 28px — `--radius-lg` in the approved reference. A card is a soft plane,
+    // not a panel.
+    borderRadius: radiusTokens['2xl'],
+    /*
+     * NO RESTING BORDER AT ALL (D-59, tightening D-54).
+     *
+     * The hairline that used to sit here was the last remnant of the outlined
+     * console: invisible on its own, but visible as a grid of faint rectangles
+     * once twelve of them share a screen — which is exactly the effect the
+     * owner rejected. The wide, faint shadow does the whole job now.
+     *
+     * The transparent border is kept rather than removed so that
+     * `prefers-contrast: more` and `forced-colors: active` can swap a real 3:1
+     * edge back in from `tokens.css` without changing the box model.
+     */
+    border: '1px solid transparent',
     boxShadow: elevated ? shadowTokens.card : 'none',
     padding: padded ? spacingTokens.lg : 0,
     /*
@@ -75,7 +87,7 @@ export function Card({
 }) {
   const inset = padded ? 0 : spacingTokens.lg;
   return (
-    <section data-testid={testId} style={cardStyle({ padded, tone, elevated })}>
+    <section data-surface="card" data-testid={testId} style={cardStyle({ padded, tone, elevated })}>
       {(title || actions) && (
         <header
           style={{
@@ -182,53 +194,65 @@ export function MetricCard({
 
   return (
     <div
+      data-surface="card"
       data-testid={testId}
       style={{
         ...cardStyle({ tone: accent ? 'lavender' : 'plain' }),
+        // A statistic is a SMALLER plane than a section card: 18px rather than
+        // 28px, and a lighter shadow, because four of them sit in a row and the
+        // section shadow repeated four times stops being subliminal.
+        borderRadius: radiusTokens.lg,
+        boxShadow: shadowTokens.metric,
+        minBlockSize: '7.375rem',
         display: 'flex',
         flexDirection: 'column',
-        gap: spacingTokens.sm,
+        gap: spacingTokens.xs,
+        justifyContent: 'space-between',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm }}>
         {icon ? <IconTile icon={icon} tone={accent ? 'accent' : iconTone} size="sm" /> : null}
         <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>{label}</span>
       </div>
-      {unavailable ? (
-        <span
-          data-testid={testId ? `${testId}-unavailable` : undefined}
-          style={{ ...typographyTokens.numeric, color: colorTokens.textMuted }}
-        >
-          {'—'}
-        </span>
-      ) : (
-        <span style={{ ...typographyTokens.numeric, color: colorTokens.textPrimary }}>{value}</span>
-      )}
-      <div
-        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: spacingTokens.xs }}
-      >
-        {trend && !unavailable ? (
+      <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+        {unavailable ? (
           <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: spacingTokens['3xs'],
-              ...typographyTokens.caption,
-              fontWeight: 600,
-              color: trendColor,
-            }}
+            data-testid={testId ? `${testId}-unavailable` : undefined}
+            style={{ ...typographyTokens.numeric, color: colorTokens.textMuted }}
           >
-            <span aria-hidden="true">
-              {trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→'}
+            {'—'}
+          </span>
+        ) : (
+          <span style={{ ...typographyTokens.numeric, color: colorTokens.textPrimary }}>
+            {value}
+          </span>
+        )}
+        <div
+          style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: spacingTokens.xs }}
+        >
+          {trend && !unavailable ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: spacingTokens['3xs'],
+                ...typographyTokens.caption,
+                fontWeight: 600,
+                color: trendColor,
+              }}
+            >
+              <span aria-hidden="true">
+                {trend.direction === 'up' ? '↑' : trend.direction === 'down' ? '↓' : '→'}
+              </span>
+              {trend.label}
             </span>
-            {trend.label}
-          </span>
-        ) : null}
-        {(unavailable ? unavailableLabel : hint) ? (
-          <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-            {unavailable ? unavailableLabel : hint}
-          </span>
-        ) : null}
+          ) : null}
+          {(unavailable ? unavailableLabel : hint) ? (
+            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+              {unavailable ? unavailableLabel : hint}
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -275,7 +299,10 @@ export function PageHeader({
                 marginBlockEnd: spacingTokens['3xs'],
                 ...typographyTokens.overline,
                 textTransform: 'uppercase',
-                color: colorTokens.brandPurple,
+                // Muted, not purple. In the approved direction the eyebrow is a
+                // quiet kicker that lets the title carry the weight; a coloured
+                // one competes with the heading it is introducing.
+                color: colorTokens.textMuted,
               }}
             >
               {eyebrow}

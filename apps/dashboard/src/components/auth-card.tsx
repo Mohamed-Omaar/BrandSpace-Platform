@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import {
+  AmbientBackground,
   BrandMark,
   CheckIcon,
   LanguageSwitcher,
@@ -141,11 +142,13 @@ export function AuthCard({
     <div
       style={{
         minBlockSize: '100vh',
-        background: colorTokens.appBackground,
         display: 'flex',
         flexDirection: 'column',
       }}
     >
+      {/* The same ambient ground the signed-in shell floats on, so sign-in is
+          recognisably the same product rather than a plain white front door. */}
+      <AmbientBackground />
       <header
         style={{
           display: 'flex',

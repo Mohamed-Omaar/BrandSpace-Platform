@@ -4,6 +4,7 @@ import {
   layoutTokens,
   motionTokens,
   radiusTokens,
+  shadowTokens,
   spacingTokens,
   typographyTokens,
 } from './tokens';
@@ -30,7 +31,7 @@ import {
  * filled control with no hover feedback feels broken.
  */
 
-export type ButtonVariant = 'primary' | 'accent' | 'neutral' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'brand' | 'accent' | 'neutral' | 'ghost' | 'danger';
 export type ControlSize = 'sm' | 'md' | 'lg';
 
 const CONTROL_HEIGHT: Record<ControlSize, string> = {
@@ -51,7 +52,8 @@ function buttonBase(size: ControlSize): CSSProperties {
     borderRadius: radiusTokens.md,
     fontFamily: 'inherit',
     fontSize: size === 'sm' ? typographyTokens.caption.fontSize : typographyTokens.bodySm.fontSize,
-    fontWeight: 600,
+    fontWeight: 700,
+    letterSpacing: '-0.01em',
     lineHeight: typographyTokens.bodySm.lineHeight,
     cursor: 'pointer',
     textDecoration: 'none',
@@ -64,12 +66,22 @@ function buttonBase(size: ControlSize): CSSProperties {
 /**
  * Button styling by variant.
  *
- * FIVE VARIANTS, ONE RULE: none of them is a stroked box. Primary is a solid
- * purple surface; accent is the yellow, which carries near-black text and is
- * used sparingly; neutral is a soft lavender-grey fill; ghost has no resting
- * surface at all; destructive is a soft red fill rather than a red outline —
- * a red-outlined button beside a filled purple one reads as equally routine,
- * and these are the actions CLAUDE.md §2.5 calls high-impact.
+ * SIX VARIANTS, ONE RULE: none of them is a stroked box.
+ *
+ * THE PRIMARY IS BLACK, AND THAT IS THE DIRECTION (D-59). The approved
+ * reference carries almost every action — the hero call to action, "Schedule
+ * post", "Export", "Edit post", "Ask Copilot" — on a near-black `.dark-button`,
+ * and reserves purple for the single "+ Create" entry point in the top bar.
+ * Reproducing only the purple half would have turned a black-and-white product
+ * with one accent into a purple product, which is precisely what §3 of the
+ * brief forbids. So `primary` is ink and `brand` is the one accent, and the
+ * ratio between how often each appears is part of the design.
+ *
+ * `accent` is the yellow, which carries near-black text and is used sparingly;
+ * `neutral` is a soft grey fill; `ghost` has no resting surface at all;
+ * `danger` is a soft red fill rather than a red outline — a red-outlined button
+ * beside a filled one reads as equally routine, and these are the actions
+ * CLAUDE.md §2.5 calls high-impact.
  */
 export function buttonStyle(
   variant: ButtonVariant = 'primary',
@@ -78,7 +90,18 @@ export function buttonStyle(
   const base = buttonBase(size);
   switch (variant) {
     case 'primary':
-      return { ...base, background: colorTokens.brandPurple, color: colorTokens.brandPurpleInk };
+      // Ink on white text at 18.85:1 — the highest-contrast action in the
+      // system, which is the right place for the most important one.
+      return { ...base, background: colorTokens.ink, color: colorTokens.inkInk };
+    case 'brand':
+      // The single accent call to action. The soft purple glow beneath it is
+      // the reference's `box-shadow: 0 10px 24px rgba(121,53,254,.2)`.
+      return {
+        ...base,
+        background: colorTokens.brandPurple,
+        color: colorTokens.brandPurpleInk,
+        boxShadow: shadowTokens.brandGlow,
+      };
     case 'accent':
       // Yellow with near-black ink at 15.3:1. Never white text on yellow.
       return { ...base, background: colorTokens.brandYellow, color: colorTokens.brandYellowInk };
@@ -97,8 +120,18 @@ export function buttonStyle(
 
 /** The interaction classes a button needs for hover, active and disabled. */
 function buttonClass(variant: ButtonVariant): string {
-  return variant === 'neutral' || variant === 'ghost' ? 'bs-pressable bs-control' : 'bs-pressable';
+  if (variant === 'neutral' || variant === 'ghost') return 'bs-pressable bs-control';
+  if (variant === 'primary') return 'bs-pressable bs-filled-ink';
+  if (variant === 'brand') return 'bs-pressable bs-filled-brand';
+  return 'bs-pressable';
 }
+
+/**
+ * Hover for the filled variants, which `bs-control` does not cover.
+ *
+ * A black button with no hover response feels dead, and `:hover` cannot be
+ * expressed inline — so the two ink-filled variants carry their own class.
+ */
 
 export function Button({
   variant = 'primary',

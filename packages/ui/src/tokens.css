@@ -22,7 +22,7 @@
   --bs-brand-purple-hover: #6528e0;
   --bs-brand-purple-pressed: #5312c4;
   --bs-brand-purple-ink: #ffffff;
-  --bs-brand-purple-tint: #f3edff;
+  --bs-brand-purple-tint: #f0e9ff;
   --bs-brand-purple-border: #d6c2ff;
 
   /* Accent yellow. Never body text, never white text on it. */
@@ -32,34 +32,46 @@
   --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
-  --bs-surface-soft: #fbfbfc;
+  --bs-surface-soft: #f9f9fa;
   --bs-surface-warm: #f7f6f4;
   --bs-surface-lavender: #f8f5ff;
   --bs-surface-lavender-strong: #f0e9ff;
-  --bs-surface-muted: #f5f6f8;
+  --bs-surface-muted: #f5f5f6;
   --bs-surface-sunken: #edeff3;
-  --bs-surface-ink: #171528;
-  /* The ground is white (D-49); structure comes from tinted surfaces (D-54). */
-  --bs-app-background: #ffffff;
+  --bs-surface-ink: #181620;
+  /* The ambient ground the shell floats on. Never white: the shell is white,
+     and it needs something to float ON (D-59). */
+  --bs-app-background: #f2f2f2;
 
   /* Controls are identified by fill, label and focus ring — not by a resting
      stroke (D-55). See the prefers-contrast block near the end of this file. */
-  --bs-control-surface: #f4f4f7;
-  --bs-control-surface-hover: #ededf3;
+  --bs-control-surface: #f5f5f6;
+  --bs-control-surface-hover: #ececef;
   --bs-control-surface-focus: #ffffff;
-  --bs-control-surface-disabled: #f7f7f9;
+  --bs-control-surface-disabled: #f7f7f8;
   --bs-control-border: transparent;
   --bs-control-border-contrast: #818c9c;
 
-  --bs-hairline: #f0f1f4;
-  --bs-card-border: #eaecf0;
-  --bs-border: #e3e8ef;
+  --bs-hairline: #f0f0f2;
+  --bs-card-border: #eeeef0;
+  --bs-border: #e8e8ea;
   --bs-border-strong: #818c9c;
 
-  --bs-text-primary: #0f172a;
-  --bs-text-secondary: #475569;
-  --bs-text-muted: #667085;
+  --bs-text-primary: #111114;
+  --bs-text-secondary: #5b5b62;
+  --bs-text-muted: #6a6a71;
   --bs-text-inverse: #ffffff;
+
+  /* INK — the approved demo's workhorse primary. Black carries almost every
+     action; purple is reserved for the single "create" entry point. */
+  --bs-ink: #111114;
+  --bs-ink-hover: #26262b;
+  --bs-ink-ink: #ffffff;
+
+  /* The floating application shell, resolved over the ambient ground. */
+  --bs-shell-surface: #fcfcfc;
+  --bs-shell-sidebar: #f9f9fa;
+  --bs-shell-panel: #fdfdfd;
 
   --bs-danger: #b42318;
   --bs-danger-tint: #fef3f2;
@@ -77,12 +89,14 @@
   --bs-focus-ring: #7935fe;
   --bs-focus-ring-contrast: #ffffff;
 
-  --bs-shadow-card: 0 1px 2px 0 rgba(23, 21, 40, 0.03), 0 6px 16px -8px rgba(23, 21, 40, 0.08);
-  --bs-shadow-raised:
-    0 2px 4px -1px rgba(23, 21, 40, 0.04), 0 12px 28px -12px rgba(23, 21, 40, 0.12);
-  --bs-shadow-overlay:
-    0 8px 16px -8px rgba(23, 21, 40, 0.1), 0 24px 48px -16px rgba(23, 21, 40, 0.18);
-  --bs-shadow-brand-glow: 0 18px 48px -18px rgba(121, 53, 254, 0.35);
+  /* Wide, far and very low in opacity — that is what lets a surface carry no
+     border and still read as a separate plane. */
+  --bs-shadow-shell: 0 24px 70px rgba(20, 16, 35, 0.1);
+  --bs-shadow-card: 0 12px 40px rgba(0, 0, 0, 0.05);
+  --bs-shadow-metric: 0 8px 30px rgba(0, 0, 0, 0.045);
+  --bs-shadow-raised: 0 18px 42px rgba(0, 0, 0, 0.1);
+  --bs-shadow-overlay: 0 30px 80px rgba(0, 0, 0, 0.2);
+  --bs-shadow-brand-glow: 0 10px 24px rgba(121, 53, 254, 0.2);
 
   --bs-space-3xs: 0.125rem;
   --bs-space-2xs: 0.1875rem;
@@ -96,10 +110,11 @@
 
   --bs-radius-xs: 0.375rem;
   --bs-radius-sm: 0.5rem;
-  --bs-radius-md: 0.75rem;
-  --bs-radius-lg: 0.875rem;
-  --bs-radius-xl: 1.125rem;
-  --bs-radius-2xl: 1.5rem;
+  --bs-radius-md: 0.8125rem;
+  --bs-radius-lg: 1.125rem;
+  --bs-radius-xl: 1.375rem;
+  --bs-radius-2xl: 1.75rem;
+  --bs-radius-3xl: 2rem;
   --bs-radius-full: 9999px;
 
   --bs-duration-instant: 80ms;
@@ -116,6 +131,27 @@
   --bs-z-toast: 70;
   --bs-z-tooltip: 80;
   --bs-z-skip-link: 100;
+
+  --bs-sidebar-expanded: 15.625rem;
+  --bs-sidebar-collapsed: 4.875rem;
+  --bs-header-height: 5.75rem;
+  --bs-shell-inset: 1.25rem;
+
+  /* The ambient orbs. Full-saturation brand colour appears ONLY here, at 24–38%
+     opacity behind a 100px blur, where it reads as light rather than as a
+     theme. Nothing sits on it: the shell above is opaque. */
+  --bs-ambient-blush: #ff99b9;
+  --bs-ambient-blur: 100px;
+  --bs-ambient-size: 56vw;
+  --bs-ambient-size-sm: 30vw;
+  --bs-ambient-drift: 16s;
+
+  --bs-gradient-hero: linear-gradient(
+    120deg,
+    rgba(255, 221, 21, 0.35),
+    rgba(255, 255, 255, 0.65) 42%,
+    rgba(121, 53, 254, 0.34)
+  );
 
   --bs-font-latin:
     'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -135,10 +171,14 @@ html[dir='ltr'] {
 
 body {
   margin: 0;
+  min-height: 100vh;
+  /* The orbs are 56vw across and deliberately positioned off-canvas; without
+     this a phone gets a horizontal scrollbar from the background alone. */
+  overflow-x: hidden;
   background: var(--bs-app-background);
   color: var(--bs-text-primary);
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -213,6 +253,87 @@ h2,
 h3,
 h4 {
   margin-block: 0;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * THE AMBIENT GROUND AND THE FLOATING SHELL (D-59).
+ *
+ * This pair is the approved direction's signature, and the reason the rest of
+ * the interface can stay black and white: the brand purple and yellow appear
+ * at full saturation exactly once, as enormous blurred orbs behind an opaque
+ * shell. At 56vw with a 100px blur they read as LIGHT rather than as shapes,
+ * which is what "atmospheric, not a colourful theme" means in practice.
+ *
+ * Nothing legible ever sits on the ambient layer. The shell above it is opaque,
+ * so no contrast ratio depends on where an orb happens to have drifted.
+ * ---------------------------------------------------------------------------
+ */
+.bs-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  background: var(--bs-app-background);
+  pointer-events: none;
+}
+
+.bs-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(var(--bs-ambient-blur));
+  /* Neutralised entirely by the reduced-motion block above. */
+  animation: bs-drift var(--bs-ambient-drift) var(--bs-ease-in-out) infinite alternate;
+}
+
+@keyframes bs-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3vw, 4vw, 0) scale(1.08);
+  }
+}
+
+/*
+ * The shell.
+ *
+ * A phone gets the full window — an inset frame on a 390px screen wastes 40px
+ * of the only dimension that is scarce, and the rounded corner is invisible
+ * anyway. From the tablet breakpoint it lifts off the ground.
+ */
+.bs-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  inline-size: 100%;
+  min-block-size: 100vh;
+  margin: 0;
+  background: var(--bs-shell-surface);
+  border-radius: 0;
+}
+
+@media (min-width: 768px) {
+  .bs-shell {
+    grid-template-columns: var(--bs-shell-sidebar-width, var(--bs-sidebar-expanded)) minmax(0, 1fr);
+    inline-size: calc(100% - var(--bs-shell-inset) * 2);
+    min-block-size: calc(100vh - var(--bs-shell-inset) * 2);
+    margin: var(--bs-shell-inset);
+    border-radius: var(--bs-radius-3xl);
+    box-shadow: var(--bs-shadow-shell);
+    transition: grid-template-columns var(--bs-duration-slow) var(--bs-ease-out);
+  }
+}
+
+/* The sidebar takes the shell's inline-start corners, so the rounded frame
+   survives without `overflow: hidden` — which would break the sticky rail. */
+.bs-shell > .bs-sidebar {
+  border-start-start-radius: inherit;
+  border-end-start-radius: inherit;
+}
+
+.bs-shell > .bs-panel {
+  border-start-end-radius: inherit;
+  border-end-end-radius: inherit;
 }
 
 /*
@@ -329,6 +450,14 @@ h4 {
     --bs-hairline: var(--bs-border-strong);
     --bs-card-border: var(--bs-border-strong);
   }
+
+  /* Cards now carry NO resting border at all, so the escape hatch has to put
+     one back structurally rather than by darkening an existing hairline. */
+  .bs-shell,
+  .bs-panel,
+  [data-surface='card'] {
+    border-color: var(--bs-border-strong) !important;
+  }
 }
 
 @media (forced-colors: active) {
@@ -336,6 +465,12 @@ h4 {
     --bs-control-border: ButtonBorder;
     --bs-hairline: CanvasText;
     --bs-card-border: CanvasText;
+  }
+
+  .bs-shell,
+  .bs-panel,
+  [data-surface='card'] {
+    border-color: CanvasText !important;
   }
 }
 
@@ -369,6 +504,31 @@ h4 {
 
 .bs-control::placeholder {
   color: var(--bs-text-muted);
+}
+
+/*
+ * The filled dark button's hover and active states.
+ *
+ * `bs-control` covers the soft neutral fills; an ink-filled or purple-filled
+ * button needs its own, because a primary action with no hover response reads
+ * as disabled. Inline styles cannot express a pseudo-class.
+ */
+.bs-filled-ink:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--bs-ink-hover);
+}
+
+.bs-filled-brand:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--bs-brand-purple-hover);
+}
+
+.bs-filled-ink:disabled,
+.bs-filled-ink[aria-disabled='true'],
+.bs-filled-brand:disabled,
+.bs-filled-brand[aria-disabled='true'] {
+  background: var(--bs-control-surface-disabled);
+  color: var(--bs-text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 /* A row that responds to the pointer without being outlined. */

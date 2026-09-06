@@ -21,6 +21,7 @@ import {
   typographyTokens,
   zIndexTokens,
 } from './tokens';
+import { AmbientBackground } from './ambient';
 import { ChevronEndIcon, ChevronStartIcon, CloseIcon, MenuIcon } from './icons';
 import { Tooltip, useOverlayBehaviour } from './overlays';
 
@@ -116,54 +117,42 @@ function useCollapsePreference(): readonly [boolean, (next: boolean) => void, bo
   return [collapsed, update, hydrated] as const;
 }
 
+/**
+ * A navigation item.
+ *
+ * THE ACTIVE ITEM IS AN INK-FILLED PILL WITH INVERTED TEXT (D-59). That single
+ * decision is most of what separates the approved direction from the outlined
+ * console it replaced: the reference marks the current page by filling its pill
+ * near-black and flipping the label white, at 18.85:1, rather than by tinting a
+ * row or drawing a bar along its edge.
+ *
+ * IT IS ALSO THE MOST ACCESSIBLE OPTION HERE, not a trade against one. A tint
+ * is a hue change, and `brandPurpleTint` is 1.10:1 against white — below the
+ * 3:1 a boundary needs, so it could never have carried the state by itself. A
+ * full fill inversion changes luminance, shape and text colour together, and
+ * `aria-current="page"` carries the same fact to assistive technology.
+ */
 function navLinkStyle(active: boolean, collapsed: boolean): CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
     gap: spacingTokens.sm,
     justifyContent: collapsed ? 'center' : 'flex-start',
-    minBlockSize: '2.75rem',
-    paddingInline: collapsed ? 0 : spacingTokens.md,
+    // 44px: the reference's nav height, and the WCAG 2.5.8 comfortable target.
+    minBlockSize: layoutTokens.controlHeight,
+    paddingInline: collapsed ? 0 : spacingTokens.sm,
     paddingBlock: spacingTokens.xs,
-    // A soft filled PILL, not an outlined row (D-54). The old treatment put a
-    // 3px yellow bar on the inline-start edge of every active item, which read
-    // as a border on a list of bordered rows.
     borderRadius: radiusTokens.md,
     textDecoration: 'none',
     ...typographyTokens.bodySm,
-    fontWeight: active ? 650 : 500,
-    color: active ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
-    background: active ? colorTokens.surfaceLavenderStrong : 'transparent',
+    fontWeight: active ? 650 : 550,
+    color: active ? colorTokens.inkInk : colorTokens.textSecondary,
+    background: active ? colorTokens.ink : 'transparent',
     border: '1px solid transparent',
     position: 'relative',
+    whiteSpace: 'nowrap',
     transition: `background-color ${motionTokens.fast} ${motionTokens.easeOut}`,
   };
-}
-
-/**
- * The active item's yellow accent.
- *
- * A small rounded mark INSIDE the pill rather than a bar along its edge, so the
- * accent reads as a dot on a filled shape instead of as another stroke. It is
- * decoration: the state is carried by the pill, the purple label and
- * `aria-current`, which is what keeps it clear of WCAG 1.4.1.
- */
-function ActiveAccent({ collapsed }: { readonly collapsed: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        position: 'absolute',
-        insetInlineStart: collapsed ? '50%' : spacingTokens.xs,
-        insetBlockEnd: collapsed ? '0.3rem' : undefined,
-        transform: collapsed ? 'translateX(-50%)' : undefined,
-        inlineSize: collapsed ? '1rem' : '0.25rem',
-        blockSize: collapsed ? '0.1875rem' : '1.25rem',
-        borderRadius: radiusTokens.full,
-        background: colorTokens.brandYellow,
-      }}
-    />
-  );
 }
 
 function NavLink({
@@ -195,7 +184,6 @@ function NavLink({
       {...(onNavigate ? { onClick: onNavigate } : {})}
       style={navLinkStyle(active, collapsed)}
     >
-      {active ? <ActiveAccent collapsed={collapsed} /> : null}
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{item.icon}</span>
       {collapsed ? null : (
         <span style={{ minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -208,10 +196,10 @@ function NavLink({
             marginInlineStart: 'auto',
             paddingInline: spacingTokens.xs,
             borderRadius: radiusTokens.full,
-            background: active ? colorTokens.surface : colorTokens.surfaceMuted,
+            background: active ? 'rgba(255, 255, 255, 0.18)' : colorTokens.surfaceMuted,
             ...typographyTokens.caption,
-            fontWeight: 600,
-            color: colorTokens.textSecondary,
+            fontWeight: 700,
+            color: active ? colorTokens.inkInk : colorTokens.textSecondary,
           }}
         >
           {item.badge}
@@ -343,80 +331,92 @@ export function AppShell({
 
   const sidebarWidth = collapsed ? layoutTokens.sidebarCollapsed : layoutTokens.sidebarExpanded;
 
+  const sidebarBody = (
+    <>
+      <div style={{ display: 'grid', gap: spacingTokens.sm, marginBlockEnd: spacingTokens.md }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'space-between',
+            gap: spacingTokens.xs,
+            minBlockSize: '2.625rem',
+          }}
+        >
+          {collapsed ? null : brand}
+          <button
+            type="button"
+            className="bs-pressable"
+            data-testid="toggle-sidebar"
+            aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
+            aria-pressed={collapsed}
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              inlineSize: '2.5rem',
+              blockSize: '2.5rem',
+              flexShrink: 0,
+              borderRadius: radiusTokens.md,
+              border: '1px solid transparent',
+              background: 'transparent',
+              color: colorTokens.textMuted,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {collapsed ? <ChevronEndIcon size={18} /> : <ChevronStartIcon size={18} />}
+          </button>
+        </div>
+        {/* THE WORKSPACE SWITCHER BELONGS AT THE TOP OF THE SIDEBAR, not in the
+            header: which workspace you are in scopes everything the navigation
+            below it points at, so it reads as the parent of the list. */}
+        {headerStart}
+      </div>
+
+      <NavList sections={sections} collapsed={collapsed} />
+
+      {/* The identity sits at the FOOT, pinned by `margin-block-start: auto`,
+          so the navigation and the account never compete for the same corner. */}
+      {profile ? (
+        <div
+          style={{
+            marginBlockStart: 'auto',
+            paddingBlockStart: spacingTokens.md,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            minInlineSize: 0,
+          }}
+        >
+          {profile}
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
     <div
       data-testid="app-shell"
       data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
-      style={{ minBlockSize: '100vh', background: colorTokens.appBackground }}
     >
+      {/* Behind everything, at `z-index: -2`, opaque shell above it. */}
+      <AmbientBackground />
+
       {banner}
 
-      <header
-        style={{
-          position: 'sticky',
-          insetBlockStart: 0,
-          zIndex: zIndexTokens.sticky,
-          display: 'flex',
-          alignItems: 'center',
-          // WRAPS. At 390px the brand, the workspace switcher, the language
-          // switcher and sign-out cannot share one row, and a non-wrapping
-          // header simply pushed the page sideways by 79px.
-          flexWrap: 'wrap',
-          gap: spacingTokens.sm,
-          rowGap: spacingTokens.xs,
-          minBlockSize: layoutTokens.headerHeight,
-          paddingInline: spacingTokens.md,
-          paddingBlock: spacingTokens.xs,
-          background: colorTokens.surface,
-          borderBlockEnd: `1px solid ${colorTokens.hairline}`,
-        }}
+      {/*
+       * THE SHELL FLOATS. `--bs-shell-sidebar-width` is the only measurement
+       * JavaScript supplies, because the collapse state genuinely is dynamic;
+       * whether there is a sidebar column at all is decided in CSS at the `md`
+       * breakpoint, so the layout does not flicker on first paint or differ
+       * between server and client.
+       */}
+      <div
+        className="bs-shell"
+        style={{ '--bs-shell-sidebar-width': sidebarWidth } as CSSProperties}
       >
-        {/* The drawer trigger exists only below `md`; the CSS class is defined
-            in tokens.css so no JavaScript decides the layout. */}
-        <button
-          type="button"
-          className="bs-drawer-trigger"
-          aria-label={labels.openNavigation}
-          aria-expanded={drawerOpen}
-          aria-controls={drawerId}
-          data-testid="open-navigation"
-          onClick={() => setDrawerOpen(true)}
-          style={{
-            display: 'none',
-            alignItems: 'center',
-            justifyContent: 'center',
-            inlineSize: '2.25rem',
-            blockSize: '2.25rem',
-            borderRadius: radiusTokens.md,
-            border: '1px solid transparent',
-            background: colorTokens.controlSurface,
-            color: colorTokens.textPrimary,
-            cursor: 'pointer',
-          }}
-        >
-          <MenuIcon size={20} />
-        </button>
-
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm, minInlineSize: 0 }}
-        >
-          {brand}
-          {headerStart}
-        </div>
-        <div
-          style={{
-            marginInlineStart: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: spacingTokens.sm,
-            minInlineSize: 0,
-          }}
-        >
-          {headerEnd}
-        </div>
-      </header>
-
-      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         <nav
           className="bs-sidebar"
           aria-label={labels.primaryNavigation}
@@ -424,84 +424,104 @@ export function AppShell({
           style={{
             display: 'none',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            gap: spacingTokens.md,
-            inlineSize: sidebarWidth,
-            flex: `0 0 ${sidebarWidth}`,
+            gap: spacingTokens.xs,
+            minInlineSize: 0,
             position: 'sticky',
-            insetBlockStart: layoutTokens.headerHeight,
-            blockSize: `calc(100vh - ${layoutTokens.headerHeight})`,
+            insetBlockStart: 0,
+            alignSelf: 'start',
+            maxBlockSize: '100vh',
             overflowY: 'auto',
-            padding: spacingTokens.md,
-            // A faint off-white rail: enough to separate navigation from the
-            // white content column without drawing a line down the page.
-            background: colorTokens.surfaceSoft,
-            borderInlineEnd: `1px solid ${colorTokens.hairline}`,
-            transition: `inline-size ${motionTokens.base} ${motionTokens.easeOut}`,
+            overflowX: 'hidden',
+            paddingInline: spacingTokens.sm,
+            paddingBlock: spacingTokens.md,
+            background: colorTokens.shellSidebar,
           }}
         >
-          <NavList sections={sections} collapsed={collapsed} />
-
-          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-            {profile ? (
-              <div
-                style={{
-                  padding: collapsed ? spacingTokens.xs : spacingTokens.sm,
-                  borderRadius: radiusTokens.md,
-                  background: colorTokens.surfaceSoft,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  minInlineSize: 0,
-                }}
-              >
-                {profile}
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              className="bs-pressable bs-control"
-              data-testid="toggle-sidebar"
-              aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
-              aria-pressed={collapsed}
-              onClick={() => setCollapsed(!collapsed)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                gap: spacingTokens.sm,
-                minBlockSize: '2.5rem',
-                paddingInline: collapsed ? 0 : spacingTokens.md,
-                borderRadius: radiusTokens.md,
-                background: 'transparent',
-                border: '1px solid transparent',
-                color: colorTokens.textMuted,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                ...typographyTokens.caption,
-                fontWeight: 600,
-              }}
-            >
-              {/* Logical chevrons: `ChevronStart` points toward the inline start,
-                  so the control reads correctly in Arabic without a second icon. */}
-              {collapsed ? <ChevronEndIcon size={18} /> : <ChevronStartIcon size={18} />}
-              {collapsed ? null : <span>{labels.collapseSidebar}</span>}
-            </button>
-          </div>
+          {sidebarBody}
         </nav>
 
-        <main
-          id="main"
+        <div
+          className="bs-panel"
           style={{
-            flex: '1 1 auto',
             minInlineSize: 0,
-            padding: spacingTokens.lg,
-            paddingBlockEnd: spacingTokens['2xl'],
+            display: 'flex',
+            flexDirection: 'column',
+            background: colorTokens.shellPanel,
           }}
         >
-          <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
-        </main>
+          {/*
+           * A LIGHT TOP BAR. No border, no fill of its own, no shadow — §7. It
+           * carries the drawer trigger on a phone and the page-level actions
+           * everywhere; the page title itself is rendered by `PageHeader`
+           * immediately below, at display scale.
+           */}
+          <header
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: spacingTokens.sm,
+              rowGap: spacingTokens.xs,
+              minBlockSize: layoutTokens.headerHeight,
+              paddingInline: spacingTokens.lg,
+              paddingBlock: spacingTokens.sm,
+            }}
+          >
+            <button
+              type="button"
+              className="bs-drawer-trigger bs-control"
+              aria-label={labels.openNavigation}
+              aria-expanded={drawerOpen}
+              aria-controls={drawerId}
+              data-testid="open-navigation"
+              onClick={() => setDrawerOpen(true)}
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                inlineSize: '2.5rem',
+                blockSize: '2.5rem',
+                flexShrink: 0,
+                borderRadius: radiusTokens.md,
+                color: colorTokens.textPrimary,
+                cursor: 'pointer',
+              }}
+            >
+              <MenuIcon size={20} />
+            </button>
+
+            {/* Below `md` the sidebar is gone, so the brand has nowhere else to
+                live. Above it, the sidebar already shows it and a second copy
+                would be a duplicate landmark. */}
+            <span className="bs-narrow-only" style={{ minInlineSize: 0 }}>
+              {brand}
+            </span>
+
+            <div
+              style={{
+                marginInlineStart: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: spacingTokens.sm,
+                minInlineSize: 0,
+              }}
+            >
+              {headerEnd}
+            </div>
+          </header>
+
+          <main
+            id="main"
+            style={{
+              flex: '1 1 auto',
+              minInlineSize: 0,
+              paddingInline: spacingTokens.lg,
+              paddingBlockEnd: spacingTokens['2xl'],
+            }}
+          >
+            <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
+          </main>
+        </div>
       </div>
 
       {drawerOpen ? (
@@ -514,7 +534,7 @@ export function AppShell({
             position: 'fixed',
             inset: 0,
             zIndex: zIndexTokens.drawer,
-            background: 'rgba(15, 23, 42, 0.45)',
+            background: 'rgba(12, 12, 14, 0.25)',
           }}
         >
           <div
@@ -552,6 +572,7 @@ export function AppShell({
               {brand}
               <button
                 type="button"
+                className="bs-control"
                 aria-label={labels.closeNavigation}
                 data-testid="close-navigation"
                 onClick={closeDrawer}
@@ -559,11 +580,9 @@ export function AppShell({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  inlineSize: '2.25rem',
-                  blockSize: '2.25rem',
+                  inlineSize: '2.5rem',
+                  blockSize: '2.5rem',
                   borderRadius: radiusTokens.md,
-                  border: '1px solid transparent',
-                  background: colorTokens.controlSurface,
                   color: colorTokens.textPrimary,
                   cursor: 'pointer',
                 }}
@@ -571,9 +590,11 @@ export function AppShell({
                 <CloseIcon size={20} />
               </button>
             </div>
+            {headerStart}
             {/* Never collapsed in the drawer: the whole point of the drawer is
                 that there is room for labels. */}
             <NavList sections={sections} collapsed={false} onNavigate={closeDrawer} />
+            {profile}
           </div>
         </div>
       ) : null}
@@ -604,12 +625,16 @@ export function BrandMark({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '1.75rem',
-          blockSize: '1.75rem',
-          borderRadius: radiusTokens.md,
-          background: colorTokens.brandPurple,
-          color: colorTokens.brandPurpleInk,
+          inlineSize: '1.875rem',
+          blockSize: '1.875rem',
+          // INK, not purple. In the approved direction the mark is near-black
+          // like every other filled surface, and the brand colours are reserved
+          // for the ambient background — that restraint is the direction.
+          borderRadius: radiusTokens.sm,
+          background: colorTokens.ink,
+          color: colorTokens.inkInk,
           ...typographyTokens.label,
+          fontWeight: 800,
           flexShrink: 0,
         }}
       >
@@ -618,9 +643,14 @@ export function BrandMark({
       <span style={{ display: 'grid', minInlineSize: 0 }}>
         <span
           style={{
-            ...typographyTokens.h3,
+            fontSize: '1rem',
+            lineHeight: '1.25rem',
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
             color: colorTokens.textPrimary,
             whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {title}

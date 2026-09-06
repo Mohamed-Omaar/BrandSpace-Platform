@@ -188,10 +188,31 @@ describe('the Phase 2C foundation meets AA', () => {
     }
   });
 
-  it('the application ground and the card surface are the same white (D-49)', () => {
-    // Structure comes from borders and one shadow, not from a tinted ground.
-    // If these ever diverge, the direction changed and the docs must follow.
-    expect(colorTokens.appBackground).toBe(colorTokens.surface);
+  it('the application ground is NO LONGER the card surface (D-59 supersedes D-49)', () => {
+    /*
+     * THE PREVIOUS ASSERTION HERE SAID THE OPPOSITE, AND SAID WHY IT WOULD
+     * CHANGE: "if these ever diverge, the direction changed and the docs must
+     * follow". They diverged, and the docs did.
+     *
+     * D-49 put a white card on a white ground and let a border carry the
+     * separation — which is exactly what made the first draft read as an
+     * outlined admin console. The approved reference inverts it: a grey
+     * ambient ground with brand-coloured light behind it, and an opaque
+     * near-white shell FLOATING on top. A card no longer needs a border
+     * because the shell is visibly a separate plane from the page.
+     *
+     * So the invariant is now the opposite one, and it is load-bearing: if the
+     * ground ever goes white again, the shell's shadow has nothing to fall on
+     * and every surface boundary in the product disappears at once.
+     */
+    expect(colorTokens.appBackground).not.toBe(colorTokens.surface);
+    expect(colorTokens.shellSurface).not.toBe(colorTokens.appBackground);
+
+    // The shell must be LIGHTER than the ground it floats on — a shell darker
+    // than its ground reads as a hole rather than as a raised surface.
+    expect(relativeLuminance(colorTokens.shellSurface)).toBeGreaterThan(
+      relativeLuminance(colorTokens.appBackground),
+    );
   });
 
   it('the focus ring is visible on every surface it can land on', () => {
@@ -287,49 +308,77 @@ describe('the Phase 2C foundation meets AA', () => {
     expect(failures).toEqual([]);
   });
 
-  it('textMuted has exactly two surfaces it may not sit on, and they are named', () => {
+  it('textMuted now clears AA on EVERY surface in the system', () => {
     /*
-     * `textMuted` clears AA on white and on every near-white surface, and fails
-     * on the two darkest supporting ones. That is not a defect in the token —
-     * it is the boundary, and naming it is the point: the rule is "muted is for
-     * the page ground and the pale surfaces, secondary for a stronger tint".
+     * THIS ASSERTION WAS INVERTED IN THE DEMO ALIGNMENT, AND THE INVERSION IS
+     * THE POINT.
      *
-     * If a future palette change moves a surface across this line, this test
-     * fails and the rule gets rewritten deliberately rather than discovered by
-     * axe on a screen somebody already approved.
+     * It used to name the two surfaces `textMuted` could NOT sit on
+     * (`surfaceLavenderStrong` at 4.21:1, `surfaceSunken` at 4.44:1) and to
+     * fail if either ever crossed the line, so that the rule would be rewritten
+     * deliberately rather than discovered by axe on an approved screen. That is
+     * exactly what happened.
+     *
+     * The approved reference sets its muted text at `#707077`, which is 4.39:1
+     * on the reference's own `#F2F2F2` ground — below AA on the surface it
+     * spends most of its life on. Rather than copy that defect, the token moved
+     * to `#6A6A71`, the nearest value that clears 4.5:1 on all fourteen
+     * surfaces this system has. The floor is now 4.55:1, on lavender-strong.
+     *
+     * So the restriction is gone, and the test says so instead of preserving a
+     * limitation that no longer exists. A future palette change that reopens
+     * the gap fails here.
      */
-    for (const [name, background] of [
-      ['surface', colorTokens.surface],
-      ['surfaceSoft', colorTokens.surfaceSoft],
-      ['surfaceWarm', colorTokens.surfaceWarm],
-      ['surfaceLavender', colorTokens.surfaceLavender],
-      ['surfaceMuted', colorTokens.surfaceMuted],
-      ['controlSurface', colorTokens.controlSurface],
-    ] as const) {
-      expect(
-        contrastRatio(colorTokens.textMuted, background),
-        `textMuted on ${name}`,
-      ).toBeGreaterThanOrEqual(AA_NORMAL);
+    const failures: string[] = [];
+    for (const [name, background] of Object.entries({
+      surface: colorTokens.surface,
+      surfaceSoft: colorTokens.surfaceSoft,
+      surfaceWarm: colorTokens.surfaceWarm,
+      surfaceLavender: colorTokens.surfaceLavender,
+      surfaceLavenderStrong: colorTokens.surfaceLavenderStrong,
+      surfaceMuted: colorTokens.surfaceMuted,
+      surfaceSunken: colorTokens.surfaceSunken,
+      appBackground: colorTokens.appBackground,
+      controlSurface: colorTokens.controlSurface,
+      controlSurfaceDisabled: colorTokens.controlSurfaceDisabled,
+      brandYellowTint: colorTokens.brandYellowTint,
+      shellSurface: colorTokens.shellSurface,
+      shellSidebar: colorTokens.shellSidebar,
+      shellPanel: colorTokens.shellPanel,
+    })) {
+      const ratio = contrastRatio(colorTokens.textMuted, background);
+      if (ratio < AA_NORMAL) failures.push(`textMuted on ${name}: ${ratio.toFixed(2)}`);
     }
-
-    for (const [name, background] of [
-      ['surfaceLavenderStrong', colorTokens.surfaceLavenderStrong],
-      ['surfaceSunken', colorTokens.surfaceSunken],
-    ] as const) {
-      expect(
-        contrastRatio(colorTokens.textMuted, background),
-        `textMuted unexpectedly passes on ${name}; the documented rule is now wrong`,
-      ).toBeLessThan(AA_NORMAL);
-    }
+    expect(failures).toEqual([]);
   });
 
-  it('the selected-surface border is a perceivable boundary', () => {
+  it('the reference palette it replaced genuinely failed, which is why it was not copied', () => {
+    // Recorded so the deviation cannot be mistaken for drift: the approved
+    // demo's own `--muted` is below AA on the demo's own page ground.
+    expect(contrastRatio('#707077', colorTokens.appBackground)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio('#707077', colorTokens.surfaceLavenderStrong)).toBeLessThan(AA_NORMAL);
+  });
+
+  it('no soft tint is a perceivable boundary, which is why none carries a state alone', () => {
+    // Both of these are below the 3:1 non-text threshold, so neither the yellow
+    // mark nor the lavender tint may be the only signal for a state. The active
+    // navigation item stopped relying on either in the demo alignment: it is
+    // now an INK-FILLED pill with inverted text at 18.85:1, plus `aria-current`
+    // — a fill inversion and a semantic, not a hue.
     expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
-    // …so the active nav item never relies on the yellow mark alone. It also
-    // carries a purple tint, a purple label and `aria-current` — asserted in
-    // tests/unit/design-system.test.ts.
     expect(contrastRatio(colorTokens.brandPurpleTint, colorTokens.surface)).toBeLessThan(
       AA_NON_TEXT,
     );
+  });
+
+  it('the ink-filled active navigation item is legible in both directions', () => {
+    expect(contrastRatio(colorTokens.inkInk, colorTokens.ink)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(colorTokens.inkInk, colorTokens.inkHover)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
+    // And the resting item, on the sidebar's own plane.
+    expect(
+      contrastRatio(colorTokens.textSecondary, colorTokens.shellSidebar),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });

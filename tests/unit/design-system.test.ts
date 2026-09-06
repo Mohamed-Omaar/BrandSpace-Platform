@@ -248,12 +248,39 @@ describe('RTL correctness is structural, not a second stylesheet', () => {
 
   it('the shell and the primitives use logical properties', () => {
     expect(shell).toContain('insetInlineStart');
-    // A logical BORDER side, whichever side the current design uses. The
-    // borderless direction moved the shell's one visible edge from the
-    // sidebar's start to the drawer's end, so pinning the assertion to a
-    // specific side tested the design, not the property model.
-    expect(shell).toMatch(/border(Inline|Block)(Start|End)/);
     expect(primitives).toContain('paddingInline');
+
+    /*
+     * STRENGTHENED, not relaxed.
+     *
+     * This used to assert that the shell mentioned SOME logical border side.
+     * That assertion stopped meaning anything once the direction removed
+     * resting borders altogether (D-59) — the shell now has no `border*` side
+     * at all, only logical CORNERS on the drawer, so a test looking for a
+     * border side was testing which design was in force rather than whether
+     * the property model was logical.
+     *
+     * The property that actually matters is the negative one, so it is
+     * asserted directly: NO PHYSICAL SIDE ANYWHERE. A single `marginLeft` is
+     * what breaks Arabic, and a positive assertion can never catch it.
+     */
+    expect(shell).toMatch(/border(Start|End)(Start|End)Radius/);
+
+    const PHYSICAL = [
+      'marginLeft',
+      'marginRight',
+      'paddingLeft',
+      'paddingRight',
+      'borderLeft',
+      'borderRight',
+      "textAlign: 'left'",
+      "textAlign: 'right'",
+    ];
+    for (const source of [shell, primitives]) {
+      for (const property of PHYSICAL) {
+        expect(source, `${property} is a physical side and breaks RTL`).not.toContain(property);
+      }
+    }
   });
 
   /*

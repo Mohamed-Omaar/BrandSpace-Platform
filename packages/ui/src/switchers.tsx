@@ -42,32 +42,62 @@ export function WorkspaceSwitcher({
       label={label}
       testId="workspace-switcher"
       align="start"
+      trigger="card"
       triggerContent={
+        // THE SIDEBAR CARD (D-59): an avatar, the workspace name, the role
+        // beneath it. Two lines rather than one run-on chip, because the role
+        // is a different fact from the workspace and reading them as one
+        // sentence is how people end up in the wrong tenant.
         <span
           style={{
-            display: 'inline-flex',
+            display: 'flex',
             alignItems: 'center',
-            gap: spacingTokens.xs,
+            gap: spacingTokens.sm,
             minInlineSize: 0,
+            flex: '1 1 auto',
           }}
         >
-          <BuildingIcon size={16} />
           <span
-            data-testid="active-workspace"
+            aria-hidden="true"
             style={{
-              maxInlineSize: '12rem',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              display: 'inline-grid',
+              placeItems: 'center',
+              inlineSize: '2.125rem',
+              blockSize: '2.125rem',
+              flexShrink: 0,
+              borderRadius: radiusTokens.sm,
+              background: colorTokens.ink,
+              color: colorTokens.inkInk,
             }}
           >
-            {current.name}
+            <BuildingIcon size={16} />
           </span>
-          <span
-            data-testid="active-role"
-            style={{ color: colorTokens.textSecondary, fontWeight: 400 }}
-          >
-            {current.roleName}
+          <span style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}>
+            <span
+              data-testid="active-workspace"
+              style={{
+                ...typographyTokens.label,
+                color: colorTokens.textPrimary,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {current.name}
+            </span>
+            <span
+              data-testid="active-role"
+              style={{
+                ...typographyTokens.caption,
+                fontWeight: 500,
+                color: colorTokens.textMuted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {current.roleName}
+            </span>
           </span>
         </span>
       }
