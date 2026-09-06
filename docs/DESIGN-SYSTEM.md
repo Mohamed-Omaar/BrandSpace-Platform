@@ -406,34 +406,44 @@ production build, including in the end-to-end suite, which is exactly what happe
 
 ## 11. What remains for Phase 2C-B
 
-Phase 2C-A restyled a representative set of screens as the visual-approval checkpoint. This revision
-went further into the two consoles than the first draft, but **the compatibility-layer pages are still
-not fully redesigned**, and this document does not claim otherwise.
+### What the demo alignment reached (D-59)
 
-### What this revision DID reach
+This revision rebuilt the system on the owner-approved reference vendored at
+`docs/visual-reference/`, and applied it to **every route in both applications**. Round 1's honest
+caveat — "the compatibility-layer pages inherit the tokens but their layouts have not been reworked"
+— no longer holds, and the sweep that verified it found real defects rather than cosmetics:
 
-- Every token, primitive, surface, table, badge, overlay and shell in `packages/ui`.
-- The customer sign-in, password reset, workspace picker and invitation flows (through `AuthCard`).
-- Platform Admin's sign-in and MFA challenge, rebuilt from raw markup onto the design system.
-- **Every form control in both applications.** Forty-three inputs and selects across the consoles were
-  styled with `inputStyle()` but no `bs-control` class, which under the new tokens rendered them as
-  transparent rectangles — invisible until focused. All now carry it, and a unit test fails on the next
-  one that does not.
-- The outlined chrome that remained: the workspace chooser's tiles, the configuration domain chips, the
-  secrets notice, the small buttons in both console pages, the environment badge (which keeps its
-  outline deliberately — a production warning is not decoration), and the public site's header rule.
+- **The ambient ground and the floating shell.** A grey `#F2F2F2` canvas carrying three blurred
+  brand-coloured orbs, with a near-white shell floating on it. This is what lets a card drop its
+  resting border entirely: the shell is visibly a separate plane, so the shadow has something to fall
+  on. Full-saturation brand colour appears in exactly one place in the product.
+- **Two primary treatments.** Near-black `ink` for almost every action, brand purple for the single
+  "create" entry point. The ratio between how often each appears is part of the design.
+- **The active navigation item** is an ink-filled pill with inverted text at 18.85:1, not a tint.
+- **The Overview hero** (§5), reproduced at the reference's scale and composition, with the reference's
+  invented figures deliberately not reproduced — see §12 below.
+- **Every remaining route**, captured at 1:1 under `docs/visual-review/` and reviewed. Fixed on the
+  way: three more invisible form controls on the customer settings page (F-38); two Control Center
+  pages that defined their own primary button in the **public marketing site's identity blue**; the
+  last hand-rolled `<h1>`; and sixteen hard-coded font sizes across both applications.
+- **The calendar → post details → composer chain**, wired for real inside the gated showcase (§9).
 
-### What it did NOT reach
+Three guards were added so none of this can quietly regress: no file outside the three shells may
+write an `<h1>`; no application page may set a literal `fontSize`; and every form control must carry
+`.bs-control` whatever it is styled with — the widened version of that last rule is what found F-38.
 
-The following pages inherit the new tokens and are now legible and consistent, but their **layouts have
-not been reworked**: console configuration, secrets, flags, plans, providers, ai-models, routing, audit,
-health and support; customer permissions, plan and settings. They still compose through the
-compatibility aliases at the bottom of `apps/dashboard/src/components/workspace-shell.tsx` and
-`apps/admin/src/components/console-ui.tsx`.
+### What still composes through the compatibility aliases
+
+The alias blocks at the bottom of `apps/dashboard/src/components/workspace-shell.tsx` and
+`apps/admin/src/components/console-ui.tsx` still exist. Every one of them now resolves to a design
+system component or token — `customerButtonStyle()` is `buttonStyle('primary')`, `CustomerCard` is
+`Card` — so they are naming, not styling, and no page renders differently because of them. Deleting
+them is a mechanical rename across roughly twenty call sites and belongs in its own change, where the
+diff is reviewable as a rename rather than hidden inside a visual revision.
 
 ### Still to do
 
-1. **Migrate those pages** off the compatibility aliases and delete both alias blocks.
+1. **Delete both alias blocks** and rename the ~20 call sites. Purely mechanical; see above.
 2. **Adopt the mobile record-list shape** on the console tables that still render only a wide table.
 3. **Toast placement.** `Toast` exists and is reviewed in the showcase, but no page mounts a toast
    region yet — server-action feedback currently uses inline `Banner`, which is correct for a

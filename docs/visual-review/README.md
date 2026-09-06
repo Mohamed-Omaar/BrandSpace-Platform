@@ -1,4 +1,4 @@
-# Visual review — Phase 2C-A (revised)
+# Visual review — Phase 2C-A (aligned to the approved demo)
 
 Evidence for the visual-direction approval. Every image here is produced by
 `tests/e2e/design-system.screenshots.spec.ts` against **freshly built applications** and the
@@ -17,6 +17,11 @@ the same image.
 **Long screens are captured in readable sections.** A full-page shot of the showcase is roughly
 12,000 pixels tall and illegible once scaled to fit a review window, which makes it useless as
 evidence. Those screens are captured as `-top`, `-middle` and `-bottom` slices at 1:1 instead.
+
+**The route sweep (50–63) captures the first viewport, not the whole document.** The stored-secrets
+page renders 176 rows against the seeded database, so a full-page shot of it is 42,000 pixels tall —
+a grey smear once scaled into a review window, and evidence of nothing. What a reviewer needs from a
+route sweep is whether the page reads as the approved direction, and that is decided above the fold.
 
 ---
 
@@ -104,6 +109,32 @@ notice that it connects to nothing and performs nothing.
 | 48  | `48-copilot-desktop-panel`        | The docked desktop panel                                     |
 | 49  | `49-copilot-mobile-sheet`         | The same panel as a modal sheet on a phone                   |
 
+### Every remaining route (§15)
+
+Round 1 restyled a representative set and said plainly that the rest inherited the tokens without
+having their layouts reworked. "Do not finish while some pages still look like the previous outlined
+admin console" is a claim that has to be checked rather than repeated, so every remaining route in
+both applications is here, captured at 1:1 and reviewed like the others. The sweep is what found the
+identity-blue buttons on the two Control Center pages, the three invisible controls on customer
+settings, the last hand-rolled `<h1>`, and the sidebar foot obscuring the last navigation item.
+
+| #   | File                      | What it shows                                               |
+| --- | ------------------------- | ----------------------------------------------------------- |
+| 50  | `50-admin-configuration`  | Configuration management — domain chips, draft form         |
+| 51  | `51-admin-secrets`        | Secret management — masked hints only, never a value        |
+| 52  | `52-admin-flags`          | Feature flags                                               |
+| 53  | `53-admin-plans`          | Plans and entitlements                                      |
+| 54  | `54-admin-providers`      | Provider registry                                           |
+| 55  | `55-admin-ai-models`      | AI model catalogue                                          |
+| 56  | `56-admin-routing`        | Task routing                                                |
+| 57  | `57-admin-audit`          | Audit log                                                   |
+| 58  | `58-admin-health`         | System health                                               |
+| 59  | `59-admin-support`        | Support Mode — the page that still had a raw `<h1>`         |
+| 60  | `60-customer-permissions` | Roles and permissions                                       |
+| 61  | `61-customer-plan`        | Plan and usage                                              |
+| 62  | `62-customer-settings`    | Workspace settings — the three controls that were invisible |
+| 63  | `63-customer-workspaces`  | The workspace picker                                        |
+
 ---
 
 ## What these images deliberately do NOT show
@@ -112,3 +143,11 @@ No plan name, price, quota, credit allowance, usage counter or analytics figure 
 All of those are versioned configuration owned by Platform Admin (CLAUDE.md §2.2); a plausible-looking
 number on a screenshot being submitted for approval would be a lie. Where a screen has a slot for one —
 the AI-credits metric card, the library's performance column — it says the value is unavailable and why.
+
+The Overview hero is the sharpest case. The approved reference fills the same composition with "12
+scheduled", "03 in review", "28 published across 4 channels", "76% of AI credits, resets in 12 days"
+and two posts on a calendar. Every one of those is a measurement of a publishing pipeline that does
+not exist in this phase, so none of them is reproduced: each panel says which of three things is true
+— here is the real figure, you may not see it, or the capability has not shipped. The hero's two
+floating cards are abstract shapes rather than captioned posts for the same reason. A shape cannot
+claim a post exists; a caption would.
