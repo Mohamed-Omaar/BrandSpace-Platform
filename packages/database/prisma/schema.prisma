@@ -150,6 +150,51 @@ enum CreditTransactionType {
   REFUND
   EXPIRY
   RESET
+  /// Phase 3. A prepaid credit pack (D-11: top-ups are the only way to add
+  /// credits mid-cycle, because there is no postpaid overage).
+  ADDON_PURCHASE
+  /// Phase 3. The one-off grant that comes with a trial (D-09).
+  TRIAL_GRANT
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 enums — subscriptions, credit buckets, reservations
+// ---------------------------------------------------------------------------
+
+/// The commercial state of a workspace. No payment provider is involved: money
+/// movement arrives in Phase 7, and this enum describes only what the platform
+/// itself knows.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+/// Where a bucket of credits came from. It decides the default expiry (D-12)
+/// and is what the customer's allocation breakdown is grouped by.
+enum CreditGrantSource {
+  PLAN_GRANT
+  TRIAL_GRANT
+  PROMOTIONAL_GRANT
+  PACK_PURCHASE
+  ADMIN_ADJUSTMENT
+  ROLLOVER
+}
+
+enum CreditReservationStatus {
+  OPEN
+  SETTLED
+  RELEASED
+  /// Released by the sweeper because the caller never came back.
+  EXPIRED
 }
 
 enum EmailMessageStatus {
@@ -295,15 +340,22 @@ model Workspace {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  memberships     Membership[]
-  roles           Role[]
-  auditEvents     AuditEvent[]
-  supportSessions SupportModeSession[]
-  invitations     Invitation[]
-  overrides       WorkspaceOverride[]
-  creditWallet    CreditWallet?
-  creditLedger    CreditTransaction[]
-  emailMessages   EmailMessage[]
+  memberships        Membership[]
+  roles              Role[]
+  auditEvents        AuditEvent[]
+  supportSessions    SupportModeSession[]
+  invitations        Invitation[]
+  overrides          WorkspaceOverride[]
+  creditWallet       CreditWallet?
+  creditLedger       CreditTransaction[]
+  // --- Phase 3 -------------------------------------------------------------
+  subscription       WorkspaceSubscription?
+  creditGrants       CreditGrant[]
+  creditReservations CreditReservation[]
+  usageCounters      UsageCounter[]
+  usageEvents        UsageEvent[]
+  betaCohorts        BetaCohortMembership[]
+  emailMessages      EmailMessage[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -820,6 +872,17 @@ model CreditWallet {
   lifetimeGrantedMilliCredits  BigInt @default(0)
   lifetimeConsumedMilliCredits BigInt @default(0)
 
+  /// Phase 3 (docs/DATABASE.md §7.1). The cycle boundary that drives the
+  /// monthly grant and the rollover sweep, and the low-balance notice state.
+  /// `nextResetAt` is the subscription's period end, not a calendar month: a
+  /// customer who starts on the 20th resets on the 20th.
+  lastResetAt               DateTime? @db.Timestamptz(6)
+  nextResetAt               DateTime? @db.Timestamptz(6)
+  lowBalanceNotifiedAt      DateTime? @db.Timestamptz(6)
+  /// The threshold percentage most recently notified, so a wallet that crosses
+  /// 20% and later 5% produces two notices rather than one or a stream.
+  lowBalanceNotifiedPercent Int?
+
   /// Optimistic-lock counter, in addition to the row lock taken on every write.
   version Int @default(0)
 
@@ -828,6 +891,8 @@ model CreditWallet {
 
   workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   transactions CreditTransaction[]
+  grants       CreditGrant[]
+  reservations CreditReservation[]
 
   @@map("credit_wallet")
 }
@@ -853,6 +918,13 @@ model CreditTransaction {
   actorType ActorType
   actorId   String?   @db.Uuid
 
+  /// Phase 3 (docs/DATABASE.md §7.2). On a GRANT row this is when the bucket
+  /// expires; on a CHARGE row `sourceGrantId` names the bucket it drew from, so
+  /// FIFO-by-expiry consumption is reconstructible from the ledger alone.
+  expiresAt     DateTime? @db.Timestamptz(6)
+  sourceGrantId String?   @db.Uuid
+  reservationId String?   @db.Uuid
+
   occurredAt DateTime @default(now()) @db.Timestamptz(6)
 
   workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -860,6 +932,8 @@ model CreditTransaction {
 
   @@index([workspaceId, occurredAt(sort: Desc)])
   @@index([walletId, type])
+  @@index([workspaceId, expiresAt])
+  @@index([reservationId])
   @@map("credit_transaction")
 }
 
@@ -926,4 +1000,253 @@ model EntitlementCatalogueSnapshot {
 
   @@id([domain, environment])
   @@map("entitlement_catalogue_snapshot")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — subscriptions, credit buckets, reservations, usage, beta cohorts
+// ---------------------------------------------------------------------------
+
+/// TENANT-OWNED. The commercial state of one workspace.
+///
+/// WHAT THIS IS NOT. It is not the billing `Subscription` of docs/DATABASE.md
+/// §8.5: there are no provider references, no invoice linkage and no payment
+/// state, because payment collection is Phase 7 and this phase must not pretend
+/// otherwise. Phase 7 extends this record rather than replacing it.
+///
+/// WHY IT EXISTS NOW. Three Phase 3 requirements need it and cannot be met from
+/// `Workspace.planKey` alone:
+///
+///   * AC-04.7 — changing a plan's price must NOT reprice existing customers.
+///     The agreed price is therefore COPIED here at assignment time, together
+///     with the configuration version it came from. Later plan edits change the
+///     catalogue, never this row.
+///   * AC-04.11 — a workspace cannot start a second trial. `trialStartedAt`
+///     survives the trial ending, the plan changing and the subscription being
+///     cancelled, so "has this workspace ever had a trial?" stays answerable.
+///   * Credit cycles — the monthly grant and the rollover sweep run on the
+///     subscription's own period boundary, not the calendar month.
+///
+/// One row per workspace, evolving in place, so the trial history cannot be
+/// erased by starting again.
+model WorkspaceSubscription {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @unique @db.Uuid
+
+  planKey String
+  status  SubscriptionStatus @default(TRIALING)
+
+  billingInterval BillingInterval @default(MONTH)
+
+  /// THE PINNED PRICE (AC-04.7). Copied from the plan configuration when the
+  /// plan was assigned, in minor units of `currency`. Never recomputed.
+  currency             String  @db.Char(3)
+  pinnedMonthlyMinor   Int
+  pinnedAnnualMinor    Int
+  /// Which `plans` configuration version the price above was copied from.
+  pinnedFromVersionId  String? @db.Uuid
+  /// The allowance in force for this subscription, likewise pinned.
+  pinnedMonthlyCredits Int     @default(0)
+
+  currentPeriodStart DateTime @db.Timestamptz(6)
+  currentPeriodEnd   DateTime @db.Timestamptz(6)
+
+  /// Set once, ever. A second trial is refused by checking this is null.
+  trialStartedAt DateTime? @db.Timestamptz(6)
+  trialEndsAt    DateTime? @db.Timestamptz(6)
+
+  /// A downgrade takes effect at period end (D-12), so the chosen plan waits
+  /// here rather than being applied and reverted.
+  pendingPlanKey         String?
+  pendingPlanEffectiveAt DateTime? @db.Timestamptz(6)
+
+  cancelAtPeriodEnd Boolean   @default(false)
+  cancelledAt       DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, currentPeriodEnd])
+  @@index([planKey])
+  @@map("workspace_subscription")
+}
+
+/// TENANT-OWNED. One bucket of credits, consumed FIFO by nearest expiry (D-12).
+///
+/// A PROJECTION, exactly like `credit_wallet.balanceMilliCredits`. The ledger
+/// remains the source of truth: the GRANT row that created this bucket carries
+/// `expiresAt`, and every CHARGE row carries `sourceGrantId`, so
+/// `remainingMilliCredits` is reconstructible by replay — which is what
+/// `CreditService.reconcile()` actually does. The column exists so choosing the
+/// next bucket is a short indexed read rather than an aggregate over the whole
+/// ledger.
+///
+/// Updated only inside the same transaction as its ledger row, under the same
+/// wallet row lock.
+model CreditGrant {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  walletId    String @db.Uuid
+
+  source CreditGrantSource
+
+  /// Granted, spent and held. The three are kept apart deliberately:
+  ///
+  ///   remaining = amount - (charges settled against this bucket)   <- replay
+  ///   reserved  = estimates currently held against this bucket
+  ///   spendable = remaining - reserved
+  ///
+  /// `remaining` therefore still equals what a ledger replay computes, which is
+  /// what `reconcile()` asserts. Holding a reservation moves `reserved` only,
+  /// so an open reservation cannot make the bucket disagree with the ledger —
+  /// and two concurrent reservations cannot both allocate the same credits,
+  /// which they could if a reservation left no per-bucket trace at all.
+  amountMilliCredits    BigInt
+  remainingMilliCredits BigInt
+  reservedMilliCredits  BigInt @default(0)
+
+  /// null = never expires. D-12 sets 12 months for packs, 3 for promotional.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  /// The ledger row that created this bucket. Unique, so a retried grant cannot
+  /// produce a second bucket from the same transaction.
+  sourceTransactionId String @unique @db.Uuid
+
+  reason    String
+  grantedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  wallet    CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  /// The consumption order: soonest expiry first, then oldest grant. NULLS LAST
+  /// is applied in the query so never-expiring buckets are spent last.
+  @@index([workspaceId, expiresAt, grantedAt])
+  @@index([walletId, remainingMilliCredits])
+  @@map("credit_grant")
+}
+
+/// TENANT-OWNED. One `reserve → confirm → settle` in flight.
+///
+/// The ledger records every movement; this row holds the STATE that makes the
+/// protocol safe:
+///
+///   * `idempotencyKey` is unique, so a retried reserve returns the existing
+///     reservation instead of holding the estimate twice (CLAUDE.md §2.4).
+///   * `status` makes settle-twice and release-after-settle impossible.
+///   * `allocations` records which buckets the estimate was taken from, so
+///     settlement charges and releases the SAME buckets FIFO chose at reserve
+///     time rather than re-deciding against a wallet that has since moved.
+///   * `expiresAt` is what the sweeper uses. An abandoned reservation must be
+///     released, and the leak count must stay at zero.
+model CreditReservation {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  walletId    String @db.Uuid
+
+  /// Unique. A retry with the same key returns the original reservation.
+  idempotencyKey String @unique
+
+  /// What the caller asked to hold. Settlement may be less, never more.
+  estimateMilliCredits BigInt
+  /// Set at settlement. Null while open.
+  settledMilliCredits  BigInt?
+
+  status CreditReservationStatus @default(OPEN)
+
+  /// `[{ grantId, milliCredits }]` — the FIFO decision, frozen at reserve time.
+  allocations Json
+
+  /// What the reservation is for. A task key, never request content.
+  purpose String
+
+  expiresAt     DateTime  @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  settledAt     DateTime? @db.Timestamptz(6)
+  releasedAt    DateTime? @db.Timestamptz(6)
+  /// Why it was released: caller cancelled, request failed, or swept.
+  releaseReason String?
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  wallet    CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  /// The sweeper's query: everything still OPEN past its deadline.
+  @@index([status, expiresAt])
+  @@map("credit_reservation")
+}
+
+/// TENANT-OWNED. Consumption of one quota feature in one window.
+///
+/// `usedValue` is incremented by a single `INSERT … ON CONFLICT DO UPDATE`
+/// carrying the limit in its WHERE clause, so the check and the increment are
+/// one atomic statement. Two concurrent requests at the limit cannot both
+/// succeed, and no row lock is held across application code.
+model UsageCounter {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  featureKey  String
+  /// Window bounds. `total` limits use a fixed epoch start so there is one row.
+  periodStart DateTime @db.Timestamptz(6)
+  periodEnd   DateTime @db.Timestamptz(6)
+
+  usedValue Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, featureKey, periodStart])
+  @@index([workspaceId, featureKey, periodEnd])
+  @@map("usage_counter")
+}
+
+/// TENANT-OWNED. The idempotency record for one usage recording.
+///
+/// Inserted in the SAME transaction as the counter increment. A retry violates
+/// the unique key, the transaction rolls back, and the counter is untouched —
+/// so recording usage twice for one logical action is impossible rather than
+/// unlikely.
+///
+/// It carries a feature key and an amount. It never carries request content.
+model UsageEvent {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  featureKey     String
+  idempotencyKey String @unique
+  amount         Int
+
+  counterId  String   @db.Uuid
+  occurredAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, featureKey, occurredAt(sort: Desc)])
+  @@map("usage_event")
+}
+
+/// TENANT-OWNED. One workspace's membership of one named beta cohort.
+///
+/// The cohort DEFINITIONS are configuration (`beta-cohorts`); membership is a
+/// database row because it is per-customer state with an author, a reason and a
+/// date — the same reasoning as `WorkspaceOverride`. Until this model existed
+/// the precedence engine's beta-group dimension read a hard-coded empty set.
+model BetaCohortMembership {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  cohortKey String
+
+  addedByPlatformUserId String   @db.Uuid
+  reason                String
+  addedAt               DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, cohortKey])
+  @@index([cohortKey])
+  @@map("beta_cohort_membership")
 }

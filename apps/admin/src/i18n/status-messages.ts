@@ -42,6 +42,21 @@ const ERROR_TEXT: Record<PublicErrorCode, { en: string; ar: string }> = {
     en: 'Too many attempts. Wait a moment and try again.',
     ar: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
   },
+  // Phase 3. An operator acting in the Control Center can hit these three when
+  // they act on behalf of a workspace. The words name the wall, never the plan,
+  // the limit or the price behind it.
+  ENTITLEMENT_REQUIRED: {
+    en: "That workspace's plan does not include this capability.",
+    ar: 'خطة مساحة العمل هذه لا تشمل هذه الإمكانية.',
+  },
+  QUOTA_EXCEEDED: {
+    en: 'That workspace has reached its limit for this action.',
+    ar: 'بلغت مساحة العمل هذه حدّها لهذا الإجراء.',
+  },
+  INSUFFICIENT_CREDITS: {
+    en: 'That workspace does not have enough AI credits for this action.',
+    ar: 'لا تملك مساحة العمل هذه رصيد ذكاء اصطناعي كافيًا لهذا الإجراء.',
+  },
   INTERNAL: {
     en: 'Something went wrong and nothing was changed.',
     ar: 'حدث خطأ ولم يتغيّر شيء.',

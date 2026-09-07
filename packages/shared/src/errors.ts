@@ -14,6 +14,10 @@ export const ERROR_CODES = [
   'RATE_LIMITED',
   'ENTITLEMENT_REQUIRED',
   'QUOTA_EXCEEDED',
+  // Phase 3. The wallet cannot cover the action. D-11 makes this a hard stop:
+  // there is no postpaid overage, so the only paths forward are a top-up or a
+  // plan change, and the customer must be told which.
+  'INSUFFICIENT_CREDITS',
   'TENANT_CONTEXT_MISSING',
   'TENANT_SCOPE_VIOLATION',
   'INTERNAL',
@@ -30,6 +34,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   RATE_LIMITED: 429,
   ENTITLEMENT_REQUIRED: 402,
   QUOTA_EXCEEDED: 402,
+  INSUFFICIENT_CREDITS: 402,
   TENANT_CONTEXT_MISSING: 500,
   TENANT_SCOPE_VIOLATION: 500,
   INTERNAL: 500,

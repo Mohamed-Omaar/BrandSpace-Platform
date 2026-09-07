@@ -122,15 +122,28 @@ export interface EntitlementServiceOptions {
   readonly catalogueSource?: CatalogueSource;
   readonly environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
   readonly clock?: Clock;
+  /**
+   * How long a loaded catalogue may be reused. Short by design: a kill switch
+   * must contain an incident, and docs/ADMIN-CONTROL-CENTER.md §5.5 puts that
+   * at "within the cache TTL (seconds)". Activation also invalidates directly,
+   * so this only bounds how stale ANOTHER process can be.
+   */
+  readonly cacheTtlMs?: number;
 }
+
+/** Seconds, not minutes — see `cacheTtlMs`. */
+const DEFAULT_CATALOGUE_TTL_MS = 5_000;
 
 export class EntitlementService {
   readonly #prisma: PrismaClient;
   readonly #source: CatalogueSource;
   readonly #clock: Clock;
+  readonly #cacheTtlMs: number;
+  #catalogueCache: { value: EntitlementCatalogue; expiresAt: number } | null = null;
 
   constructor(options: EntitlementServiceOptions) {
     this.#prisma = options.prisma;
+    this.#cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CATALOGUE_TTL_MS;
     const source =
       options.catalogueSource ??
       (options.config
@@ -156,17 +169,56 @@ export class EntitlementService {
    * any plan: no feature is silently on because nobody configured it.
    */
   async catalogue(): Promise<EntitlementCatalogue> {
-    const [entitlements, flags] = await Promise.all([
+    const cached = this.#catalogueCache;
+    if (cached && cached.expiresAt > this.#clock.now().getTime()) {
+      return cached.value;
+    }
+
+    const [entitlements, flags, plans] = await Promise.all([
       this.#source.load('entitlements'),
       this.#source.load('feature-flags'),
+      this.#source.load('plans'),
     ]);
 
-    return {
-      features: (entitlements['features'] ?? []) as unknown as FeatureDefinition[],
-      planEntitlements: (entitlements['planEntitlements'] ??
-        []) as unknown as PlanEntitlementRule[],
+    const declaredFeatures = (entitlements['features'] ?? []) as unknown as FeatureDefinition[];
+    const declaredEntitlements = (entitlements['planEntitlements'] ??
+      []) as unknown as PlanEntitlementRule[];
+    const planDocs = (plans['plans'] ?? []) as ReadonlyArray<Record<string, unknown>>;
+
+    // THE PLAN'S QUOTAS ARE THE PLAN'S. They are projected into the catalogue
+    // here rather than being maintained a second time in the `entitlements`
+    // document, because two places to write a seat limit is two places for it
+    // to disagree — and the one the engine reads would win silently.
+    //
+    // The projection is deterministic and one-directional: a quota written on
+    // the plan appears as a plan entitlement under its canonical key. An
+    // explicitly declared entitlement for the same pair still wins, so an owner
+    // can express something the six fixed dimensions cannot.
+    const projected = projectPlanQuotas(planDocs, declaredEntitlements);
+
+    const value: EntitlementCatalogue = {
+      features: withQuotaFeatures(declaredFeatures),
+      planEntitlements: [...declaredEntitlements, ...projected],
       flags: (flags['flags'] ?? []) as unknown as FlagRule[],
     };
+
+    this.#catalogueCache = {
+      value,
+      expiresAt: this.#clock.now().getTime() + this.#cacheTtlMs,
+    };
+    return value;
+  }
+
+  /**
+   * Drop the cached catalogue.
+   *
+   * Called when a configuration version is activated or rolled back, so a kill
+   * switch takes effect at once rather than at the end of a TTL (AC-05.8). The
+   * TTL is the backstop for other processes; this is the fast path for the one
+   * that made the change.
+   */
+  invalidate(): void {
+    this.#catalogueCache = null;
   }
 
   /** Plans the owner has configured. Prices are deliberately not exposed here. */
@@ -200,13 +252,19 @@ export class EntitlementService {
       orderBy: { effectiveFrom: 'desc' },
     });
 
+    // Phase 3: the real cohort memberships. Until this model existed the
+    // engine's beta dimension read a hard-coded empty set, so a flag targeted
+    // at a cohort could never match anyone.
+    const cohorts = await this.#prisma.betaCohortMembership.findMany({
+      where: { workspaceId },
+      select: { cohortKey: true },
+    });
+
     return {
       workspaceId: workspace.id,
       planKey: workspace.planKey,
       country: workspace.country,
-      // Beta cohorts are a Phase 3 targeting dimension; the engine supports
-      // them today and reads an empty set until they exist.
-      betaGroups: [],
+      betaGroups: cohorts.map((c) => c.cohortKey),
       overrides: overrides.map((o) => ({
         featureKey: o.featureKey,
         enabled: o.enabled,
@@ -230,6 +288,45 @@ export class EntitlementService {
       this.contextFor(workspaceId),
     ]);
     return resolveEntitlement(catalogue, context, featureKey, this.#clock.now());
+  }
+
+  /**
+   * May this workspace do X?
+   *
+   * The named API docs/ADMIN-CONTROL-CENTER.md §5.1 requires application code
+   * to use, so no call site ever writes `if (plan === 'growth')`. It is
+   * `resolve()` reduced to a boolean, which means the answer and the trace that
+   * explains it always come from the same evaluation.
+   */
+  async can(workspaceId: string, featureKey: string): Promise<boolean> {
+    const decision = await this.resolve(workspaceId, featureKey);
+    return decision.enabled;
+  }
+
+  /**
+   * How many may it have?
+   *
+   * `null` means unlimited — the Enterprise "negotiated" case — and is
+   * deliberately NOT zero. A caller that treats a missing limit as zero locks
+   * out exactly the customers who paid for no limit, so the two are different
+   * values and every consumer must handle both.
+   *
+   * A feature that is off returns 0: not unlimited, none.
+   */
+  async limit(workspaceId: string, featureKey: string): Promise<number | null> {
+    const decision = await this.resolve(workspaceId, featureKey);
+    if (!decision.enabled) return 0;
+    return decision.limitValue;
+  }
+
+  /**
+   * The decision AND its explanation, for the Control Center's trace view.
+   *
+   * Identical to `resolve()`; named separately so the intent at the call site
+   * is legible, and so the trace is never quietly recomputed by a second path.
+   */
+  async explain(workspaceId: string, featureKey: string): Promise<EntitlementDecision> {
+    return this.resolve(workspaceId, featureKey);
   }
 
   /** Resolve every configured feature — the "effective features" view. */
@@ -468,4 +565,103 @@ export function entitlementDenialReason(
   if (!actor.mfaVerified) return `${operation} requires verified MFA (D-27).`;
   if (!actor.permissionKeys?.includes(permission)) return `${operation} requires ${permission}.`;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// The plan-quota projection
+// ---------------------------------------------------------------------------
+
+/**
+ * The six quota dimensions, as feature definitions.
+ *
+ * The engine refuses an unknown feature key — failing closed, so a typo cannot
+ * grant access — which means the projected quota entitlements need matching
+ * feature definitions to resolve against. Declaring them here rather than
+ * requiring the owner to re-type six rows in every environment keeps the KEYS
+ * in code (where docs/ADMIN-CONTROL-CENTER.md §5.1 puts them) and every NUMBER
+ * in configuration (where AC-04.3 requires it).
+ *
+ * `defaultValue: null` matters: a workspace on no plan gets no quota, not an
+ * invented one.
+ */
+const QUOTA_FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
+  { key: 'limit.seats', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  { key: 'limit.brands', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  { key: 'limit.social_accounts', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  { key: 'limit.scheduled_posts', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  { key: 'limit.storage_gb', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  {
+    key: 'limit.analytics_retention_days',
+    valueType: 'quota',
+    defaultValue: null,
+    dependsOn: [],
+  },
+];
+
+/** Plan quota field -> canonical feature key, and the window it counts over. */
+const QUOTA_FIELD_MAP: ReadonlyArray<{
+  readonly field: string;
+  readonly featureKey: string;
+  readonly period: 'month' | 'total';
+}> = [
+  { field: 'seats', featureKey: 'limit.seats', period: 'total' },
+  { field: 'brands', featureKey: 'limit.brands', period: 'total' },
+  { field: 'socialAccounts', featureKey: 'limit.social_accounts', period: 'total' },
+  { field: 'scheduledPostsPerMonth', featureKey: 'limit.scheduled_posts', period: 'month' },
+  { field: 'storageGb', featureKey: 'limit.storage_gb', period: 'total' },
+  {
+    field: 'analyticsRetentionDays',
+    featureKey: 'limit.analytics_retention_days',
+    period: 'total',
+  },
+];
+
+/** Add the quota definitions the owner has not declared themselves. */
+function withQuotaFeatures(declared: readonly FeatureDefinition[]): readonly FeatureDefinition[] {
+  const declaredKeys = new Set(declared.map((f) => f.key));
+  return [...declared, ...QUOTA_FEATURE_DEFINITIONS.filter((f) => !declaredKeys.has(f.key))];
+}
+
+/**
+ * Turn each plan's `quotas` block into plan entitlements.
+ *
+ * An explicitly declared entitlement for the same (plan, feature) pair is left
+ * alone and this projection yields nothing for it, so the owner can always
+ * override the projection by writing the row directly.
+ *
+ * A `null` quota is Enterprise's "negotiated": the feature is ENABLED with no
+ * limit, which the engine and `limit()` both read as unlimited. Omitting the
+ * row instead would have fallen through to the feature default and disabled it.
+ */
+function projectPlanQuotas(
+  plans: ReadonlyArray<Record<string, unknown>>,
+  declared: readonly PlanEntitlementRule[],
+): readonly PlanEntitlementRule[] {
+  const declaredPairs = new Set(declared.map((e) => `${e.planKey}::${e.featureKey}`));
+  const projected: PlanEntitlementRule[] = [];
+
+  for (const plan of plans) {
+    const planKey = String(plan['key'] ?? '');
+    if (!planKey) continue;
+    const quotas = (plan['quotas'] ?? {}) as Record<string, unknown>;
+
+    for (const mapping of QUOTA_FIELD_MAP) {
+      if (declaredPairs.has(`${planKey}::${mapping.featureKey}`)) continue;
+      if (!(mapping.field in quotas)) continue;
+
+      const raw = quotas[mapping.field];
+      const limitValue = raw === null || raw === undefined ? null : Number(raw);
+      if (limitValue !== null && !Number.isFinite(limitValue)) continue;
+
+      projected.push({
+        planKey,
+        featureKey: mapping.featureKey,
+        enabled: true,
+        limitValue,
+        limitPeriod: mapping.period,
+      });
+    }
+  }
+
+  return projected;
 }

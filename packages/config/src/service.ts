@@ -10,7 +10,12 @@ import {
   type ConfigDomain,
   type ConfigPayload,
 } from './domains';
-import { buildImpactPreview, type ImpactPreview } from './impact';
+import {
+  buildImpactPreview,
+  withAffectedWorkspaces,
+  type ImpactPreview,
+  type WorkspaceUsageSnapshot,
+} from './impact';
 import { validateConfiguration, type ConfigContext, type ValidationReport } from './validation';
 
 /**
@@ -58,7 +63,17 @@ export interface ConfigActor {
  * so neither a future caller nor a direct write can put an operational or
  * integration payload where a customer can read it.
  */
-const CUSTOMER_VISIBLE_DOMAINS = new Set(['entitlements', 'plans', 'feature-flags']);
+const CUSTOMER_VISIBLE_DOMAINS = new Set([
+  'entitlements',
+  'plans',
+  'feature-flags',
+  // Phase 3. The credit POLICY — expiry windows, rollover, the hard stop — is
+  // what the customer's own Plan & Usage page explains to them ("packs expire
+  // after 12 months"). It carries no price, no provider and no other tenant's
+  // data, so it is projected like the other three rather than being restated
+  // in the dashboard where it could drift from the rule actually applied.
+  'credits',
+]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';
 /** Drafting and editing. Does NOT grant deployment. */
@@ -83,7 +98,9 @@ export interface ConfigVersionSummary {
 }
 
 /** Domains where activation is a financial change and needs dual control. */
-const DUAL_CONTROL_DOMAINS = new Set<ConfigDomain>(['plans', 'ai.credit-rules']);
+// Phase 3 adds `credits`: expiry and rollover decide how much of a customer's
+// balance survives a cycle, which is the same class of decision as a price.
+const DUAL_CONTROL_DOMAINS = new Set<ConfigDomain>(['plans', 'ai.credit-rules', 'credits']);
 
 function checksum(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
@@ -381,16 +398,73 @@ export class ConfigurationService {
       where: { domain: version.domain, environment: version.environment, status: 'ACTIVE' },
     });
 
-    const preview = buildImpactPreview(
+    const diff = buildImpactPreview(
       version.domain,
       active?.payload ?? defaultPayload(version.domain),
       version.payload,
     );
+
+    // AC-04.5. A plan change is previewed against who is actually ON those
+    // plans, not just as a document diff — "12 would exceed their new brand
+    // limit" is the sentence the owner needs before confirming.
+    const preview =
+      version.domain === 'plans'
+        ? withAffectedWorkspaces(diff, version.payload, await this.#workspaceUsage())
+        : diff;
+
     await this.#prisma.configurationVersion.update({
       where: { id: versionId },
       data: { impactPreview: preview as never },
     });
     return preview;
+  }
+
+  /**
+   * Every workspace's current consumption, for the over-limit analysis.
+   *
+   * HONESTY NOTE. Only the dimensions that have real data are reported. Seats
+   * are counted from active memberships, which exist. Brands, social accounts
+   * and scheduled posts come from the usage counters, which are populated as
+   * those features ship — until then a workspace simply is not reported against
+   * those dimensions, rather than being reported as zero. A confident "nobody
+   * is over their brand limit" derived from a table nothing writes to yet would
+   * be worse than saying nothing.
+   */
+  async #workspaceUsage(): Promise<WorkspaceUsageSnapshot[]> {
+    const workspaces = await this.#prisma.workspace.findMany({
+      where: { deletedAt: null, planKey: { not: null } },
+      select: {
+        id: true,
+        slug: true,
+        planKey: true,
+        _count: { select: { memberships: { where: { status: 'ACTIVE' } } } },
+      },
+    });
+    if (workspaces.length === 0) return [];
+
+    const counters = await this.#prisma.usageCounter.findMany({
+      where: {
+        workspaceId: { in: workspaces.map((w) => w.id) },
+        periodEnd: { gt: this.#clock.now() },
+      },
+      select: { workspaceId: true, featureKey: true, usedValue: true },
+    });
+
+    const byWorkspace = new Map<string, Record<string, number>>();
+    for (const counter of counters) {
+      const dimension = USAGE_KEY_FOR_FEATURE[counter.featureKey];
+      if (!dimension) continue;
+      const bucket = byWorkspace.get(counter.workspaceId) ?? {};
+      bucket[dimension] = counter.usedValue;
+      byWorkspace.set(counter.workspaceId, bucket);
+    }
+
+    return workspaces.map((w) => ({
+      workspaceId: w.id,
+      slug: w.slug,
+      planKey: w.planKey ?? '',
+      usage: { seats: w._count.memberships, ...(byWorkspace.get(w.id) ?? {}) },
+    }));
   }
 
   // -------------------------------------------------------------------------
@@ -697,3 +771,19 @@ function toSummary(row: VersionRow): ConfigVersionSummary {
     impactPreview: (row.impactPreview as ImpactPreview | null) ?? null,
   };
 }
+
+/**
+ * Quota feature key -> the usage dimension the impact preview compares against.
+ *
+ * Mirrors the projection in `@brandspace/entitlements`. It is repeated here
+ * rather than imported because `packages/config` may not depend on
+ * `packages/entitlements` — that edge would be a cycle, since the entitlement
+ * service reads its catalogue from this service.
+ */
+const USAGE_KEY_FOR_FEATURE: Readonly<Record<string, string>> = {
+  'limit.seats': 'seats',
+  'limit.brands': 'brands',
+  'limit.social_accounts': 'socialAccounts',
+  'limit.scheduled_posts': 'scheduledPostsPerMonth',
+  'limit.storage_gb': 'storageGb',
+};
