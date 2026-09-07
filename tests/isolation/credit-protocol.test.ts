@@ -452,11 +452,75 @@ describe('release — the failure path', () => {
       data: { expiresAt: new Date(Date.now() - 60_000) },
     });
 
-    const swept = await ledger.sweepAbandonedReservations();
+    const result = await ledger.sweepAbandonedReservations();
 
-    expect(swept).toBeGreaterThanOrEqual(1);
+    expect(result.swept).toBeGreaterThanOrEqual(1);
     expect((await ledger.reservation(reservation.id)).status).toBe('EXPIRED');
     expect(await reservedOf(workspaceId)).toBe(0n);
+  });
+
+  it('one unreleasable reservation does not stop the sweep', async () => {
+    // A reservation whose bucket does not record the hold it claims cannot be
+    // released: the decrement would take `reserved` below zero and the CHECK
+    // constraint refuses it. That row must be REPORTED, not allowed to abort
+    // the batch — reservation leaks are a metric that must stay at zero, and a
+    // sweeper that dies on the first bad row stops releasing every valid
+    // reservation behind it.
+    //
+    // The two live in SEPARATE workspaces on purpose. Sharing a bucket would
+    // let the healthy reservation's hold absorb the corrupt one's decrement,
+    // and the release would quietly succeed — testing nothing.
+    const corruptWorkspace = await freshWorkspace();
+    const healthyWorkspace = await freshWorkspace();
+
+    const bucket = await ledger.grant({
+      workspaceId: corruptWorkspace,
+      source: 'PLAN_GRANT',
+      credits: 50,
+      reason: 'allowance',
+      idempotencyKey: `g-corrupt-${corruptWorkspace}`,
+    });
+    const corruptWallet = await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: corruptWorkspace },
+    });
+    const corrupt = await platform.creditReservation.create({
+      data: {
+        workspaceId: corruptWorkspace,
+        walletId: corruptWallet.id,
+        idempotencyKey: `corrupt-${corruptWorkspace}`,
+        estimateMilliCredits: 1000n,
+        // The bucket records NO hold, so this allocation is unbacked.
+        allocations: [{ grantId: bucket.id, milliCredits: '1000' }],
+        purpose: 'corrupt.fixture',
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    await ledger.grant({
+      workspaceId: healthyWorkspace,
+      source: 'PLAN_GRANT',
+      credits: 50,
+      reason: 'allowance',
+      idempotencyKey: `g-healthy-${healthyWorkspace}`,
+    });
+    const healthy = await ledger.reserve({
+      workspaceId: healthyWorkspace,
+      estimateMilliCredits: 10n * MILLI_PER_CREDIT,
+      purpose: 'caption.generate',
+      idempotencyKey: `r-healthy-${healthyWorkspace}`,
+      ttlSeconds: 1,
+    });
+    await platform.creditReservation.update({
+      where: { id: healthy.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const result = await ledger.sweepAbandonedReservations();
+
+    expect(result.failed).toContain(corrupt.id);
+    // The valid one behind it was still released.
+    expect((await ledger.reservation(healthy.id)).status).toBe('EXPIRED');
+    expect(await reservedOf(healthyWorkspace)).toBe(0n);
   });
 });
 

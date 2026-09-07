@@ -564,7 +564,9 @@ export class CreditLedgerService {
    * that must stay at zero. Returns how many were swept so a caller can alert
    * on a non-zero count rather than discovering the leak from a balance.
    */
-  async sweepAbandonedReservations(limit = 200): Promise<number> {
+  async sweepAbandonedReservations(
+    limit = 200,
+  ): Promise<{ readonly swept: number; readonly failed: readonly string[] }> {
     const now = this.#clock.now();
     const abandoned = await this.#prisma.creditReservation.findMany({
       where: { status: 'OPEN', expiresAt: { lt: now } },
@@ -573,15 +575,33 @@ export class CreditLedgerService {
     });
 
     let swept = 0;
+    const failed: string[] = [];
+
     for (const reservation of abandoned) {
-      await this.release(
-        reservation.id,
-        'Swept: the reservation passed its deadline without being settled.',
-        'EXPIRED',
-      );
-      swept += 1;
+      try {
+        await this.release(
+          reservation.id,
+          'Swept: the reservation passed its deadline without being settled.',
+          'EXPIRED',
+        );
+        swept += 1;
+      } catch {
+        // ONE unreleasable reservation must not stop the sweep.
+        //
+        // A row whose bucket does not record the hold it claims cannot be
+        // released — the decrement would take `reserved` below zero and a CHECK
+        // constraint refuses it, which is the constraint doing its job. But a
+        // sweeper that dies on the first such row stops releasing every VALID
+        // reservation behind it, and reservation leaks are a metric that must
+        // stay at zero (docs/BILLING-AND-CREDITS.md §10.3).
+        //
+        // So the bad row is reported by id and the sweep continues. A non-empty
+        // `failed` list is a correctness alert about the ledger, distinct from
+        // `swept` being lower than expected.
+        failed.push(reservation.id);
+      }
     }
-    return swept;
+    return { swept, failed };
   }
 
   // -------------------------------------------------------------------------

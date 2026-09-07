@@ -407,6 +407,13 @@ async function createTenant(
           source: 'ADMIN_ADJUSTMENT',
           amountMilliCredits: 5000n,
           remainingMilliCredits: 5000n,
+          // The bucket must RECORD the hold the reservation below claims.
+          // Without this the fixture fabricates a state the product cannot
+          // produce — a reservation allocating credits the bucket does not know
+          // are held — and the sweeper, correctly, refuses to release it: the
+          // decrement would take `reserved` below zero, which a CHECK
+          // constraint exists to prevent.
+          reservedMilliCredits: 1000n,
           sourceTransactionId: creditTransaction.id,
           reason: `fixture grant bucket ${slug}`,
         },

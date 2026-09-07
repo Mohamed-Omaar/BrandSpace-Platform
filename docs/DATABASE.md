@@ -512,6 +512,58 @@ alerts on drift.
 
 Constraints: `CHECK (currentBalance >= 0)`, `CHECK (reservedBalance >= 0)`.
 
+### 7.1a `CreditGrant` (Phase 3) — the FIFO bucket
+
+`id`, `workspaceId`, `walletId`, `source`
+(`plan_grant`,`trial_grant`,`promotional_grant`,`pack_purchase`,`admin_adjustment`,`rollover`),
+`amountMilliCredits`, `remainingMilliCredits`, `reservedMilliCredits`, `expiresAt` (null = never),
+`sourceTransactionId` (unique), `reason`, `grantedAt`.
+
+**A PROJECTION, like `currentBalance`.** The ledger remains the source of truth: the GRANT
+row carries `expiresAt` and every CHARGE row carries `sourceGrantId`, so
+`remainingMilliCredits` is reconstructible by replay. The column exists so choosing the
+next bucket is a short indexed read rather than an aggregate over the whole ledger.
+
+Three quantities, kept apart deliberately:
+
+```
+remaining = amount − (charges settled against this bucket)   ← what replay computes
+reserved  = estimates currently held against this bucket
+spendable = remaining − reserved
+```
+
+Holding a reservation moves `reserved` only, so an open reservation never makes the bucket
+disagree with the ledger — and two concurrent reservations cannot both allocate the same
+credits, which they could if a reservation left no per-bucket trace.
+
+Constraints: `CHECK (remaining BETWEEN 0 AND amount)`, `CHECK (reserved BETWEEN 0 AND remaining)`,
+`CHECK (amount > 0)`. A trigger refuses any change to `amountMilliCredits`, `source`,
+`workspaceId`, `grantedAt` or `sourceTransactionId`: rewriting those would break replay
+SILENTLY — reconciliation would still report zero drift while the numbers underneath had
+changed.
+
+Indexes: `(workspaceId, expiresAt, grantedAt)` for the consumption order,
+`(walletId, remainingMilliCredits)`.
+
+### 7.1b `CreditReservation` (Phase 3)
+
+`id`, `workspaceId`, `walletId`, `idempotencyKey` (unique), `estimateMilliCredits`,
+`settledMilliCredits`, `status` (`open`,`settled`,`released`,`expired`), `allocations jsonb`,
+`purpose`, `expiresAt`, `createdAt`, `settledAt`, `releasedAt`, `releaseReason`.
+
+The ledger records every movement; this row holds the STATE that makes
+`reserve → confirm → settle` safe. `allocations` freezes which buckets FIFO chose at
+reserve time, so settlement charges the buckets the customer was quoted against rather
+than re-deciding against a wallet that has since moved. `expiresAt` is what the sweeper
+reads: an abandoned reservation must be released, and the leak count must stay at zero.
+
+Constraint: `CHECK (settledMilliCredits IS NULL OR settledMilliCredits BETWEEN 0 AND estimateMilliCredits)`.
+Charging above the reserved amount is the one way a wallet could go negative behind its own
+CHECK, so the database refuses it directly. A trigger refuses re-opening a terminal
+reservation, which is how the same estimate would be charged twice.
+
+Indexes: `(workspaceId, status)`, `(status, expiresAt)` for the sweeper.
+
 ### 7.2 `CreditTransaction` (immutable)
 
 `id`, `workspaceId`, `walletId`, `type`
@@ -568,6 +620,46 @@ Constraint: `unique(workspaceId, featureId, effectiveFrom)`.
 **Precedence** (highest wins): workspace override → percentage/beta/country/date flag rules → plan
 entitlement → feature default. Full rules in `docs/ADMIN-CONTROL-CENTER.md` §Feature Flags.
 
+### 8.4a `UsageCounter` and `UsageEvent` (Phase 3)
+
+`UsageCounter`: `id`, `workspaceId`, `featureKey`, `periodStart`, `periodEnd`, `usedValue`.
+Constraint: `unique(workspaceId, featureKey, periodStart)`, `CHECK (usedValue >= 0)`.
+
+`UsageEvent`: `id`, `workspaceId`, `featureKey`, `idempotencyKey` (unique), `amount`,
+`counterId`, `occurredAt`. Append-only for both roles (REVOKE plus a trigger).
+
+**Why the unique key on the counter matters.** It is what makes the check and the
+increment ONE statement:
+
+```sql
+INSERT INTO usage_counter (…) VALUES (…, $n, …)
+ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+DO UPDATE SET "usedValue" = usage_counter."usedValue" + $n
+WHERE usage_counter."usedValue" + $n <= $limit
+RETURNING "usedValue"
+```
+
+PostgreSQL evaluates the WHERE against the row it has just locked, so the losing request
+updates nothing and gets no row back. A read-then-write implementation passes every
+sequential test and fails the moment two requests arrive together — which is the normal
+outcome of two clicks, not a rare interleaving.
+
+Idempotency is a SECOND, independent mechanism: the `UsageEvent` row is inserted in the
+same transaction and its key is unique, so a retried recording aborts the transaction and
+leaves the counter untouched. The event carries a feature key and an amount; it never
+carries request content.
+
+### 8.4b `BetaCohortMembership` (Phase 3)
+
+`id`, `workspaceId`, `cohortKey`, `addedByPlatformUserId`, `reason`, `addedAt`.
+Constraint: `unique(workspaceId, cohortKey)`.
+
+Cohort DEFINITIONS are configuration (`beta-cohorts`); membership is a row for the same
+reason a `WorkspaceOverride` is — per-customer state with an author, a reason and a date,
+belonging in the audit trail rather than in a configuration document that would grow a
+line per customer. Until this model existed the precedence engine's beta dimension read a
+hard-coded empty set, so a flag targeted at a cohort could never match anyone.
+
 ### 8.5 `Subscription`
 
 `id`, `workspaceId`, `planId`, `status` (`trialing`,`active`,`past_due`,`paused`,`cancelled`,`expired`),
@@ -575,6 +667,18 @@ entitlement → feature default. Full rules in `docs/ADMIN-CONTROL-CENTER.md` §
 `currentPeriodStart`, `currentPeriodEnd`, `trialEndsAt`, `cancelAtPeriodEnd`, `cancelledAt`,
 `gracePeriodEndsAt`, `providerKey`, `providerSubscriptionId`, `providerCustomerId`,
 `couponCode`, `discountJson`, `taxProfile jsonb`, `pendingPlanChange jsonb`.
+
+> **Phase 3 ships `WorkspaceSubscription`, which is NOT this model yet.** It carries the
+> plan, the PINNED price and its source configuration version, the billing interval, the
+> cycle boundaries, the trial dates and a scheduled plan change — and no provider
+> reference, no invoice linkage and no payment state, because payment collection is
+> Phase 7 and this phase must not simulate it. One row per workspace, evolving in place,
+> so the trial history cannot be erased by starting again.
+>
+> The pinned price is the whole reason the record exists now: AC-04.7 requires that
+> changing a plan's price does not reprice existing customers, and a system that reads
+> the price out of the live catalogue at render time cannot have that property, however
+> carefully it is written. Phase 7 extends this record rather than replacing it.
 
 Indexes: `(workspaceId, status)`, `unique(providerKey, providerSubscriptionId)`,
 `(status, currentPeriodEnd)` for renewal sweeps.

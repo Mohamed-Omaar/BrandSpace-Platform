@@ -133,6 +133,42 @@ cross-tenant access, which it previously did. Further reduction (short-lived cre
 manager, and splitting read-only from write platform access) is recorded as F-07 in
 `docs/DECISIONS.md` and belongs with the Secret Service in Phase 2.
 
+### 2.9 Phase 3 tenant-owned models
+
+Six models were added, every one carrying a non-null `workspaceId` and every one protected by the
+same construction Phase 1 established: `ENABLE` + `FORCE` row-level security, a policy scoped to
+`brandspace_app` keyed on `app.current_workspace_id()`, a platform policy for the audited
+cross-tenant role, and EXPLICIT grants — the Phase 1 blanket `ALL TABLES` grant only ever covered
+the tables that existed when it ran.
+
+| Model                   | Why it is sensitive                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `WorkspaceSubscription` | The agreed price and the trial history. A tenant that could clear another's `trialStartedAt` would grant it a second trial |
+| `CreditGrant`           | Money. A tenant that could write another's bucket could spend it                                                           |
+| `CreditReservation`     | Money in flight, plus what it is for                                                                                       |
+| `UsageCounter`          | Consumption against a limit                                                                                                |
+| `UsageEvent`            | The idempotency record. Deleting one is how a quota would be reset                                                         |
+| `BetaCohortMembership`  | A cohort listing that leaked would tell one customer which OTHER customers are in a private beta                           |
+
+Two are append-only in the same sense as `audit_event` and `credit_transaction`, enforced twice:
+
+- **`usage_event`** — `REVOKE UPDATE, DELETE` from both roles, plus a trigger. If a tenant could
+  delete its own idempotency record the "record usage exactly once" guarantee would be advisory,
+  and deleting the record is also how a quota would be reset.
+- **`credit_grant`** — a trigger refuses any change to the original amount, the source, the
+  workspace, the grant time or the creating transaction. Only the remaining and reserved balances
+  move. Rewriting the rest would break ledger replay SILENTLY: reconciliation would still report
+  zero drift while the numbers underneath had changed.
+
+`credit_reservation` carries a third: a terminal reservation cannot return to `OPEN`, which is how
+the same estimate would be charged twice.
+
+**Customer-facing error codes.** `ENTITLEMENT_REQUIRED`, `QUOTA_EXCEEDED` and
+`INSUFFICIENT_CREDITS` now reach the client. Only the CODE travels — never the message, which
+still describes internal state — and each names the kind of wall that was hit rather than the
+plan, the limit or the price behind it. Hiding them behind `INTERNAL` made a wall the customer
+could clear look like a platform fault.
+
 ---
 
 ## 3. Authentication

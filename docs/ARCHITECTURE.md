@@ -429,28 +429,48 @@ stateDiagram-v2
 
 The design above is unchanged; these are the concrete details a reader needs when working in the code.
 
-**Seventeen domains ship**, named as they appear in `packages/config/src/domains.ts`:
+**Nineteen domains ship** (seventeen in Phase 2A, two added in Phase 3), named as they appear in
+`packages/config/src/domains.ts`:
 
 `ai.providers` · `ai.models` · `ai.model-capabilities` · `ai.routing` · `ai.credit-rules` · `plans` ·
-`entitlements` · `feature-flags` · `usage-limits` · `integrations.email` · `integrations.storage` ·
-`integrations.payment` · `integrations.observability` · `integrations.social-apps` · `templates` ·
-`website` · `operations`.
+`entitlements` · `feature-flags` · **`credits`** · **`beta-cohorts`** · `usage-limits` ·
+`integrations.email` · `integrations.storage` · `integrations.payment` · `integrations.observability` ·
+`integrations.social-apps` · `templates` · `website` · `operations`.
+
+`credits` is the credit POLICY — expiry windows, rollover, low-balance thresholds, the hard stop —
+kept separate from `ai.credit-rules`, which prices AI TASKS. Nothing in it is AI-specific: those rules
+govern the wallet whether or not a provider ever exists. `beta-cohorts` holds the cohort definitions
+the flag engine targets; membership is a database row, not a configuration line per customer.
 
 Every domain's default is **empty but valid** — no provider, price, model or limit is invented in code, which
 is the point of CLAUDE.md §2.2. A fresh installation therefore reads a well-formed empty document rather than
 throwing, and the owner fills it in from the Control Center.
 
-| Guarantee                                  | How it is actually enforced                                                                                                                                                |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One ACTIVE version per domain/environment  | A **partial unique index** on `(domain, environment) WHERE status = 'ACTIVE'`. Not application logic — the database refuses.                                               |
-| History is immutable                       | A trigger rejects any update to an ACTIVE version's payload or checksum. Rollback creates a new version.                                                                   |
-| Concurrent edits do not silently overwrite | `lockVersion` travels in the `WHERE` clause of a conditional `updateMany`, so the check and the write are one statement.                                                   |
-| Editing invalidates prior verdicts         | `updateDraft` clears `validationReport` and `impactPreview` (as `Prisma.DbNull`, not `undefined`, which under `exactOptionalPropertyTypes` would mean "leave unchanged").  |
-| Money changes need two people              | `plans` and `ai.credit-rules` require dual control: the activator may not be the author (D-31).                                                                            |
-| High-impact changes are acknowledged       | The impact preview marks removals, price changes, credit-rule changes, model disables and kill switches as `high`; activation refuses without an explicit acknowledgement. |
+| Guarantee                                  | How it is actually enforced                                                                                                                                                                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One ACTIVE version per domain/environment  | A **partial unique index** on `(domain, environment) WHERE status = 'ACTIVE'`. Not application logic — the database refuses.                                                                                                                                                |
+| History is immutable                       | A trigger rejects any update to an ACTIVE version's payload or checksum. Rollback creates a new version.                                                                                                                                                                    |
+| Concurrent edits do not silently overwrite | `lockVersion` travels in the `WHERE` clause of a conditional `updateMany`, so the check and the write are one statement.                                                                                                                                                    |
+| Editing invalidates prior verdicts         | `updateDraft` clears `validationReport` and `impactPreview` (as `Prisma.DbNull`, not `undefined`, which under `exactOptionalPropertyTypes` would mean "leave unchanged").                                                                                                   |
+| Money changes need two people              | `plans`, `ai.credit-rules` and `credits` require dual control: the activator may not be the author (D-31). `credits` joined them in Phase 3 — expiry and rollover decide how much of a customer's balance survives a cycle, which is the same class of decision as a price. |
+| High-impact changes are acknowledged       | The impact preview marks removals, price changes, credit-rule changes, model disables and kill switches as `high`; activation refuses without an explicit acknowledgement.                                                                                                  |
 
 **Cache**: `InMemoryConfigCache` with a 30-second TTL, invalidated in-process on activation. Redis pub/sub
 invalidation across instances is **not** implemented — recorded as F-12, and bounded at 30 seconds until it is.
+
+Phase 3 adds a second, shorter cache in front of the ENTITLEMENT CATALOGUE (five seconds), invalidated
+directly by activation. The two are layered deliberately: docs/ADMIN-CONTROL-CENTER.md §5.5 puts kill-switch
+containment "within the cache TTL (seconds)", and thirty seconds is not seconds. The short TTL bounds how
+stale another process can be; `EntitlementService.invalidate()` is the fast path for the one that made the
+change. Neither replaces the cross-instance invalidation F-12 still records.
+
+**Phase 3 also projects plan QUOTAS into the catalogue** rather than requiring them to be written twice.
+A quota on a plan appears as a plan entitlement under a canonical key (`limit.seats`, `limit.brands`, …).
+The projection is deterministic and one-directional, and an explicitly declared entitlement for the same
+pair still wins. Two places to write a seat limit would be two places for it to disagree, and the one the
+engine reads would win silently. The KEYS are code — application code asks
+`entitlements.limit(ws, 'limit.seats')` exactly as §5.1 has it ask `can(ws, 'ai.image_generation')` — and
+every NUMBER stays configuration, which is what AC-04.3 forbids in source.
 
 ### 7.4 What is code vs. configuration
 

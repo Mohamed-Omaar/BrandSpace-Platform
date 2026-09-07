@@ -116,6 +116,17 @@ This makes support questions answerable in seconds and makes precedence bugs vis
 
 Plans are **configuration**, created and edited entirely in Admin, versioned through the Configuration Service.
 
+> **IMPLEMENTED IN PHASE 3 (2026-09-07)** at `/console/plans`. A structured form over a
+> versioned draft: identity, per-currency prices, trial, credits, rollover and the six quota
+> dimensions of §4.1, plus the draft → validate → activate → roll back lifecycle of §4.2 and the
+> impact preview of §4.3 — which names the workspaces that would exceed a new limit rather than
+> reporting a count. Add-ons, tax behaviour and the overage policy are in the schema and validated;
+> the overage editor waits on D-11 being revisited, since the MVP hard-stops and nothing implements
+> a postpaid charge.
+>
+> The price table renders one column per SUPPORTED currency, read from the `operations` domain.
+> Nothing on the page converts one currency into another (D-08).
+
 ### 4.1 Plan editor fields
 
 | Group           | Fields                                                                                                     |
@@ -159,6 +170,14 @@ customer is notified per policy.
 ---
 
 ## 5. Module 4 — Feature Flags and Entitlements
+
+> **IMPLEMENTED IN PHASE 3 (2026-09-07).** The registry and the plan grant matrix at
+> `/console/features`; the targeting editor at `/console/flags`, which prints the §5.3 precedence
+> order beside the form and gives the kill switch its own one-press control that validates and
+> activates in the same action — containment during an incident must not depend on remembering a
+> second step. Beta-cohort membership is managed per workspace at
+> `/console/workspaces/{id}`; before this phase the engine's cohort dimension read a hard-coded
+> empty set, so a flag targeted at a cohort matched nobody.
 
 ### 5.1 Feature registry
 
