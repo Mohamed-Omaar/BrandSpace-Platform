@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { withSpan } from '@brandspace/observability';
 import {
+  currentEnvironment,
+  getBetaCohortService,
+  getConfigService,
   getCreditService,
   getEmailProvider,
   getEntitlementService,
@@ -306,6 +309,71 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
   } catch (error: unknown) {
     destination = failure((p) => detailUrl(locale, workspaceId, p), error, {
       action: 'revoke_invitation',
+    });
+  }
+  revalidatePath(`/${locale}/console/workspaces/${workspaceId}`);
+  redirect(destination);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — beta cohort membership
+// ---------------------------------------------------------------------------
+
+/**
+ * Put a workspace in a named beta cohort.
+ *
+ * The cohort must exist in the active `beta-cohorts` configuration: a
+ * membership of a cohort nobody defined would target nothing and look like a
+ * flag that silently does not work. The service checks the permission, the MFA
+ * and the reason again — this guard is convenience, not the control.
+ */
+export async function addCohortAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const workspaceId = String(formData.get('workspaceId') ?? '');
+  let destination: string;
+
+  try {
+    const actor = await requirePlatformActor('platform.entitlement.override');
+    const cohorts = (await getConfigService().get('beta-cohorts', currentEnvironment())) as {
+      cohorts?: { key: string }[];
+    };
+    await withSpan('admin.cohort.add', {}, async () =>
+      getBetaCohortService().add(
+        serviceActor(actor),
+        workspaceId,
+        String(formData.get('cohortKey') ?? '').trim(),
+        String(formData.get('reason') ?? ''),
+        (cohorts.cohorts ?? []).map((c) => c.key),
+      ),
+    );
+    destination = detailUrl(locale, workspaceId, { ok: 'COHORT_ADDED' });
+  } catch (error: unknown) {
+    destination = failure((p) => detailUrl(locale, workspaceId, p), error, {
+      action: 'add_cohort',
+    });
+  }
+  revalidatePath(`/${locale}/console/workspaces/${workspaceId}`);
+  redirect(destination);
+}
+
+export async function removeCohortAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const workspaceId = String(formData.get('workspaceId') ?? '');
+  let destination: string;
+
+  try {
+    const actor = await requirePlatformActor('platform.entitlement.override');
+    await withSpan('admin.cohort.remove', {}, async () =>
+      getBetaCohortService().remove(
+        serviceActor(actor),
+        workspaceId,
+        String(formData.get('cohortKey') ?? '').trim(),
+      ),
+    );
+    destination = detailUrl(locale, workspaceId, { ok: 'COHORT_REMOVED' });
+  } catch (error: unknown) {
+    destination = failure((p) => detailUrl(locale, workspaceId, p), error, {
+      action: 'remove_cohort',
     });
   }
   revalidatePath(`/${locale}/console/workspaces/${workspaceId}`);

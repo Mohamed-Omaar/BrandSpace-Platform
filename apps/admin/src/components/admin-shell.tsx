@@ -114,6 +114,13 @@ const NAV_SECTIONS: ReadonlyArray<{
         permission: 'platform.configuration.read',
         icon: <LayersIcon size={20} />,
       },
+      {
+        href: '/features',
+        key: 'nav.features',
+        titleKey: 'page.features',
+        permission: 'platform.configuration.read',
+        icon: <SlidersIcon size={20} />,
+      },
     ],
   },
   {

@@ -17,7 +17,14 @@ import {
   type CustomerWorkspaceContext,
   type EmailProvider,
 } from '@brandspace/auth';
-import { CreditService, EntitlementService, TenantCatalogueSource } from '@brandspace/entitlements';
+import {
+  CreditLedgerService,
+  CreditService,
+  EntitlementService,
+  SubscriptionService,
+  TenantCatalogueSource,
+  UsageService,
+} from '@brandspace/entitlements';
 
 /**
  * Server-only customer context.
@@ -59,6 +66,10 @@ export interface ScopedServices {
   readonly memberships: MembershipService;
   readonly entitlements: EntitlementService;
   readonly credits: CreditService;
+  /** Phase 3: the customer's own buckets, subscription and quota counters. */
+  readonly ledger: CreditLedgerService;
+  readonly subscriptions: SubscriptionService;
+  readonly usage: UsageService;
   /**
    * The outbox, on the SCOPED client.
    *
@@ -97,6 +108,12 @@ export async function inWorkspace<T>(
           environment: currentEnvironment(),
         }),
         credits: new CreditService({ prisma: scoped }),
+        // Phase 3. The customer's own view of its buckets, subscription and
+        // quota counters — all tenant-owned, all read through the same scoped
+        // client and therefore through RLS.
+        ledger: new CreditLedgerService({ prisma: scoped }),
+        subscriptions: new SubscriptionService({ prisma: scoped }),
+        usage: new UsageService({ prisma: scoped }),
         email: new OutboxEmailProvider(scoped),
       });
     },
