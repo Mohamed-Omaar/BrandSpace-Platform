@@ -76,6 +76,8 @@ export interface StudioLabels {
   readonly layersLabel: string;
   readonly opacityLabel: string;
   readonly effectsLabel: string;
+  /** The effects the panel offers, named by the caller. Never a literal. */
+  readonly effectNames: readonly string[];
   readonly presetsLabel: string;
   /** The preset design sizes' visible names, keyed by `StudioPreset.id`. */
   readonly presetNames: Record<string, string>;
@@ -545,15 +547,20 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
           ))}
         </ul>,
       )}
+      {/*
+        The two effect names were LITERALS, so the Arabic Studio read "الطبقات"
+        over "Shadow" and "Blur" (CLAUDE.md §4: every user-facing string is a
+        key, and both locales are first-class). Caught by reading the Arabic
+        capture rather than by a test, which is what a visual review is for.
+      */}
       {section(
         labels.effectsLabel,
         <ButtonRow gap={spacingTokens.xs}>
-          <Button variant="neutral" size="sm">
-            Shadow
-          </Button>
-          <Button variant="neutral" size="sm">
-            Blur
-          </Button>
+          {labels.effectNames.map((effect) => (
+            <Button key={effect} variant="neutral" size="sm">
+              {effect}
+            </Button>
+          ))}
         </ButtonRow>,
       )}
     </aside>

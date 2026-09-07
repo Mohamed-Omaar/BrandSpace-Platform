@@ -941,6 +941,7 @@ export function studioLabels(locale: string): StudioLabels {
     layersLabel: ar ? 'الطبقات' : 'Layers',
     opacityLabel: ar ? 'الشفافية' : 'Opacity',
     effectsLabel: ar ? 'التأثيرات' : 'Effects',
+    effectNames: ar ? ['ظل', 'ضباب'] : ['Shadow', 'Blur'],
     presetsLabel: ar ? 'مقاسات جاهزة' : 'Preset sizes',
     presetNames: {
       'ig-post': ar ? 'منشور إنستغرام' : 'Instagram post',
