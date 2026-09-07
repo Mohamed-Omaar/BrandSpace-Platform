@@ -64,9 +64,26 @@ describe('role definitions', () => {
     }
   });
 
-  it('gives Client Viewer the narrowest workspace access', () => {
-    const clientViewer = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
-    expect(clientViewer?.permissionKeys).toEqual(['workspace.read']);
+  it('gives the read-only Viewer the narrowest workspace access', () => {
+    const readOnlyViewer = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
+    expect(readOnlyViewer?.permissionKeys).toEqual(['workspace.read']);
+  });
+
+  /*
+   * §18's rename, guarded.
+   *
+   * "Client Viewer" was agency-shop language for a role that is simply
+   * read-only. The LABEL changed; the key and the grants must not, because
+   * `client_viewer` is written into membership rows and asserted by the RBAC
+   * and isolation suites. This test fails if a future edit renames the key, or
+   * quietly widens the role while relabelling it.
+   */
+  it('renames the read-only role in the interface without touching its key or its grants', () => {
+    const role = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
+    expect(role, 'the stored RBAC key client_viewer must not be renamed').toBeDefined();
+    expect(role?.permissionKeys).toEqual(['workspace.read']);
+    expect(role?.nameEn).not.toMatch(/client/i);
+    expect(role?.nameAr).not.toContain('عميل');
   });
 
   it('reserves platform user management to the Platform Owner alone', () => {

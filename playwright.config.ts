@@ -89,6 +89,11 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
     APP_ENV: 'development',
   };
 
+  // The design showcase is opt-in and refused in production. The suite enables
+  // it for the dashboard only, which is also the assertion that the gate works:
+  // the admin app never sets it, so a showcase route there stays a 404.
+  if (app === 'dashboard') env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+
   const keys =
     app === 'admin'
       ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
@@ -143,7 +148,8 @@ export default defineConfig({
     // serial project and is excluded from the two viewport projects.
     {
       name: 'chromium-desktop',
-      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
+      testIgnore:
+        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -152,12 +158,55 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
-      testIgnore: /(admin-console|customer-app)\.spec\.ts/,
+      testIgnore:
+        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
       name: 'admin-console',
       testMatch: /admin-console\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    /*
+     * VISUAL-REVIEW EVIDENCE — OPT-IN, and now actually opt-in.
+     *
+     * This project writes PNGs into `docs/visual-review/`; it asserts almost
+     * nothing. The comment here has always said "not run by default", but
+     * Playwright runs every project in this array unless `--project` is given,
+     * so it ran in `pnpm test:e2e` — including in CI, where the files it
+     * produces are discarded when the runner is torn down.
+     *
+     * That was merely wasteful at eight captures. At fifty-five, several of
+     * them full-page shots of a document twelve thousand pixels tall, it turned
+     * a three-minute CI step into one that did not finish. The intent is now
+     * implemented rather than described: `pnpm e2e:screenshots` sets the flag,
+     * and nothing else runs it.
+     */
+    ...(process.env['BRANDSPACE_VISUAL_REVIEW'] === '1'
+      ? [
+          {
+            name: 'visual-review',
+            testMatch: /\.screenshots\.spec\.ts$/,
+            fullyParallel: false,
+            use: {
+              ...devices['Desktop Chrome'],
+              viewport: { width: 1440, height: 900 },
+              launchOptions,
+            },
+          },
+        ]
+      : []),
+    {
+      // The design system's own suite: the shell, the showcase, responsive
+      // behaviour and accessibility. It signs in for the shell journeys, so it
+      // is serial for the same reason the other two are.
+      name: 'design-system',
+      testMatch: /design-system\.spec\.ts$/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

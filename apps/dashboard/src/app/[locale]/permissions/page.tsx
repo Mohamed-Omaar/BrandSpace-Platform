@@ -1,5 +1,16 @@
-import { ALL_PERMISSIONS } from '@brandspace/shared';
-import { colorTokens, scrollContainerStyle } from '@brandspace/ui';
+import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
+import {
+  ContentGrid,
+  SectionHeader,
+  ShieldIcon,
+  StatusBadge,
+  colorTokens,
+  radiusTokens,
+  scrollContainerStyle,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { translator } from '../../../i18n/messages';
 import {
@@ -22,9 +33,23 @@ export const dynamic = 'force-dynamic';
 export default async function PermissionsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { workspace } = await requireWorkspace(locale);
+  const { customer, workspace } = await requireWorkspace(locale);
 
   const workspacePermissions = ALL_PERMISSIONS.filter((p) => p.minScope !== 'platform');
+
+  /*
+   * The workspace's ROLES, as a card grid — the demo's composition for this
+   * screen (`.feature-matrix { grid-template-columns: repeat(3,1fr) }` with a
+   * `.phase-badge` per card). Real definitions from `ROLE_DEFINITIONS` and
+   * real permission counts; nothing is invented and nothing tenant-owned is
+   * exposed, because a role definition is the same for every workspace.
+   *
+   * It does NOT replace the table below it. The demo's screen answers "what
+   * roles exist"; the table answers "what can I, in this session, actually
+   * do" — resolved from the effective permission set rather than from a
+   * description of the role, which is the whole point of having it.
+   */
+  const roles = ROLE_DEFINITIONS.filter((role) => role.realm === 'workspace');
 
   return (
     <WorkspaceShell
@@ -32,8 +57,89 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
       heading={t('perms.title')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
+      <SectionHeader
+        eyebrow={locale === 'ar' ? 'التحكم في الوصول' : 'Access control'}
+        title={t('perms.rolesTitle')}
+        description={t('perms.rolesHint')}
+      />
+      <div style={{ marginBlockEnd: spacingTokens.md }}>
+        <ContentGrid min="15rem" testId="role-grid">
+          {roles.map((role) => {
+            const mine = role.key === workspace.roleKey;
+            return (
+              <div
+                key={role.key}
+                data-testid={`role-${role.key}`}
+                /*
+                  `.feature-card { min-height: 190px; padding: 19px;
+                   border-radius: 19px; background: rgba(255,255,255,.78);
+                   box-shadow: var(--soft-shadow) }` with
+                  `h3 { font-size: 15px; margin: 22px 0 7px }` over a 9px
+                  description and a `.phase-badge`.
+                */
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minBlockSize: '11.875rem',
+                  padding: '1.1875rem',
+                  borderRadius: radiusTokens['2xl'],
+                  background: colorTokens.surfaceCardAlpha,
+                  boxShadow: shadowTokens.card,
+                  minInlineSize: 0,
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    display: 'inline-grid',
+                    placeItems: 'center',
+                    inlineSize: '2.625rem',
+                    blockSize: '2.625rem',
+                    borderRadius: radiusTokens.control,
+                    background: mine ? colorTokens.surfaceLavenderStrong : colorTokens.surfaceMuted,
+                    color: mine ? colorTokens.brandPurplePressed : colorTokens.textMuted,
+                  }}
+                >
+                  <ShieldIcon size={17} />
+                </span>
+                <h3
+                  style={{
+                    margin: `${spacingTokens.md} 0 ${spacingTokens['3xs']}`,
+                    ...typographyTokens.cardTitle,
+                    color: colorTokens.textPrimary,
+                  }}
+                >
+                  {locale === 'ar' ? role.nameAr : role.nameEn}
+                </h3>
+                <p
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    lineHeight: 1.55,
+                    color: colorTokens.textMuted,
+                  }}
+                >
+                  {role.permissionKeys.length === 1
+                    ? t('perms.permissionCountOne')
+                    : t('perms.permissionCount').replace(
+                        '{count}',
+                        String(role.permissionKeys.length),
+                      )}
+                </p>
+                <div style={{ marginBlockStart: 'auto', paddingBlockStart: spacingTokens.sm }}>
+                  {mine ? (
+                    <StatusBadge label={t('perms.yourRole')} tone="accent" testId="role-mine" />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </ContentGrid>
+      </div>
+
       <CustomerCard testId="permissions-card">
         <p style={{ marginBlockStart: 0 }}>
           <strong>{t('perms.yourRole')}:</strong>{' '}
@@ -58,7 +164,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                     <td style={customerTdStyle()}>
                       <code>{p.key}</code>
                       <br />
-                      <span style={{ color: colorTokens.textSecondary, fontSize: '0.8125rem' }}>
+                      <span style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}>
                         {p.description}
                       </span>
                     </td>

@@ -1,4 +1,4 @@
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { statusMessage, translator } from '../../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../../components/auth-card';
 import { completePasswordResetAction } from '../../actions';
@@ -36,13 +36,11 @@ export default async function ResetCompletePage({
       <form action={completePasswordResetAction}>
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="token" value={token} />
-        <label
-          htmlFor="password"
-          style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem' }}
-        >
+        <label htmlFor="password" style={{ display: 'block', ...typographyTokens.label }}>
           {t('reset.newPassword')}
         </label>
         <input
+          className="bs-control"
           id="password"
           name="password"
           type="password"

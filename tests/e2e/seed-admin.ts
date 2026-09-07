@@ -267,7 +267,7 @@ async function seedCustomerEstate(
     where: { email: viewerEmail },
     create: {
       email: viewerEmail,
-      name: 'E2E Client Viewer',
+      name: 'E2E Viewer',
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       passwordHash: await hashPassword(viewerPassword),

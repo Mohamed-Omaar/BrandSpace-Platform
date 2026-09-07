@@ -1,4 +1,4 @@
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { InvitationService } from '@brandspace/auth';
 import { getPrisma } from '@brandspace/database';
 import { getCustomer } from '../../../../server/customer-context';
@@ -60,7 +60,7 @@ export default async function InvitationPage({
         </p>
       )}
 
-      <dl style={{ margin: 0, marginBlockEnd: spacingTokens.lg, fontSize: '0.9375rem' }}>
+      <dl style={{ margin: 0, marginBlockEnd: spacingTokens.lg, ...typographyTokens.bodySm }}>
         <dt style={{ fontWeight: 600 }}>{t('invite.workspace')}</dt>
         <dd
           data-testid="invitation-workspace"

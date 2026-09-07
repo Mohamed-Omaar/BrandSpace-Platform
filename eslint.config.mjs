@@ -176,6 +176,10 @@ export default tseslint.config(
       '**/generated/**',
       '**/*.d.ts',
       'packages/database/prisma/migrations/**',
+      // The owner-approved visual reference, vendored VERBATIM. It is evidence
+      // of what was approved, not source we own — linting or reformatting it
+      // would make it stop being an exact copy of what was reviewed.
+      'docs/visual-reference/**',
     ],
   },
 

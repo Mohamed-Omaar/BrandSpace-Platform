@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>BrandSpace — Minimal UI Concept</title>
+    <meta
+      name="description"
+      content="Interactive visual direction for the BrandSpace social media workspace."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="orb orb-purple"></span>
+      <span class="orb orb-yellow"></span>
+      <span class="orb orb-mix"></span>
+    </div>
+
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="sidebar-top">
+          <button class="brand" data-view-target="home" aria-label="Go to home">
+            <span class="brand-mark">B</span>
+            <span class="brand-name">BrandSpace</span>
+          </button>
+          <button class="icon-button collapse-button" id="collapseSidebar" aria-label="Collapse sidebar" aria-expanded="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 3 12l6 6M3 12h18"/></svg>
+          </button>
+        </div>
+
+        <button class="workspace-switcher">
+          <span class="workspace-avatar">S</span>
+          <span class="workspace-copy"><strong>Sample Brand</strong><small>Business workspace</small></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+        </button>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view-target="home" data-label="Overview">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg><span>Overview</span>
+          </button>
+          <button class="nav-item" data-view-target="calendar" data-label="Calendar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18"/></svg><span>Calendar</span>
+          </button>
+          <button class="nav-item" data-view-target="posts" data-label="Posts">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m7 16 3-3 2 2 3-4 3 5"/><circle cx="8" cy="8" r="1"/></svg><span>Posts</span>
+          </button>
+          <button class="nav-item" data-view-target="composer" data-label="Create post">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg><span>Create post</span>
+          </button>
+          <button class="nav-item" data-view-target="studio" data-label="Design studio">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 4.8L19 10l-4.8 2.2L12 17l-2.2-4.8L5 10l4.8-2.2z"/><path d="m19 16 .8 1.8L22 19l-2.2 1.2L19 22l-.8-1.8L16 19l2.2-1.2z"/></svg><span>Design studio</span>
+          </button>
+          <button class="nav-item" data-view-target="features" data-label="Features">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><span>Features</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <button class="nav-item" data-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg><span>Settings</span>
+          </button>
+          <button class="profile-button">
+            <span class="profile-avatar">MM</span>
+            <span class="profile-copy"><strong>Mohamed</strong><small>Workspace owner</small></span>
+            <span class="more">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="pageEyebrow">Workspace</p>
+            <h1 id="pageTitle">Good morning, Mohamed</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
+            <button class="icon-button" aria-label="Notifications"><path></path><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="notification-dot"></span></button>
+            <button class="primary-button compact" data-view-target="composer"><span>+</span>Create</button>
+          </div>
+        </header>
+
+        <section class="view active" data-view="home">
+          <div class="hero-card">
+            <div class="hero-copy">
+              <span class="label-pill">This week</span>
+              <h2>Your content, finally in one calm place.</h2>
+              <p>Plan the week, create every format and keep the team aligned.</p>
+              <div class="hero-actions"><button class="dark-button" data-view-target="composer">Create a post</button><button class="text-button" data-view-target="calendar">Open calendar <span>→</span></button></div>
+            </div>
+            <div class="hero-orbit" aria-hidden="true">
+              <div class="floating-post post-one"><span class="mini-brand"></span><b>Product launch</b><small>Instagram · Today</small></div>
+              <div class="floating-post post-two"><span class="mini-brand yellow"></span><b>Behind the scenes</b><small>TikTok · Tomorrow</small></div>
+              <div class="orb-ring"></div>
+            </div>
+          </div>
+
+          <div class="metric-row">
+            <article class="metric"><span>Scheduled</span><strong>12</strong><small>4 this week</small></article>
+            <article class="metric"><span>In review</span><strong>03</strong><small>Needs your attention</small></article>
+            <article class="metric"><span>Published</span><strong>28</strong><small>Across 4 channels</small></article>
+            <article class="metric"><span>AI credits</span><strong>76%</strong><small>Resets in 12 days</small></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="surface-card schedule-card">
+              <div class="section-head"><div><span class="section-kicker">Upcoming</span><h3>Next on your calendar</h3></div><button class="text-button" data-view-target="calendar">View all</button></div>
+              <button class="upcoming-item" data-post-id="launch"><span class="date-tile"><b>12</b><small>MAR</small></span><span class="post-thumb gradient-a"></span><span class="upcoming-copy"><b>New collection launch</b><small>Instagram · 09:00</small></span><span class="status">Ready</span></button>
+              <button class="upcoming-item" data-post-id="story"><span class="date-tile"><b>13</b><small>MAR</small></span><span class="post-thumb gradient-b"></span><span class="upcoming-copy"><b>Founder story</b><small>LinkedIn · 13:30</small></span><span class="status muted">Review</span></button>
+              <button class="upcoming-item" data-post-id="tips"><span class="date-tile"><b>14</b><small>MAR</small></span><span class="post-thumb gradient-c"></span><span class="upcoming-copy"><b>Three useful tips</b><small>Facebook · 18:00</small></span><span class="status">Ready</span></button>
+            </article>
+
+            <article class="surface-card ideas-card">
+              <div class="section-head"><div><span class="section-kicker">Copilot</span><h3>Ideas worth making</h3></div><span class="spark">✦</span></div>
+              <button class="idea"><span>01</span><b>Turn your launch story into a five-post series</b><i>→</i></button>
+              <button class="idea"><span>02</span><b>Reuse your best Reel as a LinkedIn carousel</b><i>→</i></button>
+              <button class="idea"><span>03</span><b>Write a calm, useful monthly recap</b><i>→</i></button>
+              <button class="dark-button full" id="openCopilot">Ask Copilot</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="calendar">
+          <div class="view-toolbar">
+            <div><span class="section-kicker">Content planning</span><h2>March 2026</h2></div>
+            <div class="segmented"><button class="selected">Month</button><button>Week</button><button>Agenda</button></div>
+          </div>
+          <div class="filter-row"><button>All channels⌄</button><button>All campaigns⌄</button><button>All statuses⌄</button><span></span><button class="primary-button compact" data-view-target="composer">+ Create post</button></div>
+          <div class="calendar-wrap">
+            <div class="weekday">MON</div><div class="weekday">TUE</div><div class="weekday">WED</div><div class="weekday">THU</div><div class="weekday">FRI</div><div class="weekday">SAT</div><div class="weekday">SUN</div>
+            <div class="day faded"><b>26</b></div><div class="day faded"><b>27</b></div><div class="day faded"><b>28</b></div><div class="day"><b>1</b></div>
+            <div class="day"><b>2</b><button class="calendar-post" data-post-id="story"><span class="post-thumb gradient-b"></span><span><strong>Founder story</strong><small>LinkedIn · 13:30</small></span></button></div>
+            <div class="day"><b>3</b></div><div class="day"><b>4</b><button class="calendar-post" data-post-id="tips"><span class="post-thumb gradient-c"></span><span><strong>Three useful tips</strong><small>Facebook · 18:00</small></span></button></div>
+            <div class="day"><b>5</b></div><div class="day"><b>6</b></div><div class="day"><b>7</b></div><div class="day"><b>8</b></div><div class="day"><b>9</b></div><div class="day"><b>10</b></div><div class="day"><b>11</b></div>
+            <div class="day"><b>12</b><button class="calendar-post focus-post" data-post-id="launch"><span class="post-thumb gradient-a"></span><span><strong>New collection</strong><small>Instagram · 09:00</small></span></button></div>
+            <div class="day"><b>13</b><button class="calendar-post" data-post-id="reel"><span class="post-thumb gradient-d"></span><span><strong>Studio Reel</strong><small>TikTok · 11:00</small></span></button></div>
+            <div class="day"><b>14</b></div><div class="day"><b>15</b></div><div class="day"><b>16</b></div><div class="day"><b>17</b></div><div class="day"><b>18</b></div>
+            <div class="day"><b>19</b></div><div class="day"><b>20</b></div><div class="day"><b>21</b></div><div class="day"><b>22</b></div><div class="day"><b>23</b></div><div class="day"><b>24</b></div><div class="day"><b>25</b></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="posts">
+          <div class="view-toolbar"><div><span class="section-kicker">Content library</span><h2>All posts</h2></div><button class="primary-button compact" data-view-target="composer">+ Create post</button></div>
+          <div class="tabs"><button class="selected">All <span>28</span></button><button>Drafts <span>4</span></button><button>In review <span>3</span></button><button>Scheduled <span>12</span></button><button>Published <span>9</span></button></div>
+          <div class="filter-row"><label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input placeholder="Search your posts" /></label><button>Channels⌄</button><button>Status⌄</button><button>Newest first⌄</button></div>
+          <div class="post-grid">
+            <button class="post-card" data-post-id="launch"><div class="post-art gradient-a"><span>NEW<br/>CHAPTER</span><small>1 / 3</small></div><div class="post-meta"><div><b>New collection launch</b><small>Instagram · 12 Mar</small></div><span class="status">Scheduled</span></div></button>
+            <button class="post-card" data-post-id="story"><div class="post-art gradient-b"><span>BUILT<br/>WITH CARE</span></div><div class="post-meta"><div><b>Founder story</b><small>LinkedIn · 13 Mar</small></div><span class="status muted">Review</span></div></button>
+            <button class="post-card" data-post-id="tips"><div class="post-art gradient-c"><span>THREE<br/>IDEAS</span></div><div class="post-meta"><div><b>Three useful tips</b><small>Facebook · 14 Mar</small></div><span class="status">Published</span></div></button>
+            <button class="post-card" data-post-id="reel"><div class="post-art gradient-d"><span>BEHIND<br/>THE SCENES</span><i>▶</i></div><div class="post-meta"><div><b>Studio Reel</b><small>TikTok · 15 Mar</small></div><span class="status">Draft</span></div></button>
+          </div>
+        </section>
+
+        <section class="view" data-view="composer">
+          <div class="view-toolbar"><div><span class="section-kicker">Create</span><h2>New post</h2></div><div class="save-state">Saved just now</div></div>
+          <div class="composer-layout">
+            <div class="composer-form surface-card">
+              <div class="field-group"><label>Publish to</label><div class="channel-row"><button class="channel selected"><span class="channel-icon">◎</span>Instagram</button><button class="channel"><span class="channel-icon">in</span>LinkedIn</button><button class="channel"><span class="channel-icon">♪</span>TikTok</button></div></div>
+              <div class="field-group"><label for="caption">Caption</label><textarea id="caption">A new collection, built for the pace of real life. Thoughtful details, simple choices, and a little more room to breathe.</textarea><small class="field-help"><span>✦ Improve with Copilot</span><span>118 / 2,200</span></small></div>
+              <div class="field-group"><label>Media</label><div class="media-strip"><div class="media-item gradient-a">1</div><div class="media-item gradient-c">2</div><button class="add-media">+<small>Add</small></button></div></div>
+              <div class="two-col"><div class="field-group"><label>Campaign</label><button class="select-like">Spring collection <span>⌄</span></button></div><div class="field-group"><label>Publish</label><button class="select-like">12 Mar · 09:00 <span>⌄</span></button></div></div>
+              <div class="composer-actions"><button class="text-button">Save draft</button><button class="dark-button">Schedule post</button></div>
+            </div>
+            <div class="preview-column">
+              <div class="preview-head"><span>Live preview</span><div class="segmented mini"><button class="selected">Feed</button><button>Story</button></div></div>
+              <article class="social-preview">
+                <header><span class="avatar-gradient">S</span><span><b>Sample Brand</b><small>@sample.brand</small></span><i>•••</i></header>
+                <div class="social-media gradient-a"><span>NEW<br/>CHAPTER</span><small>1/2</small></div>
+                <div class="social-actions"><span>♡</span><span>○</span><span>⌁</span><span class="bookmark">⌑</span></div>
+                <p><b>sample.brand</b> A new collection, built for the pace of real life. Thoughtful details, simple choices…</p>
+                <small class="timestamp">MARCH 12 · 09:00</small>
+              </article>
+            </div>
+            <aside class="copilot-column">
+              <div class="copilot-head"><span class="copilot-icon">✦</span><div><b>Copilot</b><small>Writing with you</small></div><button aria-label="Close">×</button></div>
+              <div class="copilot-chat"><div class="assistant-message">What would you like to improve?</div><div class="suggestion-list"><button>Make it shorter</button><button>Change the tone</button><button>Add hashtags</button><button>Translate to Arabic</button></div><div class="proposal"><span>Suggested caption</span><p>A considered new collection, made for real life—simple, useful and built to last.</p><div><button>Discard</button><button class="dark-button compact">Use this</button></div></div></div>
+              <label class="copilot-input"><input placeholder="Ask Copilot…"/><button>↑</button></label>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" data-view="studio">
+          <div class="studio-toolbar"><div class="studio-title"><span class="studio-spark">✦</span><b>Collection launch — square</b></div><div class="studio-actions"><button>↶</button><button>↷</button><span>72%</span><button>Preview</button><button class="dark-button compact">Export</button></div></div>
+          <div class="studio-layout">
+            <aside class="studio-tools"><button class="selected"><span>▦</span>Templates</button><button><span>⇧</span>Uploads</button><button><span>▧</span>Photos</button><button><span>✦</span>Elements</button><button><span>T</span>Text</button><button><span>◇</span>Brand kit</button></aside>
+            <div class="canvas-area"><div class="canvas-art gradient-a"><div class="canvas-brand"><span>B</span> BRANDSPACE</div><h3>Make space<br/>for better ideas.</h3><p>One calm place to plan, create and publish.</p><button>brandspace.cc</button><i class="selection-box"></i></div><div class="format-row"><button class="selected">Instagram post</button><button>Story</button><button>LinkedIn</button><button>Thumbnail</button></div></div>
+            <aside class="properties"><h3>Text</h3><label>Typeface<button>Inter Bold <span>⌄</span></button></label><label>Size<div><input value="64"/><input value="120%"/></div></label><label>Colour<div class="swatches"><button class="purple"></button><button class="yellow"></button><button class="black"></button><button class="white"></button></div></label><label>Alignment<div class="alignment"><button>≡</button><button>☰</button><button>≡</button></div></label><label>Opacity<input type="range" value="100"/></label><h3>Layers</h3><div class="layers"><button class="selected">Headline</button><button>Supporting line</button><button>Brand mark</button><button>Background</button></div></aside>
+          </div>
+        </section>
+
+        <section class="view" data-view="features">
+          <div class="view-toolbar"><div><span class="section-kicker">Workspace</span><h2>Everything you need</h2></div><p class="toolbar-copy">Simple tools that work as one.</p></div>
+          <div class="feature-list">
+            <button data-view-target="calendar"><span class="feature-number">01</span><span class="feature-icon">□</span><span><b>Content calendar</b><small>See the whole month without losing the detail.</small></span><i>→</i></button>
+            <button data-view-target="posts"><span class="feature-number">02</span><span class="feature-icon">▧</span><span><b>Posts library</b><small>Every idea, draft and published post in one view.</small></span><i>→</i></button>
+            <button data-view-target="composer"><span class="feature-number">03</span><span class="feature-icon">✎</span><span><b>Create & preview</b><small>Write once and see every platform before publishing.</small></span><i>→</i></button>
+            <button data-view-target="studio"><span class="feature-number">04</span><span class="feature-icon">✦</span><span><b>Design studio</b><small>Create on-brand visuals without leaving the workspace.</small></span><i>→</i></button>
+            <button id="featureCopilot"><span class="feature-number">05</span><span class="feature-icon">✧</span><span><b>AI Copilot</b><small>Ideas and improvements, always previewed before applying.</small></span><i>→</i></button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="post-drawer" id="postDrawer" aria-hidden="true" aria-label="Post details">
+      <div class="drawer-head"><span>Post details</span><button id="closeDrawer" aria-label="Close details">×</button></div>
+      <div class="drawer-art gradient-a" id="drawerArt"><span>NEW<br/>CHAPTER</span></div>
+      <span class="status">Scheduled</span>
+      <h2 id="drawerTitle">New collection launch</h2>
+      <p id="drawerCaption">A new collection, built for the pace of real life. Thoughtful details and simple choices.</p>
+      <dl><div><dt>Channel</dt><dd id="drawerChannel">Instagram</dd></div><div><dt>Schedule</dt><dd id="drawerDate">12 Mar · 09:00</dd></div><div><dt>Approval</dt><dd>Approved</dd></div></dl>
+      <div class="drawer-actions"><button class="text-button" id="viewPost">View in library</button><button class="dark-button" id="editPost">Edit post</button></div>
+    </aside>
+    <button class="drawer-backdrop" id="drawerBackdrop" aria-label="Close post details"></button>
+
+    <aside class="copilot-drawer" id="copilotDrawer" aria-hidden="true" aria-label="BrandSpace Copilot">
+      <div class="copilot-head"><span class="copilot-icon">✦</span><div><b>BrandSpace Copilot</b><small>Ideas, with your approval</small></div><button id="closeCopilot" aria-label="Close Copilot">×</button></div>
+      <div class="copilot-intro"><span>Good morning, Mohamed.</span><h2>What are we making today?</h2></div>
+      <div class="suggestion-list large"><button>Create a week of launch content <span>→</span></button><button>Turn one idea into every platform <span>→</span></button><button>Review this month’s calendar <span>→</span></button></div>
+      <label class="copilot-input floating"><input placeholder="Ask anything about your content…"/><button>↑</button></label>
+    </aside>
+    <button class="copilot-backdrop" id="copilotBackdrop" aria-label="Close Copilot"></button>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

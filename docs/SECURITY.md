@@ -184,7 +184,7 @@ All four must pass. A permission the plan does not include is denied even for a 
 
 Legend: ✅ full · 🟡 limited/conditional · ➖ none
 
-| Capability                            | Owner | Admin              | Mktg Mgr           | Content Creator | Copywriter     | Designer         | Approver        | Analyst         | Client Viewer               |
+| Capability                            | Owner | Admin              | Mktg Mgr           | Content Creator | Copywriter     | Designer         | Approver        | Analyst         | Viewer (read-only)          |
 | ------------------------------------- | ----- | ------------------ | ------------------ | --------------- | -------------- | ---------------- | --------------- | --------------- | --------------------------- |
 | View workspace                        | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ✅              | ✅              | 🟡 assigned brands          |
 | Manage workspace settings             | ✅    | ✅                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
@@ -213,6 +213,11 @@ Legend: ✅ full · 🟡 limited/conditional · ➖ none
 | Change plan / payment method          | ✅    | ➖                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
 | View AI credit balance                | ✅    | ✅                 | ✅                 | 🟡 own usage    | 🟡 own usage   | 🟡 own usage     | ➖              | 🟡 aggregate    | ➖                          |
 | View activity log                     | ✅    | ✅                 | 🟡 brand-scoped    | 🟡 own          | 🟡 own         | 🟡 own           | 🟡 own          | 🟡 brand-scoped | ➖                          |
+
+> **Naming note.** The rightmost role is stored as the RBAC key `client_viewer` and is displayed as
+> **Viewer (read-only)** (D-58). The key and its single `workspace.read` grant are unchanged; only the
+> visible label changed, and a unit test fails if a future edit renames the key or widens the role
+> while relabelling it.
 
 ### 4.4 Platform role matrix
 

@@ -1,7 +1,13 @@
 import { tracingStatus } from '@brandspace/observability';
 import { ALL_FAKE_ADAPTERS } from '@brandspace/providers';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
-import { Cell, DataTable, PageHeading } from '../../../../components/admin-shell';
+import {
+  SectionHeader,
+  colorTokens,
+  fontTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
+import { Cell, DataTable, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getPlatformPrisma,
@@ -72,8 +78,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'صحة النظام' : 'System health'}
+      <PageIntro
         description={
           isArabic
             ? 'حالة فعلية للاعتماديات. الحالة "غير مُهيّأ" تعني أنها فعلاً غير مُهيّأة.'
@@ -113,14 +118,16 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
 
       {mayReadConfig ? (
         <>
-          <h2 style={{ fontSize: '1.1rem', marginBlockStart: spacingTokens.xl }}>
-            {isArabic ? 'محوّلات المزودين المسجّلة' : 'Registered provider adapters'}
-          </h2>
-          <p style={{ color: colorTokens.textSecondary }}>
-            {isArabic
-              ? 'محوّلات اختبارية فقط في هذه المرحلة — لا يوجد اتصال بمزود خارجي حقيقي.'
-              : 'Test adapters only at this phase — no real external provider is connected.'}
-          </p>
+          <div style={{ marginBlockStart: spacingTokens.xl }}>
+            <SectionHeader
+              title={isArabic ? 'محوّلات المزودين المسجّلة' : 'Registered provider adapters'}
+              description={
+                isArabic
+                  ? 'محوّلات اختبارية فقط في هذه المرحلة — لا يوجد اتصال بمزود خارجي حقيقي.'
+                  : 'Test adapters only at this phase — no real external provider is connected.'
+              }
+            />
+          </div>
           <DataTable
             headers={[
               isArabic ? 'المفتاح' : 'Key',
@@ -131,7 +138,9 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
             {ALL_FAKE_ADAPTERS.map((adapter) => (
               <tr key={adapter.key} data-testid={`adapter-${adapter.key}`}>
                 <Cell>
-                  <code style={{ fontSize: '0.8rem' }}>{adapter.key}</code>
+                  <code style={{ ...typographyTokens.caption, fontFamily: fontTokens.mono }}>
+                    {adapter.key}
+                  </code>
                 </Cell>
                 <Cell>{adapter.kind}</Cell>
                 <Cell>{adapter.requiredCredentialKeys.join(', ') || '—'}</Cell>

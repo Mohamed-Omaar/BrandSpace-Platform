@@ -1,4 +1,4 @@
-import { spacingTokens } from '@brandspace/ui';
+import { spacingTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { requestPasswordResetAction } from '../actions';
@@ -24,10 +24,17 @@ export default async function ResetRequestPage({
     <AuthCard locale={locale} heading={t('reset.title')}>
       <form action={requestPasswordResetAction}>
         <input type="hidden" name="locale" value={locale} />
-        <label htmlFor="email" style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem' }}>
+        <label htmlFor="email" style={{ display: 'block', ...typographyTokens.label }}>
           {t('signIn.email')}
         </label>
-        <input id="email" name="email" type="email" required style={authInputStyle()} />
+        <input
+          className="bs-control"
+          id="email"
+          name="email"
+          type="email"
+          required
+          style={authInputStyle()}
+        />
         <button
           type="submit"
           data-testid="reset-request-submit"

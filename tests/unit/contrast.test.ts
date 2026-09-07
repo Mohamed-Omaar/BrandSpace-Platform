@@ -161,3 +161,236 @@ describe('the Phase 2B application palette meets AA', () => {
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });
+
+/**
+ * Phase 2C design foundation (D-49…D-51).
+ *
+ * The system grew a focus ring, a strong control border, a muted text tone,
+ * four semantic tint/border families and a white page ground. Each one is a
+ * promise about legibility, so each one is asserted — including the promises
+ * that a colour must NOT keep, because a token that quietly becomes legible is
+ * a token somebody will start using as text.
+ */
+describe('the Phase 2C foundation meets AA', () => {
+  it('every text tone is legible on white, which is now the page ground too', () => {
+    for (const [name, color] of [
+      ['textPrimary', colorTokens.textPrimary],
+      ['textSecondary', colorTokens.textSecondary],
+      ['textMuted', colorTokens.textMuted],
+    ] as const) {
+      expect(
+        contrastRatio(color, colorTokens.appBackground),
+        `${name} on the application ground`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL);
+      expect(contrastRatio(color, colorTokens.surface), `${name} on a card`).toBeGreaterThanOrEqual(
+        AA_NORMAL,
+      );
+    }
+  });
+
+  it('the application ground is NO LONGER the card surface (D-59 supersedes D-49)', () => {
+    /*
+     * THE PREVIOUS ASSERTION HERE SAID THE OPPOSITE, AND SAID WHY IT WOULD
+     * CHANGE: "if these ever diverge, the direction changed and the docs must
+     * follow". They diverged, and the docs did.
+     *
+     * D-49 put a white card on a white ground and let a border carry the
+     * separation — which is exactly what made the first draft read as an
+     * outlined admin console. The approved reference inverts it: a grey
+     * ambient ground with brand-coloured light behind it, and an opaque
+     * near-white shell FLOATING on top. A card no longer needs a border
+     * because the shell is visibly a separate plane from the page.
+     *
+     * So the invariant is now the opposite one, and it is load-bearing: if the
+     * ground ever goes white again, the shell's shadow has nothing to fall on
+     * and every surface boundary in the product disappears at once.
+     */
+    expect(colorTokens.appBackground).not.toBe(colorTokens.surface);
+    expect(colorTokens.shellSurface).not.toBe(colorTokens.appBackground);
+
+    // The shell must be LIGHTER than the ground it floats on — a shell darker
+    // than its ground reads as a hole rather than as a raised surface.
+    expect(relativeLuminance(colorTokens.shellSurface)).toBeGreaterThan(
+      relativeLuminance(colorTokens.appBackground),
+    );
+  });
+
+  it('the focus ring is visible on every surface it can land on', () => {
+    for (const [name, background] of [
+      ['surface', colorTokens.surface],
+      ['surfaceMuted', colorTokens.surfaceMuted],
+      ['surfaceSunken', colorTokens.surfaceSunken],
+      ['brandPurpleTint', colorTokens.brandPurpleTint],
+    ] as const) {
+      expect(
+        contrastRatio(colorTokens.focusRing, background),
+        `focus ring on ${name}`,
+      ).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    }
+  });
+
+  it('a control boundary reaches the 3:1 non-text threshold (WCAG 1.4.11)', () => {
+    // `borderStrong` exists precisely because `border` does NOT reach it: an
+    // input outlined at 1.4:1 is invisible to a lot of people.
+    expect(contrastRatio(colorTokens.borderStrong, colorTokens.surface)).toBeGreaterThanOrEqual(
+      AA_NON_TEXT,
+    );
+    expect(contrastRatio(colorTokens.border, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
+  });
+
+  it('every semantic tone is legible on its own tint', () => {
+    for (const [name, ink, tint] of [
+      ['success', colorTokens.success, colorTokens.successTint],
+      ['warning', colorTokens.warning, colorTokens.warningTint],
+      ['danger', colorTokens.danger, colorTokens.dangerTint],
+      ['info', colorTokens.info, colorTokens.infoTint],
+    ] as const) {
+      expect(contrastRatio(ink, tint), `${name} on its tint`).toBeGreaterThanOrEqual(AA_NORMAL);
+    }
+  });
+
+  it('the yellow accent badge carries darkened yellow text, never white', () => {
+    // The accent badge is `brandYellowText` on `brandYellowTint`.
+    expect(
+      contrastRatio(colorTokens.brandYellowText, colorTokens.brandYellowTint),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    // And white on yellow stays firmly unusable, which is why the rule exists.
+    expect(contrastRatio('#FFFFFF', colorTokens.brandYellow)).toBeLessThan(AA_LARGE);
+    expect(contrastRatio('#FFFFFF', colorTokens.brandYellowTint)).toBeLessThan(AA_LARGE);
+  });
+
+  it('the pressed purple is legible on the tint it appears against', () => {
+    // Active navigation is `brandPurplePressed` on `brandPurpleTint`.
+    expect(
+      contrastRatio(colorTokens.brandPurplePressed, colorTokens.brandPurpleTint),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(
+      contrastRatio(colorTokens.brandPurplePressed, colorTokens.surface),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  /*
+   * EVERY TEXT TOKEN, ON EVERY SURFACE IT CAN LAND ON.
+   *
+   * The revision made supporting surfaces the primary structural device, which
+   * means body text now lands on five different grounds instead of one. A token
+   * measured only against white is not measured: `textMuted` is 4.61:1 on white
+   * and 4.21:1 on `surfaceLavenderStrong`, and it shipped onto a selected
+   * account chip in the composer, where axe caught it (F-32).
+   *
+   * This asserts the whole matrix, so the next surface added to the palette has
+   * to state which text tokens may sit on it.
+   */
+  it('every text token clears AA on every supporting surface it can land on', () => {
+    const surfaces = [
+      ['surface', colorTokens.surface],
+      ['surfaceSoft', colorTokens.surfaceSoft],
+      ['surfaceWarm', colorTokens.surfaceWarm],
+      ['surfaceLavender', colorTokens.surfaceLavender],
+      ['surfaceLavenderStrong', colorTokens.surfaceLavenderStrong],
+      ['surfaceMuted', colorTokens.surfaceMuted],
+      ['surfaceSunken', colorTokens.surfaceSunken],
+      ['controlSurface', colorTokens.controlSurface],
+    ] as const;
+
+    const failures: string[] = [];
+    for (const [surfaceName, background] of surfaces) {
+      for (const [inkName, ink] of [
+        ['textPrimary', colorTokens.textPrimary],
+        ['textSecondary', colorTokens.textSecondary],
+      ] as const) {
+        const ratio = contrastRatio(ink, background);
+        if (ratio < AA_NORMAL) {
+          failures.push(`${inkName} on ${surfaceName}: ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('textMuted now clears AA on EVERY surface in the system', () => {
+    /*
+     * THIS ASSERTION WAS INVERTED IN THE DEMO ALIGNMENT, AND THE INVERSION IS
+     * THE POINT.
+     *
+     * It used to name the two surfaces `textMuted` could NOT sit on
+     * (`surfaceLavenderStrong` at 4.21:1, `surfaceSunken` at 4.44:1) and to
+     * fail if either ever crossed the line, so that the rule would be rewritten
+     * deliberately rather than discovered by axe on an approved screen. That is
+     * exactly what happened.
+     *
+     * The approved reference sets its muted text at `#707077`, which is 4.39:1
+     * on the reference's own `#F2F2F2` ground — below AA on the surface it
+     * spends most of its life on. Rather than copy that defect, the token moved
+     * to `#6A6A71`, the nearest value that clears 4.5:1 on all fourteen
+     * surfaces this system has. The floor is now 4.55:1, on lavender-strong.
+     *
+     * So the restriction is gone, and the test says so instead of preserving a
+     * limitation that no longer exists. A future palette change that reopens
+     * the gap fails here.
+     */
+    const failures: string[] = [];
+    for (const [name, background] of Object.entries({
+      surface: colorTokens.surface,
+      surfaceSoft: colorTokens.surfaceSoft,
+      surfaceWarm: colorTokens.surfaceWarm,
+      surfaceLavender: colorTokens.surfaceLavender,
+      surfaceLavenderStrong: colorTokens.surfaceLavenderStrong,
+      surfaceMuted: colorTokens.surfaceMuted,
+      surfaceSunken: colorTokens.surfaceSunken,
+      appBackground: colorTokens.appBackground,
+      controlSurface: colorTokens.controlSurface,
+      controlSurfaceDisabled: colorTokens.controlSurfaceDisabled,
+      brandYellowTint: colorTokens.brandYellowTint,
+      shellSurface: colorTokens.shellSurface,
+      shellSidebar: colorTokens.shellSidebar,
+      // `shellPanel` is `transparent` in the full-demo alignment — the panel
+      // takes the shell's own translucency — so the ground under it is the
+      // shell, already asserted above.
+      ambientGround: colorTokens.ambientGround,
+    })) {
+      const ratio = contrastRatio(colorTokens.textMuted, background);
+      if (ratio < AA_NORMAL) failures.push(`textMuted on ${name}: ${ratio.toFixed(2)}`);
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('the reference palette it replaced genuinely failed, which is why it was not copied', () => {
+    // Recorded so the deviation cannot be mistaken for drift: the approved
+    // demo's own `--muted` is below AA on the demo's own page ground.
+    // The FULL demo's `--muted: #717179` and `--subtle: #a3a3aa`, both of which
+    // fail on surfaces the demo itself puts them on.
+    expect(contrastRatio('#717179', colorTokens.surfaceMuted)).toBeLessThan(AA_NORMAL);
+    expect(contrastRatio('#A3A3AA', colorTokens.shellSidebar)).toBeLessThan(AA_NORMAL);
+    // …and the values that replaced them clear it.
+    expect(contrastRatio(colorTokens.textMuted, colorTokens.surfaceMuted)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
+    expect(contrastRatio(colorTokens.textSubtle, colorTokens.shellSidebar)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
+  });
+
+  it('no soft tint is a perceivable boundary, which is why none carries a state alone', () => {
+    // Both of these are below the 3:1 non-text threshold, so neither the yellow
+    // mark nor the lavender tint may be the only signal for a state. The active
+    // navigation item stopped relying on either in the demo alignment: it is
+    // now an INK-FILLED pill with inverted text at 18.85:1, plus `aria-current`
+    // — a fill inversion and a semantic, not a hue.
+    expect(contrastRatio(colorTokens.brandYellow, colorTokens.surface)).toBeLessThan(AA_NON_TEXT);
+    expect(contrastRatio(colorTokens.brandPurpleTint, colorTokens.surface)).toBeLessThan(
+      AA_NON_TEXT,
+    );
+  });
+
+  it('the ink-filled active navigation item is legible in both directions', () => {
+    expect(contrastRatio(colorTokens.inkInk, colorTokens.ink)).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(contrastRatio(colorTokens.inkInk, colorTokens.inkHover)).toBeGreaterThanOrEqual(
+      AA_NORMAL,
+    );
+    // And the resting item, on the sidebar's own plane.
+    expect(
+      contrastRatio(colorTokens.textSecondary, colorTokens.shellSidebar),
+    ).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+});

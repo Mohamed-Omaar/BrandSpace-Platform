@@ -115,10 +115,24 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     permissionKeys: ['workspace.read', 'member.read', 'audit.read', 'credits.read'],
   },
   {
+    /*
+     * THE KEY IS UNCHANGED, THE LABEL IS NOT.
+     *
+     * `client_viewer` is a stored RBAC identifier: it is written into
+     * `Membership.roleId` rows, referenced by the permission matrix and
+     * asserted by the isolation and RBAC suites. Renaming it would be a data
+     * migration wearing a copy change, so it stays exactly as it is, with
+     * exactly the permissions it had (`workspace.read`, and nothing else).
+     *
+     * What changes is the VISIBLE NAME. "Client Viewer" framed the narrowest
+     * role as an outside client of an agency, which is one customer shape
+     * among six and not the product's own language. "Viewer (read-only)"
+     * describes the same access without implying who the person is.
+     */
     key: 'client_viewer',
     realm: 'workspace',
-    nameEn: 'Client Viewer',
-    nameAr: 'عميل مُشاهِد',
+    nameEn: 'Viewer (read-only)',
+    nameAr: 'مُشاهِد (قراءة فقط)',
     permissionKeys: ['workspace.read'],
   },
   {

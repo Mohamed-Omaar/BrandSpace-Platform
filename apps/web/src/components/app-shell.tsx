@@ -24,7 +24,7 @@ export function AppShell({
     <>
       <header
         style={{
-          borderBlockEnd: `1px solid ${colorTokens.border}`,
+          borderBlockEnd: `1px solid ${colorTokens.hairline}`,
           padding: spacingTokens.md,
         }}
       >

@@ -129,7 +129,7 @@ The seed creates:
 | Account                  | Realm    | Notes                                          |
 | ------------------------ | -------- | ---------------------------------------------- |
 | `owner@brandspace.local` | platform | Platform Owner. 2FA required at sign-in (D-27) |
-| `amal@acme.local`        | customer | Workspace Owner of `acme-agency`               |
+| `amal@samplebrand.local` | customer | Workspace Owner of `sample-brand`              |
 | `noor@northstar.local`   | customer | Workspace Owner of `north-star`                |
 
 Two separate workspaces exist so tenant isolation can be inspected by hand as well as by the test

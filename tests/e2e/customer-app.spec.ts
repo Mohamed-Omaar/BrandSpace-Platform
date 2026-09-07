@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL, ADMIN_BASE_URL, LOCALES } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { expectNoHorizontalOverflow } from './overflow';
 
 /**
  * The customer application, end to end, in a real browser.
@@ -134,6 +135,13 @@ test.describe('customer authentication', () => {
     await enterWorkspace(page, customer.workspaceSlug);
     await expect(page).toHaveURL(/\/en\/overview/);
 
+    /*
+     * Sign-out now lives in the profile card's menu at the foot of the rail,
+     * which is where the full demo puts it (fidelity pass §8). The assertion is
+     * unchanged — signing out must end the session — only the route to the
+     * control moved, so the test opens the menu the person would open.
+     */
+    await page.getByTestId('profile-menu').click();
     await page.click('[data-testid="sign-out"]');
     await expect(page).toHaveURL(/\/en\/sign-in/);
 
@@ -196,6 +204,11 @@ test.describe('workspace selection and switching', () => {
     await enterWorkspace(page, customer.workspaceSlug);
     await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
 
+    // Phase 2C moved "switch workspace" INTO the workspace switcher menu, so
+    // the menu is opened first. The assertions either side are unchanged: what
+    // is being tested is that a member of two workspaces reaches the picker and
+    // lands in a correctly scoped second workspace.
+    await page.click('[data-testid="workspace-switcher"]');
     await page.click('[data-testid="switch-workspace"]');
     await enterWorkspace(page, customer.secondWorkspaceSlug);
     // A new, correctly scoped context — not the previous workspace's data.
@@ -576,10 +589,7 @@ test.describe('layout never overflows horizontally', () => {
         `/${locale.code}/plan`,
       ]) {
         await page.goto(`${DASHBOARD_BASE_URL}${path}`);
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        );
-        expect(overflow, `${path} overflows by ${overflow}px`).toBeLessThanOrEqual(1);
+        await expectNoHorizontalOverflow(page, path);
       }
     });
   }
@@ -587,9 +597,6 @@ test.describe('layout never overflows horizontally', () => {
   test('the sign-in card fits on a small screen', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(1);
+    await expectNoHorizontalOverflow(page, 'the Arabic sign-in page');
   });
 });

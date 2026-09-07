@@ -54,20 +54,20 @@ performance — in Arabic and English — without stitching together five tools.
 
 ## 2. Target Customers and Personas
 
-| Persona                    | Primary need                                             | Shape of usage                                                             |
-| -------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Individual founder**     | Look professional without a marketing team               | 1 workspace, 1 brand, 1 user, heavy AI reliance                            |
-| **Startup**                | Consistent output with 2–5 people, fast iteration        | 1 workspace, 1–2 brands, light approvals                                   |
-| **Company marketing team** | Process, roles, approvals, reporting to leadership       | 1 workspace, 1–3 brands, formal approval chains, analysts                  |
-| **Creator**                | Volume of content, personal brand voice, scheduling      | 1 workspace, 1 brand, mobile-heavy, calendar-centric                       |
-| **Agency**                 | Many client brands, separation, client-visible reporting | Many workspaces (or many brands), Client Viewer role, white-label interest |
-| **Enterprise team**        | Security, SSO, audit, data residency, retention control  | 1 workspace, many brands, strict RBAC, export and audit needs              |
+| Persona                    | Primary need                                             | Shape of usage                                                                    |
+| -------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Individual founder**     | Look professional without a marketing team               | 1 workspace, 1 brand, 1 user, heavy AI reliance                                   |
+| **Startup**                | Consistent output with 2–5 people, fast iteration        | 1 workspace, 1–2 brands, light approvals                                          |
+| **Company marketing team** | Process, roles, approvals, reporting to leadership       | 1 workspace, 1–3 brands, formal approval chains, analysts                         |
+| **Creator**                | Volume of content, personal brand voice, scheduling      | 1 workspace, 1 brand, mobile-heavy, calendar-centric                              |
+| **Agency**                 | Many client brands, separation, client-visible reporting | Many workspaces (or many brands), the read-only Viewer role, white-label interest |
+| **Enterprise team**        | Security, SSO, audit, data residency, retention control  | 1 workspace, many brands, strict RBAC, export and audit needs                     |
 
 ### 2.1 Persona → capability mapping
 
 - Founder / Creator lean on **AI Content Studio**, **Social Calendar**, **Smart Analytics**.
 - Marketing teams lean on **AI Strategy**, **Campaigns**, **Team & Approvals**, **Marketing Intelligence**.
-- Agencies lean on **multi-workspace switching**, **Client Viewer**, **Asset Library**, **Automations**.
+- Agencies lean on **multi-workspace switching**, the read-only **Viewer**, **Asset Library**, **Automations**.
 - Enterprises lean on **RBAC depth**, **Audit Log**, **retention/export controls**, **SSO (future)**.
 
 ---
@@ -174,7 +174,7 @@ the module operates at **W** (workspace) or **B** (brand) level.
 **Command Center** — the only screen a busy owner needs daily. Widgets: _Needs your approval_, _Publishing
 today_, _Failed publishes_, _AI credits remaining + burn rate_, _Top performing post this week_,
 _Connection health warnings_, _Trial/plan status_. Every widget respects the viewer's permissions; a
-Client Viewer sees a read-only subset.
+Viewer (read-only) sees a read-only subset.
 
 **Brand Brain** — the differentiator. Structured sections (identity, audience segments, tone of voice,
 products/offers, proof points, objections, do/don't rules, glossary, competitors) plus uploaded documents
@@ -261,7 +261,7 @@ Detailed permission matrices live in `docs/SECURITY.md`. Product-level intent:
 **Customer roles** — Workspace Owner (everything incl. billing), Workspace Admin (everything except
 ownership transfer/deletion), Marketing Manager (plan, campaign, approve), Content Creator (create content),
 Copywriter (text only), Designer (creative/assets only), Approver (approve/reject only), Analyst
-(read analytics/export), Client Viewer (read-only on assigned brands, no financials, no settings).
+(read analytics/export), Viewer (read-only on assigned brands, no financials, no settings).
 
 **Platform roles** — Platform Owner (everything), Platform Admin (everything except destructive platform
 config and role grants), Support Agent (support mode, read-only customer context, no secrets, no billing

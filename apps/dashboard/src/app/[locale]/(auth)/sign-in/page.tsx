@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import { Banner, Field, colorTokens, spacingTokens } from '@brandspace/ui';
 import { getCustomer } from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
@@ -37,67 +37,67 @@ export default async function SignInPage({
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
   return (
-    <AuthCard locale={locale} heading={t('signIn.title')}>
+    <AuthCard
+      locale={locale}
+      heading={t('signIn.title')}
+      description={t('signIn.description')}
+      footer={
+        <Link href={`/${locale}/reset`} style={{ color: colorTokens.brandPurple }}>
+          {t('signIn.forgot')}
+        </Link>
+      }
+    >
       {error && (
-        <p role="alert" data-testid="signin-error" style={{ color: colorTokens.danger }}>
-          {statusMessage(error, locale, ref) ?? t('signIn.failed')}
-        </p>
+        /* A single generic failure, carried as a code. The `signin-error` hook
+           and the wording are identical for every cause. */
+        <div role="alert" data-testid="signin-error">
+          <Banner tone="error" testId="signin-error-banner">
+            {statusMessage(error, locale, ref) ?? t('signIn.failed')}
+          </Banner>
+        </div>
       )}
       {ok && statusMessage(ok, locale) && (
-        <p role="status" data-testid="signin-status" style={{ color: colorTokens.success }}>
-          {statusMessage(ok, locale)}
-        </p>
+        <div data-testid="signin-status">
+          <Banner tone="success" testId="signin-status-banner">
+            {statusMessage(ok, locale)}
+          </Banner>
+        </div>
       )}
 
       <form action={signInAction}>
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="next" value={next} />
-        <label htmlFor="email" style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem' }}>
-          {t('signIn.email')}
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          style={authInputStyle()}
-        />
-
-        <label
-          htmlFor="password"
-          style={{
-            display: 'block',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-            marginBlockStart: spacingTokens.md,
-          }}
-        >
-          {t('signIn.password')}
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          style={authInputStyle()}
-        />
+        <Field label={t('signIn.email')} htmlFor="email" required>
+          <input
+            className="bs-control"
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            style={authInputStyle()}
+          />
+        </Field>
+        <Field label={t('signIn.password')} htmlFor="password" required>
+          <input
+            className="bs-control"
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            style={authInputStyle()}
+          />
+        </Field>
 
         <button
           type="submit"
           data-testid="signin-submit"
-          style={{ ...authButtonStyle(), marginBlockStart: spacingTokens.lg }}
+          style={{ ...authButtonStyle(), marginBlockStart: spacingTokens.sm }}
         >
           {t('signIn.submit')}
         </button>
       </form>
-
-      <p style={{ marginBlockStart: spacingTokens.md, fontSize: '0.875rem' }}>
-        <Link href={`/${locale}/reset`} style={{ color: colorTokens.brandPurple }}>
-          {t('signIn.forgot')}
-        </Link>
-      </p>
     </AuthCard>
   );
 }

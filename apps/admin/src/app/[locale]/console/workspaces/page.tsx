@@ -1,5 +1,20 @@
 import Link from 'next/link';
-import { colorTokens, spacingTokens } from '@brandspace/ui';
+import {
+  Avatar,
+  Cell,
+  DataTable,
+  PageHeader,
+  RecordList,
+  SearchField,
+  Stack,
+  StatusBadge,
+  Toolbar,
+  buttonStyle,
+  colorTokens,
+  initialsFrom,
+  statusTone,
+  type MediaSeed,
+} from '@brandspace/ui';
 import {
   getEntitlementService,
   getWorkspaceService,
@@ -13,13 +28,8 @@ import {
   Card,
   EmptyState,
   Field,
-  StatusPill,
-  TableScroll,
   inputStyle,
   primaryButtonStyle,
-  tableStyle,
-  tdStyle,
-  thStyle,
 } from '../../../../components/console-ui';
 import { createWorkspaceAction } from './actions';
 
@@ -33,6 +43,15 @@ export const dynamic = 'force-dynamic';
  * filled with a plausible-looking zero: a fabricated number in an admin console
  * is worse than a missing one, because somebody will act on it.
  */
+/**
+ * A stable palette per workspace, keyed by its slug — the deterministic-artwork
+ * rule (D-57) applied to identity tiles, so a directory looks the same twice.
+ */
+function avatarSeed(slug: string): MediaSeed {
+  const index = [...slug].reduce((total, character) => total + character.charCodeAt(0), 0) % 6;
+  return index as MediaSeed;
+}
+
 export default async function WorkspacesPage({
   params,
   searchParams,
@@ -60,102 +79,175 @@ export default async function WorkspacesPage({
   const okCode = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
+  const workspaceLink = (id: string, name: string) => (
+    <Link
+      href={`/${locale}/console/workspaces/${id}`}
+      style={{
+        color: colorTokens.brandPurple,
+        fontWeight: 600,
+        display: 'inline-block',
+        minBlockSize: '24px',
+        paddingBlock: '2px',
+      }}
+    >
+      {name}
+    </Link>
+  );
+
   return (
     <div>
-      <h1 style={{ marginBlockStart: 0, fontSize: '1.35rem' }}>{t('ws.title')}</h1>
+      <PageHeader
+        title={t('ws.title')}
+        description={
+          locale === 'ar'
+            ? 'كل مساحات عمل العملاء في هذه البيئة.'
+            : 'Every customer workspace in this environment.'
+        }
+        actions={
+          mayCreate ? (
+            <Link
+              href={`/${locale}/console/workspaces?view=new`}
+              data-testid="open-create-workspace"
+              style={{ ...buttonStyle('primary'), textDecoration: 'none' }}
+            >
+              {t('ws.create')}
+            </Link>
+          ) : undefined
+        }
+      />
 
       {errorCode && <Banner tone="error">{errorMessage(errorCode, locale, ref)}</Banner>}
       {okCode && successMessage(okCode, locale) && (
         <Banner tone="success">{successMessage(okCode, locale)}</Banner>
       )}
 
-      <Card testId="workspace-directory">
-        <form
-          method="get"
-          style={{
-            display: 'flex',
-            gap: spacingTokens.sm,
-            flexWrap: 'wrap',
-            alignItems: 'end',
-            marginBlockEnd: spacingTokens.md,
-          }}
-        >
-          <div style={{ flex: '1 1 16rem' }}>
-            <label htmlFor="q" style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600 }}>
-              {locale === 'ar' ? 'بحث' : 'Search'}
-            </label>
-            <input id="q" name="q" defaultValue={search ?? ''} style={inputStyle()} />
-          </div>
-          <button type="submit" data-testid="search-submit" style={primaryButtonStyle()}>
-            {locale === 'ar' ? 'بحث' : 'Search'}
-          </button>
-          {mayCreate && (
-            <Link
-              href={`/${locale}/console/workspaces?view=new`}
-              data-testid="open-create-workspace"
-              style={{ ...primaryButtonStyle(), textDecoration: 'none', display: 'inline-block' }}
-            >
-              {t('ws.create')}
-            </Link>
-          )}
-        </form>
+      <Stack>
+        <Card testId="workspace-directory">
+          <form method="get">
+            <Toolbar>
+              <SearchField
+                id="q"
+                name="q"
+                label={locale === 'ar' ? 'بحث' : 'Search'}
+                placeholder={locale === 'ar' ? 'الاسم أو المُعرّف' : 'Name or slug'}
+                defaultValue={search ?? ''}
+              />
+              <button type="submit" data-testid="search-submit" style={buttonStyle('neutral')}>
+                {locale === 'ar' ? 'بحث' : 'Search'}
+              </button>
+            </Toolbar>
+          </form>
 
-        {workspaces.length === 0 ? (
-          <EmptyState
-            message={
-              locale === 'ar'
-                ? 'لا توجد مساحات عمل بعد. أنشئ أول عميل للبدء.'
-                : 'No workspaces yet. Create the first customer to begin.'
-            }
-          />
-        ) : (
-          <TableScroll>
-            <table style={tableStyle()} data-testid="workspace-table">
-              <thead>
-                <tr>
-                  <th style={thStyle()}>{t('ws.name')}</th>
-                  <th style={thStyle()}>{t('ws.slug')}</th>
-                  <th style={thStyle()}>{t('ws.status')}</th>
-                  <th style={thStyle()}>{t('ws.plan')}</th>
-                  <th style={thStyle()}>{t('ws.members')}</th>
-                  <th style={thStyle()}>{t('ws.lastActivity')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workspaces.map((w) => (
-                  <tr key={w.id} data-testid={`workspace-row-${w.slug}`}>
-                    <td style={tdStyle()}>
-                      <Link
-                        href={`/${locale}/console/workspaces/${w.id}`}
-                        style={{
-                          color: colorTokens.brandPurple,
-                          fontWeight: 600,
-                          display: 'inline-block',
-                          minBlockSize: '24px',
-                          paddingBlock: '2px',
-                        }}
-                      >
-                        {w.name}
-                      </Link>
-                    </td>
-                    <td style={tdStyle()}>{w.slug}</td>
-                    <td style={tdStyle()}>
-                      <StatusPill status={w.status} />
-                    </td>
-                    <td style={tdStyle()}>{w.planKey ?? t('ws.noPlan')}</td>
-                    <td style={tdStyle()}>{w.memberCount}</td>
-                    <td style={tdStyle()}>
-                      {w.lastActivityAt
-                        ? w.lastActivityAt.toISOString().slice(0, 10)
-                        : t('ws.never')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableScroll>
-        )}
-      </Card>
+          {workspaces.length === 0 ? (
+            search ? (
+              /* No RESULTS is not the same message as no workspaces: one asks
+                 you to change the query, the other to create a customer. */
+              <EmptyState
+                message={
+                  locale === 'ar'
+                    ? 'لا توجد نتائج مطابقة لبحثك.'
+                    : 'No workspaces match your search.'
+                }
+              />
+            ) : (
+              <EmptyState
+                message={
+                  locale === 'ar'
+                    ? 'لا توجد مساحات عمل بعد. أنشئ أول عميل للبدء.'
+                    : 'No workspaces yet. Create the first customer to begin.'
+                }
+              />
+            )
+          ) : (
+            <>
+              <div className="bs-wide-only">
+                <DataTable
+                  headers={[
+                    t('ws.name'),
+                    t('ws.slug'),
+                    t('ws.status'),
+                    t('ws.plan'),
+                    t('ws.members'),
+                    t('ws.lastActivity'),
+                  ]}
+                  caption={t('ws.title')}
+                  testId="workspace-table"
+                >
+                  {workspaces.map((w) => (
+                    <tr key={w.id} data-testid={`workspace-row-${w.slug}`}>
+                      <Cell>
+                        {/*
+                          `.record-main { display: flex; gap: 9px;
+                           align-items: center }` with a squared-off
+                          `.record-main .avatar { border-radius: 11px }` — the
+                          demo's directory rows lead with an identity tile,
+                          which is what makes a long list scannable. The
+                          initials come from the workspace's own name.
+                        */}
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5625rem',
+                            minInlineSize: 0,
+                          }}
+                        >
+                          <Avatar
+                            initials={initialsFrom(w.name)}
+                            seed={avatarSeed(w.slug)}
+                            shape="tile"
+                          />
+                          {workspaceLink(w.id, w.name)}
+                        </span>
+                      </Cell>
+                      <Cell>{w.slug}</Cell>
+                      <Cell>
+                        <StatusBadge
+                          label={w.status}
+                          tone={statusTone(w.status)}
+                          testId={`status-${w.status}`}
+                        />
+                      </Cell>
+                      <Cell>{w.planKey ?? t('ws.noPlan')}</Cell>
+                      <Cell>{w.memberCount}</Cell>
+                      <Cell>
+                        {w.lastActivityAt
+                          ? w.lastActivityAt.toISOString().slice(0, 10)
+                          : t('ws.never')}
+                      </Cell>
+                    </tr>
+                  ))}
+                </DataTable>
+              </div>
+
+              <div className="bs-narrow-only">
+                <RecordList
+                  testId="workspace-list"
+                  records={workspaces.map((w) => ({
+                    id: w.id,
+                    title: workspaceLink(w.id, w.name),
+                    fields: [
+                      { label: t('ws.slug'), value: w.slug },
+                      {
+                        label: t('ws.status'),
+                        value: <StatusBadge label={w.status} tone={statusTone(w.status)} />,
+                      },
+                      { label: t('ws.plan'), value: w.planKey ?? t('ws.noPlan') },
+                      { label: t('ws.members'), value: String(w.memberCount) },
+                      {
+                        label: t('ws.lastActivity'),
+                        value: w.lastActivityAt
+                          ? w.lastActivityAt.toISOString().slice(0, 10)
+                          : t('ws.never'),
+                      },
+                    ],
+                  }))}
+                />
+              </div>
+            </>
+          )}
+        </Card>
+      </Stack>
 
       {showForm && (
         <Card
@@ -170,27 +262,40 @@ export default async function WorkspacesPage({
           <form action={createWorkspaceAction}>
             <input type="hidden" name="locale" value={locale} />
             <Field label={t('ws.name')} htmlFor="name">
-              <input id="name" name="name" required style={inputStyle()} />
+              <input className="bs-control" id="name" name="name" required style={inputStyle()} />
             </Field>
             <Field
               label={t('ws.slug')}
               htmlFor="slug"
               hint={
                 locale === 'ar'
-                  ? '٣ إلى ٥٠ حرفًا صغيرًا أو رقمًا أو شرطة.'
+                  ? '3 إلى 50 حرفًا صغيرًا أو رقمًا أو شرطة.'
                   : '3–50 lower-case letters, digits or hyphens.'
               }
             >
-              <input id="slug" name="slug" required style={inputStyle()} />
+              <input className="bs-control" id="slug" name="slug" required style={inputStyle()} />
             </Field>
             <Field label={t('ws.ownerEmail')} htmlFor="ownerEmail">
-              <input id="ownerEmail" name="ownerEmail" type="email" required style={inputStyle()} />
+              <input
+                className="bs-control"
+                id="ownerEmail"
+                name="ownerEmail"
+                type="email"
+                required
+                style={inputStyle()}
+              />
             </Field>
             <Field label={t('ws.ownerName')} htmlFor="ownerName">
-              <input id="ownerName" name="ownerName" style={inputStyle()} />
+              <input className="bs-control" id="ownerName" name="ownerName" style={inputStyle()} />
             </Field>
             <Field label={t('ws.type')} htmlFor="type">
-              <select id="type" name="type" defaultValue="STARTUP" style={inputStyle()}>
+              <select
+                className="bs-control"
+                id="type"
+                name="type"
+                defaultValue="STARTUP"
+                style={inputStyle()}
+              >
                 {['INDIVIDUAL', 'STARTUP', 'COMPANY', 'CREATOR', 'AGENCY', 'ENTERPRISE'].map(
                   (v) => (
                     <option key={v} value={v}>
@@ -202,6 +307,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.locale')} htmlFor="defaultLocale">
               <select
+                className="bs-control"
                 id="defaultLocale"
                 name="defaultLocale"
                 defaultValue="AR"
@@ -213,6 +319,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.country')} htmlFor="country">
               <input
+                className="bs-control"
                 id="country"
                 name="country"
                 defaultValue="SA"
@@ -222,6 +329,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.timezone')} htmlFor="timezone">
               <input
+                className="bs-control"
                 id="timezone"
                 name="timezone"
                 defaultValue="Asia/Riyadh"
@@ -230,6 +338,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.currency')} htmlFor="currency">
               <input
+                className="bs-control"
                 id="currency"
                 name="currency"
                 defaultValue="SAR"
@@ -248,7 +357,13 @@ export default async function WorkspacesPage({
                   : undefined
               }
             >
-              <select id="planKey" name="planKey" defaultValue="" style={inputStyle()}>
+              <select
+                className="bs-control"
+                id="planKey"
+                name="planKey"
+                defaultValue=""
+                style={inputStyle()}
+              >
                 <option value="">{t('ws.noPlan')}</option>
                 {plans.map((p) => (
                   <option key={p.key} value={p.key}>
@@ -259,6 +374,7 @@ export default async function WorkspacesPage({
             </Field>
             <Field label={t('ws.trialDays')} htmlFor="trialDays">
               <input
+                className="bs-control"
                 id="trialDays"
                 name="trialDays"
                 type="number"

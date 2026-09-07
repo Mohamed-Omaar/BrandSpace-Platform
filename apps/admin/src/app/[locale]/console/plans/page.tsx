@@ -1,5 +1,5 @@
 import { colorTokens } from '@brandspace/ui';
-import { Cell, DataTable, EmptyState, PageHeading } from '../../../../components/admin-shell';
+import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import {
   currentEnvironment,
   getConfigService,
@@ -23,8 +23,7 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
 
   return (
     <>
-      <PageHeading
-        title={isArabic ? 'الخطط والاستحقاقات' : 'Plans & entitlements'}
+      <PageIntro
         description={
           isArabic
             ? 'قيم مقروءة من الإصدار المُفعّل. التعديل يتم عبر صفحة الإعدادات.'
