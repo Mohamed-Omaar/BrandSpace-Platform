@@ -6,7 +6,6 @@ import { randomUUID } from 'node:crypto';
 import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { withSpan } from '@brandspace/observability';
 import {
-  currentEnvironment,
   getConfigService,
   requirePlatformActor,
   serviceActor,
@@ -14,6 +13,22 @@ import {
 import { removeCollectionItem, upsertCollectionItem } from '../../../../server/config-draft';
 
 const log = createLogger({ context: { component: 'admin.plans' } });
+
+/**
+ * The operator's change reason, or a stated fallback.
+ *
+ * `??` is not enough: an untouched text input posts an EMPTY STRING, not
+ * undefined, and the Configuration Service requires at least eight characters
+ * for the audit trail. Passing "" through produced an opaque "that change was
+ * rejected" for the ordinary case of leaving an optional-looking field blank.
+ *
+ * The fallback is a real sentence rather than a placeholder, because it is what
+ * the audit event will say.
+ */
+function reasonFrom(form: FormData, fallback: string): string {
+  const typed = String(form.get('reason') ?? '').trim();
+  return typed.length >= 8 ? typed : fallback;
+}
 
 /**
  * Plan editor server actions.
@@ -125,7 +140,7 @@ export async function savePlanAction(formData: FormData): Promise<void> {
         keyField: 'key',
         key,
         item,
-        reason: String(formData.get('reason') ?? 'Plan edited from the Control Center.'),
+        reason: reasonFrom(formData, 'Plan edited from the Control Center.'),
         expectedLockVersion: lockRaw === '' ? null : Number(lockRaw),
       }),
     );
@@ -151,7 +166,7 @@ export async function removePlanAction(formData: FormData): Promise<void> {
         field: 'plans',
         keyField: 'key',
         key,
-        reason: String(formData.get('reason') ?? 'Plan removed from the draft.'),
+        reason: reasonFrom(formData, 'Plan removed from the draft.'),
       }),
     );
     destination = backTo(locale, { ok: 'DRAFT_SAVED' });
@@ -249,7 +264,7 @@ export async function discardPlanDraftAction(formData: FormData): Promise<void> 
     await getConfigService().discardDraft(
       serviceActor(actor),
       versionId,
-      String(formData.get('reason') ?? 'Draft discarded from the Control Center.'),
+      reasonFrom(formData, 'Draft discarded from the Control Center.'),
     );
     destination = backTo(locale, { ok: 'DRAFT_DISCARDED' });
   } catch (error: unknown) {
@@ -258,5 +273,3 @@ export async function discardPlanDraftAction(formData: FormData): Promise<void> 
   revalidatePath(`/${locale}/console/plans`);
   redirect(destination);
 }
-
-export { currentEnvironment };

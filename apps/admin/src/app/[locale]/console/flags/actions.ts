@@ -15,6 +15,22 @@ import { removeCollectionItem, upsertCollectionItem } from '../../../../server/c
 const log = createLogger({ context: { component: 'admin.flags' } });
 
 /**
+ * The operator's change reason, or a stated fallback.
+ *
+ * `??` is not enough: an untouched text input posts an EMPTY STRING, not
+ * undefined, and the Configuration Service requires at least eight characters
+ * for the audit trail. Passing "" through produced an opaque "that change was
+ * rejected" for the ordinary case of leaving an optional-looking field blank.
+ *
+ * The fallback is a real sentence rather than a placeholder, because it is what
+ * the audit event will say.
+ */
+function reasonFrom(form: FormData, fallback: string): string {
+  const typed = String(form.get('reason') ?? '').trim();
+  return typed.length >= 8 ? typed : fallback;
+}
+
+/**
  * Feature flag targeting — §5.2.
  *
  * All eight dimensions are editable here, in the precedence order the engine
@@ -82,7 +98,7 @@ export async function saveFlagAction(formData: FormData): Promise<void> {
         keyField: 'featureKey',
         key: featureKey,
         item,
-        reason: String(formData.get('reason') ?? 'Flag edited from the Control Center.'),
+        reason: reasonFrom(formData, 'Flag edited from the Control Center.'),
       }),
     );
     destination = backTo(locale, { ok: 'FLAG_SAVED' });
@@ -224,7 +240,7 @@ export async function rollbackFlagsAction(formData: FormData): Promise<void> {
     await getConfigService().rollback(
       serviceActor(actor),
       versionId,
-      String(formData.get('reason') ?? 'Rolled back from the Control Center.'),
+      reasonFrom(formData, 'Rolled back from the Control Center.'),
     );
     destination = backTo(locale, { ok: 'ROLLED_BACK' });
   } catch (error: unknown) {

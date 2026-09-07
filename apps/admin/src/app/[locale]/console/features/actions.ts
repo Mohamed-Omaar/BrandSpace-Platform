@@ -20,6 +20,22 @@ import {
 const log = createLogger({ context: { component: 'admin.features' } });
 
 /**
+ * The operator's change reason, or a stated fallback.
+ *
+ * `??` is not enough: an untouched text input posts an EMPTY STRING, not
+ * undefined, and the Configuration Service requires at least eight characters
+ * for the audit trail. Passing "" through produced an opaque "that change was
+ * rejected" for the ordinary case of leaving an optional-looking field blank.
+ *
+ * The fallback is a real sentence rather than a placeholder, because it is what
+ * the audit event will say.
+ */
+function reasonFrom(form: FormData, fallback: string): string {
+  const typed = String(form.get('reason') ?? '').trim();
+  return typed.length >= 8 ? typed : fallback;
+}
+
+/**
  * The feature registry and the plan grant matrix.
  *
  * Both live in the `entitlements` domain: a feature's key, type, default and
@@ -92,7 +108,7 @@ export async function saveFeatureAction(formData: FormData): Promise<void> {
         keyField: 'key',
         key,
         item,
-        reason: String(formData.get('reason') ?? 'Feature edited from the Control Center.'),
+        reason: reasonFrom(formData, 'Feature edited from the Control Center.'),
       }),
     );
     destination = backTo(locale, { ok: 'FEATURE_SAVED' });
@@ -171,7 +187,7 @@ export async function savePlanGrantAction(formData: FormData): Promise<void> {
         replaceCollection(actor, 'entitlements', {
           field: 'planEntitlements',
           rows,
-          reason: String(formData.get('reason') ?? 'Plan grant edited.'),
+          reason: reasonFrom(formData, 'Plan grant edited.'),
         }),
     );
 

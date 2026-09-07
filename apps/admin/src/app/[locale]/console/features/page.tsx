@@ -87,6 +87,23 @@ function readGrants(payload: Record<string, unknown>): GrantRow[] {
   }));
 }
 
+/**
+ * One matrix cell, in words.
+ *
+ * Never returns an empty string. A blank cell and an em dash look similar and
+ * mean opposite things — "this plan grants nothing here" reads as an oversight,
+ * where "—" is the deliberate statement that the plan has not spoken and the
+ * feature default therefore decides. An `enumValue` of "" is treated as absent
+ * for the same reason: `??` lets it through and renders nothing at all.
+ */
+function describeGrant(grant: GrantRow | null, isArabic: boolean): string {
+  if (grant === null) return '—';
+  if (!grant.enabled) return isArabic ? 'لا' : 'no';
+  if (grant.enumValue !== null && grant.enumValue.trim() !== '') return grant.enumValue;
+  if (grant.limitValue !== null) return String(grant.limitValue);
+  return isArabic ? 'نعم' : 'yes';
+}
+
 export default async function FeaturesPage({
   params,
   searchParams,
@@ -239,27 +256,13 @@ export default async function FeaturesPage({
                 <Cell>
                   <code>{feature.key}</code>
                 </Cell>
-                {plans.map((plan) => {
-                  const grant = grantFor(plan.key, feature.key);
-                  return (
-                    <Cell key={plan.key}>
-                      <span data-testid={`grant-${plan.key}-${feature.key}`}>
-                        {grant === null
-                          ? '—'
-                          : grant.enabled
-                            ? (grant.enumValue ??
-                              (grant.limitValue === null
-                                ? isArabic
-                                  ? 'نعم'
-                                  : 'yes'
-                                : String(grant.limitValue)))
-                            : isArabic
-                              ? 'لا'
-                              : 'no'}
-                      </span>
-                    </Cell>
-                  );
-                })}
+                {plans.map((plan) => (
+                  <Cell key={plan.key}>
+                    <span data-testid={`grant-${plan.key}-${feature.key}`}>
+                      {describeGrant(grantFor(plan.key, feature.key), isArabic)}
+                    </span>
+                  </Cell>
+                ))}
               </tr>
             ))}
           </DataTable>

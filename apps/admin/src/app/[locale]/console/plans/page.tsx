@@ -831,12 +831,21 @@ function PlanForm({
       </div>
 
       <div style={{ marginBlockStart: spacingTokens.md }}>
-        <Field label={isArabic ? 'سبب التغيير' : 'Change reason'} htmlFor="plan-reason">
+        <Field
+          label={isArabic ? 'سبب التغيير' : 'Change reason'}
+          htmlFor="plan-reason"
+          hint={
+            isArabic
+              ? '٨ أحرف على الأقل، وإلا سُجّل سبب افتراضي في سجل التدقيق.'
+              : 'At least 8 characters, or a stated default is recorded in the audit trail instead.'
+          }
+        >
           <input
             className="bs-control"
             id="plan-reason"
             name="reason"
             defaultValue=""
+            minLength={8}
             placeholder={isArabic ? 'لماذا تغيّرت هذه الخطة؟' : 'Why is this plan changing?'}
             style={inputStyle()}
           />
