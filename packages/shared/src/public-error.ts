@@ -31,6 +31,12 @@ export const PUBLIC_ERROR_CODES = [
   'UNAUTHENTICATED',
   'NOT_FOUND',
   'RATE_LIMITED',
+  // Phase 3. The three outcomes a customer must be able to ACT on. Each names
+  // only the kind of wall that was hit — never which plan, limit, price or
+  // configuration produced it.
+  'ENTITLEMENT_REQUIRED',
+  'QUOTA_EXCEEDED',
+  'INSUFFICIENT_CREDITS',
   'INTERNAL',
 ] as const;
 
@@ -51,8 +57,19 @@ const APP_ERROR_CODE_MAP: Partial<Record<string, PublicErrorCode>> = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   NOT_FOUND: 'NOT_FOUND',
   RATE_LIMITED: 'RATE_LIMITED',
-  // TENANT_*, INTERNAL, ENTITLEMENT_REQUIRED and QUOTA_EXCEEDED deliberately
-  // fall through to INTERNAL: their messages describe internal state.
+  // Phase 3: these three now map, where before they fell through to INTERNAL.
+  //
+  // The reason they were excluded was that their MESSAGES describe internal
+  // state — which is still true, and still why nothing here returns a message.
+  // Only the code travels, and "you need a higher plan", "you are over a limit"
+  // and "you are out of credits" are precisely what the customer has to know to
+  // act. Hiding them behind INTERNAL made a wall the customer could clear look
+  // like a platform fault. The plan, the limit and the price stay unsaid.
+  ENTITLEMENT_REQUIRED: 'ENTITLEMENT_REQUIRED',
+  QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
+  INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
+  // TENANT_* and INTERNAL still fall through: they describe a defect, not a
+  // decision the customer can respond to.
 };
 
 /**

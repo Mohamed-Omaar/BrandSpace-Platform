@@ -2,6 +2,8 @@
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
+// The unit is defined once, beside the policy arithmetic that depends on it.
+import { MILLI_PER_CREDIT } from './credit-policy';
 
 /**
  * The AI credit wallet and ledger — docs/DATABASE.md §7, CLAUDE.md §2.4.
@@ -24,9 +26,6 @@ import { AppError, type Clock, systemClock } from '@brandspace/shared';
  */
 
 export const CREDIT_ADJUST_PERMISSION = 'platform.credit.adjust';
-
-/** 1 credit = 1000 milli-credits. Display divides; storage never does. */
-export const MILLI_PER_CREDIT = 1000n;
 
 export interface CreditActor {
   readonly platformUserId: string;

@@ -174,16 +174,22 @@ alias blocks, extend the mobile record-list shape to the console tables, and dec
 
 ## Phase 3 — Plans, Entitlements and Credits
 
-> **Status after Phase 2C-A.** The owner approved pulling the entitlement and credit
-> MACHINERY forward into 2B (D-40), with no commercial data: the precedence engine,
-> workspace overrides, the credit wallet and its immutable ledger all ship. What
-> remains for Phase 3 is the plan EDITOR, the remaining flag targeting surfaces,
-> reserve/settle primitives for AI, and quota enforcement.
+> **Status: DELIVERED, 2026-09-07.** Authorised by the owner after the decision gate
+> merged. Phase 2B had pulled the entitlement and credit MACHINERY forward (D-40); this
+> phase added what was missing rather than rebuilding it — the plan editor, the feature
+> registry, the flag targeting surface, reserve/confirm/settle with FIFO buckets and
+> expiry, cycle resets, quota enforcement, and the customer's own view of all of it.
 >
-> **D-06 … D-12 are now ANSWERED** (2026-09-07). Four plans — Starter, Growth, Scale,
+> **D-06 … D-12 are ANSWERED** (2026-09-07). Four plans — Starter, Growth, Scale,
 > Enterprise — with approved provisional prices, limits, trial terms and credit policy.
-> The values live in `docs/PRODUCT.md` §10A and are **configuration, never source**.
-> Phase 3 is unblocked on the commercial decisions; it has not been authorised to start.
+> The values live in `docs/PRODUCT.md` §10A and are **configuration, never source**:
+> no plan name, price, limit or allowance has been entered into any environment by
+> this phase, and none appears in application source.
+>
+> **Still provisional.** The prices and quotas need a second review before production
+> launch (D-07), and the credit economics must not be activated as final until Phase 4
+> measures real provider costs against the required gross margin (D-15). Nothing in
+> this phase treats either as settled.
 
 **Goal:** commercial rules are data, and credit accounting is provably correct — before any AI exists.
 
@@ -203,12 +209,31 @@ alias blocks, extend the mobile record-list shape to the console tables, and dec
 
 ### Exit criteria
 
-- [~] Owner creates a plan with prices, limits, features, and credits — with no code change — **partially (2B)**; plans are configuration and the schema exists, and D-06…D-12 now define four tiers with prices, limits and allowances. The plan EDITOR is Phase 3, and no value has been entered into any environment
-- [x] Assigning a plan to a workspace changes what that workspace can do, immediately — **done (2B)**
+- [x] Owner creates a plan with prices, limits, features, and credits — with no code change — **done**; a structured editor over a versioned draft, with a price field per supported currency and the six quota dimensions. Semantic validation refuses an incomplete currency table, an Agency plan (D-62), postpaid overage under a hard stop (D-11) and a downgrade that deletes a resource (D-12)
+- [x] Assigning a plan to a workspace changes what that workspace can do, immediately — **done (2B)**, and now covered by an integration test that changes the plan and re-resolves
 - [x] The entitlement trace explains every effective value — **done (2B)**; the same call decides and explains
-- [~] A feature flag can target by plan, workspace, beta group, country, date range, and percentage — and roll back — **engine done (2B)**, all nine precedence levels implemented and tested; the flag EDITOR and beta-cohort membership are Phase 3
-- [~] Credit reserve/settle/release primitives pass the full concurrency and idempotency suite — **adjustment done (2B)** with idempotency, row locking and a non-negative constraint; reserve/settle arrive with the AI Gateway
-- [x] Ledger replay reproduces balances exactly; the reconciliation job reports zero drift — **done (2B)**; `CreditService.reconcile()` and an assertion that drift is zero
+- [x] A feature flag can target by plan, workspace, beta group, country, date range, and percentage — and roll back — **done**; the engine shipped in 2B, and this phase added the editor, the printed precedence order, real beta-cohort membership where the engine previously read a hard-coded empty set, and a one-press kill switch that validates and activates in the same action
+- [x] Credit reserve/settle/release primitives pass the full concurrency and idempotency suite — **done**; ten parallel reservations against a wallet sized for three grant exactly three, one idempotency key raced ten times produces one hold, a failed request writes zero charges, and settlement can never exceed what was reserved
+- [x] Ledger replay reproduces balances exactly; the reconciliation job reports zero drift — **done**; asserted after a full grant/reserve/settle/release/expire cycle, and surfaced on the workspace page rather than only in a job's log
+
+### Delivered beyond the original scope
+
+- **Subscriptions.** Not billing — no provider, no invoice, no payment. The record that
+  pins the agreed price at assignment (AC-04.7 cannot hold without it), remembers that a
+  workspace has had its one trial (AC-04.11), and carries the cycle boundary the monthly
+  grant and rollover sweep run on.
+- **Credit buckets with FIFO-by-expiry.** D-12's consumption order needs per-bucket state;
+  a wallet balance alone cannot express "spend the credits that lapse soonest".
+- **Quota enforcement.** The check and the increment are one statement, so two requests at
+  the limit cannot both pass.
+
+### Not in this phase, deliberately
+
+No AI provider call, no task pricing, no model routing, no Brand Brain backend, no
+content or social persistence, no media storage, no analytics ingestion, no payment
+collection, checkout, webhook or invoice. The credit primitives PREPARE Phase 4 and do
+not simulate it: `purpose` is an opaque task key and nothing here knows what a model
+costs.
 
 ---
 

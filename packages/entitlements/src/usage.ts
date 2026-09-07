@@ -1,0 +1,391 @@
+import type { PrismaClient } from '@brandspace/database';
+import { AppError, type Clock, systemClock } from '@brandspace/shared';
+
+/**
+ * Usage quotas — docs/ADMIN-CONTROL-CENTER.md §4.1 "Volume",
+ * docs/PRODUCT.md §10A.3, roadmap Phase 3 §6.
+ *
+ * A quota is a feature whose effective value is a NUMBER: how many of a thing
+ * the workspace may have or do in a window. The limit itself comes from the
+ * entitlements engine — plan, override, flag, default, in that precedence — so
+ * this service never decides what the limit IS. It counts, and it refuses.
+ *
+ * THE ATOMICITY PROBLEM, and why this is not a read-then-write.
+ *
+ * The obvious implementation reads the counter, compares it with the limit, and
+ * writes back. Two requests that both read 99 against a limit of 100 both pass,
+ * and the workspace ends up at 101. That is not a rare interleaving; it is the
+ * normal outcome of two clicks.
+ *
+ * So the check and the increment are ONE statement:
+ *
+ *   INSERT … ON CONFLICT (workspace, feature, periodStart)
+ *   DO UPDATE SET "usedValue" = usage_counter."usedValue" + $n
+ *   WHERE usage_counter."usedValue" + $n <= $limit
+ *   RETURNING "usedValue"
+ *
+ * PostgreSQL evaluates the WHERE against the row it has just locked for update,
+ * so the losing request updates nothing and gets no row back. No application
+ * code holds a lock, and the outcome does not depend on isolation level.
+ *
+ * IDEMPOTENCY is a second, independent mechanism: the `UsageEvent` row is
+ * inserted in the same transaction and its key is unique, so a retried
+ * recording aborts the transaction and leaves the counter untouched.
+ */
+
+export const QUOTA_FEATURE_PREFIX = 'limit.';
+
+/**
+ * The six quota dimensions a plan carries (docs/PRODUCT.md §10A.3).
+ *
+ * These are KEYS, not values. Application code names a quota the same way
+ * docs/ADMIN-CONTROL-CENTER.md §5.1 has it name a feature; every number behind
+ * them is configuration the owner sets, which is what AC-04.3 requires.
+ */
+export const QUOTA_FEATURES = {
+  seats: 'limit.seats',
+  brands: 'limit.brands',
+  socialAccounts: 'limit.social_accounts',
+  scheduledPostsPerMonth: 'limit.scheduled_posts',
+  storageGb: 'limit.storage_gb',
+  analyticsRetentionDays: 'limit.analytics_retention_days',
+} as const;
+
+export type QuotaDimension = keyof typeof QUOTA_FEATURES;
+
+/** Which window a quota is counted over. */
+export type QuotaPeriod = 'day' | 'month' | 'billing_cycle' | 'total';
+
+/** A fixed epoch for `total` quotas, so they occupy exactly one counter row. */
+const TOTAL_PERIOD_START = new Date(Date.UTC(1970, 0, 1));
+const TOTAL_PERIOD_END = new Date(Date.UTC(9999, 0, 1));
+
+export interface QuotaWindow {
+  readonly start: Date;
+  readonly end: Date;
+}
+
+/**
+ * The window a quota is counted in.
+ *
+ * `billing_cycle` needs the subscription's own boundaries — a customer who
+ * subscribed on the 20th resets on the 20th (docs/BILLING-AND-CREDITS.md §11) —
+ * so the caller supplies them. Without them it falls back to the calendar
+ * month rather than silently counting forever.
+ */
+export function quotaWindow(
+  period: QuotaPeriod,
+  now: Date,
+  cycle?: QuotaWindow | null,
+): QuotaWindow {
+  if (period === 'total') {
+    return { start: TOTAL_PERIOD_START, end: TOTAL_PERIOD_END };
+  }
+  if (period === 'day') {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    return { start, end: new Date(start.getTime() + 86_400_000) };
+  }
+  if (period === 'billing_cycle' && cycle) {
+    return cycle;
+  }
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return { start, end };
+}
+
+export interface QuotaConsumption {
+  readonly featureKey: string;
+  readonly used: number;
+  readonly limit: number | null;
+  readonly window: QuotaWindow;
+  /** null limit means unlimited, and `remaining` is then null rather than 0. */
+  readonly remaining: number | null;
+}
+
+/** Raised when a quota refuses. Carries the shape a prompt needs, nothing more. */
+export class QuotaExceededError extends AppError {
+  readonly featureKey: string;
+  readonly limitValue: number;
+  readonly used: number;
+
+  constructor(featureKey: string, limitValue: number, used: number) {
+    super('QUOTA_EXCEEDED', `The workspace is at its limit for "${featureKey}".`, {
+      // Safe for a customer: it is their own plan's limit and their own usage.
+      // The plan KEY, the price and every other workspace's numbers stay unsaid.
+      featureKey,
+      limitValue,
+      used,
+    });
+    this.featureKey = featureKey;
+    this.limitValue = limitValue;
+    this.used = used;
+  }
+}
+
+export interface UsageServiceOptions {
+  readonly prisma: PrismaClient;
+  readonly clock?: Clock;
+}
+
+export class UsageService {
+  readonly #prisma: PrismaClient;
+  readonly #clock: Clock;
+
+  constructor(options: UsageServiceOptions) {
+    this.#prisma = options.prisma;
+    this.#clock = options.clock ?? systemClock;
+  }
+
+  /**
+   * Consume `amount` of a quota, or refuse.
+   *
+   * `limitValue === null` means unlimited: the counter still moves, because the
+   * customer's usage view and the platform's reporting both need the number,
+   * but nothing is refused.
+   *
+   * Returns the consumption AFTER the increment.
+   */
+  async consume(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    readonly limitValue: number | null;
+    readonly period: QuotaPeriod;
+    readonly amount?: number;
+    readonly idempotencyKey: string;
+    readonly cycle?: QuotaWindow | null;
+  }): Promise<QuotaConsumption> {
+    const amount = input.amount ?? 1;
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new AppError('VALIDATION_FAILED', 'A usage amount is a positive whole number.');
+    }
+    if (!input.idempotencyKey.trim()) {
+      throw new AppError('VALIDATION_FAILED', 'An idempotency key is required.');
+    }
+
+    const now = this.#clock.now();
+    const window = quotaWindow(input.period, now, input.cycle ?? null);
+
+    // A repeat of a recording that already happened returns the CURRENT state
+    // rather than incrementing again. Checked before the write so the common
+    // retry does not have to provoke a constraint violation to be safe.
+    const replay = await this.#prisma.usageEvent.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+      select: { id: true },
+    });
+    if (replay) {
+      return this.consumption({
+        workspaceId: input.workspaceId,
+        featureKey: input.featureKey,
+        limitValue: input.limitValue,
+        period: input.period,
+        cycle: input.cycle ?? null,
+      });
+    }
+
+    const used = await this.#prisma
+      .$transaction(async (tx) => {
+        // ONE statement: the limit is in the WHERE, so the check and the
+        // increment cannot be separated by another transaction.
+        const rows =
+          input.limitValue === null
+            ? await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+              INSERT INTO "usage_counter"
+                ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
+              VALUES
+                (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+                 ${window.start}, ${window.end}, ${amount}, now())
+              ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+              DO UPDATE SET "usedValue" = "usage_counter"."usedValue" + ${amount},
+                            "updatedAt" = now()
+              RETURNING "usedValue", "id"`
+            : await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+              INSERT INTO "usage_counter"
+                ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
+              VALUES
+                (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+                 ${window.start}, ${window.end}, ${amount}, now())
+              ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+              DO UPDATE SET "usedValue" = "usage_counter"."usedValue" + ${amount},
+                            "updatedAt" = now()
+              WHERE "usage_counter"."usedValue" + ${amount} <= ${input.limitValue}
+              RETURNING "usedValue", "id"`;
+
+        const row = rows[0];
+        if (!row) {
+          // No row came back: the WHERE refused the update, so the workspace is
+          // at or over its limit. The INSERT path cannot refuse, because a first
+          // use above the limit is caught by the guard below.
+          const current = await tx.usageCounter.findUnique({
+            where: {
+              workspaceId_featureKey_periodStart: {
+                workspaceId: input.workspaceId,
+                featureKey: input.featureKey,
+                periodStart: window.start,
+              },
+            },
+            select: { usedValue: true },
+          });
+          throw new QuotaExceededError(
+            input.featureKey,
+            input.limitValue ?? 0,
+            current?.usedValue ?? 0,
+          );
+        }
+
+        // A brand new counter is created by the INSERT branch, which the WHERE
+        // does not guard. Refusing here keeps "first use already over the limit"
+        // consistent with every later refusal, and the transaction rolls the
+        // insert back.
+        if (input.limitValue !== null && row.usedValue > input.limitValue) {
+          throw new QuotaExceededError(input.featureKey, input.limitValue, row.usedValue);
+        }
+
+        // The idempotency record, in the SAME transaction. A retry that got past
+        // the pre-check above races here instead, violates the unique key, and
+        // rolls the increment back with it.
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.idempotencyKey,
+            amount,
+            counterId: row.id,
+            occurredAt: now,
+          },
+        });
+
+        return row.usedValue;
+      })
+      .catch(async (error: unknown) => {
+        // A retry that RACED the pre-check above lands here instead: both calls
+        // saw no idempotency record, both entered a transaction, and one lost the
+        // unique key. The work was recorded exactly once, which is the guarantee
+        // — so the loser reports the current state rather than an error. Without
+        // this, an ordinary duplicate submit surfaces as a failure for work that
+        // actually succeeded.
+        if (!isDuplicateIdempotencyKey(error)) throw error;
+        const current = await this.consumption({
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          limitValue: input.limitValue,
+          period: input.period,
+          cycle: input.cycle ?? null,
+        });
+        return current.used;
+      });
+
+    return {
+      featureKey: input.featureKey,
+      used,
+      limit: input.limitValue,
+      window,
+      remaining: input.limitValue === null ? null : Math.max(0, input.limitValue - used),
+    };
+  }
+
+  /** Read a quota's consumption without changing it. */
+  async consumption(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    readonly limitValue: number | null;
+    readonly period: QuotaPeriod;
+    readonly cycle?: QuotaWindow | null;
+  }): Promise<QuotaConsumption> {
+    const window = quotaWindow(input.period, this.#clock.now(), input.cycle ?? null);
+    const row = await this.#prisma.usageCounter.findUnique({
+      where: {
+        workspaceId_featureKey_periodStart: {
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          periodStart: window.start,
+        },
+      },
+      select: { usedValue: true },
+    });
+    const used = row?.usedValue ?? 0;
+    return {
+      featureKey: input.featureKey,
+      used,
+      limit: input.limitValue,
+      window,
+      remaining: input.limitValue === null ? null : Math.max(0, input.limitValue - used),
+    };
+  }
+
+  /**
+   * Give back usage that was recorded and then undone.
+   *
+   * Deleting a scheduled post should return its slot. The counter floors at
+   * zero — the CHECK constraint refuses a negative — and the `UsageEvent` rows
+   * stay, because they are the idempotency record and are append-only.
+   */
+  async refund(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    readonly period: QuotaPeriod;
+    readonly amount?: number;
+    readonly cycle?: QuotaWindow | null;
+  }): Promise<void> {
+    const amount = input.amount ?? 1;
+    const window = quotaWindow(input.period, this.#clock.now(), input.cycle ?? null);
+    await this.#prisma.$executeRaw`
+      UPDATE "usage_counter"
+         SET "usedValue" = GREATEST(0, "usedValue" - ${amount}),
+             "updatedAt" = now()
+       WHERE "workspaceId" = ${input.workspaceId}::uuid
+         AND "featureKey"  = ${input.featureKey}
+         AND "periodStart" = ${window.start}`;
+  }
+
+  /** Every counter for a workspace in the current windows — the usage view. */
+  async currentCounters(
+    workspaceId: string,
+  ): Promise<ReadonlyArray<{ featureKey: string; used: number; periodEnd: Date }>> {
+    const now = this.#clock.now();
+    const rows = await this.#prisma.usageCounter.findMany({
+      where: { workspaceId, periodEnd: { gt: now } },
+      orderBy: { featureKey: 'asc' },
+      select: { featureKey: true, usedValue: true, periodEnd: true },
+    });
+    return rows.map((r) => ({
+      featureKey: r.featureKey,
+      used: r.usedValue,
+      periodEnd: r.periodEnd,
+    }));
+  }
+}
+
+/**
+ * Is this the unique violation on `usage_event.idempotencyKey`?
+ *
+ * Matched STRUCTURALLY, never on a message. Prisma reports a unique violation
+ * as `P2002`, but where it names the offending constraint depends on the
+ * driver: the pg adapter nests it under
+ * `meta.driverAdapterError.cause.constraint.index`, while the classic engine
+ * puts the column list in `meta.target`. Both are checked, so upgrading one
+ * does not silently turn a handled duplicate back into a 500.
+ *
+ * Any other error is rethrown. Swallowing them would turn a genuine write
+ * failure into a silently successful no-op, which is the worse bug.
+ */
+function isDuplicateIdempotencyKey(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    meta?: {
+      target?: unknown;
+      driverAdapterError?: { cause?: { constraint?: { index?: unknown } } };
+    };
+  };
+  if (candidate.code !== 'P2002') return false;
+
+  const named: string[] = [];
+  const target = candidate.meta?.target;
+  if (Array.isArray(target)) named.push(...target.map(String));
+  else if (target !== undefined && target !== null) named.push(String(target));
+
+  const index = candidate.meta?.driverAdapterError?.cause?.constraint?.index;
+  if (index !== undefined && index !== null) named.push(String(index));
+
+  return named.some((field) => field.includes('idempotencyKey'));
+}

@@ -27,6 +27,14 @@ export const STRICT_TENANT_MODELS = [
   'WorkspaceOverride',
   'CreditWallet',
   'CreditTransaction',
+  // Phase 3. Every one is per-customer commercial or consumption state and
+  // carries a non-null `workspaceId`.
+  'WorkspaceSubscription',
+  'CreditGrant',
+  'CreditReservation',
+  'UsageCounter',
+  'UsageEvent',
+  'BetaCohortMembership',
 ] as const;
 
 /**
@@ -134,6 +142,13 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   WorkspaceOverride: 'workspace_override',
   CreditWallet: 'credit_wallet',
   CreditTransaction: 'credit_transaction',
+  // Phase 3
+  WorkspaceSubscription: 'workspace_subscription',
+  CreditGrant: 'credit_grant',
+  CreditReservation: 'credit_reservation',
+  UsageCounter: 'usage_counter',
+  UsageEvent: 'usage_event',
+  BetaCohortMembership: 'beta_cohort_membership',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

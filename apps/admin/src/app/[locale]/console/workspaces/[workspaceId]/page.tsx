@@ -9,12 +9,16 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
+import { UsageService } from '@brandspace/entitlements';
 import {
+  getBetaCohortService,
+  getCreditLedgerService,
   getCreditService,
   getEntitlementService,
   getInvitationService,
   getMembershipService,
   getPlatformPrisma,
+  getSubscriptionService,
   getWorkspaceService,
   requirePageActor,
   serviceActor,
@@ -37,8 +41,10 @@ import {
   thStyle,
 } from '../../../../../components/console-ui';
 import {
+  addCohortAction,
   adjustCreditsAction,
   assignPlanAction,
+  removeCohortAction,
   changeStatusAction,
   inviteMemberAction,
   revokeInvitationAction,
@@ -78,21 +84,45 @@ export default async function WorkspaceDetailPage({
   const entitlements = getEntitlementService();
   const credits = getCreditService();
 
-  const [members, invitations, effective, overrides, wallet, ledger, activity, plans, roles] =
-    await Promise.all([
-      getMembershipService().list(workspaceId),
-      getInvitationService().list(workspaceId),
-      entitlements.resolveAll(workspaceId),
-      entitlements.listOverrides(workspaceId),
-      credits.wallet(workspaceId),
-      credits.ledger(workspaceId, 10),
-      workspaceService.recentActivity(serviceActor(actor), workspaceId, 15),
-      entitlements.plans(),
-      getPlatformPrisma().role.findMany({
-        where: { realm: 'WORKSPACE', workspaceId: null },
-        orderBy: { key: 'asc' },
-      }),
-    ]);
+  const ledgerService = await getCreditLedgerService();
+
+  const [
+    members,
+    invitations,
+    effective,
+    overrides,
+    wallet,
+    ledger,
+    activity,
+    plans,
+    roles,
+    subscription,
+    grants,
+    cohortMemberships,
+    reconciliation,
+    counters,
+  ] = await Promise.all([
+    getMembershipService().list(workspaceId),
+    getInvitationService().list(workspaceId),
+    entitlements.resolveAll(workspaceId),
+    entitlements.listOverrides(workspaceId),
+    credits.wallet(workspaceId),
+    credits.ledger(workspaceId, 10),
+    workspaceService.recentActivity(serviceActor(actor), workspaceId, 15),
+    entitlements.plans(),
+    getPlatformPrisma().role.findMany({
+      where: { realm: 'WORKSPACE', workspaceId: null },
+      orderBy: { key: 'asc' },
+    }),
+    // --- Phase 3 ---
+    getSubscriptionService().get(workspaceId),
+    ledgerService.grants(workspaceId),
+    getBetaCohortService().membershipsFor(workspaceId),
+    // Replay against the projection. A non-zero drift is a critical alert, so
+    // it is shown here rather than only in a nightly job's log.
+    credits.reconcile(workspaceId),
+    new UsageService({ prisma: getPlatformPrisma() }).currentCounters(workspaceId),
+  ]);
 
   const may = (key: string) => actor.permissionKeys.includes(key);
   const errorCode = typeof query['error'] === 'string' ? query['error'] : null;
@@ -553,6 +583,293 @@ export default async function WorkspaceDetailPage({
           </TableScroll>
         )}
       </Card>
+
+      {/* --- Subscription (Phase 3) ----------------------------------- */}
+      <Card
+        title={locale === 'ar' ? 'الاشتراك' : 'Subscription'}
+        description={
+          locale === 'ar'
+            ? 'السعر مثبَّت وقت تعيين الخطة. تعديل سعر الخطة في الكتالوج لا يعيد تسعير هذا الاشتراك.'
+            : 'The price is pinned when the plan is assigned. Repricing the plan in the catalogue never reprices this subscription.'
+        }
+        testId="workspace-subscription"
+      >
+        {!subscription ? (
+          <EmptyState
+            message={
+              locale === 'ar'
+                ? 'لا يوجد اشتراك بعد. يُنشأ عند تعيين خطة أو بدء تجربة.'
+                : 'No subscription yet. One is created when a plan is assigned or a trial starts.'
+            }
+          />
+        ) : (
+          <TableScroll>
+            <table style={tableStyle()} data-testid="subscription-table">
+              <tbody>
+                <tr>
+                  <th style={thStyle()}>{locale === 'ar' ? 'الخطة' : 'Plan'}</th>
+                  <td style={tdStyle()} data-testid="subscription-plan">
+                    {subscription.planKey}
+                  </td>
+                </tr>
+                <tr>
+                  <th style={thStyle()}>{locale === 'ar' ? 'الحالة' : 'Status'}</th>
+                  <td style={tdStyle()}>
+                    <StatusPill status={subscription.status} />
+                  </td>
+                </tr>
+                <tr>
+                  <th style={thStyle()}>
+                    {locale === 'ar' ? 'السعر المثبَّت (شهري)' : 'Pinned price (monthly)'}
+                  </th>
+                  <td style={tdStyle()} data-testid="subscription-pinned-price">
+                    {/* Minor units in the currency that was agreed. Nothing
+                        converts it (D-08). */}
+                    {(subscription.pinnedMonthlyMinor / 100).toFixed(2)} {subscription.currency}
+                  </td>
+                </tr>
+                <tr>
+                  <th style={thStyle()}>{locale === 'ar' ? 'الدورة الحالية' : 'Current period'}</th>
+                  <td style={tdStyle()}>
+                    {subscription.currentPeriodStart.toISOString().slice(0, 10)} →{' '}
+                    {subscription.currentPeriodEnd.toISOString().slice(0, 10)}
+                  </td>
+                </tr>
+                <tr>
+                  <th style={thStyle()}>{locale === 'ar' ? 'التجربة' : 'Trial'}</th>
+                  <td style={tdStyle()} data-testid="subscription-trial">
+                    {subscription.trialStartedAt
+                      ? `${subscription.trialStartedAt.toISOString().slice(0, 10)} → ${
+                          subscription.trialEndsAt?.toISOString().slice(0, 10) ?? '—'
+                        }`
+                      : locale === 'ar'
+                        ? 'لم تُستخدم بعد'
+                        : 'not used yet'}
+                  </td>
+                </tr>
+                {subscription.pendingPlanKey ? (
+                  <tr>
+                    <th style={thStyle()}>
+                      {locale === 'ar' ? 'تغيير مجدول' : 'Scheduled change'}
+                    </th>
+                    <td style={tdStyle()} data-testid="subscription-pending">
+                      {/* A downgrade takes effect at period end (D-12). Nothing
+                          is removed at request time and nothing is deleted. */}
+                      {subscription.pendingPlanKey} —{' '}
+                      {subscription.pendingPlanEffectiveAt?.toISOString().slice(0, 10) ?? '—'}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </TableScroll>
+        )}
+      </Card>
+
+      {/* --- Credit buckets (Phase 3) --------------------------------- */}
+      {may('credits.read') || may('platform.credit.adjust') ? (
+        <Card
+          title={locale === 'ar' ? 'دفعات الرصيد' : 'Credit allocations'}
+          description={
+            locale === 'ar'
+              ? 'تُستهلك الأقرب انتهاءً أولًا (D-12). المحجوز يخص طلبًا قيد التنفيذ.'
+              : 'Consumed soonest-expiry first (D-12). Reserved credits belong to a request in flight.'
+          }
+          testId="workspace-credit-grants"
+        >
+          {grants.length === 0 ? (
+            <EmptyState
+              message={locale === 'ar' ? 'لا توجد دفعات رصيد نشطة.' : 'No live credit allocations.'}
+            />
+          ) : (
+            <TableScroll>
+              <table style={tableStyle()}>
+                <thead>
+                  <tr>
+                    <th style={thStyle()}>{locale === 'ar' ? 'المصدر' : 'Source'}</th>
+                    <th style={thStyle()}>{locale === 'ar' ? 'مُنح' : 'Granted'}</th>
+                    <th style={thStyle()}>{locale === 'ar' ? 'المتبقي' : 'Remaining'}</th>
+                    <th style={thStyle()}>{locale === 'ar' ? 'محجوز' : 'Reserved'}</th>
+                    <th style={thStyle()}>{locale === 'ar' ? 'ينتهي' : 'Expires'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grants.map((grant) => (
+                    <tr key={grant.id} data-testid={`grant-${grant.id}`}>
+                      <td style={tdStyle()}>{grant.source}</td>
+                      <td style={tdStyle()}>{Number(grant.amountMilliCredits / 1000n)}</td>
+                      <td style={tdStyle()}>{Number(grant.remainingMilliCredits / 1000n)}</td>
+                      <td style={tdStyle()}>{Number(grant.reservedMilliCredits / 1000n)}</td>
+                      <td style={tdStyle()}>
+                        {grant.expiresAt
+                          ? grant.expiresAt.toISOString().slice(0, 10)
+                          : locale === 'ar'
+                            ? 'لا ينتهي'
+                            : 'never'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
+
+          {/* Reconciliation. Replaying the ledger must reproduce the balance
+              exactly; a non-zero drift is a critical alert, not a rounding
+              detail, so it is stated rather than buried. */}
+          <p
+            data-testid="reconciliation"
+            style={{
+              marginBlockStart: spacingTokens.md,
+              fontSize: typographyTokens.bodySm.fontSize,
+              color: reconciliation.drift === 0n ? colorTokens.textSecondary : colorTokens.danger,
+            }}
+          >
+            {reconciliation.drift === 0n
+              ? locale === 'ar'
+                ? 'إعادة تشغيل الدفتر تطابق الرصيد المخزَّن تمامًا.'
+                : 'Ledger replay reproduces the stored balance exactly.'
+              : locale === 'ar'
+                ? `انحراف ${String(reconciliation.drift)} — تنبيه حرج.`
+                : `Drift of ${String(reconciliation.drift)} — a critical alert.`}
+          </p>
+        </Card>
+      ) : null}
+
+      {/* --- Quota usage (Phase 3) ------------------------------------ */}
+      <Card
+        title={locale === 'ar' ? 'استهلاك الحدود' : 'Quota usage'}
+        description={
+          locale === 'ar'
+            ? 'العدادات في نوافذها الحالية. لا تُعرض قيمة لبُعد لا توجد له بيانات.'
+            : 'Counters in their current windows. A dimension with no data is not shown with an invented value.'
+        }
+        testId="workspace-quota-usage"
+      >
+        {counters.length === 0 ? (
+          <EmptyState
+            message={
+              locale === 'ar' ? 'لم يُسجَّل استهلاك بعد.' : 'No usage has been recorded yet.'
+            }
+          />
+        ) : (
+          <TableScroll>
+            <table style={tableStyle()}>
+              <thead>
+                <tr>
+                  <th style={thStyle()}>{t('ws.feature')}</th>
+                  <th style={thStyle()}>{locale === 'ar' ? 'المستهلك' : 'Used'}</th>
+                  <th style={thStyle()}>{t('ws.limit')}</th>
+                  <th style={thStyle()}>{locale === 'ar' ? 'تنتهي النافذة' : 'Window ends'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {counters.map((counter) => {
+                  const decision = effective.decisions.find(
+                    (d) => d.featureKey === counter.featureKey,
+                  );
+                  return (
+                    <tr key={counter.featureKey} data-testid={`usage-${counter.featureKey}`}>
+                      <td style={tdStyle()}>{counter.featureKey}</td>
+                      <td style={tdStyle()}>{counter.used}</td>
+                      <td style={tdStyle()}>{decision?.limitValue ?? t('ws.unlimited')}</td>
+                      <td style={tdStyle()}>{counter.periodEnd.toISOString().slice(0, 10)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
+        )}
+      </Card>
+
+      {/* --- Beta cohorts (Phase 3) ----------------------------------- */}
+      {may('platform.entitlement.override') && (
+        <Card
+          title={locale === 'ar' ? 'مجموعات التجربة' : 'Beta cohorts'}
+          description={
+            locale === 'ar'
+              ? 'العضوية سجل في قاعدة البيانات — له مؤلف وسبب وتاريخ — وليست إعدادًا.'
+              : 'Membership is a database row with an author, a reason and a date — not a configuration entry.'
+          }
+          testId="workspace-cohorts"
+        >
+          {cohortMemberships.length === 0 ? (
+            <EmptyState
+              message={
+                locale === 'ar'
+                  ? 'مساحة العمل ليست في أي مجموعة تجربة.'
+                  : 'This workspace is in no beta cohort.'
+              }
+            />
+          ) : (
+            <TableScroll>
+              <table style={tableStyle()}>
+                <thead>
+                  <tr>
+                    <th style={thStyle()}>{locale === 'ar' ? 'المجموعة' : 'Cohort'}</th>
+                    <th style={thStyle()}>{t('ws.reason')}</th>
+                    <th style={thStyle()}>{t('common.created')}</th>
+                    <th style={thStyle()} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {cohortMemberships.map((membership) => (
+                    <tr key={membership.cohortKey} data-testid={`cohort-${membership.cohortKey}`}>
+                      <td style={tdStyle()}>{membership.cohortKey}</td>
+                      <td style={tdStyle()}>{membership.reason}</td>
+                      <td style={tdStyle()}>{membership.addedAt.toISOString().slice(0, 10)}</td>
+                      <td style={tdStyle()}>
+                        <form action={removeCohortAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="workspaceId" value={workspaceId} />
+                          <input type="hidden" name="cohortKey" value={membership.cohortKey} />
+                          <button type="submit" style={secondaryButtonStyle()}>
+                            {locale === 'ar' ? 'إزالة' : 'Remove'}
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
+
+          <form action={addCohortAction} style={{ marginBlockStart: spacingTokens.lg }}>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="workspaceId" value={workspaceId} />
+            <Field label={locale === 'ar' ? 'مفتاح المجموعة' : 'Cohort key'} htmlFor="cohortKey">
+              <input
+                className="bs-control"
+                id="cohortKey"
+                name="cohortKey"
+                required
+                style={inputStyle()}
+                data-testid="cohort-key"
+              />
+            </Field>
+            <Field
+              label={t('ws.reason')}
+              htmlFor="cohort-reason"
+              hint={locale === 'ar' ? '8 أحرف على الأقل.' : 'At least 8 characters.'}
+            >
+              <input
+                className="bs-control"
+                id="cohort-reason"
+                name="reason"
+                required
+                minLength={8}
+                style={inputStyle()}
+                data-testid="cohort-reason"
+              />
+            </Field>
+            <button type="submit" style={primaryButtonStyle()} data-testid="cohort-submit">
+              {locale === 'ar' ? 'إضافة إلى المجموعة' : 'Add to cohort'}
+            </button>
+          </form>
+        </Card>
+      )}
 
       {/* --- Members -------------------------------------------------- */}
       <Card title={t('ws.members')} testId="workspace-members">

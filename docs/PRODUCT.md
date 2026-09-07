@@ -362,6 +362,15 @@ dashboards, health, usage).
 > not a second source of truth.
 >
 > **Pricing is PROVISIONAL** and must be reviewed again before production launch (D-07).
+>
+> **As of Phase 3 (2026-09-07) this page is ENFORCEABLE, not merely descriptive.** Every value below
+> can be entered from Platform Admin at `/console/plans` and `/console/features`, and the
+> configuration validator refuses several of the decisions being contradicted: an Agency plan in
+> either language, a `client_viewer` plan feature, a price table missing a supported currency,
+> postpaid overage while the platform hard-stops, and a downgrade that deletes a customer resource.
+>
+> **No value on this page has been entered into any environment.** Entering provisional prices would
+> look like a launch decision nobody has made. The owner enters them when they are final.
 
 ### 10A.1 The four plans
 

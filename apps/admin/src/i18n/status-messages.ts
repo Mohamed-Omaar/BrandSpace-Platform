@@ -42,6 +42,21 @@ const ERROR_TEXT: Record<PublicErrorCode, { en: string; ar: string }> = {
     en: 'Too many attempts. Wait a moment and try again.',
     ar: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',
   },
+  // Phase 3. An operator acting in the Control Center can hit these three when
+  // they act on behalf of a workspace. The words name the wall, never the plan,
+  // the limit or the price behind it.
+  ENTITLEMENT_REQUIRED: {
+    en: "That workspace's plan does not include this capability.",
+    ar: 'خطة مساحة العمل هذه لا تشمل هذه الإمكانية.',
+  },
+  QUOTA_EXCEEDED: {
+    en: 'That workspace has reached its limit for this action.',
+    ar: 'بلغت مساحة العمل هذه حدّها لهذا الإجراء.',
+  },
+  INSUFFICIENT_CREDITS: {
+    en: 'That workspace does not have enough AI credits for this action.',
+    ar: 'لا تملك مساحة العمل هذه رصيد ذكاء اصطناعي كافيًا لهذا الإجراء.',
+  },
   INTERNAL: {
     en: 'Something went wrong and nothing was changed.',
     ar: 'حدث خطأ ولم يتغيّر شيء.',
@@ -74,9 +89,19 @@ const SUCCESS_TEXT: Record<string, (locale: string, params: URLSearchParams) => 
     // Numbers only, coerced — the URL carries no free-form text.
     const changes = Number(params.get('changes') ?? 0);
     const high = Number(params.get('high') ?? 0);
+    const base =
+      locale === 'ar'
+        ? `صالح. ${changes} تغيير، منها ${high} عالي الأثر.`
+        : `Valid. ${changes} change(s), ${high} high impact.`;
+    // Phase 3: the plan editor also reports who would be pushed over a new
+    // limit (AC-04.5). Absent for every other domain, so the clause only
+    // appears where it means something.
+    const over = params.get('over');
+    if (over === null) return base;
+    const count = Number(over);
     return locale === 'ar'
-      ? `صالح. ${changes} تغيير، منها ${high} عالي الأثر.`
-      : `Valid. ${changes} change(s), ${high} high impact.`;
+      ? `${base} ${count} مساحة عمل تتجاوز حدًا جديدًا.`
+      : `${base} ${count} workspace(s) over a new limit.`;
   },
   VALIDATION_FAILED: (locale, params) => {
     const errors = Number(params.get('errors') ?? 0);
@@ -101,6 +126,18 @@ const SUCCESS_TEXT: Record<string, (locale: string, params: URLSearchParams) => 
   INVITATION_REVOKED: (locale) => (locale === 'ar' ? 'تم إلغاء الدعوة' : 'Invitation revoked'),
   SUPPORT_STARTED: (locale) => (locale === 'ar' ? 'بدأت جلسة الدعم' : 'Support session started'),
   SUPPORT_ENDED: (locale) => (locale === 'ar' ? 'انتهت جلسة الدعم' : 'Support session ended'),
+
+  // --- Phase 3 ---
+  DRAFT_DISCARDED: (locale) => (locale === 'ar' ? 'تم تجاهل المسودة' : 'Draft discarded'),
+  FEATURE_SAVED: (locale) => (locale === 'ar' ? 'تم حفظ الميزة' : 'Feature saved'),
+  FLAG_SAVED: (locale) => (locale === 'ar' ? 'تم حفظ المفتاح' : 'Flag saved'),
+  COHORT_ADDED: (locale) =>
+    locale === 'ar' ? 'تمت إضافة مساحة العمل إلى المجموعة' : 'Workspace added to the cohort',
+  COHORT_REMOVED: (locale) =>
+    locale === 'ar' ? 'تمت إزالة مساحة العمل من المجموعة' : 'Workspace removed from the cohort',
+  TRIAL_STARTED: (locale) => (locale === 'ar' ? 'بدأت التجربة' : 'Trial started'),
+  CREDITS_GRANTED: (locale) => (locale === 'ar' ? 'تمت إضافة الرصيد' : 'Credits granted'),
+  RECONCILED: (locale) => (locale === 'ar' ? 'تمت المطابقة' : 'Reconciliation complete'),
 };
 
 /** Render a success code, or null when the code is not one we emit. */

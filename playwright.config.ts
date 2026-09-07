@@ -141,15 +141,22 @@ export default defineConfig({
   },
 
   projects: [
-    // Two suites sign in and mutate shared state, so neither may run twice
+    // Three suites sign in and mutate shared state, so none may run twice
     // concurrently against one database: the Control Center activates
-    // configuration and stores secrets, and the customer suite accepts a
-    // single-use invitation and edits workspace settings. Each gets its own
-    // serial project and is excluded from the two viewport projects.
+    // configuration and stores secrets, the Phase 3 suite edits the plan and
+    // flag drafts, and the customer suite accepts a single-use invitation and
+    // edits workspace settings. Each runs in a serial project and is excluded
+    // from the two viewport projects.
+    //
+    // `plans-entitlements` shares the `admin-console` project rather than
+    // getting its own: both drive the same signed-in Control Center against the
+    // same configuration drafts, and two serial projects would still run in
+    // parallel WITH EACH OTHER — which is exactly the interleaving the serial
+    // mode exists to prevent.
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -159,12 +166,12 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
       name: 'admin-console',
-      testMatch: /admin-console\.spec\.ts/,
+      testMatch: /(admin-console|plans-entitlements)\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

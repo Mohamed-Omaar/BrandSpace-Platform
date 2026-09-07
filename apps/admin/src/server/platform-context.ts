@@ -14,7 +14,15 @@ import {
   type EmailProvider,
 } from '@brandspace/auth';
 import { ConfigurationService } from '@brandspace/config';
-import { CreditService, EntitlementService } from '@brandspace/entitlements';
+import {
+  BetaCohortService,
+  CreditLedgerService,
+  CreditService,
+  EntitlementService,
+  SubscriptionService,
+  INERT_CREDIT_POLICY,
+  type CreditPolicy,
+} from '@brandspace/entitlements';
 import { SecretService } from '@brandspace/secrets';
 
 /**
@@ -86,6 +94,49 @@ export function getEntitlementService(): EntitlementService {
 
 export function getCreditService(): CreditService {
   return new CreditService({ prisma: getPlatformPrisma() });
+}
+
+/**
+ * Phase 3 services.
+ *
+ * The credit LEDGER needs the `credits` policy domain, because expiry, rollover
+ * and the low-balance thresholds are configuration the owner sets. Reading it
+ * per request rather than caching it here is deliberate: an activated policy
+ * change must take effect without a restart.
+ */
+export async function getCreditLedgerService(): Promise<CreditLedgerService> {
+  return new CreditLedgerService({
+    prisma: getPlatformPrisma(),
+    policy: await getCreditPolicy(),
+  });
+}
+
+/** The active `credits` document, or the inert default. */
+export async function getCreditPolicy(): Promise<CreditPolicy> {
+  const payload = (await getConfigService().get('credits', currentEnvironment())) as Partial<
+    Record<keyof CreditPolicy, unknown>
+  >;
+  return {
+    hardStopAtZero: payload.hardStopAtZero !== false,
+    purchasedPackExpiryMonths: Number(payload.purchasedPackExpiryMonths ?? 0),
+    promotionalExpiryMonths: Number(payload.promotionalExpiryMonths ?? 0),
+    planGrantExpiryMonths: Number(payload.planGrantExpiryMonths ?? 0),
+    consumptionOrder: 'fifo_by_expiry',
+    lowBalanceThresholdPercents: Array.isArray(payload.lowBalanceThresholdPercents)
+      ? (payload.lowBalanceThresholdPercents as number[])
+      : [],
+    reservationTimeoutSeconds: Number(
+      payload.reservationTimeoutSeconds ?? INERT_CREDIT_POLICY.reservationTimeoutSeconds,
+    ),
+  } as CreditPolicy;
+}
+
+export function getSubscriptionService(): SubscriptionService {
+  return new SubscriptionService({ prisma: getPlatformPrisma() });
+}
+
+export function getBetaCohortService(): BetaCohortService {
+  return new BetaCohortService({ prisma: getPlatformPrisma() });
 }
 
 /**

@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { Secret, TOTP } from 'otpauth';
 import { ADMIN_BASE_URL, LOCALES } from './apps';
 import { expectNoHorizontalOverflow } from './overflow';
-import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+// Shared with `plans-entitlements.spec.ts`. One sign-in helper, so the MFA
+// step D-27 requires cannot drift between specs.
+import { credentials, signIn, submitPassword, totpCode } from './admin-session';
 
 /**
  * Platform Admin Control Center — end-to-end.
@@ -22,46 +22,6 @@ import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
 test.describe.configure({ mode: 'serial' });
 
 const BLOCKING_IMPACTS = new Set(['serious', 'critical']);
-
-function credentials(): E2eAdminCredentials {
-  try {
-    return JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials;
-  } catch {
-    throw new Error(
-      `No end-to-end admin credentials at ${E2E_CREDENTIALS_FILE}.\n` +
-        '  Run `pnpm e2e:seed` first (it needs .env.test and a migrated test database).',
-    );
-  }
-}
-
-function totpCode(secret: string): string {
-  return new TOTP({
-    issuer: 'BrandSpace Platform',
-    label: 'e2e',
-    algorithm: 'SHA1',
-    digits: 6,
-    period: 30,
-    secret: Secret.fromBase32(secret),
-  }).generate();
-}
-
-/** Password step only. The resulting session is deliberately NOT usable. */
-async function submitPassword(page: Page, locale: string): Promise<void> {
-  const { email, password } = credentials();
-  await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
-  await page.getByTestId('email').fill(email);
-  await page.getByTestId('password').fill(password);
-  await page.getByTestId('submit').click();
-}
-
-/** Full sign-in: password, then MFA. */
-async function signIn(page: Page, locale = 'en'): Promise<void> {
-  await submitPassword(page, locale);
-  await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/mfa`);
-  await page.getByTestId('mfa-code').fill(totpCode(credentials().totpSecret));
-  await page.getByTestId('submit').click();
-  await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/console`);
-}
 
 /** Press Tab until the element with `testId` has focus. Returns how many. */
 async function tabUntilFocused(page: Page, testId: string, max: number): Promise<number> {
@@ -104,6 +64,7 @@ test.describe('the Control Center is unreachable without a verified session', ()
     '/console/configuration',
     '/console/secrets',
     '/console/plans',
+    '/console/features',
     '/console/audit',
     '/console/health',
   ]) {
@@ -738,6 +699,10 @@ const CONSOLE_PAGES = [
   '/console/routing',
   '/console/flags',
   '/console/plans',
+  // Phase 3. The registry joins the a11y and overflow sweeps like every other
+  // console page — a new screen that nobody checks is how the first blocking
+  // violation ships.
+  '/console/features',
   '/console/audit',
   '/console/health',
 ] as const;

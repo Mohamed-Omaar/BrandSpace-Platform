@@ -109,6 +109,27 @@ const aiCreditRulesSchema = z.object({
 });
 
 // --- Commerce ---------------------------------------------------------------
+
+/**
+ * The six quota dimensions a plan carries (AC-04.2, docs/PRODUCT.md §10A.3).
+ *
+ * The KEYS are code — application code asks `entitlements.limit(ws, 'limit.seats')`
+ * the same way docs/ADMIN-CONTROL-CENTER.md §5.1 has it ask
+ * `entitlements.can(workspace, 'ai.image_generation')`. The VALUES are
+ * configuration and appear nowhere in source, which is what AC-04.3 forbids.
+ *
+ * `null` means unlimited/negotiated — Enterprise, whose numbers are agreed per
+ * contract rather than published.
+ */
+const planQuotasSchema = z.object({
+  seats: z.number().int().positive().nullable().default(null),
+  brands: z.number().int().positive().nullable().default(null),
+  socialAccounts: z.number().int().positive().nullable().default(null),
+  scheduledPostsPerMonth: z.number().int().positive().nullable().default(null),
+  storageGb: z.number().int().positive().nullable().default(null),
+  analyticsRetentionDays: z.number().int().positive().nullable().default(null),
+});
+
 const plansSchema = z.object({
   plans: z
     .array(
@@ -116,6 +137,9 @@ const plansSchema = z.object({
         key: z.string().min(1),
         name: localizedText,
         description: localizedText,
+        /** Ordinal tier. Upgrade/downgrade direction is derived from it. */
+        tier: z.number().int().nonnegative().default(0),
+        badge: localizedText.nullable().default(null),
         visibility: z.enum(['public', 'private', 'legacy']).default('private'),
         status: z.enum(['draft', 'active', 'grandfathered', 'retired']).default('draft'),
         // Prices are owner decisions (D-07). No default is invented here.
@@ -128,9 +152,119 @@ const plansSchema = z.object({
             }),
           )
           .default([]),
+        taxBehavior: z.enum(['inclusive', 'exclusive']).default('exclusive'),
         trialDays: z.number().int().nonnegative().default(0),
+        /** D-09 approved a card-free trial; the field keeps it configurable. */
+        trialRequiresCard: z.boolean().default(false),
+        trialCredits: z.number().int().nonnegative().default(0),
         monthlyCredits: z.number().int().nonnegative().default(0),
+        /**
+         * D-12: monthly plan credits roll over up to ONE monthly allowance.
+         * `capped` with a multiplier of 1 expresses exactly that, and the shape
+         * still admits `none` and `full` without a schema change.
+         */
+        creditRollover: z
+          .object({
+            policy: z.enum(['none', 'capped', 'full']).default('none'),
+            capMultiplier: z.number().min(0).max(12).default(0),
+          })
+          .default({ policy: 'none', capMultiplier: 0 }),
+        quotas: planQuotasSchema.default({}),
+        addOns: z
+          .array(
+            z.object({
+              key: z.string().min(1),
+              name: localizedText,
+              kind: z.enum(['seats', 'brands', 'social_accounts', 'storage_gb', 'credits']),
+              /** Units added per unit purchased. */
+              unitAmount: z.number().int().positive(),
+              prices: z
+                .array(
+                  z.object({
+                    currency: z.string().length(3),
+                    monthlyMinor: z.number().int().nonnegative(),
+                  }),
+                )
+                .default([]),
+            }),
+          )
+          .default([]),
+        /**
+         * D-11: the MVP is `block` on every plan — a hard stop at zero with
+         * prepaid top-ups and NO postpaid overage. The other modes stay in the
+         * schema because the decision is reversible after launch, but
+         * `validatePlans` refuses them while the credit policy says hard-stop.
+         */
+        overagePolicy: z
+          .object({
+            mode: z.enum(['block', 'charge', 'charge_capped']).default('block'),
+            pricePerCreditMinor: z.number().int().nonnegative().default(0),
+            capCredits: z.number().int().nonnegative().nullable().default(null),
+          })
+          .default({ mode: 'block', pricePerCreditMinor: 0, capCredits: null }),
+        upgradeBehavior: z
+          .object({
+            timing: z.enum(['immediate', 'period_end']).default('immediate'),
+            prorate: z.boolean().default(true),
+            creditGrant: z.enum(['full', 'prorated', 'none']).default('prorated'),
+          })
+          .default({ timing: 'immediate', prorate: true, creditGrant: 'prorated' }),
+        /**
+         * D-12: a downgrade NEVER deletes a customer resource. `read_only` is
+         * the only value `validatePlans` accepts for `excessResources`; the
+         * union exists so a future decision is a configuration change rather
+         * than a migration, not so this one can be bypassed.
+         */
+        downgradeBehavior: z
+          .object({
+            timing: z.enum(['immediate', 'period_end']).default('period_end'),
+            excessResources: z.enum(['read_only', 'archive']).default('read_only'),
+            excessCredits: z
+              .enum(['retain_until_expiry', 'forfeit'])
+              .default('retain_until_expiry'),
+          })
+          .default({
+            timing: 'period_end',
+            excessResources: 'read_only',
+            excessCredits: 'retain_until_expiry',
+          }),
         sortOrder: z.number().int().default(0),
+      }),
+    )
+    .default([]),
+});
+
+/**
+ * Credit POLICY — the rules D-11 and D-12 approved, as configuration.
+ *
+ * Separate from `ai.credit-rules`, which prices AI TASKS. Nothing here is
+ * AI-specific: expiry, rollover and thresholds govern the wallet whether or not
+ * a provider ever exists.
+ */
+const creditPolicySchema = z.object({
+  /** D-11. `false` would be postpaid overage, which the MVP does not implement. */
+  hardStopAtZero: z.boolean().default(true),
+  /** D-12. 0 disables expiry for that source. */
+  purchasedPackExpiryMonths: z.number().int().nonnegative().max(120).default(0),
+  promotionalExpiryMonths: z.number().int().nonnegative().max(120).default(0),
+  planGrantExpiryMonths: z.number().int().nonnegative().max(120).default(0),
+  /** D-12: soonest-expiring credits are consumed first. */
+  consumptionOrder: z.literal('fifo_by_expiry').default('fifo_by_expiry'),
+  /** Percentages of the monthly allowance. Default 20% and 5% per §12. */
+  lowBalanceThresholdPercents: z.array(z.number().int().min(0).max(100)).default([]),
+  /** How long an unconfirmed reservation may live before the sweeper releases it. */
+  reservationTimeoutSeconds: z.number().int().positive().max(86_400).default(900),
+});
+
+/** Named beta cohorts. Membership is a tenant-owned database row, not config. */
+const betaCohortsSchema = z.object({
+  cohorts: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        name: localizedText,
+        description: localizedText,
+        status: z.enum(['draft', 'active', 'closed']).default('draft'),
       }),
     )
     .default([]),
@@ -142,9 +276,14 @@ const entitlementsSchema = z.object({
       z.object({
         key: z.string().min(1),
         name: localizedText,
+        /** Grouping for the registry screen only; it decides nothing. */
+        category: z.string().default('general'),
         valueType: z.enum(['boolean', 'quota', 'enum']),
         defaultValue: z.union([z.boolean(), z.number(), z.string(), z.null()]).default(null),
+        /** Allowed values when `valueType` is `enum`. */
+        enumValues: z.array(z.string()).default([]),
         dependsOn: z.array(z.string()).default([]),
+        status: z.enum(['active', 'deprecated']).default('active'),
       }),
     )
     .default([]),
@@ -156,6 +295,8 @@ const entitlementsSchema = z.object({
         enabled: z.boolean(),
         limitValue: z.number().int().nullable().default(null),
         limitPeriod: z.enum(['day', 'month', 'billing_cycle', 'total']).nullable().default(null),
+        /** For `enum` features — e.g. analytics depth basic/full/advanced. */
+        enumValue: z.string().nullable().default(null),
       }),
     )
     .default([]),
@@ -286,6 +427,8 @@ export const CONFIG_DOMAINS = {
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },
   'feature-flags': { schema: featureFlagsSchema, schemaVersion: 1 },
+  credits: { schema: creditPolicySchema, schemaVersion: 1 },
+  'beta-cohorts': { schema: betaCohortsSchema, schemaVersion: 1 },
   'usage-limits': { schema: usageLimitsSchema, schemaVersion: 1 },
   'integrations.email': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.storage': { schema: providerIntegrationSchema(), schemaVersion: 1 },

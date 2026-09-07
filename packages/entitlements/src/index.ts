@@ -6,6 +6,12 @@
  * configuration: no plan name, price or allowance is written in code, because
  * D-06…D-12 are unanswered owner decisions (docs/DECISIONS.md §4.2).
  */
+export * from './beta-cohorts';
+export * from './credit-ledger';
+export * from './credit-policy';
 export * from './credits';
+export * from './plan-catalogue';
 export * from './precedence';
 export * from './service';
+export * from './subscription';
+export * from './usage';

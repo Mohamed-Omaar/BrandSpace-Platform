@@ -229,6 +229,17 @@ workspace · outstanding invoices and aging.
 > Allowances and per-action credit costs (`docs/PRODUCT.md` §10A.5) are **provisional and configurable**.
 > They must **not** be activated as final production economics until Phase 4 validates real provider costs
 > against the required gross margin (D-15).
+>
+> **IMPLEMENTED IN PHASE 3 (2026-09-07).** `reserve → confirm → settle` with `release`, credit
+> buckets consumed FIFO by nearest expiry, the expiry sweep, cycle reset with the rollover cap,
+> trial and promotional grants, low-balance thresholds, the abandoned-reservation sweeper, and
+> reconciliation by replay. All provider-independent: nothing calls an AI provider, prices a task
+> or knows what a model costs. Phase 4 drives these primitives; it does not replace them.
+>
+> **STILL SPECIFICATION.** Everything in Part I above — the payment provider abstraction,
+> checkout, the billing portal, webhooks, invoices, dunning, proration and refunds — is Phase 7.
+> Phase 3 ships `WorkspaceSubscription`, which records the plan, the pinned price, the trial and
+> the cycle, and touches no payment provider at all.
 
 ## 8. Why an Internal Credit Unit
 
@@ -383,12 +394,12 @@ configuration, set by the owner. It is an internal reporting construct — custo
 
 | Test                | Assertion                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------ |
-| Ledger replay       | Replaying all transactions reproduces `currentBalance` exactly                             |
+| Ledger replay       | Replaying all transactions reproduces `currentBalance` exactly — **implemented, Phase 3**  |
 | Failure path        | Failed AI request ⇒ balance unchanged, zero `usage_charge`                                 |
 | Retry               | Same idempotency key twice ⇒ exactly one charge                                            |
 | Concurrency         | 50 parallel requests on a wallet sized for 10 ⇒ exactly 10 charges, balance ≥ 0            |
-| Reservation leak    | Abandoned reservations are released by the sweeper                                         |
-| FIFO expiry         | Soonest-expiring credits are consumed first                                                |
+| Reservation leak    | Abandoned reservations are released by the sweeper — **implemented, Phase 3**              |
+| FIFO expiry         | Soonest-expiring credits are consumed first — **implemented, Phase 3**                     |
 | Reset               | Cycle reset applies the correct rollover policy                                            |
 | Overage             | With overage off, zero balance blocks; with overage on, it charges up to the cap and stops |
 | Webhook idempotency | Duplicate provider events change nothing                                                   |
