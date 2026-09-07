@@ -90,30 +90,38 @@ AI Copilot · automations · public marketing website · creative/image generati
 
 ## 5. Step 4 — Create a Plan
 
-| ID      | Criterion                                                                                                                                                                                       | Method |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| AC-04.1 | The owner creates a plan from Admin with: key, bilingual name, monthly and annual price, currency, trial days, and sort order                                                                   | [E2E]  |
-| AC-04.2 | Plan quotas are settable: users, brands, social accounts, scheduled posts/month, storage GB, analytics retention days                                                                           | [E2E]  |
-| AC-04.3 | **No plan name, price, limit, or trial duration appears anywhere in application source code** — verified by a repository scan in CI                                                             | [SEC]  |
-| AC-04.4 | A plan with an invalid configuration (missing price for a supported currency, negative limit, unknown feature reference) cannot be activated, and the validation report names the exact problem | [INT]  |
-| AC-04.5 | Activation shows an impact preview listing affected workspaces before the owner confirms                                                                                                        | [E2E]  |
-| AC-04.6 | Plan activation writes an audit event with the payload diff and the actor                                                                                                                       | [INT]  |
-| AC-04.7 | Changing the price of an active plan does not change the price of existing subscriptions                                                                                                        | [INT]  |
+| ID       | Criterion                                                                                                                                                                                       | Method     |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| AC-04.1  | The owner creates a plan from Admin with: key, bilingual name, monthly and annual price, currency, trial days, and sort order                                                                   | [E2E]      |
+| AC-04.2  | Plan quotas are settable: users, brands, social accounts, scheduled posts/month, storage GB, analytics retention days                                                                           | [E2E]      |
+| AC-04.3  | **No plan name, price, limit, or trial duration appears anywhere in application source code** — verified by a repository scan in CI                                                             | [SEC]      |
+| AC-04.4  | A plan with an invalid configuration (missing price for a supported currency, negative limit, unknown feature reference) cannot be activated, and the validation report names the exact problem | [INT]      |
+| AC-04.5  | Activation shows an impact preview listing affected workspaces before the owner confirms                                                                                                        | [E2E]      |
+| AC-04.6  | Plan activation writes an audit event with the payload diff and the actor                                                                                                                       | [INT]      |
+| AC-04.7  | Changing the price of an active plan does not change the price of existing subscriptions                                                                                                        | [INT]      |
+| AC-04.8  | The four approved plans — `starter`, `growth`, `scale`, `enterprise` — are creatable with the values in `docs/PRODUCT.md` §10A, entirely from Admin (D-06, D-07, D-10)                          | [E2E]      |
+| AC-04.9  | **No plan named "Agency" and no `client_viewer` plan feature exists in the plan catalogue or any customer-facing surface** (D-62). The stored RBAC key is unchanged; it is simply never sold    | [SEC]      |
+| AC-04.10 | Both SAR and USD price tables are set explicitly per plan, and **no code path FX-converts a display price at runtime** (D-08)                                                                   | [INT][SEC] |
+| AC-04.11 | A trial is 14 days, requires no card, grants 200 credits, and a workspace cannot start a second trial (D-09)                                                                                    | [E2E]      |
 
 ---
 
 ## 6. Step 5 — Configure AI Credits and Feature Access
 
-| ID      | Criterion                                                                                                                                         | Method |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| AC-05.1 | The owner sets the plan's monthly AI credit allowance and rollover policy                                                                         | [E2E]  |
-| AC-05.2 | The owner sets the credit cost for `caption.generate` per model, and the editor displays the implied gross margin at the configured provider cost | [E2E]  |
-| AC-05.3 | The owner enables or disables features per plan (e.g. `ai.content_generation`, `calendar`)                                                        | [E2E]  |
-| AC-05.4 | Enabling a feature whose dependency is disabled is rejected at validation time with the dependency named                                          | [INT]  |
-| AC-05.5 | `entitlements.can(workspace, feature)` returns the correct value for every precedence combination: default, plan, flag rule, workspace override   | [UNIT] |
-| AC-05.6 | The entitlement resolution trace in Admin names which rule decided the effective value                                                            | [E2E]  |
-| AC-05.7 | Percentage rollout is deterministic — the same workspace always resolves the same way for a given rule                                            | [UNIT] |
-| AC-05.8 | A feature kill switch disables the feature for everyone within the cache TTL, overriding all other rules                                          | [INT]  |
+| ID       | Criterion                                                                                                                                                                                     | Method     |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| AC-05.1  | The owner sets the plan's monthly AI credit allowance and rollover policy                                                                                                                     | [E2E]      |
+| AC-05.2  | The owner sets the credit cost for `caption.generate` per model, and the editor displays the implied gross margin at the configured provider cost                                             | [E2E]      |
+| AC-05.3  | The owner enables or disables features per plan (e.g. `ai.content_generation`, `calendar`)                                                                                                    | [E2E]      |
+| AC-05.4  | Enabling a feature whose dependency is disabled is rejected at validation time with the dependency named                                                                                      | [INT]      |
+| AC-05.5  | `entitlements.can(workspace, feature)` returns the correct value for every precedence combination: default, plan, flag rule, workspace override                                               | [UNIT]     |
+| AC-05.6  | The entitlement resolution trace in Admin names which rule decided the effective value                                                                                                        | [E2E]      |
+| AC-05.7  | Percentage rollout is deterministic — the same workspace always resolves the same way for a given rule                                                                                        | [UNIT]     |
+| AC-05.8  | A feature kill switch disables the feature for everyone within the cache TTL, overriding all other rules                                                                                      | [INT]      |
+| AC-05.9  | **`brand.brain`, `ai.strategy`, `ai.copilot` and `ai.content_generation` are enabled on EVERY paid plan** including Starter, and Starter's Copilot is functional rather than read-only (D-63) | [INT]      |
+| AC-05.10 | At zero available credits an AI action is refused with a clear message and a top-up path; **no postpaid overage is charged and no invoice line is created** (D-11)                            | [INT][E2E] |
+| AC-05.11 | Purchased packs expire after 12 months, promotional credits after 3 months, plan credits roll over up to one monthly allowance, and consumption is FIFO by nearest expiry (D-12)              | [INT]      |
+| AC-05.12 | A downgrade leaves resources over the new limit **read-only and undeleted**, and they are restored on re-upgrade                                                                              | [INT][E2E] |
 
 ---
 
@@ -171,30 +179,39 @@ AI Copilot · automations · public marketing website · creative/image generati
 
 ## 11. Step 10 — Customer Completes Basic Brand Brain
 
-| ID      | Criterion                                                                                                                             | Method |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| AC-10.1 | The customer fills at least: identity, audience, tone of voice, and one offer — in Arabic and/or English                              | [E2E]  |
-| AC-10.2 | Brand Brain entries are stored with both `workspaceId` and `brandId`, and a constraint guarantees the brand belongs to that workspace | [INT]  |
-| AC-10.3 | Completion status is shown so the customer knows what is still missing                                                                | [E2E]  |
-| AC-10.4 | Content is stored as localized values, so a third locale would require no schema change                                               | [INT]  |
-| AC-10.5 | Editing an entry increments its version and preserves the previous value for citation integrity                                       | [INT]  |
-| AC-10.6 | `brand_knowledge.updated` audit events exist                                                                                          | [INT]  |
+| ID       | Criterion                                                                                                                                                                                                  | Method |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| AC-10.1  | The customer fills at least: identity, audience, tone of voice, and one offer — in Arabic and/or English                                                                                                   | [E2E]  |
+| AC-10.2  | Brand Brain entries are stored with both `workspaceId` and `brandId`, and a constraint guarantees the brand belongs to that workspace                                                                      | [INT]  |
+| AC-10.3  | Completion status is shown so the customer knows what is still missing                                                                                                                                     | [E2E]  |
+| AC-10.4  | Content is stored as localized values, so a third locale would require no schema change                                                                                                                    | [INT]  |
+| AC-10.5  | Editing an entry increments its version and preserves the previous value for citation integrity                                                                                                            | [INT]  |
+| AC-10.6  | `brand_knowledge.updated` audit events exist                                                                                                                                                               | [INT]  |
+| AC-10.7  | Brand Brain is reachable on **every paid plan**, Starter included — it is the intelligence layer, not a premium add-on (D-63)                                                                              | [E2E]  |
+| AC-10.8  | Entries record which of the four memories they belong to: Canonical Brand Knowledge, Strategy, Content, or Performance/Learning (D-64)                                                                     | [INT]  |
+| AC-10.9  | A human-entered Canonical entry and an inferred learning that contradict each other **both persist**, the human entry wins at retrieval, and the conflict is surfaced rather than silently resolved (D-65) | [INT]  |
+| AC-10.10 | An entry in `proposed` state is **never** returned as retrieval grounding; only `approved` entries ground a generation (D-65)                                                                              | [INT]  |
+
+> **Scope note.** AC-10.8 to AC-10.10 describe the Phase 5 Brand Brain backend. They are recorded now so
+> that phase is built against the principle in `docs/PRODUCT.md` §6A rather than retrofitted to it. They
+> are **not** in the Phase 2C-A or Phase 3 exit criteria.
 
 ---
 
 ## 12. Step 11 — Customer Generates a Content Draft
 
-| ID      | Criterion                                                                                                                                                     | Method     |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| AC-11.1 | The customer requests AI content generation for the brand and sees the **credit cost before confirming**                                                      | [E2E]      |
-| AC-11.2 | The request is authorized against permission, entitlement, and plan limits before any provider call                                                           | [INT]      |
-| AC-11.3 | The request resolves a routing rule and calls the **mock provider** through the adapter interface — no provider SDK is imported outside `packages/ai-gateway` | [INT][SEC] |
-| AC-11.4 | The prompt includes Brand Brain context, and the resulting `ContentItem` records which Brand Brain entries and versions were cited                            | [INT][E2E] |
-| AC-11.5 | The generated draft is created as a `ContentItem` in `draft` status, linked to the `AIRequest` that produced it                                               | [INT]      |
-| AC-11.6 | The API response contains **no** provider API key, no provider raw error, and no internal identifiers beyond the request ID                                   | [INT][SEC] |
-| AC-11.7 | Generation works and produces sensible output in both Arabic and English                                                                                      | [E2E]      |
-| AC-11.8 | If no routing rule resolves, the request fails with a clear configuration error and alerts the owner — the gateway never picks a model on its own             | [INT]      |
-| AC-11.9 | Output is validated against a schema; a malformed provider response is a retryable error and is never persisted                                               | [INT]      |
+| ID      | Criterion                                                                                                                                                                                        | Method     |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| AC-11.1 | The customer requests AI content generation for the brand and sees the **credit cost before confirming**                                                                                         | [E2E]      |
+| AC-11.2 | The request is authorized against permission, entitlement, and plan limits before any provider call                                                                                              | [INT]      |
+| AC-11.3 | The request resolves a routing rule and calls the **mock provider** through the adapter interface — no provider SDK is imported outside `packages/ai-gateway`                                    | [INT][SEC] |
+| AC-11.4 | The prompt includes Brand Brain context, and the resulting `ContentItem` records which Brand Brain entries and versions were cited                                                               | [INT][E2E] |
+| AC-11.5 | The generated draft is created as a `ContentItem` in `draft` status, linked to the `AIRequest` that produced it                                                                                  | [INT]      |
+| AC-11.6 | The API response contains **no** provider API key, no provider raw error, and no internal identifiers beyond the request ID                                                                      | [INT][SEC] |
+| AC-11.7 | Generation works and produces sensible output in both Arabic and English                                                                                                                         | [E2E]      |
+| AC-11.8 | Where a generation proposes a Brand Brain write-back, the proposal carries provenance, evidence, confidence and an approval state, and is **never** committed on the model's own decision (D-65) | [INT][SEC] |
+| AC-11.8 | If no routing rule resolves, the request fails with a clear configuration error and alerts the owner — the gateway never picks a model on its own                                                | [INT]      |
+| AC-11.9 | Output is validated against a schema; a malformed provider response is a retryable error and is never persisted                                                                                  | [INT]      |
 
 ---
 

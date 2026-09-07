@@ -139,7 +139,13 @@ Module boundaries are enforced by lint rules on import paths. A package may not 
   (`margin-inline-start`, not `margin-left`).
 - Numbers, dates, and currency use locale-aware formatting; Arabic uses Western Arabic numerals by default
   (configurable).
-- Brand colors: **Blue `#00ADEE`**, **Yellow `#FFDD15`**. These are design tokens, never literals in components.
+- Brand colours: **Purple `#7935FE`** and **Yellow `#FFDD15`**, on an ink `#111114` and white
+  interface. Purple is the single primary action colour; yellow is an accent and is never used as
+  text without its darkened token. These are design tokens, never literals in components.
+- **`#00ADEE` is a RETIRED legacy identity colour.** It must not appear in new product or marketing
+  UI. The token remains defined so historical decisions stay readable, and nothing consumes it.
+  See D-42, D-60 and D-61 in `docs/DECISIONS.md`; the vendored demo in
+  `docs/visual-reference/full-demo/` is the visual authority and contains no blue at all.
 - Accessibility target: **WCAG 2.2 AA**. Keyboard navigable, correct landmarks, visible focus, adequate contrast.
 - Public website performance target: Lighthouse ≥ 95, LCP < 2.0s, CLS < 0.1 on mid-tier mobile.
 

@@ -77,17 +77,17 @@ interface PaymentProviderAdapter {
 
 All defined in Platform Admin (`docs/ADMIN-CONTROL-CENTER.md` §4), never in code.
 
-| Item                   | Detail                                                                                                                                         |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Subscription plans** | Monthly and annual, per currency; annual typically discounted                                                                                  |
-| **Seats**              | Included seat count + priced additional seats                                                                                                  |
-| **Add-ons**            | Extra brands, extra social accounts, extra storage, extra AI credits, priority support                                                         |
-| **Credit packs**       | One-time purchases, non-expiring or long-expiry                                                                                                |
-| **Overage**            | Optional per-plan, priced per credit, capped                                                                                                   |
-| **Trials**             | Configurable length, card-required or not, trial credits, one trial per workspace (abuse-checked)                                              |
-| **Coupons**            | Percentage or fixed, duration (once / repeating / forever), restricted by plan, country, date, and redemption count                            |
-| **Taxes**              | Inclusive or exclusive per region; VAT number capture and validation for business customers; provider tax engine where available               |
-| **Currencies**         | Configurable list with per-currency price tables. No runtime FX conversion for display prices — each currency has its own explicitly set price |
+| Item                   | Detail                                                                                                                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Subscription plans** | Monthly and annual, per currency; annual typically discounted                                                                                                                            |
+| **Seats**              | Included seat count + priced additional seats                                                                                                                                            |
+| **Add-ons**            | Extra brands, extra social accounts, extra storage, extra AI credits, priority support                                                                                                   |
+| **Credit packs**       | One-time purchases, non-expiring or long-expiry                                                                                                                                          |
+| **Overage**            | Optional per-plan, priced per credit, capped                                                                                                                                             |
+| **Trials**             | Configurable length, card-required or not, trial credits, one trial per workspace (abuse-checked). **Approved: 14 days, no card, 200 credits (D-09)**                                    |
+| **Coupons**            | Percentage or fixed, duration (once / repeating / forever), restricted by plan, country, date, and redemption count                                                                      |
+| **Taxes**              | Inclusive or exclusive per region; VAT number capture and validation for business customers; provider tax engine where available                                                         |
+| **Currencies**         | Configurable list with per-currency price tables. No runtime FX conversion for display prices — each currency has its own explicitly set price. **Approved at launch: SAR + USD (D-08)** |
 
 ---
 
@@ -132,8 +132,9 @@ stateDiagram-v2
   brands over limit, connected accounts over limit, storage over limit.
 - The customer must resolve overages, or choose which resources to deactivate. Nothing is deleted
   automatically — excess resources become read-only/archived and are restored on re-upgrade.
-- Unused credits: rollover per plan policy; excess above the new plan's cap is handled per configuration
-  (retain / expire at period end). The chosen policy is shown before confirming.
+- Unused credits: rollover per plan policy; excess above the new plan's cap is **retained until its own
+  expiry** under the approved policy (D-12), not forfeited at period end. The policy is shown before
+  confirming.
 
 ### 3.4 Cancellation
 
@@ -214,6 +215,20 @@ workspace · outstanding invoices and aging.
 ---
 
 # Part II — AI Credits
+
+> **APPROVED CREDIT POLICY (D-11, D-12), 2026-09-07.** For the MVP:
+>
+> - **Hard stop at zero on every plan.** No postpaid overage and no surprise invoice charges.
+> - **Prepaid top-ups only** — credit packs are bought before they are used.
+> - Purchased packs expire after **12 months**; promotional credits after **3 months**.
+> - Monthly plan credits **roll over up to one monthly allowance**.
+> - Consumption is **FIFO by nearest expiry**.
+> - On downgrade **no customer resource is ever deleted**; resources over the new limit become read-only
+>   and are restored on re-upgrade.
+>
+> Allowances and per-action credit costs (`docs/PRODUCT.md` §10A.5) are **provisional and configurable**.
+> They must **not** be activated as final production economics until Phase 4 validates real provider costs
+> against the required gross margin (D-15).
 
 ## 8. Why an Internal Credit Unit
 
@@ -312,14 +327,14 @@ A sweeper finds reservations older than their request's timeout and releases the
 
 ## 12. Limits, Warnings, Overage
 
-| Control              | Behavior                                                                                                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Low-balance warning  | Configurable thresholds (default 20% and 5%): in-app + email, rate-limited to avoid nagging                                      |
-| Hard limit (default) | At zero available credits, AI actions are refused with a clear message and upgrade/top-up paths. Everything non-AI keeps working |
-| Overage (optional)   | Per-plan opt-in: continue past zero up to a cap, billed on the next invoice; a running total is always visible                   |
-| Per-feature limits   | Independent of the wallet (e.g. 200 images/month) — enforced as entitlement quotas                                               |
-| Per-user limits      | Optional, so one member cannot drain a shared wallet                                                                             |
-| Budget alerts        | Workspace-level daily/monthly burn alerts to the Workspace Owner                                                                 |
+| Control                             | Behavior                                                                                                                                                                           |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Low-balance warning                 | Configurable thresholds (default 20% and 5%): in-app + email, rate-limited to avoid nagging                                                                                        |
+| Hard limit (**MVP: on every plan**) | At zero available credits, AI actions are refused with a clear message and upgrade/top-up paths. Everything non-AI keeps working                                                   |
+| Overage                             | **NOT IMPLEMENTED FOR THE MVP (D-11).** No postpaid overage, no surprise invoice charges. Prepaid top-ups only. The mechanism below is retained as a possible post-launch addition |
+| Per-feature limits                  | Independent of the wallet (e.g. 200 images/month) — enforced as entitlement quotas                                                                                                 |
+| Per-user limits                     | Optional, so one member cannot drain a shared wallet                                                                                                                               |
+| Budget alerts                       | Workspace-level daily/monthly burn alerts to the Workspace Owner                                                                                                                   |
 
 ---
 

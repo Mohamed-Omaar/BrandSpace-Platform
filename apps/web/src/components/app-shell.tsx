@@ -43,7 +43,14 @@ export function AppShell({
           marginInline: 'auto',
         }}
       >
-        <h1 style={{ color: colorTokens.brandBlueText }} data-testid="heading">
+        {/*
+         * D-61 retired the legacy blue and extended the purple identity to the
+         * public marketing site, closing the carve-out D-42 had left open. The
+         * heading carries the identity colour here exactly as it did before;
+         * only the colour changed. `brandPurple` reaches 5.60:1 on the surface,
+         * which `brandBlue` never did — that is why `brandBlueText` existed.
+         */}
+        <h1 style={{ color: colorTokens.brandPurple }} data-testid="heading">
           {heading}
         </h1>
         <p data-testid="description">{description}</p>

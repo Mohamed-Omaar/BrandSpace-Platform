@@ -200,6 +200,59 @@ describe('applications hold no colour literals', () => {
  * when the border was doing the work. They are fixed, and this test is why the
  * next one cannot ship.
  */
+describe('the retired legacy blue is defined but never used', () => {
+  /**
+   * THE RULE THIS ENFORCES: D-61. Purple `#7935FE` is the brand colour
+   * everywhere — the public marketing site included — and `#00ADEE` is a
+   * RETIRED legacy identity colour that must not appear in new product or
+   * marketing UI.
+   *
+   * The token stays DEFINED on purpose. A-20 and A11Y-1 are dated decisions
+   * that name it, and deleting the token would make that history unreadable
+   * while doing nothing the rule below does not already do.
+   *
+   * The vendored demo that is the visual authority (D-60) contains zero
+   * occurrences of the blue across all ten of its files, including its own
+   * `.public-*` marketing screens. That is what closed the carve-out D-42 had
+   * left open.
+   */
+  const SOURCE_DIRECTORIES = ['apps/dashboard/src', 'apps/admin/src', 'apps/web/src'];
+  const files = SOURCE_DIRECTORIES.flatMap(collectSourceFiles);
+
+  it('the token is still defined, so the historical decisions stay readable', () => {
+    expect(colorTokens.brandBlue).toBe('#00ADEE');
+  });
+
+  it('no application file references any brandBlue token', () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      for (const [index, line] of read(file).split('\n').entries()) {
+        if (line.trimStart().startsWith('*') || line.trimStart().startsWith('//')) continue;
+        if (/\bbrandBlue[A-Za-z]*\b/.test(line)) {
+          offenders.push(`${file}:${index + 1}`);
+        }
+      }
+    }
+    expect(offenders, 'D-61 retired the legacy blue; these files still use it').toEqual([]);
+  });
+
+  it('the design system itself uses it only to define it', () => {
+    // `packages/ui` may DEFINE the token and document it. What it may not do is
+    // consume it in a component, which is what would put blue back on screen.
+    const uiFiles = collectSourceFiles('packages/ui/src').filter(
+      (file) => !file.endsWith('tokens.ts'),
+    );
+    const offenders: string[] = [];
+    for (const file of uiFiles) {
+      for (const [index, line] of read(file).split('\n').entries()) {
+        if (line.trimStart().startsWith('*') || line.trimStart().startsWith('//')) continue;
+        if (/colorTokens\.brandBlue/.test(line)) offenders.push(`${file}:${index + 1}`);
+      }
+    }
+    expect(offenders, 'a component consumes the retired blue').toEqual([]);
+  });
+});
+
 describe('every form control carries the class that makes it visible', () => {
   const controlPattern = /<(input|textarea|select)\b((?:[^<>]|\{[^{}]*\})*?)\/?>/gs;
 
