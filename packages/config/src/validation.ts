@@ -31,15 +31,33 @@ export interface ValidationReport {
 /** Other domains' currently-active payloads, for cross-domain checks. */
 export type ConfigContext = Partial<Record<ConfigDomain, unknown>>;
 
-function structural(domain: ConfigDomain, payload: unknown): ValidationIssue[] {
+interface StructuralResult {
+  readonly issues: ValidationIssue[];
+  /**
+   * The payload with every schema default applied.
+   *
+   * Stage 2 runs against THIS rather than the raw document. An absent optional
+   * field is `undefined` in the raw document and its default — usually `null` —
+   * in the parsed one, and a semantic rule that compares against `null` would
+   * otherwise fire on every document that simply omitted the field. That is not
+   * hypothetical: it is exactly what made "a boolean feature takes no limit"
+   * reject a plan that had never mentioned a limit at all.
+   */
+  readonly parsed: unknown;
+}
+
+function structural(domain: ConfigDomain, payload: unknown): StructuralResult {
   const schema = CONFIG_DOMAINS[domain].schema as z.ZodTypeAny;
   const result = schema.safeParse(payload);
-  if (result.success) return [];
-  return result.error.issues.map((issue) => ({
-    severity: 'error' as const,
-    path: issue.path.join('.') || '(root)',
-    message: issue.message,
-  }));
+  if (result.success) return { issues: [], parsed: result.data };
+  return {
+    issues: result.error.issues.map((issue) => ({
+      severity: 'error' as const,
+      path: issue.path.join('.') || '(root)',
+      message: issue.message,
+    })),
+    parsed: payload,
+  };
 }
 
 interface ModelLike {
@@ -494,10 +512,12 @@ export function validateConfiguration(
   payload: unknown,
   context: ConfigContext = {},
 ): ValidationReport {
-  const structuralIssues = structural(domain, payload);
+  const { issues: structuralIssues, parsed } = structural(domain, payload);
   // Semantic checks assume a well-formed document, so they only run once the
-  // structure holds — otherwise every error would be reported twice.
-  const semanticIssues = structuralIssues.length === 0 ? semantic(domain, payload, context) : [];
+  // structure holds — otherwise every error would be reported twice. They run
+  // against the PARSED document, so a field the author omitted is seen as its
+  // default rather than as `undefined`.
+  const semanticIssues = structuralIssues.length === 0 ? semantic(domain, parsed, context) : [];
   const issues = [...structuralIssues, ...semanticIssues];
   return {
     valid: issues.every((i) => i.severity !== 'error'),

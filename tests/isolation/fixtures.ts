@@ -26,6 +26,13 @@ export interface TenantFixture {
   readonly emailMessageId: string;
   readonly customerSessionId: string;
   readonly passwordResetTokenId: string;
+  // --- Phase 3 ---
+  readonly subscriptionId: string;
+  readonly creditGrantId: string;
+  readonly creditReservationId: string;
+  readonly usageCounterId: string;
+  readonly usageEventId: string;
+  readonly cohortMembershipId: string;
 }
 
 export interface IsolationFixtures {
@@ -378,6 +385,70 @@ async function createTenant(
           actorId: platformUserId,
         },
       });
+      // --- Phase 3 rows. Same rule: every one carries the tenant key and is a
+      // direct target for the cross-tenant assertions the D-29 gate demands.
+      const subscription = await db.workspaceSubscription.create({
+        data: {
+          workspaceId: id,
+          planKey: `fixture-plan-${slug}`,
+          status: 'ACTIVE',
+          currency: 'SAR',
+          pinnedMonthlyMinor: 1000,
+          pinnedAnnualMinor: 10_000,
+          pinnedMonthlyCredits: 100,
+          currentPeriodStart: new Date(Date.now() - 3600_000),
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600_000),
+        },
+      });
+      const creditGrant = await db.creditGrant.create({
+        data: {
+          workspaceId: id,
+          walletId: wallet.id,
+          source: 'ADMIN_ADJUSTMENT',
+          amountMilliCredits: 5000n,
+          remainingMilliCredits: 5000n,
+          sourceTransactionId: creditTransaction.id,
+          reason: `fixture grant bucket ${slug}`,
+        },
+      });
+      const creditReservation = await db.creditReservation.create({
+        data: {
+          workspaceId: id,
+          walletId: wallet.id,
+          idempotencyKey: `fixture-reservation-${slug}`,
+          estimateMilliCredits: 1000n,
+          allocations: [{ grantId: creditGrant.id, milliCredits: '1000' }],
+          purpose: 'fixture.task',
+          expiresAt: new Date(Date.now() + 3600_000),
+        },
+      });
+      const usageCounter = await db.usageCounter.create({
+        data: {
+          workspaceId: id,
+          featureKey: 'limit.scheduled_posts',
+          periodStart: new Date(Date.UTC(2026, 0, 1)),
+          periodEnd: new Date(Date.UTC(2026, 1, 1)),
+          usedValue: 3,
+        },
+      });
+      const usageEvent = await db.usageEvent.create({
+        data: {
+          workspaceId: id,
+          featureKey: 'limit.scheduled_posts',
+          idempotencyKey: `fixture-usage-${slug}`,
+          amount: 3,
+          counterId: usageCounter.id,
+        },
+      });
+      const cohortMembership = await db.betaCohortMembership.create({
+        data: {
+          workspaceId: id,
+          cohortKey: `fixture-cohort-${slug}`,
+          addedByPlatformUserId: platformUserId,
+          reason: `fixture cohort ${slug}`,
+        },
+      });
+
       const emailMessage = await db.emailMessage.create({
         data: {
           workspaceId: id,
@@ -421,6 +492,12 @@ async function createTenant(
         emailMessageId: emailMessage.id,
         customerSessionId: customerSession.id,
         passwordResetTokenId: resetToken.id,
+        subscriptionId: subscription.id,
+        creditGrantId: creditGrant.id,
+        creditReservationId: creditReservation.id,
+        usageCounterId: usageCounter.id,
+        usageEventId: usageEvent.id,
+        cohortMembershipId: cohortMembership.id,
       };
     },
     { prisma, bootstrap: true },

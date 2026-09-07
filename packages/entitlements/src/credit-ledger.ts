@@ -428,19 +428,37 @@ export class CreditLedgerService {
       const chargedTotal = allocationTotal(charged);
 
       let running = wallet.balanceMilliCredits;
+      const chargeByGrant = new Map(charged.map((a) => [a.grantId, a.milliCredits]));
 
-      for (const allocation of charged) {
-        running -= allocation.milliCredits;
+      // ONE update per bucket, moving `remaining` and `reserved` TOGETHER.
+      //
+      // They cannot be two updates. The invariant is `reserved <= remaining`,
+      // enforced by a CHECK constraint, and charging a bucket lowers `remaining`
+      // while the hold is still counted — so a bucket whose whole remainder is
+      // both held and spent transiently violates it and the write is refused.
+      // That is not a constraint to relax: it is the constraint doing its job,
+      // and the fix is to make the two movements atomic, which they always
+      // logically were.
+      for (const allocation of frozen) {
+        const charge = chargeByGrant.get(allocation.grantId) ?? 0n;
         await tx.creditGrant.update({
           where: { id: allocation.grantId },
-          data: { remainingMilliCredits: { decrement: allocation.milliCredits } },
+          data: {
+            // The hold is released in full — including the part just charged,
+            // which is no longer reserved because it is now spent.
+            reservedMilliCredits: { decrement: allocation.milliCredits },
+            ...(charge > 0n ? { remainingMilliCredits: { decrement: charge } } : {}),
+          },
         });
+
+        if (charge <= 0n) continue;
+        running -= charge;
         await tx.creditTransaction.create({
           data: {
             workspaceId: reservation.workspaceId,
             walletId: wallet.id,
             type: 'USAGE_CHARGE',
-            amountMilliCredits: -allocation.milliCredits,
+            amountMilliCredits: -charge,
             balanceAfterMilliCredits: running,
             reason,
             idempotencyKey: `${reservation.idempotencyKey}:settle:${allocation.grantId}`,
@@ -450,15 +468,6 @@ export class CreditLedgerService {
             sourceGrantId: allocation.grantId,
             reservationId: reservation.id,
           },
-        });
-      }
-
-      // Release every bucket's hold in full — including the part just charged,
-      // which is no longer reserved because it is now spent.
-      for (const allocation of frozen) {
-        await tx.creditGrant.update({
-          where: { id: allocation.grantId },
-          data: { reservedMilliCredits: { decrement: allocation.milliCredits } },
         });
       }
 
