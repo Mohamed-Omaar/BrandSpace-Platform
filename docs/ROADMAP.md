@@ -82,7 +82,7 @@ bilingual UI — are proven before any feature exists.
 5. **Authorization** — permission registry, role definitions, route contract middleware, the generated
    route/permission report.
 6. **Audit** — `AuditEvent` writer, redaction layer, activity log query API.
-7. **Design system** — `packages/ui` with tokens (`#00ADEE`, `#FFDD15`), typography for Arabic and Latin,
+7. **Design system** — `packages/ui` with tokens (`#7935FE`, `#FFDD15`), typography for Arabic and Latin,
    RTL/LTR primitives, accessible base components, dark/light readiness.
 8. **i18n** — message catalogues, typed keys, locale routing, RTL layout verification in E2E.
 9. **App shells** — `apps/web`, `apps/dashboard`, `apps/admin` with routing, layout, and auth wiring only.
@@ -174,12 +174,16 @@ alias blocks, extend the mobile record-list shape to the console tables, and dec
 
 ## Phase 3 — Plans, Entitlements and Credits
 
-> **Status after Phase 2B.** The owner approved pulling the entitlement and credit
+> **Status after Phase 2C-A.** The owner approved pulling the entitlement and credit
 > MACHINERY forward into 2B (D-40), with no commercial data: the precedence engine,
 > workspace overrides, the credit wallet and its immutable ledger all ship. What
 > remains for Phase 3 is the plan EDITOR, the remaining flag targeting surfaces,
-> reserve/settle primitives for AI, quota enforcement, and — above all — the owner
-> decisions D-06…D-12 that give the plans their names, prices and allowances.
+> reserve/settle primitives for AI, and quota enforcement.
+>
+> **D-06 … D-12 are now ANSWERED** (2026-09-07). Four plans — Starter, Growth, Scale,
+> Enterprise — with approved provisional prices, limits, trial terms and credit policy.
+> The values live in `docs/PRODUCT.md` §10A and are **configuration, never source**.
+> Phase 3 is unblocked on the commercial decisions; it has not been authorised to start.
 
 **Goal:** commercial rules are data, and credit accounting is provably correct — before any AI exists.
 
@@ -199,7 +203,7 @@ alias blocks, extend the mobile record-list shape to the console tables, and dec
 
 ### Exit criteria
 
-- [~] Owner creates a plan with prices, limits, features, and credits — with no code change — **partially (2B)**; plans are configuration and the schema exists, but the plan EDITOR is Phase 3 and D-06…D-12 are unanswered, so no tier, price or allowance is defined
+- [~] Owner creates a plan with prices, limits, features, and credits — with no code change — **partially (2B)**; plans are configuration and the schema exists, and D-06…D-12 now define four tiers with prices, limits and allowances. The plan EDITOR is Phase 3, and no value has been entered into any environment
 - [x] Assigning a plan to a workspace changes what that workspace can do, immediately — **done (2B)**
 - [x] The entitlement trace explains every effective value — **done (2B)**; the same call decides and explains
 - [~] A feature flag can target by plan, workspace, beta group, country, date range, and percentage — and roll back — **engine done (2B)**, all nine precedence levels implemented and tested; the flag EDITOR and beta-cohort membership are Phase 3
@@ -249,6 +253,11 @@ alias blocks, extend the mobile record-list shape to the console tables, and dec
 1. **Brand Center** — create/edit brands, brand kit, logos, palette, typography, voice.
 2. **Brand Brain** — structured sections (bilingual), document upload, chunking, embeddings via
    `brand.retrieve`, retrieval with citations, staleness handling.
+   **Built against the principle and the four-memory architecture in `docs/PRODUCT.md` §6A** (D-63, D-64):
+   Canonical Brand Knowledge · Strategy Memory · Content Memory · Performance/Learning Memory, with
+   provenance, evidence, confidence, approval state, versioning, reproducibility, and human precedence
+   over inferred learnings (D-65). Brand Brain is in **every paid plan** — it is the intelligence layer,
+   not a premium add-on.
 3. **AI Content Studio** — caption/idea generation, per-platform variants, rewrite/shorten/expand/tone,
    ar↔en translation with glossary preservation, credit cost shown before generation.
 4. **Asset Library** — upload with pre-signed URLs, virus scanning, derivatives, folders, tags, versions.

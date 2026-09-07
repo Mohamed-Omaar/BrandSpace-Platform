@@ -54,20 +54,26 @@ performance — in Arabic and English — without stitching together five tools.
 
 ## 2. Target Customers and Personas
 
-| Persona                    | Primary need                                             | Shape of usage                                                                    |
-| -------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Individual founder**     | Look professional without a marketing team               | 1 workspace, 1 brand, 1 user, heavy AI reliance                                   |
-| **Startup**                | Consistent output with 2–5 people, fast iteration        | 1 workspace, 1–2 brands, light approvals                                          |
-| **Company marketing team** | Process, roles, approvals, reporting to leadership       | 1 workspace, 1–3 brands, formal approval chains, analysts                         |
-| **Creator**                | Volume of content, personal brand voice, scheduling      | 1 workspace, 1 brand, mobile-heavy, calendar-centric                              |
-| **Agency**                 | Many client brands, separation, client-visible reporting | Many workspaces (or many brands), the read-only Viewer role, white-label interest |
-| **Enterprise team**        | Security, SSO, audit, data residency, retention control  | 1 workspace, many brands, strict RBAC, export and audit needs                     |
+| Persona                    | Primary need                                            | Shape of usage                                                |
+| -------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| **Individual founder**     | Look professional without a marketing team              | 1 workspace, 1 brand, 1 user, heavy AI reliance               |
+| **Startup**                | Consistent output with 2–5 people, fast iteration       | 1 workspace, 1–2 brands, light approvals                      |
+| **Company marketing team** | Process, roles, approvals, reporting to leadership      | 1 workspace, 1–3 brands, formal approval chains, analysts     |
+| **Creator**                | Volume of content, personal brand voice, scheduling     | 1 workspace, 1 brand, mobile-heavy, calendar-centric          |
+| **Multi-brand company**    | Several owned brands under one roof, shared team        | 1 workspace, many brands, shared assets and approvals         |
+| **Enterprise team**        | Security, SSO, audit, data residency, retention control | 1 workspace, many brands, strict RBAC, export and audit needs |
+
+> **MVP SCOPE (D-62).** BrandSpace is for **businesses, founders, in-house brand teams and multi-brand
+> companies**. It is **not an agency operating system** in the current scope: there is no Agency plan, no
+> client portal, no client hand-off workflow, no white-labelling, and the read-only Viewer role is not
+> offered or promoted as a plan feature. Agency capability is possible **future expansion**, recorded in
+> §11.1 and deliberately outside the MVP. This narrows A-20's sibling assumption A-22.
 
 ### 2.1 Persona → capability mapping
 
 - Founder / Creator lean on **AI Content Studio**, **Social Calendar**, **Smart Analytics**.
 - Marketing teams lean on **AI Strategy**, **Campaigns**, **Team & Approvals**, **Marketing Intelligence**.
-- Agencies lean on **multi-workspace switching**, the read-only **Viewer**, **Asset Library**, **Automations**.
+- Multi-brand companies lean on **many brands in one workspace**, **Asset Library**, **Automations**.
 - Enterprises lean on **RBAC depth**, **Audit Log**, **retention/export controls**, **SSO (future)**.
 
 ---
@@ -137,8 +143,10 @@ Marketing surface: fast, SEO-strong, bilingual, CMS-driven where content changes
 - **Performance budget:** LCP < 2.0s, INP < 200ms, CLS < 0.1, JS < 150KB gzip on marketing routes.
 - **Accessibility:** WCAG 2.2 AA; brand yellow `#FFDD15` is never used as text on white without a darkened
   token — contrast pairings are defined in the design system.
-- **Design language:** clean, premium, generous whitespace, blue `#00ADEE` as primary action color,
-  yellow `#FFDD15` as accent/highlight only.
+- **Design language:** clean, premium, generous whitespace, purple `#7935FE` as the single primary
+  action colour, yellow `#FFDD15` as accent/highlight only, on an ink `#111114` and white interface.
+  This applies to the public website as well as the applications (D-61). The legacy identity blue
+  `#00ADEE` is retired and must not be used.
 
 ---
 
@@ -220,6 +228,68 @@ system gets better at the specific brand over time.
 
 ---
 
+## 6A. Brand Brain — the intelligence and memory layer
+
+> **NON-NEGOTIABLE PRINCIPLE (D-63, D-64).**
+>
+> **Brand Brain is the intelligence and memory layer for the entire BrandSpace workspace. Relevant AI
+> tasks retrieve from it before generation, and meaningful approved outputs, strategies, campaigns,
+> content decisions and performance learnings can feed back into it.**
+
+This is the product's differentiator, not a premium feature. **Every paid plan receives the real Brand
+Brain, a functional AI Copilot, and AI Strategy.** Plans differ by capacity — brands, credits, storage,
+seats, analytics depth and retention, automation capacity, and governance controls — and never by removing
+the intelligence layer. Starter's Copilot is **functional**, governed by its credit and usage limits; it is
+not a read-only preview of one.
+
+### 6A.1 The loop
+
+```mermaid
+flowchart LR
+  BB[Brand Brain] --> ST[AI Strategy]
+  ST --> CG[Content Generation]
+  CG --> CAL[Calendar / Publishing]
+  CAL --> AN[Analytics]
+  AN --> LR[Learnings]
+  LR --> BB
+```
+
+Read on the way out, write on the way back. Both directions matter: a system that only reads from Brand
+Brain is a retrieval feature, and a system that writes back without safeguards compounds its own errors.
+
+### 6A.2 The four memories (future architecture)
+
+Separated deliberately, because they have different truth conditions, different lifetimes, and different
+authority.
+
+| Memory                            | What it holds                                                                                                     | Written by                                           | Authority                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Canonical Brand Knowledge**     | Identity, audience, tone, offers, do/don't, FAQ, competitors, glossary — what the customer states about the brand | Humans, and uploaded documents the customer supplies | **Highest.** A human-entered rule always outranks an inferred learning   |
+| **Strategy Memory**               | Approved strategies, pillars, monthly plans, channel mix, and the reasoning behind them                           | AI proposal → human approval                         | High, but revisable — a strategy is a decision, not a fact               |
+| **Content Memory**                | What was actually produced and published, in which variant, for which channel, and what was rejected              | The content pipeline, on approval and on publish     | Factual record; never inferred                                           |
+| **Performance / Learning Memory** | What performed, what did not, and the inferences drawn from it                                                    | Analytics ingestion, then inference                  | **Lowest.** Always inferred, always evidenced, never overrides the above |
+
+### 6A.3 Requirements for write-back (future, D-65)
+
+No learning enters Brand Brain without all of these. They are recorded now so Phases 4–7 are built against
+them rather than retrofitted to them.
+
+| Requirement          | What it means                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Provenance**       | Every entry records where it came from: which human, which document, which analytics window, which AI request                                 |
+| **Evidence**         | An inferred learning cites the specific data that supports it, and the citation is inspectable by the customer                                |
+| **Confidence**       | Inferences carry a confidence value, and low-confidence entries are proposals rather than knowledge                                           |
+| **Approval state**   | `proposed` → `approved` → `active`. Nothing an AI infers becomes grounding until a human approves it                                          |
+| **Versioning**       | Entries are versioned, never silently overwritten. The previous value stays readable                                                          |
+| **Reproducibility**  | A generation can be replayed against the exact Brand Brain state it used, so an output can be explained after the fact                        |
+| **Human precedence** | Where a human-entered rule and an inferred learning conflict, the human rule wins, and the conflict is surfaced rather than resolved silently |
+
+**Scheduling.** The Brand Brain BACKEND — schema, chunking, embeddings, retrieval, write-back — remains
+**Phase 5** (`docs/ROADMAP.md`). This section is specification, not implementation. The approved visual
+reference is `docs/visual-reference/full-demo/brand-brain-preview.index.html` (D-60).
+
+---
+
 ## 7. Customer Lifecycle
 
 1. **Discover** — public website, SEO, templates gallery.
@@ -284,6 +354,106 @@ dashboards, health, usage).
 
 ---
 
+## 10A. Plans and What Each One Unlocks
+
+> **Every value on this page is CONFIGURATION, set from Platform Admin.** `AC-04.3` fails the build if a
+> plan name, price, limit or trial duration appears in application source. The numbers here are the
+> owner's approved starting values (D-06…D-12), recorded so the product and the configuration agree —
+> not a second source of truth.
+>
+> **Pricing is PROVISIONAL** and must be reviewed again before production launch (D-07).
+
+### 10A.1 The four plans
+
+| Plan           | Key          | For                                             |
+| -------------- | ------------ | ----------------------------------------------- |
+| **Starter**    | `starter`    | Individual founders and very small businesses   |
+| **Growth**     | `growth`     | Growing businesses and in-house marketing teams |
+| **Scale**      | `scale`      | Larger or multi-brand businesses                |
+| **Enterprise** | `enterprise` | Negotiated requirements                         |
+
+There is no Agency plan and no Client Viewer feature (D-62).
+
+### 10A.2 Price and trial
+
+|               | Starter                                          | Growth       | Scale        | Enterprise |
+| ------------- | ------------------------------------------------ | ------------ | ------------ | ---------- |
+| Monthly (USD) | $29                                              | $79          | $199         | Custom     |
+| Monthly (SAR) | SAR 109                                          | SAR 299      | SAR 749      | Custom     |
+| Annual        | 10 × monthly (two months free)                   | 10 × monthly | 10 × monthly | Custom     |
+| Trial         | 14 days, no card, 200 credits, one per workspace | same         | same         | Negotiated |
+
+Currencies at launch: **SAR and USD**, each with its own explicitly set price table. **No runtime FX
+conversion** (D-08). There is no permanent free plan at launch (D-09).
+
+### 10A.3 Limits
+
+The six dimensions `AC-04.2` requires a plan to carry.
+
+| Limit                   | Starter | Growth    | Scale     | Enterprise |
+| ----------------------- | ------- | --------- | --------- | ---------- |
+| Seats                   | 2       | 8         | 20        | Negotiated |
+| Brands                  | 1       | 3         | 10        | Negotiated |
+| Social accounts         | 3       | 12        | 40        | Negotiated |
+| Scheduled posts / month | 100     | 500       | 2,000     | Negotiated |
+| Storage                 | 5 GB    | 50 GB     | 250 GB    | Negotiated |
+| Analytics retention     | 90 days | 12 months | 24 months | Negotiated |
+
+### 10A.4 What each plan unlocks
+
+Feature keys are the identifiers the entitlements engine resolves. **Brand Brain, AI Strategy and a
+functional Copilot are in every paid plan** — plans differ by capacity, not by removing the intelligence
+layer (D-63).
+
+| Capability                                       | Feature key             | Starter | Growth |  Scale   | Enterprise |
+| ------------------------------------------------ | ----------------------- | :-----: | :----: | :------: | :--------: |
+| **Brand Brain**                                  | `brand.brain`           |   ✅    |   ✅   |    ✅    |     ✅     |
+| **AI Strategy**                                  | `ai.strategy`           |   ✅    |   ✅   |    ✅    |     ✅     |
+| **AI Copilot** (functional, credit-governed)     | `ai.copilot`            |   ✅    |   ✅   |    ✅    |     ✅     |
+| **AI content generation**                        | `ai.content_generation` |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Brand Center**                                 | `brand.center`          |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Social Calendar**                              | `calendar`              |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Publishing** _(from Phase 6)_                  | `publishing`            |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Asset Library**                                | `assets.library`        |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Settings · Activity · Notifications**          | —                       |   ✅    |   ✅   |    ✅    |     ✅     |
+| **Analytics**                                    | `analytics.smart`       |  Basic  |  Full  | Advanced |  Advanced  |
+| **Team approvals**                               | `approvals.workflow`    |   ❌    |   ✅   |    ✅    |     ✅     |
+| **AI image generation**                          | `ai.image_generation`   |   ❌    |   ✅   |    ✅    |     ✅     |
+| **Campaigns**                                    | `campaigns`             |   ❌    |   ✅   |    ✅    |     ✅     |
+| **Marketing Intelligence**                       | `intelligence.market`   |   ❌    |   ❌   |    ✅    |     ✅     |
+| **Automations**                                  | `automations`           |   ❌    |   ❌   |    ✅    |     ✅     |
+| **Advanced governance**                          | `governance.advanced`   |   ❌    |   ❌   |    ✅    |     ✅     |
+| **SSO / SAML**                                   | `security.sso`          |   ❌    |   ❌   |    ❌    |     ✅     |
+| **BYOK** _(where supported)_                     | `ai.byok`               |   ❌    |   ❌   |    ❌    |     ✅     |
+| **Custom limits, security and support controls** | —                       |   ❌    |   ❌   |    ❌    |     ✅     |
+
+**Starter is a complete product, not a demo.** It has the brand's intelligence, its strategy, a working
+Copilot, content generation, a calendar and publishing. What it does not have is a second person to
+approve things, image generation, campaign structure, and headroom. The three upgrade triggers follow
+from that: Starter → Growth when a second person needs to approve; Growth → Scale at the fourth brand or
+the first automation; Scale → Enterprise on SSO, BYOK or a negotiated volume.
+
+### 10A.5 Credits
+
+**Provisional and configurable** (D-07, D-11, D-12). These allowances and action costs must **not** be
+activated as final production economics until Phase 4 validates real provider costs against the required
+gross margin (D-15).
+
+|                 | Starter | Growth | Scale | Enterprise |
+| --------------- | ------- | ------ | ----- | ---------- |
+| Monthly credits | 500     | 2,000  | 6,000 | Negotiated |
+
+- **Hard stop at zero on every plan.** AI actions refuse with a clear message; everything non-AI keeps
+  working. **No postpaid overage and no surprise invoice charges** (D-11).
+- **Prepaid top-ups only.** Credit packs are purchased before they are used.
+- Purchased packs expire after **12 months**; promotional credits after **3 months**.
+- Monthly plan credits **roll over up to one monthly allowance**.
+- Consumption is **FIFO by nearest expiry**.
+- On downgrade, **no customer resource is ever deleted** — resources over the new limit become read-only
+  and are restored on re-upgrade. Excess credits above the new cap are retained until their own expiry.
+
+---
+
 ## 11. Product Constraints and Assumptions
 
 - Bilingual from day one; adding a third language must not require schema change (locale-keyed values).
@@ -292,3 +462,16 @@ dashboards, health, usage).
 - Social platform APIs change; connectors must be independently versioned and independently disableable.
 - AI providers change pricing and availability; the routing layer must switch models without a code release.
 - The product must remain usable when AI is degraded or a provider is down (manual paths always exist).
+
+### 11.1 Possible future expansion — explicitly outside the MVP
+
+Recorded so the ideas are not lost and not mistaken for scope. None of these is planned, scheduled, or
+promised; each would need its own owner decision (D-62).
+
+| Idea                                | Why it is out of MVP scope                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Agency operating mode**           | Client portals, client-visible reporting and hand-off workflows are a different product shape from the in-house brand team this MVP serves |
+| **White-labelling**                 | Logo-only, custom domain, or full brand removal — U-04 deferred it pending real agency demand                                              |
+| **Client Viewer as a sold feature** | The `client_viewer` RBAC key remains in the role catalogue and is unchanged; it is simply not offered or promoted as a plan feature        |
+| **Postpaid overage**                | D-11 chose hard-stop-plus-top-up for the MVP; postpaid billing can be added once customers have a usage history to reason about            |
+| **Custom workspace roles**          | U-07 — the fixed role set is enough at launch                                                                                              |

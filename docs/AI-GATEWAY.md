@@ -462,7 +462,24 @@ sequenceDiagram
 
 ---
 
-## 14. Brand Brain Retrieval
+## 14. Brand Brain Retrieval and Write-Back
+
+> **NON-NEGOTIABLE PRINCIPLE (D-63, D-64).**
+>
+> **Brand Brain is the intelligence and memory layer for the entire BrandSpace workspace. Relevant AI
+> tasks retrieve from it before generation, and meaningful approved outputs, strategies, campaigns,
+> content decisions and performance learnings can feed back into it.**
+>
+> The loop: **Brand Brain → AI Strategy → Content Generation → Calendar/Publishing → Analytics →
+> Learnings → Brand Brain.** The full principle, the four-memory architecture and the write-back
+> requirements are in `docs/PRODUCT.md` §6A; this section is the gateway's side of it.
+
+**The gateway reads on the way out and writes on the way back.** §14.1 is retrieval, which Phase 5
+implements. §14.2 is write-back, which is specification only — but it is recorded here now because a
+gateway that only reads is a different system from one that also writes, and the difference shows up in
+the schema, not in the prompt.
+
+### 14.1 Retrieval
 
 1. **Ingest:** documents are chunked with overlap, embedded via `brand.retrieve`, and stored in
    `BrandKnowledge` with `workspaceId` and `brandId`.
@@ -473,6 +490,24 @@ sequenceDiagram
    "based on: Tone of Voice v3, Audience v2" so output is explainable and correctable.
 5. **Re-embed:** when the embedding model changes, affected rows are marked `stale` and re-embedded by a
    background job; retrieval never mixes embedding spaces.
+
+### 14.2 Write-back (specification only — Phase 5+)
+
+The gateway may propose entries into Brand Brain from approved outputs, campaign decisions and analytics
+learnings. **No proposal becomes grounding until it satisfies all seven requirements (D-65):**
+
+| Requirement          | Gateway obligation                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Provenance**       | The proposing `AIRequest` id, the model, the task key and the analytics window are recorded on the entry                                                      |
+| **Evidence**         | The specific rows or metrics that support the inference are cited and inspectable by the customer                                                             |
+| **Confidence**       | The inference carries a confidence value; below the configured threshold it is a suggestion, not a proposal                                                   |
+| **Approval state**   | `proposed` → `approved` → `active`. A proposal is **never retrieved as grounding** while unapproved                                                           |
+| **Versioning**       | An approved entry supersedes rather than overwrites; the previous version stays readable                                                                      |
+| **Reproducibility**  | A generation can be replayed against the exact Brand Brain state it used, via the recorded version set                                                        |
+| **Human precedence** | Where an inferred learning contradicts human-entered Canonical Brand Knowledge, **the human rule wins** and the conflict is surfaced, never resolved silently |
+
+Write-back is a **high-impact action** under §12: the Copilot may propose and preview it, and it is never
+committed on the model's own decision. It writes an `AuditEvent` like every other state change.
 
 ---
 
@@ -490,6 +525,9 @@ sequenceDiagram
 | Budget                | Workspace daily cap reached ⇒ blocked before the provider is called                                     |
 | Model disable         | Disabling a model makes routing to it fail immediately, even mid-session                                |
 | Isolation             | Workspace A's request can never retrieve B's Brand Brain chunks                                         |
+| Unapproved grounding  | A `proposed` Brand Brain entry is never returned as retrieval grounding                                 |
+| Human precedence      | An inferred learning contradicting human-entered knowledge does not override it; the conflict surfaces  |
+| Write-back provenance | Every written entry carries its `AIRequest` id, evidence citations and confidence, or the write fails   |
 | Copilot authorization | A Content Creator's Copilot cannot invoke a publish tool                                                |
 | Ledger integrity      | Replaying all transactions reproduces the wallet balance exactly                                        |
 | Moderation            | Blocked input/output ⇒ no charge, clear status                                                          |

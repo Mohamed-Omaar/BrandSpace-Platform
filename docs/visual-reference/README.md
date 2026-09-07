@@ -36,6 +36,20 @@ authority**. Where the two disagree, `full-demo/` wins — including on the four
 departures the old README recorded, which were re-derived against the full
 demo's own values (see below) rather than carried over.
 
+## The palette this demo defines
+
+Measured from the snapshot itself, not from memory:
+
+| Colour | Occurrences | Role |
+| --- | --- | --- |
+| Purple `#7935FE` | 4 (the `--purple` root variable) | The single primary action colour |
+| Yellow `#FFDD15` | 6 (the `--yellow` root variable) | Accent and highlight only |
+| Ink `#111114` and white `#FFF` | 33+ | The interface itself |
+| Blue `#00ADEE` | **0, in all ten files** | Not part of this design |
+
+The demo's own `.public-*` marketing screens use the same purple, yellow and white. That is the evidence
+behind **D-61**: the brand is purple everywhere, the marketing site included, and `#00ADEE` is retired.
+
 ## Rules for this directory
 
 - **Never edited, formatted or linted.** It is excluded from ESLint and from

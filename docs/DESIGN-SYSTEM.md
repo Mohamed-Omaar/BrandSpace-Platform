@@ -71,7 +71,14 @@ into a client component. The shell takes serialisable nav items — an href, a l
 
 ## 2. Colour
 
-**Approved brand colours** — purple `#7935FE` primary, yellow `#FFDD15` accent, white ground (D-42, D-49).
+**Approved brand colours** — purple `#7935FE` primary, yellow `#FFDD15` accent, ink `#111114` and white
+carrying the interface (D-42, D-49, **D-61**).
+
+**`#00ADEE` is a RETIRED legacy identity colour.** D-61 closed the carve-out that had kept it for the
+public marketing site: the brand is purple everywhere, the marketing site included. `brandBlue` and its
+derived tokens remain **defined** so the historical decisions A-20 and A11Y-1 stay readable, and are
+consumed by no application file. The vendored demo that is the visual authority (D-60) contains no blue
+at all — zero occurrences across all ten files, including its own `.public-*` marketing screens.
 
 | Use                                    | Token                                                           | Rule                                                        |
 | -------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -139,8 +146,8 @@ control boundary, and `danger` at `#D92D20` scored 4.44:1 against its own tint �
 was the one part of it that failed. Both were darkened.
 
 The tests also assert what a colour must **not** do, because a token that quietly becomes legible is a
-token somebody starts using as text: the identity blue and the accent yellow are asserted to _fail_ as
-text on white.
+token somebody starts using as text: the retired legacy blue and the accent yellow are asserted to _fail_
+as text on white.
 
 ---
 
@@ -493,7 +500,7 @@ caveat — "the compatibility-layer pages inherit the tokens but their layouts h
   invented figures deliberately not reproduced — see §12 below.
 - **Every remaining route**, captured at 1:1 under `docs/visual-review/` and reviewed. Fixed on the
   way: three more invisible form controls on the customer settings page (F-38); two Control Center
-  pages that defined their own primary button in the **public marketing site's identity blue**; the
+  pages that defined their own primary button in the **legacy identity blue** (retired by D-61); the
   last hand-rolled `<h1>`; and sixteen hard-coded font sizes across both applications.
 - **The calendar → post details → composer chain**, wired for real inside the gated showcase (§9).
 

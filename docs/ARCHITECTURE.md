@@ -111,7 +111,7 @@ tradeoffs are stated so alternatives can be chosen deliberately.
 - _Why Tailwind + Radix:_ Tailwind has native RTL support via logical properties and `rtl:` variants, which
   matters enormously for Arabic. Radix gives accessible, unstyled primitives so WCAG 2.2 AA is achievable
   without fighting a component library's opinions.
-- _Design system:_ `packages/ui` owns tokens (colors incl. `#00ADEE` / `#FFDD15`, spacing, typography with an
+- _Design system:_ `packages/ui` owns tokens (colours incl. `#7935FE` / `#FFDD15`, spacing, typography with an
   Arabic-capable font pairing), primitives, and composed patterns. Direction-agnostic by construction.
 - _State/data:_ TanStack Query for server state; minimal client state. Forms via React Hook Form + Zod resolvers.
 - _Tradeoff:_ Next.js couples us to its rendering model and upgrade cadence. Accepted — the alternative
