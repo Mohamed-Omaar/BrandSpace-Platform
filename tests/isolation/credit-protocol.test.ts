@@ -172,6 +172,44 @@ describe('granting credits', () => {
     expect(plan.expiresAt).toBeNull();
   });
 
+  it('creates the wallet on first movement, even under a race', async () => {
+    // A workspace whose first credit movement arrives from several requests at
+    // once. `ON CONFLICT DO NOTHING` rather than a caught unique violation: a
+    // failed statement aborts the surrounding PostgreSQL transaction, so the
+    // catch would leave every later statement in that transaction failing.
+    const run = crypto.randomUUID();
+    const user = await platform.user.create({
+      data: { email: `race-${run}@example.local`, name: 'Race Fixture', status: 'ACTIVE' },
+    });
+    const workspace = await platform.workspace.create({
+      data: {
+        id: run,
+        workspaceId: run,
+        slug: `race-${run.slice(0, 12)}`,
+        name: 'Race Fixture Workspace',
+        ownerUserId: user.id,
+        status: 'ACTIVE',
+      },
+    });
+    // Deliberately NO wallet.
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, i) =>
+        ledger.grant({
+          workspaceId: workspace.id,
+          source: 'PROMOTIONAL_GRANT',
+          credits: 10,
+          reason: 'concurrent first movement',
+          idempotencyKey: `first-${workspace.id}-${i}`,
+        }),
+      ),
+    );
+
+    expect(attempts.every((a) => a.status === 'fulfilled')).toBe(true);
+    expect(await balanceOf(workspace.id)).toBe(50n * MILLI_PER_CREDIT);
+    expect(await platform.creditWallet.count({ where: { workspaceId: workspace.id } })).toBe(1);
+  });
+
   it('refuses a non-positive grant', async () => {
     const workspaceId = await freshWorkspace();
     await expect(

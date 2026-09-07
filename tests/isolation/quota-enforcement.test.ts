@@ -182,6 +182,41 @@ describe('idempotency', () => {
     expect(second.used).toBe(1);
   });
 
+  it('a retry that RACES the first call still reports success, not an error', async () => {
+    // Both calls see no idempotency record, both enter a transaction, one loses
+    // the unique key. The work was recorded exactly once — so the loser must
+    // report the current state rather than surfacing a failure for work that
+    // actually succeeded. Twenty at once, so the race is real rather than hoped
+    // for.
+    const workspaceId = await freshWorkspace();
+    const key = `race-ok-${workspaceId}`;
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 20 }, () =>
+        usage.consume({
+          workspaceId,
+          featureKey: 'limit.scheduled_posts',
+          limitValue: 100,
+          period: 'month',
+          idempotencyKey: key,
+        }),
+      ),
+    );
+
+    const rejected = attempts.filter((a) => a.status === 'rejected');
+    expect(
+      rejected.map((a) => String((a as PromiseRejectedResult).reason)),
+      'a raced retry surfaced an error for work that succeeded',
+    ).toEqual([]);
+    const final = await usage.consumption({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 100,
+      period: 'month',
+    });
+    expect(final.used).toBe(1);
+  });
+
   it('a retry at the limit does not refuse — the work was already recorded', async () => {
     // The nasty case: the request succeeded, the response was lost, the client
     // retried, and the workspace is now exactly at its limit. Refusing would

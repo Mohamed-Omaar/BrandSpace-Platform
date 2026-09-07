@@ -855,7 +855,7 @@ export class CreditLedgerService {
    * row, so two concurrent spends cannot both act on the same starting balance.
    */
   async #lockWallet(
-    tx: Pick<PrismaClient, '$queryRaw' | 'creditWallet'>,
+    tx: Pick<PrismaClient, '$queryRaw' | '$executeRaw' | 'creditWallet'>,
     workspaceId: string,
   ): Promise<LockedWallet> {
     const locked = await tx.$queryRaw<LockedWallet[]>`
@@ -874,7 +874,16 @@ export class CreditLedgerService {
 
     // A workspace that predates the wallet model, or one whose first credit
     // movement is this one.
-    await tx.creditWallet.create({ data: { workspaceId } });
+    //
+    // `ON CONFLICT DO NOTHING` rather than a `create` in a try/catch: a failed
+    // statement ABORTS the surrounding PostgreSQL transaction, so catching the
+    // unique violation would leave every later statement failing with "current
+    // transaction is aborted". Two concurrent first movements therefore both
+    // proceed, and the re-read below gives each the row that exists.
+    await tx.$executeRaw`
+      INSERT INTO "credit_wallet" ("id", "workspaceId", "updatedAt")
+      VALUES (gen_random_uuid(), ${workspaceId}::uuid, now())
+      ON CONFLICT ("workspaceId") DO NOTHING`;
     const created = await tx.$queryRaw<LockedWallet[]>`
       SELECT "id",
              "balanceMilliCredits",

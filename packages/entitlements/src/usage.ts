@@ -182,12 +182,13 @@ export class UsageService {
       });
     }
 
-    const used = await this.#prisma.$transaction(async (tx) => {
-      // ONE statement: the limit is in the WHERE, so the check and the
-      // increment cannot be separated by another transaction.
-      const rows =
-        input.limitValue === null
-          ? await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+    const used = await this.#prisma
+      .$transaction(async (tx) => {
+        // ONE statement: the limit is in the WHERE, so the check and the
+        // increment cannot be separated by another transaction.
+        const rows =
+          input.limitValue === null
+            ? await tx.$queryRaw<{ usedValue: number; id: string }[]>`
               INSERT INTO "usage_counter"
                 ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
               VALUES
@@ -197,7 +198,7 @@ export class UsageService {
               DO UPDATE SET "usedValue" = "usage_counter"."usedValue" + ${amount},
                             "updatedAt" = now()
               RETURNING "usedValue", "id"`
-          : await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+            : await tx.$queryRaw<{ usedValue: number; id: string }[]>`
               INSERT INTO "usage_counter"
                 ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
               VALUES
@@ -209,52 +210,69 @@ export class UsageService {
               WHERE "usage_counter"."usedValue" + ${amount} <= ${input.limitValue}
               RETURNING "usedValue", "id"`;
 
-      const row = rows[0];
-      if (!row) {
-        // No row came back: the WHERE refused the update, so the workspace is
-        // at or over its limit. The INSERT path cannot refuse, because a first
-        // use above the limit is caught by the guard below.
-        const current = await tx.usageCounter.findUnique({
-          where: {
-            workspaceId_featureKey_periodStart: {
-              workspaceId: input.workspaceId,
-              featureKey: input.featureKey,
-              periodStart: window.start,
+        const row = rows[0];
+        if (!row) {
+          // No row came back: the WHERE refused the update, so the workspace is
+          // at or over its limit. The INSERT path cannot refuse, because a first
+          // use above the limit is caught by the guard below.
+          const current = await tx.usageCounter.findUnique({
+            where: {
+              workspaceId_featureKey_periodStart: {
+                workspaceId: input.workspaceId,
+                featureKey: input.featureKey,
+                periodStart: window.start,
+              },
             },
+            select: { usedValue: true },
+          });
+          throw new QuotaExceededError(
+            input.featureKey,
+            input.limitValue ?? 0,
+            current?.usedValue ?? 0,
+          );
+        }
+
+        // A brand new counter is created by the INSERT branch, which the WHERE
+        // does not guard. Refusing here keeps "first use already over the limit"
+        // consistent with every later refusal, and the transaction rolls the
+        // insert back.
+        if (input.limitValue !== null && row.usedValue > input.limitValue) {
+          throw new QuotaExceededError(input.featureKey, input.limitValue, row.usedValue);
+        }
+
+        // The idempotency record, in the SAME transaction. A retry that got past
+        // the pre-check above races here instead, violates the unique key, and
+        // rolls the increment back with it.
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.idempotencyKey,
+            amount,
+            counterId: row.id,
+            occurredAt: now,
           },
-          select: { usedValue: true },
         });
-        throw new QuotaExceededError(
-          input.featureKey,
-          input.limitValue ?? 0,
-          current?.usedValue ?? 0,
-        );
-      }
 
-      // A brand new counter is created by the INSERT branch, which the WHERE
-      // does not guard. Refusing here keeps "first use already over the limit"
-      // consistent with every later refusal, and the transaction rolls the
-      // insert back.
-      if (input.limitValue !== null && row.usedValue > input.limitValue) {
-        throw new QuotaExceededError(input.featureKey, input.limitValue, row.usedValue);
-      }
-
-      // The idempotency record, in the SAME transaction. A retry that got past
-      // the pre-check above races here instead, violates the unique key, and
-      // rolls the increment back with it.
-      await tx.usageEvent.create({
-        data: {
+        return row.usedValue;
+      })
+      .catch(async (error: unknown) => {
+        // A retry that RACED the pre-check above lands here instead: both calls
+        // saw no idempotency record, both entered a transaction, and one lost the
+        // unique key. The work was recorded exactly once, which is the guarantee
+        // — so the loser reports the current state rather than an error. Without
+        // this, an ordinary duplicate submit surfaces as a failure for work that
+        // actually succeeded.
+        if (!isDuplicateIdempotencyKey(error)) throw error;
+        const current = await this.consumption({
           workspaceId: input.workspaceId,
           featureKey: input.featureKey,
-          idempotencyKey: input.idempotencyKey,
-          amount,
-          counterId: row.id,
-          occurredAt: now,
-        },
+          limitValue: input.limitValue,
+          period: input.period,
+          cycle: input.cycle ?? null,
+        });
+        return current.used;
       });
-
-      return row.usedValue;
-    });
 
     return {
       featureKey: input.featureKey,
@@ -335,4 +353,39 @@ export class UsageService {
       periodEnd: r.periodEnd,
     }));
   }
+}
+
+/**
+ * Is this the unique violation on `usage_event.idempotencyKey`?
+ *
+ * Matched STRUCTURALLY, never on a message. Prisma reports a unique violation
+ * as `P2002`, but where it names the offending constraint depends on the
+ * driver: the pg adapter nests it under
+ * `meta.driverAdapterError.cause.constraint.index`, while the classic engine
+ * puts the column list in `meta.target`. Both are checked, so upgrading one
+ * does not silently turn a handled duplicate back into a 500.
+ *
+ * Any other error is rethrown. Swallowing them would turn a genuine write
+ * failure into a silently successful no-op, which is the worse bug.
+ */
+function isDuplicateIdempotencyKey(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    meta?: {
+      target?: unknown;
+      driverAdapterError?: { cause?: { constraint?: { index?: unknown } } };
+    };
+  };
+  if (candidate.code !== 'P2002') return false;
+
+  const named: string[] = [];
+  const target = candidate.meta?.target;
+  if (Array.isArray(target)) named.push(...target.map(String));
+  else if (target !== undefined && target !== null) named.push(String(target));
+
+  const index = candidate.meta?.driverAdapterError?.cause?.constraint?.index;
+  if (index !== undefined && index !== null) named.push(String(index));
+
+  return named.some((field) => field.includes('idempotencyKey'));
 }
