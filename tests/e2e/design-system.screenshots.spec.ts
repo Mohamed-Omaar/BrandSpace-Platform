@@ -253,6 +253,8 @@ test.describe('visual review evidence', () => {
       ['51-admin-secrets', '/console/secrets'],
       ['52-admin-flags', '/console/flags'],
       ['53-admin-plans', '/console/plans'],
+      // Phase 3.
+      ['53b-admin-features', '/console/features'],
       ['54-admin-providers', '/console/providers'],
       ['55-admin-ai-models', '/console/ai-models'],
       ['56-admin-routing', '/console/routing'],
@@ -284,6 +286,67 @@ test.describe('visual review evidence', () => {
       await expect(page.getByTestId('heading')).toBeVisible();
       await captureViewport(page, name);
     }
+  });
+
+  /*
+   * PHASE 3, IN BOTH DIRECTIONS AND BOTH SIZES.
+   *
+   * The plan editor, the feature registry and the flag targeting surface are
+   * the densest forms in the product — a price table that grows a column per
+   * currency, a matrix that grows a column per plan. Density is exactly where
+   * RTL mirroring and a 390px viewport break, so these three are captured in
+   * Arabic and on a phone as well as the desktop sweep above.
+   */
+  test('the Phase 3 screens in Arabic', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signInAdmin(page, 'ar');
+
+    const routes = [
+      ['70-admin-plans-ar', '/console/plans'],
+      ['71-admin-features-ar', '/console/features'],
+      ['72-admin-flags-ar', '/console/flags'],
+    ] as const;
+
+    for (const [name, route] of routes) {
+      await page.goto(`${ADMIN_BASE_URL}/ar${route}`);
+      await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+      await captureSections(page, name);
+    }
+  });
+
+  test('the Phase 3 screens on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInAdmin(page, 'en');
+
+    const routes = [
+      ['73-admin-plans-mobile', '/console/plans'],
+      ['74-admin-features-mobile', '/console/features'],
+      ['75-admin-flags-mobile', '/console/flags'],
+    ] as const;
+
+    for (const [name, route] of routes) {
+      await page.goto(`${ADMIN_BASE_URL}/en${route}`);
+      await expect(page.getByTestId('heading')).toBeVisible();
+      await captureViewport(page, name);
+    }
+  });
+
+  test('the customer Plan & Usage screen, both directions and a phone', async ({ page }) => {
+    await signInCustomer(page, 'en');
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/plan`);
+    await expect(page.getByTestId('plan-card')).toBeVisible();
+    await captureSections(page, '76-customer-plan-en');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/plan`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await captureSections(page, '77-customer-plan-ar');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/plan`);
+    await expect(page.getByTestId('plan-card')).toBeVisible();
+    await captureViewport(page, '78-customer-plan-mobile');
   });
 
   test('the design showcase — full page, in readable sections', async ({ page }) => {
