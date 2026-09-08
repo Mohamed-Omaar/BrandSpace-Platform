@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
+import { hashPassword } from './password';
 
 /**
  * Workspace invitations — docs/SECURITY.md §3, docs/DATABASE.md §10.
@@ -207,6 +208,17 @@ export interface AcceptedInvitation {
   readonly workspaceId: string;
   readonly membershipId: string;
   readonly roleKey: string;
+}
+
+/**
+ * Acceptance by somebody who did not have an account a moment ago — A-2.
+ *
+ * Carries the user id so the caller can start a session: the whole point is
+ * that the invitee arrives with no identity and leaves signed in, without an
+ * administrator having pre-created anything.
+ */
+export interface OnboardedInvitation extends AcceptedInvitation {
+  readonly userId: string;
 }
 
 export interface InvitationServiceOptions {
@@ -471,65 +483,182 @@ export class InvitationService {
         throw new AppError('NOT_FOUND', INVITATION_FAILURE);
       }
 
-      await setRedemptionScope(tx, { workspaceId: found.workspaceId });
-      const workspace = await tx.workspace.findUnique({ where: { id: found.workspaceId } });
-      const role = await tx.role.findUnique({ where: { id: found.roleId } });
-      if (!workspace || !role) throw new AppError('NOT_FOUND', INVITATION_FAILURE);
-      const invitation = { ...found, workspace, role };
+      return this.#acceptFor(tx, { found, tokenHash, now, userId: acceptingUserId });
+    });
+  }
 
-      if (!['TRIALING', 'ACTIVE', 'PAST_DUE'].includes(invitation.workspace.status)) {
+  /**
+   * The acceptance itself, shared by both entry points.
+   *
+   * ONE implementation on purpose. `accept` and `acceptAsNewUser` differ only
+   * in how the identity is established; the single-use consumption, the
+   * workspace-status check, the membership and the audit event must be
+   * identical, and a second copy of them is a second place for the atomicity to
+   * drift. The caller has already read the invitation under the token scope and
+   * established who is accepting.
+   */
+  async #acceptFor(
+    tx: PrismaClient,
+    ctx: {
+      readonly found: { id: string; workspaceId: string; roleId: string; brandScope: unknown };
+      readonly tokenHash: string;
+      readonly now: Date;
+      readonly userId: string;
+    },
+  ): Promise<AcceptedInvitation> {
+    const { found, tokenHash, now, userId } = ctx;
+
+    await setRedemptionScope(tx, { workspaceId: found.workspaceId });
+    const workspace = await tx.workspace.findUnique({ where: { id: found.workspaceId } });
+    const role = await tx.role.findUnique({ where: { id: found.roleId } });
+    if (!workspace || !role) throw new AppError('NOT_FOUND', INVITATION_FAILURE);
+
+    if (!['TRIALING', 'ACTIVE', 'PAST_DUE'].includes(workspace.status)) {
+      throw new AppError('NOT_FOUND', INVITATION_FAILURE);
+    }
+
+    // THE atomic step. Exactly one row may move PENDING -> ACCEPTED, so of
+    // two concurrent acceptances one gets count 0 and fails.
+    const consumed = await tx.invitation.updateMany({
+      where: { tokenHash, status: 'PENDING', expiresAt: { gt: now } },
+      data: { status: 'ACCEPTED', acceptedAt: now, acceptedByUserId: userId },
+    });
+    if (consumed.count !== 1) {
+      throw new AppError('NOT_FOUND', INVITATION_FAILURE);
+    }
+
+    const membership = await tx.membership.upsert({
+      where: { workspaceId_userId: { workspaceId: found.workspaceId, userId } },
+      create: {
+        workspaceId: found.workspaceId,
+        userId,
+        roleId: found.roleId,
+        brandScope: found.brandScope as never,
+        status: 'ACTIVE',
+        acceptedAt: now,
+      },
+      update: {
+        roleId: found.roleId,
+        brandScope: found.brandScope as never,
+        status: 'ACTIVE',
+        acceptedAt: now,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        workspaceId: found.workspaceId,
+        actorType: 'USER',
+        actorId: userId,
+        action: 'workspace.invitation.accepted',
+        resourceType: 'invitation',
+        resourceId: found.id,
+        severity: 'NOTICE',
+        outcome: 'SUCCESS',
+        after: { roleKey: role.key },
+      },
+    });
+
+    return {
+      workspaceId: found.workspaceId,
+      membershipId: membership.id,
+      roleKey: role.key,
+    };
+  }
+
+  /**
+   * Accept an invitation as somebody who has no account yet — A-2.
+   *
+   * THE GAP THIS CLOSES. `accept` requires an already-authenticated identity,
+   * and there is no sign-up route: a customer application is entered by
+   * invitation, not by self-registration. So a genuinely new invitee reached
+   * the acceptance page, was told to sign in, and had nothing to sign in with.
+   * The journey only worked if an administrator had already created the `User`
+   * row by hand — which is not a product, it is a workaround that the
+   * end-to-end suite had encoded by pre-seeding the invitee.
+   *
+   * WHY THE TOKEN IS PROOF OF THE ADDRESS. The invitation was delivered to the
+   * invited address and its raw value exists nowhere else — the database holds
+   * only a SHA-256 hash. Presenting it therefore demonstrates control of that
+   * mailbox, which is the same evidence a verification email provides. The
+   * identity created here is marked verified for exactly that reason, and for
+   * no weaker one: the address is never taken from user input, only ever from
+   * the invitation row.
+   *
+   * WHAT IS PRESERVED, DELIBERATELY:
+   *
+   *   - THE UNIFORM FAILURE. Every refusal — bad token, expired, revoked,
+   *     already accepted, workspace suspended, or an address that already has
+   *     a usable account — is the same message. In particular the last one:
+   *     branching on "you already have an account" would turn a stolen link
+   *     into an account-existence oracle for the invited address.
+   *   - THE ATOMIC SINGLE-USE ACCEPTANCE. The same one-row conditional UPDATE,
+   *     in the same transaction as the identity it creates. Two concurrent
+   *     onboardings of one link produce one member and one account.
+   *   - THE SCOPE DISCIPLINE. Identity work happens with NO workspace scope
+   *     (the `user` policy permits an insert only there); the membership and
+   *     audit writes happen under the workspace scope, as ordinary tenant
+   *     writes. Acceptance never runs under the widened token scope.
+   */
+  async acceptAsNewUser(token: string, password: string): Promise<OnboardedInvitation> {
+    const tokenHash = hashInvitationToken(token);
+    const now = this.#clock.now();
+
+    /*
+     * Hashed BEFORE the transaction, for the reason the password-reset path
+     * documents: Argon2id is deliberately slow, and a rejected password must
+     * not have cost a row lock — or, worse, consumed the invitation.
+     */
+    const passwordHash = await hashPassword(password);
+
+    return inRedemptionTransaction(this.#prisma, async (tx) => {
+      await setRedemptionScope(tx, { invitationTokenHash: tokenHash });
+      const found = await tx.invitation.findUnique({ where: { tokenHash } });
+      if (!found) throw new AppError('NOT_FOUND', INVITATION_FAILURE);
+
+      // No workspace scope: the `user` policy allows a read of a global
+      // identity, and an INSERT, only when no workspace context is set.
+      await setRedemptionScope(tx, {});
+      const email = found.email.trim().toLowerCase();
+      const existing = await tx.user.findUnique({ where: { email } });
+
+      /*
+       * AN ACCOUNT THAT CAN ALREADY SIGN IN IS NOT ONBOARDED HERE. Setting a
+       * password on it would be an account takeover by anyone holding a
+       * forwarded link. Refused with the ordinary failure message so the
+       * refusal itself reveals nothing; the page offers signing in alongside
+       * this form, which is the route such a person should take.
+       */
+      if (existing && existing.passwordHash !== null) {
+        throw new AppError('NOT_FOUND', INVITATION_FAILURE);
+      }
+      if (existing && (existing.status === 'DELETED' || existing.deletedAt !== null)) {
         throw new AppError('NOT_FOUND', INVITATION_FAILURE);
       }
 
-      // THE atomic step. Exactly one row may move PENDING -> ACCEPTED, so of
-      // two concurrent acceptances one gets count 0 and fails.
-      const consumed = await tx.invitation.updateMany({
-        where: { tokenHash, status: 'PENDING', expiresAt: { gt: now } },
-        data: { status: 'ACCEPTED', acceptedAt: now, acceptedByUserId: acceptingUserId },
-      });
-      if (consumed.count !== 1) {
-        throw new AppError('NOT_FOUND', INVITATION_FAILURE);
-      }
+      const user = existing
+        ? await tx.user.update({
+            where: { id: existing.id },
+            data: {
+              passwordHash,
+              status: 'ACTIVE',
+              emailVerifiedAt: existing.emailVerifiedAt ?? now,
+              failedLoginCount: 0,
+              lockedUntil: null,
+            },
+          })
+        : await tx.user.create({
+            data: {
+              // From the INVITATION, never from user input.
+              email,
+              passwordHash,
+              status: 'ACTIVE',
+              emailVerifiedAt: now,
+            },
+          });
 
-      const membership = await tx.membership.upsert({
-        where: {
-          workspaceId_userId: { workspaceId: invitation.workspaceId, userId: acceptingUserId },
-        },
-        create: {
-          workspaceId: invitation.workspaceId,
-          userId: acceptingUserId,
-          roleId: invitation.roleId,
-          brandScope: invitation.brandScope,
-          status: 'ACTIVE',
-          acceptedAt: now,
-        },
-        update: {
-          roleId: invitation.roleId,
-          brandScope: invitation.brandScope,
-          status: 'ACTIVE',
-          acceptedAt: now,
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          workspaceId: invitation.workspaceId,
-          actorType: 'USER',
-          actorId: acceptingUserId,
-          action: 'workspace.invitation.accepted',
-          resourceType: 'invitation',
-          resourceId: invitation.id,
-          severity: 'NOTICE',
-          outcome: 'SUCCESS',
-          after: { roleKey: invitation.role.key },
-        },
-      });
-
-      return {
-        workspaceId: invitation.workspaceId,
-        membershipId: membership.id,
-        roleKey: invitation.role.key,
-      };
+      const accepted = await this.#acceptFor(tx, { found, tokenHash, now, userId: user.id });
+      return { ...accepted, userId: user.id };
     });
   }
 

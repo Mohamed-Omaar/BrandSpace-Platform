@@ -332,6 +332,33 @@ async function seedCustomerEstate(
     },
   });
 
+  /*
+   * A SECOND INVITATION, TO AN ADDRESS WITH NO ACCOUNT AT ALL — A-2.
+   *
+   * The one above pre-creates the invitee's `User`, and that pre-creation was
+   * itself the defect: the product had no way for a genuinely new invitee to
+   * establish an identity, so the suite quietly supplied one and the dead end
+   * went unnoticed.
+   *
+   * This address is fresh per run and deliberately has NO user row, no
+   * membership and no password. The only thing seeded is the invitation
+   * itself, because the raw token cannot be recovered afterwards — the
+   * database stores a hash, and the outbox redacts it. Everything else the
+   * onboarding journey needs, it must create for itself.
+   */
+  const newcomerEmail = `e2e-newcomer-${Date.now()}@brandspace.test`;
+  const newcomerInvitation = await invitations.create({
+    workspaceId: primary.id,
+    email: newcomerEmail,
+    roleId: viewerRole.id,
+    inviter: {
+      kind: 'platform',
+      platformUserId: actor.platformUserId,
+      permissionKeys: actor.permissionKeys,
+      mfaVerified: actor.mfaVerified,
+    },
+  });
+
   return {
     email: ownerEmail,
     password,
@@ -342,6 +369,8 @@ async function seedCustomerEstate(
     viewerPassword,
     invitationToken: issued.token,
     invitedEmail,
+    newcomerToken: newcomerInvitation.token,
+    newcomerEmail,
   };
 }
 

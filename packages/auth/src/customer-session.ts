@@ -356,6 +356,40 @@ export class CustomerAuthService {
     return result.count;
   }
 
+  /**
+   * Start a session for a user whose identity was just proven by another means.
+   *
+   * The ONE caller is invitation onboarding (A-2), where the invitee has, in
+   * the same request, demonstrated control of the invited mailbox by presenting
+   * a token that exists nowhere but in it, and set the password themselves.
+   * Asking them to type that password back on a sign-in form immediately
+   * afterwards proves nothing and loses people.
+   *
+   * NOT A BACK DOOR. It takes a user id, never an email or a password, so
+   * nothing a request body carries can reach it; and it refuses any account
+   * that is not ACTIVE. Every other entry point to a session still goes
+   * through `signIn` and its lockout.
+   *
+   * The record of how such a session came to exist is the
+   * `workspace.invitation.accepted` audit event written in the same
+   * transaction that created the identity — not a column here, which would
+   * duplicate it and could disagree with it.
+   */
+  async startSessionForUser(
+    userId: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<CustomerSessionToken> {
+    const user = await this.#prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true, deletedAt: true },
+    });
+    if (!user || user.deletedAt !== null || user.status !== 'ACTIVE') {
+      throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    }
+    return this.#createSession(user.id, ip, userAgent);
+  }
+
   // --- Password reset ------------------------------------------------------
 
   /**

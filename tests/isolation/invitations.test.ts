@@ -3,10 +3,12 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  CustomerAuthService,
   InvitationService,
   MembershipService,
   OutboxEmailProvider,
   hashInvitationToken,
+  hashPassword,
 } from '@brandspace/auth';
 import { withWorkspace } from '@brandspace/database';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
@@ -728,6 +730,184 @@ describe('invitations cannot escalate privileges', () => {
     const email = uniqueEmail('duplicate');
     await issueTo(email);
     await expect(issueTo(email)).rejects.toThrow(/already pending/i);
+  });
+});
+
+/*
+ * A-2. A GENUINELY NEW INVITEE MUST BE ABLE TO GET IN.
+ *
+ * `accept` requires an authenticated identity, and there is no sign-up route —
+ * a customer application is entered by invitation, not self-registration. So an
+ * invited address with no account reached the page, was told to sign in, and
+ * had nothing to sign in with. The journey only worked if somebody had created
+ * the `User` row by hand.
+ *
+ * Every test here creates the invitation and NOTHING else: no pre-seeded user,
+ * which is the whole point.
+ */
+describe('onboarding a brand-new invitee', () => {
+  const NEW_PASSWORD = 'a-strong-local-only-test-password-7731';
+
+  async function inviteFreshAddress(): Promise<{ token: string; email: string }> {
+    const email = uniqueEmail('newcomer');
+    const issued = await issueTo(email);
+    // The address has no account at all. Asserted, not assumed.
+    expect(await platform.user.findUnique({ where: { email } })).toBeNull();
+    return { token: issued.token, email };
+  }
+
+  it('creates a verified identity and the membership in one step', async () => {
+    const { token, email } = await inviteFreshAddress();
+
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    expect(onboarded.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(onboarded.roleKey).toBe('analyst');
+
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(user.id).toBe(onboarded.userId);
+    expect(user.status).toBe('ACTIVE');
+    // The token was delivered to that mailbox and exists nowhere else, so
+    // presenting it IS proof of control of the address.
+    expect(user.emailVerifiedAt).not.toBeNull();
+    expect(user.passwordHash).not.toBeNull();
+    // Never the plaintext.
+    expect(user.passwordHash).not.toContain(NEW_PASSWORD);
+
+    const membership = await platform.membership.findUniqueOrThrow({
+      where: { id: onboarded.membershipId },
+    });
+    expect(membership.status).toBe('ACTIVE');
+    expect(membership.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(membership.userId).toBe(user.id);
+  });
+
+  it('the new identity can then sign in normally', async () => {
+    const { token, email } = await inviteFreshAddress();
+    await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const auth = new CustomerAuthService({ prisma: app });
+    const session = await auth.signIn({ email, password: NEW_PASSWORD });
+    const resolved = await auth.resolve(session.token);
+    expect(resolved?.userId).toBeDefined();
+  });
+
+  it('consumes the invitation exactly once, even under concurrency', async () => {
+    // The single-use guarantee must survive the new entry point: it is the
+    // same conditional UPDATE, in the same transaction as the identity.
+    const { token, email } = await inviteFreshAddress();
+
+    const results = await Promise.allSettled([
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+
+    // One account, one membership — not three, and not one of each per attempt.
+    expect(await platform.user.count({ where: { email } })).toBe(1);
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(
+      await platform.membership.count({
+        where: { workspaceId: fixtures.a.workspaceId, userId: user.id },
+      }),
+    ).toBe(1);
+  });
+
+  it('refuses to take over an address that already has a password', async () => {
+    // Otherwise anyone holding a forwarded link could set a password on the
+    // invitee's existing account. Refused with the ORDINARY failure message,
+    // so the refusal itself does not confirm the account exists.
+    const email = uniqueEmail('established');
+    const existing = await platform.user.create({
+      data: {
+        email,
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        passwordHash: await hashPassword('the-incumbent-password-9931'),
+      },
+    });
+    const issued = await issueTo(email);
+
+    await expect(invitations.acceptAsNewUser(issued.token, NEW_PASSWORD)).rejects.toThrow(
+      'This invitation link is not valid.',
+    );
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: existing.id } });
+    expect(after.passwordHash, 'the incumbent password must be untouched').toBe(
+      existing.passwordHash,
+    );
+    // And the invitation is still usable by the rightful owner.
+    const invitation = await platform.invitation.findFirstOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId, email },
+    });
+    expect(invitation.status).toBe('PENDING');
+  });
+
+  it('gives the same message for every unusable token', async () => {
+    // Uniform failure, preserved across the new path.
+    const revoked = await issueTo(uniqueEmail('revoked-newcomer'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      revoked.invitationId,
+      'revoked for this test',
+      platformInviter(),
+    );
+
+    for (const token of [revoked.token, 'not-a-real-token-at-all']) {
+      await expect(invitations.acceptAsNewUser(token, NEW_PASSWORD)).rejects.toThrow(
+        'This invitation link is not valid.',
+      );
+    }
+  });
+
+  it('does not consume the invitation when the password is rejected', async () => {
+    const { token, email } = await inviteFreshAddress();
+
+    await expect(invitations.acceptAsNewUser(token, 'short')).rejects.toThrow();
+
+    // No account created, and the link still works.
+    expect(await platform.user.findUnique({ where: { email } })).toBeNull();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    expect(onboarded.userId).toBeDefined();
+  });
+
+  it('stores only the hash of the token, on this path too', async () => {
+    const { token } = await inviteFreshAddress();
+    const rows = await platform.invitation.findMany({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    expect(rows.some((r) => r.tokenHash === token)).toBe(false);
+    expect(rows.some((r) => r.tokenHash === hashInvitationToken(token))).toBe(true);
+  });
+
+  it('grants membership ONLY in the inviting workspace', async () => {
+    // Tenant isolation: a brand-new identity must not become visible in, or a
+    // member of, any workspace but the one that invited them.
+    const { token } = await inviteFreshAddress();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const memberships = await platform.membership.findMany({
+      where: { userId: onboarded.userId },
+    });
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]?.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(memberships[0]?.workspaceId).not.toBe(fixtures.b.workspaceId);
+  });
+
+  it('writes the acceptance audit event in the inviting workspace', async () => {
+    const { token } = await inviteFreshAddress();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const events = await platform.auditEvent.findMany({
+      where: {
+        workspaceId: fixtures.a.workspaceId,
+        action: 'workspace.invitation.accepted',
+        actorId: onboarded.userId,
+      },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.outcome).toBe('SUCCESS');
   });
 });
 

@@ -293,10 +293,7 @@ export class MembershipService {
    * Taken BEFORE the membership row is touched, always in this order, so two
    * of these can queue but never deadlock.
    */
-  async #lockWorkspace(
-    tx: Pick<PrismaClient, '$queryRaw'>,
-    workspaceId: string,
-  ): Promise<void> {
+  async #lockWorkspace(tx: Pick<PrismaClient, '$queryRaw'>, workspaceId: string): Promise<void> {
     await tx.$queryRaw`
       SELECT "id" FROM "workspace" WHERE "id" = ${workspaceId}::uuid FOR UPDATE`;
   }
