@@ -274,18 +274,30 @@ export class InvitationService {
     );
 
     try {
-      const invitation = await this.#prisma.invitation.create({
-        data: {
+      const invitation = await runAtomically(this.#prisma, async (tx) => {
+        const created = await tx.invitation.create({
+          data: {
+            workspaceId: input.workspaceId,
+            email,
+            roleId: input.roleId,
+            brandScope: [...(input.brandScope ?? [])],
+            tokenHash: hashInvitationToken(token),
+            expiresAt,
+            invitedByUserId: input.inviter.kind === 'member' ? input.inviter.userId : null,
+            invitedByPlatformUserId:
+              input.inviter.kind === 'platform' ? input.inviter.platformUserId : null,
+          },
+        });
+        await this.#auditInvitation(tx, {
           workspaceId: input.workspaceId,
-          email,
-          roleId: input.roleId,
-          brandScope: [...(input.brandScope ?? [])],
-          tokenHash: hashInvitationToken(token),
-          expiresAt,
-          invitedByUserId: input.inviter.kind === 'member' ? input.inviter.userId : null,
-          invitedByPlatformUserId:
-            input.inviter.kind === 'platform' ? input.inviter.platformUserId : null,
-        },
+          invitationId: created.id,
+          action: 'workspace.invitation.created',
+          actor: input.inviter,
+          // The ADDRESS and the ROLE, never the token: the audit log is read by
+          // people who must not be able to accept the invitation from it.
+          after: { email, roleId: input.roleId, expiresAt: expiresAt.toISOString() },
+        });
+        return created;
       });
       return { invitationId: invitation.id, token, email, expiresAt };
     } catch (error: unknown) {
@@ -351,6 +363,22 @@ export class InvitationService {
         data: { supersededByInvitationId: replacement.id },
       });
 
+      await this.#auditInvitation(tx, {
+        workspaceId,
+        invitationId: replacement.id,
+        action: 'workspace.invitation.resent',
+        actor: inviter,
+        // Both ids, because a resend is a supersession: the trail has to say
+        // which invitation replaced which, or a reader cannot tell a resend
+        // from a second independent invitation to the same address.
+        before: { invitationId, status: 'PENDING' },
+        after: {
+          email: existing.email,
+          supersededInvitationId: invitationId,
+          expiresAt: expiresAt.toISOString(),
+        },
+      });
+
       return {
         invitationId: replacement.id,
         token,
@@ -369,13 +397,28 @@ export class InvitationService {
   ): Promise<void> {
     assertMayInvite(revoker, 'Revoking an invitation');
 
-    const revoked = await this.#prisma.invitation.updateMany({
-      where: { id: invitationId, workspaceId, status: 'PENDING' },
-      data: { status: 'REVOKED', revokedAt: this.#clock.now(), revokedReason: reason },
+    await runAtomically(this.#prisma, async (tx) => {
+      const existing = await tx.invitation.findFirst({
+        where: { id: invitationId, workspaceId },
+        select: { email: true },
+      });
+      const revoked = await tx.invitation.updateMany({
+        where: { id: invitationId, workspaceId, status: 'PENDING' },
+        data: { status: 'REVOKED', revokedAt: this.#clock.now(), revokedReason: reason },
+      });
+      if (revoked.count !== 1) {
+        throw new AppError('NOT_FOUND', 'Invitation not found.');
+      }
+      await this.#auditInvitation(tx, {
+        workspaceId,
+        invitationId,
+        action: 'workspace.invitation.revoked',
+        actor: revoker,
+        reason,
+        before: { email: existing?.email ?? null, status: 'PENDING' },
+        after: { status: 'REVOKED' },
+      });
     });
-    if (revoked.count !== 1) {
-      throw new AppError('NOT_FOUND', 'Invitation not found.');
-    }
   }
 
   async list(workspaceId: string): Promise<InvitationSummary[]> {
@@ -659,6 +702,53 @@ export class InvitationService {
 
       const accepted = await this.#acceptFor(tx, { found, tokenHash, now, userId: user.id });
       return { ...accepted, userId: user.id };
+    });
+  }
+
+  /**
+   * Record an invitation lifecycle event — A-10.
+   *
+   * Inviting somebody into a workspace, re-sending that invitation and
+   * revoking it are all security-material: each changes who can obtain access.
+   * Only ACCEPTANCE was audited, so the customer's Activity Log showed people
+   * arriving with no record of who had invited them, and a revocation — the
+   * action taken when an invitation was sent in error or to the wrong address
+   * — left no trace at all.
+   *
+   * Always called inside the caller's transaction, so the event and the change
+   * it describes commit together or not at all.
+   */
+  async #auditInvitation(
+    tx: PrismaClient,
+    input: {
+      readonly workspaceId: string;
+      readonly invitationId: string;
+      readonly action: string;
+      readonly actor: Inviter;
+      readonly reason?: string;
+      readonly after?: Record<string, unknown>;
+      readonly before?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await tx.auditEvent.create({
+      data: {
+        workspaceId: input.workspaceId,
+        // A platform operator inviting into a customer's workspace is exactly
+        // the case the customer most needs to see attributed correctly.
+        actorType: input.actor.kind === 'platform' ? 'PLATFORM_USER' : 'USER',
+        actorId: input.actor.kind === 'platform' ? input.actor.platformUserId : input.actor.userId,
+        action: input.action,
+        resourceType: 'invitation',
+        resourceId: input.invitationId,
+        severity: 'NOTICE',
+        outcome: 'SUCCESS',
+        reason: input.reason ?? null,
+        // `?? Prisma.JsonNull` rather than `undefined`: with
+        // `exactOptionalPropertyTypes`, an absent JSON column is expressed as
+        // an explicit database NULL, not by omitting the key.
+        before: (input.before ?? null) as never,
+        after: (input.after ?? null) as never,
+      },
     });
   }
 

@@ -1307,3 +1307,108 @@ describe('membership rules', () => {
     expect(events.length).toBeGreaterThan(0);
   });
 });
+
+/*
+ * A-10. THE INVITATION LIFECYCLE WAS ALMOST ENTIRELY UNAUDITED.
+ *
+ * Only ACCEPTANCE wrote an audit event. So the customer's Activity Log showed
+ * people arriving in the workspace with no record of who had invited them, and
+ * a revocation — the action taken when an invitation went to the wrong address
+ * — left no trace at all. Each of these changes who can obtain access, which is
+ * the definition of security-material.
+ */
+describe('every invitation lifecycle step is audited', () => {
+  async function eventsFor(invitationId: string, action: string) {
+    return platform.auditEvent.findMany({
+      where: { resourceType: 'invitation', resourceId: invitationId, action },
+    });
+  }
+
+  it('records who created an invitation, and never the token', async () => {
+    const email = uniqueEmail('audit-create');
+    const issued = await issueTo(email);
+
+    const events = await eventsFor(issued.invitationId, 'workspace.invitation.created');
+    expect(events).toHaveLength(1);
+    expect(events[0]?.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(events[0]?.actorType).toBe('PLATFORM_USER');
+
+    const after = events[0]?.after as Record<string, unknown>;
+    expect(after['email']).toBe(email);
+    // The audit log is read by people who must not be able to accept the
+    // invitation from what they read.
+    expect(JSON.stringify(events[0])).not.toContain(issued.token);
+    expect(JSON.stringify(events[0])).not.toContain(hashInvitationToken(issued.token));
+  });
+
+  it('records a revocation, with the reason', async () => {
+    const issued = await issueTo(uniqueEmail('audit-revoke'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      'sent to the wrong address',
+      platformInviter(),
+    );
+
+    const events = await eventsFor(issued.invitationId, 'workspace.invitation.revoked');
+    expect(events).toHaveLength(1);
+    expect(events[0]?.reason).toBe('sent to the wrong address');
+    expect((events[0]?.after as Record<string, unknown>)['status']).toBe('REVOKED');
+  });
+
+  it('records a resend, naming the invitation it superseded', async () => {
+    // A resend is a supersession. Without both ids the trail cannot be told
+    // apart from a second independent invitation to the same address.
+    const issued = await issueTo(uniqueEmail('audit-resend'));
+    const replacement = await invitations.resend(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      platformInviter(),
+    );
+
+    const events = await eventsFor(replacement.invitationId, 'workspace.invitation.resent');
+    expect(events).toHaveLength(1);
+    const after = events[0]?.after as Record<string, unknown>;
+    expect(after['supersededInvitationId']).toBe(issued.invitationId);
+  });
+
+  it('writes no event when the change did not happen', async () => {
+    // A failed revocation must not leave a record claiming it succeeded — the
+    // property the transaction is for.
+    const issued = await issueTo(uniqueEmail('audit-failed'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      'the first revocation',
+      platformInviter(),
+    );
+
+    await expect(
+      invitations.revoke(
+        fixtures.a.workspaceId,
+        issued.invitationId,
+        'a second revocation of the same row',
+        platformInviter(),
+      ),
+    ).rejects.toThrow('Invitation not found.');
+
+    // Still exactly one, not two.
+    expect(await eventsFor(issued.invitationId, 'workspace.invitation.revoked')).toHaveLength(1);
+  });
+
+  it('writes no created event when the invitation is refused', async () => {
+    const email = uniqueEmail('audit-duplicate');
+    await issueTo(email);
+    const before = await platform.auditEvent.count({
+      where: { workspaceId: fixtures.a.workspaceId, action: 'workspace.invitation.created' },
+    });
+
+    await expect(issueTo(email)).rejects.toThrow(/already pending/);
+
+    expect(
+      await platform.auditEvent.count({
+        where: { workspaceId: fixtures.a.workspaceId, action: 'workspace.invitation.created' },
+      }),
+    ).toBe(before);
+  });
+});

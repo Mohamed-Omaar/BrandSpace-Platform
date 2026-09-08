@@ -500,3 +500,191 @@ describe('the workspace lifecycle is authorised and audited', () => {
     expect(after.revokedReason).toContain('suspended');
   });
 });
+
+/*
+ * A-10. AN ACCESS GRANT AND ITS AUDIT EVENT ARE ONE THING.
+ *
+ * `start` was three separate statements — end any live session, create the new
+ * one, write the audit event — with no transaction and no lock. Two failures
+ * followed: a crash after the INSERT left a live grant with nothing in the
+ * customer's Activity Log, and two concurrent starts produced two overlapping
+ * grants whose accesses could not be attributed to either, despite a comment
+ * asserting one session per operator per workspace.
+ */
+describe('support mode cannot open two overlapping sessions', () => {
+  async function liveSessions(workspaceId: string, platformUserId: string): Promise<number> {
+    return platform.supportModeSession.count({
+      where: { workspaceId, platformUserId, endedAt: null },
+    });
+  }
+
+  it('six concurrent starts leave exactly one live session', async () => {
+    const workspaceId = fixtures.b.workspaceId;
+    // Anything already live from an earlier test in this file.
+    await platform.supportModeSession.updateMany({
+      where: { workspaceId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, (_, i) =>
+        support.start(
+          actor(SUPPORT_PERMISSIONS),
+          workspaceId,
+          `concurrent support entry number ${i}`,
+        ),
+      ),
+    );
+
+    // At least one must succeed; the rest either succeed (having ended the
+    // previous one) or are refused. What must NEVER happen is two live at once.
+    expect(results.some((r) => r.status === 'fulfilled')).toBe(true);
+    expect(
+      await liveSessions(workspaceId, fixtures.platformUserId),
+      'two live grants cannot be told apart in the audit trail',
+    ).toBe(1);
+  });
+
+  it('the database refuses a second live session even without the lock', async () => {
+    // The partial unique index is the backstop that holds if a future caller
+    // forgets to serialise. Asserted directly, because a guarantee that lives
+    // only in application code is one refactor from being gone.
+    const workspaceId = fixtures.a.workspaceId;
+    await platform.supportModeSession.updateMany({
+      where: { workspaceId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+    await support.start(actor(SUPPORT_PERMISSIONS), workspaceId, 'the first live session');
+
+    await expect(
+      platform.supportModeSession.create({
+        data: {
+          workspaceId,
+          platformUserId: fixtures.platformUserId,
+          reason: 'a second live session, written directly',
+          writeEnabled: false,
+          expiresAt: new Date(Date.now() + 600_000),
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('starting again ends the previous session rather than stacking', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    await platform.supportModeSession.updateMany({
+      where: { workspaceId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+
+    const first = await support.start(
+      actor(SUPPORT_PERMISSIONS),
+      workspaceId,
+      'the first entry for this check',
+    );
+    const second = await support.start(
+      actor(SUPPORT_PERMISSIONS),
+      workspaceId,
+      'the second entry for this check',
+    );
+
+    expect(second.id).not.toBe(first.id);
+    const ended = await platform.supportModeSession.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    expect(ended.endedAt, 'the earlier grant must be closed, not left open').not.toBeNull();
+    expect(await liveSessions(workspaceId, fixtures.platformUserId)).toBe(1);
+  });
+
+  it('rolls the session back when the audit write fails', async () => {
+    /*
+     * INJECTED FAILURE, at the database.
+     *
+     * A trigger that refuses the audit insert reproduces exactly the case the
+     * transaction exists for: everything before it has already been written.
+     * Before `start` was one transaction this left a LIVE SUPPORT GRANT with
+     * nothing in the customer's Activity Log — an operator holding access to a
+     * customer's workspace, unrecorded, which is what docs/SECURITY.md §8
+     * forbids.
+     */
+    const workspaceId = fixtures.b.workspaceId;
+    await platform.supportModeSession.updateMany({
+      where: { workspaceId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+    const before = await platform.supportModeSession.count({ where: { workspaceId } });
+
+    /*
+     * Installed as the MIGRATOR, not the platform role. The platform role has
+     * no DDL rights in `public` — which is the least-privilege separation
+     * working exactly as intended, and is itself worth noticing here rather
+     * than working around by widening a production role for a test.
+     */
+    const migrator = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env['DATABASE_MIGRATION_URL']! }),
+    });
+    await migrator.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION refuse_support_entry_audit() RETURNS trigger AS $$
+      BEGIN
+        IF NEW."action" = 'support_mode.entered' THEN
+          RAISE EXCEPTION 'injected audit failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`);
+    await migrator.$executeRawUnsafe(`
+      CREATE TRIGGER refuse_support_entry_audit_trigger
+      BEFORE INSERT ON "audit_event"
+      FOR EACH ROW EXECUTE FUNCTION refuse_support_entry_audit()`);
+
+    try {
+      await expect(
+        support.start(actor(SUPPORT_PERMISSIONS), workspaceId, 'entry whose audit will fail'),
+      ).rejects.toThrow();
+
+      // NO session row at all — not a live one, not an ended one.
+      expect(
+        await platform.supportModeSession.count({ where: { workspaceId } }),
+        'a failed audit write must take the grant with it',
+      ).toBe(before);
+      expect(await liveSessions(workspaceId, fixtures.platformUserId)).toBe(0);
+    } finally {
+      // Dropped whatever happened above: leaving this trigger behind would
+      // break every later suite that writes an audit event.
+      await migrator.$executeRawUnsafe(
+        'DROP TRIGGER IF EXISTS refuse_support_entry_audit_trigger ON "audit_event"',
+      );
+      await migrator.$executeRawUnsafe('DROP FUNCTION IF EXISTS refuse_support_entry_audit()');
+      await migrator.$disconnect();
+    }
+
+    // And the ordinary path still works once the injected failure is removed.
+    const recovered = await support.start(
+      actor(SUPPORT_PERMISSIONS),
+      workspaceId,
+      'entry after the injected failure',
+    );
+    expect(recovered.id).toBeDefined();
+  });
+
+  it('never leaves a live session without its audit event', async () => {
+    // The property the transaction exists for: an operator holding access with
+    // nothing in the customer's Activity Log saying so is precisely what
+    // docs/SECURITY.md §8 forbids.
+    const workspaceId = fixtures.b.workspaceId;
+    await platform.supportModeSession.updateMany({
+      where: { workspaceId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+    await support.start(actor(SUPPORT_PERMISSIONS), workspaceId, 'audited support entry');
+
+    const live = await platform.supportModeSession.findMany({
+      where: { workspaceId, endedAt: null },
+    });
+    for (const session of live) {
+      const events = await platform.auditEvent.count({
+        where: { supportModeSessionId: session.id, action: 'support_mode.entered' },
+      });
+      expect(events, `session ${session.id} has no entry event`).toBe(1);
+    }
+  });
+});
