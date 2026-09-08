@@ -300,6 +300,34 @@ The Admin surface over the Secret Service (`docs/SECURITY.md` §5).
 | Expiry warnings  | Alerts at 30/14/7 days before a known expiry                                         |
 | Step-up auth     | Required for every write operation                                                   |
 
+### 7.1 The listing contract (F-53)
+
+The secret list is **paginated on the server**. `SecretService.listSecrets` returns one page, never the
+table; a Control Center page is bounded work regardless of how many secrets the platform holds.
+
+| Property              | Contract                                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Queries per page      | Exactly two: a `count` over the filter, and a `findMany` with `skip`/`take`. Neither reads more than one page of rows      |
+| Ordering              | `[category, name, id]` — **total**, so a record cannot appear on two pages or on none. The `id` is the tie-breaker         |
+| Page size             | Chosen from `SECRET_PAGE_SIZES` (10/25/50/100), default 25, capped at `MAX_SECRET_PAGE_SIZE`                               |
+| A malformed page size | Falls back to the default rather than throwing                                                                             |
+| An out-of-range page  | Returns the **last** page and reports it in `page`. A stale bookmark shows something useful, not an error or a blank table |
+| Reported range        | `from`, `to`, `total`, `totalPages`, `hasPrevious`, `hasNext`. Rendered as `Showing N–M of Total` / `عرض N–M من Total`     |
+| Empty result          | `from` and `to` are `0` — never `1–0 of 0` — and the empty state distinguishes "no matches" from "none stored"             |
+| Filtering and search  | Applied **by the database**, over `name` and `ref`, case-insensitive. Search narrows `total`, not merely the current page  |
+| Changing a filter     | Resets to page one. The filter form deliberately does not carry `page`                                                     |
+| State                 | Lives in the URL (`q`, `category`, `page`, `size`), so a page is bookmarkable and the back button works                    |
+| Payload               | Masked metadata only. No value, ciphertext, nonce, auth tag, key id or wrapped key ever reaches a response                 |
+| Authorization         | `platform.secret.read`, enforced in the page boundary **and** again in the service. Listing is not a lesser permission     |
+
+**The page-size cap is not a display cap.** It bounds how many rows one request may materialise, so a
+crafted URL cannot ask for a million. Every record stays reachable by paging and `total` always reports
+the true count — an operator is never silently stopped from seeing a secret, which is the property F-53
+turns on. A silent cap would have been worse than the unbounded query it replaced.
+
+Supported by an index on `[environment, category, name, id]`, so the database returns a page from the
+index instead of sorting the whole matching set to produce one.
+
 ---
 
 ## 8. Module 7 — AI Gateway Administration

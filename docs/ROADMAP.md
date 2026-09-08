@@ -237,6 +237,21 @@ costs.
 
 ---
 
+## Pre-Phase-4 hardening — F-53
+
+**Not a phase.** One defect and the test-data problem behind it, closed before Phase 4 opens so that the
+Control Center page Phase 4 builds on is sound and a long-lived database stops drifting.
+
+- `SecretService.listSecrets` returns one PAGE, with the contract in `docs/ADMIN-CONTROL-CENTER.md` §7.1.
+- Every suite that writes secrets owns and removes exactly its own rows — `docs/ARCHITECTURE.md` §3.9.
+
+Phase 3's scope and completion are unchanged by this, and **no Phase 4 work is started here**: no
+providers, models, routing, AI requests, Brand Brain, content models, social integrations, billing or
+payment functionality, and no commercial plan price or credit value entered or activated in any
+environment.
+
+---
+
 ## Phase 4 — AI Gateway
 
 **Goal:** provider-agnostic AI with correct economics, proven end-to-end with a mock provider.
