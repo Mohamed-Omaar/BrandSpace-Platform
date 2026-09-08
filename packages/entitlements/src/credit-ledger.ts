@@ -106,6 +106,65 @@ export interface GrantView {
   readonly reason: string;
 }
 
+/**
+ * The outcome of one abandoned-reservation sweep — F-62.
+ *
+ * `swept` alone cannot distinguish "there is no leak left" from "the sweep hit
+ * its bound and there is more to do", and that difference is the whole point of
+ * a metric that must stay at zero.
+ */
+export interface SweepResult {
+  /** Reservations actually released this pass. */
+  readonly swept: number;
+  /**
+   * Reservations that could not be released — a correctness alert about the
+   * ledger, not a reason for the sweep to stop.
+   */
+  readonly failed: readonly string[];
+  /** Rows tried, successes and failures together. */
+  readonly attempted: number;
+  /**
+   * True when the sweep ran out of candidates it had not already tried; false
+   * when it stopped at `limit` or `maxAttempts` with work remaining.
+   */
+  readonly exhausted: boolean;
+}
+
+/**
+ * Rows fetched per batch inside a sweep. Small on purpose: a batch of failures
+ * is re-fetched with those ids excluded, and a large batch would make that
+ * exclusion list grow faster than the sweep makes progress.
+ */
+const SWEEP_BATCH_SIZE = 50;
+
+/**
+ * What one cycle boundary did — A-6.
+ *
+ * `unforfeitable` and `alreadyApplied` are the two facts the previous return
+ * shape could not express, and both were silently wrong rather than merely
+ * absent: excess credits that could not be taken because they were reserved
+ * looked like credits the customer was entitled to keep, and a repeated tick
+ * looked like a fresh boundary that happened to forfeit nothing.
+ */
+export interface CycleResetResult {
+  /** Balance carried into the new cycle, excluding the new allowance. */
+  readonly rolledOver: bigint;
+  /** Credits written off for exceeding the plan's rollover cap. */
+  readonly forfeited: bigint;
+  /**
+   * Excess that could NOT be forfeited because it is reserved against requests
+   * still in flight. Non-zero means the cap was not fully applied, and the
+   * caller — or an operator reading the metric — needs to know that.
+   */
+  readonly unforfeitable: bigint;
+  /** The new allowance, if the plan carries one. */
+  readonly granted: bigint;
+  /** Lapsed credits written off before the rollover cap was computed. */
+  readonly expired: bigint;
+  /** True when this cycle had already been applied and nothing was changed. */
+  readonly alreadyApplied: boolean;
+}
+
 export interface CreditLedgerOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -127,6 +186,24 @@ export class InsufficientCreditsError extends AppError {
     this.requestedMilliCredits = requested;
   }
 }
+
+/**
+ * The client a `$transaction` callback receives.
+ *
+ * Prisma hands the callback a PrismaClient with the connection-lifecycle
+ * methods removed — you cannot open a transaction inside a transaction, and the
+ * type says so. Named here because several private helpers take it.
+ */
+type LedgerTx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$use' | '$extends'>;
+
+/**
+ * A reservation as Prisma returns it. Named rather than inlined because
+ * `#lockReservation` has to say it can return null, and `Awaited<ReturnType<…>>`
+ * at that position reads worse than the alias.
+ */
+type ReservationRow = NonNullable<
+  Awaited<ReturnType<PrismaClient['creditReservation']['findUnique']>>
+>;
 
 interface LockedWallet {
   id: string;
@@ -181,14 +258,84 @@ export class CreditLedgerService {
     const expiresAt =
       input.expiresAt !== undefined ? input.expiresAt : expiryFor(input.source, now, this.#policy);
 
-    const grantId = await this.#prisma.$transaction(async (tx) => {
+    const grantId = await this.#prisma.$transaction(async (tx) =>
+      this.#grantWithin(tx, input, { amount, actor, now, expiresAt }),
+    );
+
+    const row = await this.#prisma.creditGrant.findUniqueOrThrow({ where: { id: grantId } });
+    return toGrantView(row);
+  }
+
+  /**
+   * `grant`, inside a transaction the caller already owns.
+   *
+   * The cycle reset needs the new allowance to commit with the forfeiture that
+   * precedes it (A-6); calling the public method there would open a second
+   * transaction and reintroduce the gap this exists to close.
+   */
+  async #grant(tx: LedgerTx, input: GrantInput): Promise<string> {
+    const amount = BigInt(input.credits) * MILLI_PER_CREDIT;
+    const actor = input.actor ?? SYSTEM_ACTOR;
+    const now = this.#clock.now();
+    const expiresAt =
+      input.expiresAt !== undefined ? input.expiresAt : expiryFor(input.source, now, this.#policy);
+    return this.#grantWithin(tx, input, { amount, actor, now, expiresAt });
+  }
+
+  async #grantWithin(
+    tx: LedgerTx,
+    input: GrantInput,
+    ctx: {
+      readonly amount: bigint;
+      readonly actor: CreditLedgerActor;
+      readonly now: Date;
+      readonly expiresAt: Date | null;
+    },
+  ): Promise<string> {
+    const { amount, actor, now, expiresAt } = ctx;
+    {
       // Idempotency first, before the lock: a retry must not queue behind other
       // writers only to do nothing.
       const existing = await tx.creditTransaction.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
-        select: { id: true },
+        select: {
+          id: true,
+          workspaceId: true,
+          type: true,
+          amountMilliCredits: true,
+        },
       });
       if (existing) {
+        /*
+         * A REPLAY MUST BE THE SAME REQUEST — A-9.
+         *
+         * This used to return the stored bucket for ANY request bearing the
+         * key. Two consequences, both real:
+         *
+         *   - CROSS-WORKSPACE. `grant({workspace: B, credits: 5000, key})`
+         *     after `grant({workspace: A, credits: 100, key})` returned A's
+         *     bucket. B's caller was told 5000 credits were granted; nothing
+         *     had been. A tenant handed a view of another tenant's row is a
+         *     leak regardless of how it was reached.
+         *   - MISMATCHED AMOUNT OR SOURCE. A retry that differs from the
+         *     original is not a retry; it is a second, different instruction
+         *     that silently did nothing.
+         *
+         * Idempotency means "this exact request, at most once" — never "any
+         * request wearing this key". The immutable fields are checked before
+         * the stored outcome is handed back.
+         */
+        if (
+          existing.workspaceId !== input.workspaceId ||
+          existing.type !== LEDGER_TYPE_FOR_SOURCE[input.source] ||
+          existing.amountMilliCredits !== amount
+        ) {
+          throw new AppError(
+            'CONFLICT',
+            'That idempotency key was used for a different credit movement.',
+          );
+        }
+
         const bucket = await tx.creditGrant.findUnique({
           where: { sourceTransactionId: existing.id },
           select: { id: true },
@@ -250,10 +397,7 @@ export class CreditLedgerService {
       });
 
       return bucket.id;
-    });
-
-    const row = await this.#prisma.creditGrant.findUniqueOrThrow({ where: { id: grantId } });
-    return toGrantView(row);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -408,9 +552,24 @@ export class CreditLedgerService {
     const now = this.#clock.now();
 
     await this.#prisma.$transaction(async (tx) => {
-      const reservation = await tx.creditReservation.findUnique({
-        where: { id: reservationId },
-      });
+      /*
+       * LOCK THE RESERVATION FIRST — A-8.
+       *
+       * This used to be an unlocked `findUnique`, and the status check below
+       * ran against it. Under READ COMMITTED two concurrent settles both read
+       * OPEN, both passed the check, and both proceeded: they serialised on the
+       * WALLET lock further down, but by then the loser was already committed
+       * to writing. It decremented every bucket's hold a second time and wrote
+       * a `USAGE_CHARGE` row whose idempotency key the winner had already used
+       * — so the loser surfaced either a CHECK violation or a P2002, as a 500,
+       * for an operation that had in fact succeeded.
+       *
+       * The constraints were right: they are what stopped the double charge.
+       * What was wrong is that a retry is a normal event and must be a no-op,
+       * not an error. Taking the row lock here makes the status check mean what
+       * it says — the loser waits, re-reads a terminal status, and returns.
+       */
+      const reservation = await this.#lockReservation(tx, reservationId);
       if (!reservation) throw new AppError('NOT_FOUND', 'Reservation not found.');
 
       // Settling twice is the duplicate-charge bug this whole protocol exists
@@ -508,9 +667,10 @@ export class CreditLedgerService {
     const now = this.#clock.now();
 
     await this.#prisma.$transaction(async (tx) => {
-      const reservation = await tx.creditReservation.findUnique({
-        where: { id: reservationId },
-      });
+      // Locked before the status is read, for the reason settle documents:
+      // concurrent release-and-release, and release racing a settle, are both
+      // retries and must be no-ops rather than constraint violations.
+      const reservation = await this.#lockReservation(tx, reservationId);
       if (!reservation) throw new AppError('NOT_FOUND', 'Reservation not found.');
       if (reservation.status !== 'OPEN') return;
 
@@ -561,47 +721,106 @@ export class CreditLedgerService {
    * Release every reservation nobody came back for.
    *
    * docs/BILLING-AND-CREDITS.md §10.3: reservation leaks are a monitored metric
-   * that must stay at zero. Returns how many were swept so a caller can alert
-   * on a non-zero count rather than discovering the leak from a balance.
+   * that must stay at zero.
+   *
+   * F-62 — WHY THIS IS A LOOP AND NOT ONE QUERY.
+   *
+   * The previous version read ONE window of `take: limit` rows, in no defined
+   * order, and attempted each. A reservation whose bucket does not record the
+   * hold it claims can never be released: the decrement would take `reserved`
+   * below zero and a CHECK constraint refuses it, correctly. Such a row is
+   * reported and left OPEN — so it came back in the next window, and the next.
+   *
+   * Once as many as `limit` of them existed, the window filled with rows that
+   * could never succeed and the sweep released NOTHING, permanently, while
+   * every valid reservation behind them leaked. That is not hypothetical: a
+   * long-lived database reached 259 abandoned reservations of which the first
+   * 200 were all unreleasable, and a sweep pass swept zero.
+   *
+   * THREE CHANGES.
+   *
+   * 1. DETERMINISTIC ORDER. `[expiresAt asc, id asc]` — oldest leak first,
+   *    with `id` making the order total so paging cannot skip or repeat a row.
+   *    Unordered meant which rows a sweep touched was arbitrary, so a row could
+   *    be starved even below the limit.
+   *
+   * 2. `limit` BOUNDS RELEASES, NOT ROWS EXAMINED. Rows that fail are excluded
+   *    and the next batch is fetched, so failures cost a little work each
+   *    rather than the whole sweep. A released row leaves the candidate set by
+   *    changing status; a failed one stays, which is exactly why it must be
+   *    excluded explicitly.
+   *
+   * 3. PROGRESS IS REPORTED. `exhausted` says whether the sweep reached the end
+   *    of the abandoned set or stopped early at `limit` or `maxAttempts` —
+   *    the difference between "there is no leak" and "there is more to do", which
+   *    a bare count cannot express. `attempted` separates work done from work
+   *    that succeeded.
+   *
+   * `maxAttempts` bounds total work so one sweep cannot run unboundedly against
+   * a ledger full of unreleasable rows; the caller runs again.
    */
   async sweepAbandonedReservations(
     limit = 200,
-  ): Promise<{ readonly swept: number; readonly failed: readonly string[] }> {
+    options: { readonly maxAttempts?: number } = {},
+  ): Promise<SweepResult> {
     const now = this.#clock.now();
-    const abandoned = await this.#prisma.creditReservation.findMany({
-      where: { status: 'OPEN', expiresAt: { lt: now } },
-      select: { id: true },
-      take: limit,
-    });
+    /*
+     * An EXPLICIT bound is honoured verbatim — a caller asking for at most five
+     * attempts means five. The DEFAULT gets a floor of one batch, because
+     * `limit * 4` for a small limit is a bound that gives up before it has
+     * looked at anything: `sweepAbandonedReservations(1)` would have attempted
+     * four rows and stopped, which against a ledger holding unreleasable rows
+     * is the starvation this method exists to prevent, merely at a smaller
+     * scale.
+     */
+    const maxAttempts = options.maxAttempts ?? Math.max(limit * 4, SWEEP_BATCH_SIZE);
 
-    let swept = 0;
     const failed: string[] = [];
+    let swept = 0;
+    let attempted = 0;
+    let exhausted = false;
 
-    for (const reservation of abandoned) {
-      try {
-        await this.release(
-          reservation.id,
-          'Swept: the reservation passed its deadline without being settled.',
-          'EXPIRED',
-        );
-        swept += 1;
-      } catch {
-        // ONE unreleasable reservation must not stop the sweep.
-        //
-        // A row whose bucket does not record the hold it claims cannot be
-        // released — the decrement would take `reserved` below zero and a CHECK
-        // constraint refuses it, which is the constraint doing its job. But a
-        // sweeper that dies on the first such row stops releasing every VALID
-        // reservation behind it, and reservation leaks are a metric that must
-        // stay at zero (docs/BILLING-AND-CREDITS.md §10.3).
-        //
-        // So the bad row is reported by id and the sweep continues. A non-empty
-        // `failed` list is a correctness alert about the ledger, distinct from
-        // `swept` being lower than expected.
-        failed.push(reservation.id);
+    while (swept < limit && attempted < maxAttempts) {
+      const batch = await this.#prisma.creditReservation.findMany({
+        where: {
+          status: 'OPEN',
+          expiresAt: { lt: now },
+          // Everything already tried this sweep. Failures stay OPEN and would
+          // otherwise be handed back for ever — this exclusion IS the progress.
+          ...(failed.length > 0 ? { id: { notIn: failed } } : {}),
+        },
+        select: { id: true },
+        orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+        take: Math.min(SWEEP_BATCH_SIZE, maxAttempts - attempted),
+      });
+
+      if (batch.length === 0) {
+        // Nothing left that this sweep has not already tried: the abandoned
+        // set is drained apart from the rows in `failed`.
+        exhausted = true;
+        break;
+      }
+
+      for (const reservation of batch) {
+        if (swept >= limit || attempted >= maxAttempts) break;
+        attempted += 1;
+        try {
+          await this.release(
+            reservation.id,
+            'Swept: the reservation passed its deadline without being settled.',
+            'EXPIRED',
+          );
+          swept += 1;
+        } catch {
+          // A non-empty `failed` list is a correctness alert about the ledger,
+          // distinct from `swept` being lower than expected. It is never a
+          // reason to stop.
+          failed.push(reservation.id);
+        }
       }
     }
-    return { swept, failed };
+
+    return { swept, failed, attempted, exhausted };
   }
 
   // -------------------------------------------------------------------------
@@ -617,9 +836,20 @@ export class CreditLedgerService {
    * against them, and settling it must not fail because a sweep ran first.
    */
   async expireLapsedGrants(workspaceId: string): Promise<bigint> {
+    return this.#prisma.$transaction(async (tx) => this.#expireLapsedGrants(tx, workspaceId));
+  }
+
+  /**
+   * The body of `expireLapsedGrants`, taking a transaction.
+   *
+   * Separated so the cycle reset can run expiry, forfeiture and the new grant
+   * as ONE unit (A-6). It was four independent transactions, and a crash
+   * between any two left a workspace half-reset.
+   */
+  async #expireLapsedGrants(tx: LedgerTx, workspaceId: string): Promise<bigint> {
     const now = this.#clock.now();
 
-    return this.#prisma.$transaction(async (tx) => {
+    {
       const wallet = await this.#lockWallet(tx, workspaceId);
       const lapsed = await tx.creditGrant.findMany({
         where: {
@@ -668,7 +898,7 @@ export class CreditLedgerService {
         });
       }
       return total;
-    });
+    }
   }
 
   /**
@@ -680,6 +910,37 @@ export class CreditLedgerService {
    * off; and only then is the new allowance granted. Doing it in any other
    * order either resurrects expired credits or discards ones the customer was
    * entitled to keep.
+   *
+   * ONE TRANSACTION, AND IDEMPOTENT ON THE CYCLE — A-6.
+   *
+   * This used to be four independent database operations: expiry, forfeiture,
+   * the grant, then the timestamps. A crash between any two left the workspace
+   * half-reset, and the halves were not equally recoverable. Re-running was
+   * worse than doing nothing: the grant is keyed `plan-grant:<cycle>` and would
+   * no-op correctly, but the forfeiture was keyed per BUCKET
+   * (`reset:<cycle>:<grantId>`), and a second pass runs FIFO against the
+   * buckets that survived the first — different ids, different keys, so the
+   * customer was forfeited a SECOND time for one cycle boundary.
+   *
+   * The whole boundary is now one transaction, guarded by a single marker row
+   * keyed on the cycle. A repeat returns the recorded outcome instead of
+   * charging again, which is what makes a retried or duplicated scheduler tick
+   * safe.
+   *
+   * RESERVED CREDITS ARE NOT FORFEITABLE, AND THE CAP HAS TO KNOW THAT.
+   *
+   * `carried` is the whole balance, reserved credits included — money held
+   * against requests that are still in flight. The forfeiture then came off
+   * `remaining − reserved` per bucket, so when the excess exceeded what was
+   * actually spendable, `allocateFifo` returned a SHORTFALL that nobody read.
+   * The customer silently kept credits above the cap, and once the in-flight
+   * requests released, those credits came back as spendable balance.
+   *
+   * Now the shortfall is computed, reported, and the amount actually taken is
+   * clamped to what is spendable. Credits cannot be seized from under a
+   * request that is mid-flight — settling it must not fail because the reset
+   * ran first — so the honest outcome is to forfeit what can be forfeited and
+   * say how much could not.
    */
   async runCycleReset(input: {
     readonly workspaceId: string;
@@ -688,17 +949,31 @@ export class CreditLedgerService {
     readonly rolloverCapMultiplier: number;
     readonly cycleKey: string;
     readonly nextResetAt: Date | null;
-  }): Promise<{
-    readonly rolledOver: bigint;
-    readonly forfeited: bigint;
-    readonly granted: bigint;
-  }> {
+  }): Promise<CycleResetResult> {
     const now = this.#clock.now();
     const allowance = BigInt(input.monthlyCredits) * MILLI_PER_CREDIT;
+    const completionKey = `reset-complete:${input.cycleKey}`;
 
-    await this.expireLapsedGrants(input.workspaceId);
+    const outcome = await this.#prisma.$transaction(async (tx) => {
+      /*
+       * THE CYCLE MARKER, read first and written last, inside the same
+       * transaction. Its presence means this boundary already ran to
+       * completion; its absence means it did not, whatever partial state a
+       * previous crash may have left, because that state was rolled back.
+       */
+      const already = await tx.creditTransaction.findUnique({
+        where: { idempotencyKey: completionKey },
+        select: { workspaceId: true },
+      });
+      if (already) {
+        if (already.workspaceId !== input.workspaceId) {
+          throw new AppError('CONFLICT', 'That cycle key was used for a different workspace.');
+        }
+        return null;
+      }
 
-    const forfeited = await this.#prisma.$transaction(async (tx) => {
+      const expired = await this.#expireLapsedGrants(tx, input.workspaceId);
+
       const wallet = await this.#lockWallet(tx, input.workspaceId);
       const carried = wallet.balanceMilliCredits;
       const keep = rolloverAmount(
@@ -707,82 +982,127 @@ export class CreditLedgerService {
         allowance,
         carried,
       );
-      const lose = carried - keep;
-      if (lose <= 0n) return 0n;
 
-      // Take the forfeit off the buckets FIFO, so what survives is the
-      // soonest-expiring credit the customer keeps — the same ordering as
-      // spending, for the same reason.
-      const buckets = await tx.creditGrant.findMany({
-        where: { workspaceId: input.workspaceId, remainingMilliCredits: { gt: 0 } },
-      });
-      const { allocations } = allocateFifo(
-        buckets.map((b) => ({
-          id: b.id,
-          spendableMilliCredits: b.remainingMilliCredits - b.reservedMilliCredits,
-          expiresAt: b.expiresAt,
-          grantedAt: b.grantedAt,
-        })),
-        lose,
-      );
-
+      let forfeited = 0n;
+      let unforfeitable = 0n;
       let running = wallet.balanceMilliCredits;
-      let total = 0n;
-      for (const allocation of allocations) {
-        running -= allocation.milliCredits;
-        total += allocation.milliCredits;
-        await tx.creditGrant.update({
-          where: { id: allocation.grantId },
-          data: { remainingMilliCredits: { decrement: allocation.milliCredits } },
+
+      const lose = carried - keep;
+      if (lose > 0n) {
+        const buckets = await tx.creditGrant.findMany({
+          where: { workspaceId: input.workspaceId, remainingMilliCredits: { gt: 0 } },
         });
-        await tx.creditTransaction.create({
-          data: {
-            workspaceId: input.workspaceId,
-            walletId: wallet.id,
-            type: 'RESET',
-            amountMilliCredits: -allocation.milliCredits,
-            balanceAfterMilliCredits: running,
-            reason: 'Above the plan rollover cap at the cycle boundary.',
-            idempotencyKey: `reset:${input.cycleKey}:${allocation.grantId}`,
-            actorType: 'SYSTEM',
-            actorId: null,
-            occurredAt: now,
-            sourceGrantId: allocation.grantId,
-          },
+        // Take the forfeit off the buckets FIFO, so what survives is the
+        // soonest-expiring credit the customer keeps — the same ordering as
+        // spending, for the same reason.
+        const { allocations, shortfallMilliCredits } = allocateFifo(
+          buckets.map((b) => ({
+            id: b.id,
+            spendableMilliCredits: b.remainingMilliCredits - b.reservedMilliCredits,
+            expiresAt: b.expiresAt,
+            grantedAt: b.grantedAt,
+          })),
+          lose,
+        );
+        /*
+         * The part of the excess that is reserved and therefore cannot be
+         * taken. Previously discarded — which is exactly how the customer kept
+         * credits above the cap without anything recording that they had.
+         */
+        unforfeitable = shortfallMilliCredits;
+
+        for (const allocation of allocations) {
+          running -= allocation.milliCredits;
+          forfeited += allocation.milliCredits;
+          await tx.creditGrant.update({
+            where: { id: allocation.grantId },
+            data: { remainingMilliCredits: { decrement: allocation.milliCredits } },
+          });
+          await tx.creditTransaction.create({
+            data: {
+              workspaceId: input.workspaceId,
+              walletId: wallet.id,
+              type: 'RESET',
+              amountMilliCredits: -allocation.milliCredits,
+              balanceAfterMilliCredits: running,
+              reason: 'Above the plan rollover cap at the cycle boundary.',
+              idempotencyKey: `reset:${input.cycleKey}:${allocation.grantId}`,
+              actorType: 'SYSTEM',
+              actorId: null,
+              occurredAt: now,
+              sourceGrantId: allocation.grantId,
+            },
+          });
+        }
+      }
+
+      let granted = 0n;
+      if (input.monthlyCredits > 0) {
+        // The new allowance, in the SAME transaction. `#grant` is the body of
+        // the public `grant`, which would otherwise open a second one.
+        await this.#grant(tx, {
+          workspaceId: input.workspaceId,
+          source: 'PLAN_GRANT',
+          credits: input.monthlyCredits,
+          reason: 'Monthly plan allowance.',
+          idempotencyKey: `plan-grant:${input.cycleKey}`,
         });
+        granted = allowance;
+        running += allowance;
       }
 
       await tx.creditWallet.update({
         where: { id: wallet.id },
-        data: { balanceMilliCredits: running, version: { increment: 1 } },
+        data: {
+          balanceMilliCredits: running,
+          lastResetAt: now,
+          nextResetAt: input.nextResetAt,
+          version: { increment: 1 },
+          // A wallet that has just received its allowance is no longer low.
+          ...(granted > 0n ? { lowBalanceNotifiedPercent: null, lowBalanceNotifiedAt: null } : {}),
+        },
       });
-      return total;
+
+      // The marker, last: written only if everything above committed.
+      await tx.creditTransaction.create({
+        data: {
+          workspaceId: input.workspaceId,
+          walletId: wallet.id,
+          type: 'RESET',
+          amountMilliCredits: 0n,
+          balanceAfterMilliCredits: running,
+          reason: `Cycle boundary ${input.cycleKey} applied.`,
+          idempotencyKey: completionKey,
+          actorType: 'SYSTEM',
+          actorId: null,
+          occurredAt: now,
+        },
+      });
+
+      return {
+        rolledOver: running - granted,
+        forfeited,
+        unforfeitable,
+        granted,
+        expired,
+        alreadyApplied: false,
+      } satisfies CycleResetResult;
     });
 
-    let granted = 0n;
-    if (input.monthlyCredits > 0) {
-      await this.grant({
-        workspaceId: input.workspaceId,
-        source: 'PLAN_GRANT',
-        credits: input.monthlyCredits,
-        reason: 'Monthly plan allowance.',
-        idempotencyKey: `plan-grant:${input.cycleKey}`,
-      });
-      granted = allowance;
-    }
+    if (outcome) return outcome;
 
-    await this.#prisma.creditWallet.update({
-      where: { workspaceId: input.workspaceId },
-      data: { lastResetAt: now, nextResetAt: input.nextResetAt },
-    });
-
+    // A repeat of a cycle that already completed. Report the CURRENT state
+    // rather than re-deriving one, and say plainly that nothing was applied.
     const walletAfter = await this.#prisma.creditWallet.findUniqueOrThrow({
       where: { workspaceId: input.workspaceId },
     });
     return {
-      rolledOver: walletAfter.balanceMilliCredits - granted,
-      forfeited,
-      granted,
+      rolledOver: walletAfter.balanceMilliCredits - allowance,
+      forfeited: 0n,
+      unforfeitable: 0n,
+      granted: 0n,
+      expired: 0n,
+      alreadyApplied: true,
     };
   }
 
@@ -854,6 +1174,31 @@ export class CreditLedgerService {
    * COMMITTED a second transaction blocks here and then re-reads the committed
    * row, so two concurrent spends cannot both act on the same starting balance.
    */
+  /**
+   * Take a row lock on a reservation, then read it through Prisma.
+   *
+   * Two statements on purpose. `SELECT … FOR UPDATE` is what serialises
+   * concurrent settle/release of the same reservation; the `findUnique` that
+   * follows runs inside the same transaction with the lock already held, so it
+   * returns a consistent, fully typed row — including the JSON `allocations`
+   * column, which a raw select would hand back untyped.
+   *
+   * Returns null for a reservation that does not exist, so the caller can
+   * answer NOT_FOUND rather than deciding from an empty array.
+   */
+  async #lockReservation(
+    tx: Pick<PrismaClient, '$queryRaw' | 'creditReservation'>,
+    reservationId: string,
+  ): Promise<ReservationRow | null> {
+    const locked = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id"
+        FROM "credit_reservation"
+       WHERE "id" = ${reservationId}::uuid
+         FOR UPDATE`;
+    if (locked.length === 0) return null;
+    return tx.creditReservation.findUnique({ where: { id: reservationId } });
+  }
+
   async #lockWallet(
     tx: Pick<PrismaClient, '$queryRaw' | '$executeRaw' | 'creditWallet'>,
     workspaceId: string,

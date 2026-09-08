@@ -592,6 +592,455 @@ describe('release — the failure path', () => {
     expect((await ledger.reservation(healthy.id)).status).toBe('EXPIRED');
     expect(await reservedOf(healthyWorkspace)).toBe(0n);
   });
+
+  /*
+   * A-7 / F-62. A SWEEP MUST NOT BE STARVABLE.
+   *
+   * The old sweeper read one unordered window of `take: limit` rows. An
+   * unreleasable reservation is reported and stays OPEN, so it came back in
+   * every window: once `limit` of them existed the sweep released nothing, for
+   * ever, and every valid reservation behind them leaked. These are the
+   * assertions that would have caught that.
+   */
+  describe('the sweep cannot be starved by rows it can never release', () => {
+    /** A reservation whose bucket records no hold, so releasing it is refused. */
+    async function unreleasable(workspaceId: string, walletId: string, grantId: string, n: number) {
+      return platform.creditReservation.create({
+        data: {
+          workspaceId,
+          walletId,
+          idempotencyKey: `starve-corrupt-${workspaceId}-${n}`,
+          estimateMilliCredits: 1000n,
+          allocations: [{ grantId, milliCredits: '1000' }],
+          purpose: 'corrupt.fixture',
+          // Oldest of all, so a deterministic oldest-first order puts every one
+          // of them AHEAD of the healthy row. Without progress semantics the
+          // healthy row is never reached.
+          expiresAt: new Date(Date.now() - 3_600_000),
+        },
+      });
+    }
+
+    it('releases a healthy reservation sitting behind a full window of failures', async () => {
+      const corruptWorkspace = await freshWorkspace();
+      const bucket = await ledger.grant({
+        workspaceId: corruptWorkspace,
+        source: 'PLAN_GRANT',
+        credits: 50,
+        reason: 'allowance',
+        idempotencyKey: `g-starve-${corruptWorkspace}`,
+      });
+      const wallet = await platform.creditWallet.findUniqueOrThrow({
+        where: { workspaceId: corruptWorkspace },
+      });
+
+      // MORE unreleasable rows than one batch holds, all older than the
+      // healthy one. This is the exact shape that made the sweep useless.
+      const BLOCKERS = 60;
+      for (let i = 0; i < BLOCKERS; i += 1) {
+        await unreleasable(corruptWorkspace, wallet.id, bucket.id, i);
+      }
+
+      const healthyWorkspace = await freshWorkspace();
+      await ledger.grant({
+        workspaceId: healthyWorkspace,
+        source: 'PLAN_GRANT',
+        credits: 50,
+        reason: 'allowance',
+        idempotencyKey: `g-starve-healthy-${healthyWorkspace}`,
+      });
+      const healthy = await ledger.reserve({
+        workspaceId: healthyWorkspace,
+        estimateMilliCredits: 10n * MILLI_PER_CREDIT,
+        purpose: 'caption.generate',
+        idempotencyKey: `r-starve-healthy-${healthyWorkspace}`,
+        ttlSeconds: 1,
+      });
+      await platform.creditReservation.update({
+        where: { id: healthy.id },
+        // Newer than every blocker, so oldest-first reaches it LAST.
+        data: { expiresAt: new Date(Date.now() - 1_000) },
+      });
+
+      const result = await ledger.sweepAbandonedReservations();
+
+      expect(result.failed.length).toBeGreaterThanOrEqual(BLOCKERS);
+      expect(result.swept, 'the sweep must get past the blockers').toBeGreaterThanOrEqual(1);
+      expect((await ledger.reservation(healthy.id)).status).toBe('EXPIRED');
+      expect(await reservedOf(healthyWorkspace)).toBe(0n);
+      // It examined more rows than it released, which is the progress semantics.
+      expect(result.attempted).toBeGreaterThan(result.swept);
+    });
+
+    it('orders oldest-first, deterministically', async () => {
+      const workspaceId = await freshWorkspace();
+      await ledger.grant({
+        workspaceId,
+        source: 'PLAN_GRANT',
+        credits: 100,
+        reason: 'allowance',
+        idempotencyKey: `g-order-${workspaceId}`,
+      });
+
+      // Three abandoned reservations, deadlines an hour apart, created in the
+      // WRONG order so insertion order cannot be what the sweep follows.
+      const ages = [1_000, 7_200_000, 3_600_000];
+      const made: { id: string; age: number }[] = [];
+      for (const [i, age] of ages.entries()) {
+        const r = await ledger.reserve({
+          workspaceId,
+          estimateMilliCredits: 5n * MILLI_PER_CREDIT,
+          purpose: 'caption.generate',
+          idempotencyKey: `r-order-${workspaceId}-${i}`,
+          ttlSeconds: 1,
+        });
+        await platform.creditReservation.update({
+          where: { id: r.id },
+          data: { expiresAt: new Date(Date.now() - age) },
+        });
+        made.push({ id: r.id, age });
+      }
+
+      /*
+       * THE ASSERTION IS ABOUT MY THREE ROWS, not about the whole table.
+       *
+       * The sweep is global by design, and this database is shared: it holds
+       * abandoned rows from other suites and from runs long past. Asserting
+       * "the globally oldest row was released" would be asserting a fact about
+       * that residue, not about the ordering. What the ordering guarantees,
+       * and what is immune to whatever else is in the table, is that the FIRST
+       * OF MINE to be released is MY OLDEST.
+       *
+       * `maxAttempts` is generous because each pass re-attempts every
+       * unreleasable row ahead of mine — that is the cost of a shared
+       * database, not a property of the sweep.
+       */
+      const oldest = made.reduce((a, b) => (b.age > a.age ? b : a));
+      let firstOfMine: string | null = null;
+
+      for (let pass = 0; pass < 5 && firstOfMine === null; pass += 1) {
+        await ledger.sweepAbandonedReservations(1, { maxAttempts: 5_000 });
+        for (const row of made) {
+          if ((await ledger.reservation(row.id)).status === 'EXPIRED') {
+            firstOfMine = row.id;
+            break;
+          }
+        }
+      }
+
+      expect(firstOfMine, "the sweep released none of this test's rows").not.toBeNull();
+      expect(firstOfMine, 'the oldest leak must be released first').toBe(oldest.id);
+    });
+
+    it('reports whether it reached the end of the abandoned set', async () => {
+      // `swept` alone cannot tell "no leak left" from "hit the bound, more to
+      // do". A caller alerting on leaks needs that difference.
+      const workspaceId = await freshWorkspace();
+      await ledger.grant({
+        workspaceId,
+        source: 'PLAN_GRANT',
+        credits: 100,
+        reason: 'allowance',
+        idempotencyKey: `g-exhaust-${workspaceId}`,
+      });
+      const r = await ledger.reserve({
+        workspaceId,
+        estimateMilliCredits: 5n * MILLI_PER_CREDIT,
+        purpose: 'caption.generate',
+        idempotencyKey: `r-exhaust-${workspaceId}`,
+        ttlSeconds: 1,
+      });
+      await platform.creditReservation.update({
+        where: { id: r.id },
+        data: { expiresAt: new Date(Date.now() - 60_000) },
+      });
+
+      // Stopping AT THE LIMIT is reported as "not exhausted": there may well
+      // be more to do. That is the distinction a bare count cannot make.
+      const bounded = await ledger.sweepAbandonedReservations(1, { maxAttempts: 5_000 });
+      expect(bounded.swept, 'the limit bounds RELEASES').toBe(1);
+      expect(bounded.exhausted, 'stopping at the limit is not exhaustion').toBe(false);
+      /*
+       * Deliberately NOT asserting that `r` is the row that got released. The
+       * sweep is global and oldest-first, and other rows in this shared
+       * database are older; a limit of one goes to whichever of THOSE comes
+       * first. What this test is about is the reporting, and `r` is confirmed
+       * released by the drain below.
+       */
+
+      // Now drain: with a bound generous enough to try every candidate, the
+      // sweep must eventually report that it reached the end — including when
+      // everything left is unreleasable, which is precisely the state that
+      // used to look identical to "nothing to do".
+      for (let pass = 0; pass < 20; pass += 1) {
+        const drain = await ledger.sweepAbandonedReservations(500, { maxAttempts: 5_000 });
+        if (drain.exhausted) {
+          expect(drain.attempted).toBeGreaterThanOrEqual(drain.swept);
+          // Reaching the end means every releasable row was released,
+          // this test's included.
+          expect((await ledger.reservation(r.id)).status).toBe('EXPIRED');
+          return;
+        }
+      }
+      throw new Error('the sweep never reported reaching the end of the abandoned set');
+    });
+
+    it('bounds its own work rather than looping on unreleasable rows', async () => {
+      const workspaceId = await freshWorkspace();
+      const bucket = await ledger.grant({
+        workspaceId,
+        source: 'PLAN_GRANT',
+        credits: 50,
+        reason: 'allowance',
+        idempotencyKey: `g-bound-${workspaceId}`,
+      });
+      const wallet = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+      for (let i = 0; i < 12; i += 1) {
+        await unreleasable(workspaceId, wallet.id, bucket.id, 1000 + i);
+      }
+
+      // Nothing releasable exists for these rows, so the sweep must stop by
+      // its own bound instead of re-reading the same failures for ever.
+      const result = await ledger.sweepAbandonedReservations(2, { maxAttempts: 5 });
+      expect(result.attempted).toBeLessThanOrEqual(5);
+      expect(result.exhausted).toBe(false);
+    });
+  });
+});
+
+/*
+ * A-8. A RETRY IS A NORMAL EVENT, NOT AN ERROR.
+ *
+ * `settle` and `release` read the reservation status through an UNLOCKED
+ * findUnique, so two concurrent calls both saw OPEN and both proceeded. They
+ * serialised on the wallet lock, by which point the loser was already
+ * committed to writing: it decremented every hold a second time and reused the
+ * winner's idempotency key, surfacing a CHECK violation or a P2002 as a 500 —
+ * for work that had actually succeeded.
+ *
+ * The constraints were right. What was missing is that the loser must observe
+ * a terminal status and stop.
+ */
+describe('concurrent settlement and release are idempotent', () => {
+  /** A workspace with a grant and one OPEN reservation against it. */
+  async function reservationFor(tag: string, estimateCredits = 10) {
+    const workspaceId = await freshWorkspace();
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 100,
+      reason: 'allowance',
+      idempotencyKey: `g-${tag}-${workspaceId}`,
+    });
+    const reservation = await ledger.reserve({
+      workspaceId,
+      estimateMilliCredits: BigInt(estimateCredits) * MILLI_PER_CREDIT,
+      purpose: 'caption.generate',
+      idempotencyKey: `r-${tag}-${workspaceId}`,
+    });
+    return { workspaceId, reservation };
+  }
+
+  it('settles once under eight concurrent settlements, with no 500s', async () => {
+    const { workspaceId, reservation } = await reservationFor('settle-race');
+    const before = await balanceOf(workspaceId);
+    const charge = 6n * MILLI_PER_CREDIT;
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () => ledger.settle(reservation.id, charge, 'concurrent settle')),
+    );
+
+    // EVERY call succeeds. The old behaviour was seven rejections carrying a
+    // constraint violation, which is a 500 to whoever retried.
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(
+      rejected.map((r) => String((r as PromiseRejectedResult).reason)),
+      'a retry must not surface an error',
+    ).toEqual([]);
+
+    // Charged exactly once.
+    expect(await balanceOf(workspaceId)).toBe(before - charge);
+    expect((await ledger.reservation(reservation.id)).status).toBe('SETTLED');
+    expect(await reservedOf(workspaceId)).toBe(0n);
+
+    const charges = await platform.creditTransaction.findMany({
+      where: { reservationId: reservation.id, type: 'USAGE_CHARGE' },
+    });
+    expect(charges).toHaveLength(1);
+  });
+
+  it('releases once under eight concurrent releases, with no 500s', async () => {
+    const { workspaceId, reservation } = await reservationFor('release-race');
+    const before = await balanceOf(workspaceId);
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () => ledger.release(reservation.id, 'concurrent release')),
+    );
+
+    expect(results.filter((r) => r.status === 'rejected')).toEqual([]);
+    expect(await balanceOf(workspaceId)).toBe(before);
+    expect(await reservedOf(workspaceId)).toBe(0n);
+    expect((await ledger.reservation(reservation.id)).status).toBe('RELEASED');
+
+    const releases = await platform.creditTransaction.findMany({
+      where: { reservationId: reservation.id, type: 'RESERVATION_RELEASE' },
+    });
+    expect(releases).toHaveLength(1);
+  });
+
+  it('settle racing release resolves to exactly one outcome', async () => {
+    // The cross case. Whichever wins, the other must observe the terminal
+    // status and stop — and the hold must be given back exactly once either
+    // way, never twice.
+    const { workspaceId, reservation } = await reservationFor('cross-race');
+    const before = await balanceOf(workspaceId);
+    const charge = 4n * MILLI_PER_CREDIT;
+
+    const results = await Promise.allSettled([
+      ledger.settle(reservation.id, charge, 'racing settle'),
+      ledger.release(reservation.id, 'racing release'),
+      ledger.settle(reservation.id, charge, 'racing settle again'),
+      ledger.release(reservation.id, 'racing release again'),
+    ]);
+    expect(results.filter((r) => r.status === 'rejected')).toEqual([]);
+
+    const final = await ledger.reservation(reservation.id);
+    expect(['SETTLED', 'RELEASED']).toContain(final.status);
+    expect(await reservedOf(workspaceId)).toBe(0n);
+
+    // The balance matches the outcome that actually happened — not some
+    // interleaving of both.
+    const after = await balanceOf(workspaceId);
+    expect(after).toBe(final.status === 'SETTLED' ? before - charge : before);
+
+    const charges = await platform.creditTransaction.findMany({
+      where: { reservationId: reservation.id, type: 'USAGE_CHARGE' },
+    });
+    expect(charges).toHaveLength(final.status === 'SETTLED' ? 1 : 0);
+  });
+
+  it('a sweep racing a settle does not double-release the hold', async () => {
+    // The sweeper is just another caller of `release`, and it runs on a timer
+    // against reservations a request may be settling at that very moment.
+    const { workspaceId, reservation } = await reservationFor('sweep-race');
+    await platform.creditReservation.update({
+      where: { id: reservation.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    const before = await balanceOf(workspaceId);
+
+    const results = await Promise.allSettled([
+      ledger.settle(reservation.id, 3n * MILLI_PER_CREDIT, 'settled just in time'),
+      ledger.sweepAbandonedReservations(500, { maxAttempts: 5_000 }),
+    ]);
+    expect(results.filter((r) => r.status === 'rejected')).toEqual([]);
+
+    const final = await ledger.reservation(reservation.id);
+    expect(['SETTLED', 'EXPIRED']).toContain(final.status);
+    expect(await reservedOf(workspaceId)).toBe(0n);
+    expect(await balanceOf(workspaceId)).toBe(
+      final.status === 'SETTLED' ? before - 3n * MILLI_PER_CREDIT : before,
+    );
+  });
+});
+
+/*
+ * A-9, grants. The same rule, in the ledger.
+ *
+ * `grant` returned the stored bucket for ANY request carrying a known key. A
+ * caller for workspace B replaying workspace A's key was handed A's bucket and
+ * told the grant had happened — a view of another tenant's row, reached through
+ * an idempotency check rather than a query.
+ */
+describe('grant replays are scoped to the original request', () => {
+  it('refuses a grant key replayed against a different workspace', async () => {
+    const first = await freshWorkspace();
+    const second = await freshWorkspace();
+    const key = `grant-cross-${crypto.randomUUID()}`;
+
+    const original = await ledger.grant({
+      workspaceId: first,
+      source: 'PLAN_GRANT',
+      credits: 100,
+      reason: 'allowance',
+      idempotencyKey: key,
+    });
+
+    await expect(
+      ledger.grant({
+        workspaceId: second,
+        source: 'PLAN_GRANT',
+        credits: 100,
+        reason: 'allowance',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different credit movement.');
+
+    // The second workspace got nothing — not a balance, and not a handle on
+    // the first workspace's bucket.
+    expect(await balanceOf(second)).toBe(0n);
+    const bucketsForSecond = await platform.creditGrant.findMany({
+      where: { workspaceId: second },
+    });
+    expect(bucketsForSecond).toHaveLength(0);
+    // And the first workspace's bucket is still exactly where it was.
+    const originalRow = await platform.creditGrant.findUniqueOrThrow({
+      where: { id: original.id },
+    });
+    expect(originalRow.workspaceId).toBe(first);
+  });
+
+  it('refuses a grant key replayed with a different amount or source', async () => {
+    const workspaceId = await freshWorkspace();
+    const key = `grant-mismatch-${crypto.randomUUID()}`;
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 100,
+      reason: 'allowance',
+      idempotencyKey: key,
+    });
+    const before = await balanceOf(workspaceId);
+
+    await expect(
+      ledger.grant({
+        workspaceId,
+        source: 'PLAN_GRANT',
+        credits: 5000,
+        reason: 'allowance',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different credit movement.');
+
+    await expect(
+      ledger.grant({
+        workspaceId,
+        source: 'PROMOTIONAL_GRANT',
+        credits: 100,
+        reason: 'allowance',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different credit movement.');
+
+    expect(await balanceOf(workspaceId)).toBe(before);
+  });
+
+  it('still treats a genuine retry as the same grant', async () => {
+    const workspaceId = await freshWorkspace();
+    const input = {
+      workspaceId,
+      source: 'PLAN_GRANT' as const,
+      credits: 100,
+      reason: 'allowance',
+      idempotencyKey: `grant-same-${crypto.randomUUID()}`,
+    };
+    const first = await ledger.grant(input);
+    const second = await ledger.grant(input);
+
+    expect(second.id).toBe(first.id);
+    // Credited once, which is the property the key exists to guarantee.
+    expect(await balanceOf(workspaceId)).toBe(100n * MILLI_PER_CREDIT);
+  });
 });
 
 describe('concurrency', () => {
@@ -930,5 +1379,226 @@ describe('low-balance notice', () => {
 
     expect(await ledger.noteLowBalance(workspaceId, 100)).toBe(20);
     expect(await ledger.noteLowBalance(workspaceId, 100)).toBeNull();
+  });
+});
+
+/*
+ * A-6. THE CYCLE BOUNDARY IS ONE UNIT, AND IT KNOWS ABOUT RESERVED CREDITS.
+ *
+ * It used to be four independent transactions with no cycle-level idempotency,
+ * and the rollover cap was computed against a balance that included credits
+ * reserved against in-flight requests — an excess that could not actually be
+ * taken, whose shortfall nobody read.
+ */
+describe('cycle reset is atomic and retry-safe', () => {
+  it('applies a repeated cycle exactly once', async () => {
+    // A duplicated scheduler tick, a retried job, a redelivered message. The
+    // grant was already keyed on the cycle and no-opped correctly; the
+    // FORFEITURE was keyed per bucket, so a second pass ran FIFO against the
+    // buckets that survived the first and charged the customer again.
+    const workspaceId = await freshWorkspace();
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 900,
+      reason: 'unspent from previous cycles',
+      idempotencyKey: `twice-g-${workspaceId}`,
+    });
+
+    const cycle = {
+      workspaceId,
+      monthlyCredits: 500,
+      rolloverPolicy: 'capped' as const,
+      rolloverCapMultiplier: 1,
+      cycleKey: `${workspaceId}:2026-03`,
+      nextResetAt: new Date(Date.now() + 30 * 86_400_000),
+    };
+
+    const first = await ledger.runCycleReset(cycle);
+    expect(first.alreadyApplied).toBe(false);
+    expect(first.forfeited).toBe(400n * MILLI_PER_CREDIT);
+    const afterFirst = await balanceOf(workspaceId);
+    expect(afterFirst).toBe(1000n * MILLI_PER_CREDIT);
+
+    for (let repeat = 0; repeat < 3; repeat += 1) {
+      const again = await ledger.runCycleReset(cycle);
+      expect(again.alreadyApplied, 'a repeated cycle must say so').toBe(true);
+      expect(again.forfeited).toBe(0n);
+    }
+
+    expect(await balanceOf(workspaceId), 'three retries cost nothing').toBe(afterFirst);
+    expect(await replay(workspaceId)).toBe(await balanceOf(workspaceId));
+  });
+
+  it('refuses a cycle key belonging to another workspace', async () => {
+    const first = await freshWorkspace();
+    const second = await freshWorkspace();
+    const cycleKey = `shared-cycle-${crypto.randomUUID()}`;
+
+    await ledger.runCycleReset({
+      workspaceId: first,
+      monthlyCredits: 100,
+      rolloverPolicy: 'none',
+      rolloverCapMultiplier: 0,
+      cycleKey,
+      nextResetAt: null,
+    });
+
+    await expect(
+      ledger.runCycleReset({
+        workspaceId: second,
+        monthlyCredits: 100,
+        rolloverPolicy: 'none',
+        rolloverCapMultiplier: 0,
+        cycleKey,
+        nextResetAt: null,
+      }),
+    ).rejects.toThrow('That cycle key was used for a different workspace.');
+
+    // The second workspace got no allowance out of the collision.
+    expect(await balanceOf(second)).toBe(0n);
+  });
+
+  it('leaves nothing half-applied when the boundary fails partway', async () => {
+    /*
+     * INJECTED FAILURE. The grant carries `plan-grant:<cycle>`; writing a row
+     * under that key first makes the grant inside the reset collide, so the
+     * transaction aborts AFTER expiry and forfeiture would have been written.
+     *
+     * Before this was one transaction, that left the customer forfeited with
+     * no new allowance and no advanced timestamps — and a retry forfeited them
+     * a second time.
+     */
+    const workspaceId = await freshWorkspace();
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 900,
+      reason: 'unspent',
+      idempotencyKey: `partial-g-${workspaceId}`,
+    });
+    const before = await balanceOf(workspaceId);
+    const cycleKey = `${workspaceId}:2026-04`;
+
+    // Squat on the grant's idempotency key with a DIFFERENT amount, so the
+    // replay-scope check inside the grant rejects it.
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 7,
+      reason: 'squatter',
+      idempotencyKey: `plan-grant:${cycleKey}`,
+    });
+    const withSquatter = await balanceOf(workspaceId);
+
+    await expect(
+      ledger.runCycleReset({
+        workspaceId,
+        monthlyCredits: 500,
+        rolloverPolicy: 'capped',
+        rolloverCapMultiplier: 1,
+        cycleKey,
+        nextResetAt: new Date(Date.now() + 30 * 86_400_000),
+      }),
+    ).rejects.toThrow();
+
+    // NOTHING was applied: not the forfeiture, not the timestamps, not a
+    // completion marker.
+    expect(await balanceOf(workspaceId)).toBe(withSquatter);
+    expect(withSquatter).toBeGreaterThan(before);
+    const resets = await platform.creditTransaction.findMany({
+      where: { workspaceId, type: 'RESET' },
+    });
+    expect(resets, 'a failed boundary writes no RESET rows at all').toHaveLength(0);
+    expect(await replay(workspaceId)).toBe(await balanceOf(workspaceId));
+  });
+
+  it('advances the cycle timestamps in the same unit as the money', async () => {
+    const workspaceId = await freshWorkspace();
+    const nextResetAt = new Date(Date.now() + 30 * 86_400_000);
+    await ledger.runCycleReset({
+      workspaceId,
+      monthlyCredits: 250,
+      rolloverPolicy: 'none',
+      rolloverCapMultiplier: 0,
+      cycleKey: `${workspaceId}:2026-05`,
+      nextResetAt,
+    });
+
+    const wallet = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(wallet.lastResetAt).not.toBeNull();
+    expect(wallet.nextResetAt?.toISOString()).toBe(nextResetAt.toISOString());
+    expect(wallet.balanceMilliCredits).toBe(250n * MILLI_PER_CREDIT);
+  });
+});
+
+describe('the rollover cap accounts for reserved credits', () => {
+  it('does not forfeit credits that are reserved against an in-flight request', async () => {
+    /*
+     * 900 carried, 700 of it reserved. The cap is 100, so 800 "should" be
+     * forfeited — but only 200 is actually spendable. The old code asked
+     * `allocateFifo` for 800, got 200 with a shortfall of 600, and threw the
+     * shortfall away: the customer kept 700 above the cap, and got it back as
+     * spendable balance the moment the request released.
+     */
+    const workspaceId = await freshWorkspace();
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 900,
+      reason: 'unspent',
+      idempotencyKey: `res-cap-g-${workspaceId}`,
+    });
+    const reservation = await ledger.reserve({
+      workspaceId,
+      estimateMilliCredits: 700n * MILLI_PER_CREDIT,
+      purpose: 'caption.generate',
+      idempotencyKey: `res-cap-r-${workspaceId}`,
+    });
+
+    const result = await ledger.runCycleReset({
+      workspaceId,
+      monthlyCredits: 100,
+      rolloverPolicy: 'capped',
+      rolloverCapMultiplier: 1,
+      cycleKey: `${workspaceId}:2026-06`,
+      nextResetAt: null,
+    });
+
+    // Only the spendable 200 could be taken...
+    expect(result.forfeited).toBe(200n * MILLI_PER_CREDIT);
+    // ...and the 600 that could not is REPORTED rather than discarded.
+    expect(
+      result.unforfeitable,
+      'excess that cannot be taken must not look like credit the customer kept legitimately',
+    ).toBe(600n * MILLI_PER_CREDIT);
+
+    // The in-flight request is untouched and still settles.
+    expect((await ledger.reservation(reservation.id)).status).toBe('OPEN');
+    await ledger.settle(reservation.id, 700n * MILLI_PER_CREDIT, 'settled after the boundary');
+    expect(await replay(workspaceId)).toBe(await balanceOf(workspaceId));
+  });
+
+  it('reports no shortfall when nothing is reserved', async () => {
+    const workspaceId = await freshWorkspace();
+    await ledger.grant({
+      workspaceId,
+      source: 'PLAN_GRANT',
+      credits: 900,
+      reason: 'unspent',
+      idempotencyKey: `nores-g-${workspaceId}`,
+    });
+
+    const result = await ledger.runCycleReset({
+      workspaceId,
+      monthlyCredits: 500,
+      rolloverPolicy: 'capped',
+      rolloverCapMultiplier: 1,
+      cycleKey: `${workspaceId}:2026-07`,
+      nextResetAt: null,
+    });
+
+    expect(result.forfeited).toBe(400n * MILLI_PER_CREDIT);
+    expect(result.unforfeitable).toBe(0n);
   });
 });
