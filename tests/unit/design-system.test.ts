@@ -553,6 +553,35 @@ describe('webfonts are optional and never a build dependency', () => {
     expect(css).toMatch(/--bs-font-arabic:[^;]*system-ui/);
     expect(css).toMatch(/--bs-font-latin:[^;]*system-ui/);
   });
+
+  it('mirrors the two LOGICAL chevrons in Arabic, and only those two', () => {
+    /*
+     * The pagination and the sidebar toggle both documented this flip as
+     * though it happened. It did not: the paths are drawn pointing left and
+     * nothing mirrored them, so an Arabic reader saw "previous" pointing
+     * forwards. Asserted in three parts, because any one alone can pass while
+     * the flip is broken.
+     */
+    const icons = read('packages/ui/src/icons.tsx');
+    const css = read('packages/ui/src/tokens.css');
+
+    // 1. Both logical chevrons carry the class.
+    expect(icons).toContain("const LOGICAL_CHEVRON = 'bs-chevron-logical'");
+    for (const icon of ['ChevronStartIcon', 'ChevronEndIcon']) {
+      const body = icons.slice(icons.indexOf(`export function ${icon}`));
+      expect(body.slice(0, 200), `${icon} must opt into the logical flip`).toContain(
+        'logicalChevronProps(props)',
+      );
+    }
+
+    // 2. The stylesheet actually mirrors it, under RTL only.
+    expect(css).toMatch(/html\[dir='rtl'\] \.bs-chevron-logical \{\s*transform: scaleX\(-1\);/);
+
+    // 3. And no other icon opts in: an arrow that means something physical
+    //    (a download, a sort direction) must keep pointing where it points.
+    const optIns = icons.match(/logicalChevronProps\(props\)/g) ?? [];
+    expect(optIns).toHaveLength(2);
+  });
 });
 
 describe('the design showcase cannot reach production', () => {
