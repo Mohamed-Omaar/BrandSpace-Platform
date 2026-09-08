@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -773,6 +774,165 @@ describe('membership rules', () => {
       include: { role: true },
     });
     expect(role.role.key).toBe('workspace_owner');
+  });
+
+  /*
+   * A-5. THE OWNER INVARIANT UNDER CONCURRENCY.
+   *
+   * `#assertOwnerRemains` is a COUNT, and a count takes no locks. Two owners,
+   * two concurrent demotions: each transaction demotes a DIFFERENT membership
+   * row, so nothing conflicts, and under READ COMMITTED each still sees the
+   * other owner as active. Both counted one, both passed, both committed — and
+   * the workspace was left with none.
+   *
+   * Sequentially every one of these passes. That is the point: the sequential
+   * tests above cannot see this, and neither could any amount of reading.
+   */
+  describe('two owners cannot be removed at once', () => {
+    /** A workspace with `count` owners, returning their membership ids. */
+    async function workspaceWithOwners(count: number): Promise<{
+      workspaceId: string;
+      ownerUserId: string;
+      membershipIds: string[];
+    }> {
+      const suffix = randomUUID();
+      const founder = await platform.user.create({
+        data: { email: `founder-${suffix}@example.local`, status: 'ACTIVE' },
+      });
+      const workspace = await platform.workspace.create({
+        data: {
+          id: suffix,
+          workspaceId: suffix,
+          slug: `owners-${suffix.slice(0, 12)}`,
+          name: 'Owner race',
+          ownerUserId: founder.id,
+          status: 'ACTIVE',
+        },
+      });
+
+      const membershipIds: string[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const user =
+          i === 0
+            ? founder
+            : await platform.user.create({
+                data: { email: `co-owner-${i}-${suffix}@example.local`, status: 'ACTIVE' },
+              });
+        const membership = await platform.membership.create({
+          data: {
+            workspaceId: workspace.id,
+            userId: user.id,
+            roleId: ownerRoleId,
+            status: 'ACTIVE',
+            acceptedAt: new Date(),
+            brandScope: [],
+          },
+        });
+        membershipIds.push(membership.id);
+      }
+      return { workspaceId: workspace.id, ownerUserId: founder.id, membershipIds };
+    }
+
+    async function activeOwners(workspaceId: string): Promise<number> {
+      return platform.membership.count({
+        where: { workspaceId, status: 'ACTIVE', role: { key: 'workspace_owner' } },
+      });
+    }
+
+    it('parallel DEMOTIONS of the two remaining owners leave one standing', async () => {
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+      expect(await activeOwners(workspaceId)).toBe(2);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        ),
+      );
+
+      // Exactly one succeeds. The other is refused by the invariant — a
+      // CONFLICT, which is the correct answer, not a crash.
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      expect(fulfilled).toHaveLength(1);
+      for (const rejection of results.filter((r) => r.status === 'rejected')) {
+        expect(String((rejection as PromiseRejectedResult).reason)).toMatch(
+          /at least one active Workspace Owner/i,
+        );
+      }
+
+      expect(
+        await activeOwners(workspaceId),
+        'the workspace must never be left without an owner',
+      ).toBe(1);
+    });
+
+    it('parallel REMOVALS of the two remaining owners leave one standing', async () => {
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.remove(workspaceId, owner(ownerUserId), id, 'concurrent removal'),
+        ),
+      );
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('a removal racing a demotion leaves one standing', async () => {
+      // The mixed case, and the one a fix that only guarded `remove` would
+      // still get wrong.
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled([
+        memberships.remove(workspaceId, owner(ownerUserId), membershipIds[0]!, 'racing removal'),
+        memberships.changeRole(workspaceId, owner(ownerUserId), membershipIds[1]!, analystRoleId),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('four owners demoted at once leave exactly one', async () => {
+      // More than two, so a fix that merely serialises PAIRS is not enough.
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(4);
+      expect(await activeOwners(workspaceId)).toBe(4);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        ),
+      );
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('does not serialise across workspaces', async () => {
+      // The mutex is per workspace. Two unrelated workspaces demoting at the
+      // same moment must both succeed — a global lock would be correct and
+      // useless.
+      const first = await workspaceWithOwners(2);
+      const second = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled([
+        memberships.changeRole(
+          first.workspaceId,
+          owner(first.ownerUserId),
+          first.membershipIds[0]!,
+          analystRoleId,
+        ),
+        memberships.changeRole(
+          second.workspaceId,
+          owner(second.ownerUserId),
+          second.membershipIds[0]!,
+          analystRoleId,
+        ),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+      expect(await activeOwners(first.workspaceId)).toBe(1);
+      expect(await activeOwners(second.workspaceId)).toBe(1);
+    });
   });
 
   it('an ADMIN may not mint another OWNER', async () => {
