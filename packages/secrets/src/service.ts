@@ -1,6 +1,10 @@
 // The client TYPE comes from @brandspace/database, which is the only package
 // permitted to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
-import type { PrismaClient } from '@brandspace/database';
+// `Prisma` comes through the same approved seam — `packages/database` is the
+// only package permitted to import `@prisma/client` directly, and it re-exports
+// the namespace precisely so other packages can name Prisma's own types without
+// crossing that boundary.
+import type { Prisma, PrismaClient } from '@brandspace/database';
 import { AppError, systemClock, type Clock } from '@brandspace/shared';
 import { buildEncryptionContext, decryptSecret, encryptSecret, fingerprintValue } from './crypto';
 import { createKeyProvider, type KeyProvider } from './key-provider';
@@ -39,6 +43,47 @@ export interface SecretMetadata {
   readonly lastUsedAt: Date | null;
   readonly expiresAt: Date | null;
 }
+
+/**
+ * The pagination contract — F-53.
+ *
+ * Offset-based rather than cursor-based, deliberately. The Control Center needs
+ * a total, a current range and page navigation; a cursor gives none of those
+ * without a separate count anyway, and an operator auditing platform
+ * credentials wants to know there are 853 of them, not merely that there are
+ * more.
+ */
+export interface SecretListQuery {
+  readonly environment?: Environment;
+  readonly category?: string;
+  /** Free text over name and ref, case-insensitive. Blank means no filter. */
+  readonly search?: string;
+  /** 1-based. Out of range is clamped, never an error — see `listSecrets`. */
+  readonly page?: number;
+  readonly pageSize?: number;
+}
+
+export interface SecretPage {
+  /** Masked metadata only. Never a value, ciphertext or key material. */
+  readonly items: readonly SecretMetadata[];
+  /** The page ACTUALLY returned, which may differ from the one requested. */
+  readonly page: number;
+  readonly pageSize: number;
+  /** Total matching records, not the number on this page. */
+  readonly total: number;
+  readonly totalPages: number;
+  /** 1-based inclusive range of `items` within `total`. Both 0 when empty. */
+  readonly from: number;
+  readonly to: number;
+  readonly hasPrevious: boolean;
+  readonly hasNext: boolean;
+}
+
+/** Page sizes the Control Center offers. */
+export const SECRET_PAGE_SIZES = [10, 25, 50, 100] as const;
+export const DEFAULT_SECRET_PAGE_SIZE = 25;
+/** A bound on one request's result set, NOT on how much an operator may see. */
+export const MAX_SECRET_PAGE_SIZE = 100;
 
 export interface SecretActor {
   readonly platformUserId: string;
@@ -416,26 +461,85 @@ export class SecretService {
     return toMetadata(record);
   }
 
-  async listSecrets(
-    actor: SecretActor,
-    filter: {
-      environment?: Environment;
-      category?: string;
-    } = {},
-  ): Promise<SecretMetadata[]> {
+  /**
+   * One PAGE of secrets — F-53.
+   *
+   * This method used to return every matching record. That is what the Control
+   * Center rendered, and with 853 records accumulated in a long-lived database
+   * the page took long enough to blow a ten-second test ceiling. The query was
+   * never the problem (3.8ms); loading and rendering an unbounded result set
+   * was.
+   *
+   * TWO BOUNDED QUERIES, never the whole table:
+   *
+   *   1. `count` over the filter — reads an index, returns a number.
+   *   2. `findMany` with `skip`/`take` — reads at most `pageSize` rows.
+   *
+   * ORDERING IS TOTAL. `[category, name, id]` — the `id` tie-breaker is what
+   * makes offset pagination correct: with a partial order, two records sharing
+   * a category and name could swap between the count and the fetch, and a row
+   * would appear on two pages or on none.
+   *
+   * OUT-OF-RANGE RECOVERS RATHER THAN FAILING. A page beyond the end returns
+   * the LAST page and says so in `page`, so a stale bookmark or a deleted-down
+   * dataset shows something useful instead of an error or an empty table. The
+   * caller renders the page it is given, not the page it asked for.
+   *
+   * `pageSize` IS CAPPED, AND THAT IS NOT A DISPLAY CAP. The bound is on how
+   * many rows one request may materialise — a crafted URL cannot ask for a
+   * million. Every record stays reachable by paging and `total` always reports
+   * the true count, so nothing is hidden; the requirement F-53 records is that
+   * an operator must never silently stop seeing secrets, and they never do.
+   */
+  async listSecrets(actor: SecretActor, query: SecretListQuery = {}): Promise<SecretPage> {
     // Even masked metadata is operational intelligence: which providers are
     // wired up, when a key was last rotated, which environments are live.
     await this.#authorize(actor, 'Listing secrets', SECRET_READ_PERMISSION);
 
+    const pageSize = normalisePageSize(query.pageSize);
+    const where = buildSecretWhere(query);
+
+    const total = await this.#prisma.secretRecord.count({ where });
+    const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+    const requested = Number.isFinite(query.page) ? Math.trunc(query.page ?? 1) : 1;
+    const page = Math.min(Math.max(requested, 1), totalPages);
+
     const records = await this.#prisma.secretRecord.findMany({
-      where: {
-        ...(filter.environment ? { environment: filter.environment } : {}),
-        ...(filter.category ? { category: filter.category } : {}),
-      },
+      where,
       include: { versions: { where: { status: 'ACTIVE' }, take: 1 } },
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      // The `id` tie-breaker makes the order total. Without it the page
+      // boundaries are undefined for records that agree on category and name.
+      orderBy: [{ category: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
-    return records.map(toMetadata);
+
+    const items = records.map(toMetadata);
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      // 1-based and inclusive, so the UI can render them directly. Both are 0
+      // for an empty result: "showing 1–0 of 0" would be nonsense.
+      from: total === 0 ? 0 : (page - 1) * pageSize + 1,
+      to: total === 0 ? 0 : (page - 1) * pageSize + items.length,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages,
+    };
+  }
+
+  /**
+   * How many secrets match — without loading any of them.
+   *
+   * The console overview needs a NUMBER for its stat tile and was calling
+   * `listSecrets` to take `.length` of it, which is the F-53 defect in its
+   * purest form: every row read, every version joined, to render one integer.
+   */
+  async countSecrets(actor: SecretActor, query: SecretListQuery = {}): Promise<number> {
+    await this.#authorize(actor, 'Counting secrets', SECRET_READ_PERMISSION);
+    return this.#prisma.secretRecord.count({ where: buildSecretWhere(query) });
   }
 
   /**
@@ -521,6 +625,46 @@ interface RecordWithVersions {
   lastUsedAt: Date | null;
   expiresAt: Date | null;
   versions: { version: number; maskedHint: string; fingerprint: string }[];
+}
+
+/**
+ * Clamp a requested page size into the supported range.
+ *
+ * A non-numeric, zero or negative size falls back to the default rather than
+ * throwing: this value arrives from a URL an operator can edit, and a broken
+ * query string should show the list, not an error page.
+ */
+function normalisePageSize(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) return DEFAULT_SECRET_PAGE_SIZE;
+  const size = Math.trunc(requested);
+  if (size < 1) return DEFAULT_SECRET_PAGE_SIZE;
+  return Math.min(size, MAX_SECRET_PAGE_SIZE);
+}
+
+/**
+ * The filter, shared by the page query and the count.
+ *
+ * Built once so the two cannot disagree — a count computed over a different
+ * predicate than the fetch produces a total that does not match the rows, and
+ * "showing 1–25 of 40" would be a lie.
+ *
+ * The search is server-side. Filtering in the page component would mean
+ * shipping every row to filter it, which is the defect this exists to remove.
+ */
+function buildSecretWhere(query: SecretListQuery): Prisma.SecretRecordWhereInput {
+  const search = query.search?.trim();
+  return {
+    ...(query.environment ? { environment: query.environment } : {}),
+    ...(query.category ? { category: query.category } : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { ref: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+  };
 }
 
 function toMetadata(record: RecordWithVersions): SecretMetadata {
