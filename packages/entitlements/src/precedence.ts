@@ -31,12 +31,14 @@ export type EntitlementSource =
   | 'kill_switch'
   | 'workspace_override'
   | 'flag_workspace_list'
+  | 'flag_plan_list'
   | 'flag_beta_group'
   | 'flag_country'
   | 'flag_date_range'
   | 'flag_percentage'
   | 'plan_entitlement'
   | 'feature_default'
+  | 'dependency_unmet'
   | 'unknown_feature';
 
 export interface FeatureDefinition {
@@ -44,6 +46,13 @@ export interface FeatureDefinition {
   readonly valueType: 'boolean' | 'quota' | 'enum';
   readonly defaultValue: boolean | number | string | null;
   readonly dependsOn: readonly string[];
+  /**
+   * The options an `enum` feature offers (A-4). Empty for every other type.
+   *
+   * Without it there is nothing to validate an override against, so a typo in
+   * an option name would be written and would silently resolve.
+   */
+  readonly enumOptions: readonly string[];
 }
 
 export interface PlanEntitlementRule {
@@ -52,6 +61,15 @@ export interface PlanEntitlementRule {
   readonly enabled: boolean;
   readonly limitValue: number | null;
   readonly limitPeriod: string | null;
+  /**
+   * The chosen option for an `enum` feature — A-4.
+   *
+   * `valueType: 'enum'` existed and nothing could ever resolve one: the
+   * decision carried `enabled` and `limitValue` only, so "which video quality
+   * does this plan get" had nowhere to live and every enum feature resolved to
+   * false. Null for features that are not enums.
+   */
+  readonly enumValue: string | null;
 }
 
 export interface FlagRule {
@@ -72,6 +90,8 @@ export interface WorkspaceOverrideRule {
   readonly featureKey: string;
   readonly enabled: boolean;
   readonly limitValue: number | null;
+  /** The chosen option for an `enum` feature (A-4). Null otherwise. */
+  readonly enumValue: string | null;
   readonly reason: string;
   readonly effectiveFrom: Date;
   readonly effectiveUntil: Date | null;
@@ -104,6 +124,14 @@ export interface EntitlementDecision {
   readonly enabled: boolean;
   /** null = unlimited, or not a quota feature. */
   readonly limitValue: number | null;
+  /**
+   * The resolved option for an `enum` feature, or null (A-4).
+   *
+   * Separate from `limitValue` because they answer different questions: a
+   * quota asks "how many", an enum asks "which one", and collapsing them into
+   * one nullable number is what left enum features unresolvable.
+   */
+  readonly enumValue: string | null;
   readonly source: EntitlementSource;
   readonly trace: readonly TraceStep[];
 }
@@ -132,6 +160,80 @@ export function resolveEntitlement(
   featureKey: string,
   now: Date,
 ): EntitlementDecision {
+  return resolveWithDependencies(catalogue, context, featureKey, now, new Set());
+}
+
+/**
+ * Resolve, then re-check what the feature depends on — A-4.
+ *
+ * DEPENDENCIES WERE ONLY EVER CHECKED WHEN AN OVERRIDE WAS WRITTEN.
+ * `validateOverride` refuses to enable a feature whose dependency is off, and
+ * that is the only place the graph was consulted. Configuration is not static:
+ * the dependency can be turned off afterwards by a kill switch, a plan change,
+ * a flag edit or an override of its own — and the dependent feature carried on
+ * resolving to enabled, because nothing looked again.
+ *
+ * A validation-time check answers "may I write this row"; only a resolve-time
+ * check answers "is this true now". So the graph is walked on every resolve,
+ * and a dependent whose dependency is off is forced off whatever granted it.
+ *
+ * CYCLES TERMINATE. `visiting` carries the chain currently being resolved; a
+ * feature that reappears in it is treated as unmet rather than followed. A
+ * cyclic dependency is a configuration mistake, and failing closed is the same
+ * choice the unknown-feature branch makes.
+ */
+function resolveWithDependencies(
+  catalogue: EntitlementCatalogue,
+  context: WorkspaceEntitlementContext,
+  featureKey: string,
+  now: Date,
+  visiting: ReadonlySet<string>,
+): EntitlementDecision {
+  const decision = resolveOwnRules(catalogue, context, featureKey, now);
+  if (!decision.enabled) return decision;
+
+  const feature = catalogue.features.find((f) => f.key === featureKey);
+  if (!feature || feature.dependsOn.length === 0) return decision;
+
+  const chain = new Set(visiting).add(featureKey);
+  for (const dependency of feature.dependsOn) {
+    const unmet = chain.has(dependency)
+      ? `"${featureKey}" and "${dependency}" depend on each other.`
+      : resolveWithDependencies(catalogue, context, dependency, now, chain).enabled
+        ? null
+        : `"${dependency}" is off.`;
+    if (unmet === null) continue;
+
+    return {
+      featureKey,
+      enabled: false,
+      limitValue: null,
+      enumValue: null,
+      source: 'dependency_unmet',
+      trace: [
+        ...decision.trace,
+        {
+          source: 'dependency_unmet',
+          decided: true,
+          // The trace keeps the grant that WOULD have applied, so an operator
+          // reading it sees both what granted the feature and why it is
+          // nonetheless off.
+          detail: `Granted by ${decision.source}, but ${unmet}`,
+        },
+      ],
+    };
+  }
+
+  return decision;
+}
+
+/** The precedence ladder itself, without the dependency re-check above it. */
+function resolveOwnRules(
+  catalogue: EntitlementCatalogue,
+  context: WorkspaceEntitlementContext,
+  featureKey: string,
+  now: Date,
+): EntitlementDecision {
   const trace: TraceStep[] = [];
   const feature = catalogue.features.find((f) => f.key === featureKey);
 
@@ -143,7 +245,14 @@ export function resolveEntitlement(
       decided: true,
       detail: `Feature "${featureKey}" is not in the active entitlements configuration.`,
     });
-    return { featureKey, enabled: false, limitValue: null, source: 'unknown_feature', trace };
+    return {
+      featureKey,
+      enabled: false,
+      limitValue: null,
+      enumValue: null,
+      source: 'unknown_feature',
+      trace,
+    };
   }
 
   const flag = catalogue.flags.find((f) => f.featureKey === featureKey);
@@ -155,7 +264,14 @@ export function resolveEntitlement(
       decided: true,
       detail: 'Kill switch is engaged: the feature is off for everyone.',
     });
-    return { featureKey, enabled: false, limitValue: null, source: 'kill_switch', trace };
+    return {
+      featureKey,
+      enabled: false,
+      limitValue: null,
+      enumValue: null,
+      source: 'kill_switch',
+      trace,
+    };
   }
   trace.push({
     source: 'kill_switch',
@@ -180,6 +296,7 @@ export function resolveEntitlement(
       featureKey,
       enabled: override.enabled,
       limitValue: override.limitValue,
+      enumValue: override.enumValue,
       source: 'workspace_override',
       trace,
     };
@@ -196,7 +313,14 @@ export function resolveEntitlement(
         decided: true,
         detail: 'Workspace is on the flag deny list.',
       });
-      return { featureKey, enabled: false, limitValue: null, source: 'flag_workspace_list', trace };
+      return {
+        featureKey,
+        enabled: false,
+        limitValue: null,
+        enumValue: null,
+        source: 'flag_workspace_list',
+        trace,
+      };
     }
     if (flag.enabledForWorkspaces.includes(context.workspaceId)) {
       trace.push({
@@ -208,11 +332,47 @@ export function resolveEntitlement(
         featureKey,
         enabled: true,
         limitValue: planLimit(catalogue, context.planKey, featureKey),
+        enumValue: planEnum(catalogue, context.planKey, featureKey),
         source: 'flag_workspace_list',
         trace,
       };
     }
     trace.push({ source: 'flag_workspace_list', decided: false, detail: 'not listed' });
+
+    /*
+     * 3b. PLAN TARGETING — A-4.
+     *
+     * `enabledForPlans` was declared on `FlagRule`, carried through the
+     * configuration schema and the Control Center, and READ BY NOTHING. An
+     * operator could switch a feature on for the Growth plan, see it saved,
+     * and have it change no customer's experience at all — configuration that
+     * looks live and is inert, which is worse than a missing field because
+     * nothing signals the gap.
+     *
+     * An ALLOW LIST, like `enabledForWorkspaces` above and unlike `countries`
+     * below: a match grants, a non-match falls through to the plan entitlement
+     * rather than deciding against it. A flag naming one plan must not take
+     * the feature away from every plan it does not name — that would make
+     * targeting one audience an outage for the others.
+     */
+    if (flag.enabledForPlans.length > 0 && context.planKey !== null) {
+      if (flag.enabledForPlans.includes(context.planKey)) {
+        trace.push({
+          source: 'flag_plan_list',
+          decided: true,
+          detail: `Plan "${context.planKey}" is on the flag's plan list.`,
+        });
+        return {
+          featureKey,
+          enabled: true,
+          limitValue: planLimit(catalogue, context.planKey, featureKey),
+          enumValue: planEnum(catalogue, context.planKey, featureKey),
+          source: 'flag_plan_list',
+          trace,
+        };
+      }
+    }
+    trace.push({ source: 'flag_plan_list', decided: false, detail: 'plan not listed' });
 
     // 4. Beta group.
     const matchedGroup = flag.betaGroups.find((g) => context.betaGroups.includes(g));
@@ -226,6 +386,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: true,
         limitValue: planLimit(catalogue, context.planKey, featureKey),
+        enumValue: planEnum(catalogue, context.planKey, featureKey),
         source: 'flag_beta_group',
         trace,
       };
@@ -244,6 +405,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: matches,
         limitValue: matches ? planLimit(catalogue, context.planKey, featureKey) : null,
+        enumValue: matches ? planEnum(catalogue, context.planKey, featureKey) : null,
         source: 'flag_country',
         trace,
       };
@@ -264,6 +426,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: inWindow,
         limitValue: inWindow ? planLimit(catalogue, context.planKey, featureKey) : null,
+        enumValue: inWindow ? planEnum(catalogue, context.planKey, featureKey) : null,
         source: 'flag_date_range',
         trace,
       };
@@ -283,6 +446,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: included,
         limitValue: included ? planLimit(catalogue, context.planKey, featureKey) : null,
+        enumValue: included ? planEnum(catalogue, context.planKey, featureKey) : null,
         source: 'flag_percentage',
         trace,
       };
@@ -300,6 +464,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: flag.globalEnabled,
         limitValue: flag.globalEnabled ? planLimit(catalogue, context.planKey, featureKey) : null,
+        enumValue: flag.globalEnabled ? planEnum(catalogue, context.planKey, featureKey) : null,
         source: 'flag_workspace_list',
         trace,
       };
@@ -323,6 +488,7 @@ export function resolveEntitlement(
         featureKey,
         enabled: entitlement.enabled,
         limitValue: entitlement.limitValue,
+        enumValue: entitlement.enumValue,
         source: 'plan_entitlement',
         trace,
       };
@@ -335,8 +501,18 @@ export function resolveEntitlement(
   });
 
   // 9. Feature default.
-  const enabled = feature.defaultValue === true;
   const limitValue = typeof feature.defaultValue === 'number' ? feature.defaultValue : null;
+  /*
+   * An ENUM's default is the option it takes when nothing else decides, and a
+   * feature that HAS an option is on. Reading `defaultValue === true` alone —
+   * which is all this used to do — made every enum feature resolve to false
+   * and its value unreachable, whatever the configuration said.
+   */
+  const enumValue =
+    feature.valueType === 'enum' && typeof feature.defaultValue === 'string'
+      ? feature.defaultValue
+      : null;
+  const enabled = feature.defaultValue === true;
   trace.push({
     source: 'feature_default',
     decided: true,
@@ -344,11 +520,25 @@ export function resolveEntitlement(
   });
   return {
     featureKey,
-    enabled: enabled || limitValue !== null,
+    enabled: enabled || limitValue !== null || enumValue !== null,
     limitValue,
+    enumValue,
     source: 'feature_default',
     trace,
   };
+}
+
+/** The enum option a plan grants for a feature, or null. */
+function planEnum(
+  catalogue: EntitlementCatalogue,
+  planKey: string | null,
+  featureKey: string,
+): string | null {
+  if (!planKey) return null;
+  const entitlement = catalogue.planEntitlements.find(
+    (p) => p.planKey === planKey && p.featureKey === featureKey,
+  );
+  return entitlement?.enumValue ?? null;
 }
 
 function planLimit(
@@ -380,6 +570,7 @@ export function validateOverride(
   enabled: boolean,
   limitValue: number | null,
   now: Date,
+  enumValue: string | null = null,
 ): string | null {
   const feature = catalogue.features.find((f) => f.key === featureKey);
   if (!feature) return `Unknown feature "${featureKey}".`;
@@ -389,6 +580,22 @@ export function validateOverride(
   }
   if (feature.valueType === 'boolean' && limitValue !== null) {
     return `"${featureKey}" is a boolean feature and takes no limit.`;
+  }
+
+  /*
+   * ENUM VALIDATION — A-4. An enum override that names no option resolves to
+   * nothing useful, and one that names an option the feature does not offer is
+   * a typo that would silently take effect.
+   */
+  if (feature.valueType === 'enum') {
+    if (enabled && (enumValue === null || enumValue.trim() === '')) {
+      return `"${featureKey}" is an enum feature and needs a chosen option.`;
+    }
+    if (enumValue !== null && !feature.enumOptions.includes(enumValue)) {
+      return `"${enumValue}" is not one of the options "${featureKey}" offers.`;
+    }
+  } else if (enumValue !== null) {
+    return `"${featureKey}" is not an enum feature and takes no option.`;
   }
 
   if (enabled) {

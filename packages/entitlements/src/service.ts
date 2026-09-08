@@ -229,9 +229,29 @@ export class EntitlementService {
       this.#source.load('plans'),
     ]);
 
-    const declaredFeatures = (entitlements['features'] ?? []) as unknown as FeatureDefinition[];
-    const declaredEntitlements = (entitlements['planEntitlements'] ??
-      []) as unknown as PlanEntitlementRule[];
+    /*
+     * `dependsOn` and `enumOptions` normalised to arrays: both come from a JSON
+     * document through a cast, and a feature written before either field
+     * existed carries neither. `undefined.length` in the resolver would be a
+     * crash the compiler cannot see, because a cast is not a check.
+     */
+    const declaredFeatures = (
+      (entitlements['features'] ?? []) as unknown as FeatureDefinition[]
+    ).map((f) => ({
+      ...f,
+      dependsOn: f.dependsOn ?? [],
+      enumOptions: f.enumOptions ?? [],
+    }));
+    /*
+     * `enumValue` is normalised to null rather than left undefined (A-4).
+     * These come from a JSON document through a cast, so a plan written before
+     * enums existed carries no such key — and `undefined` reaching a field the
+     * decision type declares as `string | null` is the kind of gap a cast hides
+     * from the compiler and a caller finds at runtime.
+     */
+    const declaredEntitlements = (
+      (entitlements['planEntitlements'] ?? []) as unknown as PlanEntitlementRule[]
+    ).map((rule) => ({ ...rule, enumValue: rule.enumValue ?? null }));
     const planDocs = (plans['plans'] ?? []) as ReadonlyArray<Record<string, unknown>>;
 
     // THE PLAN'S QUOTAS ARE THE PLAN'S. They are projected into the catalogue
@@ -318,6 +338,7 @@ export class EntitlementService {
         featureKey: o.featureKey,
         enabled: o.enabled,
         limitValue: o.limitValue,
+        enumValue: o.enumValue,
         reason: o.reason,
         effectiveFrom: o.effectiveFrom,
         effectiveUntil: o.effectiveUntil,
@@ -637,6 +658,8 @@ export class EntitlementService {
     limitValue: number | null,
     reason: string,
     effectiveUntil: Date | null = null,
+    /** The chosen option for an `enum` feature (A-4). Null for every other type. */
+    enumValue: string | null = null,
   ): Promise<void> {
     await this.#authorize(actor, 'entitlements.set_override', OVERRIDE_PERMISSION);
 
@@ -658,6 +681,7 @@ export class EntitlementService {
       enabled,
       limitValue,
       this.#clock.now(),
+      enumValue,
     );
     if (invalid !== null) throw new AppError('VALIDATION_FAILED', invalid);
 
@@ -673,6 +697,7 @@ export class EntitlementService {
           featureKey,
           enabled,
           limitValue,
+          enumValue,
           reason: reason.trim(),
           grantedByPlatformUserId: actor.platformUserId,
           effectiveFrom: now,
@@ -806,16 +831,35 @@ export function entitlementDenialReason(
  * invented one.
  */
 const QUOTA_FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
-  { key: 'limit.seats', valueType: 'quota', defaultValue: null, dependsOn: [] },
-  { key: 'limit.brands', valueType: 'quota', defaultValue: null, dependsOn: [] },
-  { key: 'limit.social_accounts', valueType: 'quota', defaultValue: null, dependsOn: [] },
-  { key: 'limit.scheduled_posts', valueType: 'quota', defaultValue: null, dependsOn: [] },
-  { key: 'limit.storage_gb', valueType: 'quota', defaultValue: null, dependsOn: [] },
+  { key: 'limit.seats', valueType: 'quota', defaultValue: null, dependsOn: [], enumOptions: [] },
+  { key: 'limit.brands', valueType: 'quota', defaultValue: null, dependsOn: [], enumOptions: [] },
+  {
+    key: 'limit.social_accounts',
+    valueType: 'quota',
+    defaultValue: null,
+    dependsOn: [],
+    enumOptions: [],
+  },
+  {
+    key: 'limit.scheduled_posts',
+    valueType: 'quota',
+    defaultValue: null,
+    dependsOn: [],
+    enumOptions: [],
+  },
+  {
+    key: 'limit.storage_gb',
+    valueType: 'quota',
+    defaultValue: null,
+    dependsOn: [],
+    enumOptions: [],
+  },
   {
     key: 'limit.analytics_retention_days',
     valueType: 'quota',
     defaultValue: null,
     dependsOn: [],
+    enumOptions: [],
   },
 ];
 
@@ -879,6 +923,8 @@ function projectPlanQuotas(
         featureKey: mapping.featureKey,
         enabled: true,
         limitValue,
+        // A projected quota is never an enum: these six dimensions are counts.
+        enumValue: null,
         limitPeriod: mapping.period,
       });
     }

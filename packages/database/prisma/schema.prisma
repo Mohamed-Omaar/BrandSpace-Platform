@@ -841,6 +841,10 @@ model WorkspaceOverride {
   enabled    Boolean
   /// null = unlimited for a quota feature; ignored for a boolean feature.
   limitValue Int?
+  /// A-4. The chosen option for an `enum` feature; null for every other type.
+  /// Separate from `limitValue` because a quota answers "how many" and an enum
+  /// answers "which one" — collapsing them left enum features unresolvable.
+  enumValue  String?
 
   reason String
 
