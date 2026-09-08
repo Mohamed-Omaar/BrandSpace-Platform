@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -412,5 +413,171 @@ describe('password reset', () => {
     await expect(auth.completePasswordReset(issued!.token, PASSWORD)).rejects.toThrow(
       'This reset link is no longer valid.',
     );
+  });
+});
+
+/*
+ * A-1. A RESET IS NOT AN APPEAL AGAINST A SUSPENSION.
+ *
+ * `completePasswordReset` used to write `status: 'ACTIVE'` unconditionally, so
+ * a suspended account — or a deleted one whose token was minted before the
+ * deletion — could be resurrected from the user's own inbox. These are the
+ * assertions that would have caught it.
+ */
+describe('a password reset never reactivates an account', () => {
+  /** A throwaway user in a given state, with a live reset token. */
+  async function userWithToken(status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED') {
+    const email = `reset-${status.toLowerCase()}-${randomUUID()}@example.local`;
+    const user = await platform.user.create({
+      data: {
+        email,
+        name: `Reset ${status}`,
+        status: 'ACTIVE',
+        passwordHash: await hashPassword(PASSWORD),
+        emailVerifiedAt: new Date(),
+      },
+    });
+    // Minted while the account is still usable, exactly as it would have been
+    // in the window before an administrator acted.
+    const issued = await auth.beginPasswordReset(email);
+    expect(issued).not.toBeNull();
+
+    if (status !== 'ACTIVE') {
+      await platform.user.update({
+        where: { id: user.id },
+        data: {
+          status,
+          ...(status === 'DELETED' ? { deletedAt: new Date() } : {}),
+        },
+      });
+    }
+    return { id: user.id, email, token: issued!.token };
+  }
+
+  it('refuses a token belonging to a SUSPENDED account, and leaves it suspended', async () => {
+    const target = await userWithToken('SUSPENDED');
+
+    await expect(auth.completePasswordReset(target.token, PASSWORD)).rejects.toThrow(
+      // The SAME message as an unknown or expired token: a distinct one would
+      // tell whoever holds the link what happened to the account.
+      'This reset link is no longer valid.',
+    );
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.status).toBe('SUSPENDED');
+  });
+
+  it('refuses a token belonging to a DELETED account, and leaves it deleted', async () => {
+    const target = await userWithToken('DELETED');
+
+    await expect(auth.completePasswordReset(target.token, PASSWORD)).rejects.toThrow(
+      'This reset link is no longer valid.',
+    );
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.status).toBe('DELETED');
+    expect(after.deletedAt).not.toBeNull();
+  });
+
+  it('does not spend the token when the account is refused', async () => {
+    // The refusal rolls back the consumption. It matters because the reverse —
+    // burning the token AND refusing — would leave a reinstated user unable to
+    // use the link they were legitimately sent.
+    const target = await userWithToken('SUSPENDED');
+    await expect(auth.completePasswordReset(target.token, PASSWORD)).rejects.toThrow();
+
+    const rows = await platform.passwordResetToken.findMany({ where: { userId: target.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.usedAt).toBeNull();
+  });
+
+  it('mints no token for a suspended account in the first place', async () => {
+    const email = `reset-nomint-${randomUUID()}@example.local`;
+    await platform.user.create({
+      data: { email, name: 'No mint', status: 'SUSPENDED' },
+    });
+    // Null, not a throw: the caller's response must be identical to the
+    // unknown-address case or the endpoint becomes a status oracle.
+    await expect(auth.beginPasswordReset(email)).resolves.toBeNull();
+    expect(await platform.passwordResetToken.count({ where: { user: { email } } })).toBe(0);
+  });
+
+  it('advances PENDING to ACTIVE, because that is what a reset proves', async () => {
+    // The rule is "never REACTIVATE", not "never change status". Completing a
+    // reset is proof of address control, which is exactly what PENDING awaits.
+    const target = await userWithToken('PENDING');
+    await auth.completePasswordReset(target.token, PASSWORD);
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.status).toBe('ACTIVE');
+    expect(after.emailVerifiedAt).not.toBeNull();
+  });
+});
+
+/*
+ * A-1, second half. THE WHOLE RESET COMMITS OR NONE OF IT DOES.
+ */
+describe('password reset is atomic', () => {
+  it('does not consume the token when the new password is rejected', async () => {
+    const issued = await auth.beginPasswordReset(fixtures.a.userEmail);
+    expect(issued).not.toBeNull();
+
+    // Under the twelve-character minimum. The web form checks this too, but
+    // the service is the boundary: a caller that forgets must not cost the
+    // user their only recovery link.
+    await expect(auth.completePasswordReset(issued!.token, 'short')).rejects.toThrow();
+
+    const row = await platform.passwordResetToken.findFirst({
+      where: { userId: fixtures.a.userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(row?.usedAt, 'a rejected password must not spend the token').toBeNull();
+
+    // And the link still works afterwards, which is the property that matters.
+    await auth.completePasswordReset(issued!.token, PASSWORD);
+    const spent = await platform.passwordResetToken.findFirst({
+      where: { userId: fixtures.a.userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(spent?.usedAt).not.toBeNull();
+  });
+
+  it('leaves the password unchanged when the reset is refused', async () => {
+    const email = `reset-atomic-${randomUUID()}@example.local`;
+    const user = await platform.user.create({
+      data: {
+        email,
+        name: 'Atomic',
+        status: 'ACTIVE',
+        passwordHash: await hashPassword(PASSWORD),
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const issued = await auth.beginPasswordReset(email);
+    const before = (await platform.user.findUniqueOrThrow({ where: { id: user.id } })).passwordHash;
+
+    await platform.user.update({ where: { id: user.id }, data: { status: 'SUSPENDED' } });
+    await expect(auth.completePasswordReset(issued!.token, `${PASSWORD}-new`)).rejects.toThrow();
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.passwordHash).toBe(before);
+  });
+
+  it('revokes sessions in the same transaction as the password write', async () => {
+    // Not "revocation happens" — the earlier test covers that. This asserts
+    // the two are ONE unit: a session that outlives the password authorising
+    // it is the window this exists to close.
+    const session = await auth.signIn({ email: fixtures.a.userEmail, password: PASSWORD });
+    await expect(auth.resolve(session.token)).resolves.not.toBeNull();
+
+    const issued = await auth.beginPasswordReset(fixtures.a.userEmail);
+    await auth.completePasswordReset(issued!.token, PASSWORD);
+
+    await expect(auth.resolve(session.token)).resolves.toBeNull();
+    const row = await platform.customerSession.findFirstOrThrow({
+      where: { userId: fixtures.a.userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(row.revokedReason).toBe('Password changed');
   });
 });

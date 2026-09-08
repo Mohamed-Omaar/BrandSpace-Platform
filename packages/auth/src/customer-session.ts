@@ -33,6 +33,19 @@ export const CUSTOMER_MAX_FAILED_ATTEMPTS = 10;
 export const CUSTOMER_LOCKOUT_MINUTES = 15;
 
 /**
+ * The only account states in which a password reset may complete.
+ *
+ * PENDING, because completing a reset is exactly the proof of address control
+ * that PENDING is waiting for. ACTIVE, because that is the ordinary case.
+ *
+ * SUSPENDED and DELETED are absent deliberately, and this set is the whole
+ * reason: suspension is an administrative decision, and a link in the user's
+ * own inbox must not be able to overturn it. Anything not listed here is
+ * refused rather than reactivated.
+ */
+const RESETTABLE_STATUSES: ReadonlySet<string> = new Set(['PENDING', 'ACTIVE']);
+
+/**
  * A dummy Argon2id hash of a random value, verified when no user matched, so an
  * unknown email costs the same work as a known one. Without it, response time
  * is an oracle for "does this address have an account?".
@@ -357,7 +370,16 @@ export class CustomerAuthService {
     const user = await this.#prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
-    if (!user || user.status === 'DELETED' || user.deletedAt !== null) return null;
+    /*
+     * No token is minted for an account a reset could not complete anyway.
+     * `completePasswordReset` refuses these states too — this is the cheaper
+     * half of the same rule, and it keeps a suspended user from receiving a
+     * recovery email that implies the account is still theirs to recover.
+     *
+     * Returning null, not throwing: the caller's response is identical either
+     * way, which is what stops this being an account-existence oracle.
+     */
+    if (!user || user.deletedAt !== null || !RESETTABLE_STATUSES.has(user.status)) return null;
 
     const token = mintToken();
     const ttlMinutes = 60;
@@ -375,41 +397,119 @@ export class CustomerAuthService {
   /**
    * Complete a password reset.
    *
-   * Consumption is a single conditional UPDATE requiring exactly one affected
-   * row, so two concurrent requests cannot both spend the same token — the same
-   * defect as R-03, not repeated here.
+   * THREE PROPERTIES, each of which was previously missing or only half true.
+   *
+   * 1. A RESET NEVER REACTIVATES AN ACCOUNT. This used to write
+   *    `status: 'ACTIVE'` unconditionally, so a SUSPENDED user — or a DELETED
+   *    one holding a token minted before the deletion — could resurrect their
+   *    own account with a link from their inbox. Suspension is an
+   *    administrative decision and a password is not an appeal against it.
+   *    Only PENDING advances, because that is what a reset legitimately
+   *    completes: proving control of the address. ACTIVE stays ACTIVE;
+   *    SUSPENDED and DELETED are refused outright, with the SAME message as an
+   *    unknown token so the endpoint does not become a status oracle.
+   *
+   * 2. THE WHOLE THING IS ONE TRANSACTION. Consumption, the password write and
+   *    session revocation used to be four separate statements. Anything that
+   *    failed after the first one — a hash error, a lost connection, a crash —
+   *    left the token spent and the password unchanged, which locks the user
+   *    out of their own recovery path with no way back but a second reset.
+   *    They now commit together or not at all.
+   *
+   * 3. AN INVALID PASSWORD DOES NOT COST THE TOKEN. The new password is hashed
+   *    BEFORE anything is consumed. `hashPassword` throws for a password under
+   *    twelve characters, and it used to throw with the token already spent.
+   *    The web form checks length too, but the service is the boundary that has
+   *    to hold: a caller that forgets is a bug, not a lockout.
+   *
+   * Consumption itself is still a single conditional UPDATE requiring exactly
+   * one affected row, so two concurrent requests cannot both spend one token —
+   * the R-03 defect, not repeated here.
    */
   async completePasswordReset(token: string, newPassword: string): Promise<void> {
     const now = this.#clock.now();
-    const consumed = await this.#prisma.passwordResetToken.updateMany({
-      where: { tokenHash: hashResetToken(token), usedAt: null, expiresAt: { gt: now } },
-      data: { usedAt: now },
-    });
-    if (consumed.count !== 1) {
-      throw new AppError('UNAUTHENTICATED', 'This reset link is no longer valid.');
-    }
+    const tokenHash = hashResetToken(token);
 
-    const row = await this.#prisma.passwordResetToken.findUnique({
-      where: { tokenHash: hashResetToken(token) },
-      select: { userId: true },
-    });
-    if (!row) throw new AppError('UNAUTHENTICATED', 'This reset link is no longer valid.');
+    /*
+     * Hashed FIRST, outside the transaction. Argon2id is deliberately slow
+     * (19 MiB, two passes) and holding a row lock for the duration of it would
+     * turn every reset into a lock-contention window. Doing it here also means
+     * a rejected password has cost nothing at all.
+     */
+    const passwordHash = await hashPassword(newPassword);
 
-    await this.#prisma.user.update({
-      where: { id: row.userId },
-      data: {
-        passwordHash: await hashPassword(newPassword),
-        failedLoginCount: 0,
-        lockedUntil: null,
-        status: 'ACTIVE',
-        emailVerifiedAt: now,
-      },
+    await this.#transaction(async (tx) => {
+      const consumed = await tx.passwordResetToken.updateMany({
+        where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (consumed.count !== 1) {
+        throw new AppError('UNAUTHENTICATED', 'This reset link is no longer valid.');
+      }
+
+      const row = await tx.passwordResetToken.findUnique({
+        where: { tokenHash },
+        select: { userId: true },
+      });
+      if (!row) throw new AppError('UNAUTHENTICATED', 'This reset link is no longer valid.');
+
+      const user = await tx.user.findUnique({
+        where: { id: row.userId },
+        select: { id: true, status: true, deletedAt: true },
+      });
+      /*
+       * Refused with the SAME message as an unknown or expired token. A
+       * distinct "your account is suspended" here would tell anyone holding a
+       * stale link exactly what happened to the account, and the throw rolls
+       * the consumption back, so a suspended user's token is not silently
+       * burned either.
+       */
+      if (!user || user.deletedAt !== null || !RESETTABLE_STATUSES.has(user.status)) {
+        throw new AppError('UNAUTHENTICATED', 'This reset link is no longer valid.');
+      }
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          // PENDING advances — completing a reset proves control of the
+          // address. ACTIVE stays ACTIVE. Nothing else reaches this line.
+          ...(user.status === 'PENDING' ? { status: 'ACTIVE' as const } : {}),
+          emailVerifiedAt: now,
+        },
+      });
+
+      // A password change invalidates every existing session
+      // (docs/SECURITY.md §3), in the SAME transaction: a revocation that can
+      // fail separately is a window in which the old sessions outlive the
+      // password that authorised them.
+      await tx.customerSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: now, revokedReason: 'Password changed' },
+      });
     });
-    // A password change invalidates every existing session (docs/SECURITY.md §3).
-    await this.revokeAllForUser(row.userId, 'Password changed');
   }
 
   // --- Internals -----------------------------------------------------------
+
+  /**
+   * Run work in ONE transaction, when the client we hold supports it.
+   *
+   * Same detection as `#scope` below and for the same reason: this service is
+   * handed a real client by the customer application and, in the Control
+   * Center, a platform client that reads these tables through its own policy.
+   * A stub without `$transaction` (which is what the unit tests hand it) runs
+   * the body directly rather than failing — the atomicity is a property of the
+   * database path, and pretending to offer it elsewhere would be worse than
+   * being explicit about where it holds.
+   */
+  async #transaction<T>(fn: (db: PrismaClient) => Promise<T>): Promise<T> {
+    const maybe = this.#prisma as unknown as { $transaction?: unknown };
+    if (typeof maybe.$transaction !== 'function') return fn(this.#prisma);
+    return this.#prisma.$transaction(async (tx) => fn(tx as unknown as PrismaClient));
+  }
 
   /**
    * Run a read under the SESSION scope.
