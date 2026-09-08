@@ -4,7 +4,15 @@ import { ConfigurationService } from '@brandspace/config';
 import { SecretService } from '@brandspace/secrets';
 import { PLATFORM_ROLE_KEYS } from '@brandspace/shared';
 import { ensurePlatformRbac, platformRoleClient } from './fixtures';
+import { deleteTestSecrets, testSecretProvider } from '../support/secret-fixtures';
 import type { PrismaClient } from '@prisma/client';
+
+/**
+ * One token for this suite RUN, embedded in every secret ref it creates, so
+ * `afterAll` can delete exactly these rows and nothing else — including nothing
+ * belonging to a suite running in parallel (F-53).
+ */
+const TEST_SECRET_PROVIDER = testSecretProvider();
 
 /**
  * Regression suite for the independent security review — finding 2.
@@ -132,6 +140,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // This run's secrets go before the connection does.
+  if (prisma) await deleteTestSecrets(prisma, TEST_SECRET_PROVIDER);
   await prisma?.$disconnect();
 });
 
@@ -227,13 +237,22 @@ describe.each(PLATFORM_ROLE_KEYS)('secret access for %s', (roleKey) => {
 
   it(`${expected.secretRead ? 'can' : 'cannot'} list secret metadata`, async () => {
     const call = secrets.listSecrets(actorFor(roleKey), { environment: ENV });
-    if (expected.secretRead) await expect(call).resolves.toBeInstanceOf(Array);
-    else await expectForbidden(call);
+    if (expected.secretRead) {
+      // F-53 changed the return type from an unbounded array to one PAGE. The
+      // permission boundary is unchanged, so this still asserts the same
+      // thing — that a reader gets a result at all — against the new shape.
+      const page = await call;
+      expect(page.items).toBeInstanceOf(Array);
+      expect(page.items.length).toBeLessThanOrEqual(page.pageSize);
+      expect(page.total).toBeGreaterThanOrEqual(page.items.length);
+    } else {
+      await expectForbidden(call);
+    }
   });
 
   it(`${expected.secretManage ? 'can' : 'cannot'} create a secret`, async () => {
     const call = secrets.createSecret(actorFor(roleKey), {
-      ref: `ai_provider/rbac-${roleKey}/${randomUUID().slice(0, 8)}`,
+      ref: `ai_provider/${TEST_SECRET_PROVIDER}-${roleKey}/${randomUUID().slice(0, 8)}`,
       name: `RBAC ${roleKey}`,
       category: 'ai_provider',
       environment: ENV,
@@ -246,7 +265,7 @@ describe.each(PLATFORM_ROLE_KEYS)('secret access for %s', (roleKey) => {
   it(`${expected.secretManage ? 'can' : 'cannot'} rotate, disable, enable or revoke`, async () => {
     const owner = actorFor('platform_owner');
     const created = await secrets.createSecret(owner, {
-      ref: `ai_provider/rbac-target/${randomUUID().slice(0, 8)}`,
+      ref: `ai_provider/${TEST_SECRET_PROVIDER}-target/${randomUUID().slice(0, 8)}`,
       name: 'RBAC rotation target',
       category: 'ai_provider',
       environment: ENV,
@@ -299,7 +318,7 @@ describe('RBAC cannot be bypassed by calling the service directly', () => {
 
     await expectForbidden(
       secrets.createSecret(readOnly, {
-        ref: `ai_provider/bypass/${randomUUID().slice(0, 8)}`,
+        ref: `ai_provider/${TEST_SECRET_PROVIDER}-bypass/${randomUUID().slice(0, 8)}`,
         name: 'bypass attempt',
         category: 'ai_provider',
         environment: ENV,
@@ -316,7 +335,7 @@ describe('RBAC cannot be bypassed by calling the service directly', () => {
     await expectForbidden(config.createDraft(noMfa, 'website', ENV, reason()));
     await expectForbidden(
       secrets.createSecret(noMfa, {
-        ref: `ai_provider/nomfa/${randomUUID().slice(0, 8)}`,
+        ref: `ai_provider/${TEST_SECRET_PROVIDER}-nomfa/${randomUUID().slice(0, 8)}`,
         name: 'no mfa',
         category: 'ai_provider',
         environment: ENV,
@@ -331,7 +350,7 @@ describe('RBAC cannot be bypassed by calling the service directly', () => {
 
     await secrets
       .createSecret(agent, {
-        ref: `ai_provider/denied/${randomUUID().slice(0, 8)}`,
+        ref: `ai_provider/${TEST_SECRET_PROVIDER}-denied/${randomUUID().slice(0, 8)}`,
         name: 'denied attempt',
         category: 'ai_provider',
         environment: ENV,

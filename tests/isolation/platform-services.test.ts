@@ -5,6 +5,7 @@ import { SecretService, buildSecretRef } from '@brandspace/secrets';
 import { MODEL_TABLE_NAMES, PLATFORM_OWNED_MODELS } from '@brandspace/database';
 import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
+import { deleteTestSecrets, testSecretProvider } from '../support/secret-fixtures';
 import type { PrismaClient } from '@prisma/client';
 
 /**
@@ -18,6 +19,16 @@ import type { PrismaClient } from '@prisma/client';
 let prisma: PrismaClient;
 let config: ConfigurationService;
 let secrets: SecretService;
+
+/**
+ * One token for this suite RUN, embedded in every secret ref it creates.
+ *
+ * F-53: the suites used to leave every secret behind, and a long-lived local
+ * database reached 853 of them. The token is what lets `afterAll` delete
+ * exactly these rows and nothing else — including nothing belonging to another
+ * suite running in parallel.
+ */
+const TEST_SECRET_PROVIDER = testSecretProvider();
 let tenantSql: Client;
 let ownerId: string;
 
@@ -57,6 +68,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Remove this run's secrets before disconnecting. Guarded so a failure in
+  // beforeAll — where `prisma` may not exist — reports its own error rather
+  // than a confusing one from cleanup on top of it.
+  if (prisma) await deleteTestSecrets(prisma, TEST_SECRET_PROVIDER);
   // Optional-chained so a failure in beforeAll reports ITS error rather than a
   // confusing "cannot read 'end' of undefined" on top of it.
   await tenantSql?.end();
@@ -370,7 +385,7 @@ describe('secret service against the real database', () => {
   it('stores a secret and returns only masked metadata', async () => {
     const ref = buildSecretRef({
       category: 'ai_provider',
-      provider: `p${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-p`,
       environment: 'development',
       name: 'api-key',
     });
@@ -392,7 +407,7 @@ describe('secret service against the real database', () => {
     const value = `sk-plain-${crypto.randomUUID()}`;
     const ref = buildSecretRef({
       category: 'email_provider',
-      provider: `e${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-e`,
       environment: 'development',
       name: 'api-key',
     });
@@ -417,7 +432,7 @@ describe('secret service against the real database', () => {
     const value = 'sk-resolve-abcdefghijklmnop-1234';
     const ref = buildSecretRef({
       category: 'object_storage',
-      provider: `s${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-s`,
       environment: 'development',
       name: 'access-key',
     });
@@ -434,7 +449,7 @@ describe('secret service against the real database', () => {
   it('rotates with zero downtime: exactly one ACTIVE version at all times', async () => {
     const ref = buildSecretRef({
       category: 'ai_provider',
-      provider: `r${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-r`,
       environment: 'development',
       name: 'api-key',
     });
@@ -464,7 +479,7 @@ describe('secret service against the real database', () => {
   it('a disabled secret cannot be resolved', async () => {
     const ref = buildSecretRef({
       category: 'payment_provider',
-      provider: `d${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-d`,
       environment: 'development',
       name: 'secret-key',
     });
@@ -482,7 +497,7 @@ describe('secret service against the real database', () => {
   it('a revoked secret can never be re-enabled', async () => {
     const ref = buildSecretRef({
       category: 'other',
-      provider: `x${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-x`,
       environment: 'development',
       name: 'k',
     });
@@ -522,7 +537,7 @@ describe('secret service against the real database', () => {
   it('the secret material is immutable — rotation is the only way to change it', async () => {
     const ref = buildSecretRef({
       category: 'other',
-      provider: `i${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-i`,
       environment: 'development',
       name: 'k',
     });
@@ -550,7 +565,7 @@ describe('secret service against the real database', () => {
     const value = 'sk-fingerprint-abcdefgh-6666';
     const ref = buildSecretRef({
       category: 'other',
-      provider: `f${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-f`,
       environment: 'development',
       name: 'k',
     });
@@ -573,7 +588,7 @@ describe('audit events for platform operations', () => {
     const value = 'sk-audit-abcdefghijklmn-7777';
     const ref = buildSecretRef({
       category: 'other',
-      provider: `a${Date.now()}`,
+      provider: `${TEST_SECRET_PROVIDER}-a`,
       environment: 'development',
       name: 'k',
     });

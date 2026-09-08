@@ -41,6 +41,19 @@ let platform: PrismaClient;
 let ledger: CreditLedgerService;
 
 /**
+ * Every workspace this RUN provisioned — see the cleanup in `afterAll`.
+ *
+ * F-53's second half, in a suite that is not about secrets at all. This one
+ * leaves OPEN reservations past their deadline behind on every run, and
+ * `sweepAbandonedReservations` reads a BOUNDED window of them (200). Once the
+ * residue passed that window the sweeper tests started failing intermittently:
+ * the sweep filled its window with rows from runs months old and never reached
+ * the reservation the test had just made. The suite was right and the data was
+ * stale, which is exactly the shape F-53 had.
+ */
+const CREATED_WORKSPACE_IDS: string[] = [];
+
+/**
  * A workspace with an EMPTY wallet.
  *
  * Deliberately not `createIsolationFixtures`, for two reasons. That helper
@@ -70,6 +83,7 @@ async function freshWorkspace(): Promise<string> {
     },
   });
   await platform.creditWallet.create({ data: { workspaceId: workspace.id } });
+  CREATED_WORKSPACE_IDS.push(workspace.id);
   return workspace.id;
 }
 
@@ -82,6 +96,24 @@ beforeAll(async () => {
 }, 90_000);
 
 afterAll(async () => {
+  /*
+   * Remove this run's RESERVATIONS — only those, and only for the workspaces
+   * this run created.
+   *
+   * Reservations are the rows that matter here because a global, bounded query
+   * reads them: leave enough behind and the sweeper's window never reaches a
+   * fresh one. The grants, transactions, wallets and workspaces also linger,
+   * but nothing queries those under a limit, so they are left alone rather
+   * than widening this into a general-purpose delete (see F-61).
+   *
+   * Scoped by id to workspaces provisioned in THIS process, so a suite running
+   * in parallel keeps its own fixtures.
+   */
+  if (platform && CREATED_WORKSPACE_IDS.length > 0) {
+    await platform.creditReservation.deleteMany({
+      where: { workspaceId: { in: CREATED_WORKSPACE_IDS } },
+    });
+  }
   await app?.$disconnect();
   await platform?.$disconnect();
 });

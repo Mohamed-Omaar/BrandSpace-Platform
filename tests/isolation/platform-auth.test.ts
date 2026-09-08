@@ -17,7 +17,19 @@ import {
 import { SecretService } from '@brandspace/secrets';
 import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
+import { deleteTestSecrets, testSecretProvider } from '../support/secret-fixtures';
 import type { PrismaClient } from '@prisma/client';
+
+/**
+ * One token for this suite RUN, embedded in every secret ref it creates, so
+ * `afterAll` can delete exactly these rows and nothing else — including nothing
+ * belonging to a suite running in parallel (F-53).
+ *
+ * It goes in the ref's NAME segment, not the provider one: `platform-auth`
+ * asserts that an MFA ref starts `mfa-totp/platform/`, which is a real property
+ * of the product and not something a cleanup scheme may bend.
+ */
+const TEST_SECRET_PROVIDER = testSecretProvider();
 
 /**
  * Platform Admin authentication against a REAL PostgreSQL — section A of Phase 2A.
@@ -80,7 +92,7 @@ async function createPlatformUser(options: {
         permissionKeys: PLATFORM_PERMISSIONS.map((p) => p.key),
       },
       {
-        ref: `mfa-totp/platform/${ENV.toLowerCase()}/${email}`,
+        ref: `mfa-totp/platform/${ENV.toLowerCase()}/${TEST_SECRET_PROVIDER}-${email}`,
         name: `TOTP seed for ${email}`,
         category: 'mfa_totp',
         environment: ENV,
@@ -97,7 +109,9 @@ async function createPlatformUser(options: {
       roleId: options.roleId,
       passwordHash: options.withPassword === false ? null : await hashPassword(PASSWORD),
       mfaEnabled: enrolment !== null,
-      mfaSecretRef: enrolment ? `mfa-totp/platform/${ENV.toLowerCase()}/${email}` : null,
+      mfaSecretRef: enrolment
+        ? `mfa-totp/platform/${ENV.toLowerCase()}/${TEST_SECRET_PROVIDER}-${email}`
+        : null,
       mfaEnrolledAt: enrolment ? new Date() : null,
     },
   });
@@ -150,6 +164,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // This run's secrets go before the connections do.
+  if (prisma) await deleteTestSecrets(prisma, TEST_SECRET_PROVIDER);
   // Optional-chained so a failure in beforeAll reports ITS error rather than a
   // confusing "cannot read 'end' of undefined" on top of it.
   await tenantSql?.end();

@@ -485,6 +485,46 @@ export function Pagination({
     pointerEvents: 'none',
   };
 
+  /*
+   * A step that leads nowhere is a SPAN, not a link.
+   *
+   * `aria-disabled` plus `pointer-events: none` looks disabled and is not: the
+   * anchor keeps its href, stays in the tab order, and still navigates on
+   * Enter — so a keyboard user on page one can "go to page zero". Rendering a
+   * span removes the affordance rather than dressing it up, which is the same
+   * reasoning F-41 recorded for hidden labels.
+   */
+  const step = (
+    target: number,
+    enabled: boolean,
+    rel: 'prev' | 'next',
+    label: string,
+    icon: ReactNode,
+    trailing: boolean,
+  ): ReactNode =>
+    enabled ? (
+      <a
+        href={hrefForPage(target)}
+        rel={rel}
+        style={linkStyle}
+        data-testid={`${testId ?? 'pagination'}-${rel}`}
+      >
+        {trailing ? null : icon}
+        {label}
+        {trailing ? icon : null}
+      </a>
+    ) : (
+      <span
+        aria-hidden="true"
+        style={disabledStyle}
+        data-testid={`${testId ?? 'pagination'}-${rel}-disabled`}
+      >
+        {trailing ? null : icon}
+        {label}
+        {trailing ? icon : null}
+      </span>
+    );
+
   return (
     <nav
       aria-label={labels.navigation}
@@ -497,30 +537,18 @@ export function Pagination({
         marginBlockStart: spacingTokens.md,
       }}
     >
-      <a
-        href={hrefForPage(page - 1)}
-        rel="prev"
-        aria-disabled={page <= 1 ? 'true' : undefined}
-        style={page <= 1 ? disabledStyle : linkStyle}
+      {/* The chevron is logical: `ChevronStart` points toward the start of the
+          inline axis. It is drawn pointing left and mirrored in Arabic by
+          `.bs-chevron-logical` in `tokens.css` — the class the icon carries is
+          what makes that true, so do not swap it for a bare `<svg>`. */}
+      {step(page - 1, page > 1, 'prev', labels.previous, <ChevronStartIcon size={16} />, false)}
+      <span
+        data-testid={`${testId ?? 'pagination'}-summary`}
+        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
       >
-        {/* The chevron is logical: `ChevronStart` points toward the start of the
-            inline axis, so it flips with direction rather than pointing the
-            wrong way in Arabic. */}
-        <ChevronStartIcon size={16} />
-        {labels.previous}
-      </a>
-      <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
         {labels.summary}
       </span>
-      <a
-        href={hrefForPage(page + 1)}
-        rel="next"
-        aria-disabled={page >= pageCount ? 'true' : undefined}
-        style={page >= pageCount ? disabledStyle : linkStyle}
-      >
-        {labels.next}
-        <ChevronEndIcon size={16} />
-      </a>
+      {step(page + 1, page < pageCount, 'next', labels.next, <ChevronEndIcon size={16} />, true)}
     </nav>
   );
 }

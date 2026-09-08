@@ -148,15 +148,17 @@ export default defineConfig({
     // edits workspace settings. Each runs in a serial project and is excluded
     // from the two viewport projects.
     //
-    // `plans-entitlements` shares the `admin-console` project rather than
-    // getting its own: both drive the same signed-in Control Center against the
-    // same configuration drafts, and two serial projects would still run in
-    // parallel WITH EACH OTHER — which is exactly the interleaving the serial
-    // mode exists to prevent.
+    // `plans-entitlements` and `secrets-pagination` share the `admin-console`
+    // project rather than getting their own: all three drive the same signed-in
+    // Control Center against the same configuration drafts and the same secret
+    // table, and two serial projects would still run in parallel WITH EACH
+    // OTHER — which is exactly the interleaving the serial mode exists to
+    // prevent. `secrets-pagination` in particular seeds sixty records and
+    // asserts a total; a concurrent suite storing a secret would break it.
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -166,12 +168,12 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
       name: 'admin-console',
-      testMatch: /(admin-console|plans-entitlements)\.spec\.ts/,
+      testMatch: /(admin-console|plans-entitlements|secrets-pagination)\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

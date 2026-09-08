@@ -5,6 +5,8 @@ import { expectNoHorizontalOverflow } from './overflow';
 // Shared with `plans-entitlements.spec.ts`. One sign-in helper, so the MFA
 // step D-27 requires cannot drift between specs.
 import { credentials, signIn, submitPassword, totpCode } from './admin-session';
+import { deleteTestSecrets, testSecretProvider } from '../support/secret-fixtures';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * Platform Admin Control Center — end-to-end.
@@ -426,6 +428,18 @@ test.describe('secrets are stored but never shown', () => {
   // trivially satisfied by an empty string.
   const FAKE_VALUE = 'e2e-fake-provider-key-8f21c0a4d7b93e56';
   const SECRET_NAME = `e2e ${Date.now()}`;
+  /*
+   * F-53. The provider this run types into the form is a cleanup token, so the
+   * secret it creates through the BROWSER can still be identified and removed
+   * afterwards. Every E2E run used to leave one behind for ever, which — with
+   * the isolation suites doing the same at scale — is what eventually made this
+   * very page too slow for its own test.
+   */
+  const PROVIDER = testSecretProvider();
+
+  test.afterAll(async () => {
+    await withPlatformPrisma((prisma) => deleteTestSecrets(prisma, PROVIDER));
+  });
 
   test('stores a secret and shows only masked metadata', async ({ page }) => {
     await signIn(page, 'en');
@@ -436,7 +450,7 @@ test.describe('secrets are stored but never shown', () => {
 
     await page.getByTestId('secret-name').fill(SECRET_NAME);
     await page.getByTestId('secret-category').selectOption('ai_provider');
-    await page.getByTestId('secret-provider').fill('e2e-provider');
+    await page.getByTestId('secret-provider').fill(PROVIDER);
     await page.getByTestId('secret-value').fill(FAKE_VALUE);
     await page.getByTestId('secret-save').click();
 

@@ -233,6 +233,35 @@ MSW and recorded fixtures (provider contracts), k6 (load).**
 
 Isolation tests are a **first-class, non-skippable suite** — see §8.4.
 
+#### Test data ownership and cleanup (F-53)
+
+A suite that writes rows and never removes them is a slow leak. It is invisible in CI, which builds a
+fresh database per run, and it accumulates on every long-lived developer machine until something that
+used to pass starts timing out. That is exactly how F-53 was found: 853 secret records, and a page that
+had to render all of them.
+
+The rule is **each suite owns and identifies only the rows it creates, and removes exactly those**.
+
+- **A per-run token.** `tests/support/secret-fixtures.ts` mints `zz-testfixture-<8 hex>` once per suite
+  run and embeds it in every ref the run creates. It is the row's proof of ownership.
+- **Cleanup deletes by token, never by shape or by time.** `deleteTestSecrets` refuses any argument that
+  is not a well-formed token — an empty string, a bare prefix, a `%`, a category name — so no call can
+  widen into "delete the secrets table". "Everything created since the run started" was rejected as a
+  strategy: it would delete a suite running in parallel.
+- **Cleanup lives in the test harness only.** `tests/support/` and `tests/e2e/platform-prisma.ts` are not
+  reachable from any application package, and the module boundary lint rules keep it that way. **No
+  product-facing secret deletion path was added**, and none should be: secret records are immutable by
+  design and rotation, disable and revoke are the product's answers.
+- **It uses privileges that already existed.** The `brandspace_platform` role already held `DELETE` on
+  `secret_record` and `secret_version`; nothing was granted for testing, and `brandspace_app` still has
+  no privilege on either table at all.
+- **It is proven, not asserted.** `tests/isolation/secret-cleanup.test.ts` shows the helper removing its
+  own rows and their versions, leaving another run's rows and non-fixture rows untouched, refusing
+  malformed tokens, and returning the table to its starting count across repeated create/clean cycles.
+
+A suite must remain safe on a fresh, unseeded, migrations-only database: bootstrap what you read (F-23),
+clean up what you write.
+
 ### 3.10 Observability
 
 **Recommendation: OpenTelemetry as the instrumentation standard; structured JSON logs; vendor-neutral export.**

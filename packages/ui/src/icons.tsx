@@ -218,9 +218,32 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/*
+ * THE TWO LOGICAL CHEVRONS, and why they need a class.
+ *
+ * "Start" and "End" are directions on the INLINE axis, so in Arabic the start
+ * chevron must point right. An SVG path cannot know that — the glyph below is
+ * drawn pointing left, which is correct in English and backwards in Arabic.
+ * The components that use these (pagination, the sidebar collapse toggle, the
+ * calendar's month stepper) all documented the flip as though it happened; it
+ * did not, and an Arabic reader saw "previous" pointing forwards.
+ *
+ * `.bs-chevron-logical` is what makes the claim true: `tokens.css` mirrors it
+ * under `[dir='rtl']`. Merged rather than overwritten, so a caller's own class
+ * still arrives.
+ */
+const LOGICAL_CHEVRON = 'bs-chevron-logical';
+
+function logicalChevronProps(props: IconProps): IconProps {
+  return {
+    ...props,
+    className: props.className ? `${props.className} ${LOGICAL_CHEVRON}` : LOGICAL_CHEVRON,
+  };
+}
+
 export function ChevronStartIcon(props: IconProps) {
   return (
-    <Icon {...props}>
+    <Icon {...logicalChevronProps(props)}>
       <path d="m14.5 5-6 7 6 7" />
     </Icon>
   );
@@ -228,7 +251,7 @@ export function ChevronStartIcon(props: IconProps) {
 
 export function ChevronEndIcon(props: IconProps) {
   return (
-    <Icon {...props}>
+    <Icon {...logicalChevronProps(props)}>
       <path d="m9.5 5 6 7-6 7" />
     </Icon>
   );

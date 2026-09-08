@@ -611,6 +611,12 @@ model SecretRecord {
   @@unique([ref, environment])
   @@index([environment, status])
   @@index([category])
+  /// F-53. The Control Center's paginated listing orders by
+  /// `[category, name, id]` inside one environment. Without this the database
+  /// sorts the whole matching set to return one page, which is the cost
+  /// pagination exists to avoid. `id` is included so the index covers the total
+  /// order the query actually asks for.
+  @@index([environment, category, name, id])
   @@map("secret_record")
 }
 
