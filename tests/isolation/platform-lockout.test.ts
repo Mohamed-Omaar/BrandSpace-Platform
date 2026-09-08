@@ -11,7 +11,19 @@ import {
 import { SecretService } from '@brandspace/secrets';
 import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
+import { deleteTestSecrets, testSecretProvider } from '../support/secret-fixtures';
 import type { PrismaClient } from '@prisma/client';
+
+/**
+ * One token for this suite RUN, embedded in every secret ref it creates, so
+ * `afterAll` can delete exactly these rows and nothing else — including nothing
+ * belonging to a suite running in parallel (F-53).
+ *
+ * It goes in the ref's NAME segment, not the provider one: `platform-auth`
+ * asserts that an MFA ref starts `mfa-totp/platform/`, which is a real property
+ * of the product and not something a cleanup scheme may bend.
+ */
+const TEST_SECRET_PROVIDER = testSecretProvider();
 
 /**
  * Regression suite for the independent security review — findings 1 and 3.
@@ -59,7 +71,7 @@ interface TestUser {
 async function createUser(): Promise<TestUser> {
   const email = `lockout-${randomUUID()}@brandspace.local`;
   const enrolment = generateTotpEnrolment(email);
-  const ref = `mfa-totp/platform/development/${email}`;
+  const ref = `mfa-totp/platform/development/${TEST_SECRET_PROVIDER}-${email}`;
 
   await secrets.createSecret(
     {
@@ -124,6 +136,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // This run's secrets go before the connection does.
+  if (prisma) await deleteTestSecrets(prisma, TEST_SECRET_PROVIDER);
   await prisma?.$disconnect();
 });
 

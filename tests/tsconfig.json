@@ -6,7 +6,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx"
   },
-  "include": ["unit/**/*.ts", "isolation/**/*.ts"],
+  "include": ["unit/**/*.ts", "isolation/**/*.ts", "support/**/*.ts"],
   "//": "E2E specs run code inside the browser and need DOM types; they have their own config.",
   "//jsx": "DOM lib and jsx are set because the design-system tests import @brandspace/ui, whose components are .tsx."
 }
