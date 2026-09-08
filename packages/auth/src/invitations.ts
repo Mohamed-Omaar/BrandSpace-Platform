@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 // The client TYPE comes from @brandspace/database, the only package permitted
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
-import type { PrismaClient } from '@brandspace/database';
+import { Prisma, type PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import { hashPassword } from './password';
 
@@ -571,7 +571,13 @@ export class InvitationService {
   async #acceptFor(
     tx: PrismaClient,
     ctx: {
-      readonly found: { id: string; workspaceId: string; roleId: string; brandScope: unknown };
+      readonly found: {
+        id: string;
+        workspaceId: string;
+        roleId: string;
+        // `String[]` on both models, so it carries straight across.
+        brandScope: string[];
+      };
       readonly tokenHash: string;
       readonly now: Date;
       readonly userId: string;
@@ -604,13 +610,13 @@ export class InvitationService {
         workspaceId: found.workspaceId,
         userId,
         roleId: found.roleId,
-        brandScope: found.brandScope as never,
+        brandScope: found.brandScope,
         status: 'ACTIVE',
         acceptedAt: now,
       },
       update: {
         roleId: found.roleId,
-        brandScope: found.brandScope as never,
+        brandScope: found.brandScope,
         status: 'ACTIVE',
         acceptedAt: now,
       },
@@ -754,8 +760,8 @@ export class InvitationService {
       readonly action: string;
       readonly actor: Inviter;
       readonly reason?: string;
-      readonly after?: Record<string, unknown>;
-      readonly before?: Record<string, unknown>;
+      readonly after?: Prisma.InputJsonObject;
+      readonly before?: Prisma.InputJsonObject;
     },
   ): Promise<void> {
     await tx.auditEvent.create({
@@ -771,11 +777,13 @@ export class InvitationService {
         severity: 'NOTICE',
         outcome: 'SUCCESS',
         reason: input.reason ?? null,
-        // `?? Prisma.JsonNull` rather than `undefined`: with
-        // `exactOptionalPropertyTypes`, an absent JSON column is expressed as
-        // an explicit database NULL, not by omitting the key.
-        before: (input.before ?? null) as never,
-        after: (input.after ?? null) as never,
+        // `Prisma.DbNull`, not `null` and not `undefined`. Under
+        // `exactOptionalPropertyTypes` an omitted key is not the same as an
+        // absent value, and for a nullable Json column Prisma distinguishes a
+        // database NULL (`DbNull`) from the JSON value `null` (`JsonNull`).
+        // A database NULL is what "this event has no before state" means.
+        before: input.before ?? Prisma.DbNull,
+        after: input.after ?? Prisma.DbNull,
       },
     });
   }
