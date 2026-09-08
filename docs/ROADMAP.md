@@ -252,6 +252,40 @@ environment.
 
 ---
 
+## Post-Phase-3 audit remediation
+
+**Not a phase.** Eleven findings from an independent audit of Phase 3, closed
+before Phase 4 opens. Recorded as A-1…A-12 in `docs/DECISIONS.md` with the root
+cause, the fix and the test evidence for each.
+
+The pattern worth carrying forward: **most of them were things that looked
+done.** `enabledForPlans` was declared, schema'd, surfaced in the Control
+Centre and read by nothing. `assignPlan` wrote a plan key and no subscription.
+Support mode carried a comment asserting one live session per operator that
+nothing enforced. The end-to-end suite pre-created the invitee's account,
+which is exactly what hid the fact that a new invitee had no way in. In each
+case the artefact — a field, a comment, a passing test — was evidence that the
+work had been done, and was not.
+
+Three classes recurred:
+
+- **Read-then-write under concurrency.** The last-owner count, settle/release
+  status checks, support-mode session creation. Every one passed sequentially;
+  every one failed the moment two requests arrived together, which is the
+  normal outcome of two clicks.
+- **Multi-statement operations that were called atomic.** Password reset, the
+  cycle boundary, plan assignment, audit events. A crash between statements
+  left states nobody had designed.
+- **Configuration that resolved to nothing.** Plan targeting, enum
+  entitlements, dependency re-evaluation.
+
+Phase 3's scope and completion are unchanged. **No Phase 4 work was started**:
+no providers, models, routing, AI requests, Brand Brain, content models, social
+integrations, billing or payment functionality, and no commercial plan price or
+credit value entered or activated in any environment.
+
+---
+
 ## Phase 4 — AI Gateway
 
 **Goal:** provider-agnostic AI with correct economics, proven end-to-end with a mock provider.
