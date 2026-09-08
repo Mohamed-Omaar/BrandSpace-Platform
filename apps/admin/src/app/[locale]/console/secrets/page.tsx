@@ -1,5 +1,10 @@
-import { SECRET_CATEGORY_DEFINITIONS } from '@brandspace/secrets';
 import {
+  DEFAULT_SECRET_PAGE_SIZE,
+  SECRET_CATEGORY_DEFINITIONS,
+  SECRET_PAGE_SIZES,
+} from '@brandspace/secrets';
+import {
+  Pagination,
   SectionHeader,
   colorTokens,
   fontTokens,
@@ -8,6 +13,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
+import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import {
@@ -37,17 +43,68 @@ export default async function SecretsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; ok?: string; ref?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    ok?: string;
+    ref?: string;
+    q?: string;
+    category?: string;
+    page?: string;
+    size?: string;
+  }>;
 }) {
   const { locale } = await params;
   const search = await searchParams;
   const { error, ok } = search;
   const actor = await requirePageActor(locale, 'platform.secret.read');
   const mayManage = actor.permissionKeys.includes('platform.secret.manage');
+  const t = translator(locale);
 
   const environment = currentEnvironment();
-  const secrets = await getSecretService().listSecrets(serviceActor(actor), { environment });
   const isArabic = locale === 'ar';
+
+  /*
+   * F-53. THE STATE LIVES IN THE URL.
+   *
+   * Search, category, page and page size are query parameters, so a page is
+   * bookmarkable, survives a refresh, and works with the browser's back button
+   * — the same reason `Pagination` renders real links. It also means the whole
+   * screen stays a server component: nothing here needs client JavaScript to
+   * change what is displayed.
+   *
+   * Every value is treated as hostile: it arrives from a URL an operator can
+   * edit. A malformed page or size falls back rather than throwing, and the
+   * SERVICE clamps both again — the page is not the control.
+   */
+  const query = String(search.q ?? '').trim();
+  const category = String(search.category ?? '').trim();
+  const requestedPage = Number.parseInt(String(search.page ?? '1'), 10);
+  const requestedSize = Number.parseInt(String(search.size ?? ''), 10);
+
+  const listing = await getSecretService().listSecrets(serviceActor(actor), {
+    environment,
+    ...(category ? { category } : {}),
+    ...(query ? { search: query } : {}),
+    page: Number.isNaN(requestedPage) ? 1 : requestedPage,
+    pageSize: Number.isNaN(requestedSize) ? DEFAULT_SECRET_PAGE_SIZE : requestedSize,
+  });
+
+  /** A link back to this page with one thing changed. */
+  const hrefWith = (changes: Record<string, string | number | undefined>): string => {
+    const next = new URLSearchParams();
+    if (query) next.set('q', query);
+    if (category) next.set('category', category);
+    next.set('page', String(listing.page));
+    next.set('size', String(listing.pageSize));
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === undefined || value === '') next.delete(key);
+      else next.set(key, String(value));
+    }
+    // Not named `search`: that is the searchParams object in this scope, and
+    // shadowing it here would be one rename away from a silent bug.
+    const queryString = next.toString();
+    return queryString ? `/${locale}/console/secrets?${queryString}` : `/${locale}/console/secrets`;
+  };
 
   return (
     <>
@@ -165,8 +222,122 @@ export default async function SecretsPage({
       ) : null}
 
       <SectionHeader title={isArabic ? 'المفاتيح المخزَّنة' : 'Stored secrets'} />
-      {secrets.length === 0 ? (
-        <EmptyState message={isArabic ? 'لا توجد مفاتيح بعد.' : 'No secrets stored yet.'} />
+
+      {/*
+        SERVER-SIDE SEARCH AND FILTER.
+        A GET form, so submitting it puts the terms in the URL and the server
+        does the filtering. Filtering in the browser would mean shipping every
+        row in order to hide most of them, which is the defect F-53 records.
+
+        `page` is deliberately NOT carried: changing what you are searching for
+        must return you to the first page, or you land on page 12 of a 2-page
+        result and see nothing.
+      */}
+      <form
+        method="get"
+        action={`/${locale}/console/secrets`}
+        data-testid="secret-filters"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: spacingTokens.sm,
+          alignItems: 'flex-end',
+          marginBlockEnd: spacingTokens.md,
+        }}
+      >
+        <div>
+          <label htmlFor="secret-search" style={labelStyle}>
+            {t('secrets.search')}
+          </label>
+          <input
+            className="bs-control"
+            id="secret-search"
+            name="q"
+            type="search"
+            defaultValue={query}
+            data-testid="secret-search"
+            style={{ ...sharedInputStyle(), maxInlineSize: '18rem' }}
+          />
+        </div>
+        <div>
+          <label htmlFor="secret-filter-category" style={labelStyle}>
+            {t('secrets.category')}
+          </label>
+          <select
+            className="bs-control"
+            id="secret-filter-category"
+            name="category"
+            defaultValue={category}
+            data-testid="secret-filter-category"
+            style={{ ...sharedInputStyle(), maxInlineSize: '14rem' }}
+          >
+            <option value="">{t('secrets.categoryAll')}</option>
+            {SECRET_CATEGORY_DEFINITIONS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {isArabic ? c.labelAr : c.labelEn}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="secret-page-size" style={labelStyle}>
+            {t('secrets.perPage')}
+          </label>
+          <select
+            className="bs-control"
+            id="secret-page-size"
+            name="size"
+            defaultValue={String(listing.pageSize)}
+            data-testid="secret-page-size"
+            style={{ ...sharedInputStyle(), maxInlineSize: '8rem' }}
+          >
+            {SECRET_PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" style={smallButton} data-testid="secret-search-apply">
+          {t('secrets.searchApply')}
+        </button>
+        {query || category ? (
+          <a
+            href={`/${locale}/console/secrets`}
+            style={{ ...smallButton, textDecoration: 'none' }}
+            data-testid="secret-search-clear"
+          >
+            {t('secrets.searchClear')}
+          </a>
+        ) : null}
+      </form>
+
+      {/*
+        THE RANGE, ALWAYS. Rendered outside the pagination nav on purpose: the
+        nav is navigation and disappears on a single page, but "how many are
+        there" is information the operator needs either way — and it is the
+        assurance that nothing is being silently hidden.
+      */}
+      <p
+        data-testid="secret-range"
+        role="status"
+        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+      >
+        {isArabic
+          ? `عرض ${listing.from}–${listing.to} من ${listing.total}`
+          : `Showing ${listing.from}–${listing.to} of ${listing.total}`}
+      </p>
+
+      {listing.total === 0 ? (
+        <EmptyState
+          message={
+            query || category
+              ? t('secrets.noMatches')
+              : isArabic
+                ? 'لا توجد مفاتيح بعد.'
+                : 'No secrets stored yet.'
+          }
+        />
       ) : (
         <DataTable
           headers={[
@@ -179,7 +350,7 @@ export default async function SecretsPage({
             isArabic ? 'إجراءات' : 'Actions',
           ]}
         >
-          {secrets.map((secret) => (
+          {listing.items.map((secret) => (
             <tr key={secret.id} data-testid={`secret-row-${secret.ref}`}>
               <Cell>{secret.name}</Cell>
               <Cell>
@@ -276,6 +447,21 @@ export default async function SecretsPage({
           ))}
         </DataTable>
       )}
+
+      <Pagination
+        page={listing.page}
+        pageCount={listing.totalPages}
+        hrefForPage={(target) => hrefWith({ page: target })}
+        labels={{
+          navigation: t('secrets.pagination'),
+          previous: t('secrets.previous'),
+          next: t('secrets.next'),
+          summary: isArabic
+            ? `صفحة ${listing.page} من ${listing.totalPages}`
+            : `Page ${listing.page} of ${listing.totalPages}`,
+        }}
+        testId="secret-pagination"
+      />
     </>
   );
 }

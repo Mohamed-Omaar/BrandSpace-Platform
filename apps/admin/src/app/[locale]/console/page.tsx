@@ -40,9 +40,12 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const secrets = getSecretService();
   const workspaceService = getWorkspaceService();
 
-  const [workspaces, secretList, activeDomains] = await Promise.all([
+  const [workspaces, secretCount, activeDomains] = await Promise.all([
     workspaceService.list(serviceActor(actor), {}),
-    mayReadSecrets ? secrets.listSecrets(serviceActor(actor), { environment }) : [],
+    // F-53: a COUNT, not a listing. This tile needs one integer, and reading
+    // every record with its active version to take `.length` of them was the
+    // same unbounded-read defect in its purest form.
+    mayReadSecrets ? secrets.countSecrets(serviceActor(actor), { environment }) : 0,
     mayReadConfig
       ? Promise.all(
           CONFIG_DOMAIN_KEYS.map(async (domain) => ({
@@ -70,7 +73,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
     },
     {
       label: locale === 'ar' ? 'مفاتيح سرية' : 'Stored secrets',
-      value: mayReadSecrets ? String(secretList.length) : undefined,
+      value: mayReadSecrets ? String(secretCount) : undefined,
       withheld: !mayReadSecrets,
       testid: 'stat-secrets',
     },
