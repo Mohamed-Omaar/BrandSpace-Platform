@@ -194,7 +194,7 @@ export class InsufficientCreditsError extends AppError {
  * methods removed — you cannot open a transaction inside a transaction, and the
  * type says so. Named here because several private helpers take it.
  */
-type LedgerTx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$use' | '$extends'>;
+export type LedgerTx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$use' | '$extends'>;
 
 /**
  * A reservation as Prisma returns it. Named rather than inlined because
@@ -270,9 +270,15 @@ export class CreditLedgerService {
    * `grant`, inside a transaction the caller already owns.
    *
    * The cycle reset needs the new allowance to commit with the forfeiture that
-   * precedes it (A-6); calling the public method there would open a second
-   * transaction and reintroduce the gap this exists to close.
+   * precedes it (A-6), and a plan assignment needs it to commit with the
+   * subscription it belongs to (A-3); calling the public method in either place
+   * would open a second transaction and reintroduce the gap each exists to
+   * close. Every validation and the whole idempotency contract still apply.
    */
+  async grantWithin(tx: LedgerTx, input: GrantInput): Promise<string> {
+    return this.#grant(tx, input);
+  }
+
   async #grant(tx: LedgerTx, input: GrantInput): Promise<string> {
     const amount = BigInt(input.credits) * MILLI_PER_CREDIT;
     const actor = input.actor ?? SYSTEM_ACTOR;

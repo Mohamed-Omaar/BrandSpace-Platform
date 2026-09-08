@@ -92,6 +92,24 @@ export function getEntitlementService(): EntitlementService {
   });
 }
 
+/**
+ * The entitlement service WITH the ledger attached (A-3).
+ *
+ * Assigning a plan grants the credits that plan promises, in the same
+ * transaction as the subscription. That needs the ledger, and the ledger needs
+ * the `credits` policy, which is an async read — so this is a separate,
+ * awaited factory rather than a widening of the synchronous one above. Every
+ * read-only caller keeps the cheap constructor.
+ */
+export async function getPlanAssignmentService(): Promise<EntitlementService> {
+  return new EntitlementService({
+    prisma: getPlatformPrisma(),
+    config: getConfigService(),
+    environment: currentEnvironment(),
+    ledger: await getCreditLedgerService(),
+  });
+}
+
 export function getCreditService(): CreditService {
   return new CreditService({ prisma: getPlatformPrisma() });
 }

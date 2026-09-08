@@ -13,6 +13,21 @@ import {
   type PlanEntitlementRule,
   type WorkspaceEntitlementContext,
 } from './precedence';
+import { findPlan, readPlanCatalogue, termsFor } from './plan-catalogue';
+import { addMonthsClamped } from './credit-policy';
+import type { PlanTerms } from './subscription';
+import type { CreditLedgerService, LedgerTx } from './credit-ledger';
+
+/**
+ * The currency a subscription pins when the caller does not name one.
+ *
+ * NOT a business decision encoded in code: it is the fallback for an
+ * assignment that did not specify, and the plan must actually carry a price in
+ * it or the assignment is refused rather than pinned at zero. D-10 set SAR as
+ * the launch currency; changing it is a configuration edit plus this constant,
+ * and the refusal above is what makes a mismatch loud instead of silent.
+ */
+const DEFAULT_PIN_CURRENCY = 'SAR';
 
 /**
  * Entitlement resolution against live configuration.
@@ -70,6 +85,16 @@ export interface EffectiveEntitlements {
 export interface CatalogueSource {
   /** The ACTIVE payload for one configuration domain, or an empty object. */
   load(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<Record<string, unknown>>;
+  /**
+   * Which configuration version that payload came from, or null when nothing
+   * is active.
+   *
+   * A subscription PINS the price it was sold at (AC-04.7), and a pinned price
+   * with no record of where it came from cannot be audited: "this workspace
+   * pays 49" is only meaningful next to "because plans v7 said so on that
+   * date". Both sources can answer, so this is not optional.
+   */
+  versionId(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<string | null>;
 }
 
 /** The platform-side source: the Configuration Service itself. */
@@ -84,6 +109,10 @@ export class ConfigurationCatalogueSource implements CatalogueSource {
 
   async load(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<Record<string, unknown>> {
     return (await this.#config.get(domain, this.#environment)) as Record<string, unknown>;
+  }
+
+  async versionId(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<string | null> {
+    return this.#config.activeVersionId(domain, this.#environment);
   }
 }
 
@@ -113,6 +142,14 @@ export class TenantCatalogueSource implements CatalogueSource {
     // owner has approved any plan — not an error to paper over.
     return (row?.payload as Record<string, unknown> | undefined) ?? {};
   }
+
+  async versionId(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<string | null> {
+    const row = await this.#prisma.entitlementCatalogueSnapshot.findUnique({
+      where: { domain_environment: { domain, environment: this.#environment } },
+      select: { sourceVersionId: true },
+    });
+    return row?.sourceVersionId ?? null;
+  }
 }
 
 export interface EntitlementServiceOptions {
@@ -122,6 +159,16 @@ export interface EntitlementServiceOptions {
   readonly catalogueSource?: CatalogueSource;
   readonly environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
   readonly clock?: Clock;
+  /**
+   * The ledger, so a plan assignment can grant the credits it promises in the
+   * SAME transaction as the subscription (A-3).
+   *
+   * Optional because the tenant-side service resolves entitlements and never
+   * assigns a plan. When it is absent, `assignPlan` writes the subscription and
+   * grants nothing — which is why the Control Center wires one in, and why the
+   * absence is a deliberate configuration rather than a silent default.
+   */
+  readonly ledger?: CreditLedgerService;
   /**
    * How long a loaded catalogue may be reused. Short by design: a kill switch
    * must contain an incident, and docs/ADMIN-CONTROL-CENTER.md §5.5 puts that
@@ -139,11 +186,13 @@ export class EntitlementService {
   readonly #source: CatalogueSource;
   readonly #clock: Clock;
   readonly #cacheTtlMs: number;
+  readonly #ledger: CreditLedgerService | null;
   #catalogueCache: { value: EntitlementCatalogue; expiresAt: number } | null = null;
 
   constructor(options: EntitlementServiceOptions) {
     this.#prisma = options.prisma;
     this.#cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CATALOGUE_TTL_MS;
+    this.#ledger = options.ledger ?? null;
     const source =
       options.catalogueSource ??
       (options.config
@@ -355,15 +404,49 @@ export class EntitlementService {
     workspaceId: string,
     planKey: string | null,
     reason: string,
+    options: { readonly currency?: string; readonly billingInterval?: 'MONTH' | 'YEAR' } = {},
   ): Promise<void> {
     await this.#authorize(actor, 'entitlements.assign_plan', PLAN_ASSIGN_PERMISSION);
 
+    /*
+     * A-3. ASSIGNING A PLAN USED TO WRITE A STRING.
+     *
+     * It set `workspace.planKey` and an audit event, and stopped. No
+     * `WorkspaceSubscription` row was created, so the customer had no status,
+     * no billing period, no trial and no pinned price; the Plan & Usage page
+     * had nothing real to show; the cycle worker had nothing to advance; and
+     * the credits the plan promises were never granted. The plan was a label
+     * on a workspace rather than a commercial relationship.
+     *
+     * Everything the assignment implies now happens in ONE transaction:
+     * the workspace's plan key, the subscription with its pinned price and
+     * pinned configuration version, the trial when the plan offers one and the
+     * workspace has never had one, and the matching credit grant.
+     *
+     * IDEMPOTENT. Assigning the same plan twice is a no-op rather than a second
+     * trial or a second allowance — the credit grants carry keys derived from
+     * the workspace and the plan, and the trial is refused once
+     * `trialStartedAt` is set. An operator who double-clicks must not cost the
+     * business a month of credits.
+     */
+    const now = this.#clock.now();
+    const currency = options.currency ?? DEFAULT_PIN_CURRENCY;
+
+    let terms: PlanTerms | null = null;
     if (planKey !== null) {
-      const available = await this.plans();
-      const plan = available.find((p) => p.key === planKey);
+      const payload = await this.#source.load('plans');
+      const plan = findPlan(readPlanCatalogue(payload), planKey);
       if (!plan) throw new AppError('VALIDATION_FAILED', `Unknown plan "${planKey}".`);
       if (plan.status === 'retired') {
         throw new AppError('VALIDATION_FAILED', `Plan "${planKey}" is retired.`);
+      }
+      const versionId = await this.#source.versionId('plans');
+      terms = termsFor(plan, currency, versionId);
+      if (!terms) {
+        throw new AppError(
+          'VALIDATION_FAILED',
+          `Plan "${planKey}" has no price in ${currency}, so there is nothing to pin.`,
+        );
       }
     }
 
@@ -373,15 +456,148 @@ export class EntitlementService {
     });
     if (!before) throw new AppError('NOT_FOUND', 'Workspace not found.');
 
-    await this.#prisma.$transaction(async (tx) => {
+    const apply = async (tx: LedgerTx) => {
       await tx.workspace.update({
         where: { id: workspaceId },
         data: {
           planKey,
-          planAssignedAt: this.#clock.now(),
+          planAssignedAt: now,
           planAssignedByPlatformUserId: actor.platformUserId,
         },
       });
+
+      /*
+       * UNASSIGNING. The subscription is CANCELLED rather than deleted: it is
+       * the record of what the customer was sold and when, and deleting it
+       * would destroy the only evidence of a price that was once pinned.
+       */
+      if (terms === null) {
+        const existing = await tx.workspaceSubscription.findUnique({ where: { workspaceId } });
+        if (existing && existing.status !== 'CANCELLED') {
+          await tx.workspaceSubscription.update({
+            where: { workspaceId },
+            data: { status: 'CANCELLED', cancelledAt: now },
+          });
+        }
+        return { subscriptionStatus: 'CANCELLED' as const, grantedCredits: 0, trialStarted: false };
+      }
+
+      const existing = await tx.workspaceSubscription.findUnique({ where: { workspaceId } });
+      // One trial per workspace, ever (D-09). `trialStartedAt` is the record,
+      // so a workspace that has trialed cannot be given another by reassigning.
+      const mayTrial = terms.trialDays > 0 && (existing?.trialStartedAt ?? null) === null;
+      const samePlan = existing !== null && existing.planKey === terms.planKey;
+      /*
+       * WHEN THE BILLING PERIOD IS PRESERVED.
+       *
+       * Re-assigning the plan a workspace already has must not open a new
+       * period — otherwise every click starts a fresh month and, with it, a
+       * fresh allowance. A workspace mid-trial keeps its trial period too: the
+       * trial belongs to the workspace, not to the plan, so changing plan
+       * inside it must neither cut it short nor restart it.
+       */
+      const keepPeriod =
+        existing !== null && !mayTrial && (samePlan || existing.status === 'TRIALING');
+      const pinned = {
+        currency: terms.pricing.currency.toUpperCase(),
+        pinnedMonthlyMinor: terms.pricing.monthlyMinor,
+        pinnedAnnualMinor: terms.pricing.annualMinor,
+        pinnedMonthlyCredits: terms.monthlyCredits,
+        pinnedFromVersionId: terms.sourceVersionId,
+      };
+      const billingInterval = options.billingInterval ?? existing?.billingInterval ?? 'MONTH';
+
+      const periodStart = keepPeriod ? existing.currentPeriodStart : now;
+      const periodEnd = mayTrial
+        ? new Date(now.getTime() + terms.trialDays * 86_400_000)
+        : keepPeriod
+          ? existing.currentPeriodEnd
+          : addMonthsClamped(now, billingInterval === 'YEAR' ? 12 : 1);
+
+      await tx.workspaceSubscription.upsert({
+        where: { workspaceId },
+        create: {
+          workspaceId,
+          planKey: terms.planKey,
+          status: mayTrial ? 'TRIALING' : 'ACTIVE',
+          billingInterval,
+          ...pinned,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          ...(mayTrial ? { trialStartedAt: now, trialEndsAt: periodEnd } : {}),
+        },
+        update: {
+          planKey: terms.planKey,
+          // A workspace mid-trial that is moved to another plan STAYS in its
+          // trial: the trial is the workspace's one evaluation period, not the
+          // plan's, and re-dating it would silently extend it.
+          status: existing?.status === 'TRIALING' ? 'TRIALING' : mayTrial ? 'TRIALING' : 'ACTIVE',
+          billingInterval,
+          ...pinned,
+          // A scheduled downgrade is superseded by an explicit assignment.
+          pendingPlanKey: null,
+          pendingPlanEffectiveAt: null,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          ...(mayTrial ? { trialStartedAt: now, trialEndsAt: periodEnd } : {}),
+        },
+      });
+
+      /*
+       * THE CREDITS. A trial grants its own one-off allowance (D-09); a
+       * non-trial assignment grants the plan's monthly allowance for the period
+       * just opened.
+       *
+       * The keys are derived from the workspace and the plan, never from the
+       * clock, so a retried or double-submitted assignment reuses the same key
+       * and grants once. `#grantWithin` is not reachable from here, so the
+       * ledger is called with its own idempotency contract instead.
+       */
+      /*
+       * WHO GETS CREDITS, AND WHEN.
+       *
+       *   - A TRIAL grants its one-off allowance (D-09).
+       *   - A NEW PERIOD — a first assignment, or a plan change on an active
+       *     subscription — grants that plan's monthly allowance.
+       *   - EVERYTHING ELSE grants nothing: re-assigning the same plan, or
+       *     changing plan mid-trial, where the trial credits already ARE the
+       *     allowance. Granting there would let an operator mint credits by
+       *     toggling between two plans.
+       *
+       * The keys are derived from the workspace, the plan and the PERIOD the
+       * subscription actually holds — never from the clock. A key built from
+       * `now` differs on every call, which is not idempotency, it is a
+       * duplicate grant with extra steps.
+       */
+      const credits = mayTrial ? terms.trialCredits : keepPeriod ? 0 : terms.monthlyCredits;
+      if (credits > 0 && this.#ledger) {
+        await this.#ledger.grantWithin(tx, {
+          workspaceId,
+          source: mayTrial ? 'TRIAL_GRANT' : 'PLAN_GRANT',
+          credits,
+          reason: mayTrial
+            ? `Trial allowance for plan ${terms.planKey}.`
+            : `Plan allowance for ${terms.planKey}.`,
+          idempotencyKey: mayTrial
+            ? `trial-grant:${workspaceId}:${terms.planKey}`
+            : `plan-assign:${workspaceId}:${terms.planKey}:${periodStart.toISOString()}`,
+          actor: { actorType: 'PLATFORM_USER', actorId: actor.platformUserId },
+        });
+      }
+
+      return {
+        subscriptionStatus: mayTrial ? ('TRIALING' as const) : ('ACTIVE' as const),
+        grantedCredits: credits,
+        trialStarted: mayTrial,
+      };
+    };
+
+    await this.#prisma.$transaction(async (tx) => {
+      const outcome = await apply(tx);
+      // THE AUDIT EVENT COMMITS WITH THE CHANGE IT DESCRIBES (A-10). Written
+      // after the work so it can report what actually happened, and inside the
+      // same transaction so a rolled-back assignment leaves no record claiming
+      // it succeeded.
       await tx.auditEvent.create({
         data: {
           workspaceId,
@@ -394,7 +610,12 @@ export class EntitlementService {
           outcome: 'SUCCESS',
           reason,
           before: { planKey: before.planKey },
-          after: { planKey },
+          after: {
+            planKey,
+            subscriptionStatus: outcome.subscriptionStatus,
+            trialStarted: outcome.trialStarted,
+            grantedCredits: outcome.grantedCredits,
+          },
         },
       });
     });
