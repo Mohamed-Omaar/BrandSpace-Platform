@@ -426,7 +426,26 @@ async function createTenant(
           estimateMilliCredits: 1000n,
           allocations: [{ grantId: creditGrant.id, milliCredits: '1000' }],
           purpose: 'fixture.task',
-          expiresAt: new Date(Date.now() + 3600_000),
+          /*
+           * A-11 / F-61. FAR IN THE FUTURE, NOT ONE HOUR.
+           *
+           * This reservation exists so the isolation suites have a
+           * tenant-owned row of every Phase 3 model to test RLS against. It is
+           * never settled or released, because that is not what it is for.
+           *
+           * With a one-hour deadline, every fixture workspace ever created
+           * turned into an ABANDONED reservation sixty minutes later — twenty
+           * per full isolation run, accumulating for ever. That was the supply
+           * line that eventually starved the sweeper (F-62): a candidate set
+           * full of rows no sweep could usefully act on.
+           *
+           * F-62 is fixed, so a starved sweep is no longer the consequence.
+           * But a fixture that manufactures fake leaks is still wrong: it puts
+           * noise into the exact metric docs/BILLING-AND-CREDITS.md §10.3 says
+           * must stay at zero. A deadline a century out keeps the row for the
+           * isolation tests and out of the abandoned set entirely.
+           */
+          expiresAt: new Date(Date.now() + 100 * 365 * 86_400_000),
         },
       });
       const usageCounter = await db.usageCounter.create({

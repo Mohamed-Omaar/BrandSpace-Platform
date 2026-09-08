@@ -39,6 +39,14 @@ export const MAX_SUPPORT_TTL_MINUTES = 480;
 
 const MIN_REASON_LENGTH = 8;
 
+/**
+ * How many support sessions `listForWorkspace` returns (A-11).
+ *
+ * Exported so a caller can state the cap beside a truthful total instead of
+ * implying the list is complete.
+ */
+export const SUPPORT_SESSION_LIST_CAP = 50;
+
 /** Fields Support Mode must never surface, whatever a future query selects. */
 export const SUPPORT_MODE_FORBIDDEN_FIELDS = [
   'passwordHash',
@@ -327,6 +335,17 @@ export class SupportModeService {
     return result.count;
   }
 
+  /**
+   * How many support sessions this workspace has ever had.
+   *
+   * A-11: `listForWorkspace` returns the most recent
+   * `SUPPORT_SESSION_LIST_CAP`, and a customer reading their own support
+   * history must be able to tell that from "this is all of it".
+   */
+  async countForWorkspace(workspaceId: string): Promise<number> {
+    return this.#prisma.supportModeSession.count({ where: { workspaceId } });
+  }
+
   /** Live sessions over one workspace — shown to the customer and to Admin. */
   async listForWorkspace(workspaceId: string): Promise<SupportModeGrant[]> {
     const now = this.#clock.now();
@@ -334,7 +353,7 @@ export class SupportModeService {
       where: { workspaceId },
       include: { workspace: true, platformUser: { select: { email: true } } },
       orderBy: { grantedAt: 'desc' },
-      take: 50,
+      take: SUPPORT_SESSION_LIST_CAP,
     });
     return rows.map((s) => ({
       id: s.id,

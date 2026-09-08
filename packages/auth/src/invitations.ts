@@ -106,6 +106,15 @@ const INVITATION_FAILURE = 'This invitation link is not valid.';
 
 export const INVITATION_TTL_DAYS = 7;
 
+/**
+ * How many invitations one page of `list` returns (A-11).
+ *
+ * Exported so the UI can say "the most recent 200 of N" rather than implying
+ * it is showing everything — a cap nobody can see is the defect; a cap stated
+ * next to a truthful total is a bounded read.
+ */
+export const INVITATION_LIST_CAP = 200;
+
 export function hashInvitationToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -421,13 +430,32 @@ export class InvitationService {
     });
   }
 
+  /**
+   * How many invitations this workspace has, of any status.
+   *
+   * A-11. `list` is capped, and a cap the caller cannot see is a SILENT
+   * DISPLAY CAP — the thing F-53 rejected. The page shows this number beside
+   * the rows so an operator can tell the difference between "these are all of
+   * them" and "these are the most recent 200".
+   *
+   * Not paginated here, deliberately, and the reasoning is recorded rather
+   * than left implicit: invitations are per workspace and bounded by how many
+   * people one customer invites, so the cap is not reachable in practice the
+   * way the platform-wide workspace directory's was. Pagination is scheduled
+   * as ordinary housekeeping (docs/DECISIONS.md A-11), and the truthful total
+   * is what makes deferring it honest instead of hidden.
+   */
+  async count(workspaceId: string): Promise<number> {
+    return this.#prisma.invitation.count({ where: { workspaceId } });
+  }
+
   async list(workspaceId: string): Promise<InvitationSummary[]> {
     const rows = await this.#prisma.invitation.findMany({
       where: { workspaceId },
       // NO `invitedByPlatform` join: see InvitationSummary.invitedBy.
       include: { role: true, invitedByUser: true },
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      take: INVITATION_LIST_CAP,
     });
     return rows.map((r) => ({
       id: r.id,

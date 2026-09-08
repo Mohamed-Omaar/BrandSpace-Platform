@@ -4,6 +4,7 @@ import {
   Cell,
   DataTable,
   PageHeader,
+  Pagination,
   RecordList,
   SearchField,
   Stack,
@@ -13,8 +14,10 @@ import {
   colorTokens,
   initialsFrom,
   statusTone,
+  typographyTokens,
   type MediaSeed,
 } from '@brandspace/ui';
+import { DEFAULT_WORKSPACE_PAGE_SIZE } from '@brandspace/auth';
 import {
   getEntitlementService,
   getWorkspaceService,
@@ -66,7 +69,38 @@ export default async function WorkspacesPage({
 
   const service = getWorkspaceService();
   const search = typeof query['q'] === 'string' ? query['q'] : undefined;
-  const workspaces = await service.list(serviceActor(actor), search ? { query: search } : {});
+  /*
+   * A-11. PAGED, WITH A TRUTHFUL TOTAL.
+   *
+   * This listing used to take 200 rows and render them as the answer — no
+   * total, no navigation, nothing on screen to say more existed. An operator
+   * with 201 customers stopped seeing one and had no way to know. Same
+   * contract as the secrets page (docs/ADMIN-CONTROL-CENTER.md §7.1): state in
+   * the URL, an honest range, and every record reachable by paging.
+   */
+  const requestedPage = Number.parseInt(String(query['page'] ?? '1'), 10);
+  const requestedSize = Number.parseInt(String(query['size'] ?? ''), 10);
+  const workspaces = await service.list(serviceActor(actor), {
+    ...(search ? { query: search } : {}),
+    page: Number.isNaN(requestedPage) ? 1 : requestedPage,
+    pageSize: Number.isNaN(requestedSize) ? DEFAULT_WORKSPACE_PAGE_SIZE : requestedSize,
+  });
+
+  /** A link back to this page with one thing changed. */
+  const hrefWith = (changes: Record<string, string | number | undefined>): string => {
+    const next = new URLSearchParams();
+    if (search) next.set('q', search);
+    next.set('page', String(workspaces.page));
+    next.set('size', String(workspaces.pageSize));
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === undefined || value === '') next.delete(key);
+      else next.set(key, String(value));
+    }
+    const queryString = next.toString();
+    return queryString
+      ? `/${locale}/console/workspaces?${queryString}`
+      : `/${locale}/console/workspaces`;
+  };
 
   const mayCreate = actor.permissionKeys.includes('platform.workspace.create');
   const showForm = query['view'] === 'new' && mayCreate;
@@ -138,7 +172,7 @@ export default async function WorkspacesPage({
             </Toolbar>
           </form>
 
-          {workspaces.length === 0 ? (
+          {workspaces.total === 0 ? (
             search ? (
               /* No RESULTS is not the same message as no workspaces: one asks
                  you to change the query, the other to create a customer. */
@@ -173,7 +207,7 @@ export default async function WorkspacesPage({
                   caption={t('ws.title')}
                   testId="workspace-table"
                 >
-                  {workspaces.map((w) => (
+                  {workspaces.items.map((w) => (
                     <tr key={w.id} data-testid={`workspace-row-${w.slug}`}>
                       <Cell>
                         {/*
@@ -223,7 +257,7 @@ export default async function WorkspacesPage({
               <div className="bs-narrow-only">
                 <RecordList
                   testId="workspace-list"
-                  records={workspaces.map((w) => ({
+                  records={workspaces.items.map((w) => ({
                     id: w.id,
                     title: workspaceLink(w.id, w.name),
                     fields: [
@@ -246,6 +280,38 @@ export default async function WorkspacesPage({
               </div>
             </>
           )}
+
+          {/*
+            THE RANGE, ALWAYS — even on a single page, and even when empty.
+            The pagination nav disappears when there is only one page, but "how
+            many are there" is the assurance that nothing is being hidden, and
+            its absence is exactly what made the old 200-row cap silent.
+          */}
+          <p
+            data-testid="workspace-range"
+            role="status"
+            style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+          >
+            {locale === 'ar'
+              ? `عرض ${workspaces.from}–${workspaces.to} من ${workspaces.total}`
+              : `Showing ${workspaces.from}–${workspaces.to} of ${workspaces.total}`}
+          </p>
+
+          <Pagination
+            page={workspaces.page}
+            pageCount={workspaces.totalPages}
+            hrefForPage={(target) => hrefWith({ page: target })}
+            labels={{
+              navigation: locale === 'ar' ? 'تنقل الصفحات' : 'Pagination',
+              previous: locale === 'ar' ? 'السابق' : 'Previous',
+              next: locale === 'ar' ? 'التالي' : 'Next',
+              summary:
+                locale === 'ar'
+                  ? `صفحة ${workspaces.page} من ${workspaces.totalPages}`
+                  : `Page ${workspaces.page} of ${workspaces.totalPages}`,
+            }}
+            testId="workspace-pagination"
+          />
         </Card>
       </Stack>
 
