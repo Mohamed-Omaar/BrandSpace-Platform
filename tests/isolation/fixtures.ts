@@ -33,6 +33,9 @@ export interface TenantFixture {
   readonly usageCounterId: string;
   readonly usageEventId: string;
   readonly cohortMembershipId: string;
+  // --- Phase 4 ---
+  readonly aiRequestId: string;
+  readonly aiLedgerId: string;
 }
 
 export interface IsolationFixtures {
@@ -466,6 +469,48 @@ async function createTenant(
           counterId: usageCounter.id,
         },
       });
+      /*
+       * Phase 4. An AI request and the ledger row it produced.
+       *
+       * SUCCEEDED with a charge, deliberately: a row that never charged
+       * anything would satisfy the isolation assertions while proving nothing
+       * about the leak that actually matters — one tenant reading another
+       * tenant's AI spend.
+       */
+      const aiRequest = await db.aiRequest.create({
+        data: {
+          workspaceId: id,
+          taskKey: 'caption.generate',
+          idempotencyKey: `fixture-ai-${slug}`,
+          routingTaskKey: 'caption.generate',
+          resolvedModelKey: 'fixture-model',
+          attemptedModelKeys: ['fixture-model'],
+          status: 'SUCCEEDED',
+          // Audit-safe metadata only, exactly as the gateway writes it.
+          inputSummary: { promptTokens: 120, language: 'en' },
+          promptTokens: 120,
+          completionTokens: 80,
+          providerCostMinor: 4,
+          creditsReservedMilli: 2000n,
+          creditsChargedMilli: 1500n,
+          deadlineAt: new Date(Date.now() + 60_000),
+          completedAt: new Date(),
+        },
+      });
+      const aiLedger = await db.aiUsageLedger.create({
+        data: {
+          workspaceId: id,
+          aiRequestId: aiRequest.id,
+          taskKey: 'caption.generate',
+          providerKey: 'fixture-provider',
+          modelKey: 'fixture-model',
+          usageUnits: { promptTokens: 120, completionTokens: 80 },
+          providerCostMinor: 4,
+          creditsChargedMilli: 1500n,
+          environment: 'DEVELOPMENT',
+        },
+      });
+
       const cohortMembership = await db.betaCohortMembership.create({
         data: {
           workspaceId: id,
@@ -524,6 +569,8 @@ async function createTenant(
         usageCounterId: usageCounter.id,
         usageEventId: usageEvent.id,
         cohortMembershipId: cohortMembership.id,
+        aiRequestId: aiRequest.id,
+        aiLedgerId: aiLedger.id,
       };
     },
     { prisma, bootstrap: true },

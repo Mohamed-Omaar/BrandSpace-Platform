@@ -35,6 +35,11 @@ export const STRICT_TENANT_MODELS = [
   'UsageCounter',
   'UsageEvent',
   'BetaCohortMembership',
+  // Phase 4. An AI request and its ledger row are both per-customer: the
+  // request records what a workspace asked for, the ledger what it was
+  // charged. Neither may ever be visible across a tenant boundary.
+  'AiRequest',
+  'AiUsageLedger',
 ] as const;
 
 /**
@@ -149,6 +154,9 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   UsageCounter: 'usage_counter',
   UsageEvent: 'usage_event',
   BetaCohortMembership: 'beta_cohort_membership',
+  // Phase 4.
+  AiRequest: 'ai_request',
+  AiUsageLedger: 'ai_usage_ledger',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

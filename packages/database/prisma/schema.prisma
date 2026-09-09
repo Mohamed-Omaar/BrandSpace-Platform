@@ -197,6 +197,42 @@ enum CreditReservationStatus {
   EXPIRED
 }
 
+/// Phase 4. The AI request lifecycle — docs/AI-GATEWAY.md §6.1.
+///
+/// `PENDING → RESERVED → RUNNING → (SUCCEEDED | FAILED | TIMEOUT | CANCELLED |
+/// MODERATION_BLOCKED)`. Every terminal status except SUCCEEDED releases the
+/// reservation in full: docs/AI-GATEWAY.md §7.4 guarantee 1 is that a failed
+/// request costs the customer nothing.
+enum AiRequestStatus {
+  PENDING
+  RESERVED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMEOUT
+  MODERATION_BLOCKED
+}
+
+/// Phase 4. The uniform provider error taxonomy — docs/AI-GATEWAY.md §3.
+///
+/// Retryability and fallback eligibility are derived from THIS, never from a
+/// provider-specific message string. A provider that renames its errors must
+/// not change how the gateway behaves.
+enum AiFailureClass {
+  AUTH_ERROR
+  RATE_LIMITED
+  QUOTA_EXCEEDED
+  INVALID_REQUEST
+  CONTENT_FILTERED
+  CONTEXT_TOO_LONG
+  MODEL_UNAVAILABLE
+  PROVIDER_UNAVAILABLE
+  TIMEOUT
+  NETWORK_ERROR
+  UNKNOWN
+}
+
 enum EmailMessageStatus {
   QUEUED
   SENT
@@ -356,6 +392,9 @@ model Workspace {
   usageEvents        UsageEvent[]
   betaCohorts        BetaCohortMembership[]
   emailMessages      EmailMessage[]
+  // --- Phase 4 -------------------------------------------------------------
+  aiRequests         AiRequest[]
+  aiUsageLedger      AiUsageLedger[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1264,4 +1303,127 @@ model BetaCohortMembership {
   @@unique([workspaceId, cohortKey])
   @@index([cohortKey])
   @@map("beta_cohort_membership")
+}
+
+
+/// TENANT-OWNED. One logical AI action — docs/DATABASE.md §6.5.
+///
+/// NO RAW PROMPT OR RESPONSE IS STORED HERE. `inputSummary` holds audit-safe
+/// metadata only: token and asset counts, language, the prompt template
+/// version, Brand Brain citation ids. docs/AI-GATEWAY.md §11 makes that the
+/// default, and the column comment is not the enforcement — a unit test asserts
+/// that the gateway never writes prompt text into it.
+model AiRequest {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  /// Null for a platform- or system-initiated request.
+  userId      String? @db.Uuid
+
+  taskKey String
+  /// Unique. A retry with the same key returns the ORIGINAL result and never
+  /// touches the wallet (docs/AI-GATEWAY.md §7.4 guarantee 2).
+  idempotencyKey String @unique
+
+  /// Which routing rule resolved, and to what. Model keys, not database ids:
+  /// the registry is CONFIGURATION, so there is no model table to point at.
+  routingTaskKey    String?
+  resolvedModelKey  String?
+  /// Every model tried, in order, including the ones that failed. Fallback is
+  /// invisible in reporting without it.
+  attemptedModelKeys String[]
+
+  status       AiRequestStatus @default(PENDING)
+  failureClass AiFailureClass?
+  /// Safe to show a customer. Never a raw provider error or a credential.
+  failureMessage String?
+
+  /// Audit-safe metadata. NEVER raw customer content.
+  inputSummary Json?
+
+  /// Usage units, as reported by the adapter and normalised by `extractUsage`.
+  promptTokens     Int?
+  completionTokens Int?
+  imageCount       Int?
+  durationSeconds  Int?
+
+  /// What the PROVIDER charged us, in minor units. Accrues across attempts —
+  /// including failed ones, which the customer is never billed for.
+  providerCostMinor Int    @default(0)
+  currency          String @default("USD") @db.Char(3)
+
+  /// Milli-credits (D-14). Reserved generously up front, charged on the actual.
+  creditsReservedMilli BigInt @default(0)
+  creditsChargedMilli  BigInt @default(0)
+
+  /// The reservation this request holds. One request, one reservation.
+  creditReservationId String? @unique @db.Uuid
+
+  latencyMs  Int?
+  retryCount Int @default(0)
+
+  /// BYOK: the customer supplied the provider credential. Provider cost to
+  /// BrandSpace is zero and the ledger says so, keeping margin honest.
+  byok Boolean @default(false)
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  /// The deadline. The sweeper reconciles anything still RUNNING past it, so no
+  /// reservation outlives its request (docs/AI-GATEWAY.md §6.1).
+  deadlineAt  DateTime  @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ledger    AiUsageLedger[]
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, taskKey, status])
+  /// The stuck-request sweep, ordered so the oldest is reconciled first — the
+  /// A-7 lesson applied before the defect rather than after it.
+  @@index([status, deadlineAt])
+  @@map("ai_request")
+}
+
+/// TENANT-OWNED and IMMUTABLE. The financial truth for AI usage —
+/// docs/DATABASE.md §6.6, docs/AI-GATEWAY.md §12.
+///
+/// Append-only: no updates, no deletes. A correction is a NEW row pointing at
+/// the one it corrects, so replaying the table always reproduces the same
+/// totals. The database enforces this with a trigger, not a convention.
+model AiUsageLedger {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  aiRequestId String  @db.Uuid
+  userId      String? @db.Uuid
+
+  occurredAt DateTime @default(now()) @db.Timestamptz(6)
+
+  taskKey     String
+  providerKey String
+  modelKey    String
+
+  /// `{ promptTokens, completionTokens, imageCount, durationSeconds }` — the
+  /// units the cost was computed from, frozen at settlement.
+  usageUnits Json
+
+  providerCostMinor Int    @default(0)
+  currency          String @default("USD") @db.Char(3)
+  creditsChargedMilli BigInt @default(0)
+
+  /// The wallet movement this row accounts for, when there was one. A failed
+  /// request writes a ledger row with zero credits and no transaction.
+  creditTransactionId String? @db.Uuid
+
+  byok        Boolean @default(false)
+  environment DeploymentEnvironment
+
+  /// Set only on a correction row. Never edited; never deleted.
+  correctsLedgerId String? @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  request   AiRequest @relation(fields: [aiRequestId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, occurredAt(sort: Desc)])
+  @@index([workspaceId, taskKey, occurredAt])
+  @@index([modelKey, occurredAt])
+  @@map("ai_usage_ledger")
 }
