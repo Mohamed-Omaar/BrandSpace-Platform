@@ -30,3 +30,6 @@ export type {
   TextResult,
   UsageUnits,
 } from './adapter';
+
+export { MockProviderAdapter } from './adapters/mock';
+export type { MockAdapterOptions, MockCall, MockDirective } from './adapters/mock';
