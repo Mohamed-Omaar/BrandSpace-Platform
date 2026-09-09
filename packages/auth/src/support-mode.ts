@@ -39,6 +39,14 @@ export const MAX_SUPPORT_TTL_MINUTES = 480;
 
 const MIN_REASON_LENGTH = 8;
 
+/**
+ * How many support sessions `listForWorkspace` returns (A-11).
+ *
+ * Exported so a caller can state the cap beside a truthful total instead of
+ * implying the list is complete.
+ */
+export const SUPPORT_SESSION_LIST_CAP = 50;
+
 /** Fields Support Mode must never surface, whatever a future query selects. */
 export const SUPPORT_MODE_FORBIDDEN_FIELDS = [
   'passwordHash',
@@ -119,42 +127,69 @@ export class SupportModeService {
     const now = this.#clock.now();
     const expiresAt = new Date(now.getTime() + this.#ttlMinutes * 60_000);
 
-    // One active session per (actor, workspace). Starting again while one is
-    // live ends the old one, so the audit trail never shows two overlapping
-    // grants whose accesses cannot be told apart.
-    await this.#prisma.supportModeSession.updateMany({
-      where: { workspaceId, platformUserId: actor.platformUserId, endedAt: null },
-      data: { endedAt: now },
-    });
+    /*
+     * ONE TRANSACTION, AND A LOCK — A-10.
+     *
+     * This was three separate statements: end any live session, create the new
+     * one, write the audit event. Two failures followed from that.
+     *
+     * NOT ATOMIC. Anything failing after the INSERT left a LIVE SUPPORT GRANT
+     * WITH NO AUDIT EVENT — an operator with access to a customer's workspace
+     * and nothing in the customer's Activity Log saying so, which is the exact
+     * situation docs/SECURITY.md §8 exists to prevent.
+     *
+     * NOT SERIALISED. The comment claimed "one active session per (actor,
+     * workspace)" and nothing enforced it: two concurrent starts both ran the
+     * UPDATE (finding nothing to end), both ran the INSERT, and the workspace
+     * ended with two overlapping grants whose accesses cannot be attributed to
+     * either.
+     *
+     * The workspace row is the mutex, taken first, as in `MembershipService`.
+     * A partial unique index (migration 20260908100000) is the backstop that
+     * holds even if a future caller forgets the lock.
+     */
+    const session = await this.#prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "workspace" WHERE "id" = ${workspaceId}::uuid FOR UPDATE`;
 
-    const session = await this.#prisma.supportModeSession.create({
-      data: {
-        workspaceId,
-        platformUserId: actor.platformUserId,
-        reason: reason.trim(),
-        ticketRef: ticketRef?.trim() || null,
-        // Read-only. Elevation is a separate grant that Phase 2B does not issue.
-        writeEnabled: false,
-        expiresAt,
-      },
-    });
+      // Starting again while one is live ends the old one, so the audit trail
+      // never shows two overlapping grants.
+      await tx.supportModeSession.updateMany({
+        where: { workspaceId, platformUserId: actor.platformUserId, endedAt: null },
+        data: { endedAt: now },
+      });
 
-    await this.#prisma.auditEvent.create({
-      data: {
-        // Written against the WORKSPACE, so it appears in the customer's own
-        // Activity Log — docs/SECURITY.md §8 requires exactly that.
-        workspaceId,
-        actorType: 'PLATFORM_USER',
-        actorId: actor.platformUserId,
-        action: 'support_mode.entered',
-        resourceType: 'support_mode_session',
-        resourceId: session.id,
-        severity: 'WARNING',
-        outcome: 'SUCCESS',
-        reason: reason.trim(),
-        supportModeSessionId: session.id,
-        after: { expiresAt: expiresAt.toISOString(), writeEnabled: false },
-      },
+      const created = await tx.supportModeSession.create({
+        data: {
+          workspaceId,
+          platformUserId: actor.platformUserId,
+          reason: reason.trim(),
+          ticketRef: ticketRef?.trim() || null,
+          // Read-only. Elevation is a separate grant Phase 2B does not issue.
+          writeEnabled: false,
+          expiresAt,
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          // Written against the WORKSPACE, so it appears in the customer's own
+          // Activity Log — docs/SECURITY.md §8 requires exactly that.
+          workspaceId,
+          actorType: 'PLATFORM_USER',
+          actorId: actor.platformUserId,
+          action: 'support_mode.entered',
+          resourceType: 'support_mode_session',
+          resourceId: created.id,
+          severity: 'WARNING',
+          outcome: 'SUCCESS',
+          reason: reason.trim(),
+          supportModeSessionId: created.id,
+          after: { expiresAt: expiresAt.toISOString(), writeEnabled: false },
+        },
+      });
+
+      return created;
     });
 
     return this.#toGrant(session, workspace.name, actor.platformUserId, now);
@@ -300,6 +335,17 @@ export class SupportModeService {
     return result.count;
   }
 
+  /**
+   * How many support sessions this workspace has ever had.
+   *
+   * A-11: `listForWorkspace` returns the most recent
+   * `SUPPORT_SESSION_LIST_CAP`, and a customer reading their own support
+   * history must be able to tell that from "this is all of it".
+   */
+  async countForWorkspace(workspaceId: string): Promise<number> {
+    return this.#prisma.supportModeSession.count({ where: { workspaceId } });
+  }
+
   /** Live sessions over one workspace — shown to the customer and to Admin. */
   async listForWorkspace(workspaceId: string): Promise<SupportModeGrant[]> {
     const now = this.#clock.now();
@@ -307,7 +353,7 @@ export class SupportModeService {
       where: { workspaceId },
       include: { workspace: true, platformUser: { select: { email: true } } },
       orderBy: { grantedAt: 'desc' },
-      take: 50,
+      take: SUPPORT_SESSION_LIST_CAP,
     });
     return rows.map((s) => ({
       id: s.id,

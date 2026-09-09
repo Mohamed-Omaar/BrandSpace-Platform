@@ -138,7 +138,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
               <HeroFloatCard
                 placement="start"
                 title={t('console.float.workspaces')}
-                detail={String(workspaces.length)}
+                detail={String(workspaces.total)}
               />
             </>
           }

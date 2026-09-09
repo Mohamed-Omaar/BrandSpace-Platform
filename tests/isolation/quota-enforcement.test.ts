@@ -316,6 +316,7 @@ describe('refunding usage', () => {
       workspaceId,
       featureKey: 'limit.scheduled_posts',
       period: 'month',
+      idempotencyKey: `rf-undo-${workspaceId}`,
     });
 
     const after = await usage.consumption({
@@ -341,6 +342,7 @@ describe('refunding usage', () => {
       featureKey: 'limit.brands',
       period: 'total',
       amount: 99,
+      idempotencyKey: `rf0-undo-${workspaceId}`,
     });
 
     const after = await usage.consumption({
@@ -405,5 +407,258 @@ describe('windows', () => {
       'limit.brands',
       'limit.scheduled_posts',
     ]);
+  });
+});
+
+/*
+ * A-9. AN IDEMPOTENCY KEY NAMES ONE REQUEST, NOT ANY REQUEST WEARING IT.
+ *
+ * `consume` returned the CALLER's consumption for any known key and skipped the
+ * increment. A key reused across workspaces therefore meant the second
+ * workspace's usage was silently never recorded, while the caller was told it
+ * had been — free quota, invisible in the counters precisely because the branch
+ * writes nothing.
+ */
+describe('idempotency replays are scoped to the original request', () => {
+  it('refuses a usage key replayed against a different workspace', async () => {
+    const first = await freshWorkspace();
+    const second = await freshWorkspace();
+    const key = `cross-ws-${crypto.randomUUID()}`;
+
+    await usage.consume({
+      workspaceId: first,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 5,
+      period: 'month',
+      idempotencyKey: key,
+    });
+
+    await expect(
+      usage.consume({
+        workspaceId: second,
+        featureKey: 'limit.scheduled_posts',
+        limitValue: 5,
+        period: 'month',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different usage event.');
+
+    // And the second workspace's counter is untouched — neither incremented
+    // nor quietly credited with the first workspace's recording.
+    const after = await usage.consumption({
+      workspaceId: second,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 5,
+      period: 'month',
+    });
+    expect(after.used).toBe(0);
+  });
+
+  it('refuses a usage key replayed for a different feature or amount', async () => {
+    const workspaceId = await freshWorkspace();
+    const key = `mismatch-${crypto.randomUUID()}`;
+    await usage.consume({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+      amount: 2,
+      idempotencyKey: key,
+    });
+
+    await expect(
+      usage.consume({
+        workspaceId,
+        featureKey: 'limit.brands',
+        limitValue: 10,
+        period: 'total',
+        amount: 2,
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different usage event.');
+
+    await expect(
+      usage.consume({
+        workspaceId,
+        featureKey: 'limit.scheduled_posts',
+        limitValue: 10,
+        period: 'month',
+        amount: 7,
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different usage event.');
+  });
+
+  it('still treats a genuine retry as a no-op', async () => {
+    // The rule tightens what counts as a replay; it must not break the case
+    // idempotency exists for.
+    const workspaceId = await freshWorkspace();
+    const key = `same-${crypto.randomUUID()}`;
+    const input = {
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month' as const,
+      amount: 3,
+      idempotencyKey: key,
+    };
+
+    const first = await usage.consume(input);
+    const second = await usage.consume(input);
+    expect(first.used).toBe(3);
+    expect(second.used).toBe(3);
+  });
+});
+
+/*
+ * A-9, refunds. A REFUND THAT CHARGES IS NOT A REFUND.
+ */
+describe('refunds require a positive amount and their own key', () => {
+  it('refuses a negative amount, which used to INCREASE the counter', async () => {
+    const workspaceId = await freshWorkspace();
+    await usage.consume({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+      amount: 4,
+      idempotencyKey: `neg-seed-${workspaceId}`,
+    });
+
+    // `GREATEST(0, used − (−5))` is `used + 5`. The floor that looks like a
+    // guard never fires, because the subtraction never went negative.
+    await expect(
+      usage.refund({
+        workspaceId,
+        featureKey: 'limit.scheduled_posts',
+        period: 'month',
+        amount: -5,
+        idempotencyKey: `neg-${workspaceId}`,
+      }),
+    ).rejects.toThrow('A refund is a positive whole number of units.');
+
+    const after = await usage.consumption({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+    });
+    expect(after.used, 'a rejected refund must not move the counter').toBe(4);
+  });
+
+  it('refuses a fractional or zero amount', async () => {
+    const workspaceId = await freshWorkspace();
+    for (const amount of [0, 1.5]) {
+      await expect(
+        usage.refund({
+          workspaceId,
+          featureKey: 'limit.scheduled_posts',
+          period: 'month',
+          amount,
+          idempotencyKey: `bad-${amount}-${workspaceId}`,
+        }),
+      ).rejects.toThrow('A refund is a positive whole number of units.');
+    }
+  });
+
+  it('requires an idempotency key', async () => {
+    const workspaceId = await freshWorkspace();
+    await expect(
+      usage.refund({
+        workspaceId,
+        featureKey: 'limit.scheduled_posts',
+        period: 'month',
+        idempotencyKey: '   ',
+      }),
+    ).rejects.toThrow('An idempotency key is required.');
+  });
+
+  it('gives the slot back exactly once when the refund is retried', async () => {
+    // A duplicated webhook or a job that ran twice used to refund again, and
+    // the customer kept the quota.
+    const workspaceId = await freshWorkspace();
+    await usage.consume({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+      amount: 5,
+      idempotencyKey: `retry-seed-${workspaceId}`,
+    });
+
+    const refundInput = {
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      period: 'month' as const,
+      amount: 2,
+      idempotencyKey: `retry-refund-${workspaceId}`,
+    };
+    await usage.refund(refundInput);
+    await usage.refund(refundInput);
+    await usage.refund(refundInput);
+
+    const after = await usage.consumption({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+    });
+    expect(after.used, 'three attempts, one refund').toBe(3);
+  });
+
+  it('refuses a refund key replayed for a different workspace', async () => {
+    const first = await freshWorkspace();
+    const second = await freshWorkspace();
+    for (const workspaceId of [first, second]) {
+      await usage.consume({
+        workspaceId,
+        featureKey: 'limit.scheduled_posts',
+        limitValue: 10,
+        period: 'month',
+        amount: 3,
+        idempotencyKey: `rk-seed-${workspaceId}`,
+      });
+    }
+    const key = `rk-${crypto.randomUUID()}`;
+    await usage.refund({
+      workspaceId: first,
+      featureKey: 'limit.scheduled_posts',
+      period: 'month',
+      idempotencyKey: key,
+    });
+
+    await expect(
+      usage.refund({
+        workspaceId: second,
+        featureKey: 'limit.scheduled_posts',
+        period: 'month',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('That idempotency key was used for a different movement.');
+  });
+
+  it('records the refund as a negative event, so the record stays append-only', async () => {
+    const workspaceId = await freshWorkspace();
+    await usage.consume({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      limitValue: 10,
+      period: 'month',
+      amount: 4,
+      idempotencyKey: `ev-seed-${workspaceId}`,
+    });
+    await usage.refund({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      period: 'month',
+      amount: 3,
+      idempotencyKey: `ev-refund-${workspaceId}`,
+    });
+
+    const events = await platform.usageEvent.findMany({
+      where: { workspaceId },
+      orderBy: { occurredAt: 'asc' },
+    });
+    expect(events.map((e) => e.amount)).toEqual([4, -3]);
   });
 });

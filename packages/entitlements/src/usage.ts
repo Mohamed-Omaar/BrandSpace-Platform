@@ -170,9 +170,33 @@ export class UsageService {
     // retry does not have to provoke a constraint violation to be safe.
     const replay = await this.#prisma.usageEvent.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
-      select: { id: true },
+      select: { id: true, workspaceId: true, featureKey: true, amount: true },
     });
     if (replay) {
+      /*
+       * A REPLAY MUST BE THE SAME REQUEST — A-9.
+       *
+       * This used to accept any request carrying a known key and return the
+       * CALLER's consumption, skipping the increment. So a key reused across
+       * workspaces — by a buggy client deriving keys from something not
+       * workspace-scoped, or deliberately — meant workspace B's usage was
+       * silently not recorded while B was told the recording had happened.
+       * That is free quota, and it is invisible in the counters because the
+       * whole point of the branch is that it writes nothing.
+       *
+       * The stored event's immutable fields decide whether this is the same
+       * request. A different workspace, feature or amount is a CONFLICT.
+       */
+      if (
+        replay.workspaceId !== input.workspaceId ||
+        replay.featureKey !== input.featureKey ||
+        replay.amount !== amount
+      ) {
+        throw new AppError(
+          'CONFLICT',
+          'That idempotency key was used for a different usage event.',
+        );
+      }
       return this.consumption({
         workspaceId: input.workspaceId,
         featureKey: input.featureKey,
@@ -318,23 +342,88 @@ export class UsageService {
    * Deleting a scheduled post should return its slot. The counter floors at
    * zero — the CHECK constraint refuses a negative — and the `UsageEvent` rows
    * stay, because they are the idempotency record and are append-only.
+   *
+   * TWO THINGS THIS DID NOT DO — A-9.
+   *
+   * 1. IT DID NOT CHECK THE SIGN. `amount` was interpolated straight into
+   *    `usedValue - ${amount}`, so a negative refund INCREMENTED the counter:
+   *    `GREATEST(0, used − (−5))` is `used + 5`. A refund that charges is not
+   *    a refund, and the floor that looks like a guard does nothing about it
+   *    because the subtraction never went negative in the first place.
+   *
+   * 2. IT HAD NO IDEMPOTENCY KEY AT ALL, while every other movement in this
+   *    file has one. A retried delete — a duplicated webhook, a job that ran
+   *    twice — refunded the slot again, and the customer kept the quota. The
+   *    key is now required and recorded as a `UsageEvent` of its own, so the
+   *    second attempt is a no-op rather than a second gift.
+   *
+   * The refund's event carries a NEGATIVE `amount`, which is what distinguishes
+   * it in the append-only record from the consumption it reverses.
    */
   async refund(input: {
     readonly workspaceId: string;
     readonly featureKey: string;
     readonly period: QuotaPeriod;
     readonly amount?: number;
+    readonly idempotencyKey: string;
     readonly cycle?: QuotaWindow | null;
   }): Promise<void> {
     const amount = input.amount ?? 1;
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new AppError('VALIDATION_FAILED', 'A refund is a positive whole number of units.');
+    }
+    if (!input.idempotencyKey.trim()) {
+      throw new AppError('VALIDATION_FAILED', 'An idempotency key is required.');
+    }
+
     const window = quotaWindow(input.period, this.#clock.now(), input.cycle ?? null);
-    await this.#prisma.$executeRaw`
-      UPDATE "usage_counter"
-         SET "usedValue" = GREATEST(0, "usedValue" - ${amount}),
-             "updatedAt" = now()
-       WHERE "workspaceId" = ${input.workspaceId}::uuid
-         AND "featureKey"  = ${input.featureKey}
-         AND "periodStart" = ${window.start}`;
+
+    const replay = await this.#prisma.usageEvent.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+      select: { workspaceId: true, featureKey: true, amount: true },
+    });
+    if (replay) {
+      // Same rule as `consume`: a key names ONE request, and a different one
+      // wearing it is a conflict rather than a silent no-op.
+      if (
+        replay.workspaceId !== input.workspaceId ||
+        replay.featureKey !== input.featureKey ||
+        replay.amount !== -amount
+      ) {
+        throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
+      }
+      return;
+    }
+
+    await this.#prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE "usage_counter"
+           SET "usedValue" = GREATEST(0, "usedValue" - ${amount}),
+               "updatedAt" = now()
+         WHERE "workspaceId" = ${input.workspaceId}::uuid
+           AND "featureKey"  = ${input.featureKey}
+           AND "periodStart" = ${window.start}
+        RETURNING "id"`;
+
+      const counterId = rows[0]?.id;
+      // No counter means there is nothing recorded to give back. That is not
+      // an error — a delete of something that never consumed a slot is fine —
+      // but there is also no event to write, because `UsageEvent.counterId`
+      // must point at a real counter.
+      if (!counterId) return;
+
+      await tx.usageEvent.create({
+        data: {
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          idempotencyKey: input.idempotencyKey,
+          // Negative: this row REVERSES consumption, and the sign is what says
+          // so in an append-only record.
+          amount: -amount,
+          counterId,
+        },
+      });
+    });
   }
 
   /** Every counter for a workspace in the current windows — the usage view. */

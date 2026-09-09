@@ -86,6 +86,34 @@ export interface WorkspaceListItem {
   readonly lastActivityAt: Date | null;
 }
 
+/** One page of workspaces. Same shape as `SecretPage`, deliberately (A-11). */
+export interface WorkspacePage {
+  readonly items: readonly WorkspaceListItem[];
+  readonly page: number;
+  readonly pageSize: number;
+  /** Total MATCHING workspaces, not the number on this page. */
+  readonly total: number;
+  readonly totalPages: number;
+  readonly from: number;
+  readonly to: number;
+  readonly hasPrevious: boolean;
+  readonly hasNext: boolean;
+}
+
+export const WORKSPACE_PAGE_SIZES = [25, 50, 100, 200] as const;
+export const DEFAULT_WORKSPACE_PAGE_SIZE = 50;
+/** A bound on ONE REQUEST, not on what an operator may see. */
+export const MAX_WORKSPACE_PAGE_SIZE = 200;
+
+function normaliseWorkspacePageSize(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return DEFAULT_WORKSPACE_PAGE_SIZE;
+  }
+  const size = Math.trunc(requested);
+  if (size < 1) return DEFAULT_WORKSPACE_PAGE_SIZE;
+  return Math.min(size, MAX_WORKSPACE_PAGE_SIZE);
+}
+
 export interface WorkspaceDetail extends WorkspaceListItem {
   readonly defaultLocale: string;
   readonly timezone: string;
@@ -115,31 +143,61 @@ export class WorkspaceAdminService {
     this.#clock = options.clock ?? systemClock;
   }
 
+  /**
+   * One PAGE of workspaces — A-11, the same contract F-53 established for
+   * secrets (`docs/ADMIN-CONTROL-CENTER.md` §7.1).
+   *
+   * THIS USED TO TAKE 200 ROWS AND RETURN THEM AS THE ANSWER. No total, no
+   * navigation, nothing on screen to say more existed — which is precisely the
+   * SILENT DISPLAY CAP that F-53 rejected for secrets and then went unfixed
+   * here. An operator with 201 customers simply stopped seeing one, and there
+   * was no way to tell from the page that anything was missing.
+   *
+   * The distinction that matters is the same one: `pageSize` bounds what ONE
+   * REQUEST materialises, `total` always reports the truth, and every record
+   * stays reachable by paging.
+   */
   async list(
     actor: PlatformWorkspaceActor,
-    filter: { readonly query?: string; readonly status?: string } = {},
-  ): Promise<WorkspaceListItem[]> {
+    filter: {
+      readonly query?: string;
+      readonly status?: string;
+      readonly page?: number;
+      readonly pageSize?: number;
+    } = {},
+  ): Promise<WorkspacePage> {
     await this.#authorize(actor, 'workspace.list', PLATFORM_WORKSPACE_READ);
 
+    const pageSize = normaliseWorkspacePageSize(filter.pageSize);
+    const where = {
+      deletedAt: null,
+      ...(filter.status ? { status: filter.status as never } : {}),
+      ...(filter.query
+        ? {
+            OR: [
+              { name: { contains: filter.query, mode: 'insensitive' as const } },
+              { slug: { contains: filter.query.toLowerCase() } },
+            ],
+          }
+        : {}),
+    };
+
+    const total = await this.#prisma.workspace.count({ where });
+    const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+    const requested = Number.isFinite(filter.page) ? Math.trunc(filter.page ?? 1) : 1;
+    const page = Math.min(Math.max(requested, 1), totalPages);
+
     const rows = await this.#prisma.workspace.findMany({
-      where: {
-        deletedAt: null,
-        ...(filter.status ? { status: filter.status as never } : {}),
-        ...(filter.query
-          ? {
-              OR: [
-                { name: { contains: filter.query, mode: 'insensitive' as const } },
-                { slug: { contains: filter.query.toLowerCase() } },
-              ],
-            }
-          : {}),
-      },
+      where,
       include: { _count: { select: { memberships: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
+      // `id` makes the order total, so a workspace cannot land on two pages or
+      // on none when two share a creation timestamp.
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
 
-    return rows.map((w) => ({
+    const items = rows.map((w) => ({
       id: w.id,
       name: w.name,
       slug: w.slug,
@@ -151,6 +209,18 @@ export class WorkspaceAdminService {
       createdAt: w.createdAt,
       lastActivityAt: w.lastActivityAt,
     }));
+
+    return {
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      from: total === 0 ? 0 : (page - 1) * pageSize + 1,
+      to: total === 0 ? 0 : (page - 1) * pageSize + items.length,
+      hasPrevious: page > 1,
+      hasNext: page < totalPages,
+    };
   }
 
   async get(actor: PlatformWorkspaceActor, workspaceId: string): Promise<WorkspaceDetail> {

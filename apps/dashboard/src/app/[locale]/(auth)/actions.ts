@@ -187,6 +187,64 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
   redirect(destination);
 }
 
+/**
+ * Accept an invitation as somebody who has no account yet — A-2.
+ *
+ * The invitee sets a password, the identity is created from the address the
+ * INVITATION names, the membership is granted, and they arrive signed in — all
+ * in one submission, because a new customer's first experience of the product
+ * should not be a dead end telling them to sign in to an account that does not
+ * exist.
+ *
+ * Every failure lands on the same page with the same code as an unusable
+ * token. In particular, "that address already has an account" is NOT
+ * distinguished: doing so would let anyone holding a forwarded link probe
+ * whether the invited address is registered.
+ */
+export async function onboardInvitationAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const token = String(formData.get('token') ?? '');
+  let destination: string;
+
+  try {
+    const password = String(formData.get('password') ?? '');
+    if (password.length < 12) {
+      // docs/SECURITY.md §3: length-first policy, minimum 12. Checked here so
+      // the invitation is not touched at all for a password that cannot work.
+      throw Object.assign(new Error('too short'), { code: 'VALIDATION_FAILED' });
+    }
+
+    const onboarded = await new InvitationService({ prisma: getPrisma() }).acceptAsNewUser(
+      token,
+      password,
+    );
+
+    // Straight into a session. The password was just set by this same request,
+    // so signing in with it proves nothing further; issuing the session here
+    // avoids a second round trip through a form the invitee has no reason to
+    // see.
+    const session = await getCustomerAuth().startSessionForUser(onboarded.userId);
+    const store = await cookies();
+    store.set(CUSTOMER_REALM.cookieName, session.token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: CUSTOMER_REALM.sameSite,
+      path: '/',
+      maxAge: CUSTOMER_REALM.sessionTtlSeconds,
+    });
+    await getCustomerAuth().switchWorkspace(session.token, onboarded.workspaceId);
+    destination = `/${locale}/overview`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('invitation onboarding failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/invitations/${encodeURIComponent(token)}?error=${toPublicErrorCode(
+      error,
+    )}&ref=${correlationId}`;
+  }
+  redirect(destination);
+}
+
 /** Select the workspace this session acts in. Membership is re-verified. */
 export async function switchWorkspaceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');

@@ -158,6 +158,11 @@ export class MembershipService {
     }
 
     await runAtomically(this.#prisma, async (tx) => {
+      // First, before anything is read or written: the owner check below is a
+      // COUNT, and a count under READ COMMITTED cannot see a concurrent
+      // demotion. See `#lockWorkspace`.
+      await this.#lockWorkspace(tx, workspaceId);
+
       const membership = await tx.membership.findFirst({
         where: { id: membershipId, workspaceId, status: { not: 'REMOVED' } },
         include: { role: true },
@@ -222,6 +227,10 @@ export class MembershipService {
     }
 
     const removedUserId = await runAtomically(this.#prisma, async (tx) => {
+      // Same mutex as `changeRole`, same order. A removal and a demotion
+      // racing each other is the same write skew as two demotions.
+      await this.#lockWorkspace(tx, workspaceId);
+
       const membership = await tx.membership.findFirst({
         where: { id: membershipId, workspaceId, status: { not: 'REMOVED' } },
         include: { role: true },
@@ -263,11 +272,41 @@ export class MembershipService {
   }
 
   /**
+   * Serialise every membership change that could affect ownership — A-5.
+   *
+   * THE RACE THIS CLOSES. `#assertOwnerRemains` is a COUNT, and a count takes
+   * no locks. Two owners, two concurrent demotions: T1 demotes A then counts,
+   * T2 demotes B then counts. Under READ COMMITTED each sees only its own
+   * uncommitted write plus committed data, so T1 still sees B as an owner and
+   * T2 still sees A. Both count one, both pass, both commit — and the
+   * workspace has no owner at all. Textbook write skew: two transactions each
+   * reading what the other is about to invalidate, touching DIFFERENT rows so
+   * nothing conflicts.
+   *
+   * Neither row-level locking on the memberships nor a stricter count fixes
+   * it, because the rows being written are not the rows being read. What is
+   * needed is a mutex over the SET, and the workspace row is the natural one:
+   * every membership belongs to exactly one workspace, so taking it first
+   * serialises all of that workspace's ownership-affecting changes while
+   * leaving other workspaces entirely unaffected.
+   *
+   * Taken BEFORE the membership row is touched, always in this order, so two
+   * of these can queue but never deadlock.
+   */
+  async #lockWorkspace(tx: Pick<PrismaClient, '$queryRaw'>, workspaceId: string): Promise<void> {
+    await tx.$queryRaw`
+      SELECT "id" FROM "workspace" WHERE "id" = ${workspaceId}::uuid FOR UPDATE`;
+  }
+
+  /**
    * The owner invariant.
    *
    * Runs INSIDE the caller's transaction and after the write, so it sees the
    * post-change state and rolls the whole thing back when the workspace would
    * be left ownerless.
+   *
+   * Correct ONLY because `#lockWorkspace` ran first: without that, this count
+   * is the read half of the write skew documented above.
    */
   async #assertOwnerRemains(
     tx: Pick<PrismaClient, 'membership' | 'workspace'>,

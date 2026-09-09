@@ -3,7 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   BetaCohortService,
+  CreditLedgerService,
   EntitlementService,
+  INERT_CREDIT_POLICY,
   SubscriptionService,
   readPlanCatalogue,
   termsFor,
@@ -26,6 +28,8 @@ let platform: PrismaClient;
 let entitlements: EntitlementService;
 let cohorts: BetaCohortService;
 let subscriptions: SubscriptionService;
+let ledger: CreditLedgerService;
+let assigner: EntitlementService;
 
 /** A catalogue the test controls directly, standing in for activated config. */
 class StubCatalogue implements CatalogueSource {
@@ -41,6 +45,25 @@ class StubCatalogue implements CatalogueSource {
 
   async load(domain: string): Promise<Record<string, unknown>> {
     return this.#documents[domain] ?? {};
+  }
+
+  /**
+   * A stable fake version id per domain (A-3). A subscription pins the
+   * configuration version its price came from, so the stub has to answer —
+   * and answering with a deterministic value lets a test assert the pin.
+   *
+   * A real UUID, because `pinnedFromVersionId` is a `uuid` column: a stub that
+   * returns a readable placeholder would fail on the database rather than on
+   * the behaviour under test.
+   */
+  readonly versionIds: Record<string, string> = {
+    entitlements: '11111111-1111-4111-8111-111111111111',
+    plans: '22222222-2222-4222-8222-222222222222',
+    'feature-flags': '33333333-3333-4333-8333-333333333333',
+  };
+
+  async versionId(domain: string): Promise<string | null> {
+    return this.versionIds[domain] ?? null;
   }
 }
 
@@ -162,6 +185,18 @@ beforeAll(async () => {
   });
   cohorts = new BetaCohortService({ prisma: platform });
   subscriptions = new SubscriptionService({ prisma: platform });
+
+  // A-3: assigning a plan grants the credits that plan promises, so the
+  // service that performs assignments carries the ledger. The read-only one
+  // above deliberately does not — that is the tenant-side shape.
+  ledger = new CreditLedgerService({ prisma: platform, policy: INERT_CREDIT_POLICY });
+  assigner = new EntitlementService({
+    prisma: platform,
+    catalogueSource: catalogue,
+    environment: 'DEVELOPMENT',
+    cacheTtlMs: 0,
+    ledger,
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -560,5 +595,182 @@ describe('upgrade and downgrade timing', () => {
     expect(advanced.planKey).toBe('fixture-small');
     expect(advanced.pendingPlanKey).toBeNull();
     expect(advanced.pinnedMonthlyMinor).toBe(100);
+  });
+});
+
+/*
+ * A-3. ASSIGNING A PLAN USED TO WRITE A STRING.
+ *
+ * `assignPlan` set `workspace.planKey` and an audit event and stopped. No
+ * `WorkspaceSubscription` existed, so there was no status, no billing period,
+ * no trial, no pinned price and no credits — the Plan & Usage page had nothing
+ * real to render and the cycle worker had nothing to advance.
+ */
+describe('assigning a plan creates the commercial relationship', () => {
+  const ACTOR = {
+    platformUserId: crypto.randomUUID(),
+    roleKey: 'platform_owner',
+    permissionKeys: ['platform.plan.assign'],
+    mfaVerified: true,
+  };
+
+  async function assignable(): Promise<string> {
+    return freshWorkspace(null);
+  }
+
+  it('creates the subscription, starts the trial and grants the trial credits', async () => {
+    const workspaceId = await assignable();
+
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'sold on a call');
+
+    const subscription = await subscriptions.get(workspaceId);
+    expect(subscription, 'a plan assignment must produce a subscription').not.toBeNull();
+    expect(subscription!.planKey).toBe('fixture-large');
+    expect(subscription!.status).toBe('TRIALING');
+
+    // THE PRICE IS PINNED, from the catalogue, with the version it came from.
+    expect(subscription!.currency).toBe('SAR');
+    expect(subscription!.pinnedMonthlyMinor).toBe(500);
+    expect(subscription!.pinnedAnnualMinor).toBe(5000);
+    expect(subscription!.pinnedMonthlyCredits).toBe(1000);
+
+    const row = await platform.workspaceSubscription.findUniqueOrThrow({ where: { workspaceId } });
+    expect(row.pinnedFromVersionId, 'a pinned price must record where it came from').toBe(
+      catalogue.versionIds['plans'],
+    );
+    expect(row.trialStartedAt).not.toBeNull();
+    expect(row.trialEndsAt).not.toBeNull();
+    // The trial IS the first period, so the cycle boundary is the trial end.
+    expect(row.currentPeriodEnd.toISOString()).toBe(row.trialEndsAt!.toISOString());
+
+    // And the trial's credits are actually in the wallet.
+    const wallet = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(wallet.balanceMilliCredits).toBe(20n * 1000n);
+  });
+
+  it('changing plan mid-trial re-pins the price without granting again', async () => {
+    // The trial belongs to the WORKSPACE, not the plan: moving between plans
+    // inside it must neither cut it short, restart it, nor hand out a second
+    // allowance — otherwise an operator could mint credits by toggling.
+    const workspaceId = await assignable();
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'trial first');
+    const afterTrial = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const trialPeriod = await platform.workspaceSubscription.findUniqueOrThrow({
+      where: { workspaceId },
+    });
+
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-small', 'moved mid-trial');
+
+    const row = await platform.workspaceSubscription.findUniqueOrThrow({ where: { workspaceId } });
+    expect(row.planKey).toBe('fixture-small');
+    expect(row.status).toBe('TRIALING');
+    // The new plan's price and allowance are pinned...
+    expect(row.pinnedMonthlyCredits).toBe(100);
+    expect(row.pinnedMonthlyMinor).toBe(100);
+    // ...and the trial period is untouched.
+    expect(row.trialEndsAt?.toISOString()).toBe(trialPeriod.trialEndsAt?.toISOString());
+    expect(row.currentPeriodEnd.toISOString()).toBe(trialPeriod.currentPeriodEnd.toISOString());
+
+    // No second allowance.
+    const wallet = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(wallet.balanceMilliCredits).toBe(afterTrial.balanceMilliCredits);
+  });
+
+  it('is idempotent: assigning the same plan twice grants once', async () => {
+    // An operator double-clicking must not cost a second month of credits.
+    const workspaceId = await assignable();
+
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'first');
+    const afterFirst = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'again');
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'and again');
+
+    const afterRepeats = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(afterRepeats.balanceMilliCredits).toBe(afterFirst.balanceMilliCredits);
+
+    const trialGrants = await platform.creditGrant.findMany({
+      where: { workspaceId, source: 'TRIAL_GRANT' },
+    });
+    expect(trialGrants).toHaveLength(1);
+  });
+
+  it('gives a workspace only one trial, ever', async () => {
+    // D-09. Moving between plans must not hand out a second evaluation period.
+    const workspaceId = await assignable();
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'trial plan');
+    const first = await platform.workspaceSubscription.findUniqueOrThrow({
+      where: { workspaceId },
+    });
+
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-small', 'moved off');
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'and back');
+
+    const after = await platform.workspaceSubscription.findUniqueOrThrow({
+      where: { workspaceId },
+    });
+    expect(after.trialStartedAt?.toISOString()).toBe(first.trialStartedAt?.toISOString());
+    const trialGrants = await platform.creditGrant.findMany({
+      where: { workspaceId, source: 'TRIAL_GRANT' },
+    });
+    expect(trialGrants).toHaveLength(1);
+  });
+
+  it('cancels rather than deletes the subscription when the plan is removed', async () => {
+    // The row is the record of what the customer was sold and when. Deleting
+    // it would destroy the only evidence of a price that was once pinned.
+    const workspaceId = await assignable();
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'assigned');
+
+    await assigner.assignPlan(ACTOR, workspaceId, null, 'removed');
+
+    const row = await platform.workspaceSubscription.findUniqueOrThrow({ where: { workspaceId } });
+    expect(row.status).toBe('CANCELLED');
+    expect(row.cancelledAt).not.toBeNull();
+    expect(row.pinnedMonthlyMinor).toBe(500);
+    const workspace = await platform.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+    expect(workspace.planKey).toBeNull();
+  });
+
+  it('refuses a plan with no price in the pinning currency', async () => {
+    // Pinning zero would be worse than refusing: the customer would be
+    // recorded as having been sold the plan for nothing.
+    const workspaceId = await assignable();
+    await expect(
+      assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'wrong currency', {
+        currency: 'JPY',
+      }),
+    ).rejects.toThrow(/no price in JPY/);
+
+    expect(await subscriptions.get(workspaceId)).toBeNull();
+  });
+
+  it('records the outcome in the audit event, in the same transaction', async () => {
+    const workspaceId = await assignable();
+    await assigner.assignPlan(ACTOR, workspaceId, 'fixture-large', 'audited assignment');
+
+    const events = await platform.auditEvent.findMany({
+      where: { workspaceId, action: 'platform.plan.assigned' },
+    });
+    expect(events).toHaveLength(1);
+    const after = events[0]?.after as Record<string, unknown>;
+    expect(after['planKey']).toBe('fixture-large');
+    expect(after['subscriptionStatus']).toBe('TRIALING');
+    expect(after['trialStarted']).toBe(true);
+    expect(after['grantedCredits']).toBe(20);
+  });
+
+  it('writes nothing at all when the plan is unknown', async () => {
+    const workspaceId = await assignable();
+    await expect(assigner.assignPlan(ACTOR, workspaceId, 'no-such-plan', 'typo')).rejects.toThrow(
+      /Unknown plan/,
+    );
+
+    const workspace = await platform.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+    expect(workspace.planKey).toBeNull();
+    expect(await subscriptions.get(workspaceId)).toBeNull();
+    expect(
+      await platform.auditEvent.count({ where: { workspaceId, action: 'platform.plan.assigned' } }),
+    ).toBe(0);
   });
 });

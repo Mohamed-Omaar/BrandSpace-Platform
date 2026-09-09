@@ -211,6 +211,22 @@ export class ConfigurationService {
   }
 
   /** Every domain's active payload, for cross-domain semantic validation. */
+  /**
+   * The id of the ACTIVE version for one domain, or null when none is active.
+   *
+   * Deliberately uncached, unlike `get`. It is read when a subscription pins a
+   * price, which happens once per plan assignment rather than per request, and
+   * pinning a version id that a stale cache says is current would defeat the
+   * point of recording it.
+   */
+  async activeVersionId(domain: ConfigDomain, environment: Environment): Promise<string | null> {
+    const active = await this.#prisma.configurationVersion.findFirst({
+      where: { domain, environment, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return active?.id ?? null;
+  }
+
   async getContext(environment: Environment): Promise<ConfigContext> {
     const rows = await this.#prisma.configurationVersion.findMany({
       where: { environment, status: 'ACTIVE' },

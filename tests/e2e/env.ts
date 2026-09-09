@@ -71,5 +71,11 @@ export interface E2eAdminCredentials {
     /** A live invitation token, for the acceptance flow. */
     readonly invitationToken: string;
     readonly invitedEmail: string;
+    /**
+     * An invited address with NO account behind it (A-2). Only the invitation
+     * is seeded; the identity is what the onboarding journey has to create.
+     */
+    readonly newcomerToken: string;
+    readonly newcomerEmail: string;
   };
 }

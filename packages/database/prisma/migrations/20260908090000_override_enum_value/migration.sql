@@ -1,0 +1,12 @@
+-- A-4. Enum entitlements, end to end.
+--
+-- `FeatureDefinition.valueType` has always allowed 'enum', and nothing could
+-- resolve one: the decision carried only `enabled` and `limitValue`, so "which
+-- option does this workspace get" had nowhere to live. Plan entitlements carry
+-- the option in configuration; an OVERRIDE is a database row, and so needs a
+-- column of its own.
+--
+-- Additive and nullable: every existing override is a boolean or a quota, for
+-- which null is the correct and only value. No backfill, no default, no
+-- rewrite of existing rows.
+ALTER TABLE "workspace_override" ADD COLUMN "enumValue" TEXT;

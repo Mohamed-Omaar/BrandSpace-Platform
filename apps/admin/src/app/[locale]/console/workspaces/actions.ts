@@ -12,6 +12,7 @@ import {
   getCreditService,
   getEmailProvider,
   getEntitlementService,
+  getPlanAssignmentService,
   getInvitationService,
   getWorkspaceService,
   requirePlatformActor,
@@ -151,8 +152,9 @@ export async function assignPlanAction(formData: FormData): Promise<void> {
   try {
     const actor = await requirePlatformActor('platform.plan.assign');
     const planKey = String(formData.get('planKey') ?? '');
+    const service = await getPlanAssignmentService();
     await withSpan('workspace.assign_plan', {}, async () =>
-      getEntitlementService().assignPlan(
+      service.assignPlan(
         serviceActor(actor),
         workspaceId,
         planKey === '' ? null : planKey,

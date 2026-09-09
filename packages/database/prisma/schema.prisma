@@ -524,6 +524,11 @@ model SupportModeSession {
   @@index([workspaceId, grantedAt(sort: Desc)])
   @@index([platformUserId, grantedAt(sort: Desc)])
   @@index([expiresAt])
+  /// A-10. At most ONE live session per (workspace, operator), enforced by a
+  /// PARTIAL unique index created in migration
+  /// 20260908100000_support_mode_single_active. Prisma cannot express a
+  /// `WHERE "endedAt" IS NULL` index, so it lives in the migration and is
+  /// recorded here so nobody concludes the guarantee is only in code.
   @@map("support_mode_session")
 }
 
@@ -841,6 +846,10 @@ model WorkspaceOverride {
   enabled    Boolean
   /// null = unlimited for a quota feature; ignored for a boolean feature.
   limitValue Int?
+  /// A-4. The chosen option for an `enum` feature; null for every other type.
+  /// Separate from `limitValue` because a quota answers "how many" and an enum
+  /// answers "which one" — collapsing them left enum features unresolvable.
+  enumValue  String?
 
   reason String
 

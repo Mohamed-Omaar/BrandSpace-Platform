@@ -22,14 +22,21 @@ const WORKSPACE = '11111111-2222-4333-8444-555555555555';
 function catalogue(overrides: Partial<EntitlementCatalogue> = {}): EntitlementCatalogue {
   return {
     features: [
-      { key: 'ai.generation', valueType: 'boolean', defaultValue: false, dependsOn: [] },
+      {
+        key: 'ai.generation',
+        valueType: 'boolean',
+        defaultValue: false,
+        dependsOn: [],
+        enumOptions: [],
+      },
       {
         key: 'ai.image_generation',
         valueType: 'boolean',
         defaultValue: false,
         dependsOn: ['ai.generation'],
+        enumOptions: [],
       },
-      { key: 'seats', valueType: 'quota', defaultValue: 1, dependsOn: [] },
+      { key: 'seats', valueType: 'quota', defaultValue: 1, dependsOn: [], enumOptions: [] },
       ...(overrides.features ?? []),
     ],
     planEntitlements: overrides.planEntitlements ?? [],
@@ -68,6 +75,7 @@ describe('1. the kill switch outranks everything', () => {
             featureKey: 'ai.generation',
             enabled: true,
             limitValue: null,
+            enumValue: null,
             reason: 'customer paid for it',
             effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
             effectiveUntil: null,
@@ -121,6 +129,7 @@ describe('2. a workspace override outranks a plan', () => {
             featureKey: 'ai.generation',
             enabled: true,
             limitValue: 50,
+            enumValue: null,
             reason: 'goodwill after an incident',
             effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
             effectiveUntil: null,
@@ -145,6 +154,7 @@ describe('2. a workspace override outranks a plan', () => {
             featureKey: 'ai.generation',
             enabled: false,
             limitValue: null,
+            enumValue: null,
             reason: 'abuse investigation',
             effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
             effectiveUntil: null,
@@ -168,6 +178,7 @@ describe('2. a workspace override outranks a plan', () => {
             featureKey: 'ai.generation',
             enabled: true,
             limitValue: null,
+            enumValue: null,
             reason: 'a trial that has ended',
             effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
             effectiveUntil: new Date('2026-02-01T00:00:00.000Z'),
@@ -190,6 +201,7 @@ describe('2. a workspace override outranks a plan', () => {
             featureKey: 'ai.generation',
             enabled: true,
             limitValue: null,
+            enumValue: null,
             reason: 'starts next month',
             effectiveFrom: new Date('2026-12-01T00:00:00.000Z'),
             effectiveUntil: null,
@@ -370,6 +382,7 @@ describe('the trace explains the decision', () => {
             featureKey: 'ai.generation',
             enabled: true,
             limitValue: null,
+            enumValue: null,
             reason: 'agreed during onboarding',
             effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
             effectiveUntil: null,
@@ -412,6 +425,7 @@ describe('override validation refuses what the engine would ignore', () => {
           featureKey: 'ai.generation',
           enabled: true,
           limitValue: null,
+          enumValue: null,
           reason: 'enabled first',
           effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
           effectiveUntil: null,
@@ -448,6 +462,363 @@ describe('override validation refuses what the engine would ignore', () => {
         NOW,
       ),
     ).toBeNull();
+  });
+});
+
+/*
+ * A-4. THREE PIECES OF CONFIGURATION THAT LOOKED LIVE AND WERE INERT.
+ */
+describe('A-4. plan targeting on a feature flag', () => {
+  it('enables the feature for a plan on the list', () => {
+    // `enabledForPlans` was declared on `FlagRule`, carried through the schema
+    // and the Control Center, and READ BY NOTHING. An operator could switch a
+    // feature on for one plan, see it saved, and change nobody's experience.
+    const result = resolveEntitlement(
+      catalogue({ flags: [flag('ai.generation', { enabledForPlans: ['growth'] })] }),
+      context({ planKey: 'growth' }),
+      'ai.generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.source).toBe('flag_plan_list');
+  });
+
+  it('carries the plan limit and enum through with it', () => {
+    const result = resolveEntitlement(
+      catalogue({
+        flags: [flag('seats', { enabledForPlans: ['growth'] })],
+        planEntitlements: [entitlement('growth', 'seats', true, 25)],
+      }),
+      context({ planKey: 'growth' }),
+      'seats',
+      NOW,
+    );
+    expect(result.limitValue).toBe(25);
+  });
+
+  it('FALLS THROUGH for a plan not on the list, rather than deciding against it', () => {
+    // An allow list, like the workspace one and unlike `countries`. A flag
+    // naming one plan must not take the feature away from every plan it does
+    // not name — that would make targeting one audience an outage for others.
+    const result = resolveEntitlement(
+      catalogue({
+        flags: [flag('ai.generation', { enabledForPlans: ['growth'] })],
+        planEntitlements: [entitlement('starter', 'ai.generation', true)],
+      }),
+      context({ planKey: 'starter' }),
+      'ai.generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.source).toBe('plan_entitlement');
+  });
+
+  it('is still beaten by a kill switch', () => {
+    const result = resolveEntitlement(
+      catalogue({
+        flags: [flag('ai.generation', { killSwitch: true, enabledForPlans: ['growth'] })],
+      }),
+      context({ planKey: 'growth' }),
+      'ai.generation',
+      NOW,
+    );
+    expect(result.source).toBe('kill_switch');
+  });
+
+  it('does nothing for a workspace on no plan', () => {
+    const result = resolveEntitlement(
+      catalogue({ flags: [flag('ai.generation', { enabledForPlans: ['growth'] })] }),
+      context({ planKey: null }),
+      'ai.generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(false);
+    expect(result.source).toBe('feature_default');
+  });
+});
+
+describe('A-4. enum entitlements resolve to a value', () => {
+  const ENUM_FEATURE = {
+    key: 'video.quality',
+    valueType: 'enum' as const,
+    defaultValue: 'sd',
+    dependsOn: [],
+    enumOptions: ['sd', 'hd', '4k'],
+  };
+
+  it('takes the option the plan grants', () => {
+    // `valueType: 'enum'` existed and nothing could resolve one: the decision
+    // carried `enabled` and `limitValue` only, so an enum feature resolved to
+    // `defaultValue === true`, which is false for any string.
+    const result = resolveEntitlement(
+      catalogue({
+        features: [ENUM_FEATURE],
+        planEntitlements: [
+          {
+            planKey: 'scale',
+            featureKey: 'video.quality',
+            enabled: true,
+            limitValue: null,
+            limitPeriod: null,
+            enumValue: '4k',
+          },
+        ],
+      }),
+      context({ planKey: 'scale' }),
+      'video.quality',
+      NOW,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.enumValue).toBe('4k');
+    expect(result.source).toBe('plan_entitlement');
+  });
+
+  it('falls back to the feature default option', () => {
+    const result = resolveEntitlement(
+      catalogue({ features: [ENUM_FEATURE] }),
+      context({ planKey: null }),
+      'video.quality',
+      NOW,
+    );
+    // A feature that HAS an option is on — the old reading made every enum
+    // feature false regardless of configuration.
+    expect(result.enabled).toBe(true);
+    expect(result.enumValue).toBe('sd');
+    expect(result.source).toBe('feature_default');
+  });
+
+  it('takes the option an override names', () => {
+    const result = resolveEntitlement(
+      catalogue({
+        features: [ENUM_FEATURE],
+        planEntitlements: [
+          {
+            planKey: 'starter',
+            featureKey: 'video.quality',
+            enabled: true,
+            limitValue: null,
+            limitPeriod: null,
+            enumValue: 'sd',
+          },
+        ],
+      }),
+      context({
+        planKey: 'starter',
+        overrides: [
+          {
+            featureKey: 'video.quality',
+            enabled: true,
+            limitValue: null,
+            enumValue: 'hd',
+            reason: 'goodwill after an incident',
+            effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+            effectiveUntil: null,
+          },
+        ],
+      }),
+      'video.quality',
+      NOW,
+    );
+    expect(result.enumValue).toBe('hd');
+    expect(result.source).toBe('workspace_override');
+  });
+
+  it('is null for a boolean or quota feature', () => {
+    const boolean = resolveEntitlement(
+      catalogue({ planEntitlements: [entitlement('growth', 'ai.generation', true)] }),
+      context({ planKey: 'growth' }),
+      'ai.generation',
+      NOW,
+    );
+    expect(boolean.enumValue).toBeNull();
+  });
+
+  it('rejects an override naming an option the feature does not offer', () => {
+    const invalid = validateOverride(
+      catalogue({ features: [ENUM_FEATURE] }),
+      context(),
+      'video.quality',
+      true,
+      null,
+      NOW,
+      '8k',
+    );
+    expect(invalid).toMatch(/not one of the options/);
+  });
+
+  it('rejects an enum override with no option chosen', () => {
+    const invalid = validateOverride(
+      catalogue({ features: [ENUM_FEATURE] }),
+      context(),
+      'video.quality',
+      true,
+      null,
+      NOW,
+      null,
+    );
+    expect(invalid).toMatch(/needs a chosen option/);
+  });
+
+  it('rejects an option on a feature that is not an enum', () => {
+    const invalid = validateOverride(
+      catalogue(),
+      context(),
+      'ai.generation',
+      true,
+      null,
+      NOW,
+      'hd',
+    );
+    expect(invalid).toMatch(/not an enum feature/);
+  });
+});
+
+describe('A-4. dependencies are re-evaluated at resolve time', () => {
+  it('a dependent is OFF once its dependency is killed, whatever granted it', () => {
+    /*
+     * The dependency graph was consulted ONLY when an override was written.
+     * Configuration is not static: the dependency can be turned off afterwards
+     * by a kill switch, a plan change or a flag edit, and the dependent went
+     * on resolving to enabled because nothing looked again.
+     */
+    const result = resolveEntitlement(
+      catalogue({
+        flags: [flag('ai.generation', { killSwitch: true })],
+        planEntitlements: [
+          entitlement('growth', 'ai.generation', true),
+          entitlement('growth', 'ai.image_generation', true),
+        ],
+      }),
+      context({ planKey: 'growth' }),
+      'ai.image_generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(false);
+    expect(result.source).toBe('dependency_unmet');
+    // The trace keeps the grant that WOULD have applied, so an operator sees
+    // both what granted it and why it is nonetheless off.
+    expect(result.trace.at(-1)?.detail).toMatch(/Granted by plan_entitlement/);
+    expect(result.trace.at(-1)?.detail).toMatch(/"ai\.generation" is off/);
+  });
+
+  it('an OVERRIDE cannot keep a dependent alive once its dependency is off', () => {
+    // The override is the strongest grant there is below a kill switch. It
+    // still must not resurrect a feature whose prerequisite is gone.
+    const result = resolveEntitlement(
+      catalogue({ flags: [flag('ai.generation', { killSwitch: true })] }),
+      context({
+        overrides: [
+          {
+            featureKey: 'ai.image_generation',
+            enabled: true,
+            limitValue: null,
+            enumValue: null,
+            reason: 'granted before the dependency was killed',
+            effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+            effectiveUntil: null,
+          },
+        ],
+      }),
+      'ai.image_generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(false);
+    expect(result.source).toBe('dependency_unmet');
+  });
+
+  it('leaves a dependent alone while its dependency is on', () => {
+    const result = resolveEntitlement(
+      catalogue({
+        planEntitlements: [
+          entitlement('growth', 'ai.generation', true),
+          entitlement('growth', 'ai.image_generation', true),
+        ],
+      }),
+      context({ planKey: 'growth' }),
+      'ai.image_generation',
+      NOW,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.source).toBe('plan_entitlement');
+  });
+
+  it('does not run the check on a feature that is already off', () => {
+    // A disabled feature needs no dependency walk, and reporting
+    // `dependency_unmet` for it would hide why it is actually off.
+    const result = resolveEntitlement(
+      catalogue({ planEntitlements: [entitlement('growth', 'ai.image_generation', false)] }),
+      context({ planKey: 'growth' }),
+      'ai.image_generation',
+      NOW,
+    );
+    expect(result.source).toBe('plan_entitlement');
+  });
+
+  it('terminates on a dependency cycle instead of recursing for ever', () => {
+    // A cycle is a configuration mistake. Failing closed is the same choice
+    // the unknown-feature branch makes.
+    const cyclic = catalogue({
+      features: [
+        {
+          key: 'a.one',
+          valueType: 'boolean',
+          defaultValue: true,
+          dependsOn: ['a.two'],
+          enumOptions: [],
+        },
+        {
+          key: 'a.two',
+          valueType: 'boolean',
+          defaultValue: true,
+          dependsOn: ['a.one'],
+          enumOptions: [],
+        },
+      ],
+    });
+    const result = resolveEntitlement(cyclic, context(), 'a.one', NOW);
+
+    // Terminated, and failed closed — the two properties that matter.
+    expect(result.enabled).toBe(false);
+    expect(result.source).toBe('dependency_unmet');
+    // The OUTER feature reports its dependency as off, which is true and is
+    // the more useful message at that level; the cycle itself is named one
+    // link in, where it is actually detected.
+    expect(result.trace.at(-1)?.detail).toMatch(/"a\.two" is off/);
+
+    const inner = resolveEntitlement(cyclic, context(), 'a.two', NOW);
+    expect(inner.enabled).toBe(false);
+    expect(inner.trace.at(-1)?.detail).toMatch(/"a\.one" is off/);
+  });
+
+  it('follows a chain more than one link deep', () => {
+    const chain = catalogue({
+      features: [
+        {
+          key: 'c.base',
+          valueType: 'boolean',
+          defaultValue: false,
+          dependsOn: [],
+          enumOptions: [],
+        },
+        {
+          key: 'c.middle',
+          valueType: 'boolean',
+          defaultValue: true,
+          dependsOn: ['c.base'],
+          enumOptions: [],
+        },
+        {
+          key: 'c.leaf',
+          valueType: 'boolean',
+          defaultValue: true,
+          dependsOn: ['c.middle'],
+          enumOptions: [],
+        },
+      ],
+    });
+    const result = resolveEntitlement(chain, context(), 'c.leaf', NOW);
+    expect(result.enabled, 'the base is off, so everything above it is').toBe(false);
+    expect(result.source).toBe('dependency_unmet');
   });
 });
 
@@ -488,5 +859,5 @@ function entitlement(
   enabled: boolean,
   limitValue: number | null = null,
 ) {
-  return { planKey, featureKey, enabled, limitValue, limitPeriod: null };
+  return { planKey, featureKey, enabled, limitValue, limitPeriod: null, enumValue: null };
 }

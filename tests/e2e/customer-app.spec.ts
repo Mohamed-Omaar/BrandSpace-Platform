@@ -256,6 +256,54 @@ test.describe('invitation acceptance', () => {
     expect(url.searchParams.get('error')).toBe('NOT_FOUND');
   });
 
+  /*
+   * A-2. THE JOURNEY FOR SOMEBODY WHO HAS NEVER USED THE PRODUCT.
+   *
+   * Nothing is pre-created for this address but the invitation itself: no
+   * user row, no password, no membership. That is the whole test — the
+   * previous suite pre-seeded the invitee's `User`, and that pre-creation is
+   * what hid the fact that a new invitee had no way in at all.
+   */
+  test('a brand-new invitee sets a password and lands in the workspace', async ({ page }) => {
+    const { customer } = credentials();
+    const password = 'a-strong-local-only-newcomer-3182';
+
+    // Proof the address really is new: the acceptance page is reachable
+    // anonymously and offers the set-up form, not an accept button.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/invitations/${customer.newcomerToken}`);
+    await expect(page.getByTestId('invitation-workspace')).toContainText(customer.workspaceName);
+    await expect(page.getByTestId('invitation-setup-title')).toBeVisible();
+    await expect(page.getByTestId('invitation-accept')).toHaveCount(0);
+
+    // The invited address is NOT a field: it comes from the invitation row, so
+    // this form cannot be used to create an account for somebody else.
+    await expect(page.locator('input[name="email"]')).toHaveCount(0);
+
+    // The minimum is enforced in the field, so a short password never reaches
+    // the invitation. Asserted here rather than in a test of its own: the
+    // token is single-use, and a second test would need a second invitation
+    // only to check something this one is already holding.
+    await page.fill('[data-testid="invitation-password"]', 'short');
+    const shortIsValid = await page
+      .getByTestId('invitation-password')
+      .evaluate((el) => (el as HTMLInputElement).validity.valid);
+    expect(shortIsValid).toBe(false);
+
+    await page.fill('[data-testid="invitation-password"]', password);
+    await page.click('[data-testid="invitation-setup-submit"]');
+
+    // Signed in, in the workspace, in one step.
+    await page.waitForURL(/\/en\/overview/);
+    await expect(page.getByTestId('heading')).toBeVisible();
+
+    // And the identity now works like any other. Cookies cleared first: the
+    // onboarding already signed them in, and a sign-in form is not served to
+    // somebody who has a session.
+    await page.context().clearCookies();
+    await signIn(page, customer.newcomerEmail, password);
+    await expect(page).toHaveURL(/\/en\/(workspaces|overview)/);
+  });
+
   test('the invited recipient CAN accept it and lands in the workspace', async ({ page }) => {
     const { customer } = credentials();
     await signIn(page, customer.invitedEmail, customer.password);

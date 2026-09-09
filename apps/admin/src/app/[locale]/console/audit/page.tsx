@@ -16,18 +16,33 @@ export default async function AuditPage({ params }: { params: Promise<{ locale: 
   await requirePageActor(locale, 'platform.audit.read');
   const isArabic = locale === 'ar';
 
-  const events = await getPlatformPrisma().auditEvent.findMany({
-    orderBy: { occurredAt: 'desc' },
-    take: 100,
-  });
+  /*
+   * A-11. The cap is stated in words below ("the 100 most recent events"),
+   * which was already honest — but a claim is not a number. The total is read
+   * so the page can say the most recent 100 OF HOW MANY, which is what tells
+   * an operator whether there is history they cannot reach from here.
+   *
+   * Full pagination of the audit log is scheduled rather than done here: the
+   * log is append-only and platform-wide, so paging it usefully needs filters
+   * (actor, action, workspace, date) that are their own piece of work.
+   * Recorded in docs/DECISIONS.md under A-11.
+   */
+  const AUDIT_PAGE_CAP = 100;
+  const [events, auditTotal] = await Promise.all([
+    getPlatformPrisma().auditEvent.findMany({
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      take: AUDIT_PAGE_CAP,
+    }),
+    getPlatformPrisma().auditEvent.count(),
+  ]);
 
   return (
     <>
       <PageIntro
         description={
           isArabic
-            ? 'سجل غير قابل للتعديل. آخر 100 حدث.'
-            : 'Append-only record. The 100 most recent events.'
+            ? `سجل غير قابل للتعديل. عرض أحدث ${events.length} من ${auditTotal}.`
+            : `Append-only record. Showing the most recent ${events.length} of ${auditTotal}.`
         }
       />
       {events.length === 0 ? (

@@ -61,6 +61,9 @@ export default async function SupportModePage({
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
   const history = active ? await support.listForWorkspace(active.workspaceId) : [];
+  // A-11. The listing is capped at SUPPORT_SESSION_LIST_CAP. A customer's own
+  // support history must not imply it is complete when it is not.
+  const historyTotal = active ? await support.countForWorkspace(active.workspaceId) : 0;
 
   return (
     <div>
@@ -162,7 +165,7 @@ export default async function SupportModePage({
           <p data-testid="support-none" style={{ marginBlockStart: 0 }}>
             {t('support.none')}
           </p>
-          {workspaces.length === 0 ? (
+          {workspaces.items.length === 0 ? (
             <EmptyState
               message={locale === 'ar' ? 'لا توجد مساحات عمل.' : 'There are no workspaces.'}
             />
@@ -176,7 +179,7 @@ export default async function SupportModePage({
                   name="workspaceId"
                   style={inputStyle()}
                 >
-                  {workspaces.map((w) => (
+                  {workspaces.items.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name} ({w.slug})
                     </option>
@@ -220,6 +223,13 @@ export default async function SupportModePage({
           }
           testId="support-history"
         >
+          {historyTotal > history.length && (
+            <p data-testid="support-history-capped" role="status">
+              {locale === 'ar'
+                ? `عرض أحدث ${history.length} من ${historyTotal}`
+                : `Showing the most recent ${history.length} of ${historyTotal}`}
+            </p>
+          )}
           <TableScroll>
             <table style={tableStyle()}>
               <thead>

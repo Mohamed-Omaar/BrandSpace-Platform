@@ -328,6 +328,12 @@ turns on. A silent cap would have been worse than the unbounded query it replace
 Supported by an index on `[environment, category, name, id]`, so the database returns a page from the
 index instead of sorting the whole matching set to produce one.
 
+**This contract is not specific to secrets.** The customers-and-workspaces directory follows it
+exactly (A-11), and it is the shape any new Control Center listing should take. Where a listing is
+still capped rather than paged — invitations at 200, support history at 50, the audit log at 100 —
+the page states **"the most recent N of Total"**. That is the line that matters: a bounded read the
+operator can see is fine, a bounded read they cannot is the defect F-53 named.
+
 ---
 
 ## 8. Module 7 — AI Gateway Administration

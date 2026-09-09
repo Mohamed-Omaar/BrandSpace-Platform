@@ -70,13 +70,18 @@ export default async function MembersPage({
 
   // Every read runs inside the tenant context, so RLS — not a `where` clause
   // this page remembered — is what keeps another tenant's rows out.
-  const { members, invitations, roles, assignable } = await inWorkspace(
+  const { members, invitations, invitationTotal, roles, assignable } = await inWorkspace(
     workspace.workspaceId,
     async ({ db, memberships, invitations: invitationService }) => ({
       members: await memberships.list(workspace.workspaceId),
       invitations: workspace.permissionKeys.includes('member.invite')
         ? await invitationService.list(workspace.workspaceId)
         : [],
+      // A-11. `list` is capped. The total is read separately so the page can
+      // say which it is showing rather than implying the list is complete.
+      invitationTotal: workspace.permissionKeys.includes('member.invite')
+        ? await invitationService.count(workspace.workspaceId)
+        : 0,
       roles: await db.role.findMany({
         where: { realm: 'WORKSPACE', workspaceId: null },
         orderBy: { key: 'asc' },
@@ -317,6 +322,17 @@ export default async function MembersPage({
               />
             ) : (
               <>
+                {invitationTotal > invitations.length && (
+                  <p
+                    data-testid="invitations-capped"
+                    role="status"
+                    style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                  >
+                    {locale === 'ar'
+                      ? `عرض أحدث ${invitations.length} من ${invitationTotal}`
+                      : `Showing the most recent ${invitations.length} of ${invitationTotal}`}
+                  </p>
+                )}
                 <div className="bs-wide-only">
                   <DataTable
                     headers={[

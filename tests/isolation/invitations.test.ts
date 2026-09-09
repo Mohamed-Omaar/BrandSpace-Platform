@@ -1,11 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  CustomerAuthService,
   InvitationService,
   MembershipService,
   OutboxEmailProvider,
   hashInvitationToken,
+  hashPassword,
 } from '@brandspace/auth';
 import { withWorkspace } from '@brandspace/database';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
@@ -730,6 +733,184 @@ describe('invitations cannot escalate privileges', () => {
   });
 });
 
+/*
+ * A-2. A GENUINELY NEW INVITEE MUST BE ABLE TO GET IN.
+ *
+ * `accept` requires an authenticated identity, and there is no sign-up route —
+ * a customer application is entered by invitation, not self-registration. So an
+ * invited address with no account reached the page, was told to sign in, and
+ * had nothing to sign in with. The journey only worked if somebody had created
+ * the `User` row by hand.
+ *
+ * Every test here creates the invitation and NOTHING else: no pre-seeded user,
+ * which is the whole point.
+ */
+describe('onboarding a brand-new invitee', () => {
+  const NEW_PASSWORD = 'a-strong-local-only-test-password-7731';
+
+  async function inviteFreshAddress(): Promise<{ token: string; email: string }> {
+    const email = uniqueEmail('newcomer');
+    const issued = await issueTo(email);
+    // The address has no account at all. Asserted, not assumed.
+    expect(await platform.user.findUnique({ where: { email } })).toBeNull();
+    return { token: issued.token, email };
+  }
+
+  it('creates a verified identity and the membership in one step', async () => {
+    const { token, email } = await inviteFreshAddress();
+
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    expect(onboarded.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(onboarded.roleKey).toBe('analyst');
+
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(user.id).toBe(onboarded.userId);
+    expect(user.status).toBe('ACTIVE');
+    // The token was delivered to that mailbox and exists nowhere else, so
+    // presenting it IS proof of control of the address.
+    expect(user.emailVerifiedAt).not.toBeNull();
+    expect(user.passwordHash).not.toBeNull();
+    // Never the plaintext.
+    expect(user.passwordHash).not.toContain(NEW_PASSWORD);
+
+    const membership = await platform.membership.findUniqueOrThrow({
+      where: { id: onboarded.membershipId },
+    });
+    expect(membership.status).toBe('ACTIVE');
+    expect(membership.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(membership.userId).toBe(user.id);
+  });
+
+  it('the new identity can then sign in normally', async () => {
+    const { token, email } = await inviteFreshAddress();
+    await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const auth = new CustomerAuthService({ prisma: app });
+    const session = await auth.signIn({ email, password: NEW_PASSWORD });
+    const resolved = await auth.resolve(session.token);
+    expect(resolved?.userId).toBeDefined();
+  });
+
+  it('consumes the invitation exactly once, even under concurrency', async () => {
+    // The single-use guarantee must survive the new entry point: it is the
+    // same conditional UPDATE, in the same transaction as the identity.
+    const { token, email } = await inviteFreshAddress();
+
+    const results = await Promise.allSettled([
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+
+    // One account, one membership — not three, and not one of each per attempt.
+    expect(await platform.user.count({ where: { email } })).toBe(1);
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(
+      await platform.membership.count({
+        where: { workspaceId: fixtures.a.workspaceId, userId: user.id },
+      }),
+    ).toBe(1);
+  });
+
+  it('refuses to take over an address that already has a password', async () => {
+    // Otherwise anyone holding a forwarded link could set a password on the
+    // invitee's existing account. Refused with the ORDINARY failure message,
+    // so the refusal itself does not confirm the account exists.
+    const email = uniqueEmail('established');
+    const existing = await platform.user.create({
+      data: {
+        email,
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        passwordHash: await hashPassword('the-incumbent-password-9931'),
+      },
+    });
+    const issued = await issueTo(email);
+
+    await expect(invitations.acceptAsNewUser(issued.token, NEW_PASSWORD)).rejects.toThrow(
+      'This invitation link is not valid.',
+    );
+
+    const after = await platform.user.findUniqueOrThrow({ where: { id: existing.id } });
+    expect(after.passwordHash, 'the incumbent password must be untouched').toBe(
+      existing.passwordHash,
+    );
+    // And the invitation is still usable by the rightful owner.
+    const invitation = await platform.invitation.findFirstOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId, email },
+    });
+    expect(invitation.status).toBe('PENDING');
+  });
+
+  it('gives the same message for every unusable token', async () => {
+    // Uniform failure, preserved across the new path.
+    const revoked = await issueTo(uniqueEmail('revoked-newcomer'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      revoked.invitationId,
+      'revoked for this test',
+      platformInviter(),
+    );
+
+    for (const token of [revoked.token, 'not-a-real-token-at-all']) {
+      await expect(invitations.acceptAsNewUser(token, NEW_PASSWORD)).rejects.toThrow(
+        'This invitation link is not valid.',
+      );
+    }
+  });
+
+  it('does not consume the invitation when the password is rejected', async () => {
+    const { token, email } = await inviteFreshAddress();
+
+    await expect(invitations.acceptAsNewUser(token, 'short')).rejects.toThrow();
+
+    // No account created, and the link still works.
+    expect(await platform.user.findUnique({ where: { email } })).toBeNull();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    expect(onboarded.userId).toBeDefined();
+  });
+
+  it('stores only the hash of the token, on this path too', async () => {
+    const { token } = await inviteFreshAddress();
+    const rows = await platform.invitation.findMany({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    expect(rows.some((r) => r.tokenHash === token)).toBe(false);
+    expect(rows.some((r) => r.tokenHash === hashInvitationToken(token))).toBe(true);
+  });
+
+  it('grants membership ONLY in the inviting workspace', async () => {
+    // Tenant isolation: a brand-new identity must not become visible in, or a
+    // member of, any workspace but the one that invited them.
+    const { token } = await inviteFreshAddress();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const memberships = await platform.membership.findMany({
+      where: { userId: onboarded.userId },
+    });
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]?.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(memberships[0]?.workspaceId).not.toBe(fixtures.b.workspaceId);
+  });
+
+  it('writes the acceptance audit event in the inviting workspace', async () => {
+    const { token } = await inviteFreshAddress();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+
+    const events = await platform.auditEvent.findMany({
+      where: {
+        workspaceId: fixtures.a.workspaceId,
+        action: 'workspace.invitation.accepted',
+        actorId: onboarded.userId,
+      },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]?.outcome).toBe('SUCCESS');
+  });
+});
+
 describe('membership rules', () => {
   const owner = (userId: string) => ({
     userId,
@@ -773,6 +954,165 @@ describe('membership rules', () => {
       include: { role: true },
     });
     expect(role.role.key).toBe('workspace_owner');
+  });
+
+  /*
+   * A-5. THE OWNER INVARIANT UNDER CONCURRENCY.
+   *
+   * `#assertOwnerRemains` is a COUNT, and a count takes no locks. Two owners,
+   * two concurrent demotions: each transaction demotes a DIFFERENT membership
+   * row, so nothing conflicts, and under READ COMMITTED each still sees the
+   * other owner as active. Both counted one, both passed, both committed — and
+   * the workspace was left with none.
+   *
+   * Sequentially every one of these passes. That is the point: the sequential
+   * tests above cannot see this, and neither could any amount of reading.
+   */
+  describe('two owners cannot be removed at once', () => {
+    /** A workspace with `count` owners, returning their membership ids. */
+    async function workspaceWithOwners(count: number): Promise<{
+      workspaceId: string;
+      ownerUserId: string;
+      membershipIds: string[];
+    }> {
+      const suffix = randomUUID();
+      const founder = await platform.user.create({
+        data: { email: `founder-${suffix}@example.local`, status: 'ACTIVE' },
+      });
+      const workspace = await platform.workspace.create({
+        data: {
+          id: suffix,
+          workspaceId: suffix,
+          slug: `owners-${suffix.slice(0, 12)}`,
+          name: 'Owner race',
+          ownerUserId: founder.id,
+          status: 'ACTIVE',
+        },
+      });
+
+      const membershipIds: string[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const user =
+          i === 0
+            ? founder
+            : await platform.user.create({
+                data: { email: `co-owner-${i}-${suffix}@example.local`, status: 'ACTIVE' },
+              });
+        const membership = await platform.membership.create({
+          data: {
+            workspaceId: workspace.id,
+            userId: user.id,
+            roleId: ownerRoleId,
+            status: 'ACTIVE',
+            acceptedAt: new Date(),
+            brandScope: [],
+          },
+        });
+        membershipIds.push(membership.id);
+      }
+      return { workspaceId: workspace.id, ownerUserId: founder.id, membershipIds };
+    }
+
+    async function activeOwners(workspaceId: string): Promise<number> {
+      return platform.membership.count({
+        where: { workspaceId, status: 'ACTIVE', role: { key: 'workspace_owner' } },
+      });
+    }
+
+    it('parallel DEMOTIONS of the two remaining owners leave one standing', async () => {
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+      expect(await activeOwners(workspaceId)).toBe(2);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        ),
+      );
+
+      // Exactly one succeeds. The other is refused by the invariant — a
+      // CONFLICT, which is the correct answer, not a crash.
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      expect(fulfilled).toHaveLength(1);
+      for (const rejection of results.filter((r) => r.status === 'rejected')) {
+        expect(String((rejection as PromiseRejectedResult).reason)).toMatch(
+          /at least one active Workspace Owner/i,
+        );
+      }
+
+      expect(
+        await activeOwners(workspaceId),
+        'the workspace must never be left without an owner',
+      ).toBe(1);
+    });
+
+    it('parallel REMOVALS of the two remaining owners leave one standing', async () => {
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.remove(workspaceId, owner(ownerUserId), id, 'concurrent removal'),
+        ),
+      );
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('a removal racing a demotion leaves one standing', async () => {
+      // The mixed case, and the one a fix that only guarded `remove` would
+      // still get wrong.
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled([
+        memberships.remove(workspaceId, owner(ownerUserId), membershipIds[0]!, 'racing removal'),
+        memberships.changeRole(workspaceId, owner(ownerUserId), membershipIds[1]!, analystRoleId),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('four owners demoted at once leave exactly one', async () => {
+      // More than two, so a fix that merely serialises PAIRS is not enough.
+      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(4);
+      expect(await activeOwners(workspaceId)).toBe(4);
+
+      const results = await Promise.allSettled(
+        membershipIds.map((id) =>
+          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        ),
+      );
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
+      expect(await activeOwners(workspaceId)).toBe(1);
+    });
+
+    it('does not serialise across workspaces', async () => {
+      // The mutex is per workspace. Two unrelated workspaces demoting at the
+      // same moment must both succeed — a global lock would be correct and
+      // useless.
+      const first = await workspaceWithOwners(2);
+      const second = await workspaceWithOwners(2);
+
+      const results = await Promise.allSettled([
+        memberships.changeRole(
+          first.workspaceId,
+          owner(first.ownerUserId),
+          first.membershipIds[0]!,
+          analystRoleId,
+        ),
+        memberships.changeRole(
+          second.workspaceId,
+          owner(second.ownerUserId),
+          second.membershipIds[0]!,
+          analystRoleId,
+        ),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+      expect(await activeOwners(first.workspaceId)).toBe(1);
+      expect(await activeOwners(second.workspaceId)).toBe(1);
+    });
   });
 
   it('an ADMIN may not mint another OWNER', async () => {
@@ -965,5 +1305,110 @@ describe('membership rules', () => {
       },
     });
     expect(events.length).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * A-10. THE INVITATION LIFECYCLE WAS ALMOST ENTIRELY UNAUDITED.
+ *
+ * Only ACCEPTANCE wrote an audit event. So the customer's Activity Log showed
+ * people arriving in the workspace with no record of who had invited them, and
+ * a revocation — the action taken when an invitation went to the wrong address
+ * — left no trace at all. Each of these changes who can obtain access, which is
+ * the definition of security-material.
+ */
+describe('every invitation lifecycle step is audited', () => {
+  async function eventsFor(invitationId: string, action: string) {
+    return platform.auditEvent.findMany({
+      where: { resourceType: 'invitation', resourceId: invitationId, action },
+    });
+  }
+
+  it('records who created an invitation, and never the token', async () => {
+    const email = uniqueEmail('audit-create');
+    const issued = await issueTo(email);
+
+    const events = await eventsFor(issued.invitationId, 'workspace.invitation.created');
+    expect(events).toHaveLength(1);
+    expect(events[0]?.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(events[0]?.actorType).toBe('PLATFORM_USER');
+
+    const after = events[0]?.after as Record<string, unknown>;
+    expect(after['email']).toBe(email);
+    // The audit log is read by people who must not be able to accept the
+    // invitation from what they read.
+    expect(JSON.stringify(events[0])).not.toContain(issued.token);
+    expect(JSON.stringify(events[0])).not.toContain(hashInvitationToken(issued.token));
+  });
+
+  it('records a revocation, with the reason', async () => {
+    const issued = await issueTo(uniqueEmail('audit-revoke'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      'sent to the wrong address',
+      platformInviter(),
+    );
+
+    const events = await eventsFor(issued.invitationId, 'workspace.invitation.revoked');
+    expect(events).toHaveLength(1);
+    expect(events[0]?.reason).toBe('sent to the wrong address');
+    expect((events[0]?.after as Record<string, unknown>)['status']).toBe('REVOKED');
+  });
+
+  it('records a resend, naming the invitation it superseded', async () => {
+    // A resend is a supersession. Without both ids the trail cannot be told
+    // apart from a second independent invitation to the same address.
+    const issued = await issueTo(uniqueEmail('audit-resend'));
+    const replacement = await invitations.resend(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      platformInviter(),
+    );
+
+    const events = await eventsFor(replacement.invitationId, 'workspace.invitation.resent');
+    expect(events).toHaveLength(1);
+    const after = events[0]?.after as Record<string, unknown>;
+    expect(after['supersededInvitationId']).toBe(issued.invitationId);
+  });
+
+  it('writes no event when the change did not happen', async () => {
+    // A failed revocation must not leave a record claiming it succeeded — the
+    // property the transaction is for.
+    const issued = await issueTo(uniqueEmail('audit-failed'));
+    await invitations.revoke(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      'the first revocation',
+      platformInviter(),
+    );
+
+    await expect(
+      invitations.revoke(
+        fixtures.a.workspaceId,
+        issued.invitationId,
+        'a second revocation of the same row',
+        platformInviter(),
+      ),
+    ).rejects.toThrow('Invitation not found.');
+
+    // Still exactly one, not two.
+    expect(await eventsFor(issued.invitationId, 'workspace.invitation.revoked')).toHaveLength(1);
+  });
+
+  it('writes no created event when the invitation is refused', async () => {
+    const email = uniqueEmail('audit-duplicate');
+    await issueTo(email);
+    const before = await platform.auditEvent.count({
+      where: { workspaceId: fixtures.a.workspaceId, action: 'workspace.invitation.created' },
+    });
+
+    await expect(issueTo(email)).rejects.toThrow(/already pending/);
+
+    expect(
+      await platform.auditEvent.count({
+        where: { workspaceId: fixtures.a.workspaceId, action: 'workspace.invitation.created' },
+      }),
+    ).toBe(before);
   });
 });
