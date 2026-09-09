@@ -1,7 +1,32 @@
 /**
  * Provider-agnostic AI Gateway — docs/AI-GATEWAY.md.
  *
- * PHASE 4. Placeholder in Phase 1 to establish the module boundary only.
- * No provider SDK may be imported outside this package (lint-enforced).
+ * The public surface of the package. No provider SDK may be imported outside
+ * this package (lint-enforced), and nothing outside it may import a provider
+ * adapter's module directly: callers work through the contracts exported here.
  */
-export const AI_GATEWAY_PACKAGE_PHASE = 4 as const;
+export {
+  AI_FAILURE_CLASSES,
+  AiProviderError,
+  customerMessageFor,
+  gatewayError,
+  isFallbackEligible,
+  isRetryable,
+} from './errors';
+export type { AiFailureClass } from './errors';
+
+export { AI_MODALITIES } from './adapter';
+export type {
+  AdapterContext,
+  AdapterRegistry,
+  AiModality,
+  AiProviderAdapter,
+  ConnectionTestResult,
+  ImageRequest,
+  ImageResult,
+  ModerationRequest,
+  ModerationResult,
+  TextRequest,
+  TextResult,
+  UsageUnits,
+} from './adapter';

@@ -445,6 +445,9 @@ importers:
 
   tests:
     dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../packages/ai-gateway
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../packages/auth
