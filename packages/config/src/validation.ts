@@ -100,6 +100,38 @@ function semantic(
     const models = ((context['ai.models'] as { models?: ModelLike[] })?.models ??
       []) as ModelLike[];
     const usable = new Map(models.map((m) => [m.key, m]));
+
+    /*
+     * Two rules that select the same task, in the same scope, for the same
+     * plan or workspace, at the same priority express no operator intent: the
+     * resolver would have to pick one, and whichever it picked would be a
+     * guess. docs/AI-GATEWAY.md §5.3 forbids the gateway guessing a model, so
+     * the ambiguity is refused here, at activation, rather than resolved
+     * silently on a live request.
+     */
+    const seenSelectors = new Map<string, number>();
+    for (const [i, rule] of ((doc['rules'] ?? []) as Record<string, unknown>[]).entries()) {
+      const selector = [
+        String(rule['taskKey']),
+        String(rule['scope'] ?? 'global'),
+        String(rule['planKey'] ?? ''),
+        String(rule['workspaceId'] ?? ''),
+        String(rule['priority'] ?? 0),
+      ].join('|');
+      const first = seenSelectors.get(selector);
+      if (first === undefined) {
+        seenSelectors.set(selector, i);
+      } else {
+        issues.push({
+          severity: 'error',
+          path: `rules.${i}.priority`,
+          message:
+            `Duplicates rule ${first}: same task, scope and target at the same priority. ` +
+            'Give one of them a higher priority so the resolution order is unambiguous.',
+        });
+      }
+    }
+
     for (const [i, rule] of ((doc['rules'] ?? []) as Record<string, unknown>[]).entries()) {
       const primary = String(rule['primaryModelKey']);
       const model = usable.get(primary);

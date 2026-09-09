@@ -33,3 +33,9 @@ export type {
 
 export { MockProviderAdapter } from './adapters/mock';
 export type { MockAdapterOptions, MockCall, MockDirective } from './adapters/mock';
+
+export { AI_TASK_KEYS, AI_TASKS, findAiTask, isAiTaskKey } from './tasks';
+export type { AiTaskDefinition, AiTaskKey } from './tasks';
+
+export { resolveRoute, RoutingError } from './routing';
+export type { RegisteredModel, ResolvedRoute, RoutingQuery, RoutingRule } from './routing';

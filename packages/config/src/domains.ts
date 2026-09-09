@@ -71,6 +71,34 @@ const aiModelCapabilitiesSchema = z.object({
     .default([]),
 });
 
+/**
+ * Per-request generation parameters — docs/AI-GATEWAY.md §5.2.
+ *
+ * These belong to the ROUTING RULE and not to the calling code. A caller asks
+ * for `caption.generate`; how long the answer may be and how adventurous it is
+ * are operator decisions that must be tunable without a deploy.
+ */
+const aiRoutingParametersSchema = z.object({
+  temperature: z.number().min(0).max(2).default(0.7),
+  maxOutputTokens: z.number().int().positive().max(200_000).default(800),
+  promptTemplateVersion: z.number().int().positive().default(1),
+});
+
+/**
+ * Retry policy — docs/AI-GATEWAY.md §5.2.
+ *
+ * `retryOn` is deliberately absent. Which classes may be retried is derived
+ * from the failure taxonomy in `@brandspace/ai-gateway`, not from a list an
+ * operator can widen: making `content_filtered` retryable from a config screen
+ * would turn a moderation refusal into a paid retry loop.
+ */
+const aiRoutingRetrySchema = z.object({
+  maxAttempts: z.number().int().min(1).max(5).default(3),
+  backoff: z.enum(['none', 'fixed', 'exponential']).default('exponential'),
+  initialDelayMs: z.number().int().nonnegative().max(60_000).default(250),
+  jitter: z.boolean().default(true),
+});
+
 const aiRoutingSchema = z.object({
   rules: z
     .array(
@@ -85,6 +113,8 @@ const aiRoutingSchema = z.object({
         timeoutMs: z.number().int().positive().default(30_000),
         maxCostPerRequestMinor: z.number().int().nonnegative().nullable().default(null),
         priority: z.number().int().default(0),
+        parameters: aiRoutingParametersSchema.default({}),
+        retryPolicy: aiRoutingRetrySchema.default({}),
       }),
     )
     .default([]),
@@ -422,7 +452,10 @@ export const CONFIG_DOMAINS = {
   'ai.providers': { schema: aiProvidersSchema, schemaVersion: 1 },
   'ai.models': { schema: aiModelsSchema, schemaVersion: 1 },
   'ai.model-capabilities': { schema: aiModelCapabilitiesSchema, schemaVersion: 1 },
-  'ai.routing': { schema: aiRoutingSchema, schemaVersion: 1 },
+  // schemaVersion 2 adds `parameters` and `retryPolicy` to each rule. Both
+  // carry defaults, so a version-1 payload still parses; the bump records that
+  // new drafts are written against the wider shape.
+  'ai.routing': { schema: aiRoutingSchema, schemaVersion: 2 },
   'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 1 },
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },
