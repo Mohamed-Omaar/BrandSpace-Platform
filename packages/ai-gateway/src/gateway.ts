@@ -3,7 +3,13 @@ import type { CreditLedgerService } from '@brandspace/entitlements';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 
 import type { AdapterContext, AdapterRegistry, UsageUnits } from './adapter';
-import { AiProviderError, customerMessageFor, type AiFailureClass } from './errors';
+import {
+  AiProviderError,
+  customerMessageFor,
+  isFallbackEligible,
+  isRetryable,
+  type AiFailureClass,
+} from './errors';
 import {
   creditsChargedMilli,
   estimateReservationMilli,
@@ -48,6 +54,8 @@ export interface AiGatewayOptions {
   readonly credentials: ProviderCredentialSource;
   readonly environment: 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION';
   readonly clock?: Clock;
+  /** Retry jitter. Injectable so a test is not at the mercy of randomness. */
+  readonly random?: () => number;
 }
 
 /** The active AI configuration, already parsed. */
@@ -129,6 +137,25 @@ export type AiOutput =
       readonly imageRefs: readonly string[];
     };
 
+/** The outcome of one stuck-request sweep. Mirrors the credit sweeper's shape. */
+export interface AiSweepResult {
+  /** Requests actually reconciled this pass. */
+  readonly swept: number;
+  /** Requests that could not be reconciled — a correctness alert, not a stop. */
+  readonly failed: readonly string[];
+  /** Rows tried, successes and failures together. */
+  readonly attempted: number;
+  /** True when no untried candidate remained; false when the bound was hit. */
+  readonly exhausted: boolean;
+}
+
+/**
+ * Rows fetched per batch. Small on purpose: a batch of failures is re-fetched
+ * with those ids excluded, and a large batch makes that list grow faster than
+ * the sweep makes progress.
+ */
+const AI_SWEEP_BATCH_SIZE = 50;
+
 /** A terminal status that is not a success. */
 const FAILED_STATUSES = ['FAILED', 'TIMEOUT', 'MODERATION_BLOCKED'] as const;
 
@@ -144,6 +171,7 @@ export class AiGateway {
   readonly #credentials: ProviderCredentialSource;
   readonly #environment: AiGatewayOptions['environment'];
   readonly #clock: Clock;
+  readonly #random: () => number;
 
   constructor(options: AiGatewayOptions) {
     this.#prisma = options.prisma;
@@ -153,6 +181,7 @@ export class AiGateway {
     this.#credentials = options.credentials;
     this.#environment = options.environment;
     this.#clock = options.clock ?? systemClock;
+    this.#random = options.random ?? Math.random;
   }
 
   async execute(request: AiGatewayRequest): Promise<AiGatewayResult> {
@@ -168,20 +197,28 @@ export class AiGateway {
       config.models,
     );
 
-    // Phase 4 executes the head of the chain. W7 adds retries and the walk down
-    // the fallbacks; the chain is resolved here so the record already names
-    // what would have been tried.
     const modelKey = route.chain[0];
     /* c8 ignore next -- resolveRoute never returns an empty chain. */
     if (!modelKey) throw new AppError('INTERNAL', 'Routing resolved no model.');
 
-    const creditRule = findCreditRule(config.creditRules, request.taskKey, modelKey);
     const multiplier = request.creditMultiplierBasisPoints ?? 10_000;
-    const reservationEstimate = estimateReservationMilli(
-      creditRule,
-      worstCaseUsage(request, route),
-      multiplier,
-    );
+    const worstCase = worstCaseUsage(request, route);
+
+    /*
+     * RESERVE FOR THE MOST EXPENSIVE MODEL IN THE CHAIN, not for the primary.
+     *
+     * One reservation covers the whole attempt sequence, and a fallback model
+     * may be priced higher than the model that failed. Sizing the reservation
+     * on the primary alone would mean that falling back to a dearer model
+     * settles ABOVE its reservation — which `ai_request_charge_within_reservation`
+     * refuses outright, turning a successful generation into a 500 and leaving
+     * the customer with nothing after we already paid the provider.
+     */
+    const reservationEstimate = route.chain.reduce((highest, candidate) => {
+      const rule = findCreditRule(config.creditRules, request.taskKey, candidate);
+      const estimate = estimateReservationMilli(rule, worstCase, multiplier);
+      return estimate > highest ? estimate : highest;
+    }, 0n);
 
     const aiRequest = await this.#createRequest(request, route, modelKey, reservationEstimate);
     if (aiRequest.replayed) return aiRequest.result;
@@ -190,7 +227,6 @@ export class AiGateway {
       request,
       route,
       modelKey,
-      creditRule,
       multiplier,
       reservationEstimate,
       requestId: aiRequest.id,
@@ -297,13 +333,12 @@ export class AiGateway {
     request: AiGatewayRequest;
     route: ResolvedRoute;
     modelKey: string;
-    creditRule: CreditRule;
     multiplier: number;
     reservationEstimate: bigint;
     requestId: string;
     config: AiConfiguration;
   }): Promise<AiGatewayResult> {
-    const { request, route, modelKey, creditRule, multiplier, requestId, config } = args;
+    const { request, route, modelKey, multiplier, requestId, config } = args;
 
     let reservationId: string | null = null;
     try {
@@ -329,102 +364,238 @@ export class AiGateway {
       throw error;
     }
 
-    return this.#callProvider({
-      request,
-      route,
-      modelKey,
-      creditRule,
-      multiplier,
-      requestId,
-      reservationId,
-      config,
-    });
+    return this.#runChain({ request, route, multiplier, requestId, reservationId, config });
   }
 
-  async #callProvider(args: {
+  /**
+   * Walk the model chain, retrying inside each model, under ONE deadline.
+   *
+   * docs/AI-GATEWAY.md §5.3 and §9. Three rules govern the walk, and each of
+   * them exists to stop a specific way of spending a customer's money badly:
+   *
+   *   - A class is retried on the SAME model only if the taxonomy says it is
+   *     transient. Retrying an INVALID_REQUEST burns the deadline to reach the
+   *     same answer.
+   *   - A class moves to the NEXT model only if it is fallback-eligible. A
+   *     different model that did NOT refuse filtered content would be routing
+   *     around a moderation decision; an AUTH_ERROR served from a second
+   *     provider hides an outage the operator needs to see.
+   *   - The total deadline bounds everything. Attempts do not each get a fresh
+   *     timeout: a reservation must not be held for maxAttempts x timeoutMs.
+   */
+  async #runChain(args: {
     request: AiGatewayRequest;
     route: ResolvedRoute;
-    modelKey: string;
-    creditRule: CreditRule;
     multiplier: number;
     requestId: string;
     reservationId: string;
     config: AiConfiguration;
   }): Promise<AiGatewayResult> {
-    const { request, route, modelKey, creditRule, multiplier, requestId, reservationId, config } =
-      args;
-
-    const model = config.models.find((m) => m.key === modelKey);
-    /* c8 ignore next -- resolveRoute only returns models present in the registry. */
-    if (!model) throw new AppError('INTERNAL', `Model "${modelKey}" vanished from the registry.`);
-
-    const provider = config.providers.find((p) => p.key === model.providerKey);
-    const adapter = this.#adapters.get(model.providerKey);
-    if (!provider || !adapter) {
-      const error = new AiProviderError(
-        'MODEL_UNAVAILABLE',
-        customerMessageFor('MODEL_UNAVAILABLE'),
-        `No adapter or provider configuration for "${model.providerKey}".`,
-      );
-      await this.#releaseAndRecord(requestId, reservationId, modelKey, [modelKey], error);
-      return this.#recordedResult(requestId);
-    }
+    const { request, route, multiplier, requestId, reservationId, config } = args;
 
     const startedAt = this.#clock.now();
+    const deadline = startedAt.getTime() + route.timeoutMs;
+
     await this.#prisma.aiRequest.update({
       where: { id: requestId },
-      data: { status: 'RUNNING', startedAt, attemptedModelKeys: [modelKey] },
+      data: { status: 'RUNNING', startedAt },
     });
 
-    const controller = new AbortController();
-    // The deadline is enforced HERE, by us. A provider that ignores its own
-    // timeout must not be able to hold a reservation open indefinitely.
-    const timer = setTimeout(() => controller.abort(), route.timeoutMs);
+    const attempted: string[] = [];
+    let retries = 0;
+    let lastError: unknown = new AiProviderError(
+      'UNKNOWN',
+      customerMessageFor('UNKNOWN'),
+      'The chain produced no attempt.',
+    );
+    let lastProviderKey: string | null = null;
 
-    try {
-      const ctx: AdapterContext = {
-        environment: this.#environment,
-        apiKey: await this.#credentials.resolve(provider.apiKeySecretRef),
-        baseUrl: provider.baseUrl,
-        timeoutMs: route.timeoutMs,
-        signal: controller.signal,
-        requestId,
-      };
+    for (const modelKey of route.chain) {
+      const model = config.models.find((m) => m.key === modelKey);
+      const provider = model
+        ? config.providers.find((p) => p.key === model.providerKey)
+        : undefined;
+      const adapter = model ? this.#adapters.get(model.providerKey) : undefined;
 
-      const { output, usage } = await this.#invoke(adapter, modelKey, route, request.input, ctx);
+      if (!model || !provider || !adapter) {
+        // An unusable entry is not an outage of the whole chain: try the next
+        // model exactly as a MODEL_UNAVAILABLE would.
+        attempted.push(modelKey);
+        lastError = new AiProviderError(
+          'MODEL_UNAVAILABLE',
+          customerMessageFor('MODEL_UNAVAILABLE'),
+          `No adapter or provider configuration for model "${modelKey}".`,
+        );
+        continue;
+      }
 
-      const basis = config.costBases.find((b) => b.modelKey === modelKey);
-      const cost = basis ? providerCostMicroMinor(usage, basis) : 0n;
-      const charged = creditsChargedMilli(usage, creditRule, multiplier);
+      lastProviderKey = model.providerKey;
+      const creditRule = findCreditRule(config.creditRules, request.taskKey, modelKey);
 
-      await this.#settle({
-        requestId,
-        reservationId,
-        request,
-        route,
-        model,
-        usage,
-        output,
-        cost,
-        charged,
-        latencyMs: this.#clock.now().getTime() - startedAt.getTime(),
-      });
+      for (let attempt = 1; attempt <= route.retryPolicy.maxAttempts; attempt += 1) {
+        const remainingMs = deadline - this.#clock.now().getTime();
+        if (remainingMs <= 0) {
+          lastError = new AiProviderError(
+            'TIMEOUT',
+            customerMessageFor('TIMEOUT'),
+            'The request deadline passed before this attempt could start.',
+          );
+          await this.#finishFailed(requestId, reservationId, {
+            attempted,
+            retries,
+            error: lastError,
+            startedAt,
+            request,
+            providerKey: lastProviderKey,
+          });
+          return this.#recordedResult(requestId);
+        }
 
-      return this.#recordedResult(requestId, output);
-    } catch (error) {
-      await this.#releaseAndRecord(requestId, reservationId, modelKey, [modelKey], error, {
-        latencyMs: this.#clock.now().getTime() - startedAt.getTime(),
-        workspaceId: request.workspaceId,
-        userId: request.userId,
-        taskKey: request.taskKey,
-        providerKey: model.providerKey,
-      });
-      return this.#recordedResult(requestId);
-    } finally {
-      // Always. A leaked timer holds the process open and, worse, would abort a
-      // controller belonging to a request that already finished.
-      clearTimeout(timer);
+        attempted.push(modelKey);
+        await this.#prisma.aiRequest.update({
+          where: { id: requestId },
+          data: {
+            attemptedModelKeys: [...attempted],
+            resolvedModelKey: modelKey,
+            retryCount: retries,
+          },
+        });
+
+        const controller = new AbortController();
+        // The deadline is ours, not the provider's. A provider that ignores its
+        // own timeout must not be able to hold a reservation open — and the
+        // budget is what REMAINS, so retries cannot extend it.
+        const timer = setTimeout(() => controller.abort(), remainingMs);
+        try {
+          const ctx: AdapterContext = {
+            environment: this.#environment,
+            apiKey: await this.#credentials.resolve(provider.apiKeySecretRef),
+            baseUrl: provider.baseUrl,
+            timeoutMs: remainingMs,
+            signal: controller.signal,
+            requestId,
+          };
+
+          const { output, usage } = await this.#invoke(
+            adapter,
+            modelKey,
+            route,
+            request.input,
+            ctx,
+          );
+
+          const basis = config.costBases.find((b) => b.modelKey === modelKey);
+          const cost = basis ? providerCostMicroMinor(usage, basis) : 0n;
+          const charged = creditsChargedMilli(usage, creditRule, multiplier);
+
+          await this.#settle({
+            requestId,
+            reservationId,
+            request,
+            route,
+            model,
+            usage,
+            output,
+            cost,
+            charged,
+            latencyMs: this.#clock.now().getTime() - startedAt.getTime(),
+            attempted,
+            retries,
+          });
+          return this.#recordedResult(requestId, output);
+        } catch (error) {
+          lastError = error;
+          const failureClass = failureClassOf(error);
+          const attemptsLeft = attempt < route.retryPolicy.maxAttempts;
+
+          if (isRetryable(failureClass) && attemptsLeft) {
+            retries += 1;
+            const slept = await this.#backoff(route.retryPolicy, attempt, deadline);
+            // Backoff that would outrun the deadline is not worth taking: stop
+            // rather than sleep through the time the attempt needed.
+            if (slept) continue;
+          }
+          break;
+        } finally {
+          // Always. A leaked timer keeps the process alive and would abort a
+          // controller belonging to a request that already finished.
+          clearTimeout(timer);
+        }
+      }
+
+      const failureClass = failureClassOf(lastError);
+      if (!isFallbackEligible(failureClass)) {
+        // Deterministic refusals and our own account failures stop here. Trying
+        // another model would either fail identically or hide the problem.
+        break;
+      }
     }
+
+    await this.#finishFailed(requestId, reservationId, {
+      attempted,
+      retries,
+      error: lastError,
+      startedAt,
+      request,
+      providerKey: lastProviderKey,
+    });
+    return this.#recordedResult(requestId);
+  }
+
+  /**
+   * Sleep between attempts. Returns false when the deadline leaves no room.
+   *
+   * Jitter is real randomness by default because synchronised retries across
+   * many workspaces are how a rate-limited provider stays rate-limited. It is
+   * injectable so tests are not at the mercy of it.
+   */
+  async #backoff(
+    policy: ResolvedRoute['retryPolicy'],
+    attempt: number,
+    deadline: number,
+  ): Promise<boolean> {
+    let delay = 0;
+    if (policy.backoff === 'fixed') delay = policy.initialDelayMs;
+    if (policy.backoff === 'exponential') delay = policy.initialDelayMs * 2 ** (attempt - 1);
+    if (policy.jitter && delay > 0) delay = Math.floor(delay * (0.5 + this.#random() * 0.5));
+
+    const remaining = deadline - this.#clock.now().getTime();
+    if (delay >= remaining) return false;
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    return true;
+  }
+
+  /** Release the reservation and record the terminal failure. */
+  async #finishFailed(
+    requestId: string,
+    reservationId: string,
+    context: {
+      attempted: readonly string[];
+      retries: number;
+      error: unknown;
+      startedAt: Date;
+      request: AiGatewayRequest;
+      providerKey: string | null;
+    },
+  ): Promise<void> {
+    const modelKey = context.attempted[context.attempted.length - 1] ?? '';
+    await this.#releaseAndRecord(
+      requestId,
+      reservationId,
+      modelKey,
+      context.attempted,
+      context.error,
+      context.providerKey
+        ? {
+            latencyMs: this.#clock.now().getTime() - context.startedAt.getTime(),
+            workspaceId: context.request.workspaceId,
+            userId: context.request.userId,
+            taskKey: context.request.taskKey,
+            providerKey: context.providerKey,
+          }
+        : undefined,
+      context.retries,
+    );
   }
 
   async #invoke(
@@ -501,6 +672,8 @@ export class AiGateway {
     cost: bigint;
     charged: bigint;
     latencyMs: number;
+    attempted: readonly string[];
+    retries: number;
   }): Promise<void> {
     await this.#ledger.settle(args.reservationId, args.charged, `ai:${args.request.taskKey}`);
 
@@ -511,6 +684,11 @@ export class AiGateway {
           status: 'SUCCEEDED',
           completedAt: this.#clock.now(),
           latencyMs: args.latencyMs,
+          // Every model tried, in order, including the ones that failed —
+          // §5.3 point 4. Fallback is invisible in reporting without it.
+          attemptedModelKeys: [...args.attempted],
+          resolvedModelKey: args.model.key,
+          retryCount: args.retries,
           promptTokens: args.usage.promptTokens ?? null,
           completionTokens: args.usage.completionTokens ?? null,
           imageCount: args.usage.imageCount ?? null,
@@ -562,12 +740,32 @@ export class AiGateway {
       taskKey: string;
       providerKey: string;
     },
+    retries = 0,
   ): Promise<void> {
     if (reservationId) {
-      await this.#ledger.release(reservationId, 'ai:request-failed');
+      try {
+        await this.#ledger.release(reservationId, 'ai:request-failed');
+      } catch (releaseError) {
+        /*
+         * A reservation that is already gone is not a reason to leave the
+         * request RUNNING for ever.
+         *
+         * Nothing in production deletes a reservation row, so this should not
+         * happen — but if it does, refusing to record the failure would strand
+         * the request in a non-terminal status that only the sweeper looks at,
+         * and the sweeper would hand it back unfixable on every pass. The leak
+         * metric of §12 would then never return to zero, which is exactly the
+         * F-62 starvation shape. Only a genuine miss is tolerated; anything
+         * else still propagates.
+         */
+        if (!(releaseError instanceof AppError) || releaseError.code !== 'NOT_FOUND') {
+          throw releaseError;
+        }
+      }
     }
     await this.#recordFailure(requestId, modelKey, attempted, failureClassOf(error), error, {
       ...(ledgerContext ? { ledgerContext } : {}),
+      retries,
     });
   }
 
@@ -585,6 +783,7 @@ export class AiGateway {
         taskKey: string;
         providerKey: string;
       };
+      retries?: number;
     },
   ): Promise<void> {
     const status = failureClass === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED';
@@ -602,6 +801,7 @@ export class AiGateway {
           completedAt: this.#clock.now(),
           resolvedModelKey: modelKey,
           attemptedModelKeys: [...attempted],
+          retryCount: extra?.retries ?? 0,
           ...(context ? { latencyMs: context.latencyMs } : {}),
           // Explicit, not implied: a failed request charges nothing, and the
           // ai_request_no_charge_unless_succeeded constraint agrees.
@@ -630,6 +830,86 @@ export class AiGateway {
     });
 
     void error;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stuck-request sweep
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Reconcile requests still RUNNING past their deadline — docs/AI-GATEWAY.md §6.1.
+   *
+   * "No reservation can outlive its request." A process that dies mid-call
+   * leaves a RUNNING row and an OPEN reservation, and nothing else will ever
+   * close either: the credits stay held against a workspace that got nothing.
+   *
+   * The shape follows F-62's lesson from the reservation sweeper. A bounded
+   * query whose failures stay eligible hands the same unfixable rows back
+   * every pass and never reaches the fresh ones behind them, so ids that
+   * failed THIS sweep are excluded from the next batch, and the result
+   * distinguishes "nothing left" from "stopped at the bound with work
+   * remaining". Ordering is oldest-deadline-first with an id tie-break, so the
+   * sweep is deterministic and the longest-held credits are freed first.
+   */
+  async sweepStuckRequests(
+    limit = 200,
+    options: { readonly maxAttempts?: number } = {},
+  ): Promise<AiSweepResult> {
+    const now = this.#clock.now();
+    const maxAttempts = options.maxAttempts ?? Math.max(limit * 4, AI_SWEEP_BATCH_SIZE);
+
+    const failed: string[] = [];
+    let swept = 0;
+    let attempted = 0;
+    let exhausted = false;
+
+    while (swept < limit && attempted < maxAttempts) {
+      const batch = await this.#prisma.aiRequest.findMany({
+        where: {
+          status: { in: ['PENDING', 'RESERVED', 'RUNNING'] },
+          deadlineAt: { lt: now },
+          ...(failed.length > 0 ? { id: { notIn: failed } } : {}),
+        },
+        select: {
+          id: true,
+          creditReservationId: true,
+          resolvedModelKey: true,
+          attemptedModelKeys: true,
+        },
+        orderBy: [{ deadlineAt: 'asc' }, { id: 'asc' }],
+        take: Math.min(AI_SWEEP_BATCH_SIZE, maxAttempts - attempted),
+      });
+
+      if (batch.length === 0) {
+        exhausted = true;
+        break;
+      }
+
+      for (const row of batch) {
+        if (swept >= limit || attempted >= maxAttempts) break;
+        attempted += 1;
+        try {
+          await this.#releaseAndRecord(
+            row.id,
+            row.creditReservationId,
+            row.resolvedModelKey ?? '',
+            row.attemptedModelKeys,
+            new AiProviderError(
+              'TIMEOUT',
+              customerMessageFor('TIMEOUT'),
+              'Swept: the request passed its deadline while still running.',
+            ),
+          );
+          swept += 1;
+        } catch {
+          // A non-empty `failed` list is a correctness alert about the ledger,
+          // never a reason for the sweep to stop.
+          failed.push(row.id);
+        }
+      }
+    }
+
+    return { swept, failed, attempted, exhausted };
   }
 
   /** Read back what was recorded, so the caller and the database cannot disagree. */

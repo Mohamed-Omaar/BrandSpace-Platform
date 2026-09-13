@@ -54,6 +54,7 @@ export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from
 export { AiGateway } from './gateway';
 export type {
   AiConfiguration,
+  AiSweepResult,
   AiConfigurationSource,
   AiGatewayOptions,
   AiGatewayRequest,
