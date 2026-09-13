@@ -154,6 +154,17 @@ const aiRoutingSchema = z.object({
         priority: z.number().int().default(0),
         parameters: aiRoutingParametersSchema.default({}),
         retryPolicy: aiRoutingRetrySchema.default({}),
+        /*
+         * Input moderation — docs/AI-GATEWAY.md §6 and §10.1.
+         *
+         * OFF by default and with no model named, because moderation is only
+         * meaningful once an operator has chosen a moderation model, and a
+         * check that silently passes everything is worse than none: it looks
+         * like a control and is not one. Enabling it without naming a model is
+         * refused at activation rather than degrading quietly at runtime.
+         */
+        moderateInput: z.boolean().default(false),
+        moderationModelKey: z.string().nullable().default(null),
       }),
     )
     .default([]),

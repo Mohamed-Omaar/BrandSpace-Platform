@@ -218,8 +218,13 @@ export default async function AiUsagePage({
               caption={t('page.aiUsage')}
               testId="ai-request-table"
             >
+              {/*
+                `ai-row-`, not `ai-request-`: the table, the range line and the
+                pagination all start with `ai-request-`, so a prefix locator
+                counting rows would count those too.
+              */}
               {listing.items.map((row) => (
-                <tr key={row.id} data-testid={`ai-request-${row.id}`}>
+                <tr key={row.id} data-testid={`ai-row-${row.id}`}>
                   <Cell>
                     <Link
                       href={`/${locale}/console/ai-usage/${row.id}`}

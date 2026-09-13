@@ -41,6 +41,10 @@ const MODEL_KEY = 'mock-fast';
 const FALLBACK_KEY = 'mock-balanced';
 const TASK_KEY = 'caption.generate';
 
+/** The one phrase the fixture's moderation model refuses. */
+const MODERATED_PHRASE = 'forbidden-sentinel';
+const MODERATION_MODEL = 'mock-moderation';
+
 const NO_LIMITS = {
   creditsPerDayMilli: null,
   creditsPerMonthMilli: null,
@@ -82,6 +86,14 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
         status: 'available',
         disableSwitch: false,
       },
+      {
+        key: MODERATION_MODEL,
+        providerKey: 'mock',
+        modality: 'moderation',
+        qualityTier: 'fast',
+        status: 'available',
+        disableSwitch: false,
+      },
     ],
     costBases: [
       {
@@ -110,6 +122,8 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
           persistOutput: true,
         },
         retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
       },
     ],
     creditRules: [
@@ -192,7 +206,7 @@ beforeAll(async () => {
   if (!connectionString) throw new Error('DATABASE_PLATFORM_URL is required.');
   platform = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   ledger = new CreditLedgerService({ prisma: platform, policy: POLICY });
-  mock = new MockProviderAdapter();
+  mock = new MockProviderAdapter({ flaggedPhrases: [MODERATED_PHRASE] });
 
   const adapters = new Map<string, AiProviderAdapter>([['mock', mock]]);
   gateway = new AiGateway({
@@ -479,6 +493,125 @@ describe('idempotency', () => {
   });
 });
 
+describe('concurrency against a finite wallet', () => {
+  it('lets exactly as many through as the wallet can cover, and no more', async () => {
+    mock.reset();
+    activeConfiguration = configuration();
+
+    /*
+     * The §15 concurrency row: N parallel requests against a wallet with
+     * capacity for fewer than N.
+     *
+     * Run in PARALLEL, not in sequence. Sequentially every request would see a
+     * settled balance and the test would prove nothing about the row lock; in
+     * parallel each one sees the others' reservations, which is the only way
+     * the "no negative balance" guarantee is actually exercised.
+     */
+    // One credit is 1,000 milli-credits; each of these reserves a little over
+    // 100, so twelve cannot all fit and some must be refused.
+    const workspaceId = await freshWorkspace(1);
+    const before = await walletOf(workspaceId);
+
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 12 }, () => gateway.execute(request(workspaceId))),
+    );
+
+    const succeeded = outcomes.filter((o) => o.status === 'fulfilled');
+    const refused = outcomes.filter(
+      (o) => o.status === 'rejected' && o.reason?.code === 'INSUFFICIENT_CREDITS',
+    );
+
+    // Every outcome is one or the other: nothing failed for an unexpected
+    // reason, which is what a bad interleaving would look like.
+    expect(succeeded.length + refused.length).toBe(12);
+    expect(succeeded.length).toBeGreaterThan(0);
+    expect(refused.length).toBeGreaterThan(0);
+
+    const after = await walletOf(workspaceId);
+    expect(after.balance).toBeGreaterThanOrEqual(0n);
+    expect(after.reserved).toBe(0n);
+
+    // The balance fell by exactly what was charged, no more and no less.
+    const charged = await platform.aiRequest.aggregate({
+      where: { workspaceId, status: 'SUCCEEDED' },
+      _sum: { creditsChargedMilli: true },
+    });
+    expect(before.balance - after.balance).toBe(charged._sum.creditsChargedMilli ?? 0n);
+  });
+
+  it('reproduces the wallet balance by replaying the ledger', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(20);
+
+    await gateway.execute(request(workspaceId));
+    await gateway.execute(request(workspaceId));
+    mock.program({ failWith: 'PROVIDER_UNAVAILABLE', times: 10 });
+    await gateway.execute(request(workspaceId));
+    mock.reset();
+
+    // §15's ledger-integrity row, through the AI path: the balance is DERIVED
+    // from the transaction log, never mutated in place (CLAUDE.md §2.4). A
+    // failed request must leave no charge behind for this to hold.
+    const transactions = await platform.creditTransaction.findMany({
+      where: { workspaceId },
+      orderBy: { occurredAt: 'asc' },
+    });
+    const replayed = transactions.reduce((sum, row) => sum + row.amountMilliCredits, 0n);
+
+    expect(replayed).toBe((await walletOf(workspaceId)).balance);
+  });
+});
+
+describe('the model kill switch, mid-session', () => {
+  it('stops routing to a model the moment the registry disables it', async () => {
+    mock.reset();
+    activeConfiguration = configuration();
+    const workspaceId = await freshWorkspace(50);
+
+    const first = await gateway.execute(request(workspaceId));
+    expect(first.modelKey).toBe(MODEL_KEY);
+
+    // The registry changes; the ROUTING version does not. Config validation
+    // refuses a rule pointing at a disabled model, but that check ran when the
+    // routing version was activated — so a model killed afterwards is only
+    // stopped if the resolver looks again at request time.
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      models: base.models.map((model) =>
+        model.key === MODEL_KEY ? { ...model, disableSwitch: true } : model,
+      ),
+    };
+
+    const second = await gateway.execute(request(workspaceId));
+    activeConfiguration = configuration();
+
+    expect(second.modelKey).toBe(FALLBACK_KEY);
+    expect(second.status).toBe('SUCCEEDED');
+  });
+
+  it('fails the request when the kill switch empties the whole chain', async () => {
+    mock.reset();
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      models: base.models.map((model) => ({ ...model, disableSwitch: true })),
+    };
+    const workspaceId = await freshWorkspace(50);
+    const before = await walletOf(workspaceId);
+
+    await expect(gateway.execute(request(workspaceId))).rejects.toMatchObject({
+      name: 'RoutingError',
+    });
+    activeConfiguration = configuration();
+
+    // Substituting some other available model would be the silent guess §5.3
+    // forbids, and would spend credits on a model nobody chose.
+    expect(await walletOf(workspaceId)).toEqual(before);
+    expect(mock.calls).toHaveLength(0);
+  });
+});
+
 describe('tenant isolation', () => {
   it('refuses a cross-workspace replay as a plain not-found', async () => {
     mock.reset();
@@ -505,6 +638,120 @@ describe('tenant isolation', () => {
 
     expect(await walletOf(b)).toEqual(beforeB);
     expect(await platform.aiUsageLedger.count({ where: { workspaceId: b } })).toBe(0);
+  });
+});
+
+describe('input moderation', () => {
+  function moderated(): AiConfiguration {
+    const base = configuration();
+    return {
+      ...base,
+      routingRules: base.routingRules.map((rule) => ({
+        ...rule,
+        moderateInput: true,
+        moderationModelKey: MODERATION_MODEL,
+      })),
+    };
+  }
+
+  it('blocks flagged input and charges nothing for it', async () => {
+    mock.reset();
+    activeConfiguration = moderated();
+    const workspaceId = await freshWorkspace(50);
+    const before = await walletOf(workspaceId);
+
+    const result = await gateway.execute(
+      request(workspaceId, {
+        input: { kind: 'text', prompt: `please write about ${MODERATED_PHRASE} today` },
+      }),
+    );
+    activeConfiguration = configuration();
+
+    // §10.7: a blocked result is not charged, and the reservation is released.
+    expect(result.status).toBe('MODERATION_BLOCKED');
+    expect(result.creditsChargedMilli).toBe(0n);
+    expect(await walletOf(workspaceId)).toEqual(before);
+    expect(await openReservations(workspaceId)).toBe(0);
+  });
+
+  it('never sends flagged input to the generating model', async () => {
+    mock.reset();
+    activeConfiguration = moderated();
+    const workspaceId = await freshWorkspace(50);
+
+    await gateway.execute(
+      request(workspaceId, {
+        input: { kind: 'text', prompt: `about ${MODERATED_PHRASE}` },
+      }),
+    );
+    activeConfiguration = configuration();
+
+    // The whole point of moderating BEFORE the provider call.
+    expect(mock.calls.filter((call) => call.operation === 'generateText')).toHaveLength(0);
+    expect(mock.calls.filter((call) => call.operation === 'moderate')).toHaveLength(1);
+  });
+
+  it('records no customer content on a blocked request', async () => {
+    mock.reset();
+    activeConfiguration = moderated();
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(
+      request(workspaceId, {
+        input: { kind: 'text', prompt: `about ${MODERATED_PHRASE} SECRETSENTINEL` },
+      }),
+    );
+    const row = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+    activeConfiguration = configuration();
+
+    // Being refused is not a reason to start storing what was refused.
+    expect(JSON.stringify(row.inputSummary)).not.toContain('SECRETSENTINEL');
+    expect(row.failureMessage).not.toContain('SECRETSENTINEL');
+  });
+
+  it('lets clean input through', async () => {
+    mock.reset();
+    activeConfiguration = moderated();
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(request(workspaceId));
+    activeConfiguration = configuration();
+
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('fails open when the moderation model itself is unavailable', async () => {
+    mock.reset();
+    activeConfiguration = moderated();
+    const workspaceId = await freshWorkspace(50);
+    mock.program({ modelKey: MODERATION_MODEL, failWith: 'PROVIDER_UNAVAILABLE', times: 10 });
+
+    const result = await gateway.execute(request(workspaceId));
+    activeConfiguration = configuration();
+
+    /*
+     * DELIBERATE, AND THE ONLY PLACE IN THE GATEWAY WHERE AN ERROR IS NOT
+     * FATAL. A moderation outage that blocked every customer's work would be a
+     * far larger incident than the content it exists to catch, and the outage
+     * is visible through the same failure metrics as any other provider call.
+     * A moderation model that ANSWERS and says "flagged" always blocks.
+     */
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('does not moderate when the rule does not ask for it', async () => {
+    mock.reset();
+    activeConfiguration = configuration();
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(
+      request(workspaceId, {
+        input: { kind: 'text', prompt: `about ${MODERATED_PHRASE}` },
+      }),
+    );
+
+    expect(result.status).toBe('SUCCEEDED');
+    expect(mock.calls.filter((call) => call.operation === 'moderate')).toHaveLength(0);
   });
 });
 

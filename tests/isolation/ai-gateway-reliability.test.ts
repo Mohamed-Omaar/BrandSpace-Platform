@@ -112,6 +112,8 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
         // No delay and no jitter: these tests are about WHICH attempts happen,
         // not about how long a sleep took.
         retryPolicy: { maxAttempts: 3, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
       },
     ],
     creditRules: [creditRule(PRIMARY), creditRule(FALLBACK), creditRule(LAST_RESORT)],

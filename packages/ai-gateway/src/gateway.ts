@@ -418,6 +418,22 @@ export class AiGateway {
       throw error;
     }
 
+    /*
+     * INPUT MODERATION, AFTER THE RESERVATION AND BEFORE THE PROVIDER —
+     * docs/AI-GATEWAY.md §6 and §10.1.
+     *
+     * After, because §10.7 requires a blocked request to RELEASE a
+     * reservation, and there is nothing to release if none was taken. Before,
+     * because the point is to stop the content reaching a provider at all.
+     */
+    if (route.moderateInput && route.moderationModelKey) {
+      const blocked = await this.#moderateInput(request, route, config, requestId);
+      if (blocked) {
+        await this.#blockForModeration(requestId, reservationId, route.moderationModelKey);
+        return this.#recordedResult(requestId);
+      }
+    }
+
     return this.#runChain({
       request,
       route,
@@ -893,6 +909,87 @@ export class AiGateway {
     });
 
     void error;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Moderation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ask the configured moderation model whether the input may proceed.
+   *
+   * FAILS OPEN, DELIBERATELY, AND ONLY HERE. If the moderation model is
+   * unreachable the request continues rather than being refused: a moderation
+   * outage that silently blocked every customer's work would be a far larger
+   * incident than the content it was meant to catch, and the operator sees the
+   * outage through the same failure metrics as any other provider call. A
+   * moderation model that ANSWERS and says "flagged" always blocks.
+   *
+   * This is the one place in the gateway where an error is not fatal, which is
+   * why it is stated rather than implied.
+   */
+  async #moderateInput(
+    request: AiGatewayRequest,
+    route: ResolvedRoute,
+    config: AiConfiguration,
+    requestId: string,
+  ): Promise<boolean> {
+    const modelKey = route.moderationModelKey;
+    /* c8 ignore next -- the caller checks this before calling. */
+    if (!modelKey) return false;
+
+    const model = config.models.find((m) => m.key === modelKey);
+    const provider = model ? config.providers.find((p) => p.key === model.providerKey) : undefined;
+    const adapter = model ? this.#adapters.get(model.providerKey) : undefined;
+    if (!model || !provider || !adapter?.moderate) return false;
+
+    const text =
+      request.input.kind === 'text'
+        ? [request.input.prompt, ...(request.input.untrustedContext ?? [])].join('\n')
+        : request.input.prompt;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), route.timeoutMs);
+    try {
+      const result = await adapter.moderate(
+        { modelKey, text },
+        {
+          environment: this.#environment,
+          apiKey: await this.#credentials.resolve(provider.apiKeySecretRef),
+          baseUrl: provider.baseUrl,
+          timeoutMs: route.timeoutMs,
+          signal: controller.signal,
+          requestId,
+        },
+      );
+      return result.flagged;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** §10.7: a blocked result is not charged. */
+  async #blockForModeration(
+    requestId: string,
+    reservationId: string,
+    moderationModelKey: string,
+  ): Promise<void> {
+    await this.#ledger.release(reservationId, 'ai:moderation-blocked');
+    await this.#prisma.aiRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'MODERATION_BLOCKED',
+        failureClass: 'CONTENT_FILTERED',
+        failureMessage: customerMessageFor('CONTENT_FILTERED'),
+        completedAt: this.#clock.now(),
+        creditsChargedMilli: 0n,
+        // Recorded so an operator can see WHICH model made the call. The
+        // offending text is the customer's and is not written down.
+        attemptedModelKeys: [moderationModelKey],
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------

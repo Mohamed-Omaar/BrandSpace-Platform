@@ -184,6 +184,26 @@ function semantic(
           message: `Routes to model "${primary}", which is disabled.`,
         });
       }
+      if (rule['moderateInput'] === true && !rule['moderationModelKey']) {
+        // A moderation step with no model would have to either pass everything
+        // or fail everything. Both are worse than not claiming to moderate.
+        issues.push({
+          severity: 'error',
+          path: `rules.${i}.moderationModelKey`,
+          message: 'Input moderation is enabled but no moderation model is named.',
+        });
+      }
+      if (rule['moderationModelKey']) {
+        const moderationModel = usable.get(String(rule['moderationModelKey']));
+        if (usable.size > 0 && !moderationModel) {
+          issues.push({
+            severity: 'error',
+            path: `rules.${i}.moderationModelKey`,
+            message: `Moderates with "${String(rule['moderationModelKey'])}", which is not defined in ai.models.`,
+          });
+        }
+      }
+
       for (const [j, fallback] of ((rule['fallbackModelKeys'] ?? []) as string[]).entries()) {
         const fb = usable.get(fallback);
         if (usable.size > 0 && !fb) {

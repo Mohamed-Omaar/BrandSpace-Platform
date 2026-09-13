@@ -119,18 +119,30 @@ proven end-to-end **before any real provider credential exists**.
 
 Models are configuration, not constants.
 
-| Field                                                                 | Purpose                                                                                          |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `providerId`, `key`, `displayName`                                    | Identity                                                                                         |
-| `modality`                                                            | text / image / video / voice / embedding / moderation                                            |
-| `capabilities`                                                        | context window, max output, streaming, tool use, JSON mode, languages, image sizes, video length |
-| `inputCostPerUnitMinor`, `outputCostPerUnitMinor`, `unit`, `currency` | Cost basis for margin                                                                            |
-| `qualityTier`                                                         | `fast` \| `balanced` \| `premium` — lets routing express intent, not model names                 |
-| `status`                                                              | `available` \| `beta` \| `deprecated` \| `disabled`                                              |
-| `disableSwitch`                                                       | Immediate kill switch — a disabled model is unusable by any rule, instantly                      |
+| Field                                                                                   | Purpose                                                                                          |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `providerId`, `key`, `displayName`                                                      | Identity                                                                                         |
+| `modality`                                                                              | text / image / video / voice / embedding / moderation                                            |
+| `capabilities`                                                                          | context window, max output, streaming, tool use, JSON mode, languages, image sizes, video length |
+| `inputCostPerUnitMicroMinor`, `outputCostPerUnitMicroMinor`, `costUnit`, `costCurrency` | Cost basis for margin. **MICRO-MINOR**, a millionth of a minor unit — see the note below         |
+| `qualityTier`                                                                           | `fast` \| `balanced` \| `premium` — lets routing express intent, not model names                 |
+| `status`                                                                                | `available` \| `beta` \| `deprecated` \| `disabled`                                              |
+| `disableSwitch`                                                                         | Immediate kill switch — a disabled model is unusable by any rule, instantly                      |
 
-Registry changes are validated: routing rules may not reference a disabled or missing model, and cost fields
-must be present before a model can be activated.
+Registry changes are validated: routing rules may not reference a disabled or missing model, model keys must
+be unique, and cost fields must be present before a model can be activated.
+
+> **Why micro-minor and not minor.** A minor unit cannot express what providers charge. A text model at
+> $0.15 per million input tokens costs 0.015 of a cent per thousand tokens; as an integer count of cents
+> that is **zero**, so every text request would record a provider cost of nothing and the margin reporting
+> below would show infinite margin on every row — precisely the number the margin floor exists to catch.
+> One micro-minor is a millionth of a minor unit, which holds that price exactly as the integer `15000`.
+> Both rates are nullable and default to null: a provider rate is a commercial fact, and a plausible-looking
+> default would be indistinguishable from a real one on the margin screen.
+>
+> The same scale is used by `AIRequest.providerCostMicroMinor` and `AIUsageLedger.providerCostMicroMinor`.
+> Credits stay in **milli-credits** (D-14) and the workspace multiplier is expressed in **basis points**, so
+> no money or credit arithmetic anywhere in the gateway uses a floating-point number.
 
 ---
 
@@ -170,11 +182,25 @@ parameters:
 timeoutMs: 20000
 maxCostPerRequestMinor: 300
 retryPolicy:
-  maxAttempts: 3
-  backoff: exponential
+  maxAttempts: 3 # capped at 5
+  backoff: exponential # none | fixed | exponential
+  initialDelayMs: 250
   jitter: true
-  retryOn: [rate_limited, provider_unavailable, timeout, network_error]
+moderateInput: false # §10.1; requires moderationModelKey when true
+moderationModelKey: null
 ```
+
+> **`retryOn` is deliberately not configurable.** Which classes may be retried is derived from the failure
+> taxonomy in §3, not from a list an operator can widen: making `content_filtered` retryable from a config
+> screen would turn a moderation refusal into a paid retry loop. `maxAttempts` is capped for the same reason.
+>
+> **The retry policy and the fallback chain share ONE deadline.** Attempts do not each get a fresh
+> `timeoutMs`, and a retry is handed only the budget the earlier attempt left behind — otherwise a
+> reservation is held for `maxAttempts × timeoutMs` rather than `timeoutMs`.
+>
+> **The reservation is sized on the DEAREST model in the chain**, not on the primary. One reservation covers
+> the whole attempt sequence, and a fallback may be priced higher than the model that failed; sizing on the
+> primary would make that fallback settle above its reservation, which the database refuses outright.
 
 **Resolution order:** workspace rule → plan rule → global rule. Within a scope, highest `priority` wins.
 If no rule resolves, the request fails with a clear configuration error and an owner alert — the gateway
@@ -266,9 +292,20 @@ providerCost   = Σ (usageUnits × unitCostFromModelRegistry)
 creditsCharged = ceil( creditCost(taskKey, modelId, usageUnits) × workspaceMultiplier )
 ```
 
-`creditCost` is defined per task and model in the `ai.credit-costs` configuration domain — as a base cost plus
-a per-unit component. The Admin credit-cost editor shows the implied margin at the configured provider cost
-and warns when a change would drive margin below a configured floor.
+`creditCost` is defined per task and model in the **`ai.credit-rules`** configuration domain — as a base cost
+plus a per-unit component. The Admin credit-cost editor shows the implied margin at the configured provider
+cost and warns when a change would drive margin below a configured floor.
+
+> **Margin is reported as UNKNOWN until a credit is priced.** Revenue is denominated in credits and cost in
+> money, and nothing in the system converts between them until the owner sets `creditValueMicroMinor` — what
+> one whole credit is worth. That value is an owner commercial decision (D-15 / D-16) and defaults to `null`.
+> While it is null the margin assessment returns `null` rather than 100%, and the floor check does not run at
+> all: reporting a healthy margin for an unpriced platform would be worse than reporting nothing.
+>
+> Rounding directions are deliberate. **Our own cost rounds up**, because understating it makes a
+> loss-making model look profitable. **Credits round up once at the end**, not per component, because
+> rounding the base and the per-unit part separately gives away a fraction of a credit on every request with
+> nothing in the ledger to show for it.
 
 ### 7.3 Reserve → confirm → settle
 
@@ -513,22 +550,39 @@ committed on the model's own decision. It writes an `AuditEvent` like every othe
 
 ## 15. Testing the Gateway
 
-| Test                  | Assertion                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| Mock end-to-end       | Full reserve → execute → settle path produces a correct ledger and balance                              |
-| Failure               | Provider error ⇒ reservation released, balance unchanged, request `failed`                              |
-| Timeout               | Deadline exceeded ⇒ released, request `timeout`, no charge                                              |
-| Retry idempotency     | Same idempotency key twice ⇒ one charge, one ledger row, same result                                    |
-| Concurrency           | N parallel requests against a wallet with capacity for N−1 ⇒ exactly N−1 succeed, no negative balance   |
-| Fallback              | Primary unavailable ⇒ fallback used, one charge, both models recorded                                   |
-| Non-fallback errors   | `invalid_request` does not trigger fallback                                                             |
-| Budget                | Workspace daily cap reached ⇒ blocked before the provider is called                                     |
-| Model disable         | Disabling a model makes routing to it fail immediately, even mid-session                                |
-| Isolation             | Workspace A's request can never retrieve B's Brand Brain chunks                                         |
-| Unapproved grounding  | A `proposed` Brand Brain entry is never returned as retrieval grounding                                 |
-| Human precedence      | An inferred learning contradicting human-entered knowledge does not override it; the conflict surfaces  |
-| Write-back provenance | Every written entry carries its `AIRequest` id, evidence citations and confidence, or the write fails   |
-| Copilot authorization | A Content Creator's Copilot cannot invoke a publish tool                                                |
-| Ledger integrity      | Replaying all transactions reproduces the wallet balance exactly                                        |
-| Moderation            | Blocked input/output ⇒ no charge, clear status                                                          |
-| BYOK                  | BYOK request uses the customer credential, records zero platform provider cost, charges the reduced fee |
+Phase 4 covers the gateway rows below. The rows that depend on Brand Brain, the Copilot or BYOK belong to
+later phases and are marked as such rather than quietly dropped.
+
+| Test                  | Assertion                                                                                               | Phase 4  |
+| --------------------- | ------------------------------------------------------------------------------------------------------- | -------- |
+| Mock end-to-end       | Full reserve → execute → settle path produces a correct ledger and balance                              | ✅       |
+| Failure               | Provider error ⇒ reservation released, balance unchanged, request `failed`                              | ✅       |
+| Timeout               | Deadline exceeded ⇒ released, request `timeout`, no charge                                              | ✅       |
+| Retry idempotency     | Same idempotency key twice ⇒ one charge, one ledger row, same result                                    | ✅       |
+| Concurrency           | N parallel requests against a wallet with capacity for N−1 ⇒ exactly N−1 succeed, no negative balance   | ✅       |
+| Fallback              | Primary unavailable ⇒ fallback used, one charge, both models recorded                                   | ✅       |
+| Non-fallback errors   | `invalid_request` does not trigger fallback                                                             | ✅       |
+| Budget                | Workspace daily cap reached ⇒ blocked before the provider is called                                     | ✅       |
+| Model disable         | Disabling a model makes routing to it fail immediately, even mid-session                                | ✅       |
+| Isolation             | Workspace A's request can never retrieve B's Brand Brain chunks                                         | Phase 5  |
+| Unapproved grounding  | A `proposed` Brand Brain entry is never returned as retrieval grounding                                 | Phase 5  |
+| Human precedence      | An inferred learning contradicting human-entered knowledge does not override it; the conflict surfaces  | Phase 5  |
+| Write-back provenance | Every written entry carries its `AIRequest` id, evidence citations and confidence, or the write fails   | Phase 5  |
+| Copilot authorization | A Content Creator's Copilot cannot invoke a publish tool                                                | Phase 5  |
+| Ledger integrity      | Replaying all transactions reproduces the wallet balance exactly                                        | ✅       |
+| Moderation            | Blocked input/output ⇒ no charge, clear status                                                          | ✅ input |
+| BYOK                  | BYOK request uses the customer credential, records zero platform provider cost, charges the reduced fee | deferred |
+
+**Two rows read "✅ input" and "deferred" rather than "✅", and both are deliberate.**
+
+_Moderation_: input moderation is implemented and off by default — a check with no moderation model named
+would have to pass everything or fail everything, and both are worse than not claiming to moderate, so
+enabling it without a model is refused at activation. It **fails open**: if the moderation model is itself
+unreachable the request proceeds. A moderation outage that silently blocked every customer's work would be a
+far larger incident than the content it exists to catch, and the outage is visible through the same failure
+metrics as any other provider call. A moderation model that _answers_ and says "flagged" always blocks.
+Output moderation (§10.2) belongs with the content workflows that persist generated results.
+
+_BYOK_: the `byok` column and its ledger flag exist, but a customer-supplied credential needs
+workspace-scoped secret storage that Phase 4 does not build. Deferred rather than half-built — a BYOK path
+that fell back to the platform key would bill BrandSpace for a customer's usage.

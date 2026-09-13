@@ -353,6 +353,20 @@ Full detail in `docs/AI-GATEWAY.md`. Admin screens:
 | **Request inspector** | Per-request audit-safe metadata: task, model chain, status, latency, tokens, cost, credits, failure reason — **not** raw customer content unless the retention policy explicitly allows |
 | **Live test bench**   | Run a task against a routing rule with a synthetic prompt to verify configuration before activation                                                                                     |
 
+**Phase 4 status.** Providers, the model registry, routing rules, credit costs and budgets are configuration
+screens over the versioned `ai.*` domains. The **usage explorer** and **request inspector** are built, on the
+§7.1 pagination contract: two bounded queries, a total order, an out-of-range page clamped to the last rather
+than emptied, and the `Showing N–M of Total` line rendered even on a single page and even when empty.
+
+Both are gated on **`platform.ai.usage.read`**, which is its own authority and not implied by
+`platform.workspace.read` (D-77). Neither screen shows a prompt or a generated result — not even for a
+routing rule that opted into persisting output. The "unless the retention policy explicitly allows" clause
+above is **not** implemented as a way into these screens: reading a customer's content is a Support Mode
+decision with its own time box and audit trail (D-76).
+
+Not yet built: **cost alerts** (they need a delivery channel and thresholds nobody has set) and the **live
+test bench** (it needs a real adapter to be worth running — D-13).
+
 ---
 
 ## 9. Module 8 — Credits and Usage Administration

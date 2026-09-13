@@ -40,6 +40,8 @@ export interface RoutingRule {
     readonly initialDelayMs: number;
     readonly jitter: boolean;
   };
+  readonly moderateInput: boolean;
+  readonly moderationModelKey: string | null;
 }
 
 /** The shape this module needs from the active `ai.models` payload. */
@@ -70,6 +72,8 @@ export interface ResolvedRoute {
   readonly maxCostPerRequestMinor: number | null;
   readonly parameters: RoutingRule['parameters'];
   readonly retryPolicy: RoutingRule['retryPolicy'];
+  readonly moderateInput: boolean;
+  readonly moderationModelKey: string | null;
   /**
    * Models the rule names that the registry currently refuses — disabled,
    * killed, missing, or the wrong modality. Never routed to; surfaced so an
@@ -211,6 +215,8 @@ export function resolveRoute(
     maxCostPerRequestMinor: winner.maxCostPerRequestMinor,
     parameters: winner.parameters,
     retryPolicy: winner.retryPolicy,
+    moderateInput: winner.moderateInput,
+    moderationModelKey: winner.moderationModelKey,
     excludedModelKeys: excluded,
   };
 }

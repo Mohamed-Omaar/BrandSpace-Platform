@@ -307,14 +307,30 @@ credit value entered or activated in any environment.
 
 ### Exit criteria
 
-- [ ] Owner adds a provider, tests the connection, activates it, and routes a task — all from Admin
-- [ ] Disabling a model takes effect immediately for all traffic
-- [ ] A successful request charges exactly the right credits and writes one ledger row
-- [ ] A failed request charges **nothing**; a retried request charges **once**
-- [ ] Fallback works for eligible error classes and does not fire for ineligible ones
-- [ ] Per-workspace budgets block before a provider call is made
-- [ ] Admin shows real provider cost, credits charged, and estimated margin
-- [ ] The customer-facing product never exposes the platform API key in any response or bundle
+- [x] Owner adds a provider, tests the connection, activates it, and routes a task — all from Admin
+- [x] Disabling a model takes effect immediately for all traffic
+- [x] A successful request charges exactly the right credits and writes one ledger row
+- [x] A failed request charges **nothing**; a retried request charges **once**
+- [x] Fallback works for eligible error classes and does not fire for ineligible ones
+- [x] Per-workspace budgets block before a provider call is made
+- [x] Admin shows real provider cost and credits charged; margin is shown as **unknown** until the owner
+      prices a credit (D-15), rather than reported as a number the platform cannot actually compute
+- [x] The customer-facing product never exposes the platform API key in any response or bundle
+
+### Delivered, and what was deliberately not
+
+The gateway, the mock adapter, routing, economics, reliability, budgets, input moderation and the Admin
+usage explorer and request inspector are built and tested. Three items in the scope list above are
+**deliberately not built in Phase 4**, each for a stated reason rather than as an omission:
+
+| Not built                                                   | Why                                                                                                                                                                                             |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **First real adapters**                                     | D-13 has not selected providers, and the no-training / zero-retention filter it defines must be verified first. The adapter contract and mock make adding one a single `classifyError` away     |
+| **Circuit breakers, health probes, provider rate limiting** | Operational refinements over real providers. Tuning a breaker against a mock that fails exactly when told would encode a fiction                                                                |
+| **Output moderation, BYOK**                                 | Output moderation belongs with the workflows that persist generated content (Phase 5). BYOK needs workspace-scoped secret storage; a BYOK path that fell back to the platform key would bill us |
+
+Production **routing configuration** remains gated on D-17 (the Arabic model quality evaluation) and D-13.
+Neither blocks the gateway code, which is provider-agnostic by construction.
 
 ---
 

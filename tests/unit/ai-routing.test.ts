@@ -40,6 +40,8 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
       persistOutput: false,
     },
     retryPolicy: { maxAttempts: 3, backoff: 'exponential', initialDelayMs: 250, jitter: true },
+    moderateInput: false,
+    moderationModelKey: null,
     ...overrides,
   };
 }

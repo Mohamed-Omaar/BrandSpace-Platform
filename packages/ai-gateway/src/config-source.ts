@@ -79,6 +79,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         priority: rule.priority,
         parameters: rule.parameters,
         retryPolicy: rule.retryPolicy,
+        moderateInput: rule.moderateInput,
+        moderationModelKey: rule.moderationModelKey,
       })),
       creditRules: creditRules.costs.map((cost) => ({
         taskKey: cost.taskKey,
