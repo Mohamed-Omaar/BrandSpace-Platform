@@ -57,6 +57,31 @@ async function ensureBrand(page: Page, locale = 'en'): Promise<void> {
   }
 }
 
+/**
+ * Put one approved knowledge item into an area, through the real UI.
+ *
+ * The grounded chat path needs something to ground ON. A fresh workspace has
+ * nothing, so every chat question correctly reaches the honest
+ * insufficient-knowledge answer — which is worth testing, and is not the same
+ * thing as testing that grounding works. This adds a fact the way a customer
+ * would, so the assertion that follows is about the real pipeline.
+ */
+async function addKnowledge(page: Page, area: string, key: string, body: string): Promise<void> {
+  await page.getByTestId(`area-card-${area}`).click();
+  await expect(page.getByTestId('area-drawer')).toBeVisible();
+
+  const form = page.getByTestId('add-knowledge-form');
+  if (!(await form.isVisible().catch(() => false))) {
+    await page.keyboard.press('Escape');
+    return;
+  }
+  await page.fill('[data-testid="new-item-key"]', key);
+  await page.fill('[data-testid="new-item-title-en"]', key);
+  await page.fill('[data-testid="new-item-body-en"]', body);
+  await page.getByTestId('save-knowledge').click();
+  await page.waitForURL(/brand-brain/);
+}
+
 test.describe('Brand Brain screen', () => {
   test('renders the hero, the computed completion and the area grid', async ({ page }) => {
     await openBrandBrain(page);
@@ -420,5 +445,107 @@ test.describe('accessibility', () => {
     expect(reached).toBe(true);
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('area-drawer')).toBeVisible();
+  });
+});
+
+test.describe('chat answers, in development, without a real provider', () => {
+  /*
+   * WHAT THESE EXIST FOR. Until now Brand Brain chat had never been observed to
+   * produce an answer outside a unit test. The gateway is configuration-driven
+   * — no active routing rule for `copilot.chat` means `RoutingError`, a 500,
+   * and the generic red failure on the panel — and nothing had ever activated
+   * one outside the isolation suite's in-memory configuration.
+   *
+   * `pnpm e2e:seed` now activates a MOCK routing rule through the real
+   * Configuration Service, with no validation relaxed and no real provider
+   * chosen (tests/e2e/seed-ai.ts explains what it is and is not). So both
+   * outcomes the product promises are now reachable here, and both are asserted:
+   * an honest refusal when there is nothing to ground on, and a grounded answer
+   * with citations when there is.
+   */
+
+  test('an empty Brand Brain refuses honestly rather than failing', async ({ page }) => {
+    await openBrandBrain(page);
+    await ensureBrand(page);
+
+    await page.getByTestId('orb-center').click();
+    const panel = page.getByTestId('brand-chat');
+    await expect(panel).toBeVisible();
+
+    await page.fill('[data-testid="chat-input"]', 'What is our refund policy?');
+    await page.getByTestId('chat-send').click();
+
+    // Either outcome is correct here — it depends on what previous tests in
+    // this file have already added to the workspace — but the generic failure
+    // is not one of them, and neither is a silent empty panel.
+    await expect(
+      panel.getByTestId('chat-insufficient').or(panel.getByTestId('chat-message-assistant')),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('chat-error')).toBeHidden();
+  });
+
+  test('an answer is grounded in approved knowledge and cites it', async ({ page }) => {
+    await openBrandBrain(page);
+    await ensureBrand(page);
+
+    /*
+     * A UNIQUE KEY PER RUN, not `positioning`.
+     *
+     * `itemKey` is unique per area, so reusing one leaves the item from an
+     * earlier run in place and the assertion below would pass on THAT run's
+     * marker — a test that verifies its own history rather than this run's
+     * answer.
+     */
+    const marker = `Kestrel Provisioning ${Date.now()}`;
+    await addKnowledge(
+      page,
+      'IDENTITY',
+      `positioning-${Date.now()}`,
+      `Our positioning is ${marker}. We help independent retailers compete with national chains.`,
+    );
+
+    await page.getByTestId('orb-center').click();
+    const panel = page.getByTestId('brand-chat');
+    await expect(panel).toBeVisible();
+
+    await page.fill('[data-testid="chat-input"]', 'What is our positioning?');
+    await page.getByTestId('chat-send').click();
+
+    const answer = panel.getByTestId('chat-message-assistant').last();
+    await expect(answer).toBeVisible({ timeout: 20_000 });
+
+    // GROUNDED: the answer contains the fact the workspace approved seconds
+    // ago, which no fixture and no placeholder vocabulary could produce.
+    await expect(answer).toContainText(marker, { timeout: 20_000 });
+    // CITED: the citation list is built from retrieval, never parsed out of
+    // the model's text, so its presence is evidence the retrieval ran.
+    await expect(panel.getByTestId('chat-citations').last()).toBeVisible();
+    await expect(page.getByTestId('chat-error')).toBeHidden();
+  });
+
+  test('the answer carries no trace of how it was produced', async ({ page }) => {
+    await openBrandBrain(page);
+    await ensureBrand(page);
+
+    await page.getByTestId('orb-center').click();
+    await expect(page.getByTestId('brand-chat')).toBeVisible();
+    await page.fill('[data-testid="chat-input"]', 'What do we sell?');
+    await page.getByTestId('chat-send').click();
+    await expect(
+      page.getByTestId('chat-insufficient').or(page.getByTestId('chat-message-assistant')).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    /*
+     * NO INTERNALS ON A CUSTOMER SCREEN. This is the assertion the mock's
+     * placeholder output would fail — "[mock:mock-fast] placeholder sample" —
+     * which is exactly why the development answer is composed from the
+     * workspace's own approved knowledge instead.
+     */
+    const text = (await page.getByTestId('brand-chat').innerText()).toLowerCase();
+    expect(text).not.toContain('mock');
+    expect(text).not.toContain('provider');
+    expect(text).not.toContain('api key');
+    expect(text).not.toContain('system prompt');
+    expect(text).not.toMatch(/sk-[a-z0-9]/);
   });
 });

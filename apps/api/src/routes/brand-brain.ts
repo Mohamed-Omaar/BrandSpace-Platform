@@ -76,13 +76,23 @@ function configurationService(): ConfigurationService {
  * would be the decision D-13 explicitly withheld. Everything else about the
  * call is real — routing, reservation, settlement, budgets, idempotency and the
  * ledger row.
+ *
+ * OUTSIDE PRODUCTION the mock answers from the retrieved material rather than
+ * from its placeholder vocabulary. Without it, a developer or an end-to-end run
+ * sees "[mock:mock-fast] placeholder sample draft" on the chat panel, which
+ * proves nothing about whether retrieval, grounding, citation and the refusal
+ * path work, and puts a model key on a customer-shaped screen. The flag SELECTS
+ * from the workspace's own approved knowledge; it invents nothing, and it is
+ * off in production, where a mock answer should look unmistakably like one.
  */
 function gatewayDeps(): GatewayDeps {
   if (cachedGateway) return cachedGateway;
 
   const platform = getPlatformClient();
   const environment = currentEnvironment();
-  const adapters = new Map<string, AiProviderAdapter>([['mock', new MockProviderAdapter()]]);
+  const adapters = new Map<string, AiProviderAdapter>([
+    ['mock', new MockProviderAdapter({ answerFromContext: environment !== 'PRODUCTION' })],
+  ]);
 
   cachedGateway = {
     gateway: new AiGateway({

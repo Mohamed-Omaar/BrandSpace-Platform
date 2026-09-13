@@ -514,7 +514,7 @@ export function AreaDrawer({
               type="file"
               name="file"
               required
-              aria-label={t('bb.upload')}
+              aria-label={t('bb.uploadChoose')}
               data-testid="drawer-upload-input"
               style={{ font: 'inherit', fontSize: typographyTokens.bodySm.fontSize }}
             />

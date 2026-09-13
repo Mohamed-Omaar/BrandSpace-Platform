@@ -257,9 +257,10 @@ describe('the configured policy changes what the services actually do', () => {
         return ingestion.upload({
           brandId: fixtures.a.brandId,
           fileName: 'too-large.txt',
-          declaredMimeType: 'text/plain',
+          mimeType: 'text/plain',
           bytes,
-          actor: { userId: fixtures.a.userId, permissionKeys: ['brand_brain.upload'] },
+          idempotencyKey: `policy-too-large-${Date.now()}`,
+          actorUserId: fixtures.a.userId,
         });
       }),
     ).rejects.toThrow();

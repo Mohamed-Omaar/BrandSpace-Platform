@@ -198,7 +198,23 @@ export function BrandOrb({
       ctx!.fill();
     }
 
-    /* --- positionNodes: the demo's orbit, unchanged ------------------------ */
+    /* --- positionNodes: the demo's orbit ----------------------------------- */
+    /*
+     * ONE DEPARTURE, AND IT IS SUB-PIXEL: the position and scale are QUANTISED.
+     *
+     * The demo writes fractional pixels, so a 12px dot's box changes on every
+     * single frame even though it crosses a whole pixel only about three times
+     * a second. That is invisible to a reader and consequential to everyone
+     * else: a target that never holds still for two consecutive frames cannot be
+     * clicked reliably by assistive tooling, cannot be hit by a browser's own
+     * click stabilisation, and — the way it surfaced here — cannot be clicked by
+     * Playwright at all, which is how the orb's own nodes went untested.
+     *
+     * Rounding to whole pixels and to two decimal places of scale leaves the
+     * rendered result identical at any zoom a person uses, and makes the dot
+     * hold still between the frames in which it has not actually moved.
+     * Recorded as D-91.
+     */
     function positionNodes(t: number): void {
       const rect = stage!.getBoundingClientRect();
       const radius = Math.min(rect.width, rect.height) * 0.41 * ORB_SCALE;
@@ -212,10 +228,10 @@ export function BrandOrb({
         const y = rect.height / 2 + Math.sin(a) * ry;
         const z = (Math.sin(a) + 1) / 2;
         const scale = 0.82 + z * 0.22;
-        node.style.left = `${x}px`;
-        node.style.top = `${y}px`;
+        node.style.left = `${Math.round(x)}px`;
+        node.style.top = `${Math.round(y)}px`;
         node.style.opacity = String(0.7 + z * 0.3);
-        node.style.transform = `translate(-50%,-50%) scale(${scale})`;
+        node.style.transform = `translate(-50%,-50%) scale(${scale.toFixed(2)})`;
         node.style.zIndex = String(5 + Math.round(z * 3));
       });
     }

@@ -436,7 +436,7 @@ export function BrandBrainView({
                 name="file"
                 required
                 data-testid="upload-input"
-                aria-label={t('bb.upload')}
+                aria-label={t('bb.uploadChoose')}
               />
               <button type="submit" data-testid="upload-submit" formAction={uploadFormAction}>
                 {t('bb.upload')}

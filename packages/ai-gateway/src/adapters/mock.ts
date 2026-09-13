@@ -65,6 +65,29 @@ export interface MockAdapterOptions {
    * not a behaviour directive and cannot make the adapter fail or stall.
    */
   readonly flaggedPhrases?: readonly string[];
+  /**
+   * Compose the answer out of the supplied reference material instead of the
+   * bland placeholder words. OFF by default, and NEVER enabled in production.
+   *
+   * WHY IT EXISTS. Without a real provider — D-13 approved the architecture and
+   * deferred vendor selection — a developer or an end-to-end run has no way to
+   * see what a grounded answer looks like. The placeholder words are right for a
+   * pricing test and useless for that: a screen showing
+   * "[mock:mock-fast] placeholder sample draft" tells a reviewer nothing about
+   * whether retrieval, citation and the refusal path actually work, and it puts
+   * the word "mock" and a model key on a customer-shaped screen.
+   *
+   * What it does instead is SELECT, never generate: the first sentences of the
+   * material the retriever already chose, within the caller's token budget. No
+   * claim is invented, so an answer a reviewer reads in development is made of
+   * the workspace's own approved knowledge.
+   *
+   * IT IS STILL NOT AN INSTRUCTION CHANNEL. Selecting a prefix is not
+   * interpreting: nothing in the material can make this adapter fail, stall,
+   * change model or do anything other than return some of that same material.
+   * Property 3 above is intact.
+   */
+  readonly answerFromContext?: boolean;
 }
 
 export interface MockCall {
@@ -146,6 +169,35 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * The opening sentences of the reference material, within the token budget.
+ *
+ * SELECTION, NOT GENERATION. The fence lines the caller wrapped the material in
+ * are dropped because they are the caller's own framing rather than content;
+ * everything else is returned verbatim, in order, until the budget runs out.
+ * Deterministic by construction — the same material always yields the same
+ * answer, which is what makes an end-to-end assertion about it meaningful.
+ */
+function answerFrom(context: readonly string[], maxOutputTokens: number): string {
+  const body = context
+    .join('\n')
+    .split('\n')
+    .filter((line) => !line.startsWith('--- BEGIN ') && !line.startsWith('--- END '))
+    .join('\n')
+    .trim();
+
+  // The same ~4 characters per token this adapter uses everywhere else, so the
+  // answer respects the budget the routing rule set.
+  const budget = Math.max(1, maxOutputTokens) * CHARS_PER_TOKEN;
+  if (body.length <= budget) return body;
+
+  // Cut at a sentence end inside the budget when there is one, so the answer
+  // does not stop mid-word.
+  const window = body.slice(0, budget);
+  const lastStop = Math.max(window.lastIndexOf('. '), window.lastIndexOf('\n'));
+  return (lastStop > budget / 2 ? window.slice(0, lastStop + 1) : window).trim();
+}
+
 export class MockProviderAdapter implements AiProviderAdapter {
   readonly key = 'mock';
   readonly supportedModalities = MOCK_MODALITIES;
@@ -153,6 +205,7 @@ export class MockProviderAdapter implements AiProviderAdapter {
   readonly #seed: string;
   readonly #latencyMs: number;
   readonly #flaggedPhrases: readonly string[];
+  readonly #answerFromContext: boolean;
   #directives: ActiveDirective[] = [];
   #calls: MockCall[] = [];
 
@@ -160,6 +213,7 @@ export class MockProviderAdapter implements AiProviderAdapter {
     this.#seed = options.seed ?? 'brandspace-mock';
     this.#latencyMs = options.latencyMs ?? 0;
     this.#flaggedPhrases = options.flaggedPhrases ?? [];
+    this.#answerFromContext = options.answerFromContext ?? false;
   }
 
   /** Queue behaviour for upcoming calls. The ONLY way to change what happens. */
@@ -222,7 +276,9 @@ export class MockProviderAdapter implements AiProviderAdapter {
       request.prompt.length + context.reduce((total, entry) => total + entry.length, 0);
 
     return {
-      text: `[mock:${request.modelKey}] ${words.join(' ')}`,
+      text: this.#answerFromContext
+        ? answerFrom(context, request.maxOutputTokens)
+        : `[mock:${request.modelKey}] ${words.join(' ')}`,
       modelKey: request.modelKey,
       usage: {
         promptTokens: Math.max(1, Math.ceil(promptChars / CHARS_PER_TOKEN)),
