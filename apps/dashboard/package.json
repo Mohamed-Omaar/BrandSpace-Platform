@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/auth": "workspace:*",
+    "@brandspace/brand-brain": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",

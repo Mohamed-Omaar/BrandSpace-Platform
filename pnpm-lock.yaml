@@ -102,12 +102,24 @@ importers:
 
   apps/api:
     dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../../packages/ai-gateway
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../../packages/brand-brain
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../../packages/entitlements
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -130,9 +142,15 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../../packages/ai-gateway
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../../packages/brand-brain
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config

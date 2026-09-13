@@ -1,11 +1,16 @@
 import Fastify from 'fastify';
 import { createLogger } from '@brandspace/shared';
+import { registerBrandBrainRoutes } from './routes/brand-brain';
 import { registerHealthRoutes } from './routes/health';
 import { registeredRoutes } from './route-contract';
 
 /**
  * BrandSpace API — modular monolith HTTP surface (docs/ARCHITECTURE.md §2).
- * Phase 1 exposes health and readiness only; domain routers arrive with their phases.
+ *
+ * Phase 1 exposed health and readiness only. Phase 5 adds the first domain
+ * router: Brand Brain chat, which is here rather than in the dashboard because
+ * the AI Gateway requires the platform database identity that F-07 keeps out of
+ * tenant-facing apps.
  */
 export async function buildServer() {
   const app = Fastify({ logger: false, disableRequestLogging: true });
@@ -21,6 +26,10 @@ export async function buildServer() {
   });
 
   registerHealthRoutes(app);
+  // Phase 5. The customer-initiated AI surface lives here rather than in the
+  // dashboard: the gateway needs the platform identity, and F-07 keeps that out
+  // of tenant-facing apps. See routes/brand-brain.ts for the full reasoning.
+  registerBrandBrainRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;
