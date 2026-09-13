@@ -74,6 +74,12 @@ export const PLATFORM_PERMISSIONS: readonly PermissionDefinition[] = [
     'platform',
     'Activate or roll back platform configuration (high impact)',
   ),
+  // Phase 4. AI operations data is its own authority. It is not customer
+  // content — the explorer deliberately never surfaces a prompt or a generated
+  // result — but it is a per-workspace financial record, so it does not ride on
+  // "View any workspace" the way the configuration screens once did (R-02).
+  def('platform.ai.usage.read', 'platform', 'View AI request history, usage and cost'),
+
   def('platform.secret.read', 'platform', 'View secret metadata — never a value'),
   def('platform.secret.manage', 'platform', 'Create, rotate, disable or revoke secrets'),
 ] as const;

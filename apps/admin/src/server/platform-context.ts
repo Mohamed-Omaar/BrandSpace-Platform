@@ -23,6 +23,7 @@ import {
   INERT_CREDIT_POLICY,
   type CreditPolicy,
 } from '@brandspace/entitlements';
+import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
 
 /**
@@ -155,6 +156,17 @@ export function getSubscriptionService(): SubscriptionService {
 
 export function getBetaCohortService(): BetaCohortService {
   return new BetaCohortService({ prisma: getPlatformPrisma() });
+}
+
+/**
+ * Read-only access to AI request history, usage and cost.
+ *
+ * The explorer authorizes on `platform.ai.usage.read` itself rather than
+ * trusting the page that constructed it: a page guard and a service guard are
+ * two independent controls, and only one of them survives a refactor.
+ */
+export function getAiUsageExplorer(): AiUsageExplorer {
+  return new AiUsageExplorer({ prisma: getPlatformPrisma() });
 }
 
 /**

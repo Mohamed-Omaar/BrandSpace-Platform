@@ -162,6 +162,15 @@ const NAV_SECTIONS: ReadonlyArray<{
         icon: <ListIcon size={20} />,
       },
       {
+        href: '/ai-usage',
+        key: 'nav.aiUsage',
+        titleKey: 'page.aiUsage',
+        // Its own authority, not "View any workspace": AI usage is a
+        // per-workspace financial record (R-02's lesson).
+        permission: 'platform.ai.usage.read',
+        icon: <SparkIcon size={20} />,
+      },
+      {
         href: '/health',
         key: 'nav.health',
         titleKey: 'page.health',

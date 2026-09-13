@@ -81,12 +81,39 @@ describe('least privilege per platform role', () => {
     },
   );
 
-  it('lets the Operations Viewer read configuration and nothing more', () => {
+  it('lets the Operations Viewer read configuration and AI usage, and nothing more', () => {
+    // Pinned exactly, not as a superset: a blanket grant that quietly picks up
+    // every future permission is the mistake this file exists to catch. Phase 4
+    // added `platform.ai.usage.read` here deliberately — reading AI request
+    // history and cost is what this role is for — and the list says so.
     expect(permissionsFor('operations_viewer')).toEqual([
       'platform.workspace.read',
       'platform.audit.read',
       'platform.configuration.read',
+      'platform.ai.usage.read',
     ]);
+  });
+
+  it('keeps AI usage read away from the Support Agent', () => {
+    // AI usage is a per-workspace financial record. Support mode is the audited
+    // path to a customer's data; an operations screen is not.
+    expect(permissionsFor('support_agent')).not.toContain('platform.ai.usage.read');
+  });
+
+  it('never lets platform.workspace.read imply AI usage read', () => {
+    // R-02's shape: the configuration screens once rode on "View any
+    // workspace", which every admin-capable role holds. This one must not.
+    for (const roleKey of PLATFORM_ROLE_KEYS) {
+      const keys = permissionsFor(roleKey);
+      if (keys.includes('platform.workspace.read') && keys.includes('platform.ai.usage.read')) {
+        expect([
+          'platform_owner',
+          'platform_admin',
+          'billing_manager',
+          'operations_viewer',
+        ]).toContain(roleKey);
+      }
+    }
   });
 
   it('gives the Support Agent no configuration access of any kind', () => {

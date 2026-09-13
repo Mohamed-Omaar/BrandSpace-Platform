@@ -170,7 +170,13 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     // docs/SECURITY.md §4.4 gives this role plan assignment and credit
     // movement outright. Everything else there is conditional and therefore
     // ungranted. No configuration or secret authority at all.
-    permissionKeys: ['platform.workspace.read', 'platform.plan.assign', 'platform.credit.adjust'],
+    permissionKeys: [
+      'platform.workspace.read',
+      'platform.plan.assign',
+      'platform.credit.adjust',
+      // AI usage is the record behind every credit movement this role makes.
+      'platform.ai.usage.read',
+    ],
   },
   {
     key: 'operations_viewer',
@@ -184,6 +190,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'platform.workspace.read',
       'platform.audit.read',
       'platform.configuration.read',
+      // Reading AI request history and cost is precisely this role's job.
+      'platform.ai.usage.read',
     ],
   },
 ] as const;

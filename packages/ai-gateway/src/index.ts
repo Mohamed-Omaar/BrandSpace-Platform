@@ -82,3 +82,23 @@ export type {
   BudgetUsage,
   PlanBudgetLimits,
 } from './budgets';
+
+export { ConfigurationAiSource } from './config-source';
+
+export {
+  AI_PAGE_SIZES,
+  AI_USAGE_READ_PERMISSION,
+  AiUsageExplorer,
+  DEFAULT_AI_PAGE_SIZE,
+  MAX_AI_PAGE_SIZE,
+} from './explorer';
+export type {
+  AiExplorerActor,
+  AiLedgerEntry,
+  AiPage,
+  AiRequestDetail,
+  AiRequestFilter,
+  AiRequestListItem,
+  AiUsageExplorerOptions,
+  AiUsageRollupRow,
+} from './explorer';
