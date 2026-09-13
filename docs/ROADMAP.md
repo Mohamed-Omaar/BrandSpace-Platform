@@ -378,6 +378,32 @@ activated.
 
 **Milestone: the MVP vertical slice is complete and reviewable by the product owner.**
 
+### Delivered in Phase 5A — Brand Brain
+
+Scope items 1 and 2 (Brand Center foundations and the Brand Brain) are built. The rest of Phase 5 —
+AI Content Studio, Asset Library, Social Calendar, Approvals, Command Center, Activity Log and
+customer Notifications — remains outstanding, so the phase is **not complete** and the milestone
+above is not claimed.
+
+| Delivered                        | What it is                                                                                                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Brand and Brand Brain schema** | Nine tenant-owned tables behind two independent boundaries: RLS on `workspaceId`, and a composite foreign key `(workspaceId, brandId)` that makes the BRAND boundary a database fact rather than a service convention |
+| **Knowledge governance**         | D-65 in full — provenance, evidence, confidence, approval state, append-only versioning, rollback as a forward version, conflict surfacing, and human precedence enforced at the write                                |
+| **Source ingestion**             | Upload → extract → chunk → propose, with two distinct idempotency keys, duplicate protection by content checksum, retries, a stuck-job sweep, and customer-safe failure messages                                      |
+| **Retrieval and context**        | Deterministic local index, four-memory precedence ordering, a bounded context spent in precedence order, and prompt-injection containment applied to knowledge as well as to chunks                                   |
+| **Brand Brain chat**             | Grounded answers with citations built from what was retrieved, an honest refusal that costs no credits, and D-78 retention with a customer-facing notice                                                              |
+| **Customer UI**                  | The approved demo as a real screen: interactive orb, ten area cards, a modal detail drawer, knowledge review, sources, and the chat panel — RTL and LTR, keyboard operable, WCAG 2.2 AA                               |
+
+**Deliberately not built, each for a stated reason:**
+
+| Not built                                 | Why                                                                                                                                                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A real embedding provider**             | D-13 approved the provider architecture and deferred vendor selection pending privacy, no-training and retention review. The index is local and deterministic, and replaceable behind its interface                                                     |
+| **PDF, DOCX and PPTX extractors**         | Each is a vendor dependency nobody has reviewed. The extractor REGISTRY is built and the formats that need no library work; a format with no extractor is refused at upload rather than accepted and left stuck                                         |
+| **OCR**                                   | Same reason, and it belongs with the image pipeline in the Asset Library                                                                                                                                                                                |
+| **A background job runner for ingestion** | Processing runs inline in the request. There is no worker wired to the customer app, so a queued job would sit untouched and the customer would watch a spinner that never resolves. The job row records every stage exactly as a worker would write it |
+| **Write-back of inferred learnings**      | D-64's return path needs analytics, which is Phase 7. The schema carries it — memory layer, origin, confidence, evidence — so it is not a retrofit                                                                                                      |
+
 ---
 
 ## Phase 6 — Social Connections and Publishing

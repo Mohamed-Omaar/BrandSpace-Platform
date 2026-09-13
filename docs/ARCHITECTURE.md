@@ -695,3 +695,39 @@ Two reads precede any workspace context, and RLS has no notion of "the signed-in
 `SECURITY DEFINER` was tried for both and rejected: the tables are under `FORCE ROW LEVEL SECURITY`, so
 even the owner is subject to policy, and no policy names the migrator — a definer function would have
 returned nothing. That is the schema working as designed, and it pushed the solution somewhere better.
+
+---
+
+## Appendix — Phase 5A: where customer-initiated AI executes
+
+Phase 5 surfaced a seam Phase 4 never had to cross, and it is worth stating in the architecture
+rather than only in a decision log.
+
+**The AI Gateway requires the platform database identity.** It reads platform-owned `ai.*`
+configuration and settles credits in its own transactions, outside any tenant context. F-07 forbids
+tenant-facing applications — the public site, the customer dashboard, ordinary workers — from ever
+holding that identity. Until Phase 5 the gateway had no application caller at all: its only
+consumers were tests, which run on the platform pool, so nothing forced the question.
+
+**Customer-initiated AI therefore executes in `apps/api`**, the designated platform surface
+(`PLATFORM_SURFACE_APPS` in `eslint.config.mjs`). The route uses two identities for two different
+things, and neither borrows the other's reach:
+
+```
+browser ──► apps/dashboard  /api/brand-brain/chat   (proxy: forwards the session token, nothing else)
+                │
+                ▼
+            apps/api  POST /v1/brand-brain/chat
+                ├── TENANT identity  (withWorkspace)  → brand_knowledge_item, chunks, conversations,
+                │                                       messages — RLS applies to every statement
+                └── PLATFORM identity                → ai.* configuration, credit ledger, ai_request
+                                                       — never reads a Brand Brain table
+```
+
+**Why not project `ai.*` into the tenant-readable snapshot.** That would have followed the D-44
+precedent mechanically, and it was rejected: `ai.providers` carries provider names and credential
+references, and CLAUDE.md §10 says customers are never shown provider names. A projection that
+leaked the vendor list to every tenant would trade a real disclosure for convenience.
+
+The dashboard still owns every NON-AI Brand Brain operation directly — knowledge, review, ingestion —
+because those touch only tenant tables under RLS.
