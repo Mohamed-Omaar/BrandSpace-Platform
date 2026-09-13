@@ -40,6 +40,23 @@ export const STRICT_TENANT_MODELS = [
   // charged. Neither may ever be visible across a tenant boundary.
   'AiRequest',
   'AiUsageLedger',
+  // Phase 5. Brand Brain holds what a customer has told us about its own
+  // brand — the most sensitive tenant data in the product after credentials,
+  // and the one corpus a competitor would most want. Every one of these
+  // carries a non-null `workspaceId` AND a composite foreign key to `brand`,
+  // so the brand boundary is enforced alongside the workspace boundary.
+  //
+  // (No apostrophes in this block: readRegistryList parses it with a
+  // quote-matching regex, so one would silently swallow the names below.)
+  'Brand',
+  'BrandKnowledgeItem',
+  'BrandKnowledgeVersion',
+  'BrandSourceDocument',
+  'BrandSourceChunk',
+  'BrandKnowledgeCandidate',
+  'BrandIngestionJob',
+  'BrandBrainConversation',
+  'BrandBrainMessage',
 ] as const;
 
 /**
@@ -157,6 +174,16 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   // Phase 4.
   AiRequest: 'ai_request',
   AiUsageLedger: 'ai_usage_ledger',
+  // Phase 5.
+  Brand: 'brand',
+  BrandKnowledgeItem: 'brand_knowledge_item',
+  BrandKnowledgeVersion: 'brand_knowledge_version',
+  BrandSourceDocument: 'brand_source_document',
+  BrandSourceChunk: 'brand_source_chunk',
+  BrandKnowledgeCandidate: 'brand_knowledge_candidate',
+  BrandIngestionJob: 'brand_ingestion_job',
+  BrandBrainConversation: 'brand_brain_conversation',
+  BrandBrainMessage: 'brand_brain_message',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

@@ -395,6 +395,16 @@ model Workspace {
   // --- Phase 4 -------------------------------------------------------------
   aiRequests         AiRequest[]
   aiUsageLedger      AiUsageLedger[]
+  // --- Phase 5 -------------------------------------------------------------
+  brands                   Brand[]
+  brandKnowledgeItems      BrandKnowledgeItem[]
+  brandKnowledgeVersions   BrandKnowledgeVersion[]
+  brandSourceDocuments     BrandSourceDocument[]
+  brandSourceChunks        BrandSourceChunk[]
+  brandKnowledgeCandidates BrandKnowledgeCandidate[]
+  brandIngestionJobs       BrandIngestionJob[]
+  brandBrainConversations  BrandBrainConversation[]
+  brandBrainMessages       BrandBrainMessage[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1454,4 +1464,534 @@ model AiUsageLedger {
   @@index([workspaceId, taskKey, occurredAt])
   @@index([modelKey, occurredAt])
   @@map("ai_usage_ledger")
+}
+
+// ===========================================================================
+// Phase 5 — Brand and Brand Brain
+//
+// docs/PRODUCT.md §6A, docs/DATABASE.md §4.1–4.2, D-63/D-64/D-65.
+//
+// Brand Brain is the intelligence and memory layer. The schema is shaped by
+// D-65's seven write-back requirements — provenance, evidence, confidence,
+// approval state, versioning, reproducibility, human precedence — because each
+// of them is a column somewhere or it is nothing.
+//
+// EVERY model below is TENANT-OWNED and additionally BRAND-SCOPED. The brand
+// boundary is not a second opinion about the workspace boundary: a composite
+// foreign key `(workspaceId, brandId)` references `brand(workspaceId, id)`, so
+// the database itself refuses a row that points at another workspace's brand
+// (docs/DATABASE.md §12, "Brand belongs to workspace").
+// ===========================================================================
+
+enum BrandStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// The ten knowledge areas the product exposes. An area is a PRODUCT concept —
+/// the customer sees it as a card and a node on the orb — so it is an enum
+/// rather than configuration: adding one changes screens, copy and completion
+/// rules together, which is a release rather than a setting.
+enum BrandKnowledgeArea {
+  IDENTITY
+  AUDIENCE
+  TONE_OF_VOICE
+  OFFERS
+  PROOF_POINTS
+  DO_DONT
+  COMPETITORS
+  GLOSSARY
+  STRATEGY
+  LEARNINGS
+}
+
+/// D-64's four memories. They differ in truth condition, lifetime and
+/// AUTHORITY, and `memoryPrecedence()` in packages/brand-brain reads this to
+/// order retrieval. Canonical outranks Strategy outranks Content outranks
+/// Learning — always, and not as a tie-break.
+enum BrandMemoryLayer {
+  CANONICAL
+  STRATEGY
+  CONTENT
+  LEARNING
+}
+
+/// Where a knowledge item came from. The distinction that makes D-65's human
+/// precedence enforceable: HUMAN beats DOCUMENT beats AI_INFERRED, and no
+/// AI-inferred item may ever overwrite a human one.
+enum BrandKnowledgeOrigin {
+  HUMAN
+  DOCUMENT
+  AI_INFERRED
+}
+
+/// D-65's approval state, plus the two terminal states a real corpus needs.
+/// Only ACTIVE items are eligible for production AI context.
+enum BrandKnowledgeStatus {
+  DRAFT
+  PROPOSED
+  ACTIVE
+  STALE
+  ARCHIVED
+}
+
+enum BrandSourceStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+  QUARANTINED
+}
+
+enum BrandIngestionStage {
+  QUEUED
+  EXTRACTING
+  CHUNKING
+  EXTRACTING_FACTS
+  COMPLETED
+  FAILED
+}
+
+enum BrandCandidateStatus {
+  PENDING
+  ACCEPTED
+  EDITED_ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+/// TENANT-OWNED. One brand inside a workspace — docs/DATABASE.md §4.1.
+model Brand {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  slug String
+  name String
+
+  industry        String?
+  description     String?
+  websiteUrl      String?
+  defaultLocale   Locale   @default(EN)
+  supportedLocales Locale[] @default([])
+
+  /// Brand kit. Structured, and validated at the boundary rather than trusted.
+  colorPalette Json?
+  typography   Json?
+  voiceProfile Json?
+
+  status BrandStatus @default(DRAFT)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete (docs/DATABASE.md §2). Never applied to ledgers or audit.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  knowledgeItems    BrandKnowledgeItem[]
+  knowledgeVersions BrandKnowledgeVersion[]
+  sourceDocuments   BrandSourceDocument[]
+  sourceChunks      BrandSourceChunk[]
+  candidates        BrandKnowledgeCandidate[]
+  ingestionJobs     BrandIngestionJob[]
+  conversations     BrandBrainConversation[]
+  messages          BrandBrainMessage[]
+
+  /// The composite target a brand-scoped child points at. It is what makes
+  /// `(workspaceId, brandId)` provable rather than merely conventional.
+  @@unique([workspaceId, id], name: "brand_workspace_scope")
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+  @@map("brand")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One unit of brand knowledge — docs/DATABASE.md
+/// §4.2, and the carrier of every D-65 requirement.
+model BrandKnowledgeItem {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  area   BrandKnowledgeArea
+  memory BrandMemoryLayer     @default(CANONICAL)
+  origin BrandKnowledgeOrigin @default(HUMAN)
+  status BrandKnowledgeStatus @default(DRAFT)
+
+  /// A stable key within (brand, area) — `audience.segment.founders`. Editing
+  /// an item keeps its key; that is what makes a conflict detectable rather
+  /// than appearing as two unrelated rows.
+  itemKey String
+
+  /// Localized `{ ar, en }`. Both locales are first-class (CLAUDE.md §4), and
+  /// the boundary schema refuses a body with neither.
+  title Json
+  body  Json
+
+  /// D-65 CONFIDENCE. Null for human-entered knowledge: a human statement is
+  /// not a probability. 0–1000 (per mille) for anything inferred, kept integer
+  /// so no float ever reaches money-adjacent comparisons.
+  confidenceMilli Int?
+
+  /// D-65 PROVENANCE. Which human, which document, which AI request.
+  createdByUserId  String? @db.Uuid
+  sourceDocumentId String? @db.Uuid
+  aiRequestId      String? @db.Uuid
+
+  /// D-65 EVIDENCE. Citations an inferred item must carry and a customer can
+  /// inspect: `[{ chunkId, sourceDocumentId, locator, quote }]`. Never a raw
+  /// provider response — only text the customer already owns.
+  evidence Json?
+
+  /// D-65 VERSIONING. Incremented on every accepted edit; retrieval cites it,
+  /// and `brand_knowledge_version` keeps every prior value readable.
+  version Int @default(1)
+
+  /// Deterministic retrieval vector. NOT a vendor embedding: no embedding
+  /// provider is approved (D-13), so this holds the local, reproducible
+  /// index described in packages/brand-brain/src/retrieval.ts. The model key
+  /// is recorded so re-indexing on a change is detectable.
+  indexVector       Float[] @default([])
+  indexModelKey     String?
+  indexedAt         DateTime? @db.Timestamptz(6)
+
+  /// Staleness. `reviewDueAt` is derived from validated configuration, never
+  /// from a hard-coded interval.
+  lastReviewedAt DateTime? @db.Timestamptz(6)
+  reviewDueAt    DateTime? @db.Timestamptz(6)
+
+  /// Set when this item conflicts with another and a human has not resolved
+  /// it. D-65: a conflict is SURFACED, never silently resolved.
+  conflictsWithItemId String? @db.Uuid
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  archivedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand                @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_item_brand_fkey")
+  source    BrandSourceDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  versions   BrandKnowledgeVersion[]
+  candidates BrandKnowledgeCandidate[]
+
+  conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [conflictsWithItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  conflicting   BrandKnowledgeItem[] @relation("BrandKnowledgeConflict")
+
+  /// One live item per key per area. A second row with the same key is an
+  /// EDIT (a new version), not a duplicate — enforced here rather than hoped
+  /// for in a service.
+  @@unique([workspaceId, brandId, area, itemKey])
+  @@index([workspaceId, brandId, area, status])
+  @@index([workspaceId, brandId, status, memory])
+  @@index([workspaceId, brandId, reviewDueAt])
+  @@map("brand_knowledge_item")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED and APPEND-ONLY. D-65 VERSIONING and
+/// REPRODUCIBILITY: the previous value stays readable, so a generation can be
+/// replayed against the exact state it used, and a rollback is a restore of a
+/// row that was never destroyed.
+///
+/// Append-only is enforced by a database trigger, not a convention — the same
+/// decision `ai_usage_ledger` made in Phase 4.
+model BrandKnowledgeVersion {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  knowledgeItemId String @db.Uuid
+  version         Int
+
+  area   BrandKnowledgeArea
+  memory BrandMemoryLayer
+  origin BrandKnowledgeOrigin
+  status BrandKnowledgeStatus
+
+  title Json
+  body  Json
+
+  confidenceMilli Int?
+  evidence        Json?
+
+  /// Who made this version and why. `changeReason` is reviewer-supplied text,
+  /// not customer content, and is shown back in the history.
+  changedByUserId String? @db.Uuid
+  changeReason    String?
+  /// `created`, `edited`, `approved`, `rejected`, `archived`, `rolled_back`.
+  changeKind      String
+
+  recordedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand              @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_version_brand_fkey")
+  item      BrandKnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([knowledgeItemId, version])
+  @@index([workspaceId, brandId, recordedAt(sort: Desc)])
+  @@map("brand_knowledge_version")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. An uploaded source document.
+///
+/// The BYTES ARE NOT HERE. PostgreSQL holds a storage reference; the object
+/// lives behind the storage abstraction (packages/brand-brain/src/storage.ts).
+/// A row carries only what the product must query or display.
+model BrandSourceDocument {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  fileName    String
+  mimeType    String
+  byteSize    Int
+  /// SHA-256 of the content. Duplicate protection is a UNIQUE constraint on
+  /// it per brand, so re-uploading the same file is idempotent by identity
+  /// rather than by filename.
+  checksum    String
+  /// Opaque object-storage key. Never a URL, never a signed one: a signature
+  /// in a database column is a credential with a long life.
+  storageKey  String
+
+  status BrandSourceStatus @default(UPLOADED)
+  /// Safe to show a customer. Never a raw extractor error or a path.
+  failureMessage String?
+
+  /// Populated by extraction. `pageCount` is null for formats without pages.
+  pageCount  Int?
+  chunkCount Int @default(0)
+  /// Extracted characters — a size signal for the UI that is not the text.
+  textLength Int @default(0)
+
+  /// Which area the uploader targeted, when they dropped the file on one.
+  targetArea BrandKnowledgeArea?
+
+  uploadedByUserId String? @db.Uuid
+  /// The client's idempotency key for the upload itself.
+  idempotencyKey String
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  processedAt DateTime? @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_source_document_brand_fkey")
+
+  chunks         BrandSourceChunk[]
+  candidates     BrandKnowledgeCandidate[]
+  ingestionJobs  BrandIngestionJob[]
+  knowledgeItems BrandKnowledgeItem[]
+
+  @@unique([workspaceId, brandId, checksum])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, brandId, createdAt(sort: Desc)])
+  @@map("brand_source_document")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One retrievable chunk of a source document,
+/// with the location reference that makes a citation checkable.
+model BrandSourceChunk {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  sourceDocumentId String @db.Uuid
+  chunkIndex       Int
+
+  /// The chunk text. This IS customer content, which is why the chunk table is
+  /// never read by any operator surface and never enters a log.
+  text String
+  /// Human-readable location — "page 4", "section 2.1" — so a citation points
+  /// somewhere a person can check.
+  locator String?
+
+  indexVector   Float[] @default([])
+  indexModelKey String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_source_chunk_brand_fkey")
+  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([sourceDocumentId, chunkIndex])
+  @@index([workspaceId, brandId])
+  @@map("brand_source_chunk")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. A candidate fact extracted from a document,
+/// waiting for a human.
+///
+/// THE GOVERNANCE BOUNDARY. Extraction writes here and NEVER to
+/// `brand_knowledge_item`, so no upload can change approved knowledge on its
+/// own. D-65's approval state is this table's existence.
+model BrandKnowledgeCandidate {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  sourceDocumentId String @db.Uuid
+  /// The item this candidate would change, when one already exists. Null means
+  /// it proposes something new. This is what the review screen diffs.
+  targetItemId String? @db.Uuid
+
+  area    BrandKnowledgeArea
+  itemKey String
+
+  /// What extraction produced, kept EXACTLY as extracted even when a reviewer
+  /// edits before accepting — the original stays inspectable.
+  extractedTitle Json
+  extractedBody  Json
+  /// A reviewer's edit, when they changed it before accepting.
+  reviewedTitle Json?
+  reviewedBody  Json?
+
+  confidenceMilli Int
+  evidence        Json
+
+  status BrandCandidateStatus @default(PENDING)
+
+  reviewedByUserId String?   @db.Uuid
+  reviewedAt       DateTime? @db.Timestamptz(6)
+  reviewReason     String?
+  /// The version this candidate produced once accepted — the audit link from
+  /// a decision to its effect.
+  resultingVersion Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_candidate_brand_fkey")
+  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  target    BrandKnowledgeItem? @relation(fields: [targetItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, brandId, area, status])
+  @@index([sourceDocumentId, status])
+  @@map("brand_knowledge_candidate")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. The ingestion lifecycle for one document.
+///
+/// Idempotent and retryable (CLAUDE.md §5). One live job per document is a
+/// partial unique index in the migration, so two uploads racing the same file
+/// cannot both process it.
+model BrandIngestionJob {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  sourceDocumentId String @db.Uuid
+
+  stage    BrandIngestionStage @default(QUEUED)
+  attempts Int                 @default(0)
+  maxAttempts Int              @default(3)
+
+  /// Safe to show a customer.
+  failureMessage String?
+  /// The internal reason, for operators. Never rendered to a customer and
+  /// never a provider string.
+  failureCode String?
+
+  /// Counters the UI reports honestly rather than guessing.
+  chunksCreated     Int @default(0)
+  candidatesCreated Int @default(0)
+
+  /// The AI request that performed extraction, when one did. Reproducibility:
+  /// an extraction can be traced to its gateway request and its cost.
+  aiRequestId String? @db.Uuid
+
+  queuedAt    DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  nextAttemptAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_ingestion_job_brand_fkey")
+  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspaceId, brandId, stage])
+  @@index([stage, nextAttemptAt])
+  @@map("brand_ingestion_job")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. A Brand Brain chat conversation.
+model BrandBrainConversation {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  /// The area the conversation was opened against, when it was opened from a
+  /// node or a card. Null is the whole brain.
+  area BrandKnowledgeArea?
+
+  title String?
+
+  startedByUserId String? @db.Uuid
+
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  lastMessageAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// D-78 RETENTION. Set from validated configuration when the conversation is
+  /// created, because this feature DOES persist customer-visible AI output and
+  /// therefore owns the artifact. Null is not allowed by the service.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_brain_conversation_brand_fkey")
+
+  messages BrandBrainMessage[]
+
+  @@index([workspaceId, brandId, lastMessageAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("brand_brain_conversation")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One chat message.
+///
+/// D-78: this is persisted customer content, so it declares an owner (this
+/// feature), a retention window, and a purge that clears the BODY while leaving
+/// the accounting — `aiRequestId`, credits, the ledger — untouched.
+model BrandBrainMessage {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  conversationId String @db.Uuid
+
+  /// `user` or `assistant`. A system prompt is never persisted.
+  role String
+  /// The message text. Nulled by the retention purge; the row survives so the
+  /// conversation's shape and its accounting links remain.
+  body String?
+  /// True once the body has been purged, so the UI says "expired" rather than
+  /// rendering an empty bubble.
+  bodyPurgedAt DateTime? @db.Timestamptz(6)
+
+  /// Citations for a grounded answer: `[{ itemId, area, version, locator,
+  /// sourceDocumentId, fileName }]`. A fabricated source is impossible because
+  /// the service writes only ids it actually retrieved.
+  citations Json?
+
+  /// True when the assistant declined for lack of approved knowledge. Recorded
+  /// so "honest refusal" is measurable rather than asserted.
+  insufficientKnowledge Boolean @default(false)
+
+  aiRequestId String? @db.Uuid
+  /// Client idempotency key, so a retried send never bills twice.
+  idempotencyKey String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand        Brand                  @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_brain_message_brand_fkey")
+  conversation BrandBrainConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@index([expiresAt])
+  @@map("brand_brain_message")
 }
