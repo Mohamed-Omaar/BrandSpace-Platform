@@ -144,6 +144,45 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
         return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       }
 
+      /*
+       * THE BRAND IS CHECKED BEFORE ANY WORK, AND A MISS IS A 404.
+       *
+       * `brandId` is the one identifier the caller supplies, and it has to be:
+       * the customer chooses which brand to ask about. RLS and the composite
+       * foreign key both already refuse a brand from another workspace, so
+       * nothing leaks without this check — but the failure surfaces as a
+       * foreign-key violation, which the customer reads as "that request could
+       * not be completed" for what is really a plain not-found.
+       *
+       * Resolving it here makes the contract honest. A brand in another
+       * workspace, a brand that never existed and a soft-deleted one all
+       * produce the SAME 404, so the answer discloses nothing either
+       * (CLAUDE.md §2.1).
+       */
+      const tenantPrisma = getPrisma();
+      const brand = await withWorkspace(
+        workspace.workspaceId,
+        async (db) =>
+          db.brand.findFirst({
+            where: { id: parsed.data.brandId, deletedAt: null },
+            select: { id: true },
+          }),
+        { prisma: tenantPrisma },
+      );
+      if (!brand) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+
+      /*
+       * Read OUTSIDE the transaction below.
+       *
+       * `withWorkspace` opens a transaction, so resolving this inside the
+       * callback would open a SECOND one while the first is still held. The
+       * value is a long-committed column, so a separate read is correct — and
+       * it is read from the workspace row rather than the session, which is a
+       * snapshot taken at sign-in: a plan change since then has to take effect
+       * now.
+       */
+      const planKey = await planKeyFor(workspace.workspaceId);
+
       try {
         const { gateway } = gatewayDeps();
         const turn = await withWorkspace(
@@ -161,12 +200,9 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               message: parsed.data.message,
               idempotencyKey: parsed.data.idempotencyKey,
               actorUserId: customer.userId,
-              // The routing rule may key on the plan. Read from the workspace
-              // row rather than the session: the session is a snapshot taken at
-              // sign-in, and a plan change since then must take effect now.
-              planKey: await planKeyFor(workspace.workspaceId),
+              planKey,
             }),
-          { prisma: getPrisma() },
+          { prisma: tenantPrisma },
         );
 
         return reply.send({
