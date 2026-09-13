@@ -10,6 +10,7 @@ import {
   LanguageSwitcher,
   SettingsIcon,
   ShieldIcon,
+  SparkIcon,
   TeamIcon,
   WorkspaceSwitcher,
   Banner,
@@ -48,6 +49,12 @@ const NAV: readonly {
   icon: ReactNode;
 }[] = [
   { href: '/overview', key: 'nav.overview', permission: null, icon: <HomeIcon size={20} /> },
+  {
+    href: '/brand-brain',
+    key: 'nav.brandBrain',
+    permission: 'brand_brain.read',
+    icon: <SparkIcon size={20} />,
+  },
   { href: '/members', key: 'nav.members', permission: 'member.read', icon: <TeamIcon size={20} /> },
   { href: '/permissions', key: 'perms.title', permission: null, icon: <ShieldIcon size={20} /> },
   { href: '/plan', key: 'nav.plan', permission: 'billing.read', icon: <CreditIcon size={20} /> },

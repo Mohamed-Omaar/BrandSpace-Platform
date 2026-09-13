@@ -43,7 +43,7 @@ loadTestEnv();
  * creates seconds earlier. No real credential is involved anywhere.
  */
 
-const PORTS = { web: 3100, dashboard: 3101, admin: 3102 } as const;
+const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103 } as const;
 
 /**
  * Optional override for the Chromium binary.
@@ -92,12 +92,22 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   // The design showcase is opt-in and refused in production. The suite enables
   // it for the dashboard only, which is also the assertion that the gate works:
   // the admin app never sets it, so a showcase route there stays a 404.
-  if (app === 'dashboard') env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+  if (app === 'dashboard') {
+    env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+    // Brand Brain chat is proxied to the API service. Without this the proxy
+    // answers an honest 503 and the chat suite would be testing the fallback.
+    env['BRANDSPACE_API_URL'] = `http://127.0.0.1:${PORTS.api}`;
+  }
 
   const keys =
     app === 'admin'
       ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
-      : ['CUSTOMER_SESSION_SECRET'];
+      : app === 'api'
+        ? // The API is the platform surface for customer-initiated AI: it
+          // resolves a CUSTOMER session on the tenant pool and runs the gateway
+          // on the platform one, so it needs both credentials.
+          ['DATABASE_PLATFORM_URL', 'CUSTOMER_SESSION_SECRET', 'SECRET_VAULT_KEK']
+        : ['CUSTOMER_SESSION_SECRET'];
 
   for (const key of keys) {
     const value = process.env[key];
@@ -108,6 +118,17 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
 
 /** Build once, then serve — production output is what CI and users actually get. */
 function server(app: keyof typeof PORTS) {
+  if (app === 'api') {
+    // Fastify, not Next: it takes its port from the environment and its
+    // readiness probe is the public liveness endpoint rather than a locale root.
+    return {
+      command: `pnpm --filter @brandspace/api start`,
+      url: `http://127.0.0.1:${PORTS.api}/health/live`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+      env: { ...serverEnv('api'), PORT: String(PORTS.api) },
+    };
+  }
   return {
     command: `pnpm --filter @brandspace/${app} start --port ${PORTS[app]}`,
     // The admin root redirects to /en/login when signed out, which is a 307 and
@@ -235,5 +256,5 @@ export default defineConfig({
     },
   ],
 
-  webServer: [server('web'), server('dashboard'), server('admin')],
+  webServer: [server('web'), server('dashboard'), server('admin'), server('api')],
 });
