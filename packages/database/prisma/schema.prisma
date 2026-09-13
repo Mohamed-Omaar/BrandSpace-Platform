@@ -1346,10 +1346,13 @@ model AiRequest {
   imageCount       Int?
   durationSeconds  Int?
 
-  /// What the PROVIDER charged us, in minor units. Accrues across attempts —
-  /// including failed ones, which the customer is never billed for.
-  providerCostMinor Int    @default(0)
-  currency          String @default("USD") @db.Char(3)
+  /// What the PROVIDER charged us, in MICRO-MINOR units (a millionth of a
+  /// minor unit). Minor units cannot hold a real token price: $0.15 per
+  /// million input tokens is 0.015 of a cent per thousand tokens, which as an
+  /// integer count of cents is zero. Accrues across attempts — including
+  /// failed ones, which the customer is never billed for.
+  providerCostMicroMinor BigInt @default(0)
+  currency               String @default("USD") @db.Char(3)
 
   /// Milli-credits (D-14). Reserved generously up front, charged on the actual.
   creditsReservedMilli BigInt @default(0)
@@ -1405,9 +1408,9 @@ model AiUsageLedger {
   /// units the cost was computed from, frozen at settlement.
   usageUnits Json
 
-  providerCostMinor Int    @default(0)
-  currency          String @default("USD") @db.Char(3)
-  creditsChargedMilli BigInt @default(0)
+  providerCostMicroMinor BigInt @default(0)
+  currency               String @default("USD") @db.Char(3)
+  creditsChargedMilli    BigInt @default(0)
 
   /// The wallet movement this row accounts for, when there was one. A failed
   /// request writes a ledger row with zero credits and no transaction.

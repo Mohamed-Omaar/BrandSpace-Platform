@@ -50,6 +50,8 @@ export interface UsageUnits {
   readonly completionTokens?: number;
   readonly imageCount?: number;
   readonly durationSeconds?: number;
+  /** For models priced per character rather than per token (voice synthesis). */
+  readonly characters?: number;
 }
 
 export interface TextRequest {

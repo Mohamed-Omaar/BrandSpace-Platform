@@ -38,6 +38,14 @@ const aiProvidersSchema = z.object({
     .default([]),
 });
 
+/**
+ * The unit a provider prices by — docs/AI-GATEWAY.md §4.
+ *
+ * Shared with `ai.credit-rules` so a model's cost basis and the credit rule
+ * that prices it are expressed in the same currency of measurement.
+ */
+const aiBillingUnit = z.enum(['1k_tokens', 'image', 'second', 'character', 'request']);
+
 const aiModelsSchema = z.object({
   models: z
     .array(
@@ -50,6 +58,28 @@ const aiModelsSchema = z.object({
         status: z.enum(['available', 'beta', 'deprecated', 'disabled']),
         /** Kill switch — a disabled model is unusable by routing immediately. */
         disableSwitch: z.boolean().default(false),
+
+        /*
+         * COST BASIS — the inputs to margin (§4, §7.2).
+         *
+         * WHY MICRO-MINOR AND NOT MINOR. docs/AI-GATEWAY.md names these
+         * `inputCostPerUnitMinor`, but a minor unit cannot express what
+         * providers actually charge. A text model at $0.15 per million input
+         * tokens is 0.015 of a cent per thousand tokens; as an integer count
+         * of cents that is zero, so every request would record a provider cost
+         * of nothing and margin reporting would show infinite margin on every
+         * row. One micro-minor is a millionth of a minor unit, which holds that
+         * price exactly as the integer 15000.
+         *
+         * `null` until an operator enters real numbers. No price is invented
+         * here: provider rates are commercial facts, and a plausible-looking
+         * default would be indistinguishable from a real one on the margin
+         * screen.
+         */
+        inputCostPerUnitMicroMinor: z.number().int().nonnegative().nullable().default(null),
+        outputCostPerUnitMicroMinor: z.number().int().nonnegative().nullable().default(null),
+        costUnit: aiBillingUnit.default('1k_tokens'),
+        costCurrency: z.string().length(3).default('USD'),
       }),
     )
     .default([]),
@@ -130,12 +160,25 @@ const aiCreditRulesSchema = z.object({
         modelKey: z.string().min(1),
         baseMilliCredits: z.number().int().nonnegative(),
         perUnitMilliCredits: z.number().int().nonnegative().default(0),
-        unit: z.enum(['1k_tokens', 'image', 'second', 'character', 'request']),
+        unit: aiBillingUnit,
       }),
     )
     .default([]),
   /** Owner decision D-15 pending: a floor of 0 disables the guard until set. */
   minimumGrossMarginPercent: z.number().min(0).max(100).default(0),
+  /*
+   * What one whole credit is worth, in micro-minor units of the reference
+   * currency. Margin cannot be computed without it: revenue is denominated in
+   * credits and cost in money, and nothing else in the system converts between
+   * them.
+   *
+   * `null`, and deliberately so — the price of a credit is an owner commercial
+   * decision (D-15/D-16), not something to infer from a plan price. While it is
+   * null the margin guard reports that margin is UNKNOWN rather than passing a
+   * change it cannot actually check.
+   */
+  creditValueMicroMinor: z.number().int().positive().nullable().default(null),
+  referenceCurrency: z.string().length(3).default('USD'),
 });
 
 // --- Commerce ---------------------------------------------------------------
@@ -450,13 +493,15 @@ const operationsSchema = z.object({
 
 export const CONFIG_DOMAINS = {
   'ai.providers': { schema: aiProvidersSchema, schemaVersion: 1 },
-  'ai.models': { schema: aiModelsSchema, schemaVersion: 1 },
+  // schemaVersion 2 adds the cost basis each model is priced from.
+  'ai.models': { schema: aiModelsSchema, schemaVersion: 2 },
   'ai.model-capabilities': { schema: aiModelCapabilitiesSchema, schemaVersion: 1 },
   // schemaVersion 2 adds `parameters` and `retryPolicy` to each rule. Both
   // carry defaults, so a version-1 payload still parses; the bump records that
   // new drafts are written against the wider shape.
   'ai.routing': { schema: aiRoutingSchema, schemaVersion: 2 },
-  'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 1 },
+  // schemaVersion 2 adds the credit-to-currency reference margin needs.
+  'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 2 },
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },
   'feature-flags': { schema: featureFlagsSchema, schemaVersion: 1 },

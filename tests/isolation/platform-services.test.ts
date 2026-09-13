@@ -283,6 +283,11 @@ describe('configuration lifecycle', () => {
             qualityTier: 'fast',
             status: 'available',
             disableSwitch: false,
+            // A servable model needs a cost basis before it can be activated
+            // (docs/AI-GATEWAY.md §4) — without one it would record a provider
+            // cost of zero and report infinite margin.
+            inputCostPerUnitMicroMinor: 15_000,
+            outputCostPerUnitMicroMinor: 60_000,
           },
         ],
       },

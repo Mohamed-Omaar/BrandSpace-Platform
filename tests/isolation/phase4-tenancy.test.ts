@@ -124,7 +124,7 @@ describe('AiUsageLedger is tenant-owned', () => {
       fixtures.a.workspaceId,
       async (db) =>
         db.aiUsageLedger.aggregate({
-          _sum: { creditsChargedMilli: true, providerCostMinor: true },
+          _sum: { creditsChargedMilli: true, providerCostMicroMinor: true },
           _count: true,
         }),
       { prisma: app },

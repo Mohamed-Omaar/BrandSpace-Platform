@@ -65,6 +65,8 @@ interface ModelLike {
   providerKey: string;
   status: string;
   disableSwitch?: boolean;
+  inputCostPerUnitMicroMinor?: number | null;
+  outputCostPerUnitMicroMinor?: number | null;
 }
 interface ProviderLike {
   key: string;
@@ -85,12 +87,45 @@ function semantic(
     const providers = ((context['ai.providers'] as { providers?: ProviderLike[] })?.providers ??
       []) as ProviderLike[];
     const known = new Set(providers.map((p) => p.key));
+    const seenModelKeys = new Set<string>();
     for (const [i, model] of ((doc['models'] ?? []) as ModelLike[]).entries()) {
       if (known.size > 0 && !known.has(model.providerKey)) {
         issues.push({
           severity: 'error',
           path: `models.${i}.providerKey`,
           message: `References provider "${model.providerKey}", which is not defined in ai.providers.`,
+        });
+      }
+
+      // A duplicate key makes routing ambiguous and margin double-counted.
+      if (seenModelKeys.has(model.key)) {
+        issues.push({
+          severity: 'error',
+          path: `models.${i}.key`,
+          message: `Duplicate model key "${model.key}".`,
+        });
+      }
+      seenModelKeys.add(model.key);
+
+      /*
+       * docs/AI-GATEWAY.md §4: "cost fields must be present before a model can
+       * be activated". A servable model with no cost basis records a provider
+       * cost of zero on every request, which reports infinite margin — the one
+       * number the margin floor exists to catch.
+       */
+      const servable = model.status === 'available' || model.status === 'beta';
+      const missingCost =
+        model.inputCostPerUnitMicroMinor === null ||
+        model.inputCostPerUnitMicroMinor === undefined ||
+        model.outputCostPerUnitMicroMinor === null ||
+        model.outputCostPerUnitMicroMinor === undefined;
+      if (servable && !model.disableSwitch && missingCost) {
+        issues.push({
+          severity: 'error',
+          path: `models.${i}.inputCostPerUnitMicroMinor`,
+          message:
+            `Model "${model.key}" is servable but has no cost basis. ` +
+            'Enter the provider input and output rates before activating it.',
         });
       }
     }

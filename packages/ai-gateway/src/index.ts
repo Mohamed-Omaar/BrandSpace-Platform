@@ -39,3 +39,14 @@ export type { AiTaskDefinition, AiTaskKey } from './tasks';
 
 export { resolveRoute, RoutingError } from './routing';
 export type { RegisteredModel, ResolvedRoute, RoutingQuery, RoutingRule } from './routing';
+
+export {
+  assessMargin,
+  billableMilliUnits,
+  creditsChargedMilli,
+  estimateReservationMilli,
+  findCreditRule,
+  PricingError,
+  providerCostMicroMinor,
+} from './pricing';
+export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
