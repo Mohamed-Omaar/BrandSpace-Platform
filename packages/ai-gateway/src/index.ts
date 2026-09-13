@@ -34,7 +34,7 @@ export type {
 export { MockProviderAdapter } from './adapters/mock';
 export type { MockAdapterOptions, MockCall, MockDirective } from './adapters/mock';
 
-export { AI_TASK_KEYS, AI_TASKS, findAiTask, isAiTaskKey } from './tasks';
+export { AI_TASK_KEYS, AI_TASKS, findAiTask, isAiTaskKey, MVP_AI_TASK_KEYS } from './tasks';
 export type { AiTaskDefinition, AiTaskKey } from './tasks';
 
 export { resolveRoute, RoutingError } from './routing';
@@ -48,6 +48,7 @@ export {
   findCreditRule,
   PricingError,
   providerCostMicroMinor,
+  requiredPriceMicroMinor,
 } from './pricing';
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
 

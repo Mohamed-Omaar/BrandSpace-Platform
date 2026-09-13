@@ -367,6 +367,16 @@ decision with its own time box and audit trail (D-76).
 Not yet built: **cost alerts** (they need a delivery channel and thresholds nobody has set) and the **live
 test bench** (it needs a real adapter to be worth running — D-13).
 
+**Activation gates an operator will meet (approved 2026-09-13).** These are refusals from configuration
+validation, not advice:
+
+| Screen         | Refuses to activate when                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Providers      | An **active** provider is not confirmed free of training on customer data, has `unverified` or `retains_data` retention terms, or has no privacy-review reference (D-13)                    |
+| Model registry | A model is set to **available** with no Arabic quality-benchmark reference (D-17). `beta` is exempt — it is the status a model sits in while being benchmarked                              |
+| Routing rules  | A rule enables `persistOutput` without an `outputRetentionDays` window (D-78)                                                                                                               |
+| Credit costs   | Unchanged; the margin calculator now derives a price as `provider cost / (1 - target gross margin)` against the D-15 target of 65%, which is entered in configuration and defaults to unset |
+
 ---
 
 ## 9. Module 8 — Credits and Usage Administration

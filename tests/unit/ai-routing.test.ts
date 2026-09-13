@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AI_TASKS,
+  MVP_AI_TASK_KEYS,
   RoutingError,
   resolveRoute,
   type RegisteredModel,
@@ -38,6 +39,7 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
       maxOutputTokens: 800,
       promptTemplateVersion: 1,
       persistOutput: false,
+      outputRetentionDays: null,
     },
     retryPolicy: { maxAttempts: 3, backoff: 'exponential', initialDelayMs: 250, jitter: true },
     moderateInput: false,
@@ -191,6 +193,7 @@ describe('routing precedence', () => {
             maxOutputTokens: 120,
             promptTemplateVersion: 4,
             persistOutput: false,
+            outputRetentionDays: null,
           },
           retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
         }),
@@ -443,5 +446,149 @@ describe('ai.routing configuration validation', () => {
       ],
     });
     expect(excessive.success).toBe(false);
+  });
+});
+
+describe('MVP modality scope (D-16)', () => {
+  const IMAGE_MODELS: RegisteredModel[] = [model({ key: 'image-a', modality: 'image' })];
+
+  it('serves the approved text and image tasks', () => {
+    expect(
+      resolveRoute(query, [rule({ taskKey: 'caption.generate' })], TEXT_MODELS).chain,
+    ).toHaveLength(1);
+
+    expect(
+      resolveRoute(
+        { ...query, taskKey: 'image.generate' },
+        [rule({ taskKey: 'image.generate', primaryModelKey: 'image-a' })],
+        IMAGE_MODELS,
+      ).modality,
+    ).toBe('image');
+  });
+
+  it('refuses video generation even with a rule configured for it', () => {
+    // D-16 excluded video from the MVP and recorded it as a Phase 7+ candidate
+    // needing its own cost, latency and product review. The refusal is at
+    // resolution, so an activated rule cannot serve it either.
+    const error = (() => {
+      try {
+        resolveRoute(
+          { ...query, taskKey: 'video.generate' },
+          [rule({ taskKey: 'video.generate', primaryModelKey: 'video-a' })],
+          [model({ key: 'video-a', modality: 'video' })],
+        );
+        return null;
+      } catch (e: unknown) {
+        return e as RoutingError;
+      }
+    })();
+
+    expect(error).toBeInstanceOf(RoutingError);
+    expect(error?.reason).toBe('not_in_mvp_scope');
+  });
+
+  it('refuses voice synthesis, which D-16 did not approve either', () => {
+    expect(() =>
+      resolveRoute(
+        { ...query, taskKey: 'voice.synthesize' },
+        [rule({ taskKey: 'voice.synthesize', primaryModelKey: 'voice-a' })],
+        [model({ key: 'voice-a', modality: 'voice' })],
+      ),
+    ).toThrow(RoutingError);
+  });
+
+  it('leaves the internal modalities alone', () => {
+    // D-16 governs customer-facing GENERATION modalities. Moderation is used by
+    // the gateway itself and embedding by Brand Brain retrieval; blocking them
+    // would break the moderation step this same phase built.
+    expect(
+      resolveRoute(
+        { ...query, taskKey: 'moderation.check' },
+        [rule({ taskKey: 'moderation.check', primaryModelKey: 'mod-a' })],
+        [model({ key: 'mod-a', modality: 'moderation' })],
+      ).chain,
+    ).toEqual(['mod-a']);
+
+    expect(
+      resolveRoute(
+        { ...query, taskKey: 'brand.retrieve' },
+        [rule({ taskKey: 'brand.retrieve', primaryModelKey: 'embed-a' })],
+        [model({ key: 'embed-a', modality: 'embedding' })],
+      ).chain,
+    ).toEqual(['embed-a']);
+  });
+
+  it('keeps the deferred tasks in the catalogue rather than deleting them', () => {
+    // Removing them would erase the record that they are known, deliberately
+    // deferred capabilities — and D-16 asked for video to be RECORDED as a
+    // Phase 7+ candidate, not forgotten.
+    const video = AI_TASKS.find((task) => task.key === 'video.generate');
+    expect(video).toBeDefined();
+    expect(video?.mvpApproved).toBe(false);
+
+    expect(MVP_AI_TASK_KEYS).not.toContain('video.generate');
+    expect(MVP_AI_TASK_KEYS).toContain('caption.generate');
+    expect(MVP_AI_TASK_KEYS).toContain('image.generate');
+  });
+});
+
+describe('output retention is required whenever output is persisted', () => {
+  const models = {
+    models: [{ key: 'text-a', providerKey: 'mock', displayName: 'A', modality: 'text' }],
+  };
+
+  it('refuses persistOutput with no retention window', () => {
+    // Persisting with no expiry is how a gateway quietly becomes a permanent
+    // content store, which the approved policy forbids.
+    const report = validateConfiguration(
+      'ai.routing',
+      {
+        rules: [
+          {
+            taskKey: 'caption.generate',
+            primaryModelKey: 'text-a',
+            parameters: { persistOutput: true },
+          },
+        ],
+      },
+      { 'ai.models': models },
+    );
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.some((issue) => issue.message.includes('retention window'))).toBe(true);
+  });
+
+  it('accepts persistOutput with a retention window', () => {
+    const report = validateConfiguration(
+      'ai.routing',
+      {
+        rules: [
+          {
+            taskKey: 'caption.generate',
+            primaryModelKey: 'text-a',
+            parameters: { persistOutput: true, outputRetentionDays: 30 },
+          },
+        ],
+      },
+      { 'ai.models': models },
+    );
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('needs no retention window when nothing is persisted', () => {
+    const report = validateConfiguration(
+      'ai.routing',
+      { rules: [{ taskKey: 'caption.generate', primaryModelKey: 'text-a' }] },
+      { 'ai.models': models },
+    );
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('persists nothing and retains nothing by default', () => {
+    const parsed = CONFIG_DOMAINS['ai.routing'].schema.parse({
+      rules: [{ taskKey: 'caption.generate', primaryModelKey: 'text-a' }],
+    });
+    expect(parsed.rules[0]?.parameters.persistOutput).toBe(false);
+    expect(parsed.rules[0]?.parameters.outputRetentionDays).toBeNull();
   });
 });

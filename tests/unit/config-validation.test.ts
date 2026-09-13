@@ -152,7 +152,15 @@ describe('semantic validation', () => {
     expect(report.issues[0]?.message).toMatch(/stored API key secret/);
   });
 
-  it('warns when an active provider has no no-training guarantee (D-13)', () => {
+  it('REFUSES an active provider with no no-training guarantee (D-13)', () => {
+    /*
+     * This was a warning, and is now an error.
+     *
+     * D-13 was approved on 2026-09-13 with confirmation that customer data is
+     * not used for provider training as a hard condition of vendor selection.
+     * A warning was the right severity while the decision was open; once it is
+     * approved, an advisory gate is one somebody eventually clicks past.
+     */
     const report = validateConfiguration('ai.providers', {
       providers: [
         {
@@ -164,10 +172,16 @@ describe('semantic validation', () => {
           timeoutMs: 1000,
           maxConcurrency: 5,
           noTrainingGuarantee: false,
+          dataRetentionPolicy: 'zero_retention',
+          privacyReviewRef: 'DPA-2026-09-001',
         },
       ],
     });
-    expect(report.issues.some((i) => i.message.includes('no-training'))).toBe(true);
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.some((i) => i.severity === 'error' && i.message.includes('D-13'))).toBe(
+      true,
+    );
   });
 
   it('refuses an active plan with no price (owner decision D-07)', () => {

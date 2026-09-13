@@ -107,6 +107,32 @@ Every provider has a configurable `baseUrl`. This supports self-hosted gateways,
 and Azure/Bedrock-style deployments without a code change. The URL is validated (HTTPS, allowlisted host
 pattern) before activation.
 
+### 3.1.1 Provider eligibility — D-13 (approved 2026-09-13)
+
+The owner approved the provider **architecture** — one primary plus one fallback per supported modality —
+and deferred vendor selection. The recorded decision is:
+
+> **Provider architecture approved; exact providers pending benchmark, privacy verification and owner approval.**
+
+Vendor selection happens only after Arabic and English quality benchmarking, a current pricing comparison, a
+privacy and data-processing review, confirmation that customer data is not used for provider training,
+confirmation of zero retention or an acceptable equivalent, and owner approval of the final provider/model
+routing table.
+
+Three of those are recorded per provider and **enforced at activation** rather than trusted:
+
+| Field                 | Gate                                                                                                                                                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `noTrainingGuarantee` | An active provider must be confirmed not to train on customer data. This was a warning while D-13 was open; it is now an **error**                                                                                                |
+| `dataRetentionPolicy` | `unverified` (the default), `zero_retention`, `limited_retention` or `retains_data`. An active provider may not be `unverified` — nobody reviewed it — or `retains_data`, which is not an acceptable equivalent to zero retention |
+| `privacyReviewRef`    | Where the privacy and data-processing review is written down. Free text, and never a credential                                                                                                                                   |
+
+A `draft` provider is left alone: the gates bind at activation, and a provider being assessed has by
+definition not finished being assessed.
+
+**No real production provider adapter exists.** The adapter contract and the Mock provider are built; adding
+a vendor is one `classifyError` implementation once D-13's conditions are met.
+
 ### 3.2 The Mock adapter
 
 A first-class, always-present adapter used in development, tests, and the first vertical slice. It returns
@@ -131,6 +157,12 @@ Models are configuration, not constants.
 
 Registry changes are validated: routing rules may not reference a disabled or missing model, model keys must
 be unique, and cost fields must be present before a model can be activated.
+
+> **The Arabic quality gate — D-17 (approved 2026-09-13).** A model carries `qualityBenchmarkRef`, and
+> validation refuses status `available` without it: no model reaches production customer routing until it
+> has passed a documented side-by-side Arabic marketing-content benchmark. `beta` is deliberately exempt —
+> beta is the status a model sits in _while_ it is being benchmarked, and a gate that blocked beta would
+> make the evaluation impossible to run. The criteria and method are in **`docs/AI-QUALITY-BENCHMARK.md`**.
 
 > **Why micro-minor and not minor.** A minor unit cannot express what providers charge. A text model at
 > $0.15 per million input tokens costs 0.015 of a cent per thousand tokens; as an integer count of cents
@@ -166,6 +198,18 @@ be unique, and cost fields must be present before a model can be activated.
 | `voice.synthesize`  | voice      | balanced         | Optional, post-MVP                                       |
 
 **Each task can use a different model.** That mapping lives entirely in `AIRoutingRule`.
+
+> **MVP scope — D-16 (approved 2026-09-13).** The MVP covers **text generation and transformation** and
+> **image generation and editing**. **Video generation is excluded** and recorded as a **Phase 7+ candidate
+> requiring a separate cost, latency and product review**; voice remains post-MVP.
+>
+> `video.generate` and `voice.synthesize` stay in the catalogue above — deleting them would erase the record
+> that they are known, deliberately deferred capabilities — but they are marked `mvpApproved: false`, and
+> `resolveRoute` refuses them. An out-of-scope task therefore cannot be served even if a routing rule for it
+> were somehow activated.
+>
+> D-16 governs customer-facing **generation** modalities. `moderation.check` and `brand.retrieve` are
+> internal plumbing — the gateway's own moderation step and Brand Brain retrieval — and are unaffected.
 
 ### 5.2 Routing rule
 
@@ -296,6 +340,27 @@ creditsCharged = ceil( creditCost(taskKey, modelId, usageUnits) × workspaceMult
 plus a per-unit component. The Admin credit-cost editor shows the implied margin at the configured provider
 cost and warns when a change would drive margin below a configured floor.
 
+> **The target gross margin is 65% — D-15 (approved 2026-09-13),** and a credit price is DERIVED from a
+> measured provider cost rather than marked up:
+>
+> ```
+> customer price = provider cost / (1 - target gross margin)
+> ```
+>
+> This is the direction people get wrong. A 65% target is **not** "cost plus 65%": marking a cost of 100 up
+> by 65% gives 165, on which the margin is 65/165 ≈ **39.4%**. Dividing by (1 − 0.65) gives ≈285.7, and
+> (285.7 − 100) / 285.7 = **65%** exactly. `requiredPriceMicroMinor()` implements the division, and a unit
+> test asserts the two produce different numbers so the markup can never be substituted by accident.
+>
+> The 65% is an internal commercial **target**, not a hard-coded markup (CLAUDE.md §2.2). It lives in
+> `ai.credit-rules.targetGrossMarginPercent`, is versioned with every other configuration value, and
+> defaults to `null` — no margin is named in source. It is a separate number from
+> `minimumGrossMarginPercent`, the **floor** below which a change is flagged: the target is where pricing
+> aims, the floor is where you are warned.
+>
+> **Final per-action credit prices are not set.** They will be calibrated from real provider benchmarks once
+> D-13 and D-17 are cleared. Published package prices are unchanged.
+
 > **Margin is reported as UNKNOWN until a credit is priced.** Revenue is denominated in credits and cost in
 > money, and nothing in the system converts between them until the owner sets `creditValueMicroMinor` — what
 > one whole credit is worth. That value is an owner commercial decision (D-15 / D-16) and defaults to `null`.
@@ -416,6 +481,30 @@ A projected-overrun alert fires when the current burn rate would exceed the mont
 | Tenant scoping        | Retrieval is workspace- and brand-scoped at query level; one tenant's context can never enter another's request                                            |
 | PII                   | Detected PII in prompts may be redacted per policy before leaving the platform                                                                             |
 | Sub-processors        | Active AI providers are published on the Security page                                                                                                     |
+
+### 11.1 AI output persistence policy — D-78 (approved 2026-09-13)
+
+| Rule                                                                                                                                | Status                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `persistOutput` defaults to **`false`**                                                                                             | Enforced — the schema default, asserted by test                                                                                                                  |
+| The minimum operational metadata for usage, cost, credits, idempotency, auditing and diagnostics is **always retained**             | Enforced — `purgeExpiredOutputs` clears only the payload column and leaves every accounting field                                                                |
+| Raw provider prompts and raw provider responses are **not persisted by default**                                                    | Enforced — `inputSummary` holds metadata about the prompt, never the prompt; a failure message is the customer-facing string for its class, never the provider's |
+| A user-facing AI result is persisted **only when the calling product feature explicitly requires it**                               | Enforced — per routing rule, off unless an operator turns it on for that task                                                                                    |
+| Anything persisted is **tenant-isolated** and covered by a **defined retention/deletion policy**                                    | Enforced — `ai_request` is tenant-owned under RLS, and validation refuses `persistOutput` without `outputRetentionDays`                                          |
+| Sensitive data, secrets and provider credentials are **never** stored in prompts, outputs, logs or audit metadata                   | Enforced — credentials are resolved into memory per call and never written; the redaction layer covers every log sink and error serializer                       |
+| The feature/domain that requests persistence **owns** the saved artifact; the gateway **must not become a permanent content store** | Enforced — the retention window is mandatory, and `purgeExpiredOutputs()` is what stops a replay convenience turning into indefinite storage                     |
+
+**What the purge does and does not remove.** It clears `outputPayload` past the configured window and
+nothing else. The request row, its usage units, its provider cost, its credit charge, its idempotency key
+and its ledger entry all survive — the policy requires that metadata be retained, and the financial record
+is append-only regardless. A replay after expiry still returns the recorded accounting and simply carries no
+output: the customer's content is gone, the ledger is not.
+
+Where two rules select the same task in different scopes, the **shortest** retention window wins. That is
+the conservative reading, and the one a privacy commitment should take.
+
+**Not yet built:** the customer-facing retention _notice_ the row above describes belongs with the Phase 5
+feature that first turns persistence on, and is tracked as F-63.
 
 ---
 

@@ -33,6 +33,8 @@ export interface RoutingRule {
     readonly maxOutputTokens: number;
     readonly promptTemplateVersion: number;
     readonly persistOutput: boolean;
+    /** Null when nothing is persisted; required by config when it is. */
+    readonly outputRetentionDays: number | null;
   };
   readonly retryPolicy: {
     readonly maxAttempts: number;
@@ -91,7 +93,8 @@ export interface ResolvedRoute {
  * `reason` gives the alerting path something stable to group on.
  */
 export class RoutingError extends AppError {
-  readonly reason: 'unknown_task' | 'no_rule' | 'no_usable_model' | 'modality_mismatch';
+  readonly reason:
+    'unknown_task' | 'not_in_mvp_scope' | 'no_rule' | 'no_usable_model' | 'modality_mismatch';
 
   constructor(reason: RoutingError['reason'], message: string) {
     super('INTERNAL', message);
@@ -142,6 +145,24 @@ export function resolveRoute(
     // The caller named a task the platform does not have. Routing it to
     // anything at all would charge for work nobody defined.
     throw new RoutingError('unknown_task', `No AI task is defined for key "${query.taskKey}".`);
+  }
+
+  /*
+   * D-16 (approved 2026-09-13): the MVP covers text and image generation.
+   * Video is excluded and recorded as a Phase 7+ candidate; voice remains
+   * post-MVP.
+   *
+   * Enforced HERE rather than in configuration validation because
+   * `packages/config` cannot import this package — the dependency runs the
+   * other way. Refusing at resolution means an out-of-scope task cannot be
+   * served even if a routing rule for it were somehow activated, which is the
+   * guarantee that actually matters.
+   */
+  if (!task.mvpApproved) {
+    throw new RoutingError(
+      'not_in_mvp_scope',
+      `Task "${query.taskKey}" (${task.modality}) is outside the approved MVP scope (D-16).`,
+    );
   }
 
   const candidates = rules.filter((rule) => applies(rule, query));

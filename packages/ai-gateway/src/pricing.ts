@@ -185,6 +185,36 @@ export function estimateReservationMilli(
   return creditsChargedMilli(worstCase, rule, multiplierBasisPoints);
 }
 
+/**
+ * The price a charge must reach to hit a target gross margin — D-15.
+ *
+ *     customer price = provider cost / (1 - target gross margin)
+ *
+ * This is the DERIVATION direction, and it is the one people get wrong. A 65%
+ * target is not "cost plus 65%": marking a cost of 100 up by 65% gives 165, on
+ * which the margin is 65/165 ≈ 39.4%, not 65%. Dividing by (1 − 0.65) gives
+ * ~285.7, and (285.7 − 100) / 285.7 = 65% exactly. The two differ by more than
+ * a rounding error and the mistake compounds across every priced task.
+ *
+ * `targetBasisPoints` is the margin in basis points (6,500 = 65%), an integer
+ * for the same reason every other rate here is one. The target itself is
+ * configuration — no margin is named in this file.
+ *
+ * Rounds UP: pricing a fraction of a unit below the target would miss it.
+ */
+export function requiredPriceMicroMinor(costMicroMinor: bigint, targetBasisPoints: number): bigint {
+  if (targetBasisPoints < 0 || targetBasisPoints >= 10_000) {
+    // A target of 100% or more implies an infinite price: there is no finite
+    // number a cost can be divided by zero-or-less to reach it.
+    throw new PricingError(
+      'no_credit_rule',
+      'A target gross margin must be at least 0% and below 100%.',
+    );
+  }
+  if (costMicroMinor <= 0n) return 0n;
+  return divideRoundingUp(costMicroMinor * 10_000n, BigInt(10_000 - targetBasisPoints));
+}
+
 export interface MarginAssessment {
   /** Null when no credit value is configured — margin is UNKNOWN, not fine. */
   readonly grossMarginPercent: number | null;

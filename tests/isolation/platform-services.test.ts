@@ -288,6 +288,9 @@ describe('configuration lifecycle', () => {
             // cost of zero and report infinite margin.
             inputCostPerUnitMicroMinor: 15_000,
             outputCostPerUnitMicroMinor: 60_000,
+            // D-17: general availability also requires a recorded Arabic
+            // quality benchmark. A fixture model is not exempt from the gate.
+            qualityBenchmarkRef: 'BENCH-FIXTURE-ar-001',
           },
         ],
       },

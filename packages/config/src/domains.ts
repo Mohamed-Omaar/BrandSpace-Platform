@@ -31,8 +31,37 @@ const aiProvidersSchema = z.object({
         status: z.enum(['draft', 'validated', 'active', 'disabled']),
         timeoutMs: z.number().int().positive().max(600_000),
         maxConcurrency: z.number().int().positive().max(1000),
-        /** Only providers with no-training terms are eligible for production. */
+
+        /*
+         * D-13 ELIGIBILITY GATES (approved 2026-09-13).
+         *
+         * The owner approved the provider ARCHITECTURE — one primary plus one
+         * fallback per modality — and deferred vendor selection until each of
+         * these is confirmed. They are recorded per provider so the decision is
+         * evidenced by configuration rather than by somebody's memory, and
+         * `validateConfiguration` refuses to activate a provider that has not
+         * cleared them.
+         */
+
+        /** Confirmed: this provider does not train on our customers' data. */
         noTrainingGuarantee: z.boolean(),
+        /**
+         * The provider's retention terms, as verified in the privacy review.
+         *
+         * `unverified` is the honest default for a provider nobody has reviewed
+         * yet, and an active provider may not sit in it. `zero_retention` and
+         * `limited_retention` are the two D-13 accepts ("zero-retention or an
+         * acceptable equivalent"); `retains_data` records a provider that was
+         * reviewed and failed, so the finding is not lost.
+         */
+        dataRetentionPolicy: z
+          .enum(['unverified', 'zero_retention', 'limited_retention', 'retains_data'])
+          .default('unverified'),
+        /**
+         * Where the privacy and data-processing review is written down (a DPA
+         * reference, a ticket, a document id). Free text, never a credential.
+         */
+        privacyReviewRef: z.string().nullable().default(null),
       }),
     )
     .default([]),
@@ -80,6 +109,22 @@ const aiModelsSchema = z.object({
         outputCostPerUnitMicroMinor: z.number().int().nonnegative().nullable().default(null),
         costUnit: aiBillingUnit.default('1k_tokens'),
         costCurrency: z.string().length(3).default('USD'),
+
+        /*
+         * D-17 QUALITY GATE (approved 2026-09-13).
+         *
+         * "No provider/model may be enabled for production customer routing
+         * until it passes a documented side-by-side Arabic marketing-content
+         * benchmark." Where that benchmark is recorded — a report id, a
+         * document reference — goes here, and a model may not reach
+         * `available` without it. See docs/AI-QUALITY-BENCHMARK.md.
+         *
+         * `beta` deliberately does NOT require it: beta is the status a model
+         * sits in WHILE it is being evaluated. The gate is between beta and
+         * general availability, which is where customer traffic actually
+         * arrives.
+         */
+        qualityBenchmarkRef: z.string().nullable().default(null),
       }),
     )
     .default([]),
@@ -116,11 +161,23 @@ const aiRoutingParametersSchema = z.object({
    * Keep the model's output on the request row so an idempotent replay can
    * return it (docs/AI-GATEWAY.md §7.4 guarantee 2).
    *
-   * OFF by default, because §11 does not persist prompts or responses by
-   * default. Turn it on only for a task whose caller does not store its own
-   * artifact, and understand that it puts generated content in the database.
+   * OFF by default, and the approved output-persistence policy (2026-09-13)
+   * keeps it that way: raw prompts and raw provider responses are never
+   * persisted, and a user-facing result is kept only when the calling product
+   * feature explicitly requires it. The feature that asks for persistence owns
+   * the artifact — the gateway must not become a permanent content store.
    */
   persistOutput: z.boolean().default(false),
+  /*
+   * How long a persisted output may live, in days.
+   *
+   * The policy requires a DEFINED retention and deletion policy for anything
+   * persisted, so this is not optional: validation refuses `persistOutput`
+   * without it. `purgeExpiredOutputs` clears the payload past this age and
+   * leaves the operational metadata — usage, cost, credits, idempotency,
+   * audit — which the policy requires be retained.
+   */
+  outputRetentionDays: z.number().int().positive().max(3650).nullable().default(null),
 });
 
 /**
@@ -207,7 +264,24 @@ const aiCreditRulesSchema = z.object({
       }),
     )
     .default([]),
-  /** Owner decision D-15 pending: a floor of 0 disables the guard until set. */
+  /*
+   * TWO MARGIN NUMBERS, AND THEY ARE NOT THE SAME THING (D-15, approved
+   * 2026-09-13 at 65%).
+   *
+   * `targetGrossMarginPercent` is what pricing AIMS FOR. It drives the
+   * derivation `customer price = provider cost / (1 - target)`, which is how a
+   * credit price is calibrated from a measured provider cost.
+   *
+   * `minimumGrossMarginPercent` is the FLOOR below which a configuration change
+   * is flagged. A target of 65 with a floor somewhere beneath it is the normal
+   * shape: the target is where you price, the floor is where you are warned.
+   *
+   * Both default to unset. The approved 65% is an internal commercial target,
+   * not a hard-coded markup — CLAUDE.md §2.2 — so it is entered in
+   * configuration and versioned there, and no number is invented in source.
+   */
+  targetGrossMarginPercent: z.number().min(0).max(99.99).nullable().default(null),
+  /** A floor of 0 disables the guard until an operator sets one. */
   minimumGrossMarginPercent: z.number().min(0).max(100).default(0),
   /*
    * What one whole credit is worth, in micro-minor units of the reference
@@ -535,16 +609,21 @@ const operationsSchema = z.object({
 // --- Registry ---------------------------------------------------------------
 
 export const CONFIG_DOMAINS = {
-  'ai.providers': { schema: aiProvidersSchema, schemaVersion: 1 },
-  // schemaVersion 2 adds the cost basis each model is priced from.
-  'ai.models': { schema: aiModelsSchema, schemaVersion: 2 },
+  // schemaVersion 2 adds the D-13 eligibility gates a provider must clear
+  // before it can be activated.
+  'ai.providers': { schema: aiProvidersSchema, schemaVersion: 2 },
+  // schemaVersion 3 adds the cost basis each model is priced from and the
+  // D-17 Arabic-benchmark reference it needs before general availability.
+  'ai.models': { schema: aiModelsSchema, schemaVersion: 3 },
   'ai.model-capabilities': { schema: aiModelCapabilitiesSchema, schemaVersion: 1 },
-  // schemaVersion 2 adds `parameters` and `retryPolicy` to each rule. Both
-  // carry defaults, so a version-1 payload still parses; the bump records that
-  // new drafts are written against the wider shape.
-  'ai.routing': { schema: aiRoutingSchema, schemaVersion: 2 },
-  // schemaVersion 2 adds the credit-to-currency reference margin needs.
-  'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 2 },
+  // schemaVersion 3 adds `parameters`, `retryPolicy`, moderation and the
+  // output-retention window. All carry defaults, so an earlier payload still
+  // parses; the bump records that new drafts are written against the wider
+  // shape.
+  'ai.routing': { schema: aiRoutingSchema, schemaVersion: 3 },
+  // schemaVersion 3 adds the credit-to-currency reference margin needs and the
+  // D-15 target gross margin that credit prices are derived from.
+  'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 3 },
   'ai.budgets': { schema: aiBudgetsSchema, schemaVersion: 1 },
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },

@@ -108,6 +108,7 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
           maxOutputTokens: 64,
           promptTemplateVersion: 1,
           persistOutput: false,
+          outputRetentionDays: null,
         },
         // No delay and no jitter: these tests are about WHICH attempts happen,
         // not about how long a sleep took.

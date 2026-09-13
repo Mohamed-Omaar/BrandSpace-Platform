@@ -1050,6 +1050,73 @@ export class AiGateway {
   }
 
   // ---------------------------------------------------------------------------
+  // Output retention
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Clear persisted outputs past their retention window.
+   *
+   * The approved output-persistence policy (2026-09-13) requires that anything
+   * persisted is covered by a defined retention and deletion policy, and that
+   * the gateway does not become a permanent content store. `persistOutput`
+   * makes an idempotent replay able to return the original result; this is what
+   * stops that convenience turning into indefinite storage of customer content.
+   *
+   * ONLY THE PAYLOAD IS CLEARED. The request row stays, because the same policy
+   * requires the operational metadata — usage, cost, credits, idempotency,
+   * audit and diagnostics — to be retained. A replay after expiry still returns
+   * the recorded accounting and simply carries no output, which is the correct
+   * trade: the customer's content is gone, the financial record is not.
+   *
+   * Retention is per routing rule, so the window is read from the active
+   * configuration rather than assumed. A rule that no longer persists output
+   * still has its old payloads swept, which is what an operator turning the
+   * setting OFF should mean.
+   */
+  async purgeExpiredOutputs(limit = 500): Promise<number> {
+    const config = await this.#configuration.load();
+    const now = this.#clock.now();
+
+    // One window per task, the shortest wins. Two rules can select the same
+    // task in different scopes; honouring the tightest is the conservative
+    // reading, and the one a privacy commitment should take.
+    const windowByTask = new Map<string, number>();
+    for (const rule of config.routingRules) {
+      const days = rule.parameters.outputRetentionDays;
+      if (days === null || days === undefined) continue;
+      const existing = windowByTask.get(rule.taskKey);
+      if (existing === undefined || days < existing) windowByTask.set(rule.taskKey, days);
+    }
+
+    let purged = 0;
+    for (const [taskKey, days] of windowByTask) {
+      if (purged >= limit) break;
+      const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      const expired = await this.#prisma.aiRequest.findMany({
+        where: {
+          taskKey,
+          outputPayload: { not: Prisma.DbNull },
+          completedAt: { lt: cutoff },
+        },
+        select: { id: true },
+        // Oldest first, with an id tie-break: deterministic, and the content
+        // that has been held longest goes first.
+        orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
+        take: limit - purged,
+      });
+      if (expired.length === 0) continue;
+
+      const result = await this.#prisma.aiRequest.updateMany({
+        where: { id: { in: expired.map((row) => row.id) } },
+        data: { outputPayload: Prisma.DbNull },
+      });
+      purged += result.count;
+    }
+
+    return purged;
+  }
+
+  // ---------------------------------------------------------------------------
   // Stuck-request sweep
   // ---------------------------------------------------------------------------
 

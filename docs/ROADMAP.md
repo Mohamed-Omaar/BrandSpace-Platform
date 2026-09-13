@@ -294,7 +294,10 @@ credit value entered or activated in any environment.
 
 1. **Gateway core** — request pipeline, authorization, idempotency, status model, timeout sweeper.
 2. **Adapter interface** and the **mock adapter** (deterministic, latency- and cost-simulated).
-3. **First real adapters** — text and image, behind configuration. **[Owner decision D-13: which providers]**
+3. **First real adapters** — text and image, behind configuration. **[D-13 approved 2026-09-13:
+   provider ARCHITECTURE approved — one primary plus one fallback per modality — with exact
+   vendors pending benchmark, privacy verification and owner approval. No real adapter is built
+   in Phase 4.]**
 4. **Model registry** — modalities, capabilities, unit costs, quality tiers, disable switch.
 5. **Routing** — task catalogue, rules with primary + ordered fallbacks, scope resolution, parameters,
    timeouts, max cost per request, live test bench.
@@ -323,14 +326,22 @@ The gateway, the mock adapter, routing, economics, reliability, budgets, input m
 usage explorer and request inspector are built and tested. Three items in the scope list above are
 **deliberately not built in Phase 4**, each for a stated reason rather than as an omission:
 
-| Not built                                                   | Why                                                                                                                                                                                             |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **First real adapters**                                     | D-13 has not selected providers, and the no-training / zero-retention filter it defines must be verified first. The adapter contract and mock make adding one a single `classifyError` away     |
-| **Circuit breakers, health probes, provider rate limiting** | Operational refinements over real providers. Tuning a breaker against a mock that fails exactly when told would encode a fiction                                                                |
-| **Output moderation, BYOK**                                 | Output moderation belongs with the workflows that persist generated content (Phase 5). BYOK needs workspace-scoped secret storage; a BYOK path that fell back to the platform key would bill us |
+| Not built                                                   | Why                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **First real adapters**                                     | D-13 approved the architecture and deferred vendor selection pending benchmarking, pricing comparison, privacy review, no-training and zero-retention confirmation, and owner sign-off on the routing table. Those gates are now enforced at provider activation. The adapter contract and mock make adding one a single `classifyError` away |
+| **Circuit breakers, health probes, provider rate limiting** | Operational refinements over real providers. Tuning a breaker against a mock that fails exactly when told would encode a fiction                                                                                                                                                                                                              |
+| **Output moderation, BYOK**                                 | Output moderation belongs with the workflows that persist generated content (Phase 5). BYOK needs workspace-scoped secret storage; a BYOK path that fell back to the platform key would bill us                                                                                                                                               |
 
-Production **routing configuration** remains gated on D-17 (the Arabic model quality evaluation) and D-13.
-Neither blocks the gateway code, which is provider-agnostic by construction.
+Production **routing configuration** remains gated on D-17 (the Arabic model quality evaluation) and D-13
+(vendor selection). Neither blocks the gateway code, which is provider-agnostic by construction. Both gates
+are now enforced in configuration validation rather than left to process: a model cannot reach `available`
+without a recorded benchmark, and a provider cannot be activated without its privacy, no-training and
+retention confirmations.
+
+**D-16 (approved 2026-09-13)** fixed the MVP modalities at **text and image**. **Video generation is
+excluded from the MVP and is a Phase 7+ candidate requiring a separate cost, latency and product review.**
+`resolveRoute` refuses an out-of-scope task, so the exclusion holds even if a routing rule for one were
+activated.
 
 ---
 
@@ -406,6 +417,11 @@ Neither blocks the gateway code, which is provider-agnostic by construction.
 ## Phase 7 — Analytics and Copilot
 
 **Goal:** the loop closes — performance data becomes insight becomes better strategy.
+
+> **Video generation lands here at the earliest — D-16, approved 2026-09-13.** It was excluded from the MVP
+> and recorded as a Phase 7+ candidate requiring a **separate cost, latency and product review** before any
+> work starts. `video.generate` stays in the task catalogue marked outside MVP scope, and the routing
+> resolver refuses it, so nothing can serve it until that review approves it.
 
 ### Scope
 

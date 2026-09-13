@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assessMargin,
+  requiredPriceMicroMinor,
   billableMilliUnits,
   creditsChargedMilli,
   estimateReservationMilli,
@@ -289,6 +290,77 @@ describe('margin', () => {
   });
 });
 
+describe('deriving a price from a target gross margin (D-15)', () => {
+  it('divides by (1 - margin) rather than marking the cost up', () => {
+    // THE MISTAKE THIS TEST EXISTS TO CATCH. A 65% target is not "cost plus
+    // 65%": marking 1,000,000 up by 65% gives 1,650,000, whose margin is
+    // 650,000/1,650,000 ≈ 39.4%, not 65%. The correct derivation gives
+    // ~2,857,143, and it is off by nearly a factor of two.
+    const cost = 1_000_000n;
+    const priced = requiredPriceMicroMinor(cost, 6_500);
+
+    expect(priced).toBe(2_857_143n);
+    expect(priced).not.toBe(1_650_000n);
+  });
+
+  it('round-trips: pricing at the target then measuring it gives the target back', () => {
+    // The two directions have to agree, or the margin screen would contradict
+    // the price it just recommended.
+    const cost = 19_500n;
+    const priced = requiredPriceMicroMinor(cost, 6_500);
+    const margin = Number(((priced - cost) * 10_000n) / priced) / 100;
+
+    expect(margin).toBeCloseTo(65, 1);
+  });
+
+  it('prices at cost for a zero target', () => {
+    expect(requiredPriceMicroMinor(1_000_000n, 0)).toBe(1_000_000n);
+  });
+
+  it('rounds up, so a price never lands under its target', () => {
+    // 1 / (1 - 0.65) = 2.857…, and 2 would miss the target.
+    expect(requiredPriceMicroMinor(1n, 6_500)).toBe(3n);
+  });
+
+  it('refuses a target of 100% or more', () => {
+    // No finite price divided by zero-or-less reaches it. Better to fail than
+    // to return a number somebody prices from.
+    expect(() => requiredPriceMicroMinor(1_000_000n, 10_000)).toThrow(PricingError);
+    expect(() => requiredPriceMicroMinor(1_000_000n, 12_000)).toThrow(PricingError);
+    expect(() => requiredPriceMicroMinor(1_000_000n, -1)).toThrow(PricingError);
+  });
+
+  it('costs nothing to price nothing', () => {
+    expect(requiredPriceMicroMinor(0n, 6_500)).toBe(0n);
+  });
+
+  it('invents no target margin', () => {
+    // D-15 approved 65% as an internal commercial TARGET, explicitly not a
+    // hard-coded markup. It is entered in configuration and versioned there.
+    const parsed = CONFIG_DOMAINS['ai.credit-rules'].schema.parse({});
+    expect(parsed.targetGrossMarginPercent).toBeNull();
+    expect(parsed.minimumGrossMarginPercent).toBe(0);
+  });
+
+  it('keeps the target and the floor as separate numbers', () => {
+    // The target is where pricing aims; the floor is where a change is
+    // flagged. Collapsing them would make every price sit exactly on the
+    // warning line.
+    const parsed = CONFIG_DOMAINS['ai.credit-rules'].schema.parse({
+      targetGrossMarginPercent: 65,
+      minimumGrossMarginPercent: 55,
+    });
+    expect(parsed.targetGrossMarginPercent).toBe(65);
+    expect(parsed.minimumGrossMarginPercent).toBe(55);
+  });
+
+  it('refuses a target of 100% in configuration too', () => {
+    expect(
+      CONFIG_DOMAINS['ai.credit-rules'].schema.safeParse({ targetGrossMarginPercent: 100 }).success,
+    ).toBe(false);
+  });
+});
+
 describe('cost basis configuration', () => {
   it('invents no provider rate and no credit price', () => {
     // CLAUDE.md §2.2: AI credit costs are configuration. A plausible default
@@ -332,7 +404,7 @@ describe('cost basis configuration', () => {
     expect(report.issues.some((issue) => issue.message.includes('no cost basis'))).toBe(true);
   });
 
-  it('accepts a servable model once its rates are entered', () => {
+  it('accepts a servable model once its rates and benchmark are recorded', () => {
     const report = validateConfiguration('ai.models', {
       models: [
         {
@@ -344,6 +416,8 @@ describe('cost basis configuration', () => {
           status: 'available',
           inputCostPerUnitMicroMinor: 15_000,
           outputCostPerUnitMicroMinor: 60_000,
+          // D-17: general availability also needs the Arabic benchmark.
+          qualityBenchmarkRef: 'BENCH-2026-09-ar-001',
         },
       ],
     });
@@ -389,5 +463,152 @@ describe('cost basis configuration', () => {
     });
     expect(report.valid).toBe(false);
     expect(report.issues.some((issue) => issue.message.includes('Duplicate model key'))).toBe(true);
+  });
+});
+
+describe('the Arabic quality gate (D-17)', () => {
+  function model(overrides: Record<string, unknown> = {}) {
+    return {
+      key: 'm',
+      providerKey: 'p',
+      displayName: 'M',
+      modality: 'text',
+      qualityTier: 'fast',
+      inputCostPerUnitMicroMinor: 15_000,
+      outputCostPerUnitMicroMinor: 60_000,
+      ...overrides,
+    };
+  }
+
+  it('refuses general availability without a recorded benchmark', () => {
+    // "No provider/model may be enabled for production customer routing until
+    // it passes a documented side-by-side Arabic marketing-content benchmark."
+    const report = validateConfiguration('ai.models', {
+      models: [model({ status: 'available' })],
+    });
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.some((issue) => issue.message.includes('D-17'))).toBe(true);
+  });
+
+  it('lets a model sit in beta while it is being evaluated', () => {
+    // The gate is between beta and general availability. Blocking beta would
+    // make the evaluation itself impossible to run.
+    const report = validateConfiguration('ai.models', {
+      models: [model({ status: 'beta' })],
+    });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('admits a model once the benchmark is recorded', () => {
+    const report = validateConfiguration('ai.models', {
+      models: [model({ status: 'available', qualityBenchmarkRef: 'BENCH-2026-09-ar-001' })],
+    });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('invents no benchmark reference', () => {
+    const parsed = CONFIG_DOMAINS['ai.models'].schema.parse({
+      models: [model({ status: 'disabled' })],
+    });
+    expect(parsed.models[0]?.qualityBenchmarkRef).toBeNull();
+  });
+});
+
+describe('provider eligibility gates (D-13)', () => {
+  function provider(overrides: Record<string, unknown> = {}) {
+    return {
+      key: 'p',
+      name: 'Provider',
+      baseUrl: 'https://api.example.test',
+      apiKeySecretRef: 'ai_provider/p/production/key',
+      timeoutMs: 30_000,
+      maxConcurrency: 10,
+      noTrainingGuarantee: true,
+      dataRetentionPolicy: 'zero_retention',
+      privacyReviewRef: 'DPA-2026-09-001',
+      ...overrides,
+    };
+  }
+
+  it('refuses to activate a provider that may train on customer data', () => {
+    // D-13 made this a gate rather than advice. An advisory gate is one
+    // somebody eventually clicks past.
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active', noTrainingGuarantee: false })],
+    });
+    expect(report.valid).toBe(false);
+  });
+
+  it('refuses to activate a provider whose retention terms are unreviewed', () => {
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active', dataRetentionPolicy: 'unverified' })],
+    });
+    expect(report.valid).toBe(false);
+  });
+
+  it('refuses to activate a provider that was reviewed and retains our data', () => {
+    // Recorded rather than silently dropped: the finding is the point.
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active', dataRetentionPolicy: 'retains_data' })],
+    });
+    expect(report.valid).toBe(false);
+  });
+
+  it('refuses to activate a provider with no privacy review on record', () => {
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active', privacyReviewRef: null })],
+    });
+    expect(report.valid).toBe(false);
+  });
+
+  it('accepts a provider that has cleared every gate', () => {
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active' })],
+    });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('accepts limited retention as the documented equivalent', () => {
+    // D-13 accepts "zero-retention or an acceptable equivalent".
+    const report = validateConfiguration('ai.providers', {
+      providers: [provider({ status: 'active', dataRetentionPolicy: 'limited_retention' })],
+    });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('leaves a draft provider alone while it is being evaluated', () => {
+    // The gates bind at activation. A provider being assessed has by
+    // definition not finished being assessed.
+    const report = validateConfiguration('ai.providers', {
+      providers: [
+        provider({
+          status: 'draft',
+          noTrainingGuarantee: false,
+          dataRetentionPolicy: 'unverified',
+          privacyReviewRef: null,
+        }),
+      ],
+    });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+  });
+
+  it('defaults a new provider to unverified rather than to trusted', () => {
+    const parsed = CONFIG_DOMAINS['ai.providers'].schema.parse({
+      providers: [
+        {
+          key: 'p',
+          name: 'P',
+          baseUrl: 'https://api.example.test',
+          apiKeySecretRef: null,
+          status: 'draft',
+          timeoutMs: 1000,
+          maxConcurrency: 1,
+          noTrainingGuarantee: false,
+        },
+      ],
+    });
+    expect(parsed.providers[0]?.dataRetentionPolicy).toBe('unverified');
+    expect(parsed.providers[0]?.privacyReviewRef).toBeNull();
   });
 });

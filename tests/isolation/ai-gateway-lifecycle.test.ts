@@ -120,6 +120,9 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
           maxOutputTokens: 64,
           promptTemplateVersion: 1,
           persistOutput: true,
+          // Persisting requires a retention window — the approved
+          // output-persistence policy refuses the two apart.
+          outputRetentionDays: 30,
         },
         retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
         moderateInput: false,
@@ -752,6 +755,113 @@ describe('input moderation', () => {
 
     expect(result.status).toBe('SUCCEEDED');
     expect(mock.calls.filter((call) => call.operation === 'moderate')).toHaveLength(0);
+  });
+});
+
+describe('persisted output is deleted on a retention window', () => {
+  /** The routing config with a retention window this test controls. */
+  function retaining(days: number): AiConfiguration {
+    const base = configuration();
+    return {
+      ...base,
+      routingRules: base.routingRules.map((rule) => ({
+        ...rule,
+        parameters: { ...rule.parameters, persistOutput: true, outputRetentionDays: days },
+      })),
+    };
+  }
+
+  it('clears the payload once it is past its window, and keeps the accounting', async () => {
+    mock.reset();
+    activeConfiguration = retaining(30);
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(request(workspaceId));
+    const before = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+    expect(before.outputPayload).not.toBeNull();
+
+    // Age it past the window. `completedAt` is the anchor the purge reads.
+    await platform.aiRequest.update({
+      where: { id: result.requestId },
+      data: { completedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) },
+    });
+
+    const purged = await gateway.purgeExpiredOutputs();
+    activeConfiguration = configuration();
+
+    expect(purged).toBeGreaterThanOrEqual(1);
+    const after = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+
+    // The customer's content is gone...
+    expect(after.outputPayload).toBeNull();
+    // ...and the operational metadata the policy requires be RETAINED is not:
+    // usage, cost, credits, idempotency and status all survive.
+    expect(after.creditsChargedMilli).toBe(before.creditsChargedMilli);
+    expect(after.providerCostMicroMinor).toBe(before.providerCostMicroMinor);
+    expect(after.promptTokens).toBe(before.promptTokens);
+    expect(after.idempotencyKey).toBe(before.idempotencyKey);
+    expect(after.status).toBe('SUCCEEDED');
+    expect(await platform.aiUsageLedger.count({ where: { aiRequestId: result.requestId } })).toBe(
+      1,
+    );
+  });
+
+  it('leaves output that is still inside its window', async () => {
+    mock.reset();
+    activeConfiguration = retaining(30);
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(request(workspaceId));
+    await gateway.purgeExpiredOutputs();
+    activeConfiguration = configuration();
+
+    // Deleting early would break the replay guarantee the persistence exists
+    // to serve.
+    const row = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+    expect(row.outputPayload).not.toBeNull();
+  });
+
+  it('still replays the accounting after the content has been purged', async () => {
+    mock.reset();
+    activeConfiguration = retaining(30);
+    const workspaceId = await freshWorkspace(50);
+    const input = request(workspaceId);
+
+    const first = await gateway.execute(input);
+    await platform.aiRequest.update({
+      where: { id: first.requestId },
+      data: { completedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+    });
+    await gateway.purgeExpiredOutputs();
+
+    const replay = await gateway.execute(input);
+    activeConfiguration = configuration();
+
+    // The correct trade: the content is gone, the financial record is not, and
+    // the replay still charges nothing a second time.
+    expect(replay.replayed).toBe(true);
+    expect(replay.output).toBeNull();
+    expect(replay.creditsChargedMilli).toBe(first.creditsChargedMilli);
+  });
+
+  it('purges nothing when no rule retains anything', async () => {
+    mock.reset();
+    activeConfiguration = configuration();
+    const workspaceId = await freshWorkspace(50);
+    await gateway.execute(request(workspaceId));
+
+    // The fixture's default rule persists output with no window configured, so
+    // there is nothing for the purge to act on and it must not guess one.
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      routingRules: base.routingRules.map((rule) => ({
+        ...rule,
+        parameters: { ...rule.parameters, outputRetentionDays: null },
+      })),
+    };
+    expect(await gateway.purgeExpiredOutputs()).toBe(0);
+    activeConfiguration = configuration();
   });
 });
 

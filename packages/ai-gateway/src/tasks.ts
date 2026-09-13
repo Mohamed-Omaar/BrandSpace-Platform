@@ -20,23 +20,50 @@ export interface AiTaskDefinition {
   readonly modality: AiModality;
   /** Long-running work is queued rather than served inline (§5.1). */
   readonly async: boolean;
+  /**
+   * Whether this task is within the approved MVP scope — D-16, 2026-09-13.
+   *
+   * The owner approved TEXT and IMAGE generation for the MVP and excluded
+   * video, recording it as a Phase 7+ candidate needing its own cost, latency
+   * and product review. Voice was already post-MVP.
+   *
+   * The task stays in the catalogue either way: removing it would erase the
+   * fact that it is a known, deliberately deferred capability, and the enum it
+   * refers to is shared with later phases. What the flag does is let
+   * `validateConfiguration` refuse a routing rule for an out-of-scope task, so
+   * "excluded from the MVP" is a thing the system enforces rather than a thing
+   * a document says.
+   *
+   * Embedding and moderation are internal plumbing rather than customer-facing
+   * generation modalities, so D-16 does not bear on them: `moderation.check` is
+   * used by the gateway itself and `brand.retrieve` by Brand Brain retrieval.
+   */
+  readonly mvpApproved: boolean;
 }
 
 export const AI_TASKS = [
-  { key: 'caption.generate', modality: 'text', async: false },
-  { key: 'ideas.generate', modality: 'text', async: false },
-  { key: 'plan.monthly', modality: 'text', async: false },
-  { key: 'strategy.generate', modality: 'text', async: false },
-  { key: 'analytics.explain', modality: 'text', async: false },
-  { key: 'copilot.chat', modality: 'text', async: false },
-  { key: 'content.translate', modality: 'text', async: false },
-  { key: 'image.generate', modality: 'image', async: false },
-  // Long, expensive and never inline — docs/AI-GATEWAY.md §5.1.
-  { key: 'video.generate', modality: 'video', async: true },
-  { key: 'voice.synthesize', modality: 'voice', async: true },
-  { key: 'moderation.check', modality: 'moderation', async: false },
-  { key: 'brand.retrieve', modality: 'embedding', async: false },
+  { key: 'caption.generate', modality: 'text', async: false, mvpApproved: true },
+  { key: 'ideas.generate', modality: 'text', async: false, mvpApproved: true },
+  { key: 'plan.monthly', modality: 'text', async: false, mvpApproved: true },
+  { key: 'strategy.generate', modality: 'text', async: false, mvpApproved: true },
+  { key: 'analytics.explain', modality: 'text', async: false, mvpApproved: true },
+  { key: 'copilot.chat', modality: 'text', async: false, mvpApproved: true },
+  { key: 'content.translate', modality: 'text', async: false, mvpApproved: true },
+  { key: 'image.generate', modality: 'image', async: false, mvpApproved: true },
+  // D-16: excluded from the MVP and recorded as a Phase 7+ candidate. Long,
+  // expensive and never inline — docs/AI-GATEWAY.md §5.1.
+  { key: 'video.generate', modality: 'video', async: true, mvpApproved: false },
+  // Post-MVP, and unchanged by D-16, which did not approve a voice modality.
+  { key: 'voice.synthesize', modality: 'voice', async: true, mvpApproved: false },
+  // Internal plumbing, not a customer-facing generation modality.
+  { key: 'moderation.check', modality: 'moderation', async: false, mvpApproved: true },
+  { key: 'brand.retrieve', modality: 'embedding', async: false, mvpApproved: true },
 ] as const satisfies readonly AiTaskDefinition[];
+
+/** Task keys the owner has approved for the MVP — D-16. */
+export const MVP_AI_TASK_KEYS: readonly string[] = AI_TASKS.filter((task) => task.mvpApproved).map(
+  (task) => task.key,
+);
 
 export type AiTaskKey = (typeof AI_TASKS)[number]['key'];
 

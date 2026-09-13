@@ -227,8 +227,27 @@ workspace · outstanding invoices and aging.
 >   and are restored on re-upgrade.
 >
 > Allowances and per-action credit costs (`docs/PRODUCT.md` §10A.5) are **provisional and configurable**.
-> They must **not** be activated as final production economics until Phase 4 validates real provider costs
-> against the required gross margin (D-15).
+> They must **not** be activated as final production economics until real provider costs are measured
+> against the target gross margin (D-15).
+>
+> **D-15 approved 2026-09-13: the target gross margin on AI usage is 65%.** A credit price is derived from
+> a measured provider cost, not marked up:
+>
+> ```
+> customer price = provider cost / (1 - target gross margin)
+> ```
+>
+> Marking a cost up by 65% yields a margin of ≈39.4%, not 65% — the two are not the same operation and the
+> error compounds across every priced task. `requiredPriceMicroMinor()` in `@brandspace/ai-gateway`
+> implements the division.
+>
+> The 65% is an internal commercial **target**, not a hard-coded markup. It lives in
+> `ai.credit-rules.targetGrossMarginPercent`, versioned like every other configuration value, and defaults
+> to `null`. It is distinct from `minimumGrossMarginPercent`, the floor that triggers a warning.
+>
+> **Final per-action credit prices remain uncalibrated** and published package prices are unchanged. They
+> will be set from real provider benchmarks once D-13 (vendor selection) and D-17 (the Arabic quality gate)
+> are cleared.
 >
 > **IMPLEMENTED IN PHASE 3 (2026-09-07).** `reserve → confirm → settle` with `release`, credit
 > buckets consumed FIFO by nearest expiry, the expiry sweep, cycle reset with the rollover cap,

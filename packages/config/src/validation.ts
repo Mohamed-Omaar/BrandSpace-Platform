@@ -67,12 +67,15 @@ interface ModelLike {
   disableSwitch?: boolean;
   inputCostPerUnitMicroMinor?: number | null;
   outputCostPerUnitMicroMinor?: number | null;
+  qualityBenchmarkRef?: string | null;
 }
 interface ProviderLike {
   key: string;
   status: string;
   apiKeySecretRef: string | null;
   noTrainingGuarantee: boolean;
+  dataRetentionPolicy?: string;
+  privacyReviewRef?: string | null;
 }
 
 function semantic(
@@ -119,6 +122,27 @@ function semantic(
         model.inputCostPerUnitMicroMinor === undefined ||
         model.outputCostPerUnitMicroMinor === null ||
         model.outputCostPerUnitMicroMinor === undefined;
+      /*
+       * D-17 (approved 2026-09-13): no model reaches production customer
+       * routing until it has passed a documented side-by-side Arabic
+       * marketing-content benchmark. `available` is the status that puts
+       * customer traffic on a model, so that is where the gate sits.
+       *
+       * `beta` is deliberately exempt — beta is the status a model occupies
+       * WHILE it is being benchmarked, and a gate that blocked the evaluation
+       * itself would make the evaluation impossible to run.
+       */
+      if (model.status === 'available' && !model.disableSwitch && !model.qualityBenchmarkRef) {
+        issues.push({
+          severity: 'error',
+          path: `models.${i}.qualityBenchmarkRef`,
+          message:
+            `D-17: model "${model.key}" cannot be generally available until it has passed the Arabic ` +
+            'quality benchmark. Record the benchmark reference, or keep the model in beta while it is evaluated. ' +
+            'See docs/AI-QUALITY-BENCHMARK.md.',
+        });
+      }
+
       if (servable && !model.disableSwitch && missingCost) {
         issues.push({
           severity: 'error',
@@ -184,6 +208,23 @@ function semantic(
           message: `Routes to model "${primary}", which is disabled.`,
         });
       }
+      /*
+       * The approved output-persistence policy (2026-09-13) requires a DEFINED
+       * retention and deletion policy for anything persisted. Persisting with
+       * no expiry is how a gateway quietly becomes a permanent content store,
+       * which the policy explicitly forbids, so the two settings are refused
+       * apart.
+       */
+      const parameters = (rule['parameters'] ?? {}) as Record<string, unknown>;
+      if (parameters['persistOutput'] === true && !parameters['outputRetentionDays']) {
+        issues.push({
+          severity: 'error',
+          path: `rules.${i}.parameters.outputRetentionDays`,
+          message:
+            'Persisting AI output requires a retention window. Set outputRetentionDays, or turn persistOutput off.',
+        });
+      }
+
       if (rule['moderateInput'] === true && !rule['moderationModelKey']) {
         // A moderation step with no model would have to either pass everything
         // or fail everything. Both are worse than not claiming to moderate.
@@ -239,12 +280,48 @@ function semantic(
           message: 'An active provider must reference a stored API key secret.',
         });
       }
+      /*
+       * D-13 (approved 2026-09-13) turned these from advice into gates.
+       *
+       * The owner approved the provider ARCHITECTURE and made vendor selection
+       * conditional on a privacy and data-processing review, a confirmation
+       * that customer data is not used for training, and zero retention or an
+       * acceptable equivalent. A warning was the right severity while the
+       * decision was open; now that it is approved, a provider that has not
+       * cleared these must not be activatable at all. An advisory gate is one
+       * somebody eventually clicks past.
+       */
       if (provider.status === 'active' && !provider.noTrainingGuarantee) {
         issues.push({
-          severity: 'warning',
+          severity: 'error',
           path: `providers.${i}.noTrainingGuarantee`,
           message:
-            'Only providers with no-training / zero-retention terms are eligible for production (D-13).',
+            'D-13: a provider may not be activated until it is confirmed that customer data is not used for its training.',
+        });
+      }
+      const retention = provider.dataRetentionPolicy ?? 'unverified';
+      if (provider.status === 'active' && retention === 'unverified') {
+        issues.push({
+          severity: 'error',
+          path: `providers.${i}.dataRetentionPolicy`,
+          message:
+            'D-13: a provider may not be activated before its data-retention terms have been reviewed.',
+        });
+      }
+      if (provider.status === 'active' && retention === 'retains_data') {
+        issues.push({
+          severity: 'error',
+          path: `providers.${i}.dataRetentionPolicy`,
+          message:
+            'D-13: this provider retains our data, which is not an acceptable equivalent to zero retention.',
+        });
+      }
+      if (provider.status === 'active' && !provider.privacyReviewRef) {
+        issues.push({
+          severity: 'error',
+          path: `providers.${i}.privacyReviewRef`,
+          message:
+            'D-13: record where the privacy and data-processing review is written down before activating this provider.',
         });
       }
     }

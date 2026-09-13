@@ -445,6 +445,27 @@ audited mode** — not a hidden superpower.
 | Unsafe or brand-damaging output                                         | Moderation task before persistence/publishing; brand do/don't rules enforced as post-checks                                                                                                 |
 | Cost abuse                                                              | Per-workspace and per-user budgets, rate limits, max cost per request, hard limits                                                                                                          |
 | Model output treated as trusted code/data                               | AI output is parsed with a schema and never executed; generated URLs are not auto-fetched                                                                                                   |
+| Generated content accumulating as an unmanaged store                    | `persistOutput` is off by default and cannot be enabled without a retention window; expired payloads are purged (D-78, §9.2)                                                                |
+| Provider credentials leaking through AI records                         | Credentials are resolved into memory per call, never written to a request, output, log or audit row; the redaction layer covers every log sink and error serializer                         |
+
+### 9.2 AI output persistence and retention — D-78 (approved 2026-09-13)
+
+The AI Gateway records what a request **cost**, not what it **said**. That distinction is the security
+property, and it is enforced rather than documented:
+
+| Rule                                                                           | How it holds                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Raw provider prompts and raw provider responses are never persisted by default | `AIRequest.inputSummary` holds metadata _about_ the prompt — character counts, part counts — never the prompt. A failure message is the customer-facing string for its error class, never the provider's own error, which can echo the request |
+| A user-facing result is persisted only when the calling feature requires it    | Per routing rule, `persistOutput`, default `false`                                                                                                                                                                                             |
+| Anything persisted is tenant-isolated                                          | `ai_request` is a tenant-owned model under RLS, covered by the D-29 isolation gate and its own isolation suite                                                                                                                                 |
+| Anything persisted has a defined retention and deletion policy                 | Configuration validation refuses `persistOutput` without `outputRetentionDays`; `purgeExpiredOutputs()` clears expired payloads. Where two rules select one task, the **shortest** window wins                                                 |
+| Operational metadata is always retained                                        | The purge clears only the payload column. Usage, provider cost, credits, idempotency key, status and the append-only ledger entry all survive — they are the audit and financial record                                                        |
+| Secrets never appear in prompts, outputs, logs or audit metadata               | §5 secret rules apply unchanged; the AI path adds no new sink                                                                                                                                                                                  |
+| The gateway is not a content store                                             | The requesting feature owns the artifact. The retention window is what stops a replay convenience becoming indefinite storage                                                                                                                  |
+
+**Operator-facing consequence.** The Platform Admin AI screens show accounting and never customer content —
+not even for a rule that persisted output. Reading a customer's generated content is a Support Mode
+decision with its own time box and audit trail (D-76), not a side effect of opening an operations page.
 
 ---
 

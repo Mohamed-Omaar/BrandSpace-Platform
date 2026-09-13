@@ -155,27 +155,27 @@ Marketing surface: fast, SEO-strong, bilingual, CMS-driven where content changes
 Each module is listed with purpose, key objects, and the permissions that gate it. Scope column shows whether
 the module operates at **W** (workspace) or **B** (brand) level.
 
-| #   | Module                     | Scope | Purpose                                                                                                       | Key entities                                |
-| --- | -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 1   | **Command Center**         | W     | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas             | aggregates all                              |
-| 2   | **Brand Center**           | B     | Brand identity: name, logos, palettes, typography, voice, boilerplate, guidelines                             | `Brand`, `Asset`                            |
-| 3   | **Brand Brain**            | B     | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors) | `BrandKnowledge`                            |
-| 4   | **AI Strategy**            | B     | Generate and maintain marketing strategy, pillars, monthly plans, channel mix                                 | `Insight`, `Campaign`                       |
-| 5   | **Campaigns**              | B     | Campaign objects with goals, dates, budget, channels, content set, status                                     | `Campaign`, `ContentItem`                   |
-| 6   | **Social Calendar**        | B     | Month/week/day/list views of scheduled and published content; drag to reschedule                              | `CalendarSlot`, `ContentItem`, `PublishJob` |
-| 7   | **AI Content Studio**      | B     | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual                        | `ContentItem`, `ContentVariant`             |
-| 8   | **AI Creative Studio**     | B     | Generate and adapt images/video/voice assets on-brand; templated resizing per platform                        | `Asset`                                     |
-| 9   | **Social Media Hub**       | W/B   | Connect accounts, view connection health, per-platform rules, inbox of publish results                        | `SocialConnection`, `PublishJob`            |
-| 10  | **AI Copilot**             | W/B   | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions       | `AIRequest`, action plans                   |
-| 11  | **Marketing Intelligence** | B     | Competitive and market context, content gap analysis, trend suggestions                                       | `Insight`                                   |
-| 12  | **Smart Analytics**        | B     | Performance metrics with AI narrative explanation and recommendations                                         | `MetricSnapshot`, `Insight`                 |
-| 13  | **Asset Library**          | W/B   | Central media library: folders, tags, versions, rights/expiry, usage tracking                                 | `Asset`                                     |
-| 14  | **Team and Approvals**     | W     | Members, roles, invitations, approval workflows and queues, comments                                          | `Membership`, `Approval`, `Comment`         |
-| 15  | **Automations**            | W/B   | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot")                        | `AutomationRule`, `AutomationRun`           |
-| 16  | **Notifications**          | W     | In-app notification center + channel preferences                                                              | `Notification`                              |
-| 17  | **Activity Log**           | W     | Human-readable, filterable history of workspace activity                                                      | `AuditEvent`                                |
-| 18  | **Settings**               | W     | Workspace profile, locale/timezone, brands, security, integrations, data controls                             | `Workspace`                                 |
-| 19  | **Billing and Usage**      | W     | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade                                  | `Subscription`, `Invoice`, `CreditWallet`   |
+| #   | Module                     | Scope | Purpose                                                                                                                                                   | Key entities                                |
+| --- | -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| 1   | **Command Center**         | W     | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas                                                         | aggregates all                              |
+| 2   | **Brand Center**           | B     | Brand identity: name, logos, palettes, typography, voice, boilerplate, guidelines                                                                         | `Brand`, `Asset`                            |
+| 3   | **Brand Brain**            | B     | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors)                                             | `BrandKnowledge`                            |
+| 4   | **AI Strategy**            | B     | Generate and maintain marketing strategy, pillars, monthly plans, channel mix                                                                             | `Insight`, `Campaign`                       |
+| 5   | **Campaigns**              | B     | Campaign objects with goals, dates, budget, channels, content set, status                                                                                 | `Campaign`, `ContentItem`                   |
+| 6   | **Social Calendar**        | B     | Month/week/day/list views of scheduled and published content; drag to reschedule                                                                          | `CalendarSlot`, `ContentItem`, `PublishJob` |
+| 7   | **AI Content Studio**      | B     | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual                                                                    | `ContentItem`, `ContentVariant`             |
+| 8   | **AI Creative Studio**     | B     | Generate and adapt images on-brand; templated resizing per platform. **Video and voice are excluded from the MVP (D-16)** — video is a Phase 7+ candidate | `Asset`                                     |
+| 9   | **Social Media Hub**       | W/B   | Connect accounts, view connection health, per-platform rules, inbox of publish results                                                                    | `SocialConnection`, `PublishJob`            |
+| 10  | **AI Copilot**             | W/B   | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions                                                   | `AIRequest`, action plans                   |
+| 11  | **Marketing Intelligence** | B     | Competitive and market context, content gap analysis, trend suggestions                                                                                   | `Insight`                                   |
+| 12  | **Smart Analytics**        | B     | Performance metrics with AI narrative explanation and recommendations                                                                                     | `MetricSnapshot`, `Insight`                 |
+| 13  | **Asset Library**          | W/B   | Central media library: folders, tags, versions, rights/expiry, usage tracking                                                                             | `Asset`                                     |
+| 14  | **Team and Approvals**     | W     | Members, roles, invitations, approval workflows and queues, comments                                                                                      | `Membership`, `Approval`, `Comment`         |
+| 15  | **Automations**            | W/B   | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot")                                                                    | `AutomationRule`, `AutomationRun`           |
+| 16  | **Notifications**          | W     | In-app notification center + channel preferences                                                                                                          | `Notification`                              |
+| 17  | **Activity Log**           | W     | Human-readable, filterable history of workspace activity                                                                                                  | `AuditEvent`                                |
+| 18  | **Settings**               | W     | Workspace profile, locale/timezone, brands, security, integrations, data controls                                                                         | `Workspace`                                 |
+| 19  | **Billing and Usage**      | W     | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade                                                                              | `Subscription`, `Invoice`, `CreditWallet`   |
 
 ### 5.1 Module detail notes
 
@@ -445,8 +445,10 @@ the first automation; Scale → Enterprise on SSO, BYOK or a negotiated volume.
 ### 10A.5 Credits
 
 **Provisional and configurable** (D-07, D-11, D-12). These allowances and action costs must **not** be
-activated as final production economics until Phase 4 validates real provider costs against the required
-gross margin (D-15).
+activated as final production economics until real provider costs are measured against the target gross
+margin — **D-15, approved 2026-09-13 at 65%**, applied as
+`customer price = provider cost / (1 - target gross margin)`. The numbers below are unchanged by that
+approval: they will be calibrated from real provider benchmarks once D-13 and D-17 are cleared.
 
 |                 | Starter | Growth | Scale | Enterprise |
 | --------------- | ------- | ------ | ----- | ---------- |
