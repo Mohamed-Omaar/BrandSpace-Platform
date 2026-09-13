@@ -1051,7 +1051,11 @@ model EmailMessage {
 /// It carries no `workspaceId` and no secrets: feature keys, plan keys, limits
 /// and flag rules, identical for every tenant — the same shape as `permission`.
 model EntitlementCatalogueSnapshot {
-  /// One of: entitlements, plans, feature-flags.
+  /// One of: entitlements, plans, feature-flags, credits, brand-brain.
+  ///
+  /// Constrained by a CHECK in the migration, not by convention: a future
+  /// caller cannot project an operational or integration payload where a
+  /// customer can read it.
   domain      String
   environment DeploymentEnvironment
 

@@ -126,6 +126,11 @@ export function BrandBrainView({
   areas: readonly AreaCardData[];
   candidates: readonly CandidateData[];
   sources: readonly SourceData[];
+  /**
+   * The configured retention window. Never a number this app chose: it is read
+   * from the tenant-readable configuration projection, so the notice states what
+   * an owner actually activated (D-78, CLAUDE.md §2.2).
+   */
   retentionDays: number;
   permissions: BrandBrainPermissions;
 }) {

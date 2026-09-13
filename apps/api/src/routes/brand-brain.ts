@@ -1,5 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { BrandBrainChatService, chatMessageSchema } from '@brandspace/brand-brain';
+import {
+  BrandBrainChatService,
+  chatMessageSchema,
+  resolveBrandBrainPolicy,
+} from '@brandspace/brand-brain';
 import { AiGateway, MockProviderAdapter, type AiProviderAdapter } from '@brandspace/ai-gateway';
 import { ConfigurationService } from '@brandspace/config';
 import { CreditLedgerService } from '@brandspace/entitlements';
@@ -49,6 +53,20 @@ interface GatewayDeps {
 }
 
 let cachedGateway: GatewayDeps | null = null;
+let cachedConfiguration: ConfigurationService | null = null;
+
+/**
+ * The configuration service, on the PLATFORM identity.
+ *
+ * `configuration_version` is platform-owned; the tenant role cannot read it and
+ * must not. `apps/api` is the designated platform surface
+ * (eslint.config.mjs, PLATFORM_SURFACE_APPS), so this is where the read belongs
+ * and where the customer-safe projection below is produced.
+ */
+function configurationService(): ConfigurationService {
+  cachedConfiguration ??= new ConfigurationService({ prisma: getPlatformClient() });
+  return cachedConfiguration;
+}
 
 /**
  * Build the gateway once per process.
@@ -71,10 +89,7 @@ function gatewayDeps(): GatewayDeps {
       prisma: platform,
       ledger: new CreditLedgerService({ prisma: platform }),
       adapters,
-      configuration: new ConfigurationAiSource(
-        new ConfigurationService({ prisma: platform }),
-        environment,
-      ),
+      configuration: new ConfigurationAiSource(configurationService(), environment),
       // The mock needs no credential, and nothing here can resolve one: the
       // Secret Service decrypt path is not imported by this route at all.
       credentials: { resolve: async () => null },
@@ -104,6 +119,44 @@ function sessionTokenFrom(req: FastifyRequest): string | null {
   return null;
 }
 
+/**
+ * Resolve the caller's session and active workspace, or the reply that refuses.
+ *
+ * A missing session is a 401. Everything else — no active workspace, a
+ * membership that has since been removed, a member without the permission — is
+ * a 404 shaped exactly like a genuine miss, because telling someone which
+ * endpoints exist but are closed to them is itself information (CLAUDE.md §2.1).
+ */
+async function resolveCaller(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  permission: string,
+): Promise<{ userId: string; workspaceId: string } | null> {
+  const token = sessionTokenFrom(req);
+  if (!token) {
+    await reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
+    return null;
+  }
+
+  const auth = new CustomerAuthService({ prisma: getPrisma() });
+  const customer = await auth.resolve(token).catch(() => null);
+  if (!customer) {
+    await reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
+    return null;
+  }
+
+  // The workspace comes from the SESSION. A body naming another tenant is
+  // simply ignored — there is no field to name one.
+  const workspaces = await auth.listWorkspaces(token).catch(() => null);
+  const workspace = workspaces?.find((w) => w.workspaceId === customer.activeWorkspaceId);
+  if (!workspace || !workspace.permissionKeys.includes(permission)) {
+    await reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+    return null;
+  }
+
+  return { userId: customer.userId, workspaceId: workspace.workspaceId };
+}
+
 export function registerBrandBrainRoutes(app: FastifyInstance): void {
   route(
     app,
@@ -119,25 +172,9 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const token = sessionTokenFrom(req);
-      if (!token) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
-
-      const auth = new CustomerAuthService({ prisma: getPrisma() });
-      const customer = await auth.resolve(token).catch(() => null);
-      if (!customer) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
-
-      // The workspace comes from the SESSION. A body naming another tenant is
-      // simply ignored — there is no field to name one.
-      const workspaces = await auth.listWorkspaces(token).catch(() => null);
-      const workspace = workspaces?.find((w) => w.workspaceId === customer.activeWorkspaceId);
-      // No active workspace, or a membership that has since been removed: a
-      // 404, shaped like every other miss (CLAUDE.md §2.1).
-      if (!workspace) return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
-      if (!workspace.permissionKeys.includes(CHAT_PERMISSION)) {
-        // Missing permission is also a 404: telling someone which endpoints
-        // exist but are closed to them is itself information.
-        return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
-      }
+      const environment = currentEnvironment();
+      const caller = await resolveCaller(req, reply, CHAT_PERMISSION);
+      if (!caller) return reply;
 
       const parsed = chatMessageSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -161,7 +198,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
        */
       const tenantPrisma = getPrisma();
       const brand = await withWorkspace(
-        workspace.workspaceId,
+        caller.workspaceId,
         async (db) =>
           db.brand.findFirst({
             where: { id: parsed.data.brandId, deletedAt: null },
@@ -181,25 +218,36 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
        * snapshot taken at sign-in: a plan change since then has to take effect
        * now.
        */
-      const planKey = await planKeyFor(workspace.workspaceId);
+      const planKey = await planKeyFor(caller.workspaceId);
+
+      /*
+       * THE POLICY IS READ, NOT WRITTEN DOWN HERE.
+       *
+       * This used to be a local function returning 90 / 12 / 8 / 12000 under a
+       * comment saying it "mirrors the config schema". A mirrored setting is a
+       * second setting: an owner who shortened the retention window in Platform
+       * Admin would have changed nothing, and the screen would have gone on
+       * promising ninety days (CLAUDE.md §2.2).
+       */
+      const policy = await resolveBrandBrainPolicy(configurationService(), environment);
 
       try {
         const { gateway } = gatewayDeps();
         const turn = await withWorkspace(
-          workspace.workspaceId,
+          caller.workspaceId,
           async (db) =>
             new BrandBrainChatService({
               db,
-              workspaceId: workspace.workspaceId,
+              workspaceId: caller.workspaceId,
               gateway,
-              policy: chatPolicy(),
+              policy: policy.chat,
             }).send({
               brandId: parsed.data.brandId,
               conversationId: parsed.data.conversationId,
               area: parsed.data.area as never,
               message: parsed.data.message,
               idempotencyKey: parsed.data.idempotencyKey,
-              actorUserId: customer.userId,
+              actorUserId: caller.userId,
               planKey,
             }),
           { prisma: tenantPrisma },
@@ -253,14 +301,4 @@ async function planKeyFor(workspaceId: string): Promise<string | null> {
     { prisma: getPrisma() },
   );
   return row?.planKey ?? null;
-}
-
-/** D-78 retention and context ceilings. Mirrors the `brand-brain` config schema. */
-function chatPolicy() {
-  return {
-    retentionDays: 90,
-    maxContextItems: 12,
-    maxContextChunks: 8,
-    maxContextChars: 12_000,
-  };
 }

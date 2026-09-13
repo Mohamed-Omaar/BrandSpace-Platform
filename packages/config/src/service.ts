@@ -73,6 +73,15 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
   // data, so it is projected like the other three rather than being restated
   // in the dashboard where it could drift from the rule actually applied.
   'credits',
+  // Phase 5. The Brand Brain OPERATIONAL policy — accepted file types, the
+  // upload ceiling, the review interval, the chunking parameters and the D-78
+  // retention window. Every one of them is something the customer's own screen
+  // states or enforces: the upload control has to know what it may accept, and
+  // the chat notice has to promise the window an owner actually set. Restating
+  // them in the dashboard is what Phase 5A did, and a restated setting is a
+  // second setting. It carries no provider, no model, no price and no
+  // credential — see the schema in domains.ts.
+  'brand-brain',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

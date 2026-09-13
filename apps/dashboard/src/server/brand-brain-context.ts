@@ -4,37 +4,46 @@ import {
   AREA_DEFINITIONS,
   BrandIngestionService,
   BrandKnowledgeService,
+  TenantBrandBrainPolicySource,
   computeBrandCompletion,
   createObjectStore,
   localizedFrom,
   type AreaCompletion,
-  type ChatPolicy,
-  type IngestionPolicy,
+  type BrandBrainPolicy,
+  type CatalogueReader,
   type ObjectStore,
-  type StalenessPolicy,
 } from '@brandspace/brand-brain';
 import type { BrandKnowledgeArea } from '@brandspace/database';
-import { inWorkspace, type ScopedServices } from './customer-context';
+import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
 
 /**
  * Brand Brain wiring for the customer dashboard.
  *
- * EVERY POLICY VALUE COMES FROM CONFIGURATION, NOT FROM THIS FILE.
- * CLAUDE.md §2.2: upload rules, retention windows and freshness intervals are
- * owner settings. `brandBrainPolicy()` reads the `brand-brain` domain and the
- * defaults it returns are the SCHEMA's defaults — a bootstrap for local
- * development, never a commercial value invented here.
+ * EVERY POLICY VALUE COMES FROM VERSIONED CONFIGURATION, AND NONE OF THEM IS
+ * WRITTEN DOWN IN THIS APP.
+ *
+ * This file used to return a literal object — 25 MB, 200 documents, 180 days,
+ * 90 days — under a comment explaining that they were "the same defaults the
+ * configuration schema declares". They were, and that was the problem: two
+ * copies of a setting are two settings. An owner who shortened the retention
+ * window in Platform Admin would have changed nothing a customer could see, and
+ * the chat notice would have gone on promising ninety days. CLAUDE.md §2.2.
+ *
+ * HOW IT CROSSES THE BOUNDARY. `configuration_version` is platform-owned: every
+ * privilege is revoked from the tenant role, and F-07 keeps the platform
+ * database identity out of this app, which is the surface closest to a browser
+ * bundle. So the policy arrives the way entitlements, plans, feature flags and
+ * credit policy already do — through `entitlement_catalogue_snapshot`, the
+ * global catalogue the Configuration Service projects on activation and the
+ * tenant role may read and may not write. A CHECK constraint on that table
+ * decides which domains may ever appear in it. Nothing in this app reads a
+ * configuration table or resolves a credential.
  *
  * The tenant side, throughout. Everything runs on `brandspace_app` inside
  * `inWorkspace`, so RLS applies to every statement.
  */
 
-export interface BrandBrainPolicy {
-  readonly ingestion: IngestionPolicy;
-  readonly staleness: StalenessPolicy;
-  readonly chat: ChatPolicy;
-  readonly stuckAfterSeconds: number;
-}
+export type { BrandBrainPolicy };
 
 /*
  * The object store is process-wide.
@@ -54,78 +63,49 @@ export function objectStore(): ObjectStore {
 }
 
 /**
- * Resolve Brand Brain policy.
+ * Brand Brain policy for one workspace, read from the projection.
  *
- * The tenant role cannot read `configuration_version` (it is platform-owned),
- * so the dashboard uses the schema defaults until the tenant-readable
- * projection covers this domain. That is a deliberate, stated limitation rather
- * than a silent one: the values below are the SAME defaults the configuration
- * schema declares, so an operator who sets them is changing one number in one
- * place, not overriding a second copy hidden here.
+ * Takes the SCOPED client, so the read happens inside the workspace transaction
+ * the caller already opened rather than opening a second one. The catalogue is a
+ * global table with no tenant column — identical rows for every workspace — so
+ * reading it there is a plain lookup, not a cross-tenant reach.
  */
-export function brandBrainPolicy(): BrandBrainPolicy {
-  return {
-    ingestion: {
-      allowedMimeTypes: [
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain',
-        'text/csv',
-        'text/markdown',
-        'image/png',
-        'image/jpeg',
-      ],
-      maxFileBytes: 25 * 1024 * 1024,
-      maxDocumentsPerBrand: 200,
-      maxAttempts: 3,
-      retryBackoffSeconds: 60,
-      chunkTargetChars: 1_200,
-      chunkOverlapChars: 150,
-      maxChunksPerDocument: 400,
-      minimumCandidateConfidenceMilli: 400,
-    },
-    staleness: { reviewIntervalDays: 180 },
-    chat: {
-      retentionDays: 90,
-      maxContextItems: 12,
-      maxContextChunks: 8,
-      maxContextChars: 12_000,
-    },
-    stuckAfterSeconds: 900,
-  };
+export async function brandBrainPolicy(db: CatalogueReader): Promise<BrandBrainPolicy> {
+  return new TenantBrandBrainPolicySource(db, currentEnvironment()).load();
 }
 
 export interface BrandBrainServices extends ScopedServices {
   readonly knowledge: BrandKnowledgeService;
   /**
-   * Built ON DEMAND.
+   * Built ON DEMAND, and asynchronously.
    *
-   * Ingestion needs an object store; reading knowledge does not. Constructing
-   * it eagerly made every READ depend on storage being configured, so the whole
-   * screen failed with a storage error before it rendered a single row. A
-   * getter keeps the dependency where it belongs — on the upload path.
+   * Ingestion needs an object store and the configured upload policy; reading
+   * knowledge needs neither. Constructing it eagerly made every READ depend on
+   * both, so the whole screen failed before it rendered a row when either was
+   * unavailable. It is a function rather than a getter because resolving the
+   * policy crosses a network boundary and a getter cannot await.
    */
-  readonly ingestion: BrandIngestionService;
+  ingestion(): Promise<BrandIngestionService>;
+  /** The configured policy, read from the tenant-readable catalogue. */
+  policy(): Promise<BrandBrainPolicy>;
 }
 
 export async function inBrandBrain<T>(
   workspaceId: string,
   fn: (services: BrandBrainServices) => Promise<T>,
 ): Promise<T> {
-  const policy = brandBrainPolicy();
   return inWorkspace(workspaceId, async (scoped) =>
     fn({
       ...scoped,
       knowledge: new BrandKnowledgeService({ db: scoped.db, workspaceId }),
-      get ingestion() {
-        return new BrandIngestionService({
+      policy: () => brandBrainPolicy(scoped.db),
+      ingestion: async () =>
+        new BrandIngestionService({
           db: scoped.db,
           workspaceId,
           store: objectStore(),
-          policy: policy.ingestion,
-        });
-      },
+          policy: (await brandBrainPolicy(scoped.db)).ingestion,
+        }),
     }),
   );
 }

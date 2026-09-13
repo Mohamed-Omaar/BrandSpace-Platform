@@ -745,3 +745,19 @@ export function isConfigDomain(value: string): value is ConfigDomain {
 export function defaultPayload<D extends ConfigDomain>(domain: D): ConfigPayload<D> {
   return CONFIG_DOMAINS[domain].schema.parse({}) as ConfigPayload<D>;
 }
+
+/**
+ * Parse a stored payload against its domain schema.
+ *
+ * The one entrance for reading a configuration document that did not come from
+ * `ConfigurationService.get` — in practice, a row from the tenant-readable
+ * catalogue projection. Parsing rather than casting is what makes the schema's
+ * defaults apply: a document written before a field existed comes back complete,
+ * so a caller never has to supply a default of its own (CLAUDE.md §2.2).
+ */
+export function parseConfigPayload<D extends ConfigDomain>(
+  domain: D,
+  payload: unknown,
+): ConfigPayload<D> {
+  return CONFIG_DOMAINS[domain].schema.parse(payload ?? {}) as ConfigPayload<D>;
+}

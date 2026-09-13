@@ -12,7 +12,7 @@ import {
   type LocalizedText,
 } from '@brandspace/brand-brain';
 import { requireWorkspace } from '../../../server/customer-context';
-import { brandBrainPolicy, inBrandBrain } from '../../../server/brand-brain-context';
+import { inBrandBrain } from '../../../server/brand-brain-context';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
 
@@ -108,7 +108,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
       body: localized(formData, 'body'),
     });
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
       await knowledge.createItem({
         brandId: parsed.brandId,
         area: parsed.area as never,
@@ -119,7 +119,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
           userId: session.customer.userId,
           permissionKeys: session.workspace.permissionKeys,
         },
-        policy: brandBrainPolicy().staleness,
+        policy: (await policy()).staleness,
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
@@ -145,7 +145,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
         : {}),
     });
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
       await knowledge.updateItem({
         itemId: parsed.itemId,
         title: parsed.title,
@@ -155,7 +155,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
           userId: session.customer.userId,
           permissionKeys: session.workspace.permissionKeys,
         },
-        policy: brandBrainPolicy().staleness,
+        policy: (await policy()).staleness,
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
@@ -201,7 +201,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
       toVersion: Number(formData.get('toVersion') ?? 0),
       ...(formData.get('reason') ? { reason: String(formData.get('reason')) } : {}),
     });
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
       await knowledge.rollback({
         itemId: parsed.itemId,
         toVersion: parsed.toVersion,
@@ -210,7 +210,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
           userId: session.customer.userId,
           permissionKeys: session.workspace.permissionKeys,
         },
-        policy: brandBrainPolicy().staleness,
+        policy: (await policy()).staleness,
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_RESTORED', area });
@@ -239,7 +239,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
       ...(formData.get('reason') ? { reason: String(formData.get('reason')) } : {}),
     });
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
       await knowledge.reviewCandidate({
         candidateId: parsed.candidateId,
         decision: parsed.decision,
@@ -250,7 +250,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
           userId: session.customer.userId,
           permissionKeys: session.workspace.permissionKeys,
         },
-        policy: brandBrainPolicy().staleness,
+        policy: (await policy()).staleness,
       });
     });
     destination = pageUrl(locale, {
@@ -289,7 +289,8 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
     const targetArea = area.length > 0 ? area : undefined;
 
     await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
-      const { job } = await ingestion.upload({
+      const service = await ingestion();
+      const { job } = await service.upload({
         brandId,
         fileName: file.name,
         // The browser's type, not the extension. Both are attacker-controlled,
@@ -303,7 +304,7 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
         idempotencyKey: `ui-${brandId}-${file.name}-${file.size}`.slice(0, 120),
         actorUserId: session.customer.userId,
       });
-      await ingestion.process(job.id);
+      await service.process(job.id);
     });
     destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area });
   } catch (error: unknown) {

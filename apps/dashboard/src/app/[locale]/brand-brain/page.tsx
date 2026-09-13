@@ -1,7 +1,7 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandBrainPolicy, inBrandBrain } from '../../../server/brand-brain-context';
+import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { statusMessage } from '../../../i18n/messages';
@@ -144,13 +144,17 @@ export default async function BrandBrainPage({
     );
   }
 
-  const policy = brandBrainPolicy();
-
-  const { completion, items, candidates, sources, sourceCount } = await inBrandBrain(
+  const { policy, completion, items, candidates, sources, sourceCount } = await inBrandBrain(
     workspace.workspaceId,
-    async ({ knowledge, db }) => {
+    async ({ knowledge, db, policy }) => {
       const computed = await knowledge.completion(brand.id);
       return {
+        /*
+         * READ, NOT WRITTEN DOWN HERE. The retention window the chat notice
+         * states is whatever an owner activated — see brand-brain-context.ts
+         * for how it crosses the platform/tenant boundary (CLAUDE.md §2.2).
+         */
+        policy: await policy(),
         completion: computed,
         items: await db.brandKnowledgeItem.findMany({
           where: { brandId: brand.id, status: { in: ['ACTIVE', 'STALE'] } },

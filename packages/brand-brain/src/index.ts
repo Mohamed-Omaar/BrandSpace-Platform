@@ -123,3 +123,11 @@ export type {
 
 export { BrandBrainChatService } from './chat';
 export type { ChatPolicy, ChatServiceOptions, ChatTurn } from './chat';
+
+export {
+  BRAND_BRAIN_CONFIG_DOMAIN,
+  TenantBrandBrainPolicySource,
+  brandBrainPolicyFrom,
+  resolveBrandBrainPolicy,
+} from './policy';
+export type { BrandBrainPolicy, CatalogueReader } from './policy';
