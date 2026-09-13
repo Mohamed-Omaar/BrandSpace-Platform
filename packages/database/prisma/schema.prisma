@@ -1330,7 +1330,12 @@ model AiRequest {
   resolvedModelKey  String?
   /// Every model tried, in order, including the ones that failed. Fallback is
   /// invisible in reporting without it.
-  attemptedModelKeys String[]
+  ///
+  /// `@default([])` is declared so the datamodel matches the column's database
+  /// default. The default is load-bearing, not cosmetic: an insert that omits a
+  /// scalar list does not send an empty array, so a row created without naming
+  /// this column would violate NOT NULL.
+  attemptedModelKeys String[] @default([])
 
   status       AiRequestStatus @default(PENDING)
   failureClass AiFailureClass?
@@ -1435,6 +1440,15 @@ model AiUsageLedger {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   request   AiRequest @relation(fields: [aiRequestId], references: [id], onDelete: Cascade)
+
+  /// The row this one corrects, and the corrections against this one.
+  ///
+  /// Declared here as well as in the migration so the datamodel and the
+  /// database agree: a foreign key that exists only in SQL is one a future
+  /// `prisma migrate dev` would offer to drop. `Restrict` because a ledger row
+  /// with a correction against it must not disappear out from under it.
+  corrects    AiUsageLedger?  @relation("AiLedgerCorrection", fields: [correctsLedgerId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  correctedBy AiUsageLedger[] @relation("AiLedgerCorrection")
 
   @@index([workspaceId, occurredAt(sort: Desc)])
   @@index([workspaceId, taskKey, occurredAt])
