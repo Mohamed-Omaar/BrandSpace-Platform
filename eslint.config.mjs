@@ -20,6 +20,9 @@ const ALLOWED_IMPORTS = {
   providers: ['shared', 'config'],
   entitlements: ['shared', 'database', 'config'],
   'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  // Brand Brain reads configuration, enforces entitlements, and routes every
+  // AI operation through the gateway rather than touching a provider itself.
+  'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway'],
   'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };
