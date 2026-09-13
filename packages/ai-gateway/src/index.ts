@@ -50,3 +50,18 @@ export {
   providerCostMicroMinor,
 } from './pricing';
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
+
+export { AiGateway } from './gateway';
+export type {
+  AiConfiguration,
+  AiConfigurationSource,
+  AiGatewayOptions,
+  AiGatewayRequest,
+  AiGatewayResult,
+  AiImageInput,
+  AiInput,
+  AiOutput,
+  AiProviderConfig,
+  AiTextInput,
+  ProviderCredentialSource,
+} from './gateway';

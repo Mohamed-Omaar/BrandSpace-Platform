@@ -112,6 +112,15 @@ const aiRoutingParametersSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   maxOutputTokens: z.number().int().positive().max(200_000).default(800),
   promptTemplateVersion: z.number().int().positive().default(1),
+  /*
+   * Keep the model's output on the request row so an idempotent replay can
+   * return it (docs/AI-GATEWAY.md §7.4 guarantee 2).
+   *
+   * OFF by default, because §11 does not persist prompts or responses by
+   * default. Turn it on only for a task whose caller does not store its own
+   * artifact, and understand that it puts generated content in the database.
+   */
+  persistOutput: z.boolean().default(false),
 });
 
 /**

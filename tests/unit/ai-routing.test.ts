@@ -33,7 +33,12 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
     timeoutMs: 20_000,
     maxCostPerRequestMinor: null,
     priority: 0,
-    parameters: { temperature: 0.7, maxOutputTokens: 800, promptTemplateVersion: 1 },
+    parameters: {
+      temperature: 0.7,
+      maxOutputTokens: 800,
+      promptTemplateVersion: 1,
+      persistOutput: false,
+    },
     retryPolicy: { maxAttempts: 3, backoff: 'exponential', initialDelayMs: 250, jitter: true },
     ...overrides,
   };
@@ -179,7 +184,12 @@ describe('routing precedence', () => {
           workspaceId: WORKSPACE,
           timeoutMs: 5_000,
           maxCostPerRequestMinor: 300,
-          parameters: { temperature: 0.2, maxOutputTokens: 120, promptTemplateVersion: 4 },
+          parameters: {
+            temperature: 0.2,
+            maxOutputTokens: 120,
+            promptTemplateVersion: 4,
+            persistOutput: false,
+          },
           retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
         }),
       ],

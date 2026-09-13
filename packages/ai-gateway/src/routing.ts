@@ -32,6 +32,7 @@ export interface RoutingRule {
     readonly temperature: number;
     readonly maxOutputTokens: number;
     readonly promptTemplateVersion: number;
+    readonly persistOutput: boolean;
   };
   readonly retryPolicy: {
     readonly maxAttempts: number;
