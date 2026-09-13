@@ -1,5 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
-import { ORB_AREAS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
+import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandBrainPolicy, inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -9,8 +9,15 @@ import {
   BrandBrainView,
   type AreaCardData,
   type CandidateData,
+  type OrbNode,
   type SourceData,
 } from './brand-brain-view';
+
+/*
+ * The approved demo's stylesheet, transcribed. It is imported here rather than
+ * in the layout so that only this route pays for it.
+ */
+import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -233,6 +240,25 @@ export default async function BrandBrainPage({
     };
   });
 
+  /*
+   * The orb's six nodes. The demo shows six dots and eight cards; the product
+   * shows the same six dots and all ten of its areas below the hero (D-87), and
+   * each dot carries the workspace's own count rather than the demo's "12 facts".
+   */
+  const byArea = new Map(areaCards.map((card) => [card.area, card]));
+  const orbNodes: OrbNode[] = ORB_AREAS.flatMap((area) => {
+    const card = byArea.get(area);
+    if (!card) return [];
+    return [
+      {
+        area,
+        slot: ORB_SLOTS[area as keyof typeof ORB_SLOTS],
+        label: card.label,
+        detail: `${card.activeItems} ${t('bb.itemsCount')}`,
+      },
+    ];
+  });
+
   const candidateData: CandidateData[] = candidates.map((candidate) => ({
     id: candidate.id,
     area: candidate.area,
@@ -247,6 +273,7 @@ export default async function BrandBrainPage({
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,
     fileName: source.fileName,
+    kind: documentKind(source.fileName),
     status: source.status,
     statusLabel: t(`bb.source.${source.status}` as MessageKey),
     detail:
@@ -261,7 +288,6 @@ export default async function BrandBrainPage({
     <WorkspaceShell
       locale={locale}
       heading={t('bb.title')}
-      description={t('bb.heroBody')}
       activePath="/brand-brain"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -272,11 +298,10 @@ export default async function BrandBrainPage({
       <BrandBrainView
         locale={locale}
         brandId={brand.id}
-        brandName={brand.name}
         completionPercent={completion.percent}
         totalActiveItems={completion.totalActiveItems}
         sourceCount={sourceCount}
-        orbAreas={[...ORB_AREAS]}
+        orbNodes={orbNodes}
         areas={areaCards}
         candidates={candidateData}
         sources={sourceData}
@@ -291,6 +316,22 @@ export default async function BrandBrainPage({
       />
     </WorkspaceShell>
   );
+}
+
+/**
+ * The badge the demo prints in the corner of a source row.
+ *
+ * Derived from the file's own name — never from the browser-declared MIME type,
+ * which a caller controls. It is decorative and `aria-hidden`, so a name with no
+ * extension falls back to a neutral mark rather than to a guess.
+ */
+function documentKind(fileName: string): string {
+  const match = /\.([A-Za-z0-9]{1,5})$/.exec(fileName);
+  const extension = match?.[1]?.toUpperCase();
+  if (!extension) return '\u2022';
+  if (extension === 'JPEG') return 'JPG';
+  if (extension === 'MARKDOWN') return 'MD';
+  return extension.slice(0, 4);
 }
 
 /** The reader's locale, falling back to the other rather than rendering blank. */

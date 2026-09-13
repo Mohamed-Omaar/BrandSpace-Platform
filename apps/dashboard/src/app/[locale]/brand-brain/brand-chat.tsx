@@ -1,28 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { colorTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { CONTROL_CLASS } from '@brandspace/ui';
 
 /**
- * Brand Brain chat.
+ * Brand Brain chat — the approved demo's panel, with a real backend behind it.
  *
- * THE LAYOUT RULES ARE THE FEATURE HERE, and they are all one idea: the panel
- * is a FIXED BOX and only the message list scrolls.
+ * IT IS NOT A FLOATING WINDOW. The demo puts the chat INSIDE the hero's
+ * right-hand column and swaps it with the stats view (`.bb-hero-stats.chat-open`
+ * hides one and shows the other). That is why this component renders a bare
+ * `.bb-brain-chat` section with no position, no width and no shadow of its own:
+ * its parent owns all three. A floating panel was the previous interpretation
+ * and it is the thing the fidelity contract exists to prevent.
  *
- *   - The panel has a fixed height. It does not grow when a message is sent,
- *     which is the failure the brief calls out by name: a panel that grows
- *     pushes its own composer off the screen, and the longer the conversation
- *     the harder it is to type.
- *   - The message list is the only scroller (`min-height: 0` on the flex child,
- *     without which a flex item refuses to shrink below its content and the
- *     whole panel stretches instead).
- *   - The composer is a grid row of its own, so it cannot be pushed anywhere.
- *   - The textarea grows to a CEILING and then scrolls internally.
+ * THE LAYOUT RULE THAT MATTERS is unchanged and is inherited from the demo's
+ * stylesheet: the panel is a fixed box and only the message list scrolls
+ * (`.bb-chat-messages{flex:1;min-height:0;overflow-y:auto}`). A panel that grows
+ * when a message is sent pushes its own composer off the screen. The composer is
+ * the demo's single-line input, so the box cannot grow at all.
  *
  * AUTO-SCROLL DOES NOT STEAL THE VIEW. It follows new messages only while the
  * reader is already at the bottom. Someone scrolled up reading a citation keeps
- * their place — jumping them to the end is the behaviour that makes a chat
- * panel unusable while an answer streams in.
+ * their place.
  */
 
 export interface ChatCitation {
@@ -43,6 +42,11 @@ export interface ChatMessage {
   readonly purged?: boolean;
 }
 
+export interface ChatSuggestion {
+  readonly label: string;
+  readonly prompt: string;
+}
+
 export interface ChatLabels {
   readonly title: string;
   readonly subtitle: string;
@@ -58,24 +62,37 @@ export interface ChatLabels {
   readonly expired: string;
   readonly error: string;
   readonly close: string;
+  readonly contextAll: string;
+  readonly areaDetails: string;
+  readonly attach: string;
+  readonly suggestions: readonly ChatSuggestion[];
 }
-
-const MAX_COMPOSER_HEIGHT = 120;
 
 export function BrandChat({
   brandId,
   area,
+  areaLabel,
   labels,
   initialMessages,
   canChat,
+  canUpload,
+  hidden,
   onClose,
+  onAttach,
+  onAreaDetails,
 }: {
   brandId: string;
   area: string | null;
+  areaLabel: string | null;
   labels: ChatLabels;
   initialMessages: readonly ChatMessage[];
   canChat: boolean;
+  canUpload: boolean;
+  /** The parent shows and hides the panel; this keeps it out of the a11y tree. */
+  hidden: boolean;
   onClose: () => void;
+  onAttach: () => void;
+  onAreaDetails: (() => void) | null;
 }) {
   const [messages, setMessages] = useState<readonly ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState('');
@@ -84,7 +101,6 @@ export function BrandChat({
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const atBottomRef = useRef(true);
 
@@ -103,19 +119,6 @@ export function BrandChat({
     if (list && atBottomRef.current) list.scrollTop = list.scrollHeight;
   }, [messages, busy]);
 
-  /** Grow the composer to a ceiling, then let it scroll internally. */
-  const resizeComposer = useCallback(() => {
-    const node = composerRef.current;
-    if (!node) return;
-    node.style.height = 'auto';
-    node.style.height = `${Math.min(MAX_COMPOSER_HEIGHT, node.scrollHeight)}px`;
-    node.style.overflowY = node.scrollHeight > MAX_COMPOSER_HEIGHT ? 'auto' : 'hidden';
-  }, []);
-
-  useEffect(() => {
-    resizeComposer();
-  }, [draft, resizeComposer]);
-
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -124,199 +127,157 @@ export function BrandChat({
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const send = useCallback(async () => {
-    const message = draft.trim();
-    if (message.length === 0 || busy || !canChat) return;
+  const send = useCallback(
+    async (text: string) => {
+      const message = text.trim();
+      if (message.length === 0 || busy || !canChat) return;
 
-    // Generated ONCE per send and reused by a retry, so a request whose
-    // response is lost replays instead of billing a second time.
-    const idempotencyKey = `chat-${crypto.randomUUID()}`;
-    const optimisticId = `local-${idempotencyKey}`;
+      // Generated ONCE per send and reused by a retry, so a request whose
+      // response is lost replays instead of billing a second time.
+      const idempotencyKey = `chat-${crypto.randomUUID()}`;
+      const optimisticId = `local-${idempotencyKey}`;
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: optimisticId,
-        role: 'user',
-        body: message,
-        citations: [],
-        insufficientKnowledge: false,
-      },
-    ]);
-    setDraft('');
-    setError(null);
-    setBusy(true);
-    atBottomRef.current = true;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const response = await fetch('/api/brand-brain/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          brandId,
-          message,
-          idempotencyKey,
-          ...(conversationId ? { conversationId } : {}),
-          ...(area ? { area } : {}),
-        }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        // The server answers with a stable code and never an internal message.
-        // The screen shows its own copy rather than echoing anything back.
-        setError(labels.error);
-        return;
-      }
-
-      const payload = (await response.json()) as {
-        conversationId: string;
-        answer: string | null;
-        citations: ChatCitation[];
-        insufficientKnowledge: boolean;
-      };
-
-      setConversationId(payload.conversationId);
       setMessages((current) => [
         ...current,
         {
-          id: `assistant-${idempotencyKey}`,
-          role: 'assistant',
-          body: payload.answer,
-          citations: payload.citations ?? [],
-          insufficientKnowledge: payload.insufficientKnowledge,
+          id: optimisticId,
+          role: 'user',
+          body: message,
+          citations: [],
+          insufficientKnowledge: false,
         },
       ]);
-    } catch (cause: unknown) {
-      // An abort is the user's own choice, not a failure to report.
-      if ((cause as { name?: string } | null)?.name !== 'AbortError') setError(labels.error);
-    } finally {
-      abortRef.current = null;
-      setBusy(false);
-    }
-  }, [area, brandId, busy, canChat, conversationId, draft, labels.error]);
+      setDraft('');
+      setError(null);
+      setBusy(true);
+      atBottomRef.current = true;
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const response = await fetch('/api/brand-brain/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            brandId,
+            message,
+            idempotencyKey,
+            ...(conversationId ? { conversationId } : {}),
+            ...(area ? { area } : {}),
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          // The server answers with a stable code and never an internal message.
+          // The screen shows its own copy rather than echoing anything back.
+          setError(labels.error);
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          conversationId: string;
+          answer: string | null;
+          citations: ChatCitation[];
+          insufficientKnowledge: boolean;
+        };
+
+        setConversationId(payload.conversationId);
+        setMessages((current) => [
+          ...current,
+          {
+            id: `assistant-${idempotencyKey}`,
+            role: 'assistant',
+            body: payload.answer,
+            citations: payload.citations ?? [],
+            insufficientKnowledge: payload.insufficientKnowledge,
+          },
+        ]);
+      } catch (cause: unknown) {
+        // An abort is the user's own choice, not a failure to report.
+        if ((cause as { name?: string } | null)?.name !== 'AbortError') setError(labels.error);
+      } finally {
+        abortRef.current = null;
+        setBusy(false);
+      }
+    },
+    [area, brandId, busy, canChat, conversationId, labels.error],
+  );
 
   return (
     <section
+      className="bb-brain-chat"
       data-testid="brand-chat"
       aria-label={labels.title}
-      style={{
-        display: 'grid',
-        // THE FIXED BOX. Three rows: header, scrolling list, composer.
-        gridTemplateRows: 'auto minmax(0, 1fr) auto',
-        height: 'clamp(360px, 60vh, 560px)',
-        borderRadius: '22px',
-        background: 'rgba(255,255,255,.94)',
-        boxShadow: '0 24px 70px rgba(22,16,39,.16)',
-        overflow: 'hidden',
-      }}
+      aria-hidden={hidden ? 'true' : undefined}
+      // The panel is hidden by its parent's CSS, not removed. `inert` keeps a
+      // hidden panel's controls out of the tab order, which `display: none`
+      // already does — it is here so that a future change to how the parent
+      // hides it cannot quietly leave a focusable control behind.
+      inert={hidden ? true : undefined}
     >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '14px 16px',
-          borderBottom: '1px solid rgba(17,17,20,.08)',
-        }}
-      >
-        <span
-          aria-hidden="true"
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            background: colorTokens.brandPurple,
-            color: colorTokens.surface,
-            display: 'grid',
-            placeItems: 'center',
-            fontWeight: 800,
-          }}
-        >
-          ✦
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ display: 'block', fontSize: typographyTokens.label.fontSize }}>
-            {labels.title}
-          </b>
-          <small
-            style={{ color: colorTokens.textMuted, fontSize: typographyTokens.caption.fontSize }}
-          >
-            {labels.subtitle}
-          </small>
-        </span>
+      <header className="bb-brain-chat-head">
+        <div className="bb-brain-chat-brand">
+          <i aria-hidden="true">✦</i>
+          <span>
+            <small>{labels.subtitle}</small>
+            <b>{labels.title}</b>
+          </span>
+        </div>
         <button
           type="button"
+          className="bb-chat-close"
           onClick={onClose}
           aria-label={labels.close}
-          style={{
-            border: 0,
-            borderRadius: 10,
-            width: 32,
-            height: 32,
-            background: colorTokens.controlSurface,
-            cursor: 'pointer',
-            font: 'inherit',
-          }}
+          data-testid="chat-close"
         >
           ×
         </button>
       </header>
 
+      <div className="bb-chat-context-row">
+        <span className="bb-chat-context" data-testid="chat-context">
+          {areaLabel ?? labels.contextAll}
+        </span>
+        {onAreaDetails ? (
+          <button
+            type="button"
+            className="bb-chat-area-details"
+            onClick={onAreaDetails}
+            data-testid="chat-area-details"
+          >
+            {labels.areaDetails}
+          </button>
+        ) : null}
+      </div>
+
       {/*
-        THE ONLY SCROLLER. `minHeight: 0` is load-bearing: without it a flex or
-        grid child refuses to shrink below its content, and the panel stretches
-        instead of the list scrolling.
+        THE ONLY SCROLLER. `min-height: 0` in the stylesheet is load-bearing:
+        without it a flex child refuses to shrink below its content and the whole
+        panel stretches instead of the list scrolling.
       */}
       <div
         ref={listRef}
         onScroll={onScroll}
+        className="bb-chat-messages"
         data-testid="chat-messages"
         role="log"
         aria-live="polite"
         aria-atomic="false"
-        style={{
-          minHeight: 0,
-          overflowY: 'auto',
-          overscrollBehavior: 'contain',
-          padding: '14px 16px',
-          display: 'grid',
-          gap: '10px',
-          alignContent: 'start',
-        }}
       >
         {messages.length === 0 && !busy ? (
-          <p
-            style={{
-              margin: 0,
-              color: colorTokens.textMuted,
-              fontSize: typographyTokens.label.fontSize,
-            }}
-          >
-            {labels.empty}
-          </p>
+          <p className="bb-chat-message brain">{labels.empty}</p>
         ) : null}
 
         {messages.map((message) => (
           <article
             key={message.id}
+            className={message.role === 'user' ? 'bb-chat-message user' : 'bb-chat-message brain'}
             data-testid={`chat-message-${message.role}`}
-            style={{
-              justifySelf: message.role === 'user' ? 'end' : 'start',
-              maxWidth: '86%',
-              padding: '10px 12px',
-              borderRadius: 14,
-              background: message.role === 'user' ? colorTokens.ink : colorTokens.surfaceLavender,
-              color: message.role === 'user' ? colorTokens.surface : colorTokens.ink,
-              fontSize: typographyTokens.label.fontSize,
-              lineHeight: 1.55,
-            }}
           >
             {message.purged ? (
-              <em style={{ color: colorTokens.textMuted }}>{labels.expired}</em>
+              <em>{labels.expired}</em>
             ) : message.insufficientKnowledge ? (
               <span data-testid="chat-insufficient">{labels.insufficient}</span>
             ) : (
@@ -324,129 +285,92 @@ export function BrandChat({
             )}
 
             {message.citations.length > 0 ? (
-              <footer
-                data-testid="chat-citations"
-                style={{
-                  marginTop: 8,
-                  fontSize: typographyTokens.caption.fontSize,
-                  color: colorTokens.textSecondary,
-                }}
-              >
-                <b style={{ display: 'block', marginBottom: 4 }}>{labels.sources}</b>
-                <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
-                  {message.citations.map((citation) => (
-                    <li key={`${citation.kind}-${citation.id}`}>
-                      {citation.label}
-                      {citation.version ? ` · v${citation.version}` : ''}
-                      {citation.locator ? ` · ${citation.locator}` : ''}
-                    </li>
-                  ))}
-                </ul>
+              <footer className="bb-chat-sources" data-testid="chat-citations">
+                {message.citations.map((citation) => (
+                  <span className="bb-chat-source" key={`${citation.kind}-${citation.id}`}>
+                    {citation.label}
+                    {citation.version ? ` · v${citation.version}` : ''}
+                    {citation.locator ? ` · ${citation.locator}` : ''}
+                  </span>
+                ))}
               </footer>
             ) : null}
           </article>
         ))}
 
         {busy ? (
-          <p
-            data-testid="chat-busy"
-            style={{
-              margin: 0,
-              color: colorTokens.textMuted,
-              fontSize: typographyTokens.bodySm.fontSize,
-            }}
-          >
+          <p className="bb-chat-message brain typing" data-testid="chat-busy">
             {labels.thinking}
           </p>
         ) : null}
 
         {error ? (
-          <p
-            role="alert"
-            data-testid="chat-error"
-            style={{
-              margin: 0,
-              color: colorTokens.danger,
-              fontSize: typographyTokens.bodySm.fontSize,
-            }}
-          >
+          <p className="bb-chat-message brain" role="alert" data-testid="chat-error">
             {error}
           </p>
         ) : null}
       </div>
 
-      <footer
-        style={{
-          borderTop: '1px solid rgba(17,17,20,.08)',
-          padding: '10px 12px',
-          display: 'grid',
-          gap: '8px',
+      <div className="bb-chat-suggestions">
+        {labels.suggestions.map((suggestion) => (
+          <button
+            key={suggestion.prompt}
+            type="button"
+            data-testid={`chat-suggestion-${suggestion.prompt.length}`}
+            disabled={!canChat || busy}
+            onClick={() => void send(suggestion.prompt)}
+          >
+            {suggestion.label}
+          </button>
+        ))}
+      </div>
+
+      <form
+        className="bb-chat-compose"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy) {
+            cancel();
+            return;
+          }
+          void send(draft);
         }}
       >
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-          <textarea
-            className={CONTROL_CLASS}
-            ref={composerRef}
-            data-testid="chat-input"
-            value={draft}
-            disabled={!canChat}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              // Enter sends; Shift+Enter is a newline. A multi-line composer
-              // that cannot produce a newline is worse than a single-line one.
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-            rows={1}
-            placeholder={labels.placeholder}
-            aria-label={labels.placeholder}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              resize: 'none',
-              maxHeight: `${MAX_COMPOSER_HEIGHT}px`,
-              padding: '9px 11px',
-              borderRadius: 12,
-              border: '1px solid rgba(17,17,20,.14)',
-              font: 'inherit',
-              fontSize: typographyTokens.label.fontSize,
-              lineHeight: 1.5,
-            }}
-          />
-          <button
-            type="button"
-            data-testid={busy ? 'chat-cancel' : 'chat-send'}
-            onClick={busy ? cancel : () => void send()}
-            disabled={!canChat || (!busy && draft.trim().length === 0)}
-            style={{
-              border: 0,
-              borderRadius: 12,
-              height: 38,
-              padding: '0 14px',
-              background: busy ? colorTokens.controlSurface : colorTokens.brandPurple,
-              color: busy ? colorTokens.ink : colorTokens.surface,
-              fontWeight: 700,
-              fontSize: typographyTokens.bodySm.fontSize,
-              cursor: canChat ? 'pointer' : 'not-allowed',
-              font: 'inherit',
-            }}
-          >
-            {busy ? labels.cancel : labels.send}
-          </button>
-        </div>
-        <p
-          style={{
-            margin: 0,
-            color: colorTokens.textMuted,
-            fontSize: typographyTokens.caption.fontSize,
-            lineHeight: 1.5,
-          }}
+        <button
+          type="button"
+          className="bb-chat-attach"
+          onClick={onAttach}
+          disabled={!canUpload}
+          aria-label={labels.attach}
+          data-testid="chat-attach"
         >
-          {labels.disclaimer} {labels.retention}
-        </p>
-      </footer>
+          +
+        </button>
+        <input
+          className={`${CONTROL_CLASS} bb-chat-input`}
+          type="text"
+          autoComplete="off"
+          data-testid="chat-input"
+          value={draft}
+          disabled={!canChat}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={labels.placeholder}
+          aria-label={labels.placeholder}
+        />
+        <button
+          type="submit"
+          className="bb-chat-send"
+          data-testid={busy ? 'chat-cancel' : 'chat-send'}
+          disabled={!canChat || (!busy && draft.trim().length === 0)}
+          aria-label={busy ? labels.cancel : labels.send}
+        >
+          {busy ? '×' : '↑'}
+        </button>
+      </form>
+
+      <small className="bb-chat-disclaimer">
+        {labels.disclaimer} {labels.retention}
+      </small>
     </section>
   );
 }

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- saved from url=(0059)https://brandspace-minimal-ui-concept.imokfax.chatgpt.site/ -->
+<html lang="en" dir="ltr"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+html.brand-brain-boot .main-panel{visibility:hidden}
+</style>
+    <script>
+      (()=>{
+        if(location.hash==="#customer/brand-brain"){
+          window.__brandBrainInitial=true;
+          document.documentElement.classList.add("brand-brain-boot");
+          history.replaceState(null,"",location.pathname+location.search+"#customer/overview");
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f4f4f4">
+    <title>BrandSpace — Complete Product Preview</title>
+    <meta name="description" content="Complete interactive preview of the BrandSpace customer app, platform control center and public website.">
+    <link rel="stylesheet" href="./styles-1.css">
+    <link rel="stylesheet" href="./styles-2.css">
+    <link rel="stylesheet" href="./styles-3.css">
+    <link rel="stylesheet" href="./mobile-fix.css">
+    <link rel="stylesheet" href="./brand-brain-native.css">
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="orb orb-purple"></span><span class="orb orb-yellow"></span><span class="orb orb-mix"></span>
+    </div>
+
+    <button class="mobile-menu" id="mobileMenu" aria-label="Open navigation" aria-expanded="false">☰</button>
+    <button class="mobile-backdrop" id="mobileBackdrop" aria-label="Close navigation"></button>
+
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+        <div class="sidebar-top">
+          <button class="brand" data-go="customer/overview" aria-label="BrandSpace home"><span class="brand-mark">B</span><span class="brand-name">BrandSpace</span></button>
+          <button class="icon-button collapse-button" id="collapseSidebar" aria-label="Collapse sidebar" aria-expanded="true">←</button>
+        </div>
+
+        <div class="experience-switcher" id="experienceSwitcher">
+          <button class="experience-current" id="experienceButton" aria-haspopup="listbox" aria-expanded="false">
+            <span class="experience-icon" id="experienceIcon">◈</span>
+            <span class="workspace-copy"><strong id="experienceName">Customer app</strong><small>Preview experience</small></span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div class="experience-menu" id="experienceMenu" role="listbox">
+            <button data-mode="customer"><span>◈</span><b>Customer app</b><small>Business workspace</small></button>
+            <button data-mode="admin"><span>⌘</span><b>Control center</b><small>Platform owner</small></button>
+            <button data-mode="public"><span>◎</span><b>Public website</b><small>Marketing pages</small></button>
+          </div>
+        </div>
+
+        <nav class="nav-scroll" id="navList"><div class="nav-group"><span class="nav-group-title">Workspace</span><button class="nav-item active" data-view-target="overview" data-label="Overview" aria-current="page"><span class="nav-icon">⌂</span><span>Overview</span></button><button class="nav-item " data-view-target="calendar" data-label="Content calendar"><span class="nav-icon">□</span><span>Content calendar</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="posts" data-label="Posts library"><span class="nav-icon">▧</span><span>Posts library</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="composer" data-label="Create post"><span class="nav-icon">✎</span><span>Create post</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="studio" data-label="Design studio"><span class="nav-icon">✦</span><span>Design studio</span><em class="nav-badge">preview</em></button></div><div class="nav-group"><span class="nav-group-title">Grow</span><button class="nav-item " data-view-target="campaigns" data-label="Campaigns"><span class="nav-icon">◌</span><span>Campaigns</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="media" data-label="Media library"><span class="nav-icon">◇</span><span>Media library</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="copilot" data-label="AI Copilot"><span class="nav-icon">✧</span><span>AI Copilot</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="ideas" data-label="Content ideas"><span class="nav-icon">⚡</span><span>Content ideas</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="analytics" data-label="Analytics"><span class="nav-icon">↗</span><span>Analytics</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="reports" data-label="Reports"><span class="nav-icon">▥</span><span>Reports</span><em class="nav-badge">preview</em></button></div><div class="nav-group"><span class="nav-group-title">Manage</span><button class="nav-item " data-view-target="social" data-label="Social accounts"><span class="nav-icon">◎</span><span>Social accounts</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="approvals" data-label="Approvals"><span class="nav-icon">✓</span><span>Approvals</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="team" data-label="Team"><span class="nav-icon">♙</span><span>Team</span></button><button class="nav-item " data-view-target="roles" data-label="Roles &amp; permissions"><span class="nav-icon">⚿</span><span>Roles &amp; permissions</span></button><button class="nav-item " data-view-target="brand" data-label="Brand kit"><span class="nav-icon">B</span><span>Brand kit</span><em class="nav-badge">preview</em></button><button class="nav-item " data-view-target="plan" data-label="Plan &amp; usage"><span class="nav-icon">◫</span><span>Plan &amp; usage</span></button><button class="nav-item " data-view-target="settings" data-label="Settings"><span class="nav-icon">⚙</span><span>Settings</span></button></div><div class="nav-group"><span class="nav-group-title">Entry flows</span><button class="nav-item " data-view-target="customer-signin" data-label="Customer sign in"><span class="nav-icon">→</span><span>Customer sign in</span></button><button class="nav-item " data-view-target="customer-reset" data-label="Password reset"><span class="nav-icon">⚿</span><span>Password reset</span></button><button class="nav-item " data-view-target="workspace-picker" data-label="Workspace picker"><span class="nav-icon">◈</span><span>Workspace picker</span></button><button class="nav-item " data-view-target="invitation" data-label="Accept invitation"><span class="nav-icon">✉</span><span>Accept invitation</span></button><button class="nav-item " data-view-target="no-workspace" data-label="No workspace"><span class="nav-icon">○</span><span>No workspace</span></button></div></nav>
+
+        <div class="sidebar-bottom">
+          <button class="nav-item" data-special="map" data-label="Product map"><span class="nav-icon">⌗</span><span>Product map</span></button>
+          <button class="profile-button">
+            <span class="profile-avatar">MM</span><span class="profile-copy"><strong>Mohamed</strong><small id="profileRole">Workspace owner</small></span><span class="more">•••</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div class="title-block"><p class="eyebrow" id="pageEyebrow">Workspace</p><h1 id="pageTitle">Good morning, Mohamed</h1></div>
+          <div class="topbar-actions">
+            <button class="search-button" id="openSearch"><span>⌕</span><span>Search anything</span><kbd>⌘ K</kbd></button>
+            <button class="icon-button" aria-label="Notifications">♢<span class="notification-dot"></span></button>
+            <button class="ghost-button language-button" id="languageButton">AR</button>
+            <button class="primary-button compact" id="globalCreate">+ <span>Create</span></button>
+          </div>
+        </header>
+        <section class="view" id="view" aria-live="polite"><div class="hero-card"><div class="hero-copy"><span class="label-pill">Your week at a glance</span><h2>Everything your brand needs, in one calm place.</h2><p>Plan, create, collaborate and publish across every channel—with your AI marketing team beside you.</p><div class="hero-actions"><button class="dark-button" data-view-target="composer">Create a post</button> <button class="ghost-button" data-view-target="calendar">Open calendar</button></div></div><div class="hero-visual"><div class="float-card"><b>Performance this month</b><small>Engagement is up 18.4%</small><div class="mini-chart"><i style="height:45%"></i><i></i><i></i><i></i></div></div><div class="float-card"><b>Next to publish</b><small>Collection launch · Today 09:00</small></div></div></div><div class="metric-row"><article class="metric"><span>Scheduled</span><strong>12</strong><small>4 this week</small></article><article class="metric"><span>In review</span><strong>03</strong><small>Needs attention</small></article><article class="metric"><span>Published</span><strong>28</strong><small>Across 4 channels</small></article><article class="metric"><span>AI credits</span><strong>76%</strong><small>Resets in 12 days</small></article></div><div class="dashboard-grid"><section class="surface-card"><div class="section-head"><div><span class="section-kicker">Upcoming</span><h3>Next on your calendar</h3></div><button class="link-button" data-view-target="calendar">View all →</button></div><button class="list-item" data-post-id="launch"><span class="thumb "></span><span class="item-copy"><b>New collection launch</b><small>Instagram · Today, 09:00</small></span><span class="status ">Ready</span></button><button class="list-item" data-post-id="story"><span class="thumb alt"></span><span class="item-copy"><b>Founder story</b><small>LinkedIn · Tomorrow, 13:30</small></span><span class="status review">Review</span></button><button class="list-item" data-post-id="tips"><span class="thumb warm"></span><span class="item-copy"><b>Three useful tips</b><small>Facebook · Friday, 18:00</small></span><span class="status ">Ready</span></button></section><section class="surface-card"><div class="section-head"><div><span class="section-kicker">Copilot</span><h3>Continue creating</h3></div><span>✦</span></div><div class="quick-grid"><button class="quick-card" data-view-target="ideas"><span>⚡</span><b>Generate ideas</b><small>From your brand goals</small></button><button class="quick-card" data-view-target="composer"><span>✎</span><b>Write a post</b><small>With live preview</small></button><button class="quick-card" data-view-target="studio"><span>✦</span><b>Create a design</b><small>From a template</small></button><button class="quick-card" data-drawer="copilot"><span>✧</span><b>Ask Copilot</b><small>Plan your next move</small></button></div></section></div></section>
+      </main>
+    </div>
+
+    <button class="copilot-dock" id="copilotDock" aria-label="Open Copilot chat">
+      <span class="copilot-dock-icon">✦</span><span class="copilot-dock-copy"><b>Copilot</b><small>Ask about this page</small></span>
+    </button>
+
+    <button class="drawer-backdrop" id="drawerBackdrop" aria-label="Close panel"></button>
+    <aside class="side-drawer" id="sideDrawer" aria-hidden="true" aria-label="Details panel"><div id="drawerContent"></div></aside>
+
+    <div class="command-backdrop" id="commandBackdrop">
+      <section class="command-dialog" role="dialog" aria-modal="true" aria-label="Search BrandSpace">
+        <label><span>⌕</span><input id="commandInput" placeholder="Search pages and features…"></label>
+        <div id="commandResults"></div><small>Type to search · Enter to open · Esc to close</small>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="./app-1.js"></script>
+    <script src="./app-2.js"></script>
+    <script src="./app-3.js"></script>
+    <script src="./app-4.js"></script>
+    <script src="./brand-brain-nav.js"></script>
+    <script src="./brand-brain-native.js"></script>
+  
+
+</body></html>

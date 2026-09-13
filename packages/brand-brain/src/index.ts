@@ -11,10 +11,11 @@ export {
   AREA_DEFINITIONS,
   BRAND_KNOWLEDGE_AREAS,
   ORB_AREAS,
+  ORB_SLOTS,
   areaDefinition,
   isBrandKnowledgeArea,
 } from './areas';
-export type { AreaDefinition } from './areas';
+export type { AreaDefinition, OrbSlot } from './areas';
 
 export {
   comparePrecedence,

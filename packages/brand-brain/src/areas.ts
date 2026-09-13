@@ -155,3 +155,24 @@ export const ORB_AREAS: readonly BrandKnowledgeArea[] = [
   'LEARNINGS',
   'STRATEGY',
 ] as const;
+
+/**
+ * The demo's own name for each orbit position.
+ *
+ * The approved demo's stylesheet colours the six dots with attribute selectors
+ * on its own vocabulary — `[data-area="audience"]` and `[data-area="learnings"]`
+ * are purple, `[data-area="offers"]` and `[data-area="strategy"]` are yellow,
+ * the other two are ink. The product's area keys are not that vocabulary, so the
+ * mapping is written down here rather than guessed at the markup, where a
+ * mismatch would silently recolour the orb. See docs/UI-FIDELITY-CONTRACT.md.
+ */
+export const ORB_SLOTS = {
+  IDENTITY: 'identity',
+  AUDIENCE: 'audience',
+  OFFERS: 'offers',
+  TONE_OF_VOICE: 'voice',
+  LEARNINGS: 'learnings',
+  STRATEGY: 'strategy',
+} as const satisfies Record<string, string>;
+
+export type OrbSlot = (typeof ORB_SLOTS)[keyof typeof ORB_SLOTS];

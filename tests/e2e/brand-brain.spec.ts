@@ -182,7 +182,9 @@ test.describe('Brand Brain chat', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
-    const opener = page.getByTestId('chat-open');
+    // The demo's only chat entry point is the orb's centre, and the port keeps
+    // it that way (D-85). There is no separate floating "open chat" button.
+    const opener = page.getByTestId('orb-center');
     if (!(await opener.isVisible().catch(() => false))) test.skip();
     await opener.click();
 
@@ -205,7 +207,9 @@ test.describe('Brand Brain chat', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
-    const opener = page.getByTestId('chat-open');
+    // The demo's only chat entry point is the orb's centre, and the port keeps
+    // it that way (D-85). There is no separate floating "open chat" button.
+    const opener = page.getByTestId('orb-center');
     if (!(await opener.isVisible().catch(() => false))) test.skip();
     await opener.click();
     await expect(page.getByTestId('brand-chat')).toBeVisible();
@@ -222,7 +226,9 @@ test.describe('Brand Brain chat', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
-    const opener = page.getByTestId('chat-open');
+    // The demo's only chat entry point is the orb's centre, and the port keeps
+    // it that way (D-85). There is no separate floating "open chat" button.
+    const opener = page.getByTestId('orb-center');
     if (!(await opener.isVisible().catch(() => false))) test.skip();
     await opener.click();
 
@@ -231,9 +237,10 @@ test.describe('Brand Brain chat', () => {
     await composer.focus();
     await expect(composer).toBeFocused();
 
-    // A long multi-line draft grows the textarea to a CEILING and then scrolls
-    // internally, rather than pushing the send button out of the panel.
-    await composer.fill('line\n'.repeat(30));
+    // The demo's composer is a SINGLE-LINE input inside a fixed pill, so a long
+    // draft scrolls the field rather than growing the panel and pushing the send
+    // button out of it.
+    await composer.fill('line '.repeat(60));
     const height = await composer.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBeLessThanOrEqual(130);
     await expect(page.getByTestId('chat-send')).toBeVisible();
@@ -243,7 +250,9 @@ test.describe('Brand Brain chat', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
-    const opener = page.getByTestId('chat-open');
+    // The demo's only chat entry point is the orb's centre, and the port keeps
+    // it that way (D-85). There is no separate floating "open chat" button.
+    const opener = page.getByTestId('orb-center');
     if (!(await opener.isVisible().catch(() => false))) test.skip();
     await opener.click();
 
@@ -272,7 +281,9 @@ test.describe('Brand Brain chat', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
-    const opener = page.getByTestId('chat-open');
+    // The demo's only chat entry point is the orb's centre, and the port keeps
+    // it that way (D-85). There is no separate floating "open chat" button.
+    const opener = page.getByTestId('orb-center');
     if (!(await opener.isVisible().catch(() => false))) test.skip();
     await opener.click();
 

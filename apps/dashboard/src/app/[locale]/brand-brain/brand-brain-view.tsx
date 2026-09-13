@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { colorTokens, typographyTokens } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { BrandChat } from './brand-chat';
@@ -10,9 +9,24 @@ import { AreaDrawer } from './area-drawer';
 /**
  * The Brand Brain client island.
  *
- * Holds only what has to be interactive — which area is open, whether chat is
- * open, and the pending file drop. Everything it renders was computed on the
- * server from stored state, so nothing here invents a number.
+ * THE MARKUP IS THE APPROVED DEMO'S, CLASS FOR CLASS. `.brand-brain-page`,
+ * `.bb-page-head`, `.bb-hero`, `.bb-hero-stats`, `.bb-stats-view`,
+ * `.bb-completion`, `.bb-health`, `.bb-attention`, `.bb-section-title`,
+ * `.bb-grid`, `.bb-card`, `.bb-bottom`, `.bb-intel`, `.bb-source`, `.bb-doc` —
+ * every one of them is transcribed in `@brandspace/ui/brand-brain.css` from the
+ * pinned snapshot in `docs/visual-reference/brand-brain-native/`. There are no
+ * inline layout styles on this page any more, because an inline style is where
+ * the previous version quietly became a different design.
+ *
+ * THE DATA IS THE WORKSPACE'S, VALUE FOR VALUE. The demo showed 82%, 128 items,
+ * "+14 this month" and four invented PDFs. Nothing here is a demo literal:
+ * every number was computed on the server from stored state, and an empty Brand
+ * Brain reads 0% rather than borrowing the demo's encouraging figure. Real data
+ * flowing into the demo's shapes is exactly the split the fidelity contract
+ * draws — see docs/UI-FIDELITY-CONTRACT.md §2.
+ *
+ * This component holds only what has to be interactive: which area drawer is
+ * open, whether the hero panel is showing the chat, and the pending file drop.
  */
 
 export interface AreaItemData {
@@ -57,6 +71,8 @@ export interface SourceData {
   readonly status: string;
   readonly statusLabel: string;
   readonly detail: string;
+  /** The three- or four-letter badge the demo prints in `.bb-doc i`. */
+  readonly kind: string;
 }
 
 export interface BrandBrainPermissions {
@@ -67,14 +83,34 @@ export interface BrandBrainPermissions {
   readonly chat: boolean;
 }
 
+/**
+ * The demo's glyph for each card.
+ *
+ * Eight are the demo's own, taken from its markup. STRATEGY and LEARNINGS have
+ * no demo card — the demo shows eight areas and the product has ten (D-87) — so
+ * they take the demo's own intelligence mark and its sibling rather than a
+ * glyph from somewhere else.
+ */
+const AREA_GLYPHS: Record<string, string> = {
+  IDENTITY: '◇',
+  AUDIENCE: '◎',
+  TONE_OF_VOICE: '✎',
+  OFFERS: '▦',
+  PROOF_POINTS: '✓',
+  DO_DONT: '↔',
+  COMPETITORS: '⌁',
+  GLOSSARY: 'Aa',
+  STRATEGY: '✧',
+  LEARNINGS: '✦',
+};
+
 export function BrandBrainView({
   locale,
   brandId,
-  brandName,
   completionPercent,
   totalActiveItems,
   sourceCount,
-  orbAreas,
+  orbNodes,
   areas,
   candidates,
   sources,
@@ -83,11 +119,10 @@ export function BrandBrainView({
 }: {
   locale: string;
   brandId: string;
-  brandName: string;
   completionPercent: number;
   totalActiveItems: number;
   sourceCount: number;
-  orbAreas: readonly string[];
+  orbNodes: readonly OrbNode[];
   areas: readonly AreaCardData[];
   candidates: readonly CandidateData[];
   sources: readonly SourceData[];
@@ -103,26 +138,14 @@ export function BrandBrainView({
   const dropAreaRef = useRef<HTMLInputElement | null>(null);
 
   const byArea = new Map(areas.map((a) => [a.area, a]));
+  const needingAttention = areas.filter((a) => a.attention.length > 0 && a.status !== 'EMPTY');
+  const pendingTotal = areas.reduce((sum, area) => sum + area.pendingCandidates, 0);
+  const readySources = sources.filter((source) => source.status === 'READY').length;
 
-  const nodes: OrbNode[] = orbAreas
-    .map((area) => byArea.get(area))
-    .filter((area): area is AreaCardData => area !== undefined)
-    .map((area) => ({
-      area: area.area,
-      label: area.label,
-      // The real count, in the reader's language. The demo said "12 facts";
-      // this says what is actually there.
-      detail: `${area.activeItems} ${t('bb.itemsCount')}`,
-      status: area.status,
-    }));
-
-  const selectArea = useCallback((area: string) => {
-    if (area === '__chat__') {
-      setChatArea(null);
-      setChatOpen(true);
-      return;
-    }
-    setOpenArea(area);
+  const openChat = useCallback((area: string | null) => {
+    setChatArea(area);
+    setChatOpen(true);
+    setOpenArea(null);
   }, []);
 
   /**
@@ -149,534 +172,126 @@ export function BrandBrainView({
     [permissions.upload],
   );
 
+  /** The chat's attach button, wired to the one real upload control. */
+  const onAttach = useCallback(() => {
+    const input = fileRef.current;
+    if (!input) return;
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input.click();
+  }, []);
+
   const openAreaData = openArea ? (byArea.get(openArea) ?? null) : null;
+  const chatAreaLabel = chatArea ? (byArea.get(chatArea)?.label ?? null) : null;
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <section
-        style={{
-          display: 'grid',
-          /*
-           * INTRINSICALLY RESPONSIVE, not breakpoint-driven.
-           *
-           * This was a fixed two-column grid, which on a phone squeezed both
-           * tracks to a couple of hundred pixels and let the completion card
-           * sit on top of the orb — a broken screen that every desktop check
-           * passed. `auto-fit` + `min(100%, …)` collapses to one column when
-           * there is not room for two, with no media query to keep in sync
-           * with a design that will keep changing.
-           */
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
-          gap: '22px',
-          padding: 'clamp(14px, 3vw, 22px)',
-          borderRadius: '28px',
-          background: 'rgba(255,255,255,.86)',
-        }}
-        data-testid="brand-brain-hero"
-      >
-        <div style={{ display: 'grid', gap: '14px', minWidth: 0 }}>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 'clamp(1.75rem, 4.4vw, 3.4rem)',
-              lineHeight: 0.95,
-              letterSpacing: '-0.055em',
-              // Long words in either language break rather than push the grid
-              // track wider than the screen.
-              overflowWrap: 'anywhere',
-            }}
-          >
+    <div className="brand-brain-page">
+      <div className="bb-page-head">
+        <div>
+          <h2>
             {t('bb.heroTitle')}
             <br />
-            <strong style={{ color: colorTokens.brandPurple }}>{t('bb.heroTitleAccent')}</strong>
+            <strong>{t('bb.heroTitleAccent')}</strong>
           </h2>
-          <BrandOrb
-            nodes={nodes}
-            centerLabel={brandName}
-            centerAriaLabel={t('bb.orbOpenChat')}
-            hint={t('bb.orbHint')}
-            onSelectArea={selectArea}
-            onDropFile={onDropFile}
-            canUpload={permissions.upload}
-          />
         </div>
-
-        <div style={{ display: 'grid', gap: '12px', alignContent: 'start' }}>
-          <div
-            data-testid="completion-card"
-            style={{
-              padding: '20px',
-              borderRadius: '22px',
-              background: colorTokens.ink,
-              color: colorTokens.surface,
-            }}
-          >
-            {/*
-              THE FOREGROUND TOKEN FOR INK, NOT A LIGHT-BACKGROUND GREY.
-              `textSubtle` is 3.89:1 on ink — a serious WCAG failure that axe
-              caught the moment the literals became tokens, because the greys
-              it replaced were chosen by eye for a dark card and the token
-              system has no muted-on-ink step. Hierarchy comes from opacity
-              instead, which keeps the caption secondary while staying well
-              clear of AA.
-            */}
-            <small
-              style={{
-                color: colorTokens.inkInk,
-                opacity: 0.7,
-                fontSize: typographyTokens.caption.fontSize,
-                letterSpacing: '.1em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {t('bb.completion')}
-            </small>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'end',
-                justifyContent: 'space-between',
-                marginTop: 12,
-              }}
-            >
-              <b
-                data-testid="completion-percent"
-                style={{ fontSize: typographyTokens.display.fontSize, letterSpacing: '-.06em' }}
-              >
-                {completionPercent}%
-              </b>
-              <span
-                style={{
-                  fontSize: typographyTokens.caption.fontSize,
-                  color: colorTokens.inkInk,
-                  opacity: 0.75,
-                }}
-              >
-                {completionPercent >= 70
-                  ? t('bb.completionStrong')
-                  : completionPercent > 0
-                    ? t('bb.completionBuilding')
-                    : t('bb.completionEmpty')}
-              </span>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuenow={completionPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={t('bb.completion')}
-              style={{
-                height: 8,
-                background: colorTokens.surfaceInk,
-                borderRadius: 99,
-                overflow: 'hidden',
-                marginTop: 14,
-              }}
-            >
-              <i
-                style={{
-                  display: 'block',
-                  width: `${completionPercent}%`,
-                  height: '100%',
-                  background: `linear-gradient(90deg,${colorTokens.brandPurple},${colorTokens.brandYellow})`,
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Metric label={t('bb.knowledgeItems')} value={totalActiveItems} testId="metric-items" />
-            <Metric label={t('bb.sourceDocuments')} value={sourceCount} testId="metric-sources" />
-          </div>
-
-          <div
-            data-testid="attention-card"
-            style={{ padding: '16px', borderRadius: '18px', background: colorTokens.warningTint }}
-          >
-            <b style={{ fontSize: typographyTokens.label.fontSize }}>{t('bb.attentionTitle')}</b>
-            {areas.some((a) => a.attention.length > 0 && a.status !== 'EMPTY') ? (
-              <ul
-                style={{
-                  margin: '8px 0 0',
-                  paddingInlineStart: '1.1rem',
-                  fontSize: typographyTokens.bodySm.fontSize,
-                  color: colorTokens.textSecondary,
-                }}
-              >
-                {areas
-                  .filter((a) => a.attention.length > 0 && a.status !== 'EMPTY')
-                  .map((a) => (
-                    <li key={a.area}>
-                      {a.label} — {a.attention.join(' · ')}
-                    </li>
-                  ))}
-              </ul>
-            ) : (
-              <p
-                style={{
-                  margin: '8px 0 0',
-                  fontSize: typographyTokens.bodySm.fontSize,
-                  color: colorTokens.textSecondary,
-                }}
-              >
-                {t('bb.attentionNone')}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'end',
-            flexWrap: 'wrap',
-            gap: 8,
-            margin: '10px 4px',
-          }}
-        >
-          <div>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 'clamp(1.15rem, 3vw, 1.5rem)',
-                letterSpacing: '-.04em',
-              }}
-            >
-              {t('bb.areasTitle')}
-            </h3>
-            <p
-              style={{
-                margin: 0,
-                color: colorTokens.textMuted,
-                fontSize: typographyTokens.bodySm.fontSize,
-              }}
-            >
-              {t('bb.areasSubtitle')}
-            </p>
-          </div>
-          <p
-            style={{
-              margin: 0,
-              color: colorTokens.textMuted,
-              fontSize: typographyTokens.bodySm.fontSize,
-            }}
-          >
-            {t('bb.areasHint')}
-          </p>
-        </div>
-
-        <div
-          data-testid="area-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 230px), 1fr))',
-            gap: 12,
-          }}
-        >
-          {areas.map((area) => (
-            <button
-              key={area.area}
-              type="button"
-              data-testid={`area-card-${area.area}`}
-              onClick={() => setOpenArea(area.area)}
-              style={{
-                textAlign: 'start',
-                border: 0,
-                borderRadius: 20,
-                padding: 18,
-                minHeight: 170,
-                background: 'rgba(255,255,255,.9)',
-                display: 'flex',
-                flexDirection: 'column',
-                cursor: 'pointer',
-                font: 'inherit',
-              }}
-            >
-              <h4
-                style={{
-                  margin: '0 0 6px',
-                  fontSize: typographyTokens.h3.fontSize,
-                  letterSpacing: '-.03em',
-                }}
-              >
-                {area.label}
-              </h4>
-              <p
-                style={{
-                  margin: 0,
-                  color: colorTokens.textMuted,
-                  fontSize: typographyTokens.bodySm.fontSize,
-                  lineHeight: 1.55,
-                }}
-              >
-                {area.description}
-              </p>
-              <footer
-                style={{
-                  marginTop: 'auto',
-                  paddingTop: 14,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span
-                  data-testid={`area-status-${area.area}`}
-                  style={{
-                    fontSize: typographyTokens.caption.fontSize,
-                    fontWeight: 800,
-                    padding: '5px 8px',
-                    borderRadius: 99,
-                    color:
-                      area.status === 'COMPLETE'
-                        ? colorTokens.success
-                        : area.status === 'NEEDS_ATTENTION'
-                          ? colorTokens.brandYellowText
-                          : colorTokens.textSecondary,
-                    background:
-                      area.status === 'COMPLETE'
-                        ? colorTokens.successTint
-                        : area.status === 'NEEDS_ATTENTION'
-                          ? colorTokens.brandYellowTint
-                          : colorTokens.controlSurface,
-                  }}
-                >
-                  {area.statusLabel}
-                </span>
-                {/*
-                  The MUTED TOKEN, not the demo's grey. That grey is 2.84:1 on white at this
-                  size, which axe flags as a serious WCAG 2.2 AA failure and a
-                  reader with low vision experiences as an unreadable caption.
-                  The muted token is 5.36:1 and looks the same at a glance.
-                */}
-                <span
-                  style={{
-                    fontSize: typographyTokens.caption.fontSize,
-                    color: colorTokens.textMuted,
-                  }}
-                >
-                  {area.activeItems} {t('bb.itemsCount')}
-                  {area.pendingCandidates > 0
-                    ? ` · ${area.pendingCandidates} ${t('bb.pendingCount')}`
-                    : ''}
-                </span>
-              </footer>
-            </button>
-          ))}
-        </div>
+        <p>{t('bb.heroBody')}</p>
       </div>
 
-      <section
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
-          gap: 12,
-        }}
-      >
+      <section className="bb-hero" data-testid="brand-brain-hero">
+        <BrandOrb
+          nodes={orbNodes}
+          centerLabel={[t('bb.orbCenterTop'), t('bb.orbCenterBottom')]}
+          centerAriaLabel={t('bb.orbOpenChat')}
+          stageAriaLabel={t('bb.orbLabel')}
+          hint={t('bb.orbHint')}
+          onSelectArea={setOpenArea}
+          onOpenChat={() => openChat(null)}
+          onDropFile={onDropFile}
+          canUpload={permissions.upload}
+        />
+
+        {/*
+          ONE PANEL, TWO VIEWS. The demo does not float a chat window over the
+          page; it swaps the hero's right-hand column between the stats and the
+          chat, which is why `.bb-hero-stats` has a fixed height and both
+          children are `height: 100%`. Keeping that structure is what stops the
+          chat from changing the page's layout when it opens.
+        */}
         <div
-          data-testid="intel-card"
-          style={{
-            padding: 20,
-            borderRadius: 22,
-            background: `linear-gradient(145deg,${colorTokens.brandPurpleTint},${colorTokens.brandYellowTint})`,
-          }}
+          className={chatOpen ? 'bb-hero-stats chat-open' : 'bb-hero-stats'}
+          data-testid="hero-stats"
+          data-chat-open={chatOpen ? 'true' : 'false'}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: typographyTokens.h3.fontSize }}>
-              {t('bb.intelTitle')}
-            </h3>
-            <span
-              style={{
-                padding: '5px 9px',
-                borderRadius: 999,
-                background: 'rgba(121,53,254,.12)',
-                color: colorTokens.brandPurpleHover,
-                fontSize: typographyTokens.caption.fontSize,
-                fontWeight: 850,
-              }}
-            >
-              {t('bb.intelBadge')}
-            </span>
-          </div>
-          {candidates.length === 0 ? (
-            <p
-              style={{
-                margin: '14px 0 0',
-                color: colorTokens.textSecondary,
-                fontSize: typographyTokens.bodySm.fontSize,
-              }}
-            >
-              {t('bb.intelNone')}
-            </p>
-          ) : (
-            <p
-              style={{
-                margin: '14px 0 0',
-                color: colorTokens.textSecondary,
-                fontSize: typographyTokens.bodySm.fontSize,
-              }}
-            >
-              {candidates.length} {t('bb.pendingCount')}
-            </p>
-          )}
-        </div>
-
-        <div
-          data-testid="sources-card"
-          style={{ padding: 20, borderRadius: 22, background: 'rgba(255,255,255,.9)' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: typographyTokens.h3.fontSize }}>
-              {t('bb.sourcesTitle')}
-            </h3>
-          </div>
-
-          {/*
-            The real upload form, and the target of a file dropped on the orb.
-            It is rendered only when the caller may upload: a control that looks
-            live and answers 404 is worse than one that is not there.
-          */}
-          {permissions.upload ? (
-            <form
-              ref={uploadRef}
-              action="?"
-              method="post"
-              encType="multipart/form-data"
-              data-testid="upload-form"
-              style={{ display: 'grid', gap: 8, marginTop: 12 }}
-            >
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="brandId" value={brandId} />
-              <input type="hidden" name="area" ref={dropAreaRef} defaultValue="" />
-              <input
-                ref={fileRef}
-                type="file"
-                name="file"
-                required
-                data-testid="upload-input"
-                aria-label={t('bb.upload')}
-                style={{ font: 'inherit', fontSize: typographyTokens.bodySm.fontSize }}
-              />
-              <button
-                type="submit"
-                data-testid="upload-submit"
-                formAction={uploadFormAction}
-                style={{
-                  border: 0,
-                  borderRadius: 12,
-                  padding: '9px 14px',
-                  background: colorTokens.ink,
-                  color: colorTokens.surface,
-                  fontWeight: 700,
-                  fontSize: typographyTokens.bodySm.fontSize,
-                  cursor: 'pointer',
-                  font: 'inherit',
-                  justifySelf: 'start',
-                }}
+          <div className="bb-stats-view" data-testid="stats-view">
+            <div className="bb-completion" data-testid="completion-card">
+              <small>{t('bb.completion')}</small>
+              <div className="bb-completion-big">
+                <b data-testid="completion-percent">{completionPercent}%</b>
+                <span>
+                  {completionPercent >= 70
+                    ? t('bb.completionStrong')
+                    : completionPercent > 0
+                      ? t('bb.completionBuilding')
+                      : t('bb.completionEmpty')}
+                </span>
+              </div>
+              <div
+                className="bb-progress"
+                role="progressbar"
+                aria-valuenow={completionPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t('bb.completion')}
               >
-                {t('bb.upload')}
-              </button>
-              <small
-                style={{
-                  color: colorTokens.textMuted,
-                  fontSize: typographyTokens.caption.fontSize,
-                }}
-              >
-                {t('bb.uploadHint')}
-              </small>
-            </form>
-          ) : null}
+                <i style={{ width: `${completionPercent}%` }} />
+              </div>
+            </div>
 
-          <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
-            {sources.length === 0 ? (
-              <p
-                style={{
-                  margin: 0,
-                  color: colorTokens.textMuted,
-                  fontSize: typographyTokens.bodySm.fontSize,
-                }}
-              >
-                {t('bb.sourcesNone')}
-              </p>
-            ) : (
-              sources.map((source) => (
-                <div
-                  key={source.id}
-                  data-testid={`source-${source.id}`}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0,1fr) auto',
-                    gap: 10,
-                    alignItems: 'center',
-                    padding: 10,
-                    borderRadius: 14,
-                    background: colorTokens.surfaceSoft,
-                  }}
-                >
-                  <span style={{ minWidth: 0 }}>
-                    <b
-                      style={{
-                        display: 'block',
-                        fontSize: typographyTokens.bodySm.fontSize,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {source.fileName}
-                    </b>
-                    <small
-                      style={{
-                        color: colorTokens.textMuted,
-                        fontSize: typographyTokens.caption.fontSize,
-                      }}
-                    >
-                      {source.detail}
-                    </small>
-                  </span>
-                  <span
-                    style={{
-                      fontSize: typographyTokens.caption.fontSize,
-                      fontWeight: 700,
-                      color: source.status === 'FAILED' ? colorTokens.danger : colorTokens.success,
-                    }}
-                  >
-                    {source.statusLabel}
-                  </span>
-                </div>
-              ))
-            )}
+            <div className="bb-health">
+              <div className="bb-mini">
+                <small>{t('bb.knowledgeItems')}</small>
+                <b data-testid="metric-items">{totalActiveItems}</b>
+                <span>
+                  {pendingTotal > 0
+                    ? `${pendingTotal} ${t('bb.pendingCount')}`
+                    : t('bb.reviewNone')}
+                </span>
+              </div>
+              <div className="bb-mini">
+                <small>{t('bb.sourceDocuments')}</small>
+                <b data-testid="metric-sources">{sourceCount}</b>
+                <span>
+                  {readySources} {t('bb.source.READY')}
+                </span>
+              </div>
+            </div>
+
+            <div className="bb-attention" data-testid="attention-card">
+              <b>{t('bb.attentionTitle')}</b>
+              {needingAttention.length > 0 ? (
+                <ul>
+                  {needingAttention.map((area) => (
+                    <li key={area.area}>
+                      {area.label} — {area.attention.join(' · ')}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{t('bb.attentionNone')}</p>
+              )}
+            </div>
           </div>
-        </div>
-      </section>
 
-      {chatOpen ? (
-        <div
-          style={{
-            position: 'fixed',
-            insetInlineEnd: 20,
-            insetBlockEnd: 20,
-            width: 'min(360px, calc(100vw - 40px))',
-            zIndex: 30,
-          }}
-        >
           <BrandChat
             brandId={brandId}
             area={chatArea}
+            areaLabel={chatAreaLabel}
             canChat={permissions.chat}
+            canUpload={permissions.upload}
             initialMessages={[]}
+            hidden={!chatOpen}
             onClose={() => setChatOpen(false)}
+            onAttach={onAttach}
+            onAreaDetails={chatArea ? () => setOpenArea(chatArea) : null}
             labels={{
               title: t('bb.chatTitle'),
               subtitle: t('bb.chatSubtitle'),
@@ -692,37 +307,159 @@ export function BrandBrainView({
               expired: t('bb.chatExpired'),
               error: t('bb.chatError'),
               close: t('bb.chatClose'),
+              contextAll: t('bb.chatContextAll'),
+              areaDetails: t('bb.chatAreaDetails'),
+              attach: t('bb.chatAttach'),
+              suggestions: [
+                {
+                  label: t('bb.suggestPositioningLabel'),
+                  prompt: t('bb.suggestPositioningPrompt'),
+                },
+                { label: t('bb.suggestGapsLabel'), prompt: t('bb.suggestGapsPrompt') },
+                { label: t('bb.suggestVoiceLabel'), prompt: t('bb.suggestVoicePrompt') },
+              ],
             }}
           />
         </div>
-      ) : permissions.chat ? (
-        <button
-          type="button"
-          data-testid="chat-open"
-          onClick={() => {
-            setChatArea(null);
-            setChatOpen(true);
-          }}
-          style={{
-            position: 'fixed',
-            insetInlineEnd: 20,
-            insetBlockEnd: 20,
-            zIndex: 30,
-            border: 0,
-            borderRadius: 16,
-            padding: '12px 16px',
-            background: colorTokens.brandPurple,
-            color: colorTokens.surface,
-            fontWeight: 700,
-            fontSize: typographyTokens.bodySm.fontSize,
-            cursor: 'pointer',
-            boxShadow: '0 18px 46px rgba(22,16,39,.2)',
-            font: 'inherit',
-          }}
-        >
-          {t('bb.chatOpen')}
-        </button>
-      ) : null}
+      </section>
+
+      <div className="bb-section-title">
+        <div>
+          <h3>{t('bb.areasTitle')}</h3>
+          <p>{t('bb.areasSubtitle')}</p>
+        </div>
+        <p>{t('bb.areasHint')}</p>
+      </div>
+
+      <section className="bb-grid" data-testid="area-grid">
+        {areas.map((area) => (
+          <button
+            key={area.area}
+            type="button"
+            className="bb-card"
+            data-testid={`area-card-${area.area}`}
+            onClick={() => setOpenArea(area.area)}
+          >
+            <span className="bb-icon" aria-hidden="true">
+              {AREA_GLYPHS[area.area] ?? '◇'}
+            </span>
+            <h4>{area.label}</h4>
+            <p>{area.description}</p>
+            <footer>
+              <span
+                className={area.status === 'COMPLETE' ? 'bb-status' : 'bb-status warn'}
+                data-testid={`area-status-${area.area}`}
+              >
+                {area.statusLabel}
+              </span>
+              <span className="bb-count">
+                {area.activeItems} {t('bb.itemsCount')}
+                {area.pendingCandidates > 0
+                  ? ` · ${area.pendingCandidates} ${t('bb.pendingCount')}`
+                  : ''}
+              </span>
+            </footer>
+          </button>
+        ))}
+      </section>
+
+      <section className="bb-bottom">
+        <div className="bb-intel" data-testid="intel-card">
+          <div className="bb-intel-head">
+            <h4>{t('bb.intelTitle')}</h4>
+            <span className="bb-badge">{t('bb.intelBadge')}</span>
+          </div>
+
+          {candidates.length === 0 ? (
+            <div className="bb-learning">
+              <p>{t('bb.intelNone')}</p>
+            </div>
+          ) : (
+            candidates.slice(0, 3).map((candidate) => (
+              <div className="bb-learning" key={candidate.id} data-testid={`intel-${candidate.id}`}>
+                <small>{byArea.get(candidate.area)?.label ?? candidate.area}</small>
+                <b>{candidate.title}</b>
+                <p>{candidate.body}</p>
+                {permissions.review ? (
+                  <div className="bb-learning-actions">
+                    {/*
+                      Opens the drawer where accept and reject live. It does NOT
+                      approve anything from here: approving is a state change
+                      that needs the evidence and the existing value in front of
+                      the reviewer, which is what the drawer shows.
+                    */}
+                    <button
+                      type="button"
+                      className="accept"
+                      data-testid={`intel-review-${candidate.id}`}
+                      onClick={() => setOpenArea(candidate.area)}
+                    >
+                      {t('bb.intelReview')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="bb-source" data-testid="sources-card">
+          <div className="bb-source-head">
+            <h4>{t('bb.sourcesTitle')}</h4>
+          </div>
+
+          {/*
+            The real upload form, and the target of a file dropped on the orb.
+            It is rendered only when the caller may upload: a control that looks
+            live and answers 404 is worse than one that is not there.
+          */}
+          {permissions.upload ? (
+            <form
+              ref={uploadRef}
+              action="?"
+              method="post"
+              encType="multipart/form-data"
+              data-testid="upload-form"
+              className="bb-upload"
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="brandId" value={brandId} />
+              <input type="hidden" name="area" ref={dropAreaRef} defaultValue="" />
+              <input
+                ref={fileRef}
+                type="file"
+                name="file"
+                required
+                data-testid="upload-input"
+                aria-label={t('bb.upload')}
+              />
+              <button type="submit" data-testid="upload-submit" formAction={uploadFormAction}>
+                {t('bb.upload')}
+              </button>
+              <small>{t('bb.uploadHint')}</small>
+            </form>
+          ) : null}
+
+          <div className="bb-source-list">
+            {sources.length === 0 ? (
+              <p className="bb-source-empty">{t('bb.sourcesNone')}</p>
+            ) : (
+              sources.map((source) => (
+                <div className="bb-doc" key={source.id} data-testid={`source-${source.id}`}>
+                  <i aria-hidden="true">{source.kind}</i>
+                  <span>
+                    <b>{source.fileName}</b>
+                    <small>{source.detail}</small>
+                  </span>
+                  <span className={source.status === 'FAILED' ? 'failed' : undefined}>
+                    {source.statusLabel}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
 
       <AreaDrawer
         locale={locale}
@@ -731,34 +468,8 @@ export function BrandBrainView({
         candidates={candidates.filter((c) => c.area === openArea)}
         permissions={permissions}
         onClose={() => setOpenArea(null)}
-        onAskAbout={(area: string) => {
-          setChatArea(area);
-          setChatOpen(true);
-          setOpenArea(null);
-        }}
+        onAskAbout={(area: string) => openChat(area)}
       />
-    </div>
-  );
-}
-
-function Metric({ label, value, testId }: { label: string; value: number; testId: string }) {
-  return (
-    <div style={{ padding: 16, borderRadius: 18, background: colorTokens.surface }}>
-      <small
-        style={{
-          display: 'block',
-          color: colorTokens.textMuted,
-          fontSize: typographyTokens.caption.fontSize,
-        }}
-      >
-        {label}
-      </small>
-      <b
-        data-testid={testId}
-        style={{ display: 'block', marginTop: 6, fontSize: typographyTokens.h1.fontSize }}
-      >
-        {value}
-      </b>
     </div>
   );
 }
@@ -770,3 +481,4 @@ function Metric({ label, value, testId }: { label: string; value: number; testId
 import { uploadSourceAction as uploadFormAction } from './actions';
 
 export type { MessageKey };
+export type { OrbNode };

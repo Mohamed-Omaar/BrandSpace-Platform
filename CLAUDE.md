@@ -146,6 +146,29 @@ Module boundaries are enforced by lint rules on import paths. A package may not 
   UI. The token remains defined so historical decisions stay readable, and nothing consumes it.
   See D-42, D-60 and D-61 in `docs/DECISIONS.md`; the vendored demo in
   `docs/visual-reference/full-demo/` is the visual authority and contains no blue at all.
+
+### 4.1 UI fidelity — the approved demo is a SPECIFICATION
+
+**`docs/UI-FIDELITY-CONTRACT.md` is binding on every customer-facing route.** Read it before building
+or changing one. In short:
+
+- The approved demo is a **UI specification**, not a loose visual reference or a mood board.
+- Implementations **mechanically port** the demo's HTML, CSS, layout, motion and interaction. Numeric
+  constants are transcribed exactly; geometry keeps the same formula; composition keeps the same
+  nesting.
+- **Do not redesign, improve, simplify, reposition, recolour or replace** an approved element without an
+  owner decision that authorises it. Converting to React must not change the visual output.
+- Real data arrives through **typed adapters** at the prop boundary and never causes a redesign.
+  Production never ships demo data; deterministic E2E fixtures may reproduce it for visual tests only.
+- **Every route declares its demo source file and pinned source commit** in the contract's manifest.
+- **The token rule does not license approximation.** §4 forbids colour literals in components; satisfy it
+  by adding a token carrying the demo's EXACT value, never by substituting the nearest existing token.
+- **Visible is not faithful, and accessible is not faithful.** No phase claims visual completion without
+  measured parity against the pinned source.
+
+Phase 5A is the cautionary case: it passed every automated check while re-interpreting the orb, and was
+accessible, correct, well-tested and wrong.
+
 - Accessibility target: **WCAG 2.2 AA**. Keyboard navigable, correct landmarks, visible focus, adequate contrast.
 - Public website performance target: Lighthouse ≥ 95, LCP < 2.0s, CLS < 0.1 on mid-tier mobile.
 
@@ -202,17 +225,18 @@ A change is done when:
 
 ## 8. Document Map
 
-| Document                          | Purpose                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `docs/PRODUCT.md`                 | Product definition, interfaces, personas, modules, page and screen inventory         |
-| `docs/ARCHITECTURE.md`            | System architecture, tech stack, module boundaries, tenancy, configuration service   |
-| `docs/DATABASE.md`                | Entities, relationships, indexes, constraints, lifecycle states, ER diagram          |
-| `docs/SECURITY.md`                | Tenant isolation, RBAC, secrets, encryption, reliability, privacy, incident response |
-| `docs/ADMIN-CONTROL-CENTER.md`    | Platform Admin modules, workflows, permissions, support mode                         |
-| `docs/AI-GATEWAY.md`              | Provider-agnostic AI gateway, routing, budgets, credits, ledger, failure handling    |
-| `docs/SOCIAL-INTEGRATIONS.md`     | Social connectors, OAuth, publishing pipeline, analytics ingestion                   |
-| `docs/BILLING-AND-CREDITS.md`     | Payment abstraction, subscriptions, invoices, AI credit economics                    |
-| `docs/ROADMAP.md`                 | Phase 0 → Phase 8 + future expansion                                                 |
-| `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice                            |
-| `docs/DESIGN-SYSTEM.md`           | Design tokens, components, shell behaviour, RTL/LTR, preview and Copilot contracts   |
-| `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed  |
+| Document                          | Purpose                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `docs/PRODUCT.md`                 | Product definition, interfaces, personas, modules, page and screen inventory                      |
+| `docs/ARCHITECTURE.md`            | System architecture, tech stack, module boundaries, tenancy, configuration service                |
+| `docs/DATABASE.md`                | Entities, relationships, indexes, constraints, lifecycle states, ER diagram                       |
+| `docs/SECURITY.md`                | Tenant isolation, RBAC, secrets, encryption, reliability, privacy, incident response              |
+| `docs/ADMIN-CONTROL-CENTER.md`    | Platform Admin modules, workflows, permissions, support mode                                      |
+| `docs/AI-GATEWAY.md`              | Provider-agnostic AI gateway, routing, budgets, credits, ledger, failure handling                 |
+| `docs/SOCIAL-INTEGRATIONS.md`     | Social connectors, OAuth, publishing pipeline, analytics ingestion                                |
+| `docs/BILLING-AND-CREDITS.md`     | Payment abstraction, subscriptions, invoices, AI credit economics                                 |
+| `docs/ROADMAP.md`                 | Phase 0 → Phase 8 + future expansion                                                              |
+| `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice                                         |
+| `docs/DESIGN-SYSTEM.md`           | Design tokens, components, shell behaviour, RTL/LTR, preview and Copilot contracts                |
+| `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed               |
+| `docs/UI-FIDELITY-CONTRACT.md`    | **Binding.** The demo as UI specification, the route-to-reference manifest, authorised deviations |
