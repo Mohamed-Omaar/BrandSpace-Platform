@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { colorTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
 import {
@@ -150,9 +151,18 @@ export function AreaDrawer({
           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 10 }}
         >
           <div style={{ minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: '1.6rem', letterSpacing: '-.04em' }}>{area.label}</h2>
+            <h2
+              style={{ margin: 0, fontSize: typographyTokens.h2.fontSize, letterSpacing: '-.04em' }}
+            >
+              {area.label}
+            </h2>
             <p
-              style={{ margin: '6px 0 0', color: '#6D6D76', fontSize: '0.72rem', lineHeight: 1.6 }}
+              style={{
+                margin: '6px 0 0',
+                color: colorTokens.textMuted,
+                fontSize: typographyTokens.bodySm.fontSize,
+                lineHeight: 1.6,
+              }}
             >
               {area.description}
             </p>
@@ -168,7 +178,7 @@ export function AreaDrawer({
               borderRadius: 12,
               width: 36,
               height: 36,
-              background: '#F1F1F3',
+              background: colorTokens.controlSurface,
               cursor: 'pointer',
               font: 'inherit',
               flexShrink: 0,
@@ -209,8 +219,8 @@ export function AreaDrawer({
               margin: 0,
               padding: 12,
               borderRadius: 14,
-              background: '#FFF9DB',
-              fontSize: '0.68rem',
+              background: colorTokens.brandYellowTint,
+              fontSize: typographyTokens.bodySm.fontSize,
             }}
           >
             {area.attention.join(' · ')}
@@ -227,10 +237,10 @@ export function AreaDrawer({
               border: 0,
               borderRadius: 12,
               padding: '9px 14px',
-              background: '#7935FE',
-              color: '#fff',
+              background: colorTokens.brandPurple,
+              color: colorTokens.surface,
               fontWeight: 700,
-              fontSize: '0.7rem',
+              fontSize: typographyTokens.bodySm.fontSize,
               cursor: 'pointer',
               font: 'inherit',
             }}
@@ -244,7 +254,11 @@ export function AreaDrawer({
           {area.items.length === 0 ? (
             <p
               data-testid="drawer-empty"
-              style={{ margin: 0, color: '#6D6D76', fontSize: '0.72rem' }}
+              style={{
+                margin: 0,
+                color: colorTokens.textMuted,
+                fontSize: typographyTokens.bodySm.fontSize,
+              }}
             >
               {t('bb.detailEmpty')}
             </p>
@@ -256,7 +270,7 @@ export function AreaDrawer({
                 style={{
                   padding: 12,
                   borderRadius: 14,
-                  background: '#F7F7F8',
+                  background: colorTokens.surfaceSoft,
                   display: 'grid',
                   gap: 6,
                 }}
@@ -269,14 +283,27 @@ export function AreaDrawer({
                     alignItems: 'baseline',
                   }}
                 >
-                  <b style={{ fontSize: '0.75rem' }}>{item.title || item.itemKey}</b>
-                  <small style={{ color: '#6D6D76', fontSize: '0.58rem', whiteSpace: 'nowrap' }}>
+                  <b style={{ fontSize: typographyTokens.label.fontSize }}>
+                    {item.title || item.itemKey}
+                  </b>
+                  <small
+                    style={{
+                      color: colorTokens.textMuted,
+                      fontSize: typographyTokens.micro.fontSize,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {t('bb.version')} {item.version} · {item.originLabel}
                     {item.stale ? ` · ${t('bb.attention.stale_items')}` : ''}
                   </small>
                 </header>
                 <p
-                  style={{ margin: 0, fontSize: '0.7rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}
+                  style={{
+                    margin: 0,
+                    fontSize: typographyTokens.bodySm.fontSize,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                  }}
                 >
                   {item.body}
                 </p>
@@ -292,8 +319,8 @@ export function AreaDrawer({
                         border: 0,
                         borderRadius: 10,
                         padding: '6px 10px',
-                        background: '#EFEDF3',
-                        fontSize: '0.6rem',
+                        background: colorTokens.surfaceMuted,
+                        fontSize: typographyTokens.caption.fontSize,
                         fontWeight: 700,
                         cursor: 'pointer',
                         font: 'inherit',
@@ -311,9 +338,17 @@ export function AreaDrawer({
         {/* --- Review queue ------------------------------------------------- */}
         {permissions.review ? (
           <section data-testid="drawer-review" style={{ display: 'grid', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: '0.9rem' }}>{t('bb.reviewTitle')}</h3>
+            <h3 style={{ margin: 0, fontSize: typographyTokens.label.fontSize }}>
+              {t('bb.reviewTitle')}
+            </h3>
             {candidates.length === 0 ? (
-              <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.7rem' }}>
+              <p
+                style={{
+                  margin: 0,
+                  color: colorTokens.textMuted,
+                  fontSize: typographyTokens.bodySm.fontSize,
+                }}
+              >
                 {t('bb.reviewNone')}
               </p>
             ) : (
@@ -324,21 +359,39 @@ export function AreaDrawer({
                   style={{
                     padding: 12,
                     borderRadius: 14,
-                    background: '#F5F2FF',
+                    background: colorTokens.surfaceLavender,
                     display: 'grid',
                     gap: 6,
                   }}
                 >
-                  <b style={{ fontSize: '0.72rem' }}>{candidate.title || candidate.itemKey}</b>
-                  <p style={{ margin: 0, fontSize: '0.68rem', lineHeight: 1.55 }}>
+                  <b style={{ fontSize: typographyTokens.bodySm.fontSize }}>
+                    {candidate.title || candidate.itemKey}
+                  </b>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: typographyTokens.bodySm.fontSize,
+                      lineHeight: 1.55,
+                    }}
+                  >
                     {candidate.body}
                   </p>
-                  <small style={{ color: '#6D6D76', fontSize: '0.58rem' }}>
+                  <small
+                    style={{
+                      color: colorTokens.textMuted,
+                      fontSize: typographyTokens.micro.fontSize,
+                    }}
+                  >
                     {t('bb.reviewConfidence')}: {candidate.confidencePercent}%
                     {candidate.replacesExisting ? ` · ${t('bb.reviewExisting')}` : ''}
                   </small>
                   {candidate.evidence.length > 0 ? (
-                    <small style={{ color: '#6D6D76', fontSize: '0.58rem' }}>
+                    <small
+                      style={{
+                        color: colorTokens.textMuted,
+                        fontSize: typographyTokens.micro.fontSize,
+                      }}
+                    >
                       {t('bb.reviewEvidence')}: {candidate.evidence.join(' / ')}
                     </small>
                   ) : null}
@@ -351,7 +404,7 @@ export function AreaDrawer({
                       <button
                         type="submit"
                         data-testid={`accept-${candidate.id}`}
-                        style={reviewButtonStyle('#111114', '#fff')}
+                        style={reviewButtonStyle(colorTokens.ink, colorTokens.surface)}
                       >
                         {t('bb.reviewAccept')}
                       </button>
@@ -364,7 +417,7 @@ export function AreaDrawer({
                       <button
                         type="submit"
                         data-testid={`reject-${candidate.id}`}
-                        style={reviewButtonStyle('#EFEDF3', '#111114')}
+                        style={reviewButtonStyle(colorTokens.surfaceMuted, colorTokens.ink)}
                       >
                         {t('bb.reviewReject')}
                       </button>
@@ -386,13 +439,14 @@ export function AreaDrawer({
               gap: 8,
               padding: 12,
               borderRadius: 14,
-              background: '#F7F7F8',
+              background: colorTokens.surfaceSoft,
             }}
           >
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="brandId" value={brandId} />
             <input type="hidden" name="area" value={area.area} />
             <input
+              className={CONTROL_CLASS}
               name="itemKey"
               required
               placeholder="identity.positioning"
@@ -401,6 +455,7 @@ export function AreaDrawer({
               style={drawerInputStyle}
             />
             <input
+              className={CONTROL_CLASS}
               name="titleEn"
               placeholder="Title (EN)"
               aria-label="Title EN"
@@ -408,12 +463,14 @@ export function AreaDrawer({
               style={drawerInputStyle}
             />
             <input
+              className={CONTROL_CLASS}
               name="titleAr"
               placeholder="العنوان (AR)"
               aria-label="Title AR"
               style={drawerInputStyle}
             />
             <textarea
+              className={CONTROL_CLASS}
               name="bodyEn"
               rows={3}
               placeholder="Body (EN)"
@@ -422,6 +479,7 @@ export function AreaDrawer({
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
             <textarea
+              className={CONTROL_CLASS}
               name="bodyAr"
               rows={3}
               placeholder="النص (AR)"
@@ -431,7 +489,10 @@ export function AreaDrawer({
             <button
               type="submit"
               data-testid="save-knowledge"
-              style={{ ...reviewButtonStyle('#7935FE', '#fff'), justifySelf: 'start' }}
+              style={{
+                ...reviewButtonStyle(colorTokens.brandPurple, colorTokens.surface),
+                justifySelf: 'start',
+              }}
             >
               {t('common.save')}
             </button>
@@ -455,12 +516,15 @@ export function AreaDrawer({
               required
               aria-label={t('bb.upload')}
               data-testid="drawer-upload-input"
-              style={{ font: 'inherit', fontSize: '0.68rem' }}
+              style={{ font: 'inherit', fontSize: typographyTokens.bodySm.fontSize }}
             />
             <button
               type="submit"
               data-testid="drawer-upload-submit"
-              style={{ ...reviewButtonStyle('#111114', '#fff'), justifySelf: 'start' }}
+              style={{
+                ...reviewButtonStyle(colorTokens.ink, colorTokens.surface),
+                justifySelf: 'start',
+              }}
             >
               {t('bb.upload')}
             </button>
@@ -473,18 +537,21 @@ export function AreaDrawer({
 
 function Field({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (
-    <div style={{ padding: 10, borderRadius: 12, background: '#F7F7F8' }}>
+    <div style={{ padding: 10, borderRadius: 12, background: colorTokens.surfaceSoft }}>
       <dt
         style={{
-          color: '#6D6D76',
-          fontSize: '0.55rem',
+          color: colorTokens.textMuted,
+          fontSize: typographyTokens.micro.fontSize,
           textTransform: 'uppercase',
           letterSpacing: '.08em',
         }}
       >
         {label}
       </dt>
-      <dd data-testid={testId} style={{ margin: '6px 0 0', fontSize: '0.72rem', fontWeight: 700 }}>
+      <dd
+        data-testid={testId}
+        style={{ margin: '6px 0 0', fontSize: typographyTokens.bodySm.fontSize, fontWeight: 700 }}
+      >
         {value}
       </dd>
     </div>
@@ -496,7 +563,7 @@ const drawerInputStyle: React.CSSProperties = {
   borderRadius: 10,
   border: '1px solid rgba(17,17,20,.14)',
   font: 'inherit',
-  fontSize: '0.7rem',
+  fontSize: typographyTokens.bodySm.fontSize,
   minWidth: 0,
 };
 
@@ -507,7 +574,7 @@ function reviewButtonStyle(background: string, color: string): React.CSSProperti
     padding: '8px 12px',
     background,
     color,
-    fontSize: '0.62rem',
+    fontSize: typographyTokens.caption.fontSize,
     fontWeight: 800,
     cursor: 'pointer',
     font: 'inherit',

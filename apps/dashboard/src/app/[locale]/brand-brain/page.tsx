@@ -1,4 +1,4 @@
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 import { ORB_AREAS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandBrainPolicy, inBrandBrain } from '../../../server/brand-brain-context';
@@ -100,6 +100,7 @@ export default async function BrandBrainPage({
             <form action={createBrandAction} style={{ display: 'flex', gap: spacingTokens.sm }}>
               <input type="hidden" name="locale" value={locale} />
               <input
+                className={CONTROL_CLASS}
                 name="name"
                 required
                 maxLength={120}

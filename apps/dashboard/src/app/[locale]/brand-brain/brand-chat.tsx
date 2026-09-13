@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { colorTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 
 /**
  * Brand Brain chat.
@@ -228,8 +229,8 @@ export function BrandChat({
             width: 36,
             height: 36,
             borderRadius: 12,
-            background: '#7935FE',
-            color: '#fff',
+            background: colorTokens.brandPurple,
+            color: colorTokens.surface,
             display: 'grid',
             placeItems: 'center',
             fontWeight: 800,
@@ -238,8 +239,14 @@ export function BrandChat({
           ✦
         </span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ display: 'block', fontSize: '0.8rem' }}>{labels.title}</b>
-          <small style={{ color: '#6D6D76', fontSize: '0.65rem' }}>{labels.subtitle}</small>
+          <b style={{ display: 'block', fontSize: typographyTokens.label.fontSize }}>
+            {labels.title}
+          </b>
+          <small
+            style={{ color: colorTokens.textMuted, fontSize: typographyTokens.caption.fontSize }}
+          >
+            {labels.subtitle}
+          </small>
         </span>
         <button
           type="button"
@@ -250,7 +257,7 @@ export function BrandChat({
             borderRadius: 10,
             width: 32,
             height: 32,
-            background: '#F1F1F4',
+            background: colorTokens.controlSurface,
             cursor: 'pointer',
             font: 'inherit',
           }}
@@ -282,7 +289,15 @@ export function BrandChat({
         }}
       >
         {messages.length === 0 && !busy ? (
-          <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.75rem' }}>{labels.empty}</p>
+          <p
+            style={{
+              margin: 0,
+              color: colorTokens.textMuted,
+              fontSize: typographyTokens.label.fontSize,
+            }}
+          >
+            {labels.empty}
+          </p>
         ) : null}
 
         {messages.map((message) => (
@@ -294,14 +309,14 @@ export function BrandChat({
               maxWidth: '86%',
               padding: '10px 12px',
               borderRadius: 14,
-              background: message.role === 'user' ? '#111114' : '#F5F2FF',
-              color: message.role === 'user' ? '#fff' : '#111114',
-              fontSize: '0.75rem',
+              background: message.role === 'user' ? colorTokens.ink : colorTokens.surfaceLavender,
+              color: message.role === 'user' ? colorTokens.surface : colorTokens.ink,
+              fontSize: typographyTokens.label.fontSize,
               lineHeight: 1.55,
             }}
           >
             {message.purged ? (
-              <em style={{ color: '#6D6D76' }}>{labels.expired}</em>
+              <em style={{ color: colorTokens.textMuted }}>{labels.expired}</em>
             ) : message.insufficientKnowledge ? (
               <span data-testid="chat-insufficient">{labels.insufficient}</span>
             ) : (
@@ -311,7 +326,11 @@ export function BrandChat({
             {message.citations.length > 0 ? (
               <footer
                 data-testid="chat-citations"
-                style={{ marginTop: 8, fontSize: '0.65rem', color: '#4A4A52' }}
+                style={{
+                  marginTop: 8,
+                  fontSize: typographyTokens.caption.fontSize,
+                  color: colorTokens.textSecondary,
+                }}
               >
                 <b style={{ display: 'block', marginBottom: 4 }}>{labels.sources}</b>
                 <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
@@ -329,7 +348,14 @@ export function BrandChat({
         ))}
 
         {busy ? (
-          <p data-testid="chat-busy" style={{ margin: 0, color: '#6D6D76', fontSize: '0.72rem' }}>
+          <p
+            data-testid="chat-busy"
+            style={{
+              margin: 0,
+              color: colorTokens.textMuted,
+              fontSize: typographyTokens.bodySm.fontSize,
+            }}
+          >
             {labels.thinking}
           </p>
         ) : null}
@@ -338,7 +364,11 @@ export function BrandChat({
           <p
             role="alert"
             data-testid="chat-error"
-            style={{ margin: 0, color: '#A3282F', fontSize: '0.72rem' }}
+            style={{
+              margin: 0,
+              color: colorTokens.danger,
+              fontSize: typographyTokens.bodySm.fontSize,
+            }}
           >
             {error}
           </p>
@@ -355,6 +385,7 @@ export function BrandChat({
       >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
           <textarea
+            className={CONTROL_CLASS}
             ref={composerRef}
             data-testid="chat-input"
             value={draft}
@@ -380,7 +411,7 @@ export function BrandChat({
               borderRadius: 12,
               border: '1px solid rgba(17,17,20,.14)',
               font: 'inherit',
-              fontSize: '0.75rem',
+              fontSize: typographyTokens.label.fontSize,
               lineHeight: 1.5,
             }}
           />
@@ -394,10 +425,10 @@ export function BrandChat({
               borderRadius: 12,
               height: 38,
               padding: '0 14px',
-              background: busy ? '#F1F1F4' : '#7935FE',
-              color: busy ? '#111114' : '#fff',
+              background: busy ? colorTokens.controlSurface : colorTokens.brandPurple,
+              color: busy ? colorTokens.ink : colorTokens.surface,
               fontWeight: 700,
-              fontSize: '0.72rem',
+              fontSize: typographyTokens.bodySm.fontSize,
               cursor: canChat ? 'pointer' : 'not-allowed',
               font: 'inherit',
             }}
@@ -405,7 +436,14 @@ export function BrandChat({
             {busy ? labels.cancel : labels.send}
           </button>
         </div>
-        <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.6rem', lineHeight: 1.5 }}>
+        <p
+          style={{
+            margin: 0,
+            color: colorTokens.textMuted,
+            fontSize: typographyTokens.caption.fontSize,
+            lineHeight: 1.5,
+          }}
+        >
           {labels.disclaimer} {labels.retention}
         </p>
       </footer>

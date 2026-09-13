@@ -105,6 +105,10 @@ function configuration(): AiConfiguration {
            * store, which D-78 forbids in as many words.
            */
           persistOutput: false,
+          // Null, and necessarily so: the gateway persists nothing here, so it
+          // has no retention window of its own. The window that matters is the
+          // one on `brand_brain_message`, which the feature owns (D-78).
+          outputRetentionDays: null,
         },
         retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
         moderateInput: false,

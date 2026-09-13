@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { colorTokens, typographyTokens } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { BrandChat } from './brand-chat';
@@ -187,7 +188,7 @@ export function BrandBrainView({
           >
             {t('bb.heroTitle')}
             <br />
-            <strong style={{ color: '#7935FE' }}>{t('bb.heroTitleAccent')}</strong>
+            <strong style={{ color: colorTokens.brandPurple }}>{t('bb.heroTitleAccent')}</strong>
           </h2>
           <BrandOrb
             nodes={nodes}
@@ -203,12 +204,27 @@ export function BrandBrainView({
         <div style={{ display: 'grid', gap: '12px', alignContent: 'start' }}>
           <div
             data-testid="completion-card"
-            style={{ padding: '20px', borderRadius: '22px', background: '#111114', color: '#fff' }}
+            style={{
+              padding: '20px',
+              borderRadius: '22px',
+              background: colorTokens.ink,
+              color: colorTokens.surface,
+            }}
           >
+            {/*
+              THE FOREGROUND TOKEN FOR INK, NOT A LIGHT-BACKGROUND GREY.
+              `textSubtle` is 3.89:1 on ink — a serious WCAG failure that axe
+              caught the moment the literals became tokens, because the greys
+              it replaced were chosen by eye for a dark card and the token
+              system has no muted-on-ink step. Hierarchy comes from opacity
+              instead, which keeps the caption secondary while staying well
+              clear of AA.
+            */}
             <small
               style={{
-                color: '#AAA',
-                fontSize: '0.62rem',
+                color: colorTokens.inkInk,
+                opacity: 0.7,
+                fontSize: typographyTokens.caption.fontSize,
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
               }}
@@ -225,11 +241,17 @@ export function BrandBrainView({
             >
               <b
                 data-testid="completion-percent"
-                style={{ fontSize: '2.8rem', letterSpacing: '-.06em' }}
+                style={{ fontSize: typographyTokens.display.fontSize, letterSpacing: '-.06em' }}
               >
                 {completionPercent}%
               </b>
-              <span style={{ fontSize: '0.65rem', color: '#B9B9C0' }}>
+              <span
+                style={{
+                  fontSize: typographyTokens.caption.fontSize,
+                  color: colorTokens.inkInk,
+                  opacity: 0.75,
+                }}
+              >
                 {completionPercent >= 70
                   ? t('bb.completionStrong')
                   : completionPercent > 0
@@ -245,7 +267,7 @@ export function BrandBrainView({
               aria-label={t('bb.completion')}
               style={{
                 height: 8,
-                background: '#2B2B30',
+                background: colorTokens.surfaceInk,
                 borderRadius: 99,
                 overflow: 'hidden',
                 marginTop: 14,
@@ -256,7 +278,7 @@ export function BrandBrainView({
                   display: 'block',
                   width: `${completionPercent}%`,
                   height: '100%',
-                  background: 'linear-gradient(90deg,#7935FE,#FFDD15)',
+                  background: `linear-gradient(90deg,${colorTokens.brandPurple},${colorTokens.brandYellow})`,
                 }}
               />
             </div>
@@ -269,16 +291,16 @@ export function BrandBrainView({
 
           <div
             data-testid="attention-card"
-            style={{ padding: '16px', borderRadius: '18px', background: '#FFF6CF' }}
+            style={{ padding: '16px', borderRadius: '18px', background: colorTokens.warningTint }}
           >
-            <b style={{ fontSize: '0.8rem' }}>{t('bb.attentionTitle')}</b>
+            <b style={{ fontSize: typographyTokens.label.fontSize }}>{t('bb.attentionTitle')}</b>
             {areas.some((a) => a.attention.length > 0 && a.status !== 'EMPTY') ? (
               <ul
                 style={{
                   margin: '8px 0 0',
                   paddingInlineStart: '1.1rem',
-                  fontSize: '0.68rem',
-                  color: '#5D5641',
+                  fontSize: typographyTokens.bodySm.fontSize,
+                  color: colorTokens.textSecondary,
                 }}
               >
                 {areas
@@ -290,7 +312,13 @@ export function BrandBrainView({
                   ))}
               </ul>
             ) : (
-              <p style={{ margin: '8px 0 0', fontSize: '0.68rem', color: '#5D5641' }}>
+              <p
+                style={{
+                  margin: '8px 0 0',
+                  fontSize: typographyTokens.bodySm.fontSize,
+                  color: colorTokens.textSecondary,
+                }}
+              >
                 {t('bb.attentionNone')}
               </p>
             )}
@@ -319,11 +347,25 @@ export function BrandBrainView({
             >
               {t('bb.areasTitle')}
             </h3>
-            <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.72rem' }}>
+            <p
+              style={{
+                margin: 0,
+                color: colorTokens.textMuted,
+                fontSize: typographyTokens.bodySm.fontSize,
+              }}
+            >
               {t('bb.areasSubtitle')}
             </p>
           </div>
-          <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.68rem' }}>{t('bb.areasHint')}</p>
+          <p
+            style={{
+              margin: 0,
+              color: colorTokens.textMuted,
+              fontSize: typographyTokens.bodySm.fontSize,
+            }}
+          >
+            {t('bb.areasHint')}
+          </p>
         </div>
 
         <div
@@ -353,10 +395,23 @@ export function BrandBrainView({
                 font: 'inherit',
               }}
             >
-              <h4 style={{ margin: '0 0 6px', fontSize: '1rem', letterSpacing: '-.03em' }}>
+              <h4
+                style={{
+                  margin: '0 0 6px',
+                  fontSize: typographyTokens.h3.fontSize,
+                  letterSpacing: '-.03em',
+                }}
+              >
                 {area.label}
               </h4>
-              <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.7rem', lineHeight: 1.55 }}>
+              <p
+                style={{
+                  margin: 0,
+                  color: colorTokens.textMuted,
+                  fontSize: typographyTokens.bodySm.fontSize,
+                  lineHeight: 1.55,
+                }}
+              >
                 {area.description}
               </p>
               <footer
@@ -372,33 +427,38 @@ export function BrandBrainView({
                 <span
                   data-testid={`area-status-${area.area}`}
                   style={{
-                    fontSize: '0.6rem',
+                    fontSize: typographyTokens.caption.fontSize,
                     fontWeight: 800,
                     padding: '5px 8px',
                     borderRadius: 99,
                     color:
                       area.status === 'COMPLETE'
-                        ? '#2F7D57'
+                        ? colorTokens.success
                         : area.status === 'NEEDS_ATTENTION'
-                          ? '#7A6800'
-                          : '#55555D',
+                          ? colorTokens.brandYellowText
+                          : colorTokens.textSecondary,
                     background:
                       area.status === 'COMPLETE'
-                        ? '#EAF7EF'
+                        ? colorTokens.successTint
                         : area.status === 'NEEDS_ATTENTION'
-                          ? '#FFF9DB'
-                          : '#F1F1F4',
+                          ? colorTokens.brandYellowTint
+                          : colorTokens.controlSurface,
                   }}
                 >
                   {area.statusLabel}
                 </span>
                 {/*
-                  #6D6D76, not #999. The demo's grey is 2.84:1 on white at this
+                  The MUTED TOKEN, not the demo's grey. That grey is 2.84:1 on white at this
                   size, which axe flags as a serious WCAG 2.2 AA failure and a
                   reader with low vision experiences as an unreadable caption.
                   The muted token is 5.36:1 and looks the same at a glance.
                 */}
-                <span style={{ fontSize: '0.65rem', color: '#6D6D76' }}>
+                <span
+                  style={{
+                    fontSize: typographyTokens.caption.fontSize,
+                    color: colorTokens.textMuted,
+                  }}
+                >
                   {area.activeItems} {t('bb.itemsCount')}
                   {area.pendingCandidates > 0
                     ? ` · ${area.pendingCandidates} ${t('bb.pendingCount')}`
@@ -422,18 +482,20 @@ export function BrandBrainView({
           style={{
             padding: 20,
             borderRadius: 22,
-            background: 'linear-gradient(145deg,#EEE6FF,#FFF9D7)',
+            background: `linear-gradient(145deg,${colorTokens.brandPurpleTint},${colorTokens.brandYellowTint})`,
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1.15rem' }}>{t('bb.intelTitle')}</h3>
+            <h3 style={{ margin: 0, fontSize: typographyTokens.h3.fontSize }}>
+              {t('bb.intelTitle')}
+            </h3>
             <span
               style={{
                 padding: '5px 9px',
                 borderRadius: 999,
                 background: 'rgba(121,53,254,.12)',
-                color: '#5F23DA',
-                fontSize: '0.6rem',
+                color: colorTokens.brandPurpleHover,
+                fontSize: typographyTokens.caption.fontSize,
                 fontWeight: 850,
               }}
             >
@@ -441,11 +503,23 @@ export function BrandBrainView({
             </span>
           </div>
           {candidates.length === 0 ? (
-            <p style={{ margin: '14px 0 0', color: '#5C5866', fontSize: '0.7rem' }}>
+            <p
+              style={{
+                margin: '14px 0 0',
+                color: colorTokens.textSecondary,
+                fontSize: typographyTokens.bodySm.fontSize,
+              }}
+            >
               {t('bb.intelNone')}
             </p>
           ) : (
-            <p style={{ margin: '14px 0 0', color: '#5C5866', fontSize: '0.7rem' }}>
+            <p
+              style={{
+                margin: '14px 0 0',
+                color: colorTokens.textSecondary,
+                fontSize: typographyTokens.bodySm.fontSize,
+              }}
+            >
               {candidates.length} {t('bb.pendingCount')}
             </p>
           )}
@@ -463,7 +537,9 @@ export function BrandBrainView({
               gap: 10,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: '1.15rem' }}>{t('bb.sourcesTitle')}</h3>
+            <h3 style={{ margin: 0, fontSize: typographyTokens.h3.fontSize }}>
+              {t('bb.sourcesTitle')}
+            </h3>
           </div>
 
           {/*
@@ -490,7 +566,7 @@ export function BrandBrainView({
                 required
                 data-testid="upload-input"
                 aria-label={t('bb.upload')}
-                style={{ font: 'inherit', fontSize: '0.7rem' }}
+                style={{ font: 'inherit', fontSize: typographyTokens.bodySm.fontSize }}
               />
               <button
                 type="submit"
@@ -500,10 +576,10 @@ export function BrandBrainView({
                   border: 0,
                   borderRadius: 12,
                   padding: '9px 14px',
-                  background: '#111114',
-                  color: '#fff',
+                  background: colorTokens.ink,
+                  color: colorTokens.surface,
                   fontWeight: 700,
-                  fontSize: '0.7rem',
+                  fontSize: typographyTokens.bodySm.fontSize,
                   cursor: 'pointer',
                   font: 'inherit',
                   justifySelf: 'start',
@@ -511,13 +587,26 @@ export function BrandBrainView({
               >
                 {t('bb.upload')}
               </button>
-              <small style={{ color: '#6D6D76', fontSize: '0.6rem' }}>{t('bb.uploadHint')}</small>
+              <small
+                style={{
+                  color: colorTokens.textMuted,
+                  fontSize: typographyTokens.caption.fontSize,
+                }}
+              >
+                {t('bb.uploadHint')}
+              </small>
             </form>
           ) : null}
 
           <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
             {sources.length === 0 ? (
-              <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.7rem' }}>
+              <p
+                style={{
+                  margin: 0,
+                  color: colorTokens.textMuted,
+                  fontSize: typographyTokens.bodySm.fontSize,
+                }}
+              >
                 {t('bb.sourcesNone')}
               </p>
             ) : (
@@ -532,14 +621,14 @@ export function BrandBrainView({
                     alignItems: 'center',
                     padding: 10,
                     borderRadius: 14,
-                    background: '#F6F6F7',
+                    background: colorTokens.surfaceSoft,
                   }}
                 >
                   <span style={{ minWidth: 0 }}>
                     <b
                       style={{
                         display: 'block',
-                        fontSize: '0.68rem',
+                        fontSize: typographyTokens.bodySm.fontSize,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -547,13 +636,20 @@ export function BrandBrainView({
                     >
                       {source.fileName}
                     </b>
-                    <small style={{ color: '#6D6D76', fontSize: '0.6rem' }}>{source.detail}</small>
+                    <small
+                      style={{
+                        color: colorTokens.textMuted,
+                        fontSize: typographyTokens.caption.fontSize,
+                      }}
+                    >
+                      {source.detail}
+                    </small>
                   </span>
                   <span
                     style={{
-                      fontSize: '0.6rem',
+                      fontSize: typographyTokens.caption.fontSize,
                       fontWeight: 700,
-                      color: source.status === 'FAILED' ? '#A3282F' : '#2F7D57',
+                      color: source.status === 'FAILED' ? colorTokens.danger : colorTokens.success,
                     }}
                   >
                     {source.statusLabel}
@@ -615,10 +711,10 @@ export function BrandBrainView({
             border: 0,
             borderRadius: 16,
             padding: '12px 16px',
-            background: '#7935FE',
-            color: '#fff',
+            background: colorTokens.brandPurple,
+            color: colorTokens.surface,
             fontWeight: 700,
-            fontSize: '0.72rem',
+            fontSize: typographyTokens.bodySm.fontSize,
             cursor: 'pointer',
             boxShadow: '0 18px 46px rgba(22,16,39,.2)',
             font: 'inherit',
@@ -647,9 +743,20 @@ export function BrandBrainView({
 
 function Metric({ label, value, testId }: { label: string; value: number; testId: string }) {
   return (
-    <div style={{ padding: 16, borderRadius: 18, background: '#fff' }}>
-      <small style={{ display: 'block', color: '#6D6D76', fontSize: '0.6rem' }}>{label}</small>
-      <b data-testid={testId} style={{ display: 'block', marginTop: 6, fontSize: '1.4rem' }}>
+    <div style={{ padding: 16, borderRadius: 18, background: colorTokens.surface }}>
+      <small
+        style={{
+          display: 'block',
+          color: colorTokens.textMuted,
+          fontSize: typographyTokens.caption.fontSize,
+        }}
+      >
+        {label}
+      </small>
+      <b
+        data-testid={testId}
+        style={{ display: 'block', marginTop: 6, fontSize: typographyTokens.h1.fontSize }}
+      >
         {value}
       </b>
     </div>

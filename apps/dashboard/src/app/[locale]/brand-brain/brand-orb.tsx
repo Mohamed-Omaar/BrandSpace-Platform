@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { colorTokens, typographyTokens } from '@brandspace/ui';
 
 /**
  * The Brand Brain orb.
@@ -34,9 +35,9 @@ export interface OrbNode {
   readonly status: 'COMPLETE' | 'NEEDS_ATTENTION' | 'IN_PROGRESS' | 'EMPTY';
 }
 
-const PURPLE = '#7935FE';
-const YELLOW = '#FFDD15';
-const INK = '#111114';
+const PURPLE = colorTokens.brandPurple;
+const YELLOW = colorTokens.brandYellow;
+const INK = colorTokens.ink;
 
 interface Particle {
   x: number;
@@ -338,7 +339,7 @@ export function BrandOrb({
         background:
           'radial-gradient(circle at 30% 28%, rgba(121,53,254,.20), transparent 32%),' +
           'radial-gradient(circle at 72% 70%, rgba(255,221,21,.34), transparent 34%),' +
-          'linear-gradient(145deg,#F8F5FF,#FFFFFF)',
+          `linear-gradient(145deg,${colorTokens.surfaceLavender},${colorTokens.surface})`,
         outline: dragging ? `2px dashed ${PURPLE}` : '2px dashed transparent',
         outlineOffset: '-10px',
         transition: 'outline-color .2s',
@@ -362,7 +363,7 @@ export function BrandOrb({
           borderRadius: '26%',
           border: 0,
           background: INK,
-          color: '#FFFFFF',
+          color: colorTokens.surface,
           cursor: 'pointer',
           fontWeight: 800,
           fontSize: 'clamp(0.8rem, 2.4vw, 1.1rem)',
@@ -426,9 +427,9 @@ export function BrandOrb({
               marginInlineEnd: 7,
               background:
                 node.status === 'COMPLETE'
-                  ? '#2F7D57'
+                  ? colorTokens.success
                   : node.status === 'NEEDS_ATTENTION'
-                    ? '#8A6B00'
+                    ? colorTokens.warning
                     : PURPLE,
             }}
           />
@@ -437,7 +438,7 @@ export function BrandOrb({
             style={{
               display: 'block',
               marginTop: 3,
-              color: '#6D6D76',
+              color: colorTokens.textMuted,
               fontSize: 'clamp(0.5rem, 1.4vw, 0.6rem)',
               fontWeight: 600,
             }}
@@ -454,8 +455,8 @@ export function BrandOrb({
           transform: 'translateX(-50%)',
           bottom: 8,
           margin: 0,
-          fontSize: '0.6rem',
-          color: '#6D6D76',
+          fontSize: typographyTokens.caption.fontSize,
+          color: colorTokens.textMuted,
           textAlign: 'center',
           maxWidth: '80%',
         }}
