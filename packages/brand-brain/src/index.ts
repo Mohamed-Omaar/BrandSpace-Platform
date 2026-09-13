@@ -75,3 +75,50 @@ export {
 
 export { BrandKnowledgeService, localizedFrom } from './knowledge';
 export type { KnowledgeActor, KnowledgeServiceOptions, StalenessPolicy } from './knowledge';
+
+export { InMemoryObjectStore, buildStorageKey, checksumOf, createObjectStore } from './storage';
+export type { ObjectStore, StoredObject } from './storage';
+
+export {
+  ExtractionUnsupportedError,
+  ExtractorRegistry,
+  KeywordFactExtractor,
+  PlainTextExtractor,
+  chunkText,
+} from './extraction';
+export type {
+  CandidateFact,
+  Chunk,
+  ChunkOptions,
+  ExtractedText,
+  ExtractionInput,
+  FactExtractor,
+  TextExtractor,
+} from './extraction';
+
+export { BrandIngestionService } from './ingestion';
+export type {
+  IngestionPolicy,
+  IngestionServiceOptions,
+  ProcessResult,
+  UploadInput,
+} from './ingestion';
+
+export {
+  BrandBrainRetriever,
+  cosineSimilarity,
+  fenceUntrusted,
+  indexVector,
+  neutralizeInjection,
+  tokenize,
+} from './retrieval';
+export type {
+  Citation,
+  RetrievalContext,
+  RetrievalOptions,
+  RetrievedChunk,
+  RetrievedItem,
+} from './retrieval';
+
+export { BrandBrainChatService } from './chat';
+export type { ChatPolicy, ChatServiceOptions, ChatTurn } from './chat';

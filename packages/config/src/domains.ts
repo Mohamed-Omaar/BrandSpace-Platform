@@ -526,6 +526,94 @@ const usageLimitsSchema = z.object({
     .default([]),
 });
 
+// --- Brand Brain ------------------------------------------------------------
+
+/**
+ * Brand Brain operational policy (Phase 5).
+ *
+ * CLAUDE.md §2.2: none of this may be hard-coded. What a customer may upload,
+ * how long knowledge stays fresh, how long a persisted chat answer is kept
+ * (D-78) and how text is chunked are all OPERATIONAL settings the owner tunes
+ * without a release.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: the per-area completion requirements. Those
+ * are a PRODUCT definition of what "complete" means, and a tenant- or
+ * plan-tunable version of them would make the same badge mean different things
+ * to different customers. They live in `packages/brand-brain/src/areas.ts`.
+ */
+const brandBrainSchema = z.object({
+  upload: z
+    .object({
+      /**
+       * Accepted media types. A list rather than a wildcard: extraction has to
+       * KNOW a format to read it, and admitting one it cannot parse produces a
+       * document that sits in FAILED forever.
+       */
+      allowedMimeTypes: z
+        .array(z.string().min(1))
+        .default([
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'text/plain',
+          'text/csv',
+          'text/markdown',
+          'image/png',
+          'image/jpeg',
+        ]),
+      maxFileBytes: z
+        .number()
+        .int()
+        .positive()
+        .default(25 * 1024 * 1024),
+      /** Per-brand ceiling on live source documents. */
+      maxDocumentsPerBrand: z.number().int().positive().default(200),
+    })
+    .default({}),
+
+  ingestion: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).default(3),
+      /** Backoff before a failed job is retried. */
+      retryBackoffSeconds: z.number().int().min(1).default(60),
+      /** A job past this is stuck, and the sweep reconciles it. */
+      stuckAfterSeconds: z.number().int().min(60).default(900),
+      chunkTargetChars: z.number().int().min(200).max(8_000).default(1_200),
+      chunkOverlapChars: z.number().int().min(0).max(2_000).default(150),
+      /** Ceiling on chunks per document, so one huge upload cannot dominate. */
+      maxChunksPerDocument: z.number().int().min(1).default(400),
+    })
+    .default({}),
+
+  knowledge: z
+    .object({
+      /** How long an ACTIVE item stays fresh before it is marked STALE. */
+      reviewIntervalDays: z.number().int().min(1).default(180),
+      /** Candidates below this confidence are never auto-surfaced as ready. */
+      minimumCandidateConfidenceMilli: z.number().int().min(0).max(1000).default(400),
+    })
+    .default({}),
+
+  chat: z
+    .object({
+      /**
+       * D-78 RETENTION. Brand Brain chat is the first feature that persists
+       * customer-visible AI output, so it owns the artifact and must declare
+       * how long it keeps it. There is no "forever": the value is bounded, and
+       * `purgeExpiredChatContent` clears bodies past it while leaving the
+       * accounting intact.
+       */
+      retentionDays: z.number().int().min(1).max(3650).default(90),
+      /** Retrieved knowledge items allowed into one answer context. */
+      maxContextItems: z.number().int().min(1).max(100).default(12),
+      /** Retrieved document chunks allowed into one answer context. */
+      maxContextChunks: z.number().int().min(0).max(100).default(8),
+      /** Total characters of grounding text. A context window is finite. */
+      maxContextChars: z.number().int().min(500).default(12_000),
+    })
+    .default({}),
+});
+
 // --- Integrations -----------------------------------------------------------
 function providerIntegrationSchema() {
   return z.object({
@@ -631,6 +719,9 @@ export const CONFIG_DOMAINS = {
   credits: { schema: creditPolicySchema, schemaVersion: 1 },
   'beta-cohorts': { schema: betaCohortsSchema, schemaVersion: 1 },
   'usage-limits': { schema: usageLimitsSchema, schemaVersion: 1 },
+  // Phase 5. Upload rules, ingestion tuning, knowledge freshness and the D-78
+  // chat retention window — every one an owner setting, none of them in source.
+  'brand-brain': { schema: brandBrainSchema, schemaVersion: 1 },
   'integrations.email': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.storage': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.payment': { schema: providerIntegrationSchema(), schemaVersion: 1 },
