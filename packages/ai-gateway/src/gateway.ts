@@ -4,6 +4,15 @@ import { AppError, type Clock, systemClock } from '@brandspace/shared';
 
 import type { AdapterContext, AdapterRegistry, UsageUnits } from './adapter';
 import {
+  assessBudget,
+  budgetRefusal,
+  resolveBudget,
+  withinRequestCostCap,
+  BudgetExceededError,
+  type AiBudgets,
+  type BudgetUsage,
+} from './budgets';
+import {
   AiProviderError,
   customerMessageFor,
   isFallbackEligible,
@@ -65,6 +74,7 @@ export interface AiConfiguration {
   readonly costBases: readonly ModelCostBasis[];
   readonly routingRules: readonly RoutingRule[];
   readonly creditRules: readonly CreditRule[];
+  readonly budgets: AiBudgets;
 }
 
 export interface AiProviderConfig {
@@ -197,12 +207,39 @@ export class AiGateway {
       config.models,
     );
 
-    const modelKey = route.chain[0];
-    /* c8 ignore next -- resolveRoute never returns an empty chain. */
-    if (!modelKey) throw new AppError('INTERNAL', 'Routing resolved no model.');
-
     const multiplier = request.creditMultiplierBasisPoints ?? 10_000;
     const worstCase = worstCaseUsage(request, route);
+
+    /*
+     * THE PER-REQUEST COST CEILING NARROWS THE CHAIN — §8's first row, "reject
+     * before calling the provider".
+     *
+     * Treated exactly like a disabled model: an over-cap model is dropped from
+     * the chain rather than failing the whole request, because the operator's
+     * next choice may well be affordable. Only when nothing affordable remains
+     * is the request refused — still before the wallet is touched.
+     */
+    const affordable = route.chain.filter((candidate) => {
+      const basis = config.costBases.find((b) => b.modelKey === candidate);
+      if (!basis) return true;
+      return withinRequestCostCap(
+        providerCostMicroMinor(worstCase, basis),
+        route.maxCostPerRequestMinor,
+      );
+    });
+    if (affordable.length === 0) {
+      throw new BudgetExceededError(
+        'request_cost',
+        'This request would cost more than the configured per-request ceiling.',
+        route.maxCostPerRequestMinor,
+        0,
+      );
+    }
+    const chain = affordable;
+
+    const modelKey = chain[0];
+    /* c8 ignore next -- `affordable` is non-empty here. */
+    if (!modelKey) throw new AppError('INTERNAL', 'Routing resolved no model.');
 
     /*
      * RESERVE FOR THE MOST EXPENSIVE MODEL IN THE CHAIN, not for the primary.
@@ -214,11 +251,26 @@ export class AiGateway {
      * refuses outright, turning a successful generation into a 500 and leaving
      * the customer with nothing after we already paid the provider.
      */
-    const reservationEstimate = route.chain.reduce((highest, candidate) => {
+    const reservationEstimate = chain.reduce((highest, candidate) => {
       const rule = findCreditRule(config.creditRules, request.taskKey, candidate);
       const estimate = estimateReservationMilli(rule, worstCase, multiplier);
       return estimate > highest ? estimate : highest;
     }, 0n);
+
+    /*
+     * WORKSPACE BUDGETS, BEFORE THE WALLET AND BEFORE THE PROVIDER.
+     *
+     * A budget enforced after the fact is an invoice, not a budget. Checked
+     * against the ESTIMATE rather than the eventual charge: admitting a
+     * request because its final cost might land under the line would mean the
+     * ceiling only ever binds in hindsight.
+     */
+    const decision = assessBudget(
+      resolveBudget(config.budgets, request.planKey),
+      await this.#budgetUsage(request.workspaceId),
+      reservationEstimate,
+    );
+    if (!decision.allowed) throw budgetRefusal(decision);
 
     const aiRequest = await this.#createRequest(request, route, modelKey, reservationEstimate);
     if (aiRequest.replayed) return aiRequest.result;
@@ -226,6 +278,7 @@ export class AiGateway {
     return this.#runReserved({
       request,
       route,
+      chain,
       modelKey,
       multiplier,
       reservationEstimate,
@@ -332,6 +385,7 @@ export class AiGateway {
   async #runReserved(args: {
     request: AiGatewayRequest;
     route: ResolvedRoute;
+    chain: readonly string[];
     modelKey: string;
     multiplier: number;
     reservationEstimate: bigint;
@@ -364,7 +418,15 @@ export class AiGateway {
       throw error;
     }
 
-    return this.#runChain({ request, route, multiplier, requestId, reservationId, config });
+    return this.#runChain({
+      request,
+      route,
+      chain: args.chain,
+      multiplier,
+      requestId,
+      reservationId,
+      config,
+    });
   }
 
   /**
@@ -386,12 +448,13 @@ export class AiGateway {
   async #runChain(args: {
     request: AiGatewayRequest;
     route: ResolvedRoute;
+    chain: readonly string[];
     multiplier: number;
     requestId: string;
     reservationId: string;
     config: AiConfiguration;
   }): Promise<AiGatewayResult> {
-    const { request, route, multiplier, requestId, reservationId, config } = args;
+    const { request, route, chain, multiplier, requestId, reservationId, config } = args;
 
     const startedAt = this.#clock.now();
     const deadline = startedAt.getTime() + route.timeoutMs;
@@ -410,7 +473,7 @@ export class AiGateway {
     );
     let lastProviderKey: string | null = null;
 
-    for (const modelKey of route.chain) {
+    for (const modelKey of chain) {
       const model = config.models.find((m) => m.key === modelKey);
       const provider = model
         ? config.providers.find((p) => p.key === model.providerKey)
@@ -830,6 +893,63 @@ export class AiGateway {
     });
 
     void error;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Budgets
+  // ---------------------------------------------------------------------------
+
+  /**
+   * What this workspace has spent and has in flight — §8's "per workspace" row.
+   *
+   * The ledger is the source, not the wallet: a wallet balance says what is
+   * left, while a budget asks what has been SPENT in a window, and those are
+   * different questions once grants and top-ups are involved.
+   *
+   * Both windows are read in one round trip, and concurrency counts requests
+   * that have not reached a terminal status — including ones whose process
+   * died, which is why the stuck-request sweep has to run: without it, a
+   * crashed request would keep counting against a workspace's concurrency
+   * forever.
+   */
+  async #budgetUsage(workspaceId: string): Promise<BudgetUsage> {
+    const now = this.#clock.now();
+    const startOfDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    const [today, month, concurrent] = await Promise.all([
+      this.#prisma.aiUsageLedger.aggregate({
+        where: { workspaceId, occurredAt: { gte: startOfDay } },
+        _sum: { creditsChargedMilli: true },
+      }),
+      this.#prisma.aiUsageLedger.aggregate({
+        where: { workspaceId, occurredAt: { gte: startOfMonth } },
+        _sum: { creditsChargedMilli: true },
+      }),
+      this.#prisma.aiRequest.count({
+        where: { workspaceId, status: { in: ['PENDING', 'RESERVED', 'RUNNING'] } },
+      }),
+    ]);
+
+    return {
+      creditsTodayMilli: today._sum.creditsChargedMilli ?? 0n,
+      creditsThisMonthMilli: month._sum.creditsChargedMilli ?? 0n,
+      concurrentRequests: concurrent,
+    };
+  }
+
+  /** The budget position, for Admin and for explaining a refusal. */
+  async budgetStatus(
+    workspaceId: string,
+    planKey: string | null,
+  ): Promise<{ limits: ReturnType<typeof resolveBudget>; usage: BudgetUsage }> {
+    const config = await this.#configuration.load();
+    return {
+      limits: resolveBudget(config.budgets, planKey),
+      usage: await this.#budgetUsage(workspaceId),
+    };
   }
 
   // ---------------------------------------------------------------------------

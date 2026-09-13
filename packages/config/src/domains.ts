@@ -159,6 +159,29 @@ const aiRoutingSchema = z.object({
     .default([]),
 });
 
+/**
+ * Budgets and limits — docs/AI-GATEWAY.md §8.
+ *
+ * `null` is "no ceiling" everywhere, and every field defaults to null: a
+ * budget nobody set must not quietly refuse a customer's request, and a number
+ * invented here would be a commercial decision made in source (CLAUDE.md §2.2).
+ */
+const aiBudgetLimitsSchema = z.object({
+  creditsPerDayMilli: z.number().int().nonnegative().nullable().default(null),
+  creditsPerMonthMilli: z.number().int().nonnegative().nullable().default(null),
+  maxConcurrentRequests: z.number().int().positive().max(10_000).nullable().default(null),
+});
+
+const aiBudgetsSchema = z.object({
+  defaults: aiBudgetLimitsSchema.default({}),
+  /**
+   * Per-plan ceilings. A plan overrides a default FIELD BY FIELD, so raising
+   * only the daily credit ceiling does not silently make concurrency
+   * unlimited.
+   */
+  perPlan: z.array(aiBudgetLimitsSchema.extend({ planKey: z.string().min(1) })).default([]),
+});
+
 const aiCreditRulesSchema = z.object({
   /** D-14: milli-credits internally, whole credits displayed. */
   unit: z.literal('milli-credits').default('milli-credits'),
@@ -511,6 +534,7 @@ export const CONFIG_DOMAINS = {
   'ai.routing': { schema: aiRoutingSchema, schemaVersion: 2 },
   // schemaVersion 2 adds the credit-to-currency reference margin needs.
   'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 2 },
+  'ai.budgets': { schema: aiBudgetsSchema, schemaVersion: 1 },
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },
   'feature-flags': { schema: featureFlagsSchema, schemaVersion: 1 },

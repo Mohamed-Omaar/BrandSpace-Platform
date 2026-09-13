@@ -543,6 +543,45 @@ function semantic(
     }
   }
 
+  if (domain === 'ai.budgets') {
+    const perPlan = (doc['perPlan'] ?? []) as { planKey: string }[];
+    const seen = new Set<string>();
+    for (const [i, entry] of perPlan.entries()) {
+      if (seen.has(entry.planKey)) {
+        // Two entries for one plan means the ceiling depends on iteration
+        // order, so a customer's refusal would too.
+        issues.push({
+          severity: 'error',
+          path: `perPlan.${i}.planKey`,
+          message: `Duplicate budget entry for plan "${entry.planKey}".`,
+        });
+      }
+      seen.add(entry.planKey);
+    }
+
+    const scopes = [
+      { path: 'defaults', value: doc['defaults'] },
+      ...perPlan.map((entry, i) => ({ path: `perPlan.${i}`, value: entry })),
+    ];
+    for (const scope of scopes) {
+      const limits = (scope.value ?? {}) as Record<string, number | null>;
+      const day = limits['creditsPerDayMilli'];
+      const month = limits['creditsPerMonthMilli'];
+      const dayIsSet = typeof day === 'number';
+      const monthIsSet = typeof month === 'number';
+      if (dayIsSet && monthIsSet && day > month) {
+        // The monthly ceiling would be unreachable, and the daily one would
+        // never bind — an operator has almost certainly transposed them.
+        issues.push({
+          severity: 'error',
+          path: `${scope.path}.creditsPerDayMilli`,
+          message:
+            'The daily credit ceiling exceeds the monthly one, so the monthly one is unreachable.',
+        });
+      }
+    }
+  }
+
   if (domain === 'ai.credit-rules') {
     for (const [i, cost] of ((doc['costs'] ?? []) as Record<string, unknown>[]).entries()) {
       if (Number(cost['baseMilliCredits']) === 0 && Number(cost['perUnitMilliCredits']) === 0) {

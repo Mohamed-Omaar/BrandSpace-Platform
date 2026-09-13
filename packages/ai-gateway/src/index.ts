@@ -66,3 +66,19 @@ export type {
   AiTextInput,
   ProviderCredentialSource,
 } from './gateway';
+
+export {
+  assessBudget,
+  budgetRefusal,
+  BudgetExceededError,
+  resolveBudget,
+  withinRequestCostCap,
+} from './budgets';
+export type {
+  AiBudgets,
+  BudgetBreach,
+  BudgetDecision,
+  BudgetLimits,
+  BudgetUsage,
+  PlanBudgetLimits,
+} from './budgets';

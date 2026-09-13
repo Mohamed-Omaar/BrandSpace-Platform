@@ -41,6 +41,12 @@ const MODEL_KEY = 'mock-fast';
 const FALLBACK_KEY = 'mock-balanced';
 const TASK_KEY = 'caption.generate';
 
+const NO_LIMITS = {
+  creditsPerDayMilli: null,
+  creditsPerMonthMilli: null,
+  maxConcurrentRequests: null,
+};
+
 let platform: PrismaClient;
 let ledger: CreditLedgerService;
 let mock: MockProviderAdapter;
@@ -122,6 +128,8 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
         unit: '1k_tokens',
       },
     ],
+    // No ceilings unless a test sets one: an unset budget must never refuse.
+    budgets: { defaults: NO_LIMITS, perPlan: [] },
     ...overrides,
   };
 }
@@ -497,6 +505,187 @@ describe('tenant isolation', () => {
 
     expect(await walletOf(b)).toEqual(beforeB);
     expect(await platform.aiUsageLedger.count({ where: { workspaceId: b } })).toBe(0);
+  });
+});
+
+describe('budgets bind before the wallet and the provider', () => {
+  it('refuses a request that would pass the daily credit ceiling', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      // One milli-credit a day: everything real is over it.
+      budgets: { defaults: { ...NO_LIMITS, creditsPerDayMilli: 1 }, perPlan: [] },
+    };
+    const before = await walletOf(workspaceId);
+
+    await expect(gateway.execute(request(workspaceId))).rejects.toMatchObject({
+      name: 'BudgetExceededError',
+      code: 'QUOTA_EXCEEDED',
+    });
+    activeConfiguration = configuration();
+
+    // A budget enforced after the fact is an invoice. Nothing was reserved,
+    // nothing was called, and no request row exists to explain away.
+    expect(await walletOf(workspaceId)).toEqual(before);
+    expect(mock.calls).toHaveLength(0);
+    expect(await platform.aiRequest.count({ where: { workspaceId } })).toBe(0);
+  });
+
+  it('counts only this workspace’s spend towards its ceiling', async () => {
+    mock.reset();
+    const spender = await freshWorkspace(50);
+    const neighbour = await freshWorkspace(50);
+    activeConfiguration = configuration();
+
+    const spent = await gateway.execute(request(spender));
+    expect(spent.status).toBe('SUCCEEDED');
+    const spentRow = await platform.aiRequest.findUniqueOrThrow({
+      where: { id: spent.requestId },
+    });
+
+    /*
+     * The ceiling is set to EXACTLY one request's estimate.
+     *
+     * A workspace with nothing spent fits inside it; a workspace that has
+     * already been charged does not. That makes the two outcomes below
+     * decide the same question from opposite sides: does one tenant's usage
+     * count against another's budget?
+     */
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      budgets: {
+        defaults: { ...NO_LIMITS, creditsPerDayMilli: Number(spentRow.creditsReservedMilli) },
+        perPlan: [],
+      },
+    };
+
+    const neighbourResult = await gateway.execute(request(neighbour));
+    expect(neighbourResult.status).toBe('SUCCEEDED');
+
+    await expect(gateway.execute(request(spender))).rejects.toMatchObject({
+      name: 'BudgetExceededError',
+    });
+    activeConfiguration = configuration();
+  });
+
+  it('refuses with retry guidance when too many requests are already running', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+
+    // A request that never finishes, holding the one concurrency slot.
+    const reservation = await ledger.reserve({
+      workspaceId,
+      estimateMilliCredits: 100n,
+      purpose: TASK_KEY,
+      idempotencyKey: `busy-${crypto.randomUUID()}`,
+    });
+    await platform.aiRequest.create({
+      data: {
+        workspaceId,
+        taskKey: TASK_KEY,
+        idempotencyKey: `busy-${crypto.randomUUID()}`,
+        status: 'RUNNING',
+        creditReservationId: reservation.id,
+        creditsReservedMilli: 100n,
+        deadlineAt: new Date(Date.now() + 600_000),
+      },
+    });
+
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      budgets: { defaults: { ...NO_LIMITS, maxConcurrentRequests: 1 }, perPlan: [] },
+    };
+
+    // 429, not 402: waiting genuinely helps here, so the caller is told so.
+    await expect(gateway.execute(request(workspaceId))).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+    });
+    activeConfiguration = configuration();
+
+    await ledger.release(reservation.id, 'test cleanup');
+  });
+
+  it('applies a plan ceiling in place of the default', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      budgets: {
+        defaults: { ...NO_LIMITS, creditsPerDayMilli: 1 },
+        perPlan: [
+          {
+            planKey: 'growth',
+            creditsPerDayMilli: 1_000_000,
+            creditsPerMonthMilli: null,
+            maxConcurrentRequests: null,
+          },
+        ],
+      },
+    };
+
+    // The same request the default would refuse succeeds on the plan that
+    // raised the ceiling.
+    const result = await gateway.execute(request(workspaceId, { planKey: 'growth' }));
+    activeConfiguration = configuration();
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('refuses a request that costs more than the per-request ceiling', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const before = await walletOf(workspaceId);
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      // Zero cost allowed: the task is switched off by cost.
+      routingRules: base.routingRules.map((rule) => ({
+        ...rule,
+        fallbackModelKeys: [],
+        maxCostPerRequestMinor: 0,
+      })),
+    };
+
+    await expect(gateway.execute(request(workspaceId))).rejects.toMatchObject({
+      name: 'BudgetExceededError',
+    });
+    activeConfiguration = configuration();
+
+    expect(await walletOf(workspaceId)).toEqual(before);
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('drops an over-cap model and uses the operator’s next choice', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const base = configuration();
+    activeConfiguration = {
+      ...base,
+      // Only the primary has a cost basis, so only the primary can breach a
+      // cost ceiling; the fallback stays affordable.
+      routingRules: base.routingRules.map((rule) => ({ ...rule, maxCostPerRequestMinor: 0 })),
+    };
+
+    const result = await gateway.execute(request(workspaceId));
+    activeConfiguration = configuration();
+
+    // Treated like a disabled model, not like a failed request: the operator's
+    // next choice may well be affordable.
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.modelKey).toBe(FALLBACK_KEY);
+  });
+
+  it('does not refuse anything when no budget is configured', async () => {
+    mock.reset();
+    activeConfiguration = configuration();
+    const workspaceId = await freshWorkspace(50);
+
+    const result = await gateway.execute(request(workspaceId));
+    expect(result.status).toBe('SUCCEEDED');
   });
 });
 

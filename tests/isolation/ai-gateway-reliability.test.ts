@@ -37,6 +37,12 @@ const FALLBACK = 'mock-balanced';
 const LAST_RESORT = 'mock-premium';
 const TASK_KEY = 'caption.generate';
 
+const NO_LIMITS = {
+  creditsPerDayMilli: null,
+  creditsPerMonthMilli: null,
+  maxConcurrentRequests: null,
+};
+
 let platform: PrismaClient;
 let ledger: CreditLedgerService;
 let mock: MockProviderAdapter;
@@ -109,6 +115,8 @@ function configuration(overrides: Partial<AiConfiguration> = {}): AiConfiguratio
       },
     ],
     creditRules: [creditRule(PRIMARY), creditRule(FALLBACK), creditRule(LAST_RESORT)],
+    // No ceilings unless a test sets one: an unset budget must never refuse.
+    budgets: { defaults: NO_LIMITS, perPlan: [] },
     ...overrides,
   };
 }
