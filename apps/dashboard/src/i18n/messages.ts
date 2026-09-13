@@ -238,6 +238,8 @@ export const messages = {
     'bb.origin.HUMAN': 'مُدخلة بشريًا',
     'bb.origin.DOCUMENT': 'من مستند',
     'bb.origin.AI_INFERRED': 'مستنتجة',
+    'bb.fieldStatus': 'الحالة',
+    'bb.archive': 'أرشفة',
     'bb.detailClose': 'إغلاق اللوحة',
     'bb.detailEmpty': 'لا توجد معرفة في هذه المنطقة بعد.',
     'bb.detailSources': 'المستندات المرتبطة',
@@ -497,6 +499,8 @@ export const messages = {
     'bb.origin.HUMAN': 'Entered by a person',
     'bb.origin.DOCUMENT': 'From a document',
     'bb.origin.AI_INFERRED': 'Inferred',
+    'bb.fieldStatus': 'Status',
+    'bb.archive': 'Archive',
     'bb.detailClose': 'Close panel',
     'bb.detailEmpty': 'There is no knowledge in this area yet.',
     'bb.detailSources': 'Linked documents',
@@ -569,6 +573,25 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
+  BRAND_CREATED: { en: 'Brand created.', ar: 'تم إنشاء العلامة.' },
+  KNOWLEDGE_SAVED: { en: 'Knowledge saved.', ar: 'تم حفظ المعرفة.' },
+  KNOWLEDGE_ARCHIVED: { en: 'Knowledge archived.', ar: 'تمت أرشفة المعرفة.' },
+  KNOWLEDGE_RESTORED: {
+    en: 'The earlier version was restored as a new version.',
+    ar: 'تمت استعادة الإصدار السابق كإصدار جديد.',
+  },
+  CANDIDATE_ACCEPTED: {
+    en: 'Accepted into brand knowledge.',
+    ar: 'تم اعتماده ضمن معرفة العلامة.',
+  },
+  CANDIDATE_REJECTED: {
+    en: 'Rejected. Approved knowledge is unchanged.',
+    ar: 'تم الرفض. لم تتغيّر المعرفة المعتمدة.',
+  },
+  SOURCE_UPLOADED: {
+    en: 'Document processed. Extracted knowledge is waiting for review.',
+    ar: 'تمت معالجة المستند. المعرفة المستخرجة بانتظار المراجعة.',
+  },
   RESET_REQUESTED: {
     en: 'If an account exists for that address, a message is on its way.',
     ar: 'إذا كان هناك حساب بهذا البريد، فستصلك رسالة.',

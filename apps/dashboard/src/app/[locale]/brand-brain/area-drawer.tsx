@@ -186,9 +186,8 @@ export function AreaDrawer({
             margin: 0,
           }}
         >
-          {/* The status LABEL is already translated on the server; the field
-              caption is the generic word for it. */}
-          <Field label={t('bb.areasTitle')} value={area.statusLabel} testId="drawer-status" />
+          {/* The VALUE is translated on the server; this is its caption. */}
+          <Field label={t('bb.fieldStatus')} value={area.statusLabel} testId="drawer-status" />
           <Field
             label={t('bb.knowledgeItems')}
             value={`${area.activeItems} / ${area.requiredItems}`}
@@ -300,7 +299,7 @@ export function AreaDrawer({
                         font: 'inherit',
                       }}
                     >
-                      {t('common.disabled')}
+                      {t('bb.archive')}
                     </button>
                   </form>
                 ) : null}

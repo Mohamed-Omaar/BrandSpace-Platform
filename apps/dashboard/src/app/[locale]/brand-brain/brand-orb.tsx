@@ -165,8 +165,12 @@ export function BrandOrb({
         const ry = p.y * cosX - rz * sinX;
         const finalZ = p.y * sinX + rz * cosX;
         const depth = 700 / (700 + finalZ);
-        let px = cx + rx * depth * scaleBase * 100;
-        let py = cy + ry * depth * scaleBase * 100;
+        // `scaleBase` already maps the particle's ±100 model space onto the
+        // stage radius. Multiplying by 100 again put every point ~16,000px
+        // off-screen and drew an empty canvas — invisible in a unit test,
+        // obvious the moment the page was opened in a browser.
+        let px = cx + rx * depth * scaleBase;
+        let py = cy + ry * depth * scaleBase;
 
         if (!reduceMotion && !p.isInner && pointer.inside) {
           const dx = px - pointer.x;
@@ -324,7 +328,9 @@ export function BrandOrb({
       onDrop={handleDrop(null)}
       style={{
         position: 'relative',
-        minHeight: 'min(72vw, 500px)',
+        // Taller relative to width on a phone: the orbit nodes are a fixed
+        // minimum size, so a short stage crowds them against the core.
+        minHeight: 'min(86vw, 500px)',
         borderRadius: '26px',
         overflow: 'hidden',
         display: 'grid',
@@ -351,8 +357,8 @@ export function BrandOrb({
         style={{
           position: 'relative',
           zIndex: 3,
-          width: 'min(34vw, 170px)',
-          height: 'min(34vw, 170px)',
+          width: 'min(26vw, 170px)',
+          height: 'min(26vw, 170px)',
           borderRadius: '26%',
           border: 0,
           background: INK,
@@ -470,8 +476,10 @@ export function BrandOrb({
  */
 function nodePosition(index: number, total: number): React.CSSProperties {
   const angle = (index / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2;
-  const top = 50 + Math.sin(angle) * 38;
-  const left = 50 + Math.cos(angle) * 38;
+  // 42% rather than 38%: far enough out that a node never sits on the core,
+  // close enough in that it stays over the sphere it labels.
+  const top = 50 + Math.sin(angle) * 42;
+  const left = 50 + Math.cos(angle) * 42;
   return {
     top: `${Math.min(88, Math.max(2, top))}%`,
     left: `${Math.min(84, Math.max(2, left))}%`,

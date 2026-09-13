@@ -7,6 +7,19 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  /*
+   * ROUTE HANDLERS ARE NOT PAGES AND HAVE NO LOCALE.
+   *
+   * `/api/*` is a machine endpoint: the Brand Brain chat proxy posts to it as
+   * JSON. Redirecting it to `/ar/api/...` turned a POST into a 307 and then a
+   * 404, and the browser surfaced it as "that request could not be completed" —
+   * a chat that looked broken for a reason nothing in the chat code could
+   * explain. Excluded here rather than in the matcher so the reason travels
+   * with the rule.
+   */
+  if (pathname.startsWith('/api/')) return NextResponse.next();
+
   const hasLocale = SUPPORTED_LOCALES.some(
     (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
   );

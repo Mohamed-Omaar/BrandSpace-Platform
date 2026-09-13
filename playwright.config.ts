@@ -254,6 +254,22 @@ export default defineConfig({
         launchOptions,
       },
     },
+    {
+      /*
+       * Brand Brain gets its own project for the same reason the customer app
+       * does: it signs in, mutates real workspace state and asserts against it.
+       * Running it in parallel with itself would have two browsers creating a
+       * brand in the same workspace and each asserting on the other's rows.
+       */
+      name: 'brand-brain',
+      testMatch: /brand-brain\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
   ],
 
   webServer: [server('web'), server('dashboard'), server('admin'), server('api')],

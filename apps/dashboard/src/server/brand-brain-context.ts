@@ -47,7 +47,9 @@ export interface BrandBrainPolicy {
 let sharedStore: ObjectStore | null = null;
 
 export function objectStore(): ObjectStore {
-  sharedStore ??= createObjectStore({ nodeEnv: process.env['NODE_ENV'] ?? 'development' });
+  // APP_ENV, not NODE_ENV: every built app has NODE_ENV=production, including
+  // the one the E2E suite serves. See createObjectStore for the full reasoning.
+  sharedStore ??= createObjectStore({ appEnv: process.env['APP_ENV'] ?? 'development' });
   return sharedStore;
 }
 
@@ -96,6 +98,14 @@ export function brandBrainPolicy(): BrandBrainPolicy {
 
 export interface BrandBrainServices extends ScopedServices {
   readonly knowledge: BrandKnowledgeService;
+  /**
+   * Built ON DEMAND.
+   *
+   * Ingestion needs an object store; reading knowledge does not. Constructing
+   * it eagerly made every READ depend on storage being configured, so the whole
+   * screen failed with a storage error before it rendered a single row. A
+   * getter keeps the dependency where it belongs — on the upload path.
+   */
   readonly ingestion: BrandIngestionService;
 }
 
@@ -108,12 +118,14 @@ export async function inBrandBrain<T>(
     fn({
       ...scoped,
       knowledge: new BrandKnowledgeService({ db: scoped.db, workspaceId }),
-      ingestion: new BrandIngestionService({
-        db: scoped.db,
-        workspaceId,
-        store: objectStore(),
-        policy: policy.ingestion,
-      }),
+      get ingestion() {
+        return new BrandIngestionService({
+          db: scoped.db,
+          workspaceId,
+          store: objectStore(),
+          policy: policy.ingestion,
+        });
+      },
     }),
   );
 }

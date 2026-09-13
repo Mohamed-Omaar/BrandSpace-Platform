@@ -4,6 +4,7 @@ import { inWorkspace, requireWorkspace } from '../../../server/customer-context'
 import { brandBrainPolicy, inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { statusMessage } from '../../../i18n/messages';
 import {
   BrandBrainView,
   type AreaCardData,
@@ -53,8 +54,16 @@ export default async function BrandBrainPage({
   const status = typeof query['ok'] === 'string' ? (query['ok'] as string) : null;
   const error = typeof query['error'] === 'string' ? (query['error'] as string) : null;
 
-  const banner = status ? (
-    <CustomerBanner tone="success">{t('bb.title')}</CustomerBanner>
+  // The real outcome, in the reader's language, with the correlation id on a
+  // failure — the one value that joins this screen to the redacted server log.
+  const reference = typeof query['ref'] === 'string' ? (query['ref'] as string) : undefined;
+  const successText = status ? statusMessage(status, locale) : null;
+  const errorText = error ? statusMessage(error, locale, reference) : null;
+
+  const banner = successText ? (
+    <CustomerBanner tone="success">{successText}</CustomerBanner>
+  ) : errorText ? (
+    <CustomerBanner tone="error">{errorText}</CustomerBanner>
   ) : error ? (
     <CustomerBanner tone="error">{t('bb.chatError')}</CustomerBanner>
   ) : null;

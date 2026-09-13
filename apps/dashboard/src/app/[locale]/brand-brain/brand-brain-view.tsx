@@ -155,9 +155,19 @@ export function BrandBrainView({
       <section
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.15fr) minmax(260px, 0.85fr)',
+          /*
+           * INTRINSICALLY RESPONSIVE, not breakpoint-driven.
+           *
+           * This was a fixed two-column grid, which on a phone squeezed both
+           * tracks to a couple of hundred pixels and let the completion card
+           * sit on top of the orb — a broken screen that every desktop check
+           * passed. `auto-fit` + `min(100%, …)` collapses to one column when
+           * there is not room for two, with no media query to keep in sync
+           * with a design that will keep changing.
+           */
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
           gap: '22px',
-          padding: '22px',
+          padding: 'clamp(14px, 3vw, 22px)',
           borderRadius: '28px',
           background: 'rgba(255,255,255,.86)',
         }}
@@ -167,9 +177,12 @@ export function BrandBrainView({
           <h2
             style={{
               margin: 0,
-              fontSize: 'clamp(2rem, 4.4vw, 3.4rem)',
+              fontSize: 'clamp(1.75rem, 4.4vw, 3.4rem)',
               lineHeight: 0.95,
               letterSpacing: '-0.055em',
+              // Long words in either language break rather than push the grid
+              // track wider than the screen.
+              overflowWrap: 'anywhere',
             }}
           >
             {t('bb.heroTitle')}
@@ -291,11 +304,19 @@ export function BrandBrainView({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'end',
+            flexWrap: 'wrap',
+            gap: 8,
             margin: '10px 4px',
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '-.04em' }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 'clamp(1.15rem, 3vw, 1.5rem)',
+                letterSpacing: '-.04em',
+              }}
+            >
               {t('bb.areasTitle')}
             </h3>
             <p style={{ margin: 0, color: '#6D6D76', fontSize: '0.72rem' }}>
@@ -371,7 +392,13 @@ export function BrandBrainView({
                 >
                   {area.statusLabel}
                 </span>
-                <span style={{ fontSize: '0.6rem', color: '#999' }}>
+                {/*
+                  #6D6D76, not #999. The demo's grey is 2.84:1 on white at this
+                  size, which axe flags as a serious WCAG 2.2 AA failure and a
+                  reader with low vision experiences as an unreadable caption.
+                  The muted token is 5.36:1 and looks the same at a glance.
+                */}
+                <span style={{ fontSize: '0.65rem', color: '#6D6D76' }}>
                   {area.activeItems} {t('bb.itemsCount')}
                   {area.pendingCandidates > 0
                     ? ` · ${area.pendingCandidates} ${t('bb.pendingCount')}`

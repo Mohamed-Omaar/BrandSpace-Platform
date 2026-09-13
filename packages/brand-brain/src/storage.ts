@@ -82,13 +82,30 @@ export class InMemoryObjectStore implements ObjectStore {
   }
 }
 
-export function createObjectStore(options: { nodeEnv: string; store?: ObjectStore }): ObjectStore {
+/**
+ * Resolve the object store for an environment.
+ *
+ * THE GATE IS THE DEPLOYMENT ENVIRONMENT, NOT THE BUILD MODE.
+ *
+ * It keyed on `NODE_ENV` first, which was wrong in a way only an end-to-end run
+ * could show: `NODE_ENV` is `production` in ANY production build, including the
+ * one the E2E suite serves and the one a developer runs to check a bundle. That
+ * made the memory store unavailable to every built app, and the whole Brand
+ * Brain screen failed with a storage error before it rendered a single read.
+ *
+ * `APP_ENV` is what the rest of the platform already uses to mean "which
+ * deployment is this" — `currentEnvironment()` in both apps reads it — and it is
+ * the value that should decide. A real production deployment still refuses:
+ * failing there is correct, because the alternative is a memory store that
+ * silently loses every customer upload on the next restart.
+ */
+export function createObjectStore(options: {
+  /** The DEPLOYMENT environment: `APP_ENV`, never `NODE_ENV`. */
+  appEnv: string;
+  store?: ObjectStore;
+}): ObjectStore {
   if (options.store) return options.store;
-  if (options.nodeEnv === 'production') {
-    // A production deployment must configure a real storage provider through
-    // `integrations.storage`. Failing here is the correct outcome: the
-    // alternative is a memory store that loses every customer upload on the
-    // next restart, silently.
+  if (options.appEnv === 'production') {
     throw new Error(
       'No object store is configured. Configure integrations.storage before enabling uploads.',
     );

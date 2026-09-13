@@ -179,9 +179,21 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
           replayed: turn.replayed,
         });
       } catch (error: unknown) {
-        // An AppError carries a stable code and a message already judged safe.
-        // Anything else is logged with its internals and answered generically.
+        /*
+         * An AppError carries a stable code the client can act on. It is still
+         * LOGGED when it maps to a 5xx, because those are ours, not the
+         * caller's: a `RoutingError` for an unconfigured task is an operator
+         * problem that would otherwise be invisible — the customer sees a
+         * generic failure and nothing anywhere says the platform has no active
+         * routing rule. A 4xx is the caller's and stays quiet.
+         */
         if (isAppError(error)) {
+          if (error.httpStatus >= 500) {
+            log.error('brand brain chat failed', {
+              code: error.code,
+              ...internalErrorFields(error),
+            });
+          }
           return reply.code(error.httpStatus).send({ error: { code: error.code } });
         }
         log.error('brand brain chat failed', internalErrorFields(error));
