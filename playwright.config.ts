@@ -244,7 +244,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -254,7 +254,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -328,6 +328,23 @@ export default defineConfig({
        */
       name: 'brand-brain',
       testMatch: /brand-brain\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * The Asset Library gets its own project for the same reason Brand Brain
+       * does: it signs in, uploads real files into a real workspace and asserts
+       * against what comes back. Two browsers running it in parallel would each
+       * be asserting on the other's rows — and an upload is not idempotent
+       * across runs, so a shared workspace has to be driven serially.
+       */
+      name: 'assets',
+      testMatch: /assets\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],
