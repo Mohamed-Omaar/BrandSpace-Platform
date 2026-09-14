@@ -412,6 +412,39 @@ They are named rather than silently deleted, so a reader who remembers them can 
 
 ---
 
+### Delivered in Phase 5B-1 — Asset Library
+
+Scope item 4 is built. **Scope items 3, 5, 6, 7 and 8 remain outstanding**, so Phase 5 is still not
+complete and the milestone above is still not claimed.
+
+| Delivered                   | What it is                                                                                                                                                                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Asset Library schema**    | Six tenant-owned tables (`docs/DATABASE.md` §4.2b) behind two independent boundaries, with **every intra-library foreign key composite with `workspaceId`** — closing the cross-tenant existence oracle a plain key leaves open (D-99)                                                         |
+| **Upload lifecycle**        | Entitlement, permission, brand scope and configured limits resolved **before bytes**; a provider-agnostic upload session; idempotent completion keyed per logical action; the kind decided from the bytes, never from the browser's claim                                                      |
+| **Quarantine and scanning** | An asset is unreachable until a scan returns CLEAN. `isSelectable()` requires READY **and** CLEAN **and** not deleted, and a row that is READY but not CLEAN is refused — proven by a test that writes exactly that row                                                                        |
+| **Queue-backed processing** | `media-processing` runs in the real worker through `packages/jobs`, with safe retries, duplicate-delivery tolerance, and the same reconciliation sweep that already recovers stuck ingestion jobs                                                                                              |
+| **Folders, tags, versions** | Bounded nesting from activated configuration, append-only version history in three separated layers (D-102), archive and restore, and content-checksum duplicate protection over live rows                                                                                                     |
+| **Serving**                 | Opaque HMAC-signed, time-limited download grants (D-103). No storage key, provider object key or filesystem path ever reaches the browser, and every wrong grant returns an identical `404`                                                                                                    |
+| **Customer UI**             | `/[locale]/assets` — browse, folders, tags, search, filter, sort, upload with progress, per-state presentation for processing, failed, quarantined and ready, preview, detail, versions, archive and restore, and selection for a future consuming module. AR and EN, RTL and LTR, WCAG 2.2 AA |
+| **Configuration, not code** | File size, allowed types, folder depth, version count and derivative ceilings all come from the activated `assets` configuration domain; the storage quota comes from `limit.storage_gb` through the entitlements engine                                                                       |
+
+**Deliberately not built, each for a stated reason:**
+
+| Not built                        | Why                                                                                                                                                                                                                                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A production storage adapter** | No vendor is approved (D-110, F-77). The `ObjectStore` boundary is provider-agnostic and the filesystem implementation behind it is real and cross-process, which is enough for development, test and CI. **Production fails closed** rather than accepting a file it cannot keep (D-105) |
+| **A production virus scanner**   | No engine is selected (D-111, F-78). The gate, the quarantine state, the failure path and the audit trail are all real; what decides CLEAN is a deterministic mock. **Production fails closed** (D-106)                                                                                   |
+| **Derivative bytes**             | No image encoder has been reviewed, and every candidate decodes untrusted bytes in native code (D-107, F-79). The `asset_derivative` model, its RLS, its bounds and its lifecycle are complete, so adding one later is a worker and configuration change, not a migration                 |
+| **SVG support**                  | SVG is an executable document. Accepting it means an unreviewed sanitiser or active content on the app origin, so it is refused outright rather than half-supported (D-108, F-81)                                                                                                         |
+| **OCR**                          | Unchanged from Phase 5A, and deliberately not revisited here. Images are valid Asset Library media; extracting text from them is a separate decision                                                                                                                                      |
+
+**The route is a design-system EXTENSION, not a demo port.** The approved demo routes `media` to a
+placeholder, so under D-98 the screen was built from the platform's own tokens, components and
+interaction patterns, and is recorded in `docs/UI-FIDELITY-CONTRACT.md` §6.3. The owner may refine it
+in the F-76 parity pass.
+
+---
+
 ## Phase 6 — Social Connections and Publishing
 
 **Goal:** real external publishing, reliably.

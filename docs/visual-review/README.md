@@ -177,6 +177,28 @@ settings, the last hand-rolled `<h1>`, and the sidebar foot obscuring the last n
 
 ---
 
+## Final review captures
+
+Two files sit outside the numbered manifest. Each is a **single** capture produced once, at the end of
+a phase, for the product owner to look at — not evidence a test asserts against, and not a baseline.
+
+| File                      | Route                   | What it is                                                                                                                                                                                            |
+| ------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brand-brain-final.png`   | `/[locale]/brand-brain` | Phase 5A. A port of an approved demo route, so the fidelity question it answers is "does this match the pinned source".                                                                               |
+| `asset-library-final.png` | `/[locale]/assets`      | Phase 5B-1. An approved **design-system extension** (D-98, `docs/UI-FIDELITY-CONTRACT.md` §6.3), so the question it answers is different: does this read as the same product as the routes around it. |
+
+**What is in the Asset Library capture, and why.** The four gradient tiles are real PNGs uploaded
+through the product's own picker and processed by the real worker; their previews are fetched through
+expiring download grants, which is the only way the page can reach bytes at all. The quarantined tile
+below them shows the state that matters most — the badge, the reason, and no preview and no way to
+reach the file. The earlier tiles with a broken-image mark are end-to-end fixtures: deliberately
+synthetic bytes with a valid PNG signature and no decodable image behind it, because a suite that
+needs a real photograph to run is a suite carrying binaries nobody reviews.
+
+**Storage reads "Unlimited", and that is not a placeholder.** No plan is assigned in the development
+fixture, and the entitlements engine already means an unstated limit as unlimited. Writing a number
+there to make the screenshot look complete would be inventing a commercial value (CLAUDE.md §2.2).
+
 ## What these images deliberately do NOT show
 
 No plan name, price, quota, credit allowance, usage counter or analytics figure appears anywhere.

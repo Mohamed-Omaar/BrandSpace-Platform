@@ -1024,3 +1024,69 @@ still sees one workspace, and platform-owned tables still return _permission den
 | Support Mode cannot become a customer session or cross a workspace | `tests/isolation/support-mode.test.ts`                                    |
 | The customer app cannot import platform or secret modules          | `tests/unit/phase2b-boundaries.test.ts`                                   |
 | The role matrices match the Blueprint                              | same                                                                      |
+
+---
+
+## 21. Implementation Status — Phase 5B-1 (Asset Library)
+
+§11 above states the file-upload contract. This section says, item by item, **what is actually built and
+what is not**, because a security document that describes intentions as though they were controls is worse
+than one that says nothing.
+
+### 21.1 §11 measured against the build
+
+| §11 item                                     | Status                           | As built                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Pre-signed upload, server key, size cap   | **Built**                        | `initiateUpload()` resolves entitlement, permission, brand scope and the activated size and type limits **before a single byte is accepted**, then issues a provider-agnostic session. The storage key is server-generated and workspace-prefixed; the client never proposes one                                    |
+| 2. Server-side content sniffing              | **Built**                        | The declared `Content-Type` is recorded and **never trusted**. The kind is decided from the bytes — magic numbers read at fixed offsets, not scanned for — and a file whose signature disagrees with its extension is refused, not relabelled                                                                       |
+| 3. Scan before `ready`, quarantine, audit    | **Gate built, engine mocked**    | The quarantine gate is real: an asset is `PENDING` until a scan returns, `QUARANTINED` on a hit, and `isSelectable()` requires `READY` **and** `CLEAN` **and** not deleted. What decides CLEAN is `MockVirusScanner` (D-106). **Production refuses uploads until an engine is configured** (F-78)                   |
+| 4. Re-encoding strips metadata               | **Not built**                    | No encoder has been reviewed, so nothing decodes customer image bytes (D-107, F-79). Metadata is therefore _carried_, not stripped — which is why uploaded bytes are never served inline as an image from the app origin without an expiring grant                                                                  |
+| 5. SVG sanitised or converted                | **Not applicable — SVG refused** | SVG is absent from the allow-list entirely (D-108). An upload named `.svg` fails the signature check like any other undetectable type. Refusing is honest; sanitising would be another unreviewed dependency (F-81)                                                                                                 |
+| 6. Served from a separate domain/CDN         | **Partly**                       | There is no separate asset domain yet (it depends on the storage vendor, F-77). What exists instead: every download goes through an opaque HMAC-signed grant with a short TTL, `Content-Disposition` is set, and the response carries a restrictive `Content-Security-Policy` and `X-Content-Type-Options: nosniff` |
+| 7. Workspace-prefixed keys, signed short TTL | **Built**                        | Keys are built by `buildStorageKey()` and always workspace-prefixed. **No storage key and no filesystem path ever reaches the browser** (D-103)                                                                                                                                                                     |
+| 8. Per-plan storage quota at authorization   | **Built**                        | `limit.storage_gb` is consumed through `UsageService` in a single check-and-increment statement, before bytes, and refunded when an upload fails. Changing the activated configuration changes the ceiling with no source edit                                                                                      |
+
+### 21.2 The download grant
+
+A download is an **opaque, HMAC-signed, time-limited grant** — never a path and never an object key.
+The signing key is derived with domain separation, so a grant cannot be replayed against another
+purpose. The four ways a grant can be wrong — forged, expired, malformed, or valid but belonging to
+another workspace — all produce **the same `404`**, shaped identically to a genuine miss. A different
+message for the fourth case would confirm that the asset exists, which is the same inference §2.1
+forbids at the database layer.
+
+### 21.3 The hostile-input surface
+
+Each of these has a test that asserts the refusal, not merely the absence of a crash:
+
+- **Path traversal** is refused on the **raw** filename, before any separator stripping — because a
+  normaliser that quietly repairs `../../etc/passwd` into `passwd` accepts an attack and reports success.
+- **Filenames** are Unicode NFC-normalised and bidi-override characters (U+202E and its family) are
+  stripped, so a file cannot present itself in the UI as a different extension than it has.
+- **Extension/signature mismatch** is a refusal, never a correction.
+- **Oversized files** are refused at authorisation from the activated limit; the schema additionally caps
+  any configurable ceiling at `MAX_STORED_FILE_BYTES`, so an impossible limit fails at activation rather
+  than at insert.
+- **Decompression bombs** are bounded by declared-size and expansion ceilings from configuration.
+- **Macro-bearing and embedded-executable formats** are refused by signature.
+- **Retries and duplicate queue delivery** are idempotent on the upload session's key; a replayed
+  completion returns the first asset rather than creating a second.
+- **Stuck jobs** are reconciled by the existing scheduled sweep, not left to a customer to notice.
+
+### 21.4 Brand scope is enforced inside the service boundary
+
+`Membership.brandScope` is resolved in `packages/assets`, not in the route handler — so every caller
+gets the check, including the worker and any future module that selects an asset. A file in a brand the
+member is not scoped to is `NOT_FOUND`, identical in shape to a cross-tenant miss and to a genuine one.
+
+### 21.5 What these claims rest on
+
+| Claim                                                             | Proven by                                       |
+| ----------------------------------------------------------------- | ----------------------------------------------- |
+| Every Asset Library model is tenant-isolated                      | `tests/isolation/phase5b-asset-tenancy.test.ts` |
+| Composite keys close the cross-tenant existence oracle            | same                                            |
+| Quarantine, scan transitions, quota, idempotency, archive/restore | `tests/isolation/assets-lifecycle.test.ts`      |
+| A `READY` asset that is not `CLEAN` is still refused              | same                                            |
+| Hostile filenames, traversal, signature mismatch, size bounds     | `tests/unit/assets-file-safety.test.ts`         |
+| Permission and brand-scope refusals                               | `tests/unit/assets-policy.test.ts`              |
+| The route, its states, AR/EN, RTL/LTR, keyboard and WCAG 2.2 AA   | `tests/e2e/assets.spec.ts`                      |
