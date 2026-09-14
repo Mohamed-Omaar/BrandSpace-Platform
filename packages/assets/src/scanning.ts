@@ -83,7 +83,14 @@ export const SCAN_FAILURE_PROBE = 'BRANDSPACE-SCANNER-FAILURE-PROBE';
 export class MockVirusScanner implements VirusScanner {
   readonly key = 'mock';
 
-  async scan(input: { bytes: Uint8Array; declaredMimeType: string }): Promise<ScanResult> {
+  async scan(input: {
+    bytes: Uint8Array;
+    declaredMimeType: string;
+    // Accepted and unused: this scanner is synchronous and cannot exceed a
+    // deadline. Declared so the class matches `VirusScanner` exactly, and so a
+    // caller cannot tell the mock from a real engine by its signature.
+    timeoutMs?: number;
+  }): Promise<ScanResult> {
     /*
      * A BOUNDED WINDOW, not the whole file. A scanner that reads 500 MB into a
      * string to look for a 68-byte marker is a memory problem of its own, and

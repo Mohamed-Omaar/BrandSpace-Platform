@@ -591,6 +591,47 @@ describe('quarantine holds until a scanner says otherwise', () => {
     });
   });
 
+  it('an asset that is READY but NOT CLEAN is still refused', async () => {
+    /*
+     * THE TEST THAT MAKES THE SECOND CONDITION MEAN SOMETHING.
+     *
+     * docs/DATABASE.md §4.6 requires BOTH `status='ready'` and
+     * `scanStatus='clean'`, and every path in the product today sets them
+     * together — an infected file is QUARANTINED as well as INFECTED. So a
+     * suite that only drives the product cannot tell whether the scan half of
+     * the rule is load-bearing or decorative: deleting it passes every test.
+     * That was verified by planting exactly that deletion and watching 50 tests
+     * go green.
+     *
+     * This constructs the state no current path produces — READY with a scan
+     * that never came back clean — by writing the row directly, which is what a
+     * future code path, a migration or a support fix could plausibly do. It is
+     * the only assertion in the suite that fails when the scan condition is
+     * removed, and it is why the condition is defence in depth rather than a
+     * restatement.
+     */
+    await inA(async (h) => {
+      const { asset } = await uploadAndProcess(h, { name: 'ready-but-unscanned.png' });
+      await h.db.asset.update({
+        where: { id: asset.id },
+        data: { status: 'READY', scanStatus: 'PENDING' },
+      });
+
+      const row = await h.library.get(asset.id, actor());
+      expect(row.status).toBe('READY');
+      expect(row.scanStatus).toBe('PENDING');
+
+      // Both halves of the rule, asserted independently of each other.
+      expect(isSelectable(row)).toBe(false);
+      await expect(h.library.resolveForUse(asset.id, actor())).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      await expect(
+        h.download.grantFor({ assetId: asset.id, actor: actor(), disposition: 'inline' }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    });
+  });
+
   it('a missing object is terminal and says so in a customer-safe way', async () => {
     await inA(async (h) => {
       const bytes = png(crypto.randomUUID());
