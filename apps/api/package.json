@@ -9,7 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/auth": "workspace:*",
+    "@brandspace/brand-brain": "workspace:*",
+    "@brandspace/jobs": "workspace:*",
+    "@brandspace/config": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "fastify": "5.12.1",

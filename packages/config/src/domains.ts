@@ -526,6 +526,152 @@ const usageLimitsSchema = z.object({
     .default([]),
 });
 
+// --- Brand Brain ------------------------------------------------------------
+
+/**
+ * Brand Brain operational policy (Phase 5).
+ *
+ * CLAUDE.md §2.2: none of this may be hard-coded. What a customer may upload,
+ * how long knowledge stays fresh, how long a persisted chat answer is kept
+ * (D-78) and how text is chunked are all OPERATIONAL settings the owner tunes
+ * without a release.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: the per-area completion requirements. Those
+ * are a PRODUCT definition of what "complete" means, and a tenant- or
+ * plan-tunable version of them would make the same badge mean different things
+ * to different customers. They live in `packages/brand-brain/src/areas.ts`.
+ */
+const brandBrainSchema = z.object({
+  upload: z
+    .object({
+      /**
+       * Accepted media types. A list rather than a wildcard: extraction has to
+       * KNOW a format to read it, and admitting one it cannot parse produces a
+       * document that sits in FAILED forever.
+       *
+       * IMAGES ARE NOT ON THIS LIST, and that is a decision rather than an
+       * omission (D-93). The only way to get text out of a PNG or a JPEG is
+       * OCR, and no OCR option clears the bar this feature sets: the maintained
+       * JavaScript engine fetches its language model over the network at run
+       * time, its output is not reproducible across versions — which D-65
+       * requires, because a citation recorded today must still point at the
+       * same text next year — and its Arabic accuracy is far below its Latin
+       * accuracy, so a bilingual product would be quietly writing mistranscribed
+       * Arabic into approved brand knowledge. Refusing the upload is the honest
+       * answer until an option exists that does not have those properties.
+       *
+       * An operator CAN add a type here, and extraction will then refuse it at
+       * ingest with a customer-safe message rather than accepting a document it
+       * cannot read.
+       */
+      allowedMimeTypes: z
+        .array(z.string().min(1))
+        .default([
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'text/plain',
+          'text/csv',
+          'text/markdown',
+        ]),
+      maxFileBytes: z
+        .number()
+        .int()
+        .positive()
+        .default(25 * 1024 * 1024),
+      /** Per-brand ceiling on live source documents. */
+      maxDocumentsPerBrand: z.number().int().positive().default(200),
+    })
+    .default({}),
+
+  ingestion: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).default(3),
+      /** Backoff before a failed job is retried. */
+      retryBackoffSeconds: z.number().int().min(1).default(60),
+      /** A job past this is stuck, and the sweep reconciles it. */
+      stuckAfterSeconds: z.number().int().min(60).default(900),
+      chunkTargetChars: z.number().int().min(200).max(8_000).default(1_200),
+      chunkOverlapChars: z.number().int().min(0).max(2_000).default(150),
+      /** Ceiling on chunks per document, so one huge upload cannot dominate. */
+      maxChunksPerDocument: z.number().int().min(1).default(400),
+    })
+    .default({}),
+
+  /*
+   * EXTRACTION BOUNDS (Phase 5B).
+   *
+   * Every one of these exists because a customer upload is HOSTILE INPUT until
+   * proven otherwise, and because the cost of parsing it is paid by the whole
+   * platform. A PDF can declare fifty thousand pages; a 40 KB .docx can expand
+   * to gigabytes; an XML part can nest until a scanner gives up. Unbounded, any
+   * of those is a denial of service that one customer can aim at every other.
+   *
+   * They are configuration rather than constants for the usual reason: the
+   * right ceiling depends on the hardware the workers run on, which is an
+   * operator's fact and not a developer's (CLAUDE.md §2.2).
+   */
+  extraction: z
+    .object({
+      /** Pages read from one PDF. Pages past this are not read at all. */
+      maxPages: z.number().int().min(1).max(5_000).default(300),
+      /** Characters kept from one document, across every page or slide. */
+      maxTextChars: z.number().int().min(1_000).default(2_000_000),
+      /** Entries examined in one OOXML archive. */
+      maxArchiveEntries: z.number().int().min(1).max(10_000).default(512),
+      /** Total uncompressed bytes read from one archive. */
+      maxArchiveBytes: z
+        .number()
+        .int()
+        .min(1_024)
+        .default(64 * 1024 * 1024),
+      /**
+       * Uncompressed-to-compressed ratio at which an archive is refused.
+       *
+       * A zip bomb IS this number: 42.zip is roughly 4,500,000:1. Real Office
+       * documents sit between 2:1 and 20:1, so 200 refuses the attack with a
+       * wide margin above anything legitimate.
+       */
+      maxCompressionRatio: z.number().int().min(2).max(10_000).default(200),
+      /** Wall-clock ceiling on extracting one document. */
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(10 * 60_000)
+        .default(60_000),
+    })
+    .default({}),
+
+  knowledge: z
+    .object({
+      /** How long an ACTIVE item stays fresh before it is marked STALE. */
+      reviewIntervalDays: z.number().int().min(1).default(180),
+      /** Candidates below this confidence are never auto-surfaced as ready. */
+      minimumCandidateConfidenceMilli: z.number().int().min(0).max(1000).default(400),
+    })
+    .default({}),
+
+  chat: z
+    .object({
+      /**
+       * D-78 RETENTION. Brand Brain chat is the first feature that persists
+       * customer-visible AI output, so it owns the artifact and must declare
+       * how long it keeps it. There is no "forever": the value is bounded, and
+       * `purgeExpiredChatContent` clears bodies past it while leaving the
+       * accounting intact.
+       */
+      retentionDays: z.number().int().min(1).max(3650).default(90),
+      /** Retrieved knowledge items allowed into one answer context. */
+      maxContextItems: z.number().int().min(1).max(100).default(12),
+      /** Retrieved document chunks allowed into one answer context. */
+      maxContextChunks: z.number().int().min(0).max(100).default(8),
+      /** Total characters of grounding text. A context window is finite. */
+      maxContextChars: z.number().int().min(500).default(12_000),
+    })
+    .default({}),
+});
+
 // --- Integrations -----------------------------------------------------------
 function providerIntegrationSchema() {
   return z.object({
@@ -602,6 +748,36 @@ const operationsSchema = z.object({
     })
     .default({ enabled: false, message: null, allowPlatformAdmin: true }),
   supportModeTtlMinutes: z.number().int().positive().max(480).default(60),
+
+  /*
+   * BACKGROUND MAINTENANCE CADENCES.
+   *
+   * How often the platform reconciles unclaimed work and clears content past
+   * its retention window. Configuration rather than constants for the same
+   * reason as every other operational number here: the right cadence depends on
+   * how much traffic the platform is carrying and how many workers are running,
+   * which is an operator's fact (CLAUDE.md §2.2). A retention WINDOW is a
+   * privacy commitment and lives with the feature that makes it; this is only
+   * how often the sweep that enforces it runs.
+   */
+  maintenance: z
+    .object({
+      /**
+       * How often unclaimed ingestion jobs are re-dispatched.
+       *
+       * Dispatch is an optimisation and this sweep is the correctness path
+       * (docs/ARCHITECTURE.md §9), so the interval is the worst-case delay
+       * before a document whose queue message was lost is picked up.
+       */
+      ingestionReconcileSeconds: z.number().int().min(5).max(3_600).default(30),
+      /** How often expired AI content is cleared. */
+      retentionPurgeSeconds: z.number().int().min(60).max(86_400).default(900),
+      /** Rows cleared per pass, so one sweep cannot monopolise the database. */
+      retentionPurgeBatch: z.number().int().min(1).max(10_000).default(500),
+      /** Ingestion jobs re-dispatched per pass, for the same reason. */
+      ingestionReconcileBatch: z.number().int().min(1).max(10_000).default(200),
+    })
+    .default({}),
   trialDefaultDays: z.number().int().nonnegative().default(14),
   supportedCurrencies: z.array(z.string().length(3)).default(['SAR', 'USD']),
 });
@@ -631,6 +807,9 @@ export const CONFIG_DOMAINS = {
   credits: { schema: creditPolicySchema, schemaVersion: 1 },
   'beta-cohorts': { schema: betaCohortsSchema, schemaVersion: 1 },
   'usage-limits': { schema: usageLimitsSchema, schemaVersion: 1 },
+  // Phase 5. Upload rules, ingestion tuning, knowledge freshness and the D-78
+  // chat retention window — every one an owner setting, none of them in source.
+  'brand-brain': { schema: brandBrainSchema, schemaVersion: 1 },
   'integrations.email': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.storage': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.payment': { schema: providerIntegrationSchema(), schemaVersion: 1 },
@@ -653,4 +832,20 @@ export function isConfigDomain(value: string): value is ConfigDomain {
 /** The empty-but-valid document a brand new domain starts from. */
 export function defaultPayload<D extends ConfigDomain>(domain: D): ConfigPayload<D> {
   return CONFIG_DOMAINS[domain].schema.parse({}) as ConfigPayload<D>;
+}
+
+/**
+ * Parse a stored payload against its domain schema.
+ *
+ * The one entrance for reading a configuration document that did not come from
+ * `ConfigurationService.get` — in practice, a row from the tenant-readable
+ * catalogue projection. Parsing rather than casting is what makes the schema's
+ * defaults apply: a document written before a field existed comes back complete,
+ * so a caller never has to supply a default of its own (CLAUDE.md §2.2).
+ */
+export function parseConfigPayload<D extends ConfigDomain>(
+  domain: D,
+  payload: unknown,
+): ConfigPayload<D> {
+  return CONFIG_DOMAINS[domain].schema.parse(payload ?? {}) as ConfigPayload<D>;
 }

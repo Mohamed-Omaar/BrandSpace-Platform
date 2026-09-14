@@ -40,6 +40,33 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('billing.read', 'workspace', 'View the plan, effective features and limits'),
   def('billing.manage', 'workspace', 'Change the plan or payment method'),
   def('credits.read', 'workspace', 'View the workspace AI credit balance'),
+
+  /*
+   * Phase 5. Brand Brain, split along the lines where the ANSWERS differ.
+   *
+   * `brand_brain.read` and `brand_brain.edit` are the ordinary pair. The other
+   * three exist because they are genuinely different authorities:
+   *
+   *   - `upload` is not `edit`. Uploading consumes storage and produces work
+   *     for a reviewer; a copywriter who may correct a typo is not
+   *     automatically someone who may add documents to the corpus.
+   *   - `review` is not `edit` either. Approving a candidate is what turns
+   *     machine output into brand truth, and D-65 makes that a human decision
+   *     with a named owner. Collapsing it into `edit` would mean anyone who can
+   *     fix a sentence can also approve everything a document proposed.
+   *   - `delete` is separate because archiving knowledge is destructive to the
+   *     grounding every future generation depends on.
+   *
+   * No new ROLE is introduced. These attach to the roles that already exist.
+   */
+  def('brand.read', 'workspace', 'View brands'),
+  def('brand.manage', 'workspace', 'Create and edit brands'),
+  def('brand_brain.read', 'workspace', 'View Brand Brain knowledge and sources'),
+  def('brand_brain.edit', 'workspace', 'Add and edit brand knowledge'),
+  def('brand_brain.upload', 'workspace', 'Upload source documents'),
+  def('brand_brain.review', 'workspace', 'Approve or reject extracted knowledge'),
+  def('brand_brain.delete', 'workspace', 'Archive brand knowledge and remove sources'),
+  def('brand_brain.chat', 'workspace', 'Ask Brand Brain questions'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */

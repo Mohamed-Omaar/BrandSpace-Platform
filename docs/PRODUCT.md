@@ -284,9 +284,18 @@ them rather than retrofitted to them.
 | **Reproducibility**  | A generation can be replayed against the exact Brand Brain state it used, so an output can be explained after the fact                        |
 | **Human precedence** | Where a human-entered rule and an inferred learning conflict, the human rule wins, and the conflict is surfaced rather than resolved silently |
 
-**Scheduling.** The Brand Brain BACKEND — schema, chunking, embeddings, retrieval, write-back — remains
-**Phase 5** (`docs/ROADMAP.md`). This section is specification, not implementation. The approved visual
-reference is `docs/visual-reference/full-demo/brand-brain-preview.index.html` (D-60).
+**Scheduling.** The Brand Brain backend AND its customer screen were built in **Phase 5A**
+(`docs/ROADMAP.md`). Schema, chunking, retrieval, governance, chat and the UI exist; the WRITE-BACK
+direction of the loop does not yet, because it needs the analytics of Phase 7 to have anything to
+infer from. The schema carries what write-back will need — memory layer, origin, confidence,
+evidence, approval state, versioning — so it is not a retrofit.
+
+Two things in this section are specification still. Embeddings are a LOCAL deterministic index
+rather than a vendor one (D-13 deferred provider selection), and inferred learnings are proposed by
+nothing yet: `LEARNINGS` is a real area with real storage and no producer.
+
+The approved visual reference is `docs/visual-reference/full-demo/brand-brain-preview.index.html`
+(D-60). The screen as built is captured in `docs/visual-review/phase-5/`.
 
 ---
 

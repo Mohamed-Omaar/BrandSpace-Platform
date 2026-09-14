@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
@@ -43,7 +44,7 @@ loadTestEnv();
  * creates seconds earlier. No real credential is involved anywhere.
  */
 
-const PORTS = { web: 3100, dashboard: 3101, admin: 3102 } as const;
+const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103, worker: 3104 } as const;
 
 /**
  * Optional override for the Chromium binary.
@@ -87,17 +88,52 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   const env: Record<string, string> = {
     DATABASE_URL: process.env['DATABASE_URL'] ?? PLACEHOLDER_DATABASE_URL,
     APP_ENV: 'development',
+    /*
+     * ONE OBJECT STORE FOR EVERY PROCESS IN THE SUITE. The dashboard accepts the
+     * upload and the worker reads the bytes back, so a per-process store makes
+     * every queued ingestion fail on a file that "does not exist". Pinning the
+     * directory here also keeps the run self-contained rather than depending on
+     * both processes computing the same temporary path.
+     */
+    BRANDSPACE_OBJECT_STORE_DIR:
+      process.env['BRANDSPACE_OBJECT_STORE_DIR'] ??
+      path.join(os.tmpdir(), 'brandspace-e2e-objects'),
   };
 
   // The design showcase is opt-in and refused in production. The suite enables
   // it for the dashboard only, which is also the assertion that the gate works:
   // the admin app never sets it, so a showcase route there stays a 404.
-  if (app === 'dashboard') env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+  if (app === 'dashboard') {
+    env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+    // So the upload DISPATCHES rather than taking the non-production inline
+    // fallback. The suite is meant to exercise the path production takes.
+    env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
+    // Brand Brain chat is proxied to the API service. Without this the proxy
+    // answers an honest 503 and the chat suite would be testing the fallback.
+    env['BRANDSPACE_API_URL'] = `http://127.0.0.1:${PORTS.api}`;
+  }
+
+  if (app === 'worker') {
+    /*
+     * THE WORKER IS PART OF THE SUITE NOW, and that is the point.
+     *
+     * Uploads no longer process inside the server action: the dashboard writes
+     * the row and dispatches, and this process does the parsing. Without it
+     * running here the end-to-end suite would exercise only the non-production
+     * inline fallback and prove nothing about the path production takes.
+     */
+    env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
+  }
 
   const keys =
     app === 'admin'
       ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
-      : ['CUSTOMER_SESSION_SECRET'];
+      : app === 'api'
+        ? // The API is the platform surface for customer-initiated AI: it
+          // resolves a CUSTOMER session on the tenant pool and runs the gateway
+          // on the platform one, so it needs both credentials.
+          ['DATABASE_PLATFORM_URL', 'CUSTOMER_SESSION_SECRET', 'SECRET_VAULT_KEK']
+        : ['CUSTOMER_SESSION_SECRET'];
 
   for (const key of keys) {
     const value = process.env[key];
@@ -108,6 +144,28 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
 
 /** Build once, then serve — production output is what CI and users actually get. */
 function server(app: keyof typeof PORTS) {
+  if (app === 'worker') {
+    // A queue consumer, not an HTTP service: its readiness probe is the small
+    // liveness endpoint it serves for exactly this purpose.
+    return {
+      command: `pnpm --filter @brandspace/worker start`,
+      url: `http://127.0.0.1:${PORTS.worker}/`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+      env: { ...serverEnv('worker'), WORKER_PORT: String(PORTS.worker) },
+    };
+  }
+  if (app === 'api') {
+    // Fastify, not Next: it takes its port from the environment and its
+    // readiness probe is the public liveness endpoint rather than a locale root.
+    return {
+      command: `pnpm --filter @brandspace/api start`,
+      url: `http://127.0.0.1:${PORTS.api}/health/live`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+      env: { ...serverEnv('api'), PORT: String(PORTS.api) },
+    };
+  }
   return {
     command: `pnpm --filter @brandspace/${app} start --port ${PORTS[app]}`,
     // The admin root redirects to /en/login when signed out, which is a 307 and
@@ -132,7 +190,35 @@ export default defineConfig({
     ? [['dot'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
     : [['list']],
   timeout: 30_000,
-  expect: { timeout: 10_000 },
+  expect: {
+    timeout: 10_000,
+    toHaveScreenshot: {
+      /*
+       * TIGHT ON PURPOSE. A generous threshold turns a visual test into a
+       * formality: the Phase 5A orb differed from the approved demo in its
+       * container, its centre, its nodes and its chat placement, and a 20%
+       * allowance would have called that a match.
+       *
+       * `maxDiffPixelRatio` at 1% absorbs font rasterisation between machines
+       * without absorbing a moved element; `threshold` is per-pixel colour
+       * tolerance, kept low for the same reason.
+       */
+      maxDiffPixelRatio: 0.01,
+      /*
+       * PER-PIXEL COLOUR TOLERANCE, and it has to be TIGHT.
+       *
+       * This started at 0.15 and a planted defect proved the number wrong: a
+       * pale lavender container behind the orb — the exact Phase 5A defect —
+       * sat inside that tolerance and the comparison called it a match. 0.05
+       * still absorbs antialiasing, and refuses a pale fill that is not there
+       * in the baseline.
+       */
+      threshold: 0.05,
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'device',
+    },
+  },
 
   use: {
     trace: 'retain-on-failure',
@@ -158,7 +244,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -168,7 +254,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -233,7 +319,49 @@ export default defineConfig({
         launchOptions,
       },
     },
+    {
+      /*
+       * Brand Brain gets its own project for the same reason the customer app
+       * does: it signs in, mutates real workspace state and asserts against it.
+       * Running it in parallel with itself would have two browsers creating a
+       * brand in the same workspace and each asserting on the other's rows.
+       */
+      name: 'brand-brain',
+      testMatch: /brand-brain\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * VISUAL PARITY against the pinned demo — docs/UI-FIDELITY-CONTRACT.md §5.
+       *
+       * Its own project because it needs settings the functional suites must
+       * not have: reduced motion (so the orb draws one static frame rather than
+       * a different one every millisecond), a fixed device scale factor, and a
+       * comparison threshold tight enough that a moved element fails.
+       *
+       * It signs in as the VISUAL FIXTURE — a workspace whose Brand Brain is
+       * reset to a fixed state by `pnpm e2e:seed` — so the page it photographs
+       * is the same on every run. Serial, because it drives one workspace.
+       */
+      name: 'brand-brain-visual',
+      testMatch: /brand-brain-visual\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        // A fixed scale, so a baseline taken on one machine is comparable on
+        // another. Without it a retina runner produces images twice the size.
+        deviceScaleFactor: 1,
+        reducedMotion: 'reduce',
+        launchOptions,
+      },
+    },
   ],
 
-  webServer: [server('web'), server('dashboard'), server('admin')],
+  webServer: [server('web'), server('dashboard'), server('admin'), server('api'), server('worker')],
 });

@@ -268,7 +268,45 @@ describe('configuration lifecycle', () => {
       },
       draft.lockVersion,
     );
-    // Seed a models document so the reference check has something to check against.
+    /*
+     * Seed a PROVIDERS document first, then a models document, so the reference
+     * checks have something to check against.
+     *
+     * The providers half used to be missing, and the test passed anyway —
+     * because `ai.providers` had never been activated in the test database, the
+     * cross-domain check skipped itself entirely. That made this test depend on
+     * global database state it does not control: the moment anything else
+     * activated a providers document, the fixture model below referenced an
+     * undefined provider and the SETUP failed rather than the assertion. Fixing
+     * it here makes the test say what it means independently of its neighbours.
+     */
+    const providers = await config.createDraft(actor(), 'ai.providers', ENV, uniqueReason());
+    await config.updateDraft(
+      actor(),
+      providers.id,
+      {
+        providers: [
+          {
+            key: 'p',
+            name: 'Fixture provider',
+            baseUrl: 'https://fixture.invalid',
+            // `draft`, not `active`: an active provider must reference a stored
+            // API key secret, and this fixture has no business creating one.
+            apiKeySecretRef: null,
+            status: 'draft',
+            timeoutMs: 30_000,
+            maxConcurrency: 4,
+            noTrainingGuarantee: true,
+            dataRetentionPolicy: 'zero_retention',
+            privacyReviewRef: 'test fixture',
+          },
+        ],
+      },
+      providers.lockVersion,
+    );
+    await config.validateDraft(actor(), providers.id);
+    await config.activate(actor(), providers.id, { acknowledgeHighImpact: true });
+
     const models = await config.createDraft(actor(), 'ai.models', ENV, uniqueReason());
     await config.updateDraft(
       actor(),

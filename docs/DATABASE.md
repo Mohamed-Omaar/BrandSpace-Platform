@@ -195,7 +195,40 @@ Indexes: `unique(role.workspaceId, role.key)`, `unique(permission.key)`, `unique
 
 Indexes: `(workspaceId, status)`, `unique(workspaceId, slug)`.
 
-### 4.2 `BrandKnowledge`
+### 4.2 `BrandKnowledgeItem` and the Brand Brain tables — AS BUILT (Phase 5A)
+
+> **This section describes what exists.** The Phase-0 sketch below it (§4.2a) is kept because
+> decisions elsewhere reference it, but where the two differ the tables here are the authority.
+
+Nine tables, every one TENANT-OWNED and additionally BRAND-SCOPED. The brand boundary is a
+composite foreign key `(workspaceId, brandId)` referencing `brand(workspaceId, id)`, so a row
+pointing at another workspace's brand is refused by PostgreSQL and not by a service that remembered
+to check. RLS alone would admit such a row, because it would carry its own `workspaceId`.
+
+| Table                                              | What it holds                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `brand`                                            | One brand in a workspace. `unique(workspaceId, slug)`, soft delete                                                                                                                                                                                                                                                                                           |
+| `brand_knowledge_item`                             | The canonical unit. `area`, `memory` (D-64), `origin` (D-65 human precedence), `status`, `itemKey`, localized `title`/`body`, `confidenceMilli` (NULL for human knowledge — a human statement is not a probability), provenance columns, `evidence`, `version`, `indexVector`, staleness and conflict columns. `unique(workspaceId, brandId, area, itemKey)` |
+| `brand_knowledge_version`                          | APPEND-ONLY history. UPDATE and DELETE revoked from both roles, FORCE RLS leaves the owner without a policy, and a trigger refuses the operation outright — three independent layers                                                                                                                                                                         |
+| `brand_source_document`                            | An uploaded source. The BYTES ARE NOT HERE: a `storageKey` points into object storage. `unique(workspaceId, brandId, checksum)` is duplicate protection by content; `unique(workspaceId, idempotencyKey)` is request replay                                                                                                                                  |
+| `brand_source_chunk`                               | Retrievable chunks with a human-readable `locator`, so a citation points somewhere a person can check                                                                                                                                                                                                                                                        |
+| `brand_knowledge_candidate`                        | **The governance boundary.** Extraction writes here and never to `brand_knowledge_item`, so no upload can change approved knowledge on its own. The extraction is preserved even when a reviewer edits before accepting                                                                                                                                      |
+| `brand_ingestion_job`                              | Lifecycle, attempts and customer-safe failure text. A partial unique index keeps at most one live job per document                                                                                                                                                                                                                                           |
+| `brand_brain_conversation` / `brand_brain_message` | Chat. D-78: the message row is the artifact, carries its own `expiresAt`, and the purge clears the BODY while leaving `aiRequestId` and the ledger link intact                                                                                                                                                                                               |
+
+**Enums:** `BrandStatus`, `BrandKnowledgeArea` (ten areas), `BrandMemoryLayer` (D-64's four memories),
+`BrandKnowledgeOrigin`, `BrandKnowledgeStatus`, `BrandSourceStatus`, `BrandIngestionStage`,
+`BrandCandidateStatus`.
+
+**Retrieval index.** `indexVector Float[]` holds a deterministic local vector, not a vendor
+embedding: D-13 deferred provider selection, and `embeddingModelKey` is recorded so re-indexing on a
+change is detectable. A pgvector column and an ANN index replace it behind the same interface once a
+provider is approved.
+
+Migration: `20260913140000_phase_5_brand_brain`. Isolation coverage:
+`tests/isolation/phase5-tenancy.test.ts` (41 tests).
+
+### 4.2a `BrandKnowledge` — the original Phase 0 sketch
 
 Structured brand facts and uploaded documents, chunked and embedded for retrieval.
 

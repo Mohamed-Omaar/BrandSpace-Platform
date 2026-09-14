@@ -211,10 +211,43 @@ describe('the customer role matrix matches the Blueprint', () => {
       (p) => !['read'].includes(p.action) && p.key !== 'audit.read',
     ).map((p) => p.key);
 
-    for (const role of ['analyst', 'client_viewer', 'approver']) {
+    /*
+     * `approver` LEFT THIS LIST IN PHASE 5, AND THE TEST IS SHARPER FOR IT.
+     *
+     * It was read-only only because nothing it could approve existed yet.
+     * D-65 makes approving an extracted candidate a human decision with a named
+     * owner, and the role whose entire purpose is judging proposals has to be
+     * able to make it. Its exact grant is pinned in its own test below rather
+     * than left to a blanket rule, so widening it stays a deliberate act.
+     *
+     * `analyst` and `client_viewer` remain strictly read-only — including no
+     * `brand_brain.chat`, because a chat turn spends credits and writes a
+     * conversation. It is a mutation wearing a question mark, and a read-only
+     * role must not be able to spend money.
+     */
+    for (const role of ['analyst', 'client_viewer']) {
       for (const key of mutating) {
         expect(grants(role), `${role} must not hold ${key}`).not.toContain(key);
       }
+    }
+  });
+
+  it('approver may review extracted knowledge, and may do nothing else to it', () => {
+    // Pinned exactly, not as a superset: approving what a document proposed is
+    // a different act from authoring brand knowledge, and the review record
+    // only means something while the two are kept apart.
+    expect(grants('approver')).toContain('brand_brain.review');
+    for (const key of [
+      'brand_brain.edit',
+      'brand_brain.upload',
+      'brand_brain.delete',
+      'brand_brain.chat',
+      'brand.manage',
+      'member.invite',
+      'billing.manage',
+      'workspace.update',
+    ]) {
+      expect(grants('approver'), `approver must not hold ${key}`).not.toContain(key);
     }
   });
 

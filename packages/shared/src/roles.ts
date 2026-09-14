@@ -77,42 +77,101 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     // docs/SECURITY.md §4.3 marks "invite / remove members" as conditional for
     // this role (non-admin roles only). A conditional grant needs the condition
     // to be enforced, not assumed, so it is NOT granted in Phase 2B — see F-15.
-    permissionKeys: ['workspace.read', 'member.read', 'audit.read', 'credits.read'],
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'audit.read',
+      'credits.read',
+      // Phase 5. The role that runs the brand: full Brand Brain authority
+      // short of deleting knowledge, which stays with the admins.
+      'brand.read',
+      'brand.manage',
+      'brand_brain.read',
+      'brand_brain.edit',
+      'brand_brain.upload',
+      'brand_brain.review',
+      'brand_brain.chat',
+    ],
   },
   {
     key: 'content_creator',
     realm: 'workspace',
     nameEn: 'Content Creator',
     nameAr: 'منشئ المحتوى',
-    permissionKeys: ['workspace.read', 'member.read'],
+    // Reads the brand and asks it questions; may add knowledge and upload
+    // sources. May NOT review: approving a candidate is what turns machine
+    // output into brand truth (D-65), and that is an approver decision.
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'brand.read',
+      'brand_brain.read',
+      'brand_brain.edit',
+      'brand_brain.upload',
+      'brand_brain.chat',
+    ],
   },
   {
     key: 'copywriter',
     realm: 'workspace',
     nameEn: 'Copywriter',
     nameAr: 'كاتب المحتوى',
-    permissionKeys: ['workspace.read', 'member.read'],
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'brand.read',
+      'brand_brain.read',
+      'brand_brain.edit',
+      'brand_brain.chat',
+    ],
   },
   {
     key: 'designer',
     realm: 'workspace',
     nameEn: 'Designer',
     nameAr: 'مصمم',
-    permissionKeys: ['workspace.read', 'member.read'],
+    // Reads the brand to design consistently with it. No editing.
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'brand.read',
+      'brand_brain.read',
+      'brand_brain.chat',
+    ],
   },
   {
     key: 'approver',
     realm: 'workspace',
     nameEn: 'Approver',
     nameAr: 'المعتمِد',
-    permissionKeys: ['workspace.read', 'member.read'],
+    // The role whose whole purpose is judging proposals. It gets `review`
+    // WITHOUT `edit`: approving what was extracted is a different act from
+    // authoring brand knowledge, and keeping them apart is what makes the
+    // review record mean something.
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'brand.read',
+      'brand_brain.read',
+      'brand_brain.review',
+    ],
   },
   {
     key: 'analyst',
     realm: 'workspace',
     nameEn: 'Analyst',
     nameAr: 'محلل',
-    permissionKeys: ['workspace.read', 'member.read', 'audit.read', 'credits.read'],
+    permissionKeys: [
+      'workspace.read',
+      'member.read',
+      'audit.read',
+      'credits.read',
+      // Read-only, deliberately. `brand_brain.chat` is NOT granted: a chat turn
+      // spends credits and writes a conversation, so it is a mutation wearing a
+      // question mark, and a read-only role must not be able to spend money.
+      'brand.read',
+      'brand_brain.read',
+    ],
   },
   {
     /*

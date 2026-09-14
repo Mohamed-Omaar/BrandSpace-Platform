@@ -508,6 +508,23 @@ feature that first turns persistence on, and is tracked as F-63.
 
 ---
 
+#### The first feature to turn persistence on — Brand Brain chat (Phase 5A)
+
+D-78 says the requesting feature owns the artifact and the gateway must not become a content store.
+Brand Brain chat is the first feature to persist a customer-visible AI result, and it does so
+WITHOUT asking the gateway to: its routing rule leaves `persistOutput` **false**, and the answer
+lives in `brand_brain_message` with its own `expiresAt` taken from validated configuration
+(`brand-brain.chat.retentionDays`).
+
+This closes the customer-facing half of F-63. The retention notice §11 describes is on the chat
+panel, visible BEFORE the customer types rather than after their first answer is stored.
+`purgeExpiredChatContent()` clears the message BODY and nulls its citations while leaving the row,
+its `aiRequestId` and the usage ledger untouched — which is precisely D-78's split between content
+and the operational metadata that must be retained. An integration test asserts both halves.
+
+**Still open (F-72):** nothing calls the purge on a timer yet. The window is enforceable but not
+enforced until it is wired into `apps/worker` alongside the existing sweeps.
+
 ## 12. Observability
 
 **Per request:** `AIRequest` row + trace span with attributes (task, model chain, provider, latency, usage

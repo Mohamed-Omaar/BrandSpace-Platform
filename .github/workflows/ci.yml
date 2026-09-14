@@ -135,6 +135,21 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Phase 5B. The queue the worker consumes and the dashboard dispatches to.
+      # Without it the background-job path is not exercised at all: `enqueue`
+      # reports that it could not dispatch, the non-production inline fallback
+      # takes over, and a suite that was meant to prove the asynchronous
+      # pipeline works proves only that the fallback does.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -247,6 +262,21 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Phase 5B. The queue the worker consumes and the dashboard dispatches to.
+      # Without it the background-job path is not exercised at all: `enqueue`
+      # reports that it could not dispatch, the non-production inline fallback
+      # takes over, and a suite that was meant to prove the asynchronous
+      # pipeline works proves only that the fallback does.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -310,7 +340,18 @@ jobs:
       # `pnpm test:e2e` seeds the throwaway admin account first, then runs
       # Playwright. The Playwright config reads .env.test for the Control
       # Center's database connection; the other two apps get a placeholder.
+      #
+      # BRANDSPACE_VISUAL_BASELINE=0 turns off the PIXEL half of the Brand Brain
+      # visual suite, and only that half. Its DOM-geometry assertions — the
+      # binding ones, measured against the demo's own numbers — run here in
+      # full. The pixel baselines are committed from a developer machine, and
+      # this page uses a system font stack, so a runner with different fonts
+      # rasterises the same layout differently; a baseline that has to be
+      # re-approved whenever the image changes teaches exactly the habit
+      # docs/UI-FIDELITY-CONTRACT.md §5 forbids.
       - name: Run Playwright
+        env:
+          BRANDSPACE_VISUAL_BASELINE: '0'
         run: pnpm test:e2e
 
       # Failure artifacts only. Traces and screenshots are of the applications

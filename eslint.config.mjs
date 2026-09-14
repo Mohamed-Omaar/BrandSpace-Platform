@@ -17,9 +17,16 @@ const ALLOWED_IMPORTS = {
   // auth needs secrets to resolve the TOTP seed at MFA verification.
   auth: ['shared', 'database', 'secrets'],
   ui: ['shared'],
+  // Queue definitions and the dispatch client. `shared` only: a producer must
+  // be able to import this without pulling the database or the domain packages
+  // in, and the payloads are pointers rather than data (payloads.ts).
+  jobs: ['shared'],
   providers: ['shared', 'config'],
   entitlements: ['shared', 'database', 'config'],
   'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  // Brand Brain reads configuration, enforces entitlements, and routes every
+  // AI operation through the gateway rather than touching a provider itself.
+  'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway'],
   'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };

@@ -1074,46 +1074,12 @@ export class AiGateway {
    * setting OFF should mean.
    */
   async purgeExpiredOutputs(limit = 500): Promise<number> {
-    const config = await this.#configuration.load();
-    const now = this.#clock.now();
-
-    // One window per task, the shortest wins. Two rules can select the same
-    // task in different scopes; honouring the tightest is the conservative
-    // reading, and the one a privacy commitment should take.
-    const windowByTask = new Map<string, number>();
-    for (const rule of config.routingRules) {
-      const days = rule.parameters.outputRetentionDays;
-      if (days === null || days === undefined) continue;
-      const existing = windowByTask.get(rule.taskKey);
-      if (existing === undefined || days < existing) windowByTask.set(rule.taskKey, days);
-    }
-
-    let purged = 0;
-    for (const [taskKey, days] of windowByTask) {
-      if (purged >= limit) break;
-      const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-      const expired = await this.#prisma.aiRequest.findMany({
-        where: {
-          taskKey,
-          outputPayload: { not: Prisma.DbNull },
-          completedAt: { lt: cutoff },
-        },
-        select: { id: true },
-        // Oldest first, with an id tie-break: deterministic, and the content
-        // that has been held longest goes first.
-        orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
-        take: limit - purged,
-      });
-      if (expired.length === 0) continue;
-
-      const result = await this.#prisma.aiRequest.updateMany({
-        where: { id: { in: expired.map((row) => row.id) } },
-        data: { outputPayload: Prisma.DbNull },
-      });
-      purged += result.count;
-    }
-
-    return purged;
+    return purgeExpiredOutputs({
+      prisma: this.#prisma,
+      configuration: this.#configuration,
+      clock: this.#clock,
+      limit,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1315,4 +1281,73 @@ function toResult(row: AiRequestRow, replayed: boolean): AiGatewayResult {
     replayed,
     latencyMs: row.latencyMs,
   };
+}
+
+/**
+ * Clear AI output payloads past their configured retention window — D-78.
+ *
+ * A FUNCTION BECAUSE OF WHO CALLS IT. The maintenance sweep needs a database
+ * handle, the routing configuration and a clock. Reaching this through the full
+ * gateway would have meant constructing one with a fabricated ledger and an
+ * empty adapter map — collaborators the purge never touches, until the day
+ * someone adds a line that does. This way the sweep is handed exactly what the
+ * purge needs and has no ability to reserve, call a provider or settle a
+ * credit.
+ *
+ * CONTENT ONLY. The payload is nulled; the `ai_request` row, its usage, its
+ * credit settlement and its correlation ids all stay. D-78 retains operational
+ * metadata and drops content, and deleting the row would take the accounting
+ * with it.
+ *
+ * ONE WINDOW PER TASK, THE SHORTEST WINS. Two routing rules can select the same
+ * task in different scopes; honouring the tightest is the conservative reading,
+ * and the one a privacy commitment should take.
+ */
+export async function purgeExpiredOutputs(input: {
+  prisma: PrismaClient;
+  configuration: AiConfigurationSource;
+  clock: Clock;
+  limit?: number;
+}): Promise<number> {
+  const limit = input.limit ?? 500;
+  const config = await input.configuration.load();
+  const now = input.clock.now();
+
+  const windowByTask = new Map<string, number>();
+  for (const rule of config.routingRules) {
+    const days = rule.parameters.outputRetentionDays;
+    if (days === null || days === undefined) continue;
+    const existing = windowByTask.get(rule.taskKey);
+    if (existing === undefined || days < existing) windowByTask.set(rule.taskKey, days);
+  }
+
+  let purged = 0;
+  // Sorted, so a bounded pass processes the same tasks in the same order every
+  // time rather than in whatever order the rules happened to be written in.
+  for (const taskKey of [...windowByTask.keys()].sort()) {
+    if (purged >= limit) break;
+    const days = windowByTask.get(taskKey)!;
+    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const expired = await input.prisma.aiRequest.findMany({
+      where: {
+        taskKey,
+        outputPayload: { not: Prisma.DbNull },
+        completedAt: { lt: cutoff },
+      },
+      select: { id: true },
+      // Oldest first, with an id tie-break: deterministic, and the content that
+      // has been held longest goes first.
+      orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
+      take: limit - purged,
+    });
+    if (expired.length === 0) continue;
+
+    const result = await input.prisma.aiRequest.updateMany({
+      where: { id: { in: expired.map((row) => row.id) } },
+      data: { outputPayload: Prisma.DbNull },
+    });
+    purged += result.count;
+  }
+
+  return purged;
 }

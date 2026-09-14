@@ -1,3 +1,4 @@
+export * from './brand-scope';
 export * from './clock';
 export * from './env';
 export * from './errors';

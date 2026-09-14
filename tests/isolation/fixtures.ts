@@ -36,6 +36,20 @@ export interface TenantFixture {
   // --- Phase 4 ---
   readonly aiRequestId: string;
   readonly aiLedgerId: string;
+  // --- Phase 5 ---
+  readonly brandId: string;
+  readonly brandSlug: string;
+  readonly knowledgeItemId: string;
+  readonly knowledgeItemKey: string;
+  readonly knowledgeVersionId: string;
+  readonly sourceDocumentId: string;
+  readonly sourceChecksum: string;
+  readonly sourceChunkId: string;
+  readonly candidateId: string;
+  readonly ingestionJobId: string;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly messageIdempotencyKey: string;
 }
 
 export interface IsolationFixtures {
@@ -69,6 +83,23 @@ export function appRoleClient(): PrismaClient {
 export function platformRoleClient(): PrismaClient {
   const connectionString = process.env['DATABASE_PLATFORM_URL'];
   if (!connectionString) throw new Error('DATABASE_PLATFORM_URL is required for fixtures.');
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+}
+
+/**
+ * A client on the MIGRATOR role — the OWNER of every table.
+ *
+ * Used by exactly one kind of assertion: proving that a database TRIGGER, not
+ * a revoked privilege, is what refuses a write. PostgreSQL checks privileges
+ * before firing triggers, so a role that has been revoked never reaches the
+ * trigger; the owner holds its privileges implicitly and cannot be revoked
+ * from, which makes it the only identity that can demonstrate the backstop.
+ *
+ * Never used to provision fixtures or to sidestep RLS in an ordinary test.
+ */
+export function migrationRoleClient(): PrismaClient {
+  const connectionString = process.env['DATABASE_MIGRATION_URL'];
+  if (!connectionString) throw new Error('DATABASE_MIGRATION_URL is required for trigger tests.');
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
@@ -546,6 +577,156 @@ async function createTenant(
         },
       });
 
+      /*
+       * Phase 5 — a complete Brand Brain for this tenant.
+       *
+       * The two tenants get the SAME brand slug, the same knowledge item key
+       * and the same document checksum. Every one of those is a unique index
+       * scoped to the workspace (or to the brand), so identical values across
+       * tenants are exactly what proves the scoping is real: if any of those
+       * uniques were global, provisioning tenant B would fail outright.
+       */
+      const brand = await db.brand.create({
+        data: {
+          workspaceId: id,
+          // Deliberately IDENTICAL across tenants.
+          slug: 'house-brand',
+          name: `House Brand (${slug})`,
+          industry: 'retail',
+          status: 'ACTIVE',
+          defaultLocale: 'EN',
+          supportedLocales: ['EN', 'AR'],
+        },
+      });
+
+      const sourceDocument = await db.brandSourceDocument.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          fileName: 'brand-guidelines.pdf',
+          mimeType: 'application/pdf',
+          byteSize: 24_000,
+          // Identical across tenants: the same file uploaded by two customers
+          // is two documents, not a collision.
+          checksum: 'fixture-checksum-0000000000000000000000000000000000000000',
+          storageKey: `ws/${id}/brand/${brand.id}/fixture.pdf`,
+          status: 'READY',
+          pageCount: 24,
+          chunkCount: 1,
+          textLength: 512,
+          idempotencyKey: `fixture-upload-${slug}`,
+          processedAt: new Date(),
+        },
+      });
+
+      const sourceChunk = await db.brandSourceChunk.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          sourceDocumentId: sourceDocument.id,
+          chunkIndex: 0,
+          // Tenant-distinguishing content. A test that reads a chunk across the
+          // boundary must be able to tell WHOSE text it got.
+          text: `Confidential positioning for ${slug}: we serve independent retailers.`,
+          locator: 'page 1',
+          indexVector: [0.1, 0.2, 0.3],
+          indexModelKey: 'fixture-index-v1',
+        },
+      });
+
+      const knowledgeItem = await db.brandKnowledgeItem.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          area: 'IDENTITY',
+          memory: 'CANONICAL',
+          origin: 'HUMAN',
+          status: 'ACTIVE',
+          // Identical across tenants.
+          itemKey: 'identity.positioning',
+          title: { en: 'Positioning', ar: 'التموضع' },
+          body: {
+            en: `${slug} positioning statement`,
+            ar: `بيان تموضع ${slug}`,
+          },
+          createdByUserId: user.id,
+          version: 1,
+        },
+      });
+
+      const knowledgeVersion = await db.brandKnowledgeVersion.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          knowledgeItemId: knowledgeItem.id,
+          version: 1,
+          area: 'IDENTITY',
+          memory: 'CANONICAL',
+          origin: 'HUMAN',
+          status: 'ACTIVE',
+          title: { en: 'Positioning', ar: 'التموضع' },
+          body: { en: `${slug} positioning statement`, ar: `بيان تموضع ${slug}` },
+          changedByUserId: user.id,
+          changeKind: 'created',
+        },
+      });
+
+      const candidate = await db.brandKnowledgeCandidate.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          sourceDocumentId: sourceDocument.id,
+          targetItemId: knowledgeItem.id,
+          area: 'IDENTITY',
+          itemKey: 'identity.mission',
+          extractedTitle: { en: 'Mission', ar: 'الرسالة' },
+          extractedBody: { en: `${slug} mission`, ar: `رسالة ${slug}` },
+          confidenceMilli: 720,
+          evidence: [{ chunkId: sourceChunk.id, locator: 'page 1' }],
+          status: 'PENDING',
+        },
+      });
+
+      const ingestionJob = await db.brandIngestionJob.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          sourceDocumentId: sourceDocument.id,
+          // COMPLETED so the partial unique index on live stages stays free —
+          // a suite that later enqueues a job for this document must not be
+          // blocked by a fixture that parked one in QUEUED forever.
+          stage: 'COMPLETED',
+          attempts: 1,
+          chunksCreated: 1,
+          candidatesCreated: 1,
+          completedAt: new Date(),
+        },
+      });
+
+      const conversation = await db.brandBrainConversation.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          area: 'IDENTITY',
+          title: `Fixture conversation ${slug}`,
+          startedByUserId: user.id,
+          expiresAt: new Date(Date.now() + 30 * 24 * 3600_000),
+        },
+      });
+
+      const message = await db.brandBrainMessage.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          conversationId: conversation.id,
+          role: 'assistant',
+          body: `Grounded answer for ${slug} only.`,
+          citations: [{ itemId: knowledgeItem.id, area: 'IDENTITY', version: 1 }],
+          idempotencyKey: `fixture-message-${slug}`,
+          expiresAt: new Date(Date.now() + 30 * 24 * 3600_000),
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -571,6 +752,19 @@ async function createTenant(
         cohortMembershipId: cohortMembership.id,
         aiRequestId: aiRequest.id,
         aiLedgerId: aiLedger.id,
+        brandId: brand.id,
+        brandSlug: brand.slug,
+        knowledgeItemId: knowledgeItem.id,
+        knowledgeItemKey: knowledgeItem.itemKey,
+        knowledgeVersionId: knowledgeVersion.id,
+        sourceDocumentId: sourceDocument.id,
+        sourceChecksum: sourceDocument.checksum,
+        sourceChunkId: sourceChunk.id,
+        candidateId: candidate.id,
+        ingestionJobId: ingestionJob.id,
+        conversationId: conversation.id,
+        messageId: message.id,
+        messageIdempotencyKey: message.idempotencyKey ?? '',
       };
     },
     { prisma, bootstrap: true },

@@ -798,3 +798,35 @@ export const WEBFONT_HREF =
 export function webfontHref(source: string | undefined): string | null {
   return source === 'google' ? WEBFONT_HREF : null;
 }
+
+/**
+ * Brand Brain orb tokens — the approved demo's own values, not approximations.
+ *
+ * The orb is drawn on a canvas, so its colours cannot come from a stylesheet;
+ * they have to be strings in the drawing code. The design system forbids hex
+ * literals in application source, and that rule is right — but satisfying it by
+ * reaching for the nearest existing token is the trap
+ * `docs/UI-FIDELITY-CONTRACT.md` §2 names: a token that is *close* silently
+ * repaints a design that was approved at a specific value.
+ *
+ * So these are NAMED tokens carrying the EXACT values from
+ * `demo/brand-brain-native.js` at commit b01d9473. They are spelled exactly as
+ * the demo spells them, lowercase included, so that a reviewer diffing this
+ * block against the vendored snapshot sees character-for-character equality.
+ * `tests/unit/ui-fidelity-manifest.test.ts` asserts that equality.
+ *
+ * `brandPurple` and `brandYellow` already hold the same two colours in upper
+ * case. These exist ALONGSIDE them rather than instead of them because the orb's
+ * values must never drift when a brand token is retuned: this is a transcription
+ * of an approved drawing, and the contract's rule 9 governs changing it.
+ */
+export const brandBrainTokens = {
+  /** `outer` particles and the links between them. */
+  orbOuter: '#7935fe',
+  /** `inner` particles and the straight links between them. */
+  orbInner: '#ffdd15',
+  /** Every third particle, and the orb's ink text. */
+  orbInk: '#111114',
+  /** A particle at full energy flares to white before decaying. */
+  orbFlare: '#ffffff',
+} as const;
