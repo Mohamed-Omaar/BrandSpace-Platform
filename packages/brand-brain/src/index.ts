@@ -105,7 +105,7 @@ export { PdfExtractor } from './extract-pdf';
 export { checkSignature, detectFormat } from './file-signature';
 export type { DetectedFormat, SignatureCheck } from './file-signature';
 
-export { BrandIngestionService } from './ingestion';
+export { BrandIngestionService, findUnclaimedIngestionJobs } from './ingestion';
 export type {
   IngestionPolicy,
   IngestionServiceOptions,
@@ -129,6 +129,7 @@ export type {
   RetrievedItem,
 } from './retrieval';
 
+export { purgeExpiredChatContent } from './chat';
 export { BrandBrainChatService } from './chat';
 export type { ChatPolicy, ChatServiceOptions, ChatTurn } from './chat';
 

@@ -43,7 +43,7 @@ loadTestEnv();
  * creates seconds earlier. No real credential is involved anywhere.
  */
 
-const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103 } as const;
+const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103, worker: 3104 } as const;
 
 /**
  * Optional override for the Chromium binary.
@@ -94,9 +94,24 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   // the admin app never sets it, so a showcase route there stays a 404.
   if (app === 'dashboard') {
     env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
+    // So the upload DISPATCHES rather than taking the non-production inline
+    // fallback. The suite is meant to exercise the path production takes.
+    env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
     // Brand Brain chat is proxied to the API service. Without this the proxy
     // answers an honest 503 and the chat suite would be testing the fallback.
     env['BRANDSPACE_API_URL'] = `http://127.0.0.1:${PORTS.api}`;
+  }
+
+  if (app === 'worker') {
+    /*
+     * THE WORKER IS PART OF THE SUITE NOW, and that is the point.
+     *
+     * Uploads no longer process inside the server action: the dashboard writes
+     * the row and dispatches, and this process does the parsing. Without it
+     * running here the end-to-end suite would exercise only the non-production
+     * inline fallback and prove nothing about the path production takes.
+     */
+    env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
   }
 
   const keys =
@@ -118,6 +133,17 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
 
 /** Build once, then serve — production output is what CI and users actually get. */
 function server(app: keyof typeof PORTS) {
+  if (app === 'worker') {
+    // A queue consumer, not an HTTP service: its readiness probe is the small
+    // liveness endpoint it serves for exactly this purpose.
+    return {
+      command: `pnpm --filter @brandspace/worker start`,
+      url: `http://127.0.0.1:${PORTS.worker}/`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 120_000,
+      env: { ...serverEnv('worker'), WORKER_PORT: String(PORTS.worker) },
+    };
+  }
   if (app === 'api') {
     // Fastify, not Next: it takes its port from the environment and its
     // readiness probe is the public liveness endpoint rather than a locale root.
@@ -272,5 +298,5 @@ export default defineConfig({
     },
   ],
 
-  webServer: [server('web'), server('dashboard'), server('admin'), server('api')],
+  webServer: [server('web'), server('dashboard'), server('admin'), server('api'), server('worker')],
 });

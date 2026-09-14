@@ -15,7 +15,9 @@ import {
   type CatalogueReader,
   type ObjectStore,
 } from '@brandspace/brand-brain';
+
 import type { BrandKnowledgeArea } from '@brandspace/database';
+import { assertBrandInScope, brandInScope, brandScopeFilter } from '@brandspace/shared';
 import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
 
 /**
@@ -145,7 +147,18 @@ export async function inBrandBrain<T>(
 export async function requireBrand(
   workspaceId: string,
   brandId: string,
+  /**
+   * The caller's membership scope. REQUIRED, so a new call site cannot forget
+   * it: an optional parameter would default to unrestricted and the omission
+   * would be invisible (F-74).
+   */
+  brandScope: readonly string[],
 ): Promise<{ id: string; name: string; slug: string }> {
+  // BEFORE the query, not after. A scoped-out brand must be indistinguishable
+  // from one that does not exist, and a read that happens first is a read that
+  // happened (docs/SECURITY.md §4.2).
+  if (!brandInScope(brandScope, brandId)) notFound();
+
   const brand = await inWorkspace(workspaceId, async ({ db }) =>
     db.brand.findFirst({
       where: { id: brandId, deletedAt: null },
@@ -155,6 +168,8 @@ export async function requireBrand(
   if (!brand) notFound();
   return brand;
 }
+
+export { assertBrandInScope, brandScopeFilter };
 
 /** Area presentation, joined to computed completion. */
 export interface AreaView extends AreaCompletion {

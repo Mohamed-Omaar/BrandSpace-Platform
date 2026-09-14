@@ -228,7 +228,11 @@ describe('the configured policy changes what the services actually do', () => {
         itemKey,
         title: { en: 'Positioning' },
         body: { en: 'We help independent retailers compete.' },
-        actor: { userId: fixtures.a.userId, permissionKeys: ['brand_brain.edit'] },
+        actor: {
+          userId: fixtures.a.userId,
+          permissionKeys: ['brand_brain.edit'],
+          brandScope: [],
+        },
         policy: policy.staleness,
       });
       return item.reviewDueAt;
@@ -265,6 +269,8 @@ describe('the configured policy changes what the services actually do', () => {
           bytes,
           idempotencyKey: `policy-too-large-${Date.now()}`,
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         });
       }),
     ).rejects.toThrow();

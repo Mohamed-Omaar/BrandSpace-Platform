@@ -6,7 +6,7 @@ import {
   type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { type Clock, systemClock } from '@brandspace/shared';
+import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
 import type { ExtractorRegistry } from './extraction';
 import {
   chunkText,
@@ -78,6 +78,14 @@ export interface UploadInput {
   readonly targetArea?: BrandKnowledgeArea | undefined;
   readonly idempotencyKey: string;
   readonly actorUserId: string;
+  /**
+   * The member's brand scope — docs/SECURITY.md §4.2, F-74.
+   *
+   * REQUIRED. An optional field would default to unrestricted, and a call site
+   * that forgot it would silently admit every brand. Empty means unrestricted,
+   * which is what the schema says and what every membership carries today.
+   */
+  readonly actorBrandScope: readonly string[];
 }
 
 /**
@@ -130,6 +138,10 @@ export class BrandIngestionService {
   async upload(
     input: UploadInput,
   ): Promise<{ document: BrandSourceDocument; job: BrandIngestionJob }> {
+    // BEFORE anything else. An out-of-scope brand is refused the way a missing
+    // one is, and nothing is read, stored or counted on the way there.
+    assertBrandInScope(input.actorBrandScope, input.brandId);
+
     if (!this.#policy.allowedMimeTypes.includes(input.mimeType)) throw unsupportedFileType();
     if (input.bytes.byteLength > this.#policy.maxFileBytes) throw fileTooLarge();
 
@@ -533,4 +545,44 @@ export class BrandIngestionService {
       failureMessage: customerMessage,
     };
   }
+}
+
+/**
+ * Ingestion jobs nothing has claimed, oldest first.
+ *
+ * SEPARATE FROM ANY DISPATCH, so the selection rule can be tested without a
+ * queue — and it is the whole of the reconciliation sweep's correctness: QUEUED
+ * with its next attempt due, which is exactly the condition the producer's own
+ * dispatch races. A job already RUNNING is deliberately excluded, because the
+ * worker holds a lock on it and re-dispatching would only queue a message the
+ * processor discards. A job in a terminal stage is excluded for the same
+ * reason.
+ *
+ * IT TAKES A CLIENT RATHER THAN OPENING ONE, and the caller's identity decides
+ * what it can see. A tenant-scoped client returns that workspace's jobs; the
+ * platform identity returns every tenant's, which is what the sweep in the
+ * designated platform surface needs and what "ordinary workers" must not have
+ * (F-07). This function grants nothing: it asks a question with whatever reach
+ * the caller already had.
+ */
+export async function findUnclaimedIngestionJobs(
+  db: {
+    brandIngestionJob: {
+      findMany(args: unknown): Promise<Array<{ id: string; workspaceId: string }>>;
+    };
+  },
+  now: Date,
+  limit: number,
+): Promise<Array<{ id: string; workspaceId: string }>> {
+  return db.brandIngestionJob.findMany({
+    where: {
+      stage: 'QUEUED',
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+    },
+    select: { id: true, workspaceId: true },
+    // Oldest first with an id tie-break: deterministic, and the document that
+    // has been waiting longest goes first.
+    orderBy: [{ queuedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
 }

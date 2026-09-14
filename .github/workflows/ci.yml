@@ -135,6 +135,21 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Phase 5B. The queue the worker consumes and the dashboard dispatches to.
+      # Without it the background-job path is not exercised at all: `enqueue`
+      # reports that it could not dispatch, the non-production inline fallback
+      # takes over, and a suite that was meant to prove the asynchronous
+      # pipeline works proves only that the fallback does.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -243,6 +258,21 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      # Phase 5B. The queue the worker consumes and the dashboard dispatches to.
+      # Without it the background-job path is not exercised at all: `enqueue`
+      # reports that it could not dispatch, the non-production inline fallback
+      # takes over, and a suite that was meant to prove the asynchronous
+      # pipeline works proves only that the fallback does.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10

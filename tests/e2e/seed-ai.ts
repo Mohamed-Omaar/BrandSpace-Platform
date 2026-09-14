@@ -207,6 +207,17 @@ const PAYLOADS = {
       },
     ],
   },
+  /*
+   * THE BRAND BRAIN DEFAULTS, ACTIVATED EXPLICITLY.
+   *
+   * An empty payload, so every value is the schema's own. It is activated
+   * rather than left unset for two reasons: it populates the tenant-readable
+   * projection, so development and the end-to-end suite exercise the path
+   * production takes rather than the "nothing activated yet" fallback; and it
+   * gives the environment a KNOWN policy, so a run is not silently inheriting
+   * whatever the last test to activate a version happened to set.
+   */
+  'brand-brain': {},
   'ai.credit-rules': {
     costs: [
       {

@@ -1,7 +1,7 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { inBrandBrain } from '../../../server/brand-brain-context';
+import { brandScopeFilter, inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { statusMessage } from '../../../i18n/messages';
@@ -50,9 +50,22 @@ export default async function BrandBrainPage({
   const permissions = workspace.permissionKeys;
   const can = (key: string) => permissions.includes(key);
 
+  /*
+   * THE MEMBER'S OWN BRANDS, not the workspace's.
+   *
+   * `brandScopeFilter` contributes nothing when the scope is empty — which it
+   * is for every membership today — and restricts the query when it is not.
+   * Filtering here rather than refusing afterwards matters: a member restricted
+   * to one brand must land on THEIR brand, not on the workspace's oldest one
+   * followed by a 404 (docs/SECURITY.md §4.2, F-74).
+   */
   const brand = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.brand.findFirst({
-      where: { deletedAt: null, status: { in: ['ACTIVE', 'DRAFT'] } },
+      where: {
+        deletedAt: null,
+        status: { in: ['ACTIVE', 'DRAFT'] },
+        ...brandScopeFilter(workspace.brandScope),
+      },
       orderBy: { createdAt: 'asc' },
       select: { id: true, name: true },
     }),

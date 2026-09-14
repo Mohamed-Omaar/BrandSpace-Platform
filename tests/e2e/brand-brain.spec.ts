@@ -79,7 +79,15 @@ async function addKnowledge(page: Page, area: string, key: string, body: string)
   await page.fill('[data-testid="new-item-title-en"]', key);
   await page.fill('[data-testid="new-item-body-en"]', body);
   await page.getByTestId('save-knowledge').click();
+
+  /*
+   * ASSERT THE SAVE, rather than assuming it. The action redirects with a code
+   * either way, so a failed save looks exactly like a successful one to a test
+   * that only waits for the URL to change — and the grounding assertion that
+   * follows would then fail for a reason several steps removed from its cause.
+   */
   await page.waitForURL(/brand-brain/);
+  await expect(page).toHaveURL(/ok=KNOWLEDGE_SAVED/);
 }
 
 test.describe('Brand Brain screen', () => {
@@ -508,7 +516,15 @@ test.describe('chat answers, in development, without a real provider', () => {
     const panel = page.getByTestId('brand-chat');
     await expect(panel).toBeVisible();
 
-    await page.fill('[data-testid="chat-input"]', 'What is our positioning?');
+    /*
+     * ASK ABOUT THE MARKER, not about "positioning" in general.
+     *
+     * Earlier runs leave their own positioning items behind, and retrieval
+     * ranks by overlap with the question — so a generic question can fill its
+     * context with three identical older facts and never reach this run's.
+     * Asking about the marker makes the assertion about THIS run.
+     */
+    await page.fill('[data-testid="chat-input"]', `What does ${marker} mean for our brand?`);
     await page.getByTestId('chat-send').click();
 
     const answer = panel.getByTestId('chat-message-assistant').last();
@@ -547,5 +563,55 @@ test.describe('chat answers, in development, without a real provider', () => {
     expect(text).not.toContain('api key');
     expect(text).not.toContain('system prompt');
     expect(text).not.toMatch(/sk-[a-z0-9]/);
+  });
+});
+
+test.describe('an upload is processed by the WORKER, not by the request', () => {
+  /*
+   * THE PROOF THAT THE PIPELINE IS ASYNCHRONOUS.
+   *
+   * Phase 5A parsed uploaded documents inside the server action, so a test like
+   * this passed the moment the redirect landed and proved nothing about where
+   * the work happened. Now the action writes the row and dispatches; the
+   * document only becomes READY once `apps/worker` — a separate process, started
+   * by this suite's own web-server list — has consumed the message and parsed
+   * it. The wait below is therefore the assertion: if the dispatch, the queue or
+   * the worker were missing, the row would stay PROCESSING forever.
+   */
+  test('a text document reaches READY, and its chunks reach Brand Brain', async ({ page }) => {
+    await openBrandBrain(page);
+    await ensureBrand(page);
+
+    const upload = page.getByTestId('upload-input');
+    if (!(await upload.isVisible().catch(() => false))) test.skip();
+
+    const marker = `Ospreyline ${Date.now()}`;
+    await upload.setInputFiles({
+      name: `brand-notes-${Date.now()}.txt`,
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        [
+          `Our mission is ${marker}: to help independent retailers compete with national chains.`,
+          '',
+          'Our audience is founders of small retail businesses in the Gulf region.',
+          '',
+          'We never make price comparisons against named competitors.',
+        ].join('\n'),
+        'utf8',
+      ),
+    });
+    await page.getByTestId('upload-submit').click();
+    await expect(page).toHaveURL(/ok=SOURCE_UPLOADED/);
+
+    /*
+     * POLL THE PAGE, not a database. What a customer sees is the contract, and
+     * the status they see has to become READY on its own — nothing in this test
+     * touches the job, the queue or the worker to help it along.
+     */
+    const sources = page.getByTestId('sources-card');
+    await expect(async () => {
+      await page.reload();
+      await expect(sources).toContainText(/Ready|جاهز/);
+    }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 3_000] });
   });
 });

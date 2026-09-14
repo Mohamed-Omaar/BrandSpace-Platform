@@ -11,7 +11,7 @@ import { ConfigurationAiSource } from '@brandspace/ai-gateway';
 import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import { brandInScope, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { route } from '../route-contract';
 
 /**
@@ -141,7 +141,7 @@ async function resolveCaller(
   req: FastifyRequest,
   reply: FastifyReply,
   permission: string,
-): Promise<{ userId: string; workspaceId: string } | null> {
+): Promise<{ userId: string; workspaceId: string; brandScope: readonly string[] } | null> {
   const token = sessionTokenFrom(req);
   if (!token) {
     await reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
@@ -164,7 +164,13 @@ async function resolveCaller(
     return null;
   }
 
-  return { userId: customer.userId, workspaceId: workspace.workspaceId };
+  // The brand scope travels with the caller, so the handler cannot forget to
+  // pass it — the service's `actorBrandScope` is required (F-74).
+  return {
+    userId: customer.userId,
+    workspaceId: workspace.workspaceId,
+    brandScope: workspace.brandScope,
+  };
 }
 
 export function registerBrandBrainRoutes(app: FastifyInstance): void {
@@ -207,6 +213,13 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
        * (CLAUDE.md §2.1).
        */
       const tenantPrisma = getPrisma();
+      // A brand outside the member's scope is refused HERE, with the same 404
+      // as one that does not exist — before the pre-check reveals that it does
+      // (docs/SECURITY.md §4.2).
+      if (!brandInScope(caller.brandScope, parsed.data.brandId)) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+      }
+
       const brand = await withWorkspace(
         caller.workspaceId,
         async (db) =>
@@ -258,6 +271,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               message: parsed.data.message,
               idempotencyKey: parsed.data.idempotencyKey,
               actorUserId: caller.userId,
+              actorBrandScope: caller.brandScope,
               planKey,
             }),
           { prisma: tenantPrisma },

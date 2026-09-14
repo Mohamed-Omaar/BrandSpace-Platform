@@ -582,14 +582,14 @@ isolation coverage** — so new models cannot be added without tests.
 
 ## 9. Background Processing
 
-| Queue              | Jobs                                         | Concurrency                          | Retry                       | Failure path                                                |
-| ------------------ | -------------------------------------------- | ------------------------------------ | --------------------------- | ----------------------------------------------------------- |
-| `ai-jobs`          | generation, embeddings, moderation, insights | per-provider cap + per-workspace cap | exponential, provider-aware | credit reservation released, `AIRequest` = failed           |
-| `publish-jobs`     | publish, verify, retry, token refresh        | per-platform cap                     | exponential + jitter        | `PublishAttempt` recorded, DLQ after N, user notified       |
-| `analytics-ingest` | scheduled metric pulls, backfills            | per-platform cap                     | exponential                 | partial-window retry, no duplicates (upsert on natural key) |
-| `notifications`    | email/SMS/WhatsApp/in-app dispatch           | high                                 | exponential                 | DLQ + admin alert                                           |
-| `billing-events`   | webhook processing, dunning, resets          | low, ordered per subscription        | exponential                 | DLQ + manual replay tool                                    |
-| `media-processing` | thumbnails, crops, transcode, virus scan     | CPU-bound cap                        | limited                     | asset stays `processing_failed`                             |
+| Queue              | Jobs                                                                       | Concurrency                          | Retry                       | Failure path                                                                                   |
+| ------------------ | -------------------------------------------------------------------------- | ------------------------------------ | --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `ai-jobs`          | generation, embeddings, moderation, insights                               | per-provider cap + per-workspace cap | exponential, provider-aware | credit reservation released, `AIRequest` = failed                                              |
+| `publish-jobs`     | publish, verify, retry, token refresh                                      | per-platform cap                     | exponential + jitter        | `PublishAttempt` recorded, DLQ after N, user notified                                          |
+| `analytics-ingest` | scheduled metric pulls, backfills                                          | per-platform cap                     | exponential                 | partial-window retry, no duplicates (upsert on natural key)                                    |
+| `notifications`    | email/SMS/WhatsApp/in-app dispatch                                         | high                                 | exponential                 | DLQ + admin alert                                                                              |
+| `billing-events`   | webhook processing, dunning, resets                                        | low, ordered per subscription        | exponential                 | DLQ + manual replay tool                                                                       |
+| `media-processing` | thumbnails, crops, transcode, virus scan, **Brand Brain source ingestion** | CPU-bound cap                        | limited                     | asset stays `processing_failed`; a source document stays `PROCESSING` until a terminal failure |
 
 **Cross-cutting job rules:** every job is idempotent (natural idempotency key), carries tenant context,
 declares a timeout, is observable as a trace span, and lands in a dead-letter queue with a replay tool rather
@@ -597,6 +597,29 @@ than disappearing.
 
 **Scheduling correctness:** delayed jobs are an optimization; a reconciliation sweeper every minute finds
 `CalendarSlot`s that are due and unclaimed, so a lost Redis state degrades punctuality, not correctness.
+
+**Where the definitions live (Phase 5B, D-95).** `packages/jobs`, not `apps/worker`. They were inside the
+worker, which meant only the consumer could see them — an app may not import another app — so a producer
+had nowhere to dispatch from. That absence, not a decision, is why Phase 5A parsed uploaded documents
+inside a server action. The package carries the queue table above, the typed payloads, and the dispatch
+client; `shared` is its only workspace dependency, so a producer can reach it without pulling the database
+or a domain package in.
+
+**Payloads are pointers, never work.** A message names a row and the workspace it belongs to. Redis is not
+tenant-isolated and is not encrypted at rest the way the database is, so customer content does not travel
+through it — and a message that names durable state is safe to replay, which is what makes at-least-once
+delivery harmless.
+
+**Who schedules, and with which identity (Phase 5B, D-96).** Both maintenance sweeps — ingestion
+reconciliation and the D-78 retention purge — begin with a CROSS-TENANT question: which tenants have work
+waiting, which have content past its window. F-07 keeps the platform identity out of ordinary workers, so
+the enumeration runs in `apps/api` (`MaintenanceScheduler`) and the per-tenant work is either dispatched to
+the worker or performed inside that tenant's own RLS context. Only the enumeration is cross-tenant; nothing
+that writes tenant data does so with a wider reach than the tenant itself has.
+
+**The worker's own liveness.** A queue consumer has no request to answer, so `apps/worker` serves a small
+liveness endpoint. Without one, a worker that has lost its Redis connection and consumes nothing is
+indistinguishable from one that is idle.
 
 ---
 

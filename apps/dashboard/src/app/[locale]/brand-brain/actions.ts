@@ -5,16 +5,42 @@ import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import {
+  checksumOf,
   createKnowledgeItemSchema,
   reviewCandidateSchema,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
 } from '@brandspace/brand-brain';
-import { requireWorkspace } from '../../../server/customer-context';
+import {
+  INGEST_SOURCE_DOCUMENT,
+  enqueue,
+  mayProcessInline,
+  type IngestSourceDocumentPayload,
+} from '@brandspace/jobs';
+import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
+
+/**
+ * The actor every Brand Brain service call is made under, built in ONE place.
+ *
+ * Its brand scope is the whole point. Assembling the actor inline at five call
+ * sites is how one of them ends up without it, and the field is required
+ * precisely so that omission is a type error rather than a silent grant (F-74).
+ */
+function knowledgeActor(session: WorkspaceSession): {
+  userId: string;
+  permissionKeys: readonly string[];
+  brandScope: readonly string[];
+} {
+  return {
+    userId: session.customer.userId,
+    permissionKeys: session.workspace.permissionKeys,
+    brandScope: session.workspace.brandScope,
+  };
+}
 
 /**
  * Brand Brain actions.
@@ -115,10 +141,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
         itemKey: parsed.itemKey,
         title: parsed.title,
         body: parsed.body,
-        actor: {
-          userId: session.customer.userId,
-          permissionKeys: session.workspace.permissionKeys,
-        },
+        actor: knowledgeActor(session),
         policy: (await policy()).staleness,
       });
     });
@@ -151,10 +174,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
         title: parsed.title,
         body: parsed.body,
         changeReason: parsed.changeReason,
-        actor: {
-          userId: session.customer.userId,
-          permissionKeys: session.workspace.permissionKeys,
-        },
+        actor: knowledgeActor(session),
         policy: (await policy()).staleness,
       });
     });
@@ -176,10 +196,7 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
       await knowledge.archiveItem({
         itemId: String(formData.get('itemId') ?? ''),
         ...(formData.get('reason') ? { reason: String(formData.get('reason')) } : {}),
-        actor: {
-          userId: session.customer.userId,
-          permissionKeys: session.workspace.permissionKeys,
-        },
+        actor: knowledgeActor(session),
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_ARCHIVED', area });
@@ -206,10 +223,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
         itemId: parsed.itemId,
         toVersion: parsed.toVersion,
         reason: parsed.reason,
-        actor: {
-          userId: session.customer.userId,
-          permissionKeys: session.workspace.permissionKeys,
-        },
+        actor: knowledgeActor(session),
         policy: (await policy()).staleness,
       });
     });
@@ -246,10 +260,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
         title: parsed.title,
         body: parsed.body,
         reason: parsed.reason,
-        actor: {
-          userId: session.customer.userId,
-          permissionKeys: session.workspace.permissionKeys,
-        },
+        actor: knowledgeActor(session),
         policy: (await policy()).staleness,
       });
     });
@@ -265,15 +276,27 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
 }
 
 /**
- * Upload a source document and process it.
+ * Upload a source document and hand it to the worker.
  *
- * PROCESSING RUNS INLINE, and that is a stated Phase 5 limitation rather than
- * an oversight. There is no job runner wired to the customer app yet, so a
- * queued job would sit untouched and the customer would watch a spinner that
- * never resolves. Running it in the request is honest: the work is bounded by
- * the upload ceiling, the job row records every stage exactly as a worker would
- * write it, and moving to a worker later changes this one call rather than the
- * pipeline.
+ * IT NO LONGER PROCESSES INLINE IN PRODUCTION. Phase 5A ran the whole pipeline
+ * — read the object, parse it, chunk it, propose candidates — inside the server
+ * action, because there was nowhere to dispatch to. Three things are wrong with
+ * that and none of them show up as a failing test: the request holds a
+ * connection for the length of a parse, one slow document delays every other
+ * request on the instance, and a deploy mid-parse loses the work with nothing
+ * anywhere recording that it was lost.
+ *
+ * The upload now WRITES THE ROW AND DISPATCHES. `brand_ingestion_job` is the
+ * durable state and the queue message is a pointer to it, so a dispatch that
+ * never arrives costs punctuality rather than correctness: the reconciliation
+ * sweep in `apps/api` finds the unclaimed row and dispatches it again
+ * (docs/ARCHITECTURE.md §9).
+ *
+ * OUTSIDE PRODUCTION, and only there, a missing `REDIS_URL` falls back to
+ * running the pipeline here. A developer trying an upload should not need a
+ * Redis container, and an end-to-end run should not need one either. In
+ * production the fallback is refused outright — see `mayProcessInline` — so the
+ * old behaviour cannot return by accident or by a missing environment variable.
  */
 export async function uploadSourceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
@@ -288,24 +311,73 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
     const brandId = String(formData.get('brandId') ?? '');
     const targetArea = area.length > 0 ? area : undefined;
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
+    /*
+     * THE IDEMPOTENCY KEY IS THE CONTENT, not the file's name and size.
+     *
+     * It used to be `ui-<brand>-<name>-<size>`, which answers a different
+     * question than the one it was asked. Two DIFFERENT documents saved as
+     * `brand.pdf` at the same byte count collide and the second is silently
+     * discarded as a replay of the first; the same document renamed produces a
+     * second upload rather than replaying. A checksum over the bytes, scoped to
+     * the workspace, the brand and the area the customer chose, answers "is
+     * this the same request?" correctly: the same file to the same place is a
+     * replay, and anything else is a new upload.
+     */
+    const checksum = await checksumOf(bytes);
+    const idempotencyKey = `ui:${session.workspace.workspaceId}:${brandId}:${
+      targetArea ?? 'auto'
+    }:${checksum}`;
+
+    const queued = await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
       const service = await ingestion();
       const { job } = await service.upload({
         brandId,
         fileName: file.name,
         // The browser's type, not the extension. Both are attacker-controlled,
-        // which is why the allow-list is checked against a fixed set rather
-        // than trusted to describe the bytes.
+        // which is why the allow-list is checked against a fixed set and the
+        // file's own SIGNATURE has to agree before anything is stored.
         mimeType: file.type || 'application/octet-stream',
         bytes,
         targetArea: targetArea as never,
-        // Derived from the CONTENT and the brand, so a double-submit of the
-        // same form replays instead of creating a second document.
-        idempotencyKey: `ui-${brandId}-${file.name}-${file.size}`.slice(0, 120),
+        idempotencyKey,
         actorUserId: session.customer.userId,
+        actorBrandScope: session.workspace.brandScope,
       });
-      await service.process(job.id);
+      return job;
     });
+
+    const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+      kind: INGEST_SOURCE_DOCUMENT,
+      workspaceId: session.workspace.workspaceId,
+      requestedByUserId: session.customer.userId,
+      // The job row's id IS the natural key for this work. A second dispatch
+      // of the same row is refused by BullMQ rather than parsed twice.
+      idempotencyKey: `ingest-${queued.id}`,
+      ingestionJobId: queued.id,
+    } satisfies IngestSourceDocumentPayload);
+
+    if (!dispatch.dispatched) {
+      if (!mayProcessInline()) {
+        /*
+         * PRODUCTION DOES NOT PROCESS INLINE. The row is already durable, so
+         * the reconciliation sweep will pick it up: the upload succeeded, the
+         * document reads PROCESSING, and the outage is the operator's to fix
+         * rather than the customer's to notice as a slow page.
+         */
+        log.error('could not dispatch ingestion; leaving it for the reconciliation sweep', {
+          workspaceId: session.workspace.workspaceId,
+          jobId: queued.id,
+        });
+      } else {
+        log.warn('no queue configured; processing this upload inline (non-production only)', {
+          jobId: queued.id,
+        });
+        await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
+          const service = await ingestion();
+          await service.process(queued.id);
+        });
+      }
+    }
     destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area });
   } catch (error: unknown) {
     destination = failure(locale, error, 'upload-source', { area });

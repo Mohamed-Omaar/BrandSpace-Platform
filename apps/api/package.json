@@ -12,6 +12,7 @@
     "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/auth": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
+    "@brandspace/jobs": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/database": "workspace:*",

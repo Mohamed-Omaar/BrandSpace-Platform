@@ -6,7 +6,7 @@ import {
   type BrandKnowledgeArea,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { type Clock, systemClock } from '@brandspace/shared';
+import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
 import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
 import { BrandBrainRetriever, fenceUntrusted, type Citation } from './retrieval';
 import { conversationNotFound } from './errors';
@@ -105,9 +105,24 @@ export class BrandBrainChatService {
     idempotencyKey: string;
     actorUserId: string;
     planKey: string | null;
+    /**
+     * The member's brand scope — docs/SECURITY.md §4.2, F-74. REQUIRED for the
+     * same reason as everywhere else: an optional field would default to
+     * unrestricted and a forgetful call site would grant every brand.
+     */
+    actorBrandScope: readonly string[];
   }): Promise<ChatTurn> {
     /*
-     * IDEMPOTENT REPLAY, CHECKED FIRST.
+     * SCOPE FIRST, BEFORE THE REPLAY CHECK.
+     *
+     * A member who may not act on this brand must not be able to learn whether
+     * a conversation about it exists — and the replay path below returns a
+     * stored turn, which would answer exactly that question.
+     */
+    assertBrandInScope(input.actorBrandScope, input.brandId);
+
+    /*
+     * IDEMPOTENT REPLAY, CHECKED SECOND.
      *
      * A send whose response the browser lost is retried with the same key. The
      * stored turn is returned and NO gateway call is made, so a retry cannot
@@ -275,26 +290,12 @@ export class BrandBrainChatService {
   /**
    * D-78 retention purge.
    *
-   * CLEARS THE BODY, KEEPS THE ROW. The message's accounting links —
-   * `aiRequestId`, and through it the usage ledger — are what the platform must
-   * retain for billing and audit, and D-78 says exactly that: operational
-   * metadata is always retained, content is not. Deleting the row would take
-   * the accounting with it.
+   * The standalone function below does the work; this is the method a caller
+   * that already holds a service reaches for. See `purgeExpiredChatContent` for
+   * why it is a function at all.
    */
   async purgeExpiredChatContent(limit = 500): Promise<number> {
-    const now = this.#clock.now();
-    const expired = await this.#db.brandBrainMessage.findMany({
-      where: { expiresAt: { lt: now }, bodyPurgedAt: null, body: { not: null } },
-      select: { id: true },
-      take: limit,
-    });
-    if (expired.length === 0) return 0;
-
-    const result = await this.#db.brandBrainMessage.updateMany({
-      where: { id: { in: expired.map((m) => m.id) } },
-      data: { body: null, citations: Prisma.DbNull, bodyPurgedAt: now },
-    });
-    return result.count;
+    return purgeExpiredChatContent({ db: this.#db, clock: this.#clock, limit });
   }
 
   async #resolveConversation(input: {
@@ -379,4 +380,48 @@ export class BrandBrainChatService {
       replayed: true,
     };
   }
+}
+
+/**
+ * D-78 retention purge, as a function rather than only a method.
+ *
+ * CLEARS THE BODY, KEEPS THE ROW. The message's accounting links —
+ * `aiRequestId`, and through it the usage ledger — are what the platform must
+ * retain for billing and audit, and D-78 says exactly that: operational
+ * metadata is always retained, content is not. Deleting the row would take the
+ * accounting with it.
+ *
+ * IT IS A FUNCTION BECAUSE OF WHO CALLS IT. The maintenance sweep has a
+ * database handle and a clock and nothing else — no gateway, no chat policy, no
+ * ability to spend a credit. Reaching it through the full service would have
+ * meant constructing one with fabricated collaborators, which is a lie that
+ * holds only until someone adds a line to a method. This way the sweep is
+ * handed precisely what the purge needs, and cannot do anything else.
+ *
+ * BOUNDED AND IDEMPOTENT. `limit` rows per call, so one pass cannot monopolise
+ * the database; `bodyPurgedAt` makes a second pass over the same rows a no-op.
+ * Repeated calls make progress until there is nothing left to clear.
+ */
+export async function purgeExpiredChatContent(input: {
+  db: TenantScopedClient;
+  clock: Clock;
+  limit?: number;
+}): Promise<number> {
+  const limit = input.limit ?? 500;
+  const now = input.clock.now();
+  const expired = await input.db.brandBrainMessage.findMany({
+    where: { expiresAt: { lt: now }, bodyPurgedAt: null, body: { not: null } },
+    select: { id: true },
+    // Oldest first with an id tie-break, so a bounded pass is deterministic and
+    // the content held longest goes first.
+    orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+  if (expired.length === 0) return 0;
+
+  const result = await input.db.brandBrainMessage.updateMany({
+    where: { id: { in: expired.map((message) => message.id) } },
+    data: { body: null, citations: Prisma.DbNull, bodyPurgedAt: now },
+  });
+  return result.count;
 }

@@ -120,6 +120,8 @@ describe('upload validation happens before a byte is stored', () => {
           bytes: bytesOf('MZ'),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         }),
       ),
     ).rejects.toThrow(/not supported/i);
@@ -135,6 +137,8 @@ describe('upload validation happens before a byte is stored', () => {
           bytes: bytesOf('x'.repeat(POLICY.maxFileBytes + 1)),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         }),
       ),
     ).rejects.toThrow(/larger than the allowed size/i);
@@ -151,6 +155,8 @@ describe('upload validation happens before a byte is stored', () => {
           bytes: bytesOf('MZ'),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         })
         .catch(() => undefined);
       return store.size;
@@ -168,6 +174,8 @@ describe('upload validation happens before a byte is stored', () => {
         bytes: bytesOf(`Our mission is clear. ${secret}`),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       return db.auditEvent.findMany({ where: { resourceId: document.id } });
     });
@@ -188,6 +196,8 @@ describe('the two idempotency keys answer two different questions', () => {
         bytes: bytesOf(DOCUMENT),
         idempotencyKey: key,
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       const b = await svc.upload({
         brandId: fixtures.a.brandId,
@@ -196,6 +206,8 @@ describe('the two idempotency keys answer two different questions', () => {
         bytes: bytesOf(DOCUMENT),
         idempotencyKey: key,
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       return { first: a, second: b };
     });
@@ -216,6 +228,8 @@ describe('the two idempotency keys answer two different questions', () => {
           bytes: bytesOf('Our mission is identical content for the duplicate test.'),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         });
         return svc.upload({
           brandId: fixtures.a.brandId,
@@ -224,6 +238,8 @@ describe('the two idempotency keys answer two different questions', () => {
           bytes: bytesOf('Our mission is identical content for the duplicate test.'),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         });
       }),
     ).rejects.toThrow(/already been uploaded/i);
@@ -244,6 +260,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         bytes: bytesOf(DOCUMENT.replace('independent', 'family-run')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       const outcome = await svc.process(job.id);
       const chunks = await db.brandSourceChunk.count({
@@ -279,6 +297,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         bytes: bytesOf(DOCUMENT.replace('mission', 'purpose')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await svc.process(job.id);
       const after = await db.brandKnowledgeItem.count({ where: { brandId: fixtures.a.brandId } });
@@ -298,6 +318,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         bytes: bytesOf(DOCUMENT.replace('Gulf', 'Levant')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await svc.process(job.id);
       const candidates = await db.brandKnowledgeCandidate.findMany({
@@ -335,6 +357,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         bytes: bytesOf(DOCUMENT.replace('retailers', 'grocers')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await svc.process(job.id);
       const a = await db.brandSourceChunk.count({ where: { sourceDocumentId: document.id } });
@@ -358,6 +382,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         bytes: bytesOf(DOCUMENT.replace('quarterly', 'annual')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await svc.process(job.id);
       const first = await db.brandKnowledgeCandidate.findFirst({
@@ -385,6 +411,8 @@ describe('failure states are honest and safe', () => {
         bytes: bytesOf(DOCUMENT.replace('monthly', 'weekly')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       const stored = await db.brandSourceDocument.findUniqueOrThrow({
         where: { id: document.id },
@@ -416,6 +444,8 @@ describe('failure states are honest and safe', () => {
         bytes: bytesOf(DOCUMENT.replace('compete', 'thrive')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await db.brandIngestionJob.update({
         where: { id: job.id },
@@ -446,6 +476,8 @@ describe('failure states are honest and safe', () => {
         bytes: bytesOf(DOCUMENT.replace('chains', 'groups')),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       await db.brandIngestionJob.update({
         where: { id: job.id },
@@ -555,6 +587,8 @@ describe('the formats customers actually have', () => {
         ]),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       return svc.process(job.id);
     });
@@ -576,6 +610,8 @@ describe('the formats customers actually have', () => {
         ]),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       const processed = await svc.process(job.id);
       return {
@@ -605,6 +641,8 @@ describe('the formats customers actually have', () => {
           bytes: pdfBytes(['nothing to see']),
           idempotencyKey: nextKey(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
         }),
       ),
     ).rejects.toThrow(/do not match its type/i);
@@ -621,6 +659,8 @@ describe('the formats customers actually have', () => {
         }),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       const processed = await svc.process(queued.id);
       return {
@@ -657,6 +697,8 @@ trailer<</Root 1 0 R>>
         ),
         idempotencyKey: nextKey(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
       });
       return svc.process(job.id);
     });

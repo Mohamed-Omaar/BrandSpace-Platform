@@ -748,6 +748,36 @@ const operationsSchema = z.object({
     })
     .default({ enabled: false, message: null, allowPlatformAdmin: true }),
   supportModeTtlMinutes: z.number().int().positive().max(480).default(60),
+
+  /*
+   * BACKGROUND MAINTENANCE CADENCES.
+   *
+   * How often the platform reconciles unclaimed work and clears content past
+   * its retention window. Configuration rather than constants for the same
+   * reason as every other operational number here: the right cadence depends on
+   * how much traffic the platform is carrying and how many workers are running,
+   * which is an operator's fact (CLAUDE.md §2.2). A retention WINDOW is a
+   * privacy commitment and lives with the feature that makes it; this is only
+   * how often the sweep that enforces it runs.
+   */
+  maintenance: z
+    .object({
+      /**
+       * How often unclaimed ingestion jobs are re-dispatched.
+       *
+       * Dispatch is an optimisation and this sweep is the correctness path
+       * (docs/ARCHITECTURE.md §9), so the interval is the worst-case delay
+       * before a document whose queue message was lost is picked up.
+       */
+      ingestionReconcileSeconds: z.number().int().min(5).max(3_600).default(30),
+      /** How often expired AI content is cleared. */
+      retentionPurgeSeconds: z.number().int().min(60).max(86_400).default(900),
+      /** Rows cleared per pass, so one sweep cannot monopolise the database. */
+      retentionPurgeBatch: z.number().int().min(1).max(10_000).default(500),
+      /** Ingestion jobs re-dispatched per pass, for the same reason. */
+      ingestionReconcileBatch: z.number().int().min(1).max(10_000).default(200),
+    })
+    .default({}),
   trialDefaultDays: z.number().int().nonnegative().default(14),
   supportedCurrencies: z.array(z.string().length(3)).default(['SAR', 'USD']),
 });

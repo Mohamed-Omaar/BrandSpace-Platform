@@ -7,7 +7,7 @@ import {
   type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { type Clock, systemClock } from '@brandspace/shared';
+import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
 import { areaDefinition } from './areas';
 import { mayOverwrite } from './precedence';
 import {
@@ -36,6 +36,20 @@ import { type AreaCounts, computeBrandCompletion, type BrandCompletion } from '.
 export interface KnowledgeActor {
   readonly userId: string;
   readonly permissionKeys: readonly string[];
+  /**
+   * The member's brand scope — docs/SECURITY.md §4.2, and F-74 closed.
+   *
+   * REQUIRED, not optional. An optional field would default to unrestricted,
+   * and a call site that forgot it would silently grant every brand — which is
+   * precisely the shape of the gap this closes. An empty array means
+   * unrestricted, which is what the schema says and what every membership in
+   * existence currently carries; a non-empty one restricts.
+   *
+   * Every method below that resolves a brand checks it, so the rule is enforced
+   * once per operation in the service rather than once per call site in four
+   * applications.
+   */
+  readonly brandScope: readonly string[];
 }
 
 export interface KnowledgeServiceOptions {
@@ -105,6 +119,10 @@ export class BrandKnowledgeService {
     actor: KnowledgeActor;
     policy: StalenessPolicy;
   }): Promise<BrandKnowledgeItem> {
+    // The brand is named by the caller here, so it is checked before anything
+    // is written. An out-of-scope brand is a 404 shaped like a genuine miss.
+    assertBrandInScope(input.actor.brandScope, input.brandId);
+
     const definition = areaDefinition(input.area);
     const now = this.now();
 
@@ -174,6 +192,9 @@ export class BrandKnowledgeService {
     // RLS already returned null for another tenant. Both cases land here, and
     // both produce the same 404 — the caller cannot tell them apart.
     if (!existing) throw knowledgeNotFound();
+    // And so does a brand outside the member's scope: the row is legitimately
+    // the tenant's, and this member may not act on it (F-74).
+    assertBrandInScope(input.actor.brandScope, existing.brandId);
 
     const incomingOrigin = input.incomingOrigin ?? 'HUMAN';
     const decision = mayOverwrite(
@@ -247,6 +268,7 @@ export class BrandKnowledgeService {
   }): Promise<BrandKnowledgeItem> {
     const item = await this.db.brandKnowledgeItem.findUnique({ where: { id: input.itemId } });
     if (!item) throw knowledgeNotFound();
+    assertBrandInScope(input.actor.brandScope, item.brandId);
 
     const target = await this.db.brandKnowledgeVersion.findFirst({
       where: { knowledgeItemId: item.id, version: input.toVersion },
@@ -295,6 +317,7 @@ export class BrandKnowledgeService {
   }): Promise<BrandKnowledgeItem> {
     const item = await this.db.brandKnowledgeItem.findUnique({ where: { id: input.itemId } });
     if (!item) throw knowledgeNotFound();
+    assertBrandInScope(input.actor.brandScope, item.brandId);
 
     const archived = await this.db.brandKnowledgeItem.update({
       where: { id: item.id },
@@ -342,6 +365,7 @@ export class BrandKnowledgeService {
       where: { id: input.candidateId },
     });
     if (!candidate) throw candidateNotFound();
+    assertBrandInScope(input.actor.brandScope, candidate.brandId);
     // Two reviewers opening the same queue is ordinary. The second one must be
     // told, not silently allowed to re-apply a decision.
     if (candidate.status !== 'PENDING') throw alreadyReviewed();

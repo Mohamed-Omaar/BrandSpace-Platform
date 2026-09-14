@@ -120,6 +120,9 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -160,6 +163,9 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -219,9 +225,18 @@ importers:
 
   apps/worker:
     dependencies:
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../../packages/brand-brain
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -396,6 +411,22 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/jobs:
+    dependencies:
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      bullmq:
+        specifier: 5.81.4
+        version: 5.81.4
+      ioredis:
+        specifier: 5.11.1
+        version: 5.11.1
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/observability:
     dependencies:
       '@brandspace/shared':
@@ -515,6 +546,9 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../packages/entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../packages/jobs
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../packages/observability

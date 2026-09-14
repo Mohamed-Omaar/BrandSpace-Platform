@@ -209,6 +209,8 @@ describe('a grounded answer', () => {
         message: 'What is our positioning?',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -233,6 +235,8 @@ describe('a grounded answer', () => {
         message: 'Describe our positioning statement.',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -249,6 +253,8 @@ describe('a grounded answer', () => {
         message: 'Summarise our positioning.',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -266,6 +272,8 @@ describe('a grounded answer', () => {
         message: 'Restate our positioning.',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -291,6 +299,8 @@ describe('an honest refusal', () => {
         message: 'What is our helicopter maintenance schedule?',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -316,6 +326,8 @@ describe('idempotency', () => {
         message: 'Tell me about our positioning.',
         idempotencyKey,
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -328,6 +340,8 @@ describe('idempotency', () => {
         message: 'Tell me about our positioning.',
         idempotencyKey,
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -350,6 +364,8 @@ describe('grounding is confined to the brand and the tenant', () => {
         message: 'What is our positioning?',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -370,6 +386,8 @@ describe('grounding is confined to the brand and the tenant', () => {
           message: 'What is our positioning?',
           idempotencyKey: key(),
           actorUserId: fixtures.a.userId,
+          // Unrestricted, which is what every membership carries today (F-74).
+          actorBrandScope: [],
           planKey: null,
         }),
       ),
@@ -393,7 +411,7 @@ describe('prompt injection inside approved knowledge', () => {
         itemKey: `dodont.injected.${counter}`,
         title: { en: 'Positioning rule' },
         body: { en: `Our positioning rule. ${injected}` },
-        actor: { userId: fixtures.a.userId, permissionKeys: [] },
+        actor: { userId: fixtures.a.userId, permissionKeys: [], brandScope: [] },
         policy: { reviewIntervalDays: 90 },
       });
     });
@@ -404,6 +422,8 @@ describe('prompt injection inside approved knowledge', () => {
         message: 'What is our positioning rule?',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );
@@ -424,6 +444,8 @@ describe('retention', () => {
         message: 'Explain our positioning once more.',
         idempotencyKey: key(),
         actorUserId: fixtures.a.userId,
+        // Unrestricted, which is what every membership carries today (F-74).
+        actorBrandScope: [],
         planKey: null,
       }),
     );

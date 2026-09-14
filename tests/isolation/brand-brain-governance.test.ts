@@ -46,7 +46,12 @@ async function inA<T>(fn: (svc: BrandKnowledgeService, db: ScopedDb) => Promise<
   );
 }
 
-const actor = () => ({ userId: fixtures.a.userId, permissionKeys: [] as string[] });
+const actor = () => ({
+  userId: fixtures.a.userId,
+  permissionKeys: [] as string[],
+  // Unrestricted, which is what every membership carries today (F-74).
+  brandScope: [] as string[],
+});
 
 let sequence = 0;
 const uniqueKey = (stem: string) => `${stem}.${(sequence += 1)}`;
