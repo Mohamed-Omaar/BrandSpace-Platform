@@ -1093,19 +1093,31 @@ member is not scoped to is `NOT_FOUND`, identical in shape to a cross-tenant mis
 
 ---
 
-## 22. Implementation Status — F-80 corrective pass (Brand Brain composite foreign keys)
+## 22. Implementation Status — F-80 / F-83 corrective pass (Brand Brain composite foreign keys)
 
 ### 22.1 The defect
 
 §2.1 of `CLAUDE.md` forbids a tenant inferring anything about another tenant's data, and says an
-unauthorised access must be shaped identically to a genuine miss. Three Phase 5A foreign keys broke
-that on the WRITE side:
+unauthorised access must be shaped identically to a genuine miss. **Eight** Phase 5A foreign keys
+broke that on the WRITE side:
 
-| Column                                 | Referenced                     |
-| -------------------------------------- | ------------------------------ |
-| `brand_source_chunk.sourceDocumentId`  | `brand_source_document(id)`    |
-| `brand_ingestion_job.sourceDocumentId` | `brand_source_document(id)`    |
-| `brand_brain_message.conversationId`   | `brand_brain_conversation(id)` |
+| Column                                       | Referenced                     | Finding |
+| -------------------------------------------- | ------------------------------ | ------- |
+| `brand_source_chunk.sourceDocumentId`        | `brand_source_document(id)`    | F-80    |
+| `brand_ingestion_job.sourceDocumentId`       | `brand_source_document(id)`    | F-80    |
+| `brand_brain_message.conversationId`         | `brand_brain_conversation(id)` | F-80    |
+| `brand_knowledge_candidate.sourceDocumentId` | `brand_source_document(id)`    | F-83    |
+| `brand_knowledge_candidate.targetItemId`     | `brand_knowledge_item(id)`     | F-83    |
+| `brand_knowledge_item.sourceDocumentId`      | `brand_source_document(id)`    | F-83    |
+| `brand_knowledge_item.conflictsWithItemId`   | `brand_knowledge_item(id)`     | F-83    |
+| `brand_knowledge_version.knowledgeItemId`    | `brand_knowledge_item(id)`     | F-83    |
+
+F-80 recorded three because three tables were examined. F-83 is what asking the catalogue about the
+whole module returned, and it is the more serious half: **`targetItemId` crosses the D-65 governance
+boundary** — it names the approved knowledge item a candidate would EDIT once a reviewer accepts it,
+so a foreign id pointed the review screen's diff at another tenant's canonical brand knowledge, and
+an acceptance would have written a version against it. **`knowledgeItemId` attaches append-only
+history**, which by construction nothing can correct afterwards.
 
 PostgreSQL evaluates referential integrity **with RLS bypassed** — as the table owner, not as the
 caller. A row carrying the caller's OWN `workspaceId` therefore satisfies the tenant policy, reaches
@@ -1126,8 +1138,25 @@ fabricated one produce an **identical** SQLSTATE, constraint name and PostgreSQL
 `tests/isolation/f80-brand-brain-composite-keys.test.ts` asserts by comparing the two refusals
 field for field rather than only checking that both fail.
 
-`ON DELETE CASCADE` is preserved on all three, and both directions are tested: the relationships
-still work and deleting a parent still removes its children.
+Every referential action is preserved, and both directions are tested: the relationships still work
+and deleting a parent still does what it did. The rule is now enforced by a test that asks the
+catalogue whether **any** single-column foreign key to a tenant-owned parent remains anywhere in
+Brand Brain — so a new table with a plain parent reference fails on the day it is added, which is
+what would have caught F-83 when F-80 was written.
+
+### 22.2a `SET NULL` had to name its column, or the fix would have caused data loss (D-114)
+
+Three of the eight nulled a single nullable column when their parent was deleted. Making a key
+composite changes what that means: PostgreSQL nulls **every** referencing column, `workspaceId`
+included — and because `workspaceId` is `NOT NULL`, the parent delete does not quietly corrupt the
+tenant key, it **fails**. Deleting a source document any knowledge item cites, or an item any
+candidate targets, would have started erroring on a path that worked the day before.
+
+`ON DELETE SET NULL ("<column>")` (PostgreSQL 15+) restricts the nulling to the one nullable
+reference, so a referential action can never write the tenant key. The isolation suite asserts
+`pg_constraint.confdelsetcols` rather than the clause text, because the column list is the part a
+future edit would drop without the diff looking any different, and the migration itself refuses to
+commit if any such key lacks a single-column list or names `workspaceId`.
 
 ### 22.3 The migration is not allowed to repair
 
@@ -1153,15 +1182,18 @@ SECURITY`, the policies and the grants are untouched.
 
 ### 22.5 What these claims rest on
 
-| Claim                                                                    | Proven by                                                    |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| A foreign parent id is refused from inside the caller's own workspace    | `tests/isolation/f80-brand-brain-composite-keys.test.ts`     |
-| A real foreign id and a fabricated one fail identically                  | same                                                         |
-| The relationships and their `ON DELETE CASCADE` still work               | same                                                         |
-| The constraints are composite in the catalogue and no plain key survives | same                                                         |
-| RLS, the append-only grants and the brand boundary are unchanged         | same                                                         |
-| The defect was real at the pre-fix commit                                | `tests/isolation/f80-migration-upgrade.test.ts`              |
-| The migration refuses an offending row and changes nothing               | same                                                         |
-| Every valid row survives the upgrade, by id                              | same                                                         |
-| A migrations-only database has zero drift from the Prisma schema         | same                                                         |
-| Brand Brain ingestion, chat, governance and retention still behave       | the seven `tests/isolation/brand-brain-*` suites (122 tests) |
+| Claim                                                                         | Proven by                                                    |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| A foreign parent id is refused from inside the caller's own workspace         | `tests/isolation/f80-brand-brain-composite-keys.test.ts`     |
+| A real foreign id and a fabricated one fail identically                       | same                                                         |
+| The relationships and their referential actions still work                    | same                                                         |
+| The constraints are composite in the catalogue and no plain key survives      | same                                                         |
+| NO single-column key to a tenant-owned parent remains anywhere in Brand Brain | same                                                         |
+| Every `SET NULL` key nulls its own column and never `workspaceId`             | same (`confdelsetcols`, and a real delete)                   |
+| RLS, the append-only grants and the brand boundary are unchanged              | same                                                         |
+| The defect was real at the pre-fix commit, for F-80 and for F-83              | `tests/isolation/f80-migration-upgrade.test.ts`              |
+| The migration refuses an offending row and changes nothing                    | same                                                         |
+| Every valid row survives the upgrade, by id and by reference                  | same                                                         |
+| An item with recorded history still cannot be deleted (append-only wins)      | same                                                         |
+| A migrations-only database has zero drift from the Prisma schema              | same                                                         |
+| Brand Brain ingestion, chat, governance and retention still behave            | the seven `tests/isolation/brand-brain-*` suites (122 tests) |

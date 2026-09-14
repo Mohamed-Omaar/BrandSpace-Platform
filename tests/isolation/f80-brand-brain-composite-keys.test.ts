@@ -489,53 +489,462 @@ describe('the refusal discloses nothing about whether the foreign id exists', ()
 });
 
 // ---------------------------------------------------------------------------
+// F-83 — the five keys F-80 missed, because F-80 looked at three tables and
+// the module has eight. Same class, same fix, and two of them reach places
+// F-80's three did not: the GOVERNANCE boundary and the APPEND-ONLY history.
+// ---------------------------------------------------------------------------
+
+describe('F-83: the knowledge tables refuse a foreign parent id too', () => {
+  it('brand_knowledge_candidate.sourceDocumentId — B document, A workspace', async () => {
+    const { code, sqlState, constraint } = await refusal(
+      inA((db) =>
+        db.brandKnowledgeCandidate.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            sourceDocumentId: fixtures.b.sourceDocumentId,
+            area: 'IDENTITY',
+            itemKey: 'identity.probe',
+            extractedTitle: { en: 'probe', ar: 'probe' },
+            extractedBody: { en: 'probe', ar: 'probe' },
+            confidenceMilli: 500,
+            evidence: [],
+          },
+        }),
+      ),
+    );
+    expect(code).toBe('P2003');
+    expect(sqlState).toBe('23503');
+    expect(constraint).toBe('brand_knowledge_candidate_document_fkey');
+  });
+
+  it('brand_knowledge_candidate.targetItemId — B item, A workspace', async () => {
+    /*
+     * THE GOVERNANCE BOUNDARY (D-65). `targetItemId` names the approved item a
+     * candidate would EDIT once a reviewer accepts it, and the review screen
+     * diffs the two. A foreign id here pointed that diff at another tenant's
+     * approved brand knowledge.
+     */
+    const { code, sqlState, constraint } = await refusal(
+      inA((db) =>
+        db.brandKnowledgeCandidate.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            sourceDocumentId: fixtures.a.sourceDocumentId,
+            targetItemId: fixtures.b.knowledgeItemId,
+            area: 'IDENTITY',
+            itemKey: 'identity.probe',
+            extractedTitle: { en: 'probe', ar: 'probe' },
+            extractedBody: { en: 'probe', ar: 'probe' },
+            confidenceMilli: 500,
+            evidence: [],
+          },
+        }),
+      ),
+    );
+    expect(code).toBe('P2003');
+    expect(sqlState).toBe('23503');
+    expect(constraint).toBe('brand_knowledge_candidate_target_fkey');
+  });
+
+  it('brand_knowledge_item.sourceDocumentId — B document, A workspace', async () => {
+    const { code, sqlState, constraint } = await refusal(
+      inA((db) =>
+        db.brandKnowledgeItem.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            sourceDocumentId: fixtures.b.sourceDocumentId,
+            area: 'IDENTITY',
+            itemKey: `identity.probe-source-${Date.now()}`,
+            title: { en: 'probe', ar: 'probe' },
+            body: { en: 'probe', ar: 'probe' },
+          },
+        }),
+      ),
+    );
+    expect(code).toBe('P2003');
+    expect(sqlState).toBe('23503');
+    expect(constraint).toBe('brand_knowledge_item_source_fkey');
+  });
+
+  it('brand_knowledge_item.conflictsWithItemId — B item, A workspace', async () => {
+    /*
+     * A SELF-REFERENCE, and the sharpest oracle of the eight: it asked "is this
+     * id a knowledge item somewhere on the platform" of the very table holding
+     * every tenant's approved brand knowledge. It would also have published a
+     * conflict between two tenants' items — a state the review UI renders.
+     */
+    const { code, sqlState, constraint } = await refusal(
+      inA((db) =>
+        db.brandKnowledgeItem.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            conflictsWithItemId: fixtures.b.knowledgeItemId,
+            area: 'IDENTITY',
+            itemKey: `identity.probe-conflict-${Date.now()}`,
+            title: { en: 'probe', ar: 'probe' },
+            body: { en: 'probe', ar: 'probe' },
+          },
+        }),
+      ),
+    );
+    expect(code).toBe('P2003');
+    expect(sqlState).toBe('23503');
+    expect(constraint).toBe('brand_knowledge_item_conflict_fkey');
+  });
+
+  it('brand_knowledge_version.knowledgeItemId — B item, A workspace', async () => {
+    /*
+     * THE APPEND-ONLY HISTORY. A version row carries the title and body it
+     * recorded, so a row misattached to another tenant's item is that tenant's
+     * approved knowledge filed under someone else's identity — and the table
+     * is append-only, so nothing could edit it afterwards.
+     */
+    const { code, sqlState, constraint } = await refusal(
+      inA((db) =>
+        db.brandKnowledgeVersion.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            knowledgeItemId: fixtures.b.knowledgeItemId,
+            version: 99,
+            area: 'IDENTITY',
+            memory: 'CANONICAL',
+            origin: 'HUMAN',
+            status: 'ACTIVE',
+            title: { en: 'probe', ar: 'probe' },
+            body: { en: 'probe', ar: 'probe' },
+            changeKind: 'created',
+          },
+        }),
+      ),
+    );
+    expect(code).toBe('P2003');
+    expect(sqlState).toBe('23503');
+    expect(constraint).toBe('brand_knowledge_version_item_fkey');
+  });
+
+  it('a real foreign item id and a fabricated one fail identically', async () => {
+    const makeVersion = (knowledgeItemId: string) =>
+      inA((db) =>
+        db.brandKnowledgeVersion.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            knowledgeItemId,
+            version: 98,
+            area: 'IDENTITY',
+            memory: 'CANONICAL',
+            origin: 'HUMAN',
+            status: 'ACTIVE',
+            title: { en: 'probe', ar: 'probe' },
+            body: { en: 'probe', ar: 'probe' },
+            changeKind: 'created',
+          },
+        }),
+      );
+
+    const real = await refusal(makeVersion(fixtures.b.knowledgeItemId));
+    const invented = await refusal(makeVersion(fabricatedId()));
+    expect(real).toEqual(invented);
+  });
+});
+
+describe('F-83: the knowledge relationships still work inside one workspace', () => {
+  it('a candidate attaches to its own document and targets its own item', async () => {
+    const created = await inA((db) =>
+      db.brandKnowledgeCandidate.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          sourceDocumentId: fixtures.a.sourceDocumentId,
+          targetItemId: fixtures.a.knowledgeItemId,
+          area: 'IDENTITY',
+          itemKey: 'identity.same-workspace',
+          extractedTitle: { en: 'ok', ar: 'ok' },
+          extractedBody: { en: 'ok', ar: 'ok' },
+          confidenceMilli: 700,
+          evidence: [],
+        },
+      }),
+    );
+    expect(created.targetItemId).toBe(fixtures.a.knowledgeItemId);
+    await inA((db) => db.brandKnowledgeCandidate.delete({ where: { id: created.id } }));
+  });
+
+  it('a NULL targetItemId is accepted — that is a candidate proposing something NEW', async () => {
+    /*
+     * THE MATCH SIMPLE EXEMPTION, exercised rather than assumed. A composite
+     * key is satisfied whenever any referencing column is NULL, which is what
+     * keeps "this candidate proposes a new item" legal. If that ever stopped
+     * being true, extraction would break for every genuinely new fact.
+     */
+    const created = await inA((db) =>
+      db.brandKnowledgeCandidate.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          sourceDocumentId: fixtures.a.sourceDocumentId,
+          targetItemId: null,
+          area: 'IDENTITY',
+          itemKey: 'identity.brand-new',
+          extractedTitle: { en: 'new', ar: 'new' },
+          extractedBody: { en: 'new', ar: 'new' },
+          confidenceMilli: 700,
+          evidence: [],
+        },
+      }),
+    );
+    expect(created.targetItemId).toBeNull();
+    await inA((db) => db.brandKnowledgeCandidate.delete({ where: { id: created.id } }));
+  });
+
+  it('an item may conflict with another item in the SAME workspace', async () => {
+    const created = await inA((db) =>
+      db.brandKnowledgeItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          conflictsWithItemId: fixtures.a.knowledgeItemId,
+          sourceDocumentId: fixtures.a.sourceDocumentId,
+          area: 'IDENTITY',
+          itemKey: `identity.conflict-ok-${Date.now()}`,
+          title: { en: 'ok', ar: 'ok' },
+          body: { en: 'ok', ar: 'ok' },
+        },
+      }),
+    );
+    expect(created.conflictsWithItemId).toBe(fixtures.a.knowledgeItemId);
+    await inA((db) => db.brandKnowledgeItem.delete({ where: { id: created.id } }));
+  });
+});
+
+describe('F-83: ON DELETE SET NULL nulls the reference and NEVER the tenant key', () => {
+  it('deleting a source document nulls the item reference and leaves workspaceId intact', async () => {
+    /*
+     * THE BEHAVIOURAL HALF of the `confdelsetcols` assertion in the catalogue
+     * block. Written as a real delete because the failure mode this guards
+     * against is not subtle at runtime: with a bare composite SET NULL,
+     * PostgreSQL would try to null `workspaceId` too, hit its NOT NULL, and the
+     * customer's delete would fail. Nothing in the migration diff would look
+     * wrong; the first symptom would be a customer unable to remove a file.
+     */
+    const doc = await inA((db) =>
+      db.brandSourceDocument.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          fileName: 'set-null-probe.txt',
+          mimeType: 'text/plain',
+          byteSize: 4,
+          checksum: `set-null-probe-${fixtures.a.slug}`,
+          storageKey: `ws/${fixtures.a.workspaceId}/set-null-probe`,
+          idempotencyKey: `set-null-probe-${fixtures.a.slug}`,
+        },
+      }),
+    );
+
+    const item = await inA((db) =>
+      db.brandKnowledgeItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          sourceDocumentId: doc.id,
+          area: 'IDENTITY',
+          itemKey: `identity.set-null-${Date.now()}`,
+          title: { en: 'probe', ar: 'probe' },
+          body: { en: 'probe', ar: 'probe' },
+        },
+      }),
+    );
+
+    // The delete must SUCCEED. Under a bare composite SET NULL it would raise
+    // a not-null violation on "workspaceId" instead.
+    await inA((db) => db.brandSourceDocument.delete({ where: { id: doc.id } }));
+
+    const after = await inA((db) => db.brandKnowledgeItem.findUnique({ where: { id: item.id } }));
+    expect(after).not.toBeNull();
+    expect(after!.sourceDocumentId).toBeNull();
+    // The row is still the tenant's, and still readable inside A's context —
+    // which is only possible because workspaceId was never touched.
+    expect(after!.workspaceId).toBe(fixtures.a.workspaceId);
+    expect(after!.brandId).toBe(fixtures.a.brandId);
+
+    await inA((db) => db.brandKnowledgeItem.delete({ where: { id: item.id } }));
+  });
+
+  it('deleting a targeted item nulls the candidate reference and leaves workspaceId intact', async () => {
+    const item = await inA((db) =>
+      db.brandKnowledgeItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          area: 'IDENTITY',
+          itemKey: `identity.target-probe-${Date.now()}`,
+          title: { en: 'probe', ar: 'probe' },
+          body: { en: 'probe', ar: 'probe' },
+        },
+      }),
+    );
+
+    const candidate = await inA((db) =>
+      db.brandKnowledgeCandidate.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          sourceDocumentId: fixtures.a.sourceDocumentId,
+          targetItemId: item.id,
+          area: 'IDENTITY',
+          itemKey: 'identity.target-probe',
+          extractedTitle: { en: 'probe', ar: 'probe' },
+          extractedBody: { en: 'probe', ar: 'probe' },
+          confidenceMilli: 600,
+          evidence: [],
+        },
+      }),
+    );
+
+    await inA((db) => db.brandKnowledgeItem.delete({ where: { id: item.id } }));
+
+    const after = await inA((db) =>
+      db.brandKnowledgeCandidate.findUnique({ where: { id: candidate.id } }),
+    );
+    expect(after).not.toBeNull();
+    expect(after!.targetItemId).toBeNull();
+    expect(after!.workspaceId).toBe(fixtures.a.workspaceId);
+
+    await inA((db) => db.brandKnowledgeCandidate.delete({ where: { id: candidate.id } }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The catalogue. A future migration that quietly restores a plain key would
 // pass every behavioural test above only until someone noticed; this reads the
 // database's own definition and fails immediately.
 // ---------------------------------------------------------------------------
 
 describe('the constraints are composite in the database catalogue', () => {
+  /** Every key F-80 and F-83 replaced, with the delete behaviour it must keep. */
   const expected = [
-    ['brand_source_chunk', 'brand_source_chunk_document_fkey', 'sourceDocumentId'],
-    ['brand_ingestion_job', 'brand_ingestion_job_document_fkey', 'sourceDocumentId'],
-    ['brand_brain_message', 'brand_brain_message_conversation_fkey', 'conversationId'],
+    // F-80.
+    ['brand_source_chunk', 'brand_source_chunk_document_fkey', 'sourceDocumentId', 'CASCADE'],
+    ['brand_ingestion_job', 'brand_ingestion_job_document_fkey', 'sourceDocumentId', 'CASCADE'],
+    ['brand_brain_message', 'brand_brain_message_conversation_fkey', 'conversationId', 'CASCADE'],
+    // F-83.
+    [
+      'brand_knowledge_candidate',
+      'brand_knowledge_candidate_document_fkey',
+      'sourceDocumentId',
+      'CASCADE',
+    ],
+    [
+      'brand_knowledge_candidate',
+      'brand_knowledge_candidate_target_fkey',
+      'targetItemId',
+      'SET NULL',
+    ],
+    ['brand_knowledge_item', 'brand_knowledge_item_source_fkey', 'sourceDocumentId', 'SET NULL'],
+    [
+      'brand_knowledge_item',
+      'brand_knowledge_item_conflict_fkey',
+      'conflictsWithItemId',
+      'SET NULL',
+    ],
+    ['brand_knowledge_version', 'brand_knowledge_version_item_fkey', 'knowledgeItemId', 'CASCADE'],
   ] as const;
 
-  it.each(expected)('%s.%s references (workspaceId, %s)', async (table, constraint, column) => {
-    const rows = await app.$queryRawUnsafe<{ definition: string }[]>(
-      `SELECT pg_get_constraintdef(oid) AS definition
-         FROM pg_constraint
-        WHERE contype = 'f' AND conname = $1 AND conrelid = $2::regclass`,
-      constraint,
-      table,
+  it.each(expected)(
+    '%s.%s references (workspaceId, %s) and still ON DELETE %s',
+    async (table, constraint, column, action) => {
+      const rows = await app.$queryRawUnsafe<{ definition: string }[]>(
+        `SELECT pg_get_constraintdef(oid) AS definition
+           FROM pg_constraint
+          WHERE contype = 'f' AND conname = $1 AND conrelid = $2::regclass`,
+        constraint,
+        table,
+      );
+
+      expect(rows).toHaveLength(1);
+      const definition = rows[0]!.definition;
+      expect(definition).toContain(`FOREIGN KEY ("workspaceId", "${column}")`);
+      // The referential action is PRESERVED, not merely present: a composite
+      // key that quietly became RESTRICT would pass every refusal test above
+      // and change how the product deletes things.
+      expect(definition).toContain(`ON DELETE ${action}`);
+    },
+  );
+
+  it('every SET NULL key nulls its OWN column and never the tenant key', async () => {
+    /*
+     * THE ASSERTION THAT KEEPS A DELETE FROM BECOMING A DATA-LOSS BUG.
+     *
+     * A bare `ON DELETE SET NULL` on a composite key nulls EVERY referencing
+     * column — `workspaceId` included. `workspaceId` is NOT NULL, so the parent
+     * delete does not corrupt the tenant key; it fails outright, and a customer
+     * deleting a source document gets an error instead of a deletion. The
+     * migration therefore writes `ON DELETE SET NULL ("<column>")`, and
+     * `pg_constraint.confdelsetcols` is where PostgreSQL records that.
+     *
+     * Read from the catalogue rather than from the clause text, because the
+     * column list is the part a future edit would drop without the diff looking
+     * any different.
+     */
+    const rows = await app.$queryRawUnsafe<{ conname: string; columns: string[] }[]>(
+      // `attname` is PostgreSQL's `name` type, which the driver cannot
+      // deserialise as an array element; cast to text.
+      `SELECT c.conname::text AS conname,
+              ARRAY(SELECT a.attname::text
+                      FROM unnest(c.confdelsetcols) AS s(attnum)
+                      JOIN pg_attribute a
+                        ON a.attrelid = c.conrelid AND a.attnum = s.attnum) AS columns
+         FROM pg_constraint c
+        WHERE c.contype = 'f'
+          AND c.confdeltype = 'n'
+          AND c.conrelid IN (
+            'brand_knowledge_candidate'::regclass,
+            'brand_knowledge_item'::regclass)
+        ORDER BY c.conname`,
     );
 
-    expect(rows).toHaveLength(1);
-    const definition = rows[0]!.definition;
-    expect(definition).toContain(`FOREIGN KEY ("workspaceId", "${column}")`);
-    expect(definition).toContain('ON DELETE CASCADE');
+    expect(rows.map((r) => [r.conname, r.columns])).toEqual([
+      ['brand_knowledge_candidate_target_fkey', ['targetItemId']],
+      ['brand_knowledge_item_conflict_fkey', ['conflictsWithItemId']],
+      ['brand_knowledge_item_source_fkey', ['sourceDocumentId']],
+    ]);
+
+    for (const row of rows) {
+      expect(row.columns, row.conname).not.toContain('workspaceId');
+    }
   });
 
-  it('no plain single-column key to either parent survives', async () => {
+  it('NO plain foreign key of this class survives anywhere in Brand Brain', async () => {
     /*
-     * DROPPING THE OLD CONSTRAINT IS PART OF THE FIX, NOT HOUSEKEEPING. Leaving
-     * it in place beside the composite one would keep the oracle alive: the
-     * plain key would still be consulted, and still answer.
+     * THE WHOLE-MODULE ASSERTION, and the one that would have caught F-83 at
+     * the time F-80 was written.
+     *
+     * F-80 named three keys because three tables were looked at. This query
+     * looks at every Brand Brain table at once and asks the catalogue — not a
+     * list somebody maintained — whether any single-column foreign key to a
+     * tenant-owned parent remains. `workspace` itself is excluded: a key TO the
+     * workspace table is the tenant anchor, not a reference that needs scoping.
+     *
+     * A new Brand Brain table with a plain parent reference fails here on the
+     * day it is added, which is the point.
      */
-    const rows = await app.$queryRawUnsafe<{ conname: string }[]>(
-      `SELECT conname
-         FROM pg_constraint
-        WHERE contype = 'f'
-          AND conrelid IN (
-            'brand_source_chunk'::regclass,
-            'brand_ingestion_job'::regclass,
-            'brand_brain_message'::regclass)
-          AND cardinality(conkey) = 1
-          AND confrelid IN (
-            'brand_source_document'::regclass,
-            'brand_brain_conversation'::regclass)`,
+    const rows = await app.$queryRawUnsafe<{ relation: string }[]>(
+      `SELECT c.conrelid::regclass || '.' || c.conname AS relation
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'f'
+          AND t.relname LIKE 'brand%'
+          AND cardinality(c.conkey) = 1
+          AND c.confrelid <> 'workspace'::regclass
+        ORDER BY 1`,
     );
-    expect(rows).toEqual([]);
+    expect(rows.map((r) => r.relation)).toEqual([]);
   });
 
   it('each parent carries the (workspaceId, id) unique the children reference', async () => {
@@ -543,11 +952,13 @@ describe('the constraints are composite in the database catalogue', () => {
       `SELECT indexname FROM pg_indexes
         WHERE indexname IN (
           'brand_source_document_workspaceId_id_key',
-          'brand_brain_conversation_workspaceId_id_key')
+          'brand_brain_conversation_workspaceId_id_key',
+          'brand_knowledge_item_workspaceId_id_key')
         ORDER BY indexname`,
     );
     expect(rows.map((r) => r.indexname)).toEqual([
       'brand_brain_conversation_workspaceId_id_key',
+      'brand_knowledge_item_workspaceId_id_key',
       'brand_source_document_workspaceId_id_key',
     ]);
   });

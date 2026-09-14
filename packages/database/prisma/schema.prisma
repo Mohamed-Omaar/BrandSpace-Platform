@@ -1690,17 +1690,34 @@ model BrandKnowledgeItem {
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand                @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_item_brand_fkey")
-  source    BrandSourceDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83). Same oracle as the rest of the module, and
+  /// the same collapse to "is this a document in my OWN workspace".
+  ///
+  /// `onDelete: SetNull` here is `ON DELETE SET NULL ("sourceDocumentId")` in
+  /// the migration — the column list is NOT decoration. A bare SET NULL on a
+  /// composite key nulls EVERY referencing column, `workspaceId` included, and
+  /// `workspaceId` is NOT NULL, so deleting a source document would have begun
+  /// failing outright. Prisma has no syntax for the column list; the migration
+  /// carries it and D-114 records why.
+  source    BrandSourceDocument? @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_source_fkey")
 
   versions   BrandKnowledgeVersion[]
   candidates BrandKnowledgeCandidate[]
 
-  conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [conflictsWithItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83), and a SELF-reference, so the oracle it
+  /// closed was the sharpest kind: "is this id a knowledge item somewhere on
+  /// the platform" asked of the very table that holds every tenant's approved
+  /// brand knowledge. Column-scoped SET NULL, for the reason on `source`.
+  conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [workspaceId, conflictsWithItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_conflict_fkey")
   conflicting   BrandKnowledgeItem[] @relation("BrandKnowledgeConflict")
 
   /// One live item per key per area. A second row with the same key is an
   /// EDIT (a new version), not a duplicate — enforced here rather than hoped
   /// for in a service.
+  /// The composite target every child of an item points at (D-99, D-112, F-83)
+  /// — its versions, the candidates that would edit it, and the items that
+  /// conflict with it.
+  @@unique([workspaceId, id], name: "brand_knowledge_item_workspace_scope")
   @@unique([workspaceId, brandId, area, itemKey])
   @@index([workspaceId, brandId, area, status])
   @@index([workspaceId, brandId, status, memory])
@@ -1745,7 +1762,11 @@ model BrandKnowledgeVersion {
 
   workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand              @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_version_brand_fkey")
-  item      BrandKnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83). The append-only history is the last place
+  /// a row should be attachable to another tenant's item: a version names the
+  /// title and body it recorded, so a misattached row is that tenant's approved
+  /// knowledge filed under someone else's identity.
+  item      BrandKnowledgeItem @relation(fields: [workspaceId, knowledgeItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_version_item_fkey")
 
   @@unique([knowledgeItemId, version])
   @@index([workspaceId, brandId, recordedAt(sort: Desc)])
@@ -1897,8 +1918,16 @@ model BrandKnowledgeCandidate {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_candidate_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  target    BrandKnowledgeItem? @relation(fields: [targetItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83), for the reason on
+  /// `BrandSourceChunk.document`.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_candidate_document_fkey")
+  /// COMPOSITE (D-99, D-112, F-83). This one crosses the GOVERNANCE boundary:
+  /// `targetItemId` is the item a candidate would edit once accepted, so a
+  /// foreign id here pointed the review screen's diff at another tenant's
+  /// approved knowledge. NULL is legal and means "proposes something new",
+  /// which MATCH SIMPLE exempts by construction. Column-scoped SET NULL, for
+  /// the reason on `BrandKnowledgeItem.source`.
+  target    BrandKnowledgeItem? @relation(fields: [workspaceId, targetItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_target_fkey")
 
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, area, status])

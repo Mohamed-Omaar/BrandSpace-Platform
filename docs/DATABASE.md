@@ -225,30 +225,51 @@ embedding: D-13 deferred provider selection, and `embeddingModelKey` is recorded
 change is detectable. A pgvector column and an ANN index replace it behind the same interface once a
 provider is approved.
 
-**Foreign keys BETWEEN these tables are composite with `workspaceId` too** (D-112, F-80), for the
-reason §4.6 gives about the Asset Library: PostgreSQL evaluates referential integrity with RLS
-BYPASSED, so a plain parent id is an existence oracle over the whole platform. Phase 5A shipped three
-plain ones and they were confirmed exploitable — `brand_source_chunk.sourceDocumentId`,
-`brand_ingestion_job.sourceDocumentId` and `brand_brain_message.conversationId`. All three are now
-`(workspaceId, sourceDocumentId)` and `(workspaceId, conversationId)` against
-`@@unique([workspaceId, id])` on `brand_source_document` and `brand_brain_conversation`, with
-`ON DELETE CASCADE` unchanged.
+**Foreign keys BETWEEN these tables are composite with `workspaceId` too** (D-112, F-80, F-83), for
+the reason §4.6 gives about the Asset Library: PostgreSQL evaluates referential integrity with RLS
+BYPASSED, so a plain parent id is an existence oracle over the whole platform. Phase 5A shipped
+**eight** plain ones and all eight were confirmed exploitable:
 
-**`brand_knowledge_candidate` still carries two plain keys** — `sourceDocumentId` and `targetItemId`
-— recorded as F-83 for a dedicated corrective change rather than folded into the F-80 one.
+| Key                                          | Now references                             | `ON DELETE`                        |
+| -------------------------------------------- | ------------------------------------------ | ---------------------------------- |
+| `brand_source_chunk.sourceDocumentId`        | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_ingestion_job.sourceDocumentId`       | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_brain_message.conversationId`         | `brand_brain_conversation(workspaceId,id)` | `CASCADE`                          |
+| `brand_knowledge_candidate.sourceDocumentId` | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_knowledge_candidate.targetItemId`     | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("targetItemId")`        |
+| `brand_knowledge_item.sourceDocumentId`      | `brand_source_document(workspaceId,id)`    | `SET NULL ("sourceDocumentId")`    |
+| `brand_knowledge_item.conflictsWithItemId`   | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("conflictsWithItemId")` |
+| `brand_knowledge_version.knowledgeItemId`    | `brand_knowledge_item(workspaceId,id)`     | `CASCADE`                          |
+
+The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
+rather than the four tables F-80 happened to name. `brand_source_document`,
+`brand_brain_conversation` and `brand_knowledge_item` each carry the `@@unique([workspaceId, id])`
+those keys reference. Every referential action is unchanged from Phase 5A.
+
+**A composite `ON DELETE SET NULL` names its column** (D-114). PostgreSQL nulls EVERY referencing
+column of a key, so a bare `SET NULL` on `(workspaceId, targetItemId)` would null `workspaceId` —
+which is `NOT NULL`, so the parent delete would FAIL rather than null the reference. The column list
+restricts it to the one nullable reference, and `pg_constraint.confdelsetcols` is what the isolation
+suite asserts. Prisma cannot express the list and warns about these three relations; the migration is
+hand-written for exactly that reason, and a migrations-only database still shows no drift.
 
 **A migration that validates tenant data must lift FORCE RLS to see it** (D-113). Migrations run as
 the table owner, `brandspace_migrator`, which no policy on these tables names; under FORCE RLS the
 owner therefore reads nothing, and `ADD CONSTRAINT FOREIGN KEY` will validate against an empty set
-and still mark the constraint valid. The F-80 migration lifts FORCE inside its own transaction —
-under the ACCESS EXCLUSIVE lock `ALTER TABLE` already holds, so no other session can observe it —
-and refuses to commit unless all five tables are ENABLED and FORCED again.
+and still mark the constraint valid. The migration lifts FORCE inside its own transaction — under the
+ACCESS EXCLUSIVE lock `ALTER TABLE` already holds, so no other session can observe it — and refuses
+to commit unless all eight tables are ENABLED and FORCED again.
+
+**An item with recorded history cannot be deleted at all**, and that is Phase 5A behaviour the
+composite key preserved rather than introduced: `brand_knowledge_version.knowledgeItemId` cascades,
+and the cascade reaches the append-only trigger, which refuses the DELETE and takes the statement
+with it.
 
 Migrations: `20260913140000_phase_5_brand_brain`,
 `20260914200000_f80_brand_brain_composite_foreign_keys`. Isolation coverage:
 `tests/isolation/phase5-tenancy.test.ts` (41 tests),
-`tests/isolation/f80-brand-brain-composite-keys.test.ts` (21 tests) and
-`tests/isolation/f80-migration-upgrade.test.ts` (9 tests).
+`tests/isolation/f80-brand-brain-composite-keys.test.ts` (38 tests) and
+`tests/isolation/f80-migration-upgrade.test.ts` (15 tests).
 
 ### 4.2a `BrandKnowledge` — the original Phase 0 sketch
 

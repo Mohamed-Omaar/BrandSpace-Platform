@@ -150,6 +150,11 @@ interface Tenant {
   jobId: string;
   conversationId: string;
   messageIds: string[];
+  // F-83.
+  itemId: string;
+  conflictingItemId: string;
+  versionId: string;
+  candidateId: string;
 }
 
 async function seedTenant(client: Client, slug: string): Promise<Tenant> {
@@ -161,6 +166,10 @@ async function seedTenant(client: Client, slug: string): Promise<Tenant> {
   const chunkIds = [randomUUID(), randomUUID()];
   const jobId = randomUUID();
   const messageIds = [randomUUID(), randomUUID()];
+  const itemId = randomUUID();
+  const conflictingItemId = randomUUID();
+  const versionId = randomUUID();
+  const candidateId = randomUUID();
 
   await client.query(`INSERT INTO "user" ("id", "email", "updatedAt") VALUES ($1, $2, now())`, [
     userId,
@@ -236,7 +245,94 @@ async function seedTenant(client: Client, slug: string): Promise<Tenant> {
     );
   }
 
-  return { workspaceId, userId, brandId, documentId, chunkIds, jobId, conversationId, messageIds };
+  // --- F-83: the knowledge graph, with every shape the five keys care about.
+  //
+  // `conflictingItemId` points at `itemId` through the SELF-reference, the
+  // candidate targets `itemId`, the item cites the document, and the version
+  // belongs to the item — so all five relationships carry real rows across the
+  // upgrade rather than being asserted on an empty table.
+  await client.query(
+    `INSERT INTO "brand_knowledge_item"
+       ("id", "workspaceId", "brandId", "area", "itemKey", "title", "body",
+        "sourceDocumentId", "updatedAt")
+     VALUES ($1, $2, $3, 'IDENTITY', 'identity.positioning', $4, $5, $6, now())`,
+    [
+      itemId,
+      workspaceId,
+      brandId,
+      JSON.stringify({ en: 'Positioning', ar: 'التموضع' }),
+      JSON.stringify({ en: `${slug} positioning`, ar: `تموضع ${slug}` }),
+      documentId,
+    ],
+  );
+  await client.query(
+    `INSERT INTO "brand_knowledge_item"
+       ("id", "workspaceId", "brandId", "area", "itemKey", "title", "body",
+        "conflictsWithItemId", "updatedAt")
+     VALUES ($1, $2, $3, 'IDENTITY', 'identity.positioning.rival', $4, $5, $6, now())`,
+    [
+      conflictingItemId,
+      workspaceId,
+      brandId,
+      JSON.stringify({ en: 'Rival positioning', ar: 'تموضع منافس' }),
+      JSON.stringify({ en: `${slug} rival`, ar: `منافس ${slug}` }),
+      itemId,
+    ],
+  );
+  // THE VERSION BELONGS TO THE *CONFLICTING* ITEM, and that is deliberate.
+  //
+  // `brand_knowledge_version` is append-only: UPDATE and DELETE are revoked and
+  // a trigger refuses both. An item that has recorded history therefore cannot
+  // be deleted at all — the ON DELETE CASCADE reaches the version table and the
+  // trigger stops it. That is Phase 5A behaviour this migration preserves
+  // exactly, and it is asserted below rather than worked around. It also means
+  // the item the SET NULL tests delete must be one WITHOUT history, so the
+  // history is seeded against the other item.
+  await client.query(
+    `INSERT INTO "brand_knowledge_version"
+       ("id", "workspaceId", "brandId", "knowledgeItemId", "version", "area",
+        "memory", "origin", "status", "title", "body", "changeKind")
+     VALUES ($1, $2, $3, $4, 1, 'IDENTITY', 'CANONICAL', 'HUMAN', 'ACTIVE', $5, $6, 'created')`,
+    [
+      versionId,
+      workspaceId,
+      brandId,
+      conflictingItemId,
+      JSON.stringify({ en: 'Rival positioning', ar: 'تموضع منافس' }),
+      JSON.stringify({ en: `${slug} rival`, ar: `منافس ${slug}` }),
+    ],
+  );
+  await client.query(
+    `INSERT INTO "brand_knowledge_candidate"
+       ("id", "workspaceId", "brandId", "sourceDocumentId", "targetItemId", "area",
+        "itemKey", "extractedTitle", "extractedBody", "confidenceMilli", "evidence")
+     VALUES ($1, $2, $3, $4, $5, 'IDENTITY', 'identity.mission', $6, $7, 720, $8)`,
+    [
+      candidateId,
+      workspaceId,
+      brandId,
+      documentId,
+      itemId,
+      JSON.stringify({ en: 'Mission', ar: 'الرسالة' }),
+      JSON.stringify({ en: `${slug} mission`, ar: `رسالة ${slug}` }),
+      JSON.stringify([]),
+    ],
+  );
+
+  return {
+    workspaceId,
+    userId,
+    brandId,
+    documentId,
+    chunkIds,
+    jobId,
+    conversationId,
+    messageIds,
+    itemId,
+    conflictingItemId,
+    versionId,
+    candidateId,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +348,8 @@ describe('the F-80 migration as an upgrade from current main', () => {
   let b: Tenant;
   /** The cross-workspace message that only exists because F-80 was real. */
   let smuggledMessageId: string;
+  /** The cross-workspace candidate that only exists because F-83 was real. */
+  let smuggledCandidateId: string;
 
   beforeAll(async () => {
     admin = await connect(urlFor('migrator', 'postgres'));
@@ -284,23 +382,32 @@ describe('the F-80 migration as an upgrade from current main', () => {
     }
   }, 60_000);
 
-  it('main really does hold three PLAIN foreign keys', async () => {
-    // The finding, read out of the database rather than taken on trust.
-    expect(
-      (await foreignKeys(migrator, 'brand_source_chunk'))[
-        'brand_source_chunk_sourceDocumentId_fkey'
-      ],
-    ).toContain('FOREIGN KEY ("sourceDocumentId")');
-    expect(
-      (await foreignKeys(migrator, 'brand_ingestion_job'))[
-        'brand_ingestion_job_sourceDocumentId_fkey'
-      ],
-    ).toContain('FOREIGN KEY ("sourceDocumentId")');
-    expect(
-      (await foreignKeys(migrator, 'brand_brain_message'))[
-        'brand_brain_message_conversationId_fkey'
-      ],
-    ).toContain('FOREIGN KEY ("conversationId")');
+  it('main really does hold EIGHT plain foreign keys', async () => {
+    /*
+     * THE FINDING, READ OUT OF THE DATABASE RATHER THAN TAKEN ON TRUST — and
+     * counted across the WHOLE module, which is how F-83 came to light. F-80
+     * named three because three tables were looked at.
+     */
+    const { rows } = await migrator.query<{ relation: string }>(
+      `SELECT c.conrelid::regclass || '.' || c.conname AS relation
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'f'
+          AND t.relname LIKE 'brand%'
+          AND cardinality(c.conkey) = 1
+          AND c.confrelid <> 'workspace'::regclass
+        ORDER BY 1`,
+    );
+    expect(rows.map((r) => r.relation)).toEqual([
+      'brand_brain_message.brand_brain_message_conversationId_fkey',
+      'brand_ingestion_job.brand_ingestion_job_sourceDocumentId_fkey',
+      'brand_knowledge_candidate.brand_knowledge_candidate_sourceDocumentId_fkey',
+      'brand_knowledge_candidate.brand_knowledge_candidate_targetItemId_fkey',
+      'brand_knowledge_item.brand_knowledge_item_conflictsWithItemId_fkey',
+      'brand_knowledge_item.brand_knowledge_item_sourceDocumentId_fkey',
+      'brand_knowledge_version.brand_knowledge_version_knowledgeItemId_fkey',
+      'brand_source_chunk.brand_source_chunk_sourceDocumentId_fkey',
+    ]);
   });
 
   it('F-80 is real at main: A posts into B conversation and it SUCCEEDS', async () => {
@@ -330,6 +437,46 @@ describe('the F-80 migration as an upgrade from current main', () => {
     expect(rows[0]?.count).toBe('1');
   });
 
+  it("F-83 is real at main too: A's candidate TARGETS B's approved item and it SUCCEEDS", async () => {
+    /*
+     * THE SAME DEFECT AT THE GOVERNANCE BOUNDARY (D-65).
+     *
+     * `targetItemId` names the approved knowledge item a candidate would EDIT
+     * once a reviewer accepts it. Pointed at another tenant's item, the review
+     * screen diffs against knowledge A has never been allowed to see — and an
+     * acceptance would write a version against it.
+     *
+     * This is why F-83 could not be left for later: it is the one key of the
+     * eight whose misuse reaches a WRITE on another tenant's canonical data.
+     */
+    smuggledCandidateId = randomUUID();
+    await app.query('BEGIN');
+    await app.query(`SELECT set_config('app.workspace_id', $1, true)`, [a.workspaceId]);
+    await app.query(
+      `INSERT INTO "brand_knowledge_candidate"
+         ("id", "workspaceId", "brandId", "sourceDocumentId", "targetItemId", "area",
+          "itemKey", "extractedTitle", "extractedBody", "confidenceMilli", "evidence")
+       VALUES ($1, $2, $3, $4, $5, 'IDENTITY', 'identity.smuggled', $6, $7, 500, $8)`,
+      [
+        smuggledCandidateId,
+        a.workspaceId,
+        a.brandId,
+        a.documentId,
+        b.itemId,
+        JSON.stringify({ en: 'smuggled', ar: 'smuggled' }),
+        JSON.stringify({ en: 'smuggled', ar: 'smuggled' }),
+        JSON.stringify([]),
+      ],
+    );
+    await app.query('COMMIT');
+
+    const { rows } = await platform.query<{ targetItemId: string }>(
+      `SELECT "targetItemId" FROM "brand_knowledge_candidate" WHERE "id" = $1`,
+      [smuggledCandidateId],
+    );
+    expect(rows[0]?.targetItemId).toBe(b.itemId);
+  });
+
   it('the migration REFUSES while that row exists, and changes nothing', async () => {
     const before = {
       chunks: await foreignKeys(migrator, 'brand_source_chunk'),
@@ -342,7 +489,28 @@ describe('the F-80 migration as an upgrade from current main', () => {
       ).rows[0]?.count,
     };
 
-    expect(() => applyMigration(migratorUrl, F80_MIGRATION)).toThrow(/F-80 migration refused/);
+    /*
+     * ONE REFUSAL COVERING BOTH FINDINGS. The message names every relationship
+     * with its own count, so an operator sees which of the eight is affected
+     * without running anything — and sees COUNTS, never ids.
+     */
+    expect(() => applyMigration(migratorUrl, F80_MIGRATION)).toThrow(
+      /F-80\/F-83 migration refused/,
+    );
+    expect(() => applyMigration(migratorUrl, F80_MIGRATION)).toThrow(
+      /brand_brain_message\.conversationId=1/,
+    );
+    expect(() => applyMigration(migratorUrl, F80_MIGRATION)).toThrow(
+      /brand_knowledge_candidate\.targetItemId=1/,
+    );
+    // Counts only: no uuid may appear anywhere in what the operator is shown.
+    try {
+      applyMigration(migratorUrl, F80_MIGRATION);
+      throw new Error('the migration was ACCEPTED');
+    } catch (error) {
+      const text = String((error as { stderr?: unknown }).stderr ?? (error as Error).message);
+      expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    }
 
     /*
      * FAIL SAFELY MEANS FAIL WITHOUT SIDE EFFECTS. The constraints are still
@@ -372,8 +540,11 @@ describe('the F-80 migration as an upgrade from current main', () => {
 
   it('once the operator has dealt with the row, the migration applies', async () => {
     // The decision a human makes after looking, which the migration refused to
-    // make for them.
+    // make for them — for BOTH cross-tenant rows.
     await platform.query(`DELETE FROM "brand_brain_message" WHERE "id" = $1`, [smuggledMessageId]);
+    await platform.query(`DELETE FROM "brand_knowledge_candidate" WHERE "id" = $1`, [
+      smuggledCandidateId,
+    ]);
 
     expect(() => applyMigration(migratorUrl, F80_MIGRATION)).not.toThrow();
 
@@ -387,17 +558,65 @@ describe('the F-80 migration as an upgrade from current main', () => {
       (await foreignKeys(migrator, 'brand_brain_message'))['brand_brain_message_conversation_fkey'],
     ).toContain('FOREIGN KEY ("workspaceId", "conversationId")');
 
-    // And the plain keys are gone, not merely joined by composite ones.
     expect(
-      (await foreignKeys(migrator, 'brand_source_chunk'))[
-        'brand_source_chunk_sourceDocumentId_fkey'
+      (await foreignKeys(migrator, 'brand_knowledge_candidate'))[
+        'brand_knowledge_candidate_target_fkey'
       ],
-    ).toBeUndefined();
+    ).toContain('FOREIGN KEY ("workspaceId", "targetItemId")');
     expect(
-      (await foreignKeys(migrator, 'brand_brain_message'))[
-        'brand_brain_message_conversationId_fkey'
-      ],
-    ).toBeUndefined();
+      (await foreignKeys(migrator, 'brand_knowledge_item'))['brand_knowledge_item_conflict_fkey'],
+    ).toContain('FOREIGN KEY ("workspaceId", "conflictsWithItemId")');
+    expect(
+      (await foreignKeys(migrator, 'brand_knowledge_version'))['brand_knowledge_version_item_fkey'],
+    ).toContain('FOREIGN KEY ("workspaceId", "knowledgeItemId")');
+
+    // And NOT ONE plain key is left anywhere in the module — the same query
+    // that listed eight before the upgrade.
+    const { rows } = await migrator.query<{ relation: string }>(
+      `SELECT c.conrelid::regclass || '.' || c.conname AS relation
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'f'
+          AND t.relname LIKE 'brand%'
+          AND cardinality(c.conkey) = 1
+          AND c.confrelid <> 'workspace'::regclass`,
+    );
+    expect(rows.map((r) => r.relation)).toEqual([]);
+  });
+
+  it('the referential actions survived, column lists included', async () => {
+    /*
+     * PRESERVED EXACTLY is an assertion, not a claim in a commit message. The
+     * SET NULL keys additionally have to name their OWN column: a bare
+     * composite SET NULL nulls `workspaceId` too, and since that column is NOT
+     * NULL the parent delete would fail rather than null the reference.
+     */
+    const { rows } = await migrator.query<{ conname: string; definition: string }>(
+      `SELECT c.conname::text AS conname, pg_get_constraintdef(c.oid) AS definition
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+        WHERE c.contype = 'f' AND t.relname LIKE 'brand%'
+          AND c.conname LIKE '%_fkey' AND cardinality(c.conkey) = 2
+          AND c.confrelid <> 'brand'::regclass
+        ORDER BY c.conname`,
+    );
+    const byName = Object.fromEntries(rows.map((r) => [r.conname, r.definition]));
+
+    expect(byName['brand_source_chunk_document_fkey']).toContain('ON DELETE CASCADE');
+    expect(byName['brand_ingestion_job_document_fkey']).toContain('ON DELETE CASCADE');
+    expect(byName['brand_brain_message_conversation_fkey']).toContain('ON DELETE CASCADE');
+    expect(byName['brand_knowledge_candidate_document_fkey']).toContain('ON DELETE CASCADE');
+    expect(byName['brand_knowledge_version_item_fkey']).toContain('ON DELETE CASCADE');
+
+    expect(byName['brand_knowledge_candidate_target_fkey']).toContain(
+      'ON DELETE SET NULL ("targetItemId")',
+    );
+    expect(byName['brand_knowledge_item_source_fkey']).toContain(
+      'ON DELETE SET NULL ("sourceDocumentId")',
+    );
+    expect(byName['brand_knowledge_item_conflict_fkey']).toContain(
+      'ON DELETE SET NULL ("conflictsWithItemId")',
+    );
   });
 
   it('every valid row survived the upgrade, by id', async () => {
@@ -424,6 +643,37 @@ describe('the F-80 migration as an upgrade from current main', () => {
         [tenant.conversationId],
       );
       expect(messages.rows.map((r) => r.id).sort()).toEqual([...tenant.messageIds].sort());
+
+      // F-83's rows, and the REFERENCES they carry — a migration that dropped a
+      // reference while keeping the row would pass a bare existence check.
+      const item = await platform.query<{ sourceDocumentId: string | null }>(
+        `SELECT "sourceDocumentId" FROM "brand_knowledge_item" WHERE "id" = $1`,
+        [tenant.itemId],
+      );
+      expect(item.rowCount).toBe(1);
+      expect(item.rows[0]?.sourceDocumentId).toBe(tenant.documentId);
+
+      const conflicting = await platform.query<{ conflictsWithItemId: string | null }>(
+        `SELECT "conflictsWithItemId" FROM "brand_knowledge_item" WHERE "id" = $1`,
+        [tenant.conflictingItemId],
+      );
+      expect(conflicting.rows[0]?.conflictsWithItemId).toBe(tenant.itemId);
+
+      const version = await platform.query<{ knowledgeItemId: string }>(
+        `SELECT "knowledgeItemId" FROM "brand_knowledge_version" WHERE "id" = $1`,
+        [tenant.versionId],
+      );
+      expect(version.rows[0]?.knowledgeItemId).toBe(tenant.conflictingItemId);
+
+      const candidate = await platform.query<{
+        sourceDocumentId: string;
+        targetItemId: string | null;
+      }>(
+        `SELECT "sourceDocumentId", "targetItemId" FROM "brand_knowledge_candidate" WHERE "id" = $1`,
+        [tenant.candidateId],
+      );
+      expect(candidate.rows[0]?.sourceDocumentId).toBe(tenant.documentId);
+      expect(candidate.rows[0]?.targetItemId).toBe(tenant.itemId);
     }
   });
 
@@ -465,15 +715,134 @@ describe('the F-80 migration as an upgrade from current main', () => {
     expect(rowCount).toBe(1);
   });
 
+  it("F-83: the candidate can no longer target another tenant's item", async () => {
+    await app.query('BEGIN');
+    await app.query(`SELECT set_config('app.workspace_id', $1, true)`, [a.workspaceId]);
+    await expect(
+      app.query(
+        `INSERT INTO "brand_knowledge_candidate"
+           ("id", "workspaceId", "brandId", "sourceDocumentId", "targetItemId", "area",
+            "itemKey", "extractedTitle", "extractedBody", "confidenceMilli", "evidence")
+         VALUES ($1, $2, $3, $4, $5, 'IDENTITY', 'identity.smuggled', $6, $7, 500, $8)`,
+        [
+          randomUUID(),
+          a.workspaceId,
+          a.brandId,
+          a.documentId,
+          b.itemId,
+          JSON.stringify({ en: 'smuggled', ar: 'smuggled' }),
+          JSON.stringify({ en: 'smuggled', ar: 'smuggled' }),
+          JSON.stringify([]),
+        ],
+      ),
+    ).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'brand_knowledge_candidate_target_fkey',
+    });
+    await app.query('ROLLBACK');
+  });
+
+  it('F-83: deleting a source document nulls the reference and KEEPS workspaceId', async () => {
+    /*
+     * THE DATA-LOSS-SHAPED REGRESSION THIS MIGRATION HAD TO AVOID, asserted on
+     * a database that came through the upgrade rather than a fresh one.
+     *
+     * `brand_knowledge_item.sourceDocumentId` nulled on parent delete before,
+     * and must go on nulling. Written as a composite `ON DELETE SET NULL` with
+     * no column list, PostgreSQL would null `workspaceId` too, hit its NOT NULL
+     * and REFUSE the delete — so a customer removing an uploaded document would
+     * get an error, on a path that worked the day before.
+     */
+    const { rows: before } = await platform.query<{ workspaceId: string }>(
+      `SELECT "workspaceId" FROM "brand_knowledge_item" WHERE "id" = $1`,
+      [a.itemId],
+    );
+    expect(before[0]?.workspaceId).toBe(a.workspaceId);
+
+    // Deleting the document also cascades away A's chunks, job and candidate —
+    // which is the behaviour those keys already had. This is the last test to
+    // touch A's document.
+    await platform.query(`DELETE FROM "brand_source_document" WHERE "id" = $1`, [a.documentId]);
+
+    const { rows: after } = await platform.query<{
+      workspaceId: string;
+      brandId: string;
+      sourceDocumentId: string | null;
+    }>(
+      `SELECT "workspaceId", "brandId", "sourceDocumentId"
+         FROM "brand_knowledge_item" WHERE "id" = $1`,
+      [a.itemId],
+    );
+    expect(after).toHaveLength(1);
+    expect(after[0]?.sourceDocumentId).toBeNull();
+    expect(after[0]?.workspaceId).toBe(a.workspaceId);
+    expect(after[0]?.brandId).toBe(a.brandId);
+  });
+
+  it("F-83: deleting an item nulls the conflict reference and KEEPS the other item's workspaceId", async () => {
+    await platform.query(`DELETE FROM "brand_knowledge_item" WHERE "id" = $1`, [a.itemId]);
+
+    const { rows } = await platform.query<{
+      workspaceId: string;
+      conflictsWithItemId: string | null;
+    }>(
+      `SELECT "workspaceId", "conflictsWithItemId"
+         FROM "brand_knowledge_item" WHERE "id" = $1`,
+      [a.conflictingItemId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.conflictsWithItemId).toBeNull();
+    expect(rows[0]?.workspaceId).toBe(a.workspaceId);
+
+    // B is untouched throughout: its item, its conflict link and its version
+    // are exactly where they were.
+    const { rows: bRows } = await platform.query<{ conflictsWithItemId: string | null }>(
+      `SELECT "conflictsWithItemId" FROM "brand_knowledge_item" WHERE "id" = $1`,
+      [b.conflictingItemId],
+    );
+    expect(bRows[0]?.conflictsWithItemId).toBe(b.itemId);
+  });
+
+  it('an item WITH recorded history still cannot be deleted — append-only wins', async () => {
+    /*
+     * A PHASE 5A GUARANTEE THE NEW KEY HAD TO LEAVE ALONE.
+     *
+     * `brand_knowledge_version.knowledgeItemId` cascades, so deleting an item
+     * reaches its history — where the append-only trigger (D-65) refuses the
+     * DELETE and takes the whole statement with it. The composite key kept
+     * ON DELETE CASCADE exactly, so this still behaves as it did: the item
+     * survives, and so does every version of it.
+     *
+     * Asserted because "preserved the referential action exactly" is easy to
+     * say and this is what it actually means at runtime.
+     */
+    await expect(
+      platform.query(`DELETE FROM "brand_knowledge_item" WHERE "id" = $1`, [a.conflictingItemId]),
+    ).rejects.toThrow(/append-only/i);
+
+    const { rowCount: itemRows } = await platform.query(
+      `SELECT 1 FROM "brand_knowledge_item" WHERE "id" = $1`,
+      [a.conflictingItemId],
+    );
+    expect(itemRows).toBe(1);
+
+    const { rowCount: versionRows } = await platform.query(
+      `SELECT 1 FROM "brand_knowledge_version" WHERE "id" = $1`,
+      [a.versionId],
+    );
+    expect(versionRows).toBe(1);
+  });
+
   it('RLS is still enabled and forced after the upgrade', async () => {
     const { rows } = await migrator.query<{ relname: string; ok: boolean }>(
       `SELECT relname, (relrowsecurity AND relforcerowsecurity) AS ok
          FROM pg_class
         WHERE relname IN ('brand_source_document', 'brand_source_chunk',
                           'brand_ingestion_job', 'brand_brain_conversation',
-                          'brand_brain_message')`,
+                          'brand_brain_message', 'brand_knowledge_item',
+                          'brand_knowledge_version', 'brand_knowledge_candidate')`,
     );
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(8);
     for (const row of rows) expect(row.ok, row.relname).toBe(true);
   });
 });
