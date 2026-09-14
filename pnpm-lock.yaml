@@ -331,6 +331,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../storage
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -499,6 +502,16 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../entitlements
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/storage:
+    dependencies:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
