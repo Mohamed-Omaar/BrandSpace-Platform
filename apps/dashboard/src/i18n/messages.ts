@@ -818,6 +818,32 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'حدث خطأ ولم يتغيّر شيء.',
   },
   INVALID_JSON: { en: 'The payload is not valid.', ar: 'المحتوى غير صالح.' },
+  /*
+   * THE THREE COMMERCIAL REFUSALS, which had no text at all.
+   *
+   * `toPublicErrorCode` has mapped these since Phase 3 — deliberately, because
+   * "you are over a limit" is exactly what a customer needs in order to act —
+   * but no entry existed here, so `statusMessage` returned null and the screen
+   * rendered NOTHING. A customer whose upload was refused for want of storage
+   * saw the page reload unchanged, which reads as a broken button rather than a
+   * plan decision. Found by the end-to-end run, on a workspace whose plan
+   * genuinely grants no storage.
+   *
+   * The plan name, the price and the limit stay unsaid; what travels is the
+   * kind of wall and the fact that it is clearable.
+   */
+  QUOTA_EXCEEDED: {
+    en: 'This workspace has reached a limit on its plan. Free some space or ask an admin to change the plan.',
+    ar: 'وصلت مساحة العمل إلى أحد حدود خطتها. أفرِغ بعض المساحة أو اطلب من المسؤول تغيير الخطة.',
+  },
+  ENTITLEMENT_REQUIRED: {
+    en: 'This workspace plan does not include that. An admin can change the plan.',
+    ar: 'خطة مساحة العمل لا تشمل هذا. يمكن للمسؤول تغيير الخطة.',
+  },
+  INSUFFICIENT_CREDITS: {
+    en: 'There are not enough AI credits for that. Top up or wait for the next allowance.',
+    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ. أضف رصيدًا أو انتظر المخصّص التالي.',
+  },
   MEMBER_INVITED: { en: 'Invitation sent.', ar: 'تم إرسال الدعوة.' },
   MEMBER_REMOVED: { en: 'Member removed.', ar: 'تمت إزالة العضو.' },
   ROLE_CHANGED: { en: 'Role updated.', ar: 'تم تحديث الدور.' },

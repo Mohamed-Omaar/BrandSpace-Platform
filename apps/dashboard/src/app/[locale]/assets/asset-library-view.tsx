@@ -419,6 +419,10 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 className={CONTROL_CLASS}
                 data-testid="assets-load-more"
                 style={{
+                  // The same 24px floor as the filter links (WCAG 2.2 AA 2.5.8).
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  minBlockSize: '24px',
                   ...typographyTokens.label,
                   color: colorTokens.brandPurple,
                   textDecoration: 'none',
@@ -608,6 +612,21 @@ function FilterGroup({
             style={{
               ...typographyTokens.label,
               textDecoration: 'none',
+              /*
+               * A 24px MINIMUM TOUCH TARGET — WCAG 2.2 AA 2.5.8.
+               *
+               * These were 27.5 x 20px, which reads fine on a desktop pointer
+               * and fails on a phone: axe reported 268 violations on a 390px
+               * viewport, all of them these links. Padding alone does not fix
+               * it, because a short label gives the box nothing to pad around;
+               * the minimum has to be stated, and the flex centring is what
+               * keeps the label in the middle of the larger box.
+               */
+              display: 'inline-flex',
+              alignItems: 'center',
+              minBlockSize: '24px',
+              minInlineSize: '24px',
+              justifyContent: 'center',
               padding: `${spacingTokens['3xs']} ${spacingTokens.xs}`,
               borderRadius: radiusTokens.sm,
               color: active ? colorTokens.brandPurple : colorTokens.textSecondary,
