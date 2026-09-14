@@ -82,6 +82,16 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
   // second setting. It carries no provider, no model, no price and no
   // credential — see the schema in domains.ts.
   'brand-brain',
+  // Phase 5B-1. The Asset Library OPERATIONAL policy — accepted media types per
+  // kind, the size ceilings, the version and derivative bounds, the upload
+  // session window, the download-grant window and the retention windows. The
+  // customer upload control has to know what it may accept BEFORE it sends a
+  // byte, and the library screen has to state the ceiling it is enforcing.
+  // Restating them in the dashboard is what Phase 5A did, and a restated
+  // setting is a second setting. It carries no provider, no model, no price and
+  // no credential — the storage VENDOR lives in `integrations.storage`, and the
+  // storage QUOTA in `plans`, neither of which is projected.
+  'assets',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

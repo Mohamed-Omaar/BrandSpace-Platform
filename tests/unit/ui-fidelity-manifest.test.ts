@@ -64,9 +64,27 @@ describe('the vendored Brand Brain reference', () => {
     expect(host).toContain('brand-brain-native.js');
   });
 
-  it('every route in the manifest declares a source file and a pinned commit', () => {
+  it('every route in the PORT manifest declares a source file and a pinned commit', () => {
+    /*
+     * SCOPED TO §3, AND THAT BOUNDARY IS THE POINT.
+     *
+     * The scan used to run from §3 to the end of the document, which was
+     * correct while §3 was the only table naming routes. §6.3 now lists
+     * DESIGN-SYSTEM EXTENSIONS — routes built because no reference exists
+     * (D-98) — and those rows have no pinned commit and no checksum, because
+     * there is nothing to pin. The unscoped scan read them as §3 rows and
+     * failed, which is the test doing its job on a document that had grown a
+     * second table rather than a defect in either.
+     *
+     * So the slice ends where §4 begins, and §6.3 gets the assertions that
+     * actually apply to it in the test below.
+     */
     const contract = readFileSync(path.join(ROOT, 'docs/UI-FIDELITY-CONTRACT.md'), 'utf8');
-    const manifest = contract.slice(contract.indexOf('## 3. Route-to-reference manifest'));
+    const start = contract.indexOf('## 3. Route-to-reference manifest');
+    const end = contract.indexOf('## 4. Authorised deviations');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const manifest = contract.slice(start, end);
     const rows = manifest
       .split('\n')
       .filter((line) => line.startsWith('| `/') && line.includes('|'));
@@ -76,6 +94,38 @@ describe('the vendored Brand Brain reference', () => {
       // two is a route that cannot be verified.
       expect(row, `manifest row has no pinned commit: ${row}`).toContain(PINNED_COMMIT);
       expect(row, `manifest row has no checksum: ${row}`).toMatch(/[0-9a-f]{64}/);
+    }
+  });
+
+  it('every EXTENSION route names why it has no reference and a recorded decision', () => {
+    /*
+     * The §6.3 counterpart. An extension cannot declare a pinned commit, so
+     * what it must declare instead is WHY there is nothing to pin, what it was
+     * composed from (rule 4 — reuse before creating), and the decision that
+     * authorised it. A row missing any of those is a screen somebody invented
+     * and wrote a table entry for afterwards, which is the failure D-98 exists
+     * to prevent.
+     */
+    const contract = readFileSync(path.join(ROOT, 'docs/UI-FIDELITY-CONTRACT.md'), 'utf8');
+    const start = contract.indexOf('### 6.3 Extension manifest');
+    expect(start).toBeGreaterThan(-1);
+    const rows = contract
+      .slice(start)
+      .split('\n')
+      .filter((line) => line.startsWith('| `/') && line.includes('|'));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const cells = row.split('|').map((cell) => cell.trim());
+      // `| route | why | composed from | recorded |` plus the empty ends.
+      expect(cells.length, `extension row is malformed: ${row}`).toBe(6);
+      expect(cells[2]?.length, `extension row does not say why: ${row}`).toBeGreaterThan(40);
+      expect(
+        cells[3]?.length,
+        `extension row does not say what it composes from: ${row}`,
+      ).toBeGreaterThan(40);
+      expect(cells[4], `extension row has no recorded decision: ${row}`).toMatch(/D-\d+/);
+      // An extension must NOT claim a pinned reference it does not have.
+      expect(row, `an extension row must not claim a checksum: ${row}`).not.toMatch(/[0-9a-f]{64}/);
     }
   });
 });

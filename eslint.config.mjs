@@ -31,6 +31,11 @@ const ALLOWED_IMPORTS = {
   // Brand Brain reads configuration, enforces entitlements, and routes every
   // AI operation through the gateway rather than touching a provider itself.
   'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway', 'storage'],
+  // The Asset Library. It reads configuration, enforces entitlements and
+  // quotas, and reaches object storage through the same boundary Brand Brain
+  // uses. NOT `ai-gateway`: nothing in this phase generates anything, and an
+  // import nobody needs is a dependency somebody later uses.
+  assets: ['shared', 'database', 'config', 'entitlements', 'storage'],
   'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };

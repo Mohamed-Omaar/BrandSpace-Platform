@@ -12,6 +12,12 @@
  * builder, no connection. Adding a name to this file is a deliberate act.
  */
 export type {
+  Asset,
+  AssetDerivative,
+  AssetFolder,
+  AssetProcessingJob,
+  AssetUploadSession,
+  AssetVersion,
   Brand,
   BrandBrainConversation,
   BrandBrainMessage,
@@ -24,6 +30,13 @@ export type {
 } from '@prisma/client';
 
 export type {
+  AssetDerivativeKind,
+  AssetKind,
+  AssetProcessingStage,
+  AssetScanStatus,
+  AssetSource,
+  AssetStatus,
+  AssetUploadSessionStatus,
   BrandCandidateStatus,
   BrandIngestionStage,
   BrandKnowledgeArea,
