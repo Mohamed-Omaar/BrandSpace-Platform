@@ -30,7 +30,37 @@ export interface IngestSourceDocumentPayload extends TenantJobPayload {
   readonly ingestionJobId: string;
 }
 
-export type MediaProcessingPayload = IngestSourceDocumentPayload;
+/**
+ * Process one uploaded asset: scan, then inspect, then derive.
+ *
+ * THE SAME SHAPE AND THE SAME REASONS as the ingestion payload above. It names
+ * an `asset_processing_job` row and a workspace, and nothing else: no bytes, no
+ * file name, no customer content. Redis is not tenant-isolated and is not
+ * encrypted at rest the way the database is, so a customer file name in a queue
+ * message would move their data somewhere none of the isolation guarantees
+ * reach — and a file name is exactly the sort of thing that carries
+ * "Acquisition-termsheet-Q4.pdf".
+ *
+ * IT SHARES THE `media-processing` QUEUE with Brand Brain ingestion rather than
+ * taking one of its own. Both are "read a customer upload on a worker", both
+ * are bounded by configured wall-clock limits, and both want the same modest
+ * concurrency. A second queue would be a second thing to provision, monitor and
+ * drain for no behavioural difference; the `kind` discriminant is what routes
+ * them apart, and the consumer switches on it exhaustively.
+ */
+export interface ProcessAssetPayload extends TenantJobPayload {
+  readonly kind: 'assets.process-asset';
+  readonly processingJobId: string;
+}
 
-/** The job name BullMQ dispatches on, kept next to the payload it belongs to. */
+/**
+ * Everything the `media-processing` queue carries.
+ *
+ * A DISCRIMINATED UNION, so adding a member without handling it is a compile
+ * error in the consumer rather than a message that is silently dropped.
+ */
+export type MediaProcessingPayload = IngestSourceDocumentPayload | ProcessAssetPayload;
+
+/** The job names BullMQ dispatches on, kept next to the payloads they belong to. */
 export const INGEST_SOURCE_DOCUMENT = 'brand-brain.ingest-source-document' as const;
+export const PROCESS_ASSET = 'assets.process-asset' as const;

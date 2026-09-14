@@ -200,6 +200,13 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   BrandIngestionJob: 'brand_ingestion_job',
   BrandBrainConversation: 'brand_brain_conversation',
   BrandBrainMessage: 'brand_brain_message',
+  // Phase 5B-1 — the Asset Library.
+  AssetFolder: 'asset_folder',
+  Asset: 'asset',
+  AssetVersion: 'asset_version',
+  AssetDerivative: 'asset_derivative',
+  AssetUploadSession: 'asset_upload_session',
+  AssetProcessingJob: 'asset_processing_job',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

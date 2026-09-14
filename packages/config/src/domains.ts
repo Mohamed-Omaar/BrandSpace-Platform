@@ -675,6 +675,15 @@ const brandBrainSchema = z.object({
 // --- Asset Library ----------------------------------------------------------
 
 /**
+ * The largest file size the schema can record: PostgreSQL `integer`.
+ *
+ * Named rather than inlined so the reason travels with the number. Raising it
+ * is a MIGRATION — `asset.sizeBytes` and `asset_upload_session.declaredSizeBytes`
+ * would both have to become `bigint` — not a configuration change.
+ */
+const MAX_STORED_FILE_BYTES = 2_147_483_647;
+
+/**
  * Asset Library operational policy (Phase 5B-1).
  *
  * CLAUDE.md §2.2: none of this may be hard-coded. What a customer may upload,
@@ -739,6 +748,18 @@ const assetsSchema = z.object({
        * Size ceiling per kind. A video is legitimately larger than a font, and
        * one ceiling for both would either refuse real video or admit a font
        * nobody should be storing.
+       *
+       * EVERY CEILING IS CAPPED AT WHAT THE COLUMN CAN HOLD. `asset.sizeBytes`
+       * and `asset_upload_session.declaredSizeBytes` are 32-bit integers, so a
+       * value above 2,147,483,647 is not a generous limit — it is an upload
+       * that reaches the database and fails with "value out of range", which a
+       * customer sees as an unexplained error and an operator has no way to
+       * connect back to the number they typed.
+       *
+       * Refusing it at ACTIVATION turns that into a configuration error the
+       * operator sees immediately, next to the field they are editing. Found by
+       * the isolation suite, which set a ceiling above the range and got the
+       * opaque failure.
        */
       maxFileBytes: z
         .object({
@@ -746,26 +767,31 @@ const assetsSchema = z.object({
             .number()
             .int()
             .positive()
+            .max(MAX_STORED_FILE_BYTES)
             .default(25 * 1024 * 1024),
           video: z
             .number()
             .int()
             .positive()
+            .max(MAX_STORED_FILE_BYTES)
             .default(500 * 1024 * 1024),
           audio: z
             .number()
             .int()
             .positive()
+            .max(MAX_STORED_FILE_BYTES)
             .default(100 * 1024 * 1024),
           document: z
             .number()
             .int()
             .positive()
+            .max(MAX_STORED_FILE_BYTES)
             .default(50 * 1024 * 1024),
           font: z
             .number()
             .int()
             .positive()
+            .max(MAX_STORED_FILE_BYTES)
             .default(10 * 1024 * 1024),
         })
         .default({}),

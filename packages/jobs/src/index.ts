@@ -18,8 +18,10 @@ export {
 } from './queues';
 export {
   INGEST_SOURCE_DOCUMENT,
+  PROCESS_ASSET,
   type IngestSourceDocumentPayload,
   type MediaProcessingPayload,
+  type ProcessAssetPayload,
 } from './payloads';
 export {
   closeQueues,

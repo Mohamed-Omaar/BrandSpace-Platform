@@ -215,3 +215,40 @@ export class AssetMaintenanceService {
     });
   }
 }
+
+/**
+ * Asset processing jobs nothing has claimed, across whatever the caller can see.
+ *
+ * IT TAKES A CLIENT RATHER THAN OPENING ONE, and the caller's identity decides
+ * the reach. A tenant-scoped client returns that workspace's jobs; the platform
+ * identity returns every tenant's, which is what the sweep in the designated
+ * platform surface needs and what "ordinary workers" must not have (F-07). This
+ * function grants nothing — it asks a question with whatever reach the caller
+ * already had.
+ *
+ * "UNCLAIMED" IS `QUEUED` WITH ITS NEXT ATTEMPT DUE, which is the same condition
+ * the producer's dispatch races. A job already SCANNING is left alone: the
+ * worker holds a lock on it, and re-dispatching would only queue a message the
+ * processor discards.
+ */
+export async function findUnclaimedAssetJobs(
+  db: {
+    assetProcessingJob: {
+      findMany(args: unknown): Promise<Array<{ id: string; workspaceId: string }>>;
+    };
+  },
+  now: Date,
+  limit: number,
+): Promise<Array<{ id: string; workspaceId: string }>> {
+  return db.assetProcessingJob.findMany({
+    where: {
+      stage: 'QUEUED',
+      OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+    },
+    select: { id: true, workspaceId: true },
+    // Oldest first with an id tie-break: deterministic, and the asset that has
+    // been waiting longest goes first.
+    orderBy: [{ queuedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+}

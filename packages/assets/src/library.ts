@@ -208,7 +208,7 @@ export class AssetLibraryService {
     assertPermission(input.actor, 'assets.edit');
     const asset = await this.get(input.assetId, input.actor);
 
-    const data: Prisma.AssetUpdateInput = {};
+    const data: Prisma.AssetUncheckedUpdateInput = {};
     if (input.name !== undefined) {
       const trimmed = input.name.trim();
       if (trimmed === '') throw new AppError('VALIDATION_FAILED', 'A name is required.');
@@ -218,12 +218,25 @@ export class AssetLibraryService {
     if (input.license !== undefined) data.license = input.license;
     if (input.rightsExpiryAt !== undefined) data.rightsExpiryAt = input.rightsExpiryAt;
     if (input.folderId !== undefined) {
-      if (input.folderId === null) {
-        data.folder = { disconnect: true };
-      } else {
+      /*
+       * THE SCALAR, NOT `connect`.
+       *
+       * `folderId` is half of a COMPOSITE relation — `(workspaceId, folderId)`
+       * — so Prisma implements `connect: { id }` by writing BOTH columns from
+       * the row it looked up. That rewrite of `workspaceId` is what the RLS
+       * `WITH CHECK` refuses, and the failure surfaces as
+       * "new row violates row-level security policy" from a statement that only
+       * meant to move a file into a folder. Found by the isolation suite.
+       *
+       * Writing the scalar leaves `workspaceId` untouched. The foreign key
+       * still holds the pair together, and `#assertFolderAccepts` has already
+       * established that the folder is visible to this tenant and accepts this
+       * brand.
+       */
+      if (input.folderId !== null) {
         await this.#assertFolderAccepts(input.folderId, asset.brandId);
-        data.folder = { connect: { id: input.folderId } };
       }
+      data.folderId = input.folderId;
     }
 
     const updated = await this.#db.asset.update({ where: { id: asset.id }, data });
@@ -357,7 +370,14 @@ export class AssetLibraryService {
       const parent = await this.#loadFolder(input.parentFolderId);
       if (parent.brandId !== input.brandId) throw folderNotFound();
       const depth = await this.#depthOf(parent.id);
-      if (depth + 1 >= this.#policy.upload.maxFolderDepth) throw folderTooDeep();
+      /*
+       * `maxFolderDepth` is how many LEVELS are allowed, so a folder created at
+       * exactly that depth is legal and the one below it is not. The first
+       * version used `>=`, which silently allowed one level fewer than an
+       * operator configured — invisible until a test set the ceiling to 2 and
+       * got one level.
+       */
+      if (depth + 1 > this.#policy.upload.maxFolderDepth) throw folderTooDeep();
     }
 
     const folder = await this.#db.assetFolder.create({
@@ -442,7 +462,14 @@ export class AssetLibraryService {
        */
       if (await this.#isDescendantOf(parent.id, folder.id)) throw folderCycle();
       const depth = await this.#depthOf(parent.id);
-      if (depth + 1 >= this.#policy.upload.maxFolderDepth) throw folderTooDeep();
+      /*
+       * `maxFolderDepth` is how many LEVELS are allowed, so a folder created at
+       * exactly that depth is legal and the one below it is not. The first
+       * version used `>=`, which silently allowed one level fewer than an
+       * operator configured — invisible until a test set the ceiling to 2 and
+       * got one level.
+       */
+      if (depth + 1 > this.#policy.upload.maxFolderDepth) throw folderTooDeep();
     }
 
     const updated = await this.#db.assetFolder.update({

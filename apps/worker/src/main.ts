@@ -5,9 +5,10 @@ import {
   QUEUE_DEFINITIONS,
   QUEUE_NAMES,
   queueUrl,
-  type IngestSourceDocumentPayload,
+  type MediaProcessingPayload,
 } from '@brandspace/jobs';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { processAssetJob } from './processors/assets';
 import { processIngestionJob } from './processors/ingestion';
 
 /**
@@ -64,8 +65,31 @@ async function main(): Promise<void> {
   const worker = new Worker(
     'media-processing',
     async (job: Job): Promise<void> => {
-      const payload = job.data as IngestSourceDocumentPayload;
-      await processIngestionJob(payload);
+      /*
+       * ONE QUEUE, TWO KINDS OF WORK, ROUTED EXHAUSTIVELY.
+       *
+       * Both members of `MediaProcessingPayload` are handled and the default
+       * arm THROWS rather than returning quietly. A message nobody handles must
+       * fail loudly: a silent return acknowledges the job, so the row it points
+       * at stays QUEUED forever, the reconciliation sweep re-dispatches it, and
+       * the customer watches a spinner while every log line says the job
+       * completed.
+       */
+      const payload = job.data as MediaProcessingPayload;
+      switch (payload.kind) {
+        case 'brand-brain.ingest-source-document':
+          await processIngestionJob(payload);
+          return;
+        case 'assets.process-asset':
+          await processAssetJob(payload);
+          return;
+        default: {
+          const unknown: never = payload;
+          throw new Error(
+            `Unroutable media-processing job: ${JSON.stringify((unknown as { kind?: string }).kind)}`,
+          );
+        }
+      }
     },
     {
       connection: connection(),

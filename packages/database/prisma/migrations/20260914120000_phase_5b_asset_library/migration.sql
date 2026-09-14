@@ -402,33 +402,86 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON "asset_upload_session" TO brandspace_app
 GRANT SELECT, INSERT, UPDATE, DELETE ON "asset_processing_job" TO brandspace_app, brandspace_platform;
 
 -- ---------------------------------------------------------------------------
--- 4. The version history is APPEND-ONLY, in three separated layers.
+-- 4. The version history is APPEND-ONLY, in three separated layers — with ONE
+--    column deliberately exempt.
 --
--- The same construction `brand_knowledge_version` uses, and for the same
--- reason: a version history a caller can rewrite is not a history. A customer
--- restoring version 2 must get exactly the file they uploaded, and "exactly"
--- is only true if nothing could have edited the row in between.
+-- The same construction `brand_knowledge_version` uses, and for a sharper
+-- reason: a customer restoring version 2 must get exactly the file they
+-- uploaded, and "exactly" is only true if nothing could have edited the row in
+-- between.
 --
---   Layer 1 — REVOKED PRIVILEGE. Neither application role holds UPDATE or
---             DELETE, so an ordinary attempt fails on permissions.
+--   Layer 1 — REVOKED PRIVILEGE. Neither application role holds DELETE, and
+--             neither holds a table-wide UPDATE. The UPDATE grant is
+--             COLUMN-LEVEL and names exactly one column.
 --   Layer 2 — FORCE RLS WITH NO OWNER POLICY. The owner is not exempt and has
 --             no policy admitting it, so even the migrator is refused.
 --   Layer 3 — A TRIGGER. The one that still holds after a careless future
 --             migration grants the privilege back, which is exactly what the
 --             isolation suite does before asserting the refusal.
+--
+-- WHY `scanStatus` IS EXEMT, and why that is not a hole. The immutable facts
+-- are WHICH BYTES this version is: its key, its checksum, its size, its
+-- dimensions, its number. The scan verdict is not one of them — it is a fact
+-- ABOUT those bytes, discovered afterwards by a scanner that necessarily runs
+-- after the row exists. An append-only row with a column that must be written
+-- later is a contradiction, and the first version of this migration contained
+-- it: the processor could not record a clean verdict at all, which the
+-- isolation suite found on its first run as `permission denied for table
+-- asset_version`.
+--
+-- The resolution keeps immutability where it means something. PostgreSQL grants
+-- UPDATE per column, so the roles can write `scanStatus` and NOTHING else, and
+-- the trigger refuses an UPDATE that changes any other column even if a future
+-- migration widened the grant. The bytes a version names still cannot be
+-- rewritten by anyone.
 -- ---------------------------------------------------------------------------
 GRANT SELECT, INSERT ON "asset_version" TO brandspace_app, brandspace_platform;
-REVOKE UPDATE, DELETE ON "asset_version" FROM brandspace_app;
-REVOKE UPDATE, DELETE ON "asset_version" FROM brandspace_platform;
+GRANT UPDATE ("scanStatus") ON "asset_version" TO brandspace_app, brandspace_platform;
+REVOKE DELETE ON "asset_version" FROM brandspace_app;
+REVOKE DELETE ON "asset_version" FROM brandspace_platform;
 
 CREATE OR REPLACE FUNCTION app.refuse_asset_version_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  RAISE EXCEPTION
-    'asset_version is append-only: % is refused', TG_OP
-    USING ERRCODE = 'restrict_violation';
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION
+      'asset_version is append-only: DELETE is refused'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+
+  /*
+   * AN UPDATE IS PERMITTED ONLY WHERE `scanStatus` IS THE ONLY DIFFERENCE.
+   *
+   * Compared field by field rather than by rebuilding the row with the new
+   * verdict and testing equality: the row-equality form quietly starts
+   * permitting any column added later, because a new column is equal on both
+   * sides until someone writes it. Naming the immutable fields means a future
+   * column is NOT covered by accident, and the reviewer adding it has to
+   * decide.
+   */
+  IF NEW."id"             IS DISTINCT FROM OLD."id"
+  OR NEW."workspaceId"    IS DISTINCT FROM OLD."workspaceId"
+  OR NEW."brandId"        IS DISTINCT FROM OLD."brandId"
+  OR NEW."assetId"        IS DISTINCT FROM OLD."assetId"
+  OR NEW."versionNumber"  IS DISTINCT FROM OLD."versionNumber"
+  OR NEW."storageKey"     IS DISTINCT FROM OLD."storageKey"
+  OR NEW."checksumSha256" IS DISTINCT FROM OLD."checksumSha256"
+  OR NEW."mimeType"       IS DISTINCT FROM OLD."mimeType"
+  OR NEW."sizeBytes"      IS DISTINCT FROM OLD."sizeBytes"
+  OR NEW."width"          IS DISTINCT FROM OLD."width"
+  OR NEW."height"         IS DISTINCT FROM OLD."height"
+  OR NEW."durationMs"     IS DISTINCT FROM OLD."durationMs"
+  OR NEW."createdByUserId" IS DISTINCT FROM OLD."createdByUserId"
+  OR NEW."createdAt"      IS DISTINCT FROM OLD."createdAt"
+  THEN
+    RAISE EXCEPTION
+      'asset_version is append-only: only scanStatus may change'
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+
+  RETURN NEW;
 END;
 $$;
 

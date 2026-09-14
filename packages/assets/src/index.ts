@@ -59,4 +59,8 @@ export {
 } from './processing';
 export { AssetVersionService, type AssetVersionServiceOptions } from './versions';
 export { AssetDownloadService, type AssetDownloadServiceOptions } from './download';
-export { AssetMaintenanceService, type AssetMaintenanceOptions } from './maintenance';
+export {
+  AssetMaintenanceService,
+  findUnclaimedAssetJobs,
+  type AssetMaintenanceOptions,
+} from './maintenance';
