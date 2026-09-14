@@ -57,6 +57,22 @@ export const STRICT_TENANT_MODELS = [
   'BrandIngestionJob',
   'BrandBrainConversation',
   'BrandBrainMessage',
+  // Phase 5B-1. The Asset Library holds files belonging to the customer:
+  // brand photography, contracts, logo packs, campaign video. Every one of
+  // these carries a non-null workspaceId. Five of the six are additionally
+  // brand-scoped with a NULLABLE brand, because docs/DATABASE.md §4.6 makes a
+  // null brand mean "belongs to the workspace" rather than "belongs to
+  // nobody" — and the composite foreign key still checks every row that DOES
+  // name a brand, because PostgreSQL MATCH SIMPLE exempts only the null case.
+  //
+  // (No apostrophes in this block either: readRegistryList parses it with a
+  // quote-matching regex, so one would silently swallow the names below.)
+  'AssetFolder',
+  'Asset',
+  'AssetVersion',
+  'AssetDerivative',
+  'AssetUploadSession',
+  'AssetProcessingJob',
 ] as const;
 
 /**
