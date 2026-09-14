@@ -280,9 +280,17 @@ export default async function BrandBrainPage({
     kind: documentKind(source.fileName),
     status: source.status,
     statusLabel: t(`bb.source.${source.status}` as MessageKey),
+    /*
+     * A FAILURE IS TRANSLATED, NOT ECHOED.
+     *
+     * `failureMessage` holds a stable reason key, so the customer reads why in
+     * their own language and never reads a parser's own words — which name
+     * offsets, object numbers and library versions, and belong in an operator
+     * log (CLAUDE.md §4 and docs/SECURITY.md).
+     */
     detail:
       source.status === 'FAILED'
-        ? (source.failureMessage ?? '')
+        ? failureText(source.failureMessage, t)
         : source.pageCount
           ? `${source.pageCount} · ${source.chunkCount}`
           : `${source.chunkCount}`,
@@ -320,6 +328,23 @@ export default async function BrandBrainPage({
       />
     </WorkspaceShell>
   );
+}
+
+/**
+ * A stored failure reason, in the reader's language.
+ *
+ * An unrecognised key falls back to the general message rather than printing
+ * the key itself: a reason added on the server before a translation exists must
+ * not surface as `archive_unsafe_entry` on a customer's screen.
+ */
+function failureText(reason: string | null, t: (key: MessageKey) => string): string {
+  if (!reason) return t('bb.failure.extraction_failed');
+  const key = `bb.failure.${reason}` as MessageKey;
+  // `translator` returns undefined for a key the catalogue does not have. The
+  // cast above is what makes that possible, so the check is not defensive
+  // noise — it is the guard the cast removed.
+  const translated = t(key) as string | undefined;
+  return translated ?? t('bb.failure.extraction_failed');
 }
 
 /**

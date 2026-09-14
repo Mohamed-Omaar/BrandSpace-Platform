@@ -1,17 +1,35 @@
 /**
  * Text extraction and chunking.
  *
- * TWO ABSTRACTIONS, ONE REASON. A PDF parser and an OCR engine are both vendor
- * choices nobody has approved, and both are the kind of dependency that is
- * painful to remove once a schema depends on its output. So extraction is an
- * INTERFACE with a deterministic built-in implementation for the formats that
- * need no library (text, CSV, Markdown), and a declared gap for the ones that
- * do.
+ * EXTRACTION IS AN INTERFACE WITH REAL IMPLEMENTATIONS BEHIND IT. Phase 5A
+ * shipped the interface and one built-in extractor for the formats that need no
+ * library, and refused PDF, Word and PowerPoint at upload — which was honest,
+ * and which meant the three formats customers actually have could not be
+ * ingested at all (F-70).
+ *
+ * The implementations now live next to this file, one per family, and each
+ * carries the reasoning for its dependency and its refusals:
+ *
+ *   - `PlainTextExtractor`  — text, Markdown, CSV. No dependency.
+ *   - `DocxExtractor`, `PptxExtractor` — `extract-ooxml.ts`. A bounded ZIP read
+ *     and a scan for one element, rather than a document-conversion library.
+ *   - `PdfExtractor` — `extract-pdf.ts`. Mozilla's pdf.js, configured so it
+ *     cannot compile, cannot fetch, and cannot exceed its budget.
+ *
+ * IMAGES ARE NOT SUPPORTED, deliberately (D-93). See the `allowedMimeTypes`
+ * comment in the `brand-brain` configuration schema for the reasoning.
  *
  * A format with no extractor produces an honest FAILED document with a
  * customer-safe message — never a silently empty one, which would present as
  * "processed, 0 facts found" and teach the customer that Brand Brain does not
  * work.
+ *
+ * EVERY FAILURE REACHES THE CUSTOMER AS A CODE, NEVER AS A LIBRARY'S WORDS. A
+ * parser's error text names offsets, object numbers and internal state; it is
+ * an operator's diagnostic and it is exactly the kind of detail CLAUDE.md §2.3
+ * and docs/SECURITY.md keep off a customer's screen. `ExtractionFailedError`
+ * carries a stable reason key that the dashboard translates, and keeps the
+ * original as a non-enumerable cause for the log.
  */
 
 import type { BrandKnowledgeArea } from '@brandspace/database';
@@ -47,6 +65,58 @@ export class ExtractionUnsupportedError extends Error {
   }
 }
 
+/**
+ * Why one document could not be read.
+ *
+ * `reason` is a STABLE KEY, not a message: the dashboard has a translation for
+ * each one in both languages, so a customer reads "this file looks damaged"
+ * rather than a byte offset. The underlying error is kept as `cause` for the
+ * operator log and is never rendered.
+ */
+export type ExtractionFailureReason =
+  | 'archive_unreadable'
+  | 'archive_unsafe_entry'
+  | 'archive_too_many_entries'
+  | 'archive_entry_too_large'
+  | 'archive_too_large'
+  | 'archive_compression_ratio'
+  | 'document_part_missing'
+  | 'no_text_found'
+  | 'pdf_unreadable'
+  | 'pdf_has_no_text_layer'
+  | 'extraction_timed_out'
+  | 'content_does_not_match_type';
+
+export class ExtractionFailedError extends Error {
+  constructor(
+    public readonly reason: ExtractionFailureReason,
+    cause?: unknown,
+  ) {
+    // The MESSAGE is the key. Nothing derived from the file or from a library
+    // goes into it, because an Error's message is the thing most likely to be
+    // logged, serialised or — the failure this prevents — shown.
+    super(reason);
+    this.name = 'ExtractionFailedError';
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
+ * How much work one document may cost.
+ *
+ * Read from the `brand-brain` configuration domain (CLAUDE.md §2.2); there is
+ * no default written here, because a ceiling depends on the hardware the
+ * workers run on, which is an operator's fact.
+ */
+export interface ExtractionLimits {
+  readonly maxPages: number;
+  readonly maxTextChars: number;
+  readonly maxArchiveEntries: number;
+  readonly maxArchiveBytes: number;
+  readonly maxCompressionRatio: number;
+  readonly timeoutMs: number;
+}
+
 const PLAIN_TEXT_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv']);
 
 /**
@@ -61,8 +131,19 @@ export class PlainTextExtractor implements TextExtractor {
     return PLAIN_TEXT_TYPES.has(mimeType);
   }
 
+  readonly #limits: ExtractionLimits;
+
+  constructor(limits: ExtractionLimits) {
+    this.#limits = limits;
+  }
+
   async extract(input: ExtractionInput): Promise<ExtractedText> {
-    const text = new TextDecoder('utf-8', { fatal: false }).decode(input.bytes);
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(input.bytes);
+    // Bounded like every other format. A 25 MB text file is admissible by the
+    // upload policy and would otherwise be chunked in full.
+    const text = decoded.slice(0, this.#limits.maxTextChars);
+    if (text.trim().length === 0) throw new ExtractionFailedError('no_text_found');
+
     const boundaries: { label: string; startOffset: number }[] = [];
     // Sections from blank-line separation, so a locator says something more
     // useful than a character offset.
@@ -83,7 +164,7 @@ export class PlainTextExtractor implements TextExtractor {
 export class ExtractorRegistry {
   readonly #extractors: TextExtractor[];
 
-  constructor(extractors: readonly TextExtractor[] = [new PlainTextExtractor()]) {
+  constructor(extractors: readonly TextExtractor[]) {
     this.#extractors = [...extractors];
   }
 
@@ -352,4 +433,23 @@ function stableDigest(value: string): string {
 
 function truncate(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+/**
+ * The registry every caller should use.
+ *
+ * One place that decides which formats exist, so the upload allow-list, the
+ * signature check and the extractor set cannot drift apart. Adding a format
+ * means adding an extractor here AND a media type in configuration; doing only
+ * the second produces an honest refusal rather than a stuck document.
+ */
+export async function defaultExtractors(limits: ExtractionLimits): Promise<TextExtractor[]> {
+  const { DocxExtractor, PptxExtractor } = await import('./extract-ooxml');
+  const { PdfExtractor } = await import('./extract-pdf');
+  return [
+    new PlainTextExtractor(limits),
+    new DocxExtractor(limits),
+    new PptxExtractor(limits),
+    new PdfExtractor(limits),
+  ];
 }

@@ -4,9 +4,11 @@ import {
   AREA_DEFINITIONS,
   BrandIngestionService,
   BrandKnowledgeService,
+  ExtractorRegistry,
   TenantBrandBrainPolicySource,
   computeBrandCompletion,
   createObjectStore,
+  defaultExtractors,
   localizedFrom,
   type AreaCompletion,
   type BrandBrainPolicy,
@@ -99,13 +101,20 @@ export async function inBrandBrain<T>(
       ...scoped,
       knowledge: new BrandKnowledgeService({ db: scoped.db, workspaceId }),
       policy: () => brandBrainPolicy(scoped.db),
-      ingestion: async () =>
-        new BrandIngestionService({
+      ingestion: async () => {
+        const resolved = await brandBrainPolicy(scoped.db);
+        return new BrandIngestionService({
           db: scoped.db,
           workspaceId,
           store: objectStore(),
-          policy: (await brandBrainPolicy(scoped.db)).ingestion,
-        }),
+          policy: resolved.ingestion,
+          // Built per call, because the extractors carry the configured limits
+          // and those change when an owner activates a new version. pdf.js is
+          // imported lazily inside `defaultExtractors`, so a request that never
+          // reaches a PDF never loads it.
+          extractors: new ExtractorRegistry(await defaultExtractors(resolved.extraction)),
+        });
+      },
     }),
   );
 }

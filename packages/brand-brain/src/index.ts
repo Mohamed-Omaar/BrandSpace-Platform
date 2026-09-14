@@ -81,21 +81,29 @@ export { InMemoryObjectStore, buildStorageKey, checksumOf, createObjectStore } f
 export type { ObjectStore, StoredObject } from './storage';
 
 export {
+  ExtractionFailedError,
   ExtractionUnsupportedError,
   ExtractorRegistry,
   KeywordFactExtractor,
   PlainTextExtractor,
   chunkText,
+  defaultExtractors,
 } from './extraction';
 export type {
   CandidateFact,
   Chunk,
   ChunkOptions,
   ExtractedText,
+  ExtractionFailureReason,
   ExtractionInput,
+  ExtractionLimits,
   FactExtractor,
   TextExtractor,
 } from './extraction';
+export { DocxExtractor, PptxExtractor } from './extract-ooxml';
+export { PdfExtractor } from './extract-pdf';
+export { checkSignature, detectFormat } from './file-signature';
+export type { DetectedFormat, SignatureCheck } from './file-signature';
 
 export { BrandIngestionService } from './ingestion';
 export type {

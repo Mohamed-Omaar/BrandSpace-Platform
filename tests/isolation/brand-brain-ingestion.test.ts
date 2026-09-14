@@ -1,9 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { zipSync, strToU8 } from 'fflate';
 import { withWorkspace } from '@brandspace/database';
 import {
   BrandIngestionService,
+  ExtractorRegistry,
   InMemoryObjectStore,
+  PlainTextExtractor,
+  defaultExtractors,
+  type ExtractionLimits,
   type IngestionPolicy,
 } from '@brandspace/brand-brain';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
@@ -31,6 +36,28 @@ const POLICY: IngestionPolicy = {
   maxChunksPerDocument: 50,
   minimumCandidateConfidenceMilli: 400,
 };
+
+/** Generous: these tests are about the pipeline, not about the ceilings. */
+const LIMITS: ExtractionLimits = {
+  maxPages: 50,
+  maxTextChars: 200_000,
+  maxArchiveEntries: 256,
+  maxArchiveBytes: 8 * 1024 * 1024,
+  maxCompressionRatio: 200,
+  timeoutMs: 30_000,
+};
+
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/** Every type the default extractors claim, so the wide policy admits them. */
+const ALL_SUPPORTED_TYPES = [
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  DOCX_TYPE,
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/pdf',
+];
 
 const DOCUMENT = [
   'Our mission is to help independent retailers compete with national chains.',
@@ -69,6 +96,7 @@ async function inA<T>(
           workspaceId: fixtures.a.workspaceId,
           store,
           policy: POLICY,
+          extractors: new ExtractorRegistry([new PlainTextExtractor(LIMITS)]),
         }),
         db,
         store,
@@ -431,5 +459,209 @@ describe('failure states are honest and safe', () => {
     expect(status.doc).toBe('PROCESSING');
     expect(status.job).toBe('QUEUED');
     expect(status.next).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real documents, through the whole pipeline (F-70)
+// ---------------------------------------------------------------------------
+
+/**
+ * The formats customers actually have, ingested end to end.
+ *
+ * Phase 5A refused PDF, Word and PowerPoint at upload because nothing could
+ * read them. That was the honest behaviour for a capability that did not exist,
+ * and it meant the three formats a brand's material is usually in could not
+ * reach Brand Brain at all. These assert the whole path: signature check,
+ * extraction, chunking, locators, and candidates proposed for review — and that
+ * a hostile file is refused somewhere along it rather than processed.
+ *
+ * The `extractors` here are the DEFAULT set, not a stub. A test that passed
+ * with a fake extractor would prove nothing about the formats it names.
+ */
+
+const WIDE_POLICY: IngestionPolicy = { ...POLICY, allowedMimeTypes: ALL_SUPPORTED_TYPES };
+
+async function inAWithRealExtractors<T>(
+  fn: (svc: BrandIngestionService, db: ScopedDb, store: InMemoryObjectStore) => Promise<T>,
+): Promise<T> {
+  const store = new InMemoryObjectStore();
+  const extractors = new ExtractorRegistry(await defaultExtractors(LIMITS));
+  return withWorkspace(
+    fixtures.a.workspaceId,
+    async (db) =>
+      fn(
+        new BrandIngestionService({
+          db,
+          workspaceId: fixtures.a.workspaceId,
+          store,
+          policy: WIDE_POLICY,
+          extractors,
+        }),
+        db,
+        store,
+      ),
+    { prisma: app },
+  );
+}
+
+function docxBytes(
+  paragraphs: readonly string[],
+  extra: Record<string, Uint8Array> = {},
+): Uint8Array {
+  const body = paragraphs.map((text) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`).join('');
+  return zipSync({
+    '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+    'word/document.xml': strToU8(
+      `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>${body}</w:body></w:document>`,
+    ),
+    ...extra,
+  });
+}
+
+function pdfBytes(lines: readonly string[]): Uint8Array {
+  const content = lines
+    .map((line, index) => `BT /F1 12 Tf 20 ${180 - index * 20} Td (${line}) Tj ET`)
+    .join('\n');
+  return new Uint8Array(
+    Buffer.from(
+      `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length ${content.length}>>stream
+${content}
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R>>
+`,
+      'latin1',
+    ),
+  );
+}
+
+describe('the formats customers actually have', () => {
+  it('reads a Word document and proposes candidates from it', async () => {
+    const result = await inAWithRealExtractors(async (svc) => {
+      const { job } = await svc.upload({
+        brandId: fixtures.a.brandId,
+        fileName: 'brand-guidelines.docx',
+        mimeType: DOCX_TYPE,
+        bytes: docxBytes([
+          'Our mission is to help independent retailers compete with national chains.',
+          'Our audience is founders of small retail businesses in the Gulf region.',
+          'We never make price comparisons against named competitors.',
+        ]),
+        idempotencyKey: nextKey(),
+        actorUserId: fixtures.a.userId,
+      });
+      return svc.process(job.id);
+    });
+
+    expect(result.status).toBe('READY');
+    expect(result.chunksCreated).toBeGreaterThan(0);
+    expect(result.candidatesCreated).toBeGreaterThan(0);
+  });
+
+  it('reads a PDF and records a page locator a customer can check', async () => {
+    const { result, chunks } = await inAWithRealExtractors(async (svc, db) => {
+      const { document, job } = await svc.upload({
+        brandId: fixtures.a.brandId,
+        fileName: 'company-profile.pdf',
+        mimeType: 'application/pdf',
+        bytes: pdfBytes([
+          'Our mission is to make brand knowledge usable',
+          'Our audience is small retail founders',
+        ]),
+        idempotencyKey: nextKey(),
+        actorUserId: fixtures.a.userId,
+      });
+      const processed = await svc.process(job.id);
+      return {
+        result: processed,
+        chunks: await db.brandSourceChunk.findMany({
+          where: { sourceDocumentId: document.id },
+          orderBy: { chunkIndex: 'asc' },
+        }),
+      };
+    });
+
+    expect(result.status).toBe('READY');
+    expect(chunks.length).toBeGreaterThan(0);
+    // D-65: "a citation the customer cannot check is not evidence."
+    expect(chunks[0]?.locator).toMatch(/^page \d+$/);
+  });
+
+  it('refuses a file whose content does not match its declared type', async () => {
+    // The rename attack: a PDF called `.docx` would otherwise reach the ZIP
+    // reader, which is "feed the wrong parser attacker-controlled bytes".
+    await expect(
+      inAWithRealExtractors((svc) =>
+        svc.upload({
+          brandId: fixtures.a.brandId,
+          fileName: 'disguised.docx',
+          mimeType: DOCX_TYPE,
+          bytes: pdfBytes(['nothing to see']),
+          idempotencyKey: nextKey(),
+          actorUserId: fixtures.a.userId,
+        }),
+      ),
+    ).rejects.toThrow(/do not match its type/i);
+  });
+
+  it('fails a macro-bearing document TERMINALLY, with a reason key and no retry', async () => {
+    const { result, job } = await inAWithRealExtractors(async (svc, db) => {
+      const { job: queued } = await svc.upload({
+        brandId: fixtures.a.brandId,
+        fileName: 'macro.docx',
+        mimeType: DOCX_TYPE,
+        bytes: docxBytes(['Harmless looking text about our mission.'], {
+          'word/vbaProject.bin': strToU8('macro payload'),
+        }),
+        idempotencyKey: nextKey(),
+        actorUserId: fixtures.a.userId,
+      });
+      const processed = await svc.process(queued.id);
+      return {
+        result: processed,
+        job: await db.brandIngestionJob.findUniqueOrThrow({ where: { id: queued.id } }),
+      };
+    });
+
+    expect(result.status).toBe('FAILED');
+    // A REASON KEY, never a sentence and never a parser's own words.
+    expect(result.failureMessage).toBe('archive_unsafe_entry');
+    // TERMINAL on the first attempt: retrying a bad file costs another parse
+    // and reaches the same answer, while the customer watches PROCESSING.
+    expect(job.stage).toBe('FAILED');
+    expect(job.attempts).toBe(1);
+  });
+
+  it('says a scanned PDF has no text layer rather than recording an empty one', async () => {
+    const result = await inAWithRealExtractors(async (svc) => {
+      const { job } = await svc.upload({
+        brandId: fixtures.a.brandId,
+        fileName: 'scan.pdf',
+        mimeType: 'application/pdf',
+        bytes: new Uint8Array(
+          Buffer.from(
+            `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj
+trailer<</Root 1 0 R>>
+`,
+            'latin1',
+          ),
+        ),
+        idempotencyKey: nextKey(),
+        actorUserId: fixtures.a.userId,
+      });
+      return svc.process(job.id);
+    });
+
+    expect(result.status).toBe('FAILED');
+    expect(result.failureMessage).toBe('pdf_has_no_text_layer');
   });
 });

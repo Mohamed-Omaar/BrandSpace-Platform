@@ -7,21 +7,24 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { type Clock, systemClock } from '@brandspace/shared';
+import type { ExtractorRegistry } from './extraction';
 import {
   chunkText,
+  ExtractionFailedError,
   ExtractionUnsupportedError,
-  ExtractorRegistry,
   KeywordFactExtractor,
   type FactExtractor,
 } from './extraction';
 import { buildStorageKey, checksumOf, type ObjectStore } from './storage';
 import {
+  contentTypeMismatch,
   documentNotFound,
   duplicateUpload,
   fileTooLarge,
   storageLimitReached,
   unsupportedFileType,
 } from './errors';
+import { checkSignature } from './file-signature';
 
 /**
  * Source ingestion — upload, extract, chunk, propose.
@@ -57,7 +60,12 @@ export interface IngestionServiceOptions {
   readonly workspaceId: string;
   readonly store: ObjectStore;
   readonly policy: IngestionPolicy;
-  readonly extractors?: ExtractorRegistry;
+  /**
+   * REQUIRED. There is no default any more: the extractors need the configured
+   * limits, and a default built from nothing would be a second set of ceilings
+   * that an operator cannot change (CLAUDE.md §2.2).
+   */
+  readonly extractors: ExtractorRegistry;
   readonly factExtractor?: FactExtractor;
   readonly clock?: Clock;
 }
@@ -71,6 +79,19 @@ export interface UploadInput {
   readonly idempotencyKey: string;
   readonly actorUserId: string;
 }
+
+/**
+ * The failures where a second attempt could plausibly succeed.
+ *
+ * Everything absent from this set is a property of the file and goes terminal
+ * on the first attempt.
+ */
+const RETRYABLE_REASONS: ReadonlySet<string> = new Set([
+  'extraction_failed',
+  'extraction_timed_out',
+  'object_missing',
+  'stuck_timeout',
+]);
 
 export interface ProcessResult {
   readonly documentId: string;
@@ -94,7 +115,7 @@ export class BrandIngestionService {
     this.#workspaceId = options.workspaceId;
     this.#store = options.store;
     this.#policy = options.policy;
-    this.#extractors = options.extractors ?? new ExtractorRegistry();
+    this.#extractors = options.extractors;
     this.#facts = options.factExtractor ?? new KeywordFactExtractor();
     this.#clock = options.clock ?? systemClock;
   }
@@ -111,6 +132,21 @@ export class BrandIngestionService {
   ): Promise<{ document: BrandSourceDocument; job: BrandIngestionJob }> {
     if (!this.#policy.allowedMimeTypes.includes(input.mimeType)) throw unsupportedFileType();
     if (input.bytes.byteLength > this.#policy.maxFileBytes) throw fileTooLarge();
+
+    /*
+     * THE BYTES DECIDE WHAT THE FILE IS, NOT THE CALLER.
+     *
+     * `mimeType` arrives from the browser, which derives it from the file's
+     * EXTENSION, and from a scripted upload, which can simply assert it. The
+     * allow-list above is the right use for it — may this workspace upload this
+     * kind of thing — and the wrong basis for choosing a parser. Feeding a PDF
+     * to the ZIP reader because the file was named `.docx` is the oldest shape
+     * of upload bug there is, so the signature has to agree before anything is
+     * stored. See file-signature.ts.
+     */
+    const signature = checkSignature(input.mimeType, input.bytes);
+    if (!signature.ok) throw contentTypeMismatch();
+
     if (!this.#extractors.supports(input.mimeType)) {
       // Configuration allows the type but nothing can read it. Refusing at the
       // door is honest; accepting would produce a document stuck in FAILED and
@@ -388,16 +424,34 @@ export class BrandIngestionService {
        * operators.
        */
       const unsupported = error instanceof ExtractionUnsupportedError;
-      const terminal = unsupported || job.attempts + 1 >= job.maxAttempts;
-      return this.#fail(
-        job.id,
-        document.id,
-        unsupported
-          ? 'This file type could not be read.'
-          : 'This file could not be processed. Try uploading it again.',
-        unsupported ? 'unsupported_format' : 'extraction_failed',
-        terminal,
-      );
+      /*
+       * A REASON KEY, NOT A SENTENCE.
+       *
+       * This used to store English prose in `failureMessage`, which the screen
+       * then printed verbatim — hard-coded user-facing copy that an Arabic
+       * reader saw in English (CLAUDE.md §4). It now stores a stable key the
+       * dashboard translates, and the keys distinguish failures a customer can
+       * act on: a damaged archive, a scan with no text layer and a file that is
+       * simply too big all deserve different advice.
+       */
+      const reason: string = unsupported
+        ? 'unsupported_format'
+        : error instanceof ExtractionFailedError
+          ? error.reason
+          : 'extraction_failed';
+
+      /*
+       * RETRYING A BAD FILE IS NOT A FIX. A malformed archive, a PDF with no
+       * text layer and a format nothing can read are all properties of the file
+       * itself: a second attempt costs the platform another parse and reaches
+       * the same answer a minute later, while the customer watches a document
+       * that says PROCESSING and never resolves. Only genuinely transient
+       * failures — storage, a timeout — earn a retry.
+       */
+      const terminal =
+        unsupported || !RETRYABLE_REASONS.has(reason) || job.attempts + 1 >= job.maxAttempts;
+
+      return this.#fail(job.id, document.id, reason, reason, terminal);
     }
   }
 
@@ -442,6 +496,7 @@ export class BrandIngestionService {
   async #fail(
     jobId: string,
     documentId: string,
+    /** A stable reason key the dashboard translates — never a sentence. */
     customerMessage: string,
     internalCode: string,
     terminal: boolean,

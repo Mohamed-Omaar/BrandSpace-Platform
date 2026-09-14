@@ -38,6 +38,14 @@ describe('the configuration document is mapped completely', () => {
         maxChunksPerDocument: 777,
       },
       knowledge: { reviewIntervalDays: 88, minimumCandidateConfidenceMilli: 999 },
+      extraction: {
+        maxPages: 21,
+        maxTextChars: 22_000,
+        maxArchiveEntries: 23,
+        maxArchiveBytes: 24_000,
+        maxCompressionRatio: 25,
+        timeoutMs: 26_000,
+      },
       chat: {
         retentionDays: 12,
         maxContextItems: 13,
@@ -58,6 +66,14 @@ describe('the configuration document is mapped completely', () => {
         maxChunksPerDocument: 777,
         minimumCandidateConfidenceMilli: 999,
       },
+      extraction: {
+        maxPages: 21,
+        maxTextChars: 22_000,
+        maxArchiveEntries: 23,
+        maxArchiveBytes: 24_000,
+        maxCompressionRatio: 25,
+        timeoutMs: 26_000,
+      },
       staleness: { reviewIntervalDays: 88 },
       chat: {
         retentionDays: 12,
@@ -76,6 +92,8 @@ describe('the configuration document is mapped completely', () => {
     expect(policy.chat.retentionDays).toBeGreaterThan(0);
     expect(policy.ingestion.allowedMimeTypes.length).toBeGreaterThan(0);
     expect(policy.staleness.reviewIntervalDays).toBeGreaterThan(0);
+    expect(policy.extraction.maxPages).toBeGreaterThan(0);
+    expect(policy.extraction.maxCompressionRatio).toBeGreaterThan(1);
   });
 });
 
@@ -101,6 +119,11 @@ describe('no application source carries its own copy of a policy value', () => {
     'maxContextChunks',
     'maxContextChars',
     'retryBackoffSeconds',
+    'maxPages',
+    'maxTextChars',
+    'maxArchiveEntries',
+    'maxArchiveBytes',
+    'maxCompressionRatio',
   ];
 
   /** `retentionDays: 90` and `maxFileBytes: 25 * 1024 * 1024` both count. */

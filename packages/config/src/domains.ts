@@ -548,6 +548,21 @@ const brandBrainSchema = z.object({
        * Accepted media types. A list rather than a wildcard: extraction has to
        * KNOW a format to read it, and admitting one it cannot parse produces a
        * document that sits in FAILED forever.
+       *
+       * IMAGES ARE NOT ON THIS LIST, and that is a decision rather than an
+       * omission (D-93). The only way to get text out of a PNG or a JPEG is
+       * OCR, and no OCR option clears the bar this feature sets: the maintained
+       * JavaScript engine fetches its language model over the network at run
+       * time, its output is not reproducible across versions — which D-65
+       * requires, because a citation recorded today must still point at the
+       * same text next year — and its Arabic accuracy is far below its Latin
+       * accuracy, so a bilingual product would be quietly writing mistranscribed
+       * Arabic into approved brand knowledge. Refusing the upload is the honest
+       * answer until an option exists that does not have those properties.
+       *
+       * An operator CAN add a type here, and extraction will then refuse it at
+       * ingest with a customer-safe message rather than accepting a document it
+       * cannot read.
        */
       allowedMimeTypes: z
         .array(z.string().min(1))
@@ -558,8 +573,6 @@ const brandBrainSchema = z.object({
           'text/plain',
           'text/csv',
           'text/markdown',
-          'image/png',
-          'image/jpeg',
         ]),
       maxFileBytes: z
         .number()
@@ -582,6 +595,51 @@ const brandBrainSchema = z.object({
       chunkOverlapChars: z.number().int().min(0).max(2_000).default(150),
       /** Ceiling on chunks per document, so one huge upload cannot dominate. */
       maxChunksPerDocument: z.number().int().min(1).default(400),
+    })
+    .default({}),
+
+  /*
+   * EXTRACTION BOUNDS (Phase 5B).
+   *
+   * Every one of these exists because a customer upload is HOSTILE INPUT until
+   * proven otherwise, and because the cost of parsing it is paid by the whole
+   * platform. A PDF can declare fifty thousand pages; a 40 KB .docx can expand
+   * to gigabytes; an XML part can nest until a scanner gives up. Unbounded, any
+   * of those is a denial of service that one customer can aim at every other.
+   *
+   * They are configuration rather than constants for the usual reason: the
+   * right ceiling depends on the hardware the workers run on, which is an
+   * operator's fact and not a developer's (CLAUDE.md §2.2).
+   */
+  extraction: z
+    .object({
+      /** Pages read from one PDF. Pages past this are not read at all. */
+      maxPages: z.number().int().min(1).max(5_000).default(300),
+      /** Characters kept from one document, across every page or slide. */
+      maxTextChars: z.number().int().min(1_000).default(2_000_000),
+      /** Entries examined in one OOXML archive. */
+      maxArchiveEntries: z.number().int().min(1).max(10_000).default(512),
+      /** Total uncompressed bytes read from one archive. */
+      maxArchiveBytes: z
+        .number()
+        .int()
+        .min(1_024)
+        .default(64 * 1024 * 1024),
+      /**
+       * Uncompressed-to-compressed ratio at which an archive is refused.
+       *
+       * A zip bomb IS this number: 42.zip is roughly 4,500,000:1. Real Office
+       * documents sit between 2:1 and 20:1, so 200 refuses the attack with a
+       * wide margin above anything legitimate.
+       */
+      maxCompressionRatio: z.number().int().min(2).max(10_000).default(200),
+      /** Wall-clock ceiling on extracting one document. */
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(10 * 60_000)
+        .default(60_000),
     })
     .default({}),
 

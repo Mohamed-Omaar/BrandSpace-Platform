@@ -5,7 +5,9 @@ import { ConfigurationService, type ConfigActor } from '@brandspace/config';
 import {
   BrandIngestionService,
   BrandKnowledgeService,
+  ExtractorRegistry,
   InMemoryObjectStore,
+  PlainTextExtractor,
   TenantBrandBrainPolicySource,
   resolveBrandBrainPolicy,
 } from '@brandspace/brand-brain';
@@ -253,6 +255,8 @@ describe('the configured policy changes what the services actually do', () => {
           workspaceId: fixtures.a.workspaceId,
           store,
           policy: policy.ingestion,
+          // The CONFIGURED limits, so this too would change with an activation.
+          extractors: new ExtractorRegistry([new PlainTextExtractor(policy.extraction)]),
         });
         return ingestion.upload({
           brandId: fixtures.a.brandId,

@@ -13,11 +13,13 @@
     "build": "tsc --emitDeclarationOnly --declarationDir dist"
   },
   "dependencies": {
-    "@brandspace/shared": "workspace:*",
-    "@brandspace/database": "workspace:*",
-    "@brandspace/config": "workspace:*",
-    "@brandspace/entitlements": "workspace:*",
     "@brandspace/ai-gateway": "workspace:*",
+    "@brandspace/config": "workspace:*",
+    "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/shared": "workspace:*",
+    "fflate": "0.8.3",
+    "pdfjs-dist": "6.3.289",
     "zod": "3.25.76"
   },
   "devDependencies": {

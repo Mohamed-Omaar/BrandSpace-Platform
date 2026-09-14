@@ -5,6 +5,7 @@ import {
   type Environment,
 } from '@brandspace/config';
 import type { ChatPolicy } from './chat';
+import type { ExtractionLimits } from './extraction';
 import type { IngestionPolicy } from './ingestion';
 import type { StalenessPolicy } from './knowledge';
 
@@ -38,6 +39,7 @@ export const BRAND_BRAIN_CONFIG_DOMAIN = 'brand-brain';
 
 export interface BrandBrainPolicy {
   readonly ingestion: IngestionPolicy;
+  readonly extraction: ExtractionLimits;
   readonly staleness: StalenessPolicy;
   readonly chat: ChatPolicy;
   /** An ingestion job older than this is stuck, and the sweep reconciles it. */
@@ -62,6 +64,14 @@ export function brandBrainPolicyFrom(document: BrandBrainConfig): BrandBrainPoli
       chunkOverlapChars: document.ingestion.chunkOverlapChars,
       maxChunksPerDocument: document.ingestion.maxChunksPerDocument,
       minimumCandidateConfidenceMilli: document.knowledge.minimumCandidateConfidenceMilli,
+    },
+    extraction: {
+      maxPages: document.extraction.maxPages,
+      maxTextChars: document.extraction.maxTextChars,
+      maxArchiveEntries: document.extraction.maxArchiveEntries,
+      maxArchiveBytes: document.extraction.maxArchiveBytes,
+      maxCompressionRatio: document.extraction.maxCompressionRatio,
+      timeoutMs: document.extraction.timeoutMs,
     },
     staleness: { reviewIntervalDays: document.knowledge.reviewIntervalDays },
     chat: {

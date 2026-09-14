@@ -55,6 +55,21 @@ export function unsupportedFileType(): AppError {
   return new AppError('VALIDATION_FAILED', 'This file type is not supported.');
 }
 
+/**
+ * The file's content is not what the caller said it was.
+ *
+ * A distinct error from "unsupported type", and worth keeping distinct: this
+ * one usually means a renamed file or a mistaken extension, which is a thing
+ * the customer can fix, and occasionally means someone trying to reach a parser
+ * they were not offered. Neither is served by the vaguer message.
+ */
+export function contentTypeMismatch(): AppError {
+  return new AppError(
+    'VALIDATION_FAILED',
+    "This file's contents do not match its type. It may have been renamed.",
+  );
+}
+
 export function fileTooLarge(): AppError {
   return new AppError('VALIDATION_FAILED', 'This file is larger than the allowed size.');
 }
