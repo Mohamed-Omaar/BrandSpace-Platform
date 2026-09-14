@@ -179,7 +179,35 @@ export default defineConfig({
     ? [['dot'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
     : [['list']],
   timeout: 30_000,
-  expect: { timeout: 10_000 },
+  expect: {
+    timeout: 10_000,
+    toHaveScreenshot: {
+      /*
+       * TIGHT ON PURPOSE. A generous threshold turns a visual test into a
+       * formality: the Phase 5A orb differed from the approved demo in its
+       * container, its centre, its nodes and its chat placement, and a 20%
+       * allowance would have called that a match.
+       *
+       * `maxDiffPixelRatio` at 1% absorbs font rasterisation between machines
+       * without absorbing a moved element; `threshold` is per-pixel colour
+       * tolerance, kept low for the same reason.
+       */
+      maxDiffPixelRatio: 0.01,
+      /*
+       * PER-PIXEL COLOUR TOLERANCE, and it has to be TIGHT.
+       *
+       * This started at 0.15 and a planted defect proved the number wrong: a
+       * pale lavender container behind the orb — the exact Phase 5A defect —
+       * sat inside that tolerance and the comparison called it a match. 0.05
+       * still absorbs antialiasing, and refuses a pale fill that is not there
+       * in the baseline.
+       */
+      threshold: 0.05,
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'device',
+    },
+  },
 
   use: {
     trace: 'retain-on-failure',
@@ -205,7 +233,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -215,7 +243,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -293,6 +321,32 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * VISUAL PARITY against the pinned demo — docs/UI-FIDELITY-CONTRACT.md §5.
+       *
+       * Its own project because it needs settings the functional suites must
+       * not have: reduced motion (so the orb draws one static frame rather than
+       * a different one every millisecond), a fixed device scale factor, and a
+       * comparison threshold tight enough that a moved element fails.
+       *
+       * It signs in as the VISUAL FIXTURE — a workspace whose Brand Brain is
+       * reset to a fixed state by `pnpm e2e:seed` — so the page it photographs
+       * is the same on every run. Serial, because it drives one workspace.
+       */
+      name: 'brand-brain-visual',
+      testMatch: /brand-brain-visual\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        // A fixed scale, so a baseline taken on one machine is comparable on
+        // another. Without it a retina runner produces images twice the size.
+        deviceScaleFactor: 1,
+        reducedMotion: 'reduce',
         launchOptions,
       },
     },

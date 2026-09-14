@@ -126,8 +126,28 @@ Not by looking at a screenshot and forming an opinion:
 - **DOM geometry assertions.** `tests/e2e/brand-brain-visual.spec.ts` measures the real rendered
   elements against the demo's own values — stage height, centre diameter, node diameter, hero column
   ratio — and fails on material drift.
+- **DOM geometry, against the demo's own numbers.** `tests/e2e/brand-brain-visual.spec.ts` measures the
+  rendered elements — stage height and background, centre diameter and fill, node diameter and shape,
+  hero column ratio and padding, node and card counts, the chat's position inside the hero, the drawer's
+  side in RTL — against values transcribed from the pinned snapshot. They are duplicated in the test
+  rather than imported from the stylesheet on purpose: a test that reads its expectations from the thing
+  under test asserts nothing. Each assertion names the Phase 5A defect it would have caught.
+- **A deterministic fixture.** `tests/e2e/seed-visual.ts` provisions a workspace whose Brand Brain is
+  RESET to a fixed state on every seed. The functional suites deliberately leave state behind, and a
+  visual test pointed at their workspace would photograph a different page every run — which makes
+  re-approving the baseline the only way to stay green, and that is the failure this section forbids.
+  The test asserts the page against the numbers the seed recorded, so fixture drift fails as fixture
+  drift.
 - **Numerical screenshot comparison.** Playwright snapshot assertions against committed baselines, with
-  animation frozen and dynamic content masked.
+  motion reduced to a single static frame (D-86), the orb's canvas masked — its particle field is seeded
+  randomly and its rotation comes from a frame timestamp, so it is the one genuinely non-deterministic
+  thing on the page — and a 1% pixel-ratio tolerance, tight enough that a moved element fails.
+
+  This half is skipped where `BRANDSPACE_VISUAL_BASELINE=0`, and the reason is worth stating rather than
+  hiding: the page uses a SYSTEM font stack, and two machines with different fonts installed rasterise
+  the same layout differently. A baseline that must be re-approved whenever the runner image changes
+  teaches exactly the habit the rule above forbids. So the environment-independent half is what gates
+  the build, and the pixel half is a tight check run where its baselines were produced.
 
 A baseline is never updated to make a failing test pass. It changes only when §3's pinned commit
 changes or an owner authorises a deviation under rule 9.

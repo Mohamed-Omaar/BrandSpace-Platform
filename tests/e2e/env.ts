@@ -46,6 +46,35 @@ export function loadE2eEnv(): void {
  */
 export const E2E_CREDENTIALS_FILE = path.join(repoRoot, '.e2e-admin.json');
 
+/**
+ * Where the VISUAL fixture writes its own throwaway account.
+ *
+ * A separate file because it describes a separate thing: a workspace whose
+ * Brand Brain content is reset to a fixed state on every seed, so a screenshot
+ * comparison is about the design rather than about whatever the functional
+ * tests happened to leave behind. Same rules — generated per run, git-ignored,
+ * mode 0600, worthless a minute later.
+ */
+export const E2E_VISUAL_FILE = path.join(repoRoot, '.e2e-visual.json');
+
+export interface E2eVisualFixture {
+  readonly email: string;
+  readonly password: string;
+  readonly workspaceSlug: string;
+  readonly brandName: string;
+  /**
+   * What the fixture is built to put on the screen.
+   *
+   * Recorded by the seeder rather than written by hand, and ASSERTED by the
+   * visual test against the rendered page. A change to the completion rule or
+   * to an area's minimum then fails a test that says so, instead of quietly
+   * moving a baseline.
+   */
+  readonly knowledgeItems: number;
+  readonly sourceDocuments: number;
+  readonly pendingCandidates: number;
+}
+
 export interface E2eAdminCredentials {
   readonly email: string;
   readonly password: string;
