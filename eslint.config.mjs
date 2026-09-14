@@ -17,6 +17,10 @@ const ALLOWED_IMPORTS = {
   // auth needs secrets to resolve the TOTP seed at MFA verification.
   auth: ['shared', 'database', 'secrets'],
   ui: ['shared'],
+  // The object-storage boundary and the signed-download grant. `shared` only:
+  // it is infrastructure, and a driver that could reach the database or a
+  // domain package would stop being swappable for a vendor adapter.
+  storage: ['shared'],
   // Queue definitions and the dispatch client. `shared` only: a producer must
   // be able to import this without pulling the database or the domain packages
   // in, and the payloads are pointers rather than data (payloads.ts).
@@ -26,7 +30,12 @@ const ALLOWED_IMPORTS = {
   'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
   // Brand Brain reads configuration, enforces entitlements, and routes every
   // AI operation through the gateway rather than touching a provider itself.
-  'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway'],
+  'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway', 'storage'],
+  // The Asset Library. It reads configuration, enforces entitlements and
+  // quotas, and reaches object storage through the same boundary Brand Brain
+  // uses. NOT `ai-gateway`: nothing in this phase generates anything, and an
+  // import nobody needs is a dependency somebody later uses.
+  assets: ['shared', 'database', 'config', 'entitlements', 'storage'],
   'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };

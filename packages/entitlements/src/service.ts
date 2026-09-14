@@ -2,7 +2,7 @@
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
-import type { ConfigurationService } from '@brandspace/config';
+import { parseConfigPayload, type ConfigurationService } from '@brandspace/config';
 import {
   resolveEntitlement,
   validateOverride,
@@ -137,10 +137,30 @@ export class TenantCatalogueSource implements CatalogueSource {
     const row = await this.#prisma.entitlementCatalogueSnapshot.findUnique({
       where: { domain_environment: { domain, environment: this.#environment } },
     });
-    // No snapshot yet means nothing has been activated for this domain. An
-    // empty catalogue grants nothing, which is the correct answer before the
-    // owner has approved any plan — not an error to paper over.
-    return (row?.payload as Record<string, unknown> | undefined) ?? {};
+    /*
+     * PARSED, NOT CAST — and the difference is a customer-facing crash.
+     *
+     * `createDraft` stores the payload it is handed, and the precedence engine
+     * reads fields like `flag.disabledForWorkspaces` positionally. A payload
+     * that omits one — an operator editing a flag in Platform Admin and
+     * supplying only the fields they care about, a script, a partial API write —
+     * therefore reached `resolveOwnRules` with `undefined` where an array was
+     * expected and threw `Cannot read properties of undefined`, which the
+     * dashboard surfaced as "this page couldn't load" on every screen that
+     * resolves an entitlement.
+     *
+     * Parsing applies the schema's own defaults, so a document written before a
+     * field existed — or without one — comes back COMPLETE. It is the same
+     * mechanism `TenantBrandBrainPolicySource` and `TenantAssetPolicySource`
+     * already use, and this was the one projection reader that did not.
+     * Found by the Phase 5B-1 end-to-end run.
+     *
+     * No snapshot yet still means nothing has been activated for this domain:
+     * parsing `{}` yields the schema's defaults, which grant nothing. That is
+     * the correct answer before the owner has approved any plan, not an error
+     * to paper over.
+     */
+    return parseConfigPayload(domain, row?.payload ?? {}) as unknown as Record<string, unknown>;
   }
 
   async versionId(domain: 'entitlements' | 'plans' | 'feature-flags'): Promise<string | null> {

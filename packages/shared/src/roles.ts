@@ -91,6 +91,16 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'brand_brain.upload',
       'brand_brain.review',
       'brand_brain.chat',
+      // Phase 5B-1. Everything the library offers except permanent deletion,
+      // which stays with the admins exactly as `brand_brain.delete` does.
+      'assets.read',
+      'assets.use',
+      'assets.upload',
+      'assets.edit',
+      'assets.manage_taxonomy',
+      'assets.version',
+      'assets.archive',
+      'assets.restore',
     ],
   },
   {
@@ -109,6 +119,15 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'brand_brain.edit',
       'brand_brain.upload',
       'brand_brain.chat',
+      // Phase 5B-1. Creates content, so uploads and uses assets and keeps the
+      // library tidy. NOT `version`: replacing the bytes behind an asset other
+      // content already references is a heavier act than adding a new one, and
+      // NOT `archive`, `restore` or `delete`.
+      'assets.read',
+      'assets.use',
+      'assets.upload',
+      'assets.edit',
+      'assets.manage_taxonomy',
     ],
   },
   {
@@ -123,6 +142,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'brand_brain.read',
       'brand_brain.edit',
       'brand_brain.chat',
+      // Phase 5B-1. docs/SECURITY.md §4.3 marks "Upload / manage assets" as
+      // CONDITIONAL for this role — "own" only. A conditional grant needs the
+      // condition ENFORCED, not assumed, and per-actor ownership scoping does
+      // not exist yet, so upload is not granted (the F-15 rule: an ungranted
+      // capability is recoverable, an ungated one is not). Reading and using
+      // approved assets is unconditional and is granted.
+      'assets.read',
+      'assets.use',
     ],
   },
   {
@@ -137,6 +164,17 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'brand.read',
       'brand_brain.read',
       'brand_brain.chat',
+      // Phase 5B-1. docs/SECURITY.md §4.3 gives this role "Upload / manage
+      // assets" OUTRIGHT — it is the role whose work the library exists for.
+      // Deletion still stays with the admins.
+      'assets.read',
+      'assets.use',
+      'assets.upload',
+      'assets.edit',
+      'assets.manage_taxonomy',
+      'assets.version',
+      'assets.archive',
+      'assets.restore',
     ],
   },
   {
@@ -154,6 +192,11 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'brand.read',
       'brand_brain.read',
       'brand_brain.review',
+      // Phase 5B-1. Judging a post means seeing the image attached to it, so
+      // the library is readable. Nothing else: docs/SECURITY.md §4.3 gives this
+      // role no asset authority at all, and `use` is a content decision rather
+      // than an approval one.
+      'assets.read',
     ],
   },
   {
@@ -171,6 +214,10 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // question mark, and a read-only role must not be able to spend money.
       'brand.read',
       'brand_brain.read',
+      // Phase 5B-1. READ-ONLY, and `assets.use` is deliberately withheld: it is
+      // the capability other modules will ask for before putting a file in
+      // front of the public, which is not something a read-only role does.
+      'assets.read',
     ],
   },
   {

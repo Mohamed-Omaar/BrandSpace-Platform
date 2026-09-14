@@ -9,11 +9,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/assets": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/jobs": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/storage": "workspace:*",
     "bullmq": "5.81.4",
     "ioredis": "5.11.1"
   },

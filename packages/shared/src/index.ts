@@ -2,6 +2,7 @@ export * from './brand-scope';
 export * from './clock';
 export * from './env';
 export * from './errors';
+export * from './file-signature';
 export * from './logger';
 export * from './permissions';
 export * from './public-error';

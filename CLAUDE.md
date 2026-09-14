@@ -169,6 +169,35 @@ or changing one. In short:
 Phase 5A is the cautionary case: it passed every automated check while re-interpreting the orb, and was
 accessible, correct, well-tested and wrong.
 
+### 4.2 When a screen has no approved reference — the design-system extension
+
+**A missing reference is not a licence to invent, and it is not a reason to stop.** Some required
+product screens have no approved demo at all, or have only a "future product preview" placeholder.
+Asset Library was the first. The rule, binding from Phase 5B-1 onward:
+
+1. **Where an approved, complete reference exists, port it mechanically.** §4.1 and
+   `docs/UI-FIDELITY-CONTRACT.md` govern unchanged. Nothing below relaxes them.
+2. **Where none exists, BUILD THE SCREEN.** Do not stop, and do not ask the owner to design every
+   screen before the functional work can land. Missing route artwork must never block delivery.
+3. **Build it from the platform's own established visual language** — the tokens, typography, spacing
+   and grid, cards and surfaces, buttons and controls, toolbars, search and filters, drawers and
+   modals, empty/loading/error states, motion and interaction patterns, and the RTL/LTR and
+   responsive behaviour that already ship in `packages/ui` and the approved routes.
+4. **Reuse and compose before creating.** A new component or visual treatment is a last resort, and
+   needs a reason recorded next to it.
+5. **Never introduce a new visual language**: no unrelated layout system, no new colour family, no new
+   font, no new shadow style, no new interaction model.
+6. **Record it as an APPROVED DESIGN-SYSTEM EXTENSION** in `docs/UI-FIDELITY-CONTRACT.md` §6 — not as
+   a literal demo port, which it is not, and not as an unapproved deviation, which it also is not.
+7. **Real data enters through typed adapters**, and every functional state is implemented — loading,
+   empty, processing, failed, quarantined and ready.
+8. **Prove it the way a ported route is proven**: deterministic fixtures, DOM geometry, responsive,
+   RTL/LTR and accessibility tests.
+9. **One final screenshot for owner review.** Do not request design approval repeatedly, and do not
+   generate or inspect screenshots throughout implementation.
+10. **The owner may refine it in the final UI parity pass.** An extension is a starting point the owner
+    can correct, not a claim that the design is settled.
+
 - Accessibility target: **WCAG 2.2 AA**. Keyboard navigable, correct landmarks, visible focus, adequate contrast.
 - Public website performance target: Lighthouse ≥ 95, LCP < 2.0s, CLS < 0.1 on mid-tier mobile.
 

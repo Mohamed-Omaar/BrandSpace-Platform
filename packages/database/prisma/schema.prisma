@@ -406,6 +406,14 @@ model Workspace {
   brandBrainConversations  BrandBrainConversation[]
   brandBrainMessages       BrandBrainMessage[]
 
+  /// Phase 5B-1 — Asset Library.
+  assetFolders        AssetFolder[]
+  assets              Asset[]
+  assetVersions       AssetVersion[]
+  assetDerivatives    AssetDerivative[]
+  assetUploadSessions AssetUploadSession[]
+  assetProcessingJobs AssetProcessingJob[]
+
   @@index([status])
   @@index([ownerUserId])
   @@index([planKey])
@@ -1602,6 +1610,14 @@ model Brand {
   conversations     BrandBrainConversation[]
   messages          BrandBrainMessage[]
 
+  /// Phase 5B-1 — Asset Library. Every one is OPTIONALLY brand-scoped: a NULL
+  /// brandId means the row belongs to the workspace rather than to a brand.
+  assetFolders        AssetFolder[]
+  assets              Asset[]
+  assetVersions       AssetVersion[]
+  assetUploadSessions AssetUploadSession[]
+  assetProcessingJobs AssetProcessingJob[]
+
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
   @@unique([workspaceId, id], name: "brand_workspace_scope")
@@ -1998,4 +2014,397 @@ model BrandBrainMessage {
   @@index([conversationId, createdAt])
   @@index([expiresAt])
   @@map("brand_brain_message")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5B-1 — Asset Library (docs/PRODUCT.md §5 module 13, docs/DATABASE.md
+// §4.6 and §12, docs/SECURITY.md §11).
+//
+// SIX TENANT-OWNED TABLES. Every one carries `workspaceId` and is protected by
+// RLS. Five of them are BRAND-SCOPED, and their brand scope is NULLABLE on
+// purpose: docs/DATABASE.md §4.6 says "brandId (null = workspace-level)", and a
+// multi-brand company's logo pack, font files and legal boilerplate genuinely
+// belong to the workspace rather than to one of its brands.
+//
+// THE COMPOSITE FOREIGN KEY STILL APPLIES, and a nullable column does not
+// weaken it. PostgreSQL's default MATCH SIMPLE satisfies a composite key when
+// ANY referencing column is NULL, so a workspace-level row (brandId IS NULL) is
+// exempt by construction while every brand-scoped row is checked against
+// `brand(workspaceId, id)`. A row pointing at another workspace's brand is
+// refused by the database rather than by a service that remembered to look.
+// ---------------------------------------------------------------------------
+
+/// What kind of thing an asset is. docs/DATABASE.md §4.6.
+enum AssetKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  FONT
+}
+
+/// docs/DATABASE.md §4.6. `ai_generated` exists so an image the AI Creative
+/// Studio produces lands in the same library under the same quota (U-09)
+/// without a second table; nothing in this phase writes it.
+enum AssetSource {
+  UPLOAD
+  AI_GENERATED
+  IMPORTED
+}
+
+/// The malware verdict. docs/SECURITY.md §11.3.
+///
+/// PENDING IS THE ONLY LEGAL STARTING STATE and it means QUARANTINED, not
+/// "probably fine". `isSelectable` and every download path require CLEAN.
+enum AssetScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+}
+
+/// docs/DATABASE.md §4.6. An asset is usable only at READY + CLEAN.
+enum AssetStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  PROCESSING_FAILED
+  QUARANTINED
+  ARCHIVED
+}
+
+/// A bounded, approved transformation of an asset's bytes.
+///
+/// AN ENUM RATHER THAN A STRING, so the set of derivatives the platform will
+/// ever produce is a schema fact. An open string would let a caller ask for
+/// anything and let the worker produce work nobody bounded.
+enum AssetDerivativeKind {
+  THUMBNAIL
+  PREVIEW
+}
+
+/// The lifecycle of one upload session. docs/SECURITY.md §11.1.
+enum AssetUploadSessionStatus {
+  PENDING
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
+/// The stages one asset's processing passes through, mirroring
+/// `BrandIngestionStage` so both pipelines read the same way in an operator's
+/// dashboard.
+enum AssetProcessingStage {
+  QUEUED
+  SCANNING
+  INSPECTING
+  DERIVING
+  COMPLETED
+  FAILED
+}
+
+/// TENANT-OWNED, OPTIONALLY BRAND-SCOPED. A folder in the Asset Library —
+/// docs/DATABASE.md §12 (`AssetFolder`, "asset library hierarchy").
+model AssetFolder {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  /// NULL = a workspace-level folder, visible to every brand in the workspace.
+  brandId     String? @db.Uuid
+
+  /// NULL = a root folder. A tree rather than a path string, because a rename
+  /// of a folder halfway up must not require rewriting every descendant's row.
+  parentFolderId String? @db.Uuid
+
+  name String
+
+  createdByUserId String? @db.Uuid
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete (docs/DATABASE.md §2).
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_folder_brand_fkey")
+
+  /// COMPOSITE, and not merely tidy. A plain foreign key on `parentFolderId`
+  /// does NOT keep the parent inside the tenant: PostgreSQL runs referential
+  /// integrity checks with RLS BYPASSED, so a tenant can reference a row it
+  /// cannot read. That is an existence oracle — an insert that succeeds only
+  /// when the id names a real folder somewhere on the platform tells the
+  /// caller it exists, which is exactly the inference CLAUDE.md §2.1 forbids.
+  /// Pairing the parent with `workspaceId` collapses the oracle to "is this a
+  /// folder in my OWN workspace", which discloses nothing. Found by the
+  /// isolation suite, which asserted the refusal and got a created row.
+  parent         AssetFolder?         @relation("AssetFolderTree", fields: [workspaceId, parentFolderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "asset_folder_parent_fkey")
+  children       AssetFolder[]        @relation("AssetFolderTree")
+  assets         Asset[]
+  uploadSessions AssetUploadSession[]
+
+  /// The composite target every child of a folder points at.
+  @@unique([workspaceId, id], name: "asset_folder_workspace_scope")
+  /// The listing query: one brand's folders under one parent, by name.
+  @@index([workspaceId, brandId, parentFolderId, name])
+  @@index([workspaceId, parentFolderId])
+  @@map("asset_folder")
+}
+
+/// TENANT-OWNED, OPTIONALLY BRAND-SCOPED. docs/DATABASE.md §4.6.
+///
+/// THE ROW IS THE CURRENT VERSION. `AssetVersion` carries the history, and the
+/// denormalised bytes fields here always describe the version `currentVersion`
+/// names. Reading a library page therefore touches one table, which is what a
+/// grid of two hundred thumbnails needs.
+model Asset {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  /// NULL = a workspace-level asset (docs/DATABASE.md §4.6).
+  brandId     String? @db.Uuid
+  folderId    String? @db.Uuid
+
+  name String
+  kind AssetKind
+
+  /// The type decided from the file's OWN SIGNATURE at upload, never the
+  /// browser's claim (docs/SECURITY.md §11.2).
+  mimeType   String
+  sizeBytes  Int
+  width      Int?
+  height     Int?
+  durationMs Int?
+
+  /// Opaque object-storage key. Never a URL and never a signed one: a
+  /// signature in a database column is a credential with a long life.
+  storageKey     String
+  checksumSha256 String
+
+  source      AssetSource @default(UPLOAD)
+  aiRequestId String?     @db.Uuid
+
+  license        String?
+  rightsExpiryAt DateTime? @db.Timestamptz(6)
+
+  /// docs/DATABASE.md §4.6 stores tags as an array with a GIN index rather than
+  /// as a join table. Kept exactly as specified: a tag here is a label, not an
+  /// entity with its own identity, and a catalogue table would be a second
+  /// source of truth for the same string.
+  tags String[] @default([])
+
+  scanStatus AssetScanStatus @default(PENDING)
+  /// A stable reason key, never a scanner's own message. Both translations live
+  /// in the message catalogue.
+  scanReason String?
+  scannedAt  DateTime?       @db.Timestamptz(6)
+
+  status        AssetStatus @default(UPLOADING)
+  /// Safe to show a customer. A stable reason key, never a parser error or a path.
+  failureReason String?
+
+  /// Which version the columns above describe. Starts at 1.
+  currentVersion  Int     @default(1)
+  /// docs/DATABASE.md §4.6. Set when this asset supersedes another.
+  replacesAssetId String? @db.Uuid
+
+  uploadedByUserId String? @db.Uuid
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+  archivedAt DateTime? @db.Timestamptz(6)
+  /// Soft delete. The object and its derivatives are removed by the retention
+  /// sweep, not by the request that pressed the button.
+  deletedAt  DateTime? @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_brand_fkey")
+  /// COMPOSITE, for the reason spelled out on AssetFolder.parent: a plain key
+  /// would let a tenant file its own asset under another tenant folder, and
+  /// would answer "does this folder id exist anywhere" for free.
+  folder    AssetFolder? @relation(fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "asset_folder_fkey")
+
+  versions       AssetVersion[]
+  derivatives    AssetDerivative[]
+  uploadSessions AssetUploadSession[]
+  processingJobs AssetProcessingJob[]
+
+  /// DUPLICATE PROTECTION. docs/DATABASE.md §4.6 asks for
+  /// `(workspaceId, checksumSha256)` "for dedupe"; it is a UNIQUE constraint
+  /// here rather than a plain index so the second upload of the same bytes is
+  /// refused by the database even if two requests race past the service's own
+  /// check. Scoped to the live rows only would need a partial index, which
+  /// Prisma cannot express — so the service checks `deletedAt` and the
+  /// constraint is the backstop. See the migration for the partial unique index
+  /// that makes re-uploading after a delete possible.
+  /// The composite target versions, derivatives, sessions and jobs point at.
+  @@unique([workspaceId, id], name: "asset_workspace_scope")
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, kind])
+  @@index([workspaceId, checksumSha256])
+  /// The library's own listing: newest first inside a folder, deterministically.
+  @@index([workspaceId, brandId, folderId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("asset")
+}
+
+/// TENANT-OWNED. One historical version of an asset's bytes.
+///
+/// APPEND-ONLY, and enforced the way `brand_knowledge_version` is: the tenant
+/// role is granted SELECT and INSERT and nothing else, FORCE RLS leaves the
+/// owner without a policy, and a trigger refuses UPDATE and DELETE. A version
+/// history a caller can rewrite is not a history.
+model AssetVersion {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  brandId     String? @db.Uuid
+  assetId     String  @db.Uuid
+
+  versionNumber Int
+
+  /// The bytes THIS version points at. A version is a complete object, not a
+  /// delta: a customer restoring version 2 must get exactly the file they
+  /// uploaded, not a reconstruction.
+  storageKey     String
+  checksumSha256 String
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationMs     Int?
+
+  scanStatus AssetScanStatus @default(PENDING)
+
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_version_brand_fkey")
+  asset     Asset     @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "asset_version_asset_fkey")
+
+  @@unique([assetId, versionNumber])
+  @@index([workspaceId, assetId, versionNumber(sort: Desc)])
+  @@map("asset_version")
+}
+
+/// TENANT-OWNED. A bounded, approved transformation of an asset's bytes.
+///
+/// A ROW PER DERIVATIVE RATHER THAN A JSON BLOB. docs/DATABASE.md §4.6 carries
+/// `derivatives jsonb` on the asset, and that shape cannot answer the question
+/// this phase must answer: how many derivative objects exist, so the ceiling
+/// can be enforced and so every one of them can be deleted when the asset is.
+/// A JSON column that the deletion path has to parse to find object keys is how
+/// orphaned objects accumulate.
+model AssetDerivative {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  assetId     String @db.Uuid
+
+  kind AssetDerivativeKind
+
+  storageKey String
+  mimeType   String
+  sizeBytes  Int
+  width      Int?
+  height     Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  asset     Asset     @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "asset_derivative_asset_fkey")
+
+  /// ONE DERIVATIVE PER KIND PER ASSET. The ceiling is then a schema fact as
+  /// well as a configured number, so a retried processing run overwrites rather
+  /// than accumulating.
+  @@unique([assetId, kind])
+  @@index([workspaceId, assetId])
+  @@map("asset_derivative")
+}
+
+/// TENANT-OWNED, OPTIONALLY BRAND-SCOPED. One upload in flight —
+/// docs/SECURITY.md §11.1.
+///
+/// THE SESSION IS THE AUTHORISATION DECISION, MADE BEFORE ANY BYTES EXIST.
+/// Permission, brand scope, entitlement, storage quota, declared size and
+/// declared type are all settled at initiate; the completion step re-checks
+/// only what the bytes themselves decide. That ordering is the whole reason a
+/// session exists rather than a single upload call: refusing a 2 GB file after
+/// receiving it costs the platform the 2 GB.
+model AssetUploadSession {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  brandId     String? @db.Uuid
+  folderId    String? @db.Uuid
+
+  /// Set once the session completes and an asset row exists. NULL while the
+  /// upload is in flight, and for a session that never completed.
+  assetId String? @db.Uuid
+
+  /// What the CALLER said. Kept because it is what the customer will be shown
+  /// if the bytes disagree, and never used to choose a parser or a store.
+  declaredFileName  String
+  declaredMimeType  String
+  declaredSizeBytes Int
+
+  /// Where the bytes will land. Reserved at initiate, so the completion step
+  /// cannot be talked into writing somewhere else.
+  storageKey String
+
+  status        AssetUploadSessionStatus @default(PENDING)
+  /// A stable reason key when the session was refused at completion.
+  failureReason String?
+
+  /// REQUEST idempotency: a retry of an initiate whose response was lost
+  /// replays the same session rather than reserving a second key.
+  idempotencyKey String
+
+  createdByUserId String? @db.Uuid
+
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  /// A session past this may no longer be completed. The sweep expires it and
+  /// removes any bytes that arrived.
+  expiresAt   DateTime  @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_upload_session_brand_fkey")
+  asset     Asset?       @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "asset_upload_session_asset_fkey")
+  folder    AssetFolder? @relation(fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "asset_upload_session_folder_fkey")
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, status])
+  /// The expiry sweep reads this and nothing else.
+  @@index([status, expiresAt])
+  @@map("asset_upload_session")
+}
+
+/// TENANT-OWNED. Scan, inspect and derive one asset — the same shape as
+/// `BrandIngestionJob`, for the same reasons.
+model AssetProcessingJob {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  brandId     String? @db.Uuid
+  assetId     String  @db.Uuid
+
+  stage       AssetProcessingStage @default(QUEUED)
+  attempts    Int                  @default(0)
+  maxAttempts Int                  @default(3)
+
+  /// A stable reason key, safe to show a customer.
+  failureReason String?
+  /// The internal reason, for operators. Never rendered to a customer.
+  failureCode   String?
+
+  derivativesCreated Int @default(0)
+
+  queuedAt      DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt     DateTime? @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
+  nextAttemptAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_processing_job_brand_fkey")
+  asset     Asset     @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "asset_processing_job_asset_fkey")
+
+  @@index([workspaceId, assetId, queuedAt(sort: Desc)])
+  /// The reconciliation sweep: unclaimed work, oldest first.
+  @@index([stage, nextAttemptAt])
+  @@map("asset_processing_job")
 }

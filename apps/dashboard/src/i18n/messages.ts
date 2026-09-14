@@ -162,6 +162,95 @@ export const messages = {
     'common.reason': 'السبب',
     'common.empty': 'لا توجد بيانات بعد',
     'common.loading': 'جارٍ التحميل…',
+    // --- Phase 5B-1 — Asset Library ---
+    'nav.assets': 'مكتبة الوسائط',
+    'assets.title': 'مكتبة الوسائط',
+    'assets.eyebrow': 'مساحة العمل',
+    'assets.subtitle':
+      'صورك ومقاطعك وملفاتك وأصول علامتك المعتمدة في مكان واحد — منظّمة بالمجلدات والوسوم، ومفحوصة قبل أن تصبح قابلة للاستخدام.',
+    'assets.search': 'ابحث بالاسم',
+    'assets.filter.kind': 'النوع',
+    'assets.filter.status': 'الحالة',
+    'assets.filter.tag': 'الوسم',
+    'assets.filter.all': 'الكل',
+    'assets.sort': 'الترتيب',
+    'assets.sort.newest': 'الأحدث أولًا',
+    'assets.sort.name': 'الاسم',
+    'assets.sort.size': 'الحجم',
+    'assets.upload': 'رفع ملف',
+    'assets.uploading': 'جارٍ الرفع…',
+    'assets.newFolder': 'مجلد جديد',
+    'assets.folders': 'المجلدات',
+    'assets.allFiles': 'كل الملفات',
+    'assets.tags': 'الوسوم',
+    'assets.noTags': 'لا توجد وسوم بعد',
+    'assets.count': 'ملف',
+    'assets.countPlural': 'ملفات',
+    'assets.storageUsed': 'المساحة المستخدمة',
+    'assets.storageOf': 'من',
+    'assets.storageUnlimited': 'غير محدودة',
+    'assets.emptyTitle': 'لا توجد ملفات بعد',
+    'assets.emptyBody':
+      'ارفع صور علامتك وشعاراتها وملفاتها المعتمدة. يُفحص كل ملف قبل أن يصبح متاحًا للاستخدام.',
+    'assets.emptyFilteredTitle': 'لا نتائج',
+    'assets.emptyFilteredBody': 'لا يوجد ملف يطابق ما بحثت عنه. جرّب تعديل البحث أو المرشّحات.',
+    'assets.loading': 'جارٍ تحميل المكتبة…',
+    'assets.loadMore': 'عرض المزيد',
+    // --- The functional states a file passes through ---
+    'assets.state.processing': 'قيد المعالجة',
+    'assets.state.processingHint': 'يجري فحص الملف. سيصبح متاحًا بعد انتهاء الفحص.',
+    'assets.state.ready': 'جاهز',
+    'assets.state.quarantined': 'محجوز',
+    'assets.state.quarantinedHint': 'لم يجتز هذا الملف الفحص الأمني، ولا يمكن استخدامه أو تنزيله.',
+    'assets.state.failed': 'فشلت المعالجة',
+    'assets.state.archived': 'مؤرشف',
+    'assets.state.uploading': 'جارٍ الرفع',
+    // --- Reason keys. Never a raw error, never a path, never a vendor name ---
+    'assets.reason.unsupported_type': 'نوع الملف غير مدعوم.',
+    'assets.reason.content_type_mismatch': 'محتوى الملف لا يطابق نوعه. ربما أُعيدت تسميته.',
+    'assets.reason.file_too_large': 'حجم الملف أكبر من المسموح.',
+    'assets.reason.file_empty': 'الملف فارغ.',
+    'assets.reason.size_mismatch': 'الملف المرفوع لا يطابق ما تم الإعلان عنه.',
+    'assets.reason.checksum_mismatch': 'هذا الملف موجود في المكتبة بالفعل.',
+    'assets.reason.infected': 'لم يجتز هذا الملف الفحص الأمني.',
+    'assets.reason.scan_failed': 'تعذّر إكمال الفحص الأمني. ستتم إعادة المحاولة.',
+    'assets.reason.scan_unavailable': 'خدمة الفحص غير متاحة حاليًا. ستتم إعادة المحاولة.',
+    'assets.reason.derivative_failed': 'تعذّر إنشاء المعاينة.',
+    'assets.reason.object_missing': 'تعذّرت قراءة الملف المرفوع.',
+    'assets.reason.stuck_timeout': 'استغرقت المعالجة وقتًا أطول من المتوقع.',
+    'assets.reason.unsafe_filename': 'لا يمكن استخدام هذا الاسم للملف.',
+    // --- Detail panel ---
+    'assets.detail.title': 'تفاصيل الملف',
+    'assets.detail.kind': 'النوع',
+    'assets.detail.size': 'الحجم',
+    'assets.detail.uploaded': 'تاريخ الرفع',
+    'assets.detail.dimensions': 'الأبعاد',
+    'assets.detail.folder': 'المجلد',
+    'assets.detail.tags': 'الوسوم',
+    'assets.detail.versions': 'الإصدارات',
+    'assets.detail.version': 'الإصدار',
+    'assets.detail.noPreview': 'لا تتوفر معاينة لهذا النوع من الملفات.',
+    'assets.detail.scanPending': 'تُعرض المعاينة بعد اجتياز الفحص.',
+    'assets.action.download': 'تنزيل',
+    'assets.action.select': 'اختيار',
+    'assets.action.archive': 'أرشفة',
+    'assets.action.restore': 'استعادة',
+    'assets.action.delete': 'حذف',
+    'assets.action.newVersion': 'إصدار جديد',
+    'assets.action.restoreVersion': 'استعادة هذا الإصدار',
+    'assets.action.cancel': 'إلغاء',
+    'assets.confirm.deleteTitle': 'حذف هذا الملف؟',
+    'assets.confirm.deleteBody':
+      'يمكن استعادة الملف خلال فترة السماح، وبعدها تُحذف بياناته نهائيًا.',
+    'assets.folderName': 'اسم المجلد',
+    'assets.folderCreate': 'إنشاء',
+    // Both kinds of card in the grid announce their own state to a screen
+    // reader, because colour alone is not a status.
+    'assets.kind.IMAGE': 'صورة',
+    'assets.kind.VIDEO': 'فيديو',
+    'assets.kind.AUDIO': 'صوت',
+    'assets.kind.DOCUMENT': 'مستند',
+    'assets.kind.FONT': 'خط',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'عقل العلامة',
     'bb.title': 'عقل العلامة',
@@ -458,6 +547,99 @@ export const messages = {
     'common.reason': 'Reason',
     'common.empty': 'No data yet',
     'common.loading': 'Loading…',
+    // --- Phase 5B-1 — Asset Library ---
+    'nav.assets': 'Media library',
+    'assets.title': 'Media library',
+    'assets.eyebrow': 'Workspace',
+    'assets.subtitle':
+      'Your photography, video, files and approved brand assets in one place — organised by folder and tag, and scanned before anything becomes usable.',
+    'assets.search': 'Search by name',
+    'assets.filter.kind': 'Type',
+    'assets.filter.status': 'Status',
+    'assets.filter.tag': 'Tag',
+    'assets.filter.all': 'All',
+    'assets.sort': 'Sort',
+    'assets.sort.newest': 'Newest first',
+    'assets.sort.name': 'Name',
+    'assets.sort.size': 'Size',
+    'assets.upload': 'Upload a file',
+    'assets.uploading': 'Uploading…',
+    'assets.newFolder': 'New folder',
+    'assets.folders': 'Folders',
+    'assets.allFiles': 'All files',
+    'assets.tags': 'Tags',
+    'assets.noTags': 'No tags yet',
+    'assets.count': 'file',
+    'assets.countPlural': 'files',
+    'assets.storageUsed': 'Storage used',
+    'assets.storageOf': 'of',
+    'assets.storageUnlimited': 'Unlimited',
+    'assets.emptyTitle': 'No files yet',
+    'assets.emptyBody':
+      'Upload your brand photography, logos and approved files. Every file is scanned before it becomes available for use.',
+    'assets.emptyFilteredTitle': 'No matches',
+    'assets.emptyFilteredBody':
+      'No file matches what you searched for. Try a different search or filter.',
+    'assets.loading': 'Loading the library…',
+    'assets.loadMore': 'Show more',
+    // --- The functional states a file passes through ---
+    'assets.state.processing': 'Processing',
+    'assets.state.processingHint':
+      'This file is being scanned. It becomes available once the scan finishes.',
+    'assets.state.ready': 'Ready',
+    'assets.state.quarantined': 'Quarantined',
+    'assets.state.quarantinedHint':
+      'This file did not pass the security scan. It cannot be used or downloaded.',
+    'assets.state.failed': 'Processing failed',
+    'assets.state.archived': 'Archived',
+    'assets.state.uploading': 'Uploading',
+    // --- Reason keys. Never a raw error, never a path, never a vendor name ---
+    'assets.reason.unsupported_type': 'This file type is not supported.',
+    'assets.reason.content_type_mismatch':
+      "This file's contents do not match its type. It may have been renamed.",
+    'assets.reason.file_too_large': 'This file is larger than the allowed size.',
+    'assets.reason.file_empty': 'This file is empty.',
+    'assets.reason.size_mismatch': 'The uploaded file does not match what was announced.',
+    'assets.reason.checksum_mismatch': 'This file is already in the library.',
+    'assets.reason.infected': 'This file did not pass the security scan.',
+    'assets.reason.scan_failed': 'The security scan could not be completed. It will be retried.',
+    'assets.reason.scan_unavailable': 'The scanning service is unavailable. It will be retried.',
+    'assets.reason.derivative_failed': 'A preview could not be generated.',
+    'assets.reason.object_missing': 'The uploaded file could not be read.',
+    'assets.reason.stuck_timeout': 'Processing took longer than expected.',
+    'assets.reason.unsafe_filename': 'That file name cannot be used.',
+    // --- Detail panel ---
+    'assets.detail.title': 'File details',
+    'assets.detail.kind': 'Type',
+    'assets.detail.size': 'Size',
+    'assets.detail.uploaded': 'Uploaded',
+    'assets.detail.dimensions': 'Dimensions',
+    'assets.detail.folder': 'Folder',
+    'assets.detail.tags': 'Tags',
+    'assets.detail.versions': 'Versions',
+    'assets.detail.version': 'Version',
+    'assets.detail.noPreview': 'No preview is available for this kind of file.',
+    'assets.detail.scanPending': 'A preview appears once the scan passes.',
+    'assets.action.download': 'Download',
+    'assets.action.select': 'Select',
+    'assets.action.archive': 'Archive',
+    'assets.action.restore': 'Restore',
+    'assets.action.delete': 'Delete',
+    'assets.action.newVersion': 'New version',
+    'assets.action.restoreVersion': 'Restore this version',
+    'assets.action.cancel': 'Cancel',
+    'assets.confirm.deleteTitle': 'Delete this file?',
+    'assets.confirm.deleteBody':
+      'It can be recovered during the grace period, after which its data is permanently removed.',
+    'assets.folderName': 'Folder name',
+    'assets.folderCreate': 'Create',
+    // Both kinds of card in the grid announce their own state to a screen
+    // reader, because colour alone is not a status.
+    'assets.kind.IMAGE': 'Image',
+    'assets.kind.VIDEO': 'Video',
+    'assets.kind.AUDIO': 'Audio',
+    'assets.kind.DOCUMENT': 'Document',
+    'assets.kind.FONT': 'Font',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'Brand Brain',
     'bb.title': 'Brand Brain',
@@ -636,6 +818,32 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'حدث خطأ ولم يتغيّر شيء.',
   },
   INVALID_JSON: { en: 'The payload is not valid.', ar: 'المحتوى غير صالح.' },
+  /*
+   * THE THREE COMMERCIAL REFUSALS, which had no text at all.
+   *
+   * `toPublicErrorCode` has mapped these since Phase 3 — deliberately, because
+   * "you are over a limit" is exactly what a customer needs in order to act —
+   * but no entry existed here, so `statusMessage` returned null and the screen
+   * rendered NOTHING. A customer whose upload was refused for want of storage
+   * saw the page reload unchanged, which reads as a broken button rather than a
+   * plan decision. Found by the end-to-end run, on a workspace whose plan
+   * genuinely grants no storage.
+   *
+   * The plan name, the price and the limit stay unsaid; what travels is the
+   * kind of wall and the fact that it is clearable.
+   */
+  QUOTA_EXCEEDED: {
+    en: 'This workspace has reached a limit on its plan. Free some space or ask an admin to change the plan.',
+    ar: 'وصلت مساحة العمل إلى أحد حدود خطتها. أفرِغ بعض المساحة أو اطلب من المسؤول تغيير الخطة.',
+  },
+  ENTITLEMENT_REQUIRED: {
+    en: 'This workspace plan does not include that. An admin can change the plan.',
+    ar: 'خطة مساحة العمل لا تشمل هذا. يمكن للمسؤول تغيير الخطة.',
+  },
+  INSUFFICIENT_CREDITS: {
+    en: 'There are not enough AI credits for that. Top up or wait for the next allowance.',
+    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ. أضف رصيدًا أو انتظر المخصّص التالي.',
+  },
   MEMBER_INVITED: { en: 'Invitation sent.', ar: 'تم إرسال الدعوة.' },
   MEMBER_REMOVED: { en: 'Member removed.', ar: 'تمت إزالة العضو.' },
   ROLE_CHANGED: { en: 'Role updated.', ar: 'تم تحديث الدور.' },
@@ -660,6 +868,26 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   SOURCE_UPLOADED: {
     en: 'Document processed. Extracted knowledge is waiting for review.',
     ar: 'تمت معالجة المستند. المعرفة المستخرجة بانتظار المراجعة.',
+  },
+  ASSET_UPLOADED: {
+    en: 'File uploaded. It becomes available for use once the security scan passes.',
+    ar: 'تم رفع الملف. سيصبح متاحًا للاستخدام بعد اجتياز الفحص الأمني.',
+  },
+  ASSET_FOLDER_CREATED: { en: 'Folder created.', ar: 'تم إنشاء المجلد.' },
+  ASSET_UPDATED: { en: 'File details updated.', ar: 'تم تحديث تفاصيل الملف.' },
+  ASSET_ARCHIVED: { en: 'File archived.', ar: 'تمت أرشفة الملف.' },
+  ASSET_RESTORED: { en: 'File restored.', ar: 'تمت استعادة الملف.' },
+  ASSET_DELETED: {
+    en: 'File deleted. It can be recovered during the grace period.',
+    ar: 'تم حذف الملف. يمكن استعادته خلال فترة السماح.',
+  },
+  ASSET_VERSION_CREATED: {
+    en: 'New version uploaded. It is scanned before it replaces the current file.',
+    ar: 'تم رفع إصدار جديد. سيُفحص قبل أن يحل محل الملف الحالي.',
+  },
+  ASSET_VERSION_RESTORED: {
+    en: 'Version restored as a new version. Nothing in the history was removed.',
+    ar: 'تمت استعادة الإصدار كإصدار جديد. لم يُحذف أي شيء من السجل.',
   },
   RESET_REQUESTED: {
     en: 'If an account exists for that address, a message is on its way.',

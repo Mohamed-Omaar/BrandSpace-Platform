@@ -105,6 +105,9 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -126,6 +129,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       fastify:
         specifier: 5.12.1
         version: 5.12.1
@@ -148,6 +154,9 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -172,6 +181,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@brandspace/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -225,6 +237,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -240,6 +255,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       bullmq:
         specifier: 5.81.4
         version: 5.81.4
@@ -268,6 +286,31 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/assets:
+    dependencies:
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -331,6 +374,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../storage
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -507,6 +553,16 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/storage:
+    dependencies:
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/ui:
     dependencies:
       '@brandspace/shared':
@@ -531,6 +587,9 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../packages/ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../packages/auth
@@ -561,6 +620,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../packages/storage
       '@brandspace/ui':
         specifier: workspace:*
         version: link:../packages/ui

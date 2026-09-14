@@ -28,6 +28,8 @@ This document removes that option.
    as a schema or an API contract.
 2. **Implementations mechanically PORT the corresponding demo HTML, CSS, layout, motion and
    interaction.** Read the demo source and transcribe it. Do not build something that resembles it.
+   **Where no approved reference exists, §6 applies instead** — the screen is built from the design
+   system and recorded as an extension. A missing reference is never grounds to stop.
 3. **Do not redesign, improve, simplify, reposition, recolour or replace an approved visual element**
    unless an owner decision explicitly authorises it. "It looked better" is not authorisation.
    Neither is "the design system has a similar token".
@@ -151,3 +153,51 @@ Not by looking at a screenshot and forming an opinion:
 
 A baseline is never updated to make a failing test pass. It changes only when §3's pinned commit
 changes or an owner authorises a deviation under rule 9.
+
+---
+
+## 6. When a route has NO approved reference — the design-system extension
+
+**Binding from Phase 5B-1 onward, and mirrored in `CLAUDE.md` §4.2.**
+
+### 6.1 Why this section exists
+
+The Asset Library is a required product module — `docs/PRODUCT.md` §5 module 13, and scope item 4 of
+Phase 5. Its route in the approved demo (`#customer/media`, "Media library") is **not a design**: the
+router in `demo/app-3.js` sends it to `simpleFeaturePage()` in `demo/app-2.js`, which renders a
+"Future product preview" kicker, a heading, one sentence and three identical placeholder cards. Every
+other mention of a media or asset library in the Landing repository is marketing copy on a public
+page. There is nothing to port.
+
+§1 rule 2 as originally written had no answer for that, and the two readings it invited were both
+wrong: invent a screen (rule 3 forbids it), or refuse to build a required module until the owner
+designs it (which makes missing artwork a blocker on functional delivery, indefinitely).
+
+### 6.2 The rule
+
+|                                                  |                                                                                                                                                                                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. Reference exists and is complete**          | Port it mechanically. §1–§5 govern unchanged                                                                                                                                                                                                           |
+| **2. No reference, or a placeholder route**      | **Build the screen.** Do not stop; do not require the owner to design it first                                                                                                                                                                         |
+| **3. Build it from the platform's own language** | Existing tokens · typography · spacing and grid · cards and surfaces · buttons and controls · toolbars, search and filters · drawers and modals · empty, loading and error states · motion and interaction patterns · responsive and RTL/LTR behaviour |
+| **4. Compose before creating**                   | Reuse an existing pattern. A new component or visual treatment is a last resort and carries a recorded reason                                                                                                                                          |
+| **5. No new visual language**                    | No unrelated layout system, no new colour family, no new font, no new shadow style, no new interaction model                                                                                                                                           |
+| **6. Record it as an EXTENSION**                 | In §6.3 below — not as a demo port, which it is not, and not as an unapproved deviation, which it also is not                                                                                                                                          |
+| **7. Real data, every state**                    | Typed adapters at the prop boundary; loading, empty, processing, failed, quarantined and ready all implemented                                                                                                                                         |
+| **8. Prove it like a port**                      | Deterministic fixtures, DOM geometry, responsive, RTL/LTR and accessibility tests                                                                                                                                                                      |
+| **9. One final screenshot**                      | For owner review, after the targeted tests pass. Not repeated approval requests, and not screenshots generated throughout implementation                                                                                                               |
+| **10. Refinable, not settled**                   | The owner may correct an extension in the final UI parity pass. Missing route artwork must not block functional delivery                                                                                                                               |
+
+**What rule 5 costs, stated plainly.** An extension will look like the rest of BrandSpace rather than
+like a screen designed for its own purpose. That is the intended trade: a screen that is unmistakably
+part of this product and slightly generic is recoverable in a parity pass, and a screen with its own
+colour family and its own idea of a card is not.
+
+### 6.3 Extension manifest
+
+Routes built under §6. Each names what it is composed FROM, so a reviewer can check rule 4 rather than
+take it on trust.
+
+| Route              | Why no reference                                                                                                                                                                                                      | Composed from                                                                                                                                                                                                           | Recorded |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `/[locale]/assets` | The demo's `#customer/media` route is `simpleFeaturePage('media')` — a "Future product preview" placeholder with three identical cards. No Asset Library design exists in the Landing repository at the pinned commit | `packages/ui` tokens and primitives; the shared dashboard shell; the demo's own `view-toolbar`, card, chip, drawer and empty-state geometry as already ported for Brand Brain and the members, plan and settings routes | D-98     |

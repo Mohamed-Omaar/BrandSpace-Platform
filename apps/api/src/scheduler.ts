@@ -1,13 +1,22 @@
+import {
+  AssetMaintenanceService,
+  TenantAssetPolicySource,
+  findUnclaimedAssetJobs,
+} from '@brandspace/assets';
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import { ConfigurationService, type Environment } from '@brandspace/config';
-import { getPrisma, withWorkspace } from '@brandspace/database';
+import { getPrisma, withWorkspace, type PrismaClient } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
   INGEST_SOURCE_DOCUMENT,
+  PROCESS_ASSET,
   enqueue,
   type IngestSourceDocumentPayload,
+  type ProcessAssetPayload,
 } from '@brandspace/jobs';
+import { UsageService } from '@brandspace/entitlements';
+import { createObjectStore } from '@brandspace/storage';
 import { createLogger, internalErrorFields, systemClock, type Clock } from '@brandspace/shared';
 
 /**
@@ -43,6 +52,10 @@ export interface MaintenanceResult {
   readonly ingestionDispatched: number;
   readonly chatContentPurged: number;
   readonly gatewayOutputsPurged: number;
+  /** Phase 5B-1 — the Asset Library sweeps. */
+  readonly assetJobsDispatched: number;
+  readonly uploadSessionsExpired: number;
+  readonly deletedAssetsPurged: number;
 }
 
 export interface SchedulerOptions {
@@ -165,15 +178,126 @@ export class MaintenanceScheduler {
     });
   }
 
+  /**
+   * Re-dispatch asset processing jobs nothing has claimed.
+   *
+   * The same shape, the same condition and the same idempotency key discipline
+   * as `reconcileIngestion` above: an asset waiting to be scanned is a customer
+   * watching a spinner, and a lost queue message must cost punctuality rather
+   * than correctness (R-08).
+   */
+  async reconcileAssetProcessing(limit: number): Promise<number> {
+    const waiting = await findUnclaimedAssetJobs(getPlatformClient(), this.#clock.now(), limit);
+
+    let dispatched = 0;
+    for (const job of waiting) {
+      const result = await enqueue('media-processing', PROCESS_ASSET, {
+        kind: PROCESS_ASSET,
+        workspaceId: job.workspaceId,
+        // THE SAME KEY THE PRODUCER USES. BullMQ refuses a duplicate job id, so
+        // a sweep racing a successful dispatch adds nothing rather than queuing
+        // a second scan of the same asset.
+        idempotencyKey: `asset-${job.id}`,
+        processingJobId: job.id,
+      } satisfies ProcessAssetPayload);
+      if (result.dispatched) dispatched += 1;
+    }
+    return dispatched;
+  }
+
+  /**
+   * Expire abandoned upload sessions and purge assets past their grace period.
+   *
+   * THE ENUMERATION IS CROSS-TENANT; THE WORK IS NOT. The platform identity
+   * answers "which workspaces have something to sweep", and each sweep then
+   * runs inside that workspace own RLS context — so a maintenance job never
+   * widens a boundary for its own convenience (D-96).
+   *
+   * WHY AN EXPIRED SESSION MATTERS ENOUGH TO SWEEP. `initiate` spends storage
+   * quota against the DECLARED size before any bytes arrive, so a customer
+   * whose browser closed mid-upload is paying for a file that does not exist.
+   * Without this, a flaky connection quietly consumes a plan.
+   */
+  async sweepAssets(batch: number): Promise<{ sessions: number; purged: number }> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    const sessionWorkspaces = await platform.assetUploadSession.findMany({
+      where: { status: 'PENDING', expiresAt: { lte: now } },
+      select: { workspaceId: true },
+      distinct: ['workspaceId'],
+      take: batch,
+    });
+    const purgeCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1_000);
+    const purgeWorkspaces = await platform.asset.findMany({
+      where: { deletedAt: { lte: purgeCutoff }, storageKey: { not: '' } },
+      select: { workspaceId: true },
+      distinct: ['workspaceId'],
+      take: batch,
+    });
+
+    const workspaceIds = new Set<string>([
+      ...sessionWorkspaces.map((row) => row.workspaceId),
+      ...purgeWorkspaces.map((row) => row.workspaceId),
+    ]);
+
+    const tenantPrisma = getPrisma();
+    const store = createObjectStore({ appEnv: process.env['APP_ENV'] ?? 'development' });
+    let sessions = 0;
+    let purged = 0;
+
+    for (const workspaceId of workspaceIds) {
+      const result = await withWorkspace(
+        workspaceId,
+        async (db) => {
+          // The SAME configuration the dashboard and the worker read, through
+          // the same tenant-side projection. A sweep with its own retention
+          // window would be a second setting an operator cannot see.
+          const policy = await new TenantAssetPolicySource(db, this.#environment).load();
+          const maintenance = new AssetMaintenanceService({
+            db,
+            workspaceId,
+            store,
+            policy,
+            /*
+             * The SCOPED client, cast the way every other caller casts it. A
+             * scoped client is a PrismaClient minus the connection-lifecycle
+             * and transaction methods, which is exactly the surface UsageService
+             * uses; it detects the absence of `$transaction` and runs inline,
+             * so the refund commits with the sweep rather than beside it.
+             */
+            usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+            clock: this.#clock,
+          });
+          const expired = await maintenance.expireStaleSessions();
+          const deleted = await maintenance.purgeDeletedAssets();
+          return { expired: expired.expired, purged: deleted.purged };
+        },
+        { prisma: tenantPrisma },
+      );
+      sessions += result.expired;
+      purged += result.purged;
+    }
+
+    return { sessions, purged };
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
     const ingestionDispatched = await this.reconcileIngestion(cadence.ingestionReconcileBatch);
+    const assetJobsDispatched = await this.reconcileAssetProcessing(
+      cadence.ingestionReconcileBatch,
+    );
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
+    const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
       gatewayOutputsPurged: purged.gateway,
+      assetJobsDispatched,
+      uploadSessionsExpired: assets.sessions,
+      deletedAssetsPurged: assets.purged,
     };
   }
 
@@ -216,6 +340,17 @@ export class MaintenanceScheduler {
     every(cadence.retentionPurgeSeconds, 'retention-purge', async () => {
       const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
       return purged.chat + purged.gateway;
+    });
+
+    // Phase 5B-1. The asset sweeps ride the cadences their Brand Brain
+    // counterparts already use rather than introducing two more operator
+    // settings for the same two pressures.
+    every(cadence.ingestionReconcileSeconds, 'asset-reconcile', () =>
+      this.reconcileAssetProcessing(cadence.ingestionReconcileBatch),
+    );
+    every(cadence.retentionPurgeSeconds, 'asset-sweep', async () => {
+      const swept = await this.sweepAssets(cadence.retentionPurgeBatch);
+      return swept.sessions + swept.purged;
     });
 
     log.info('maintenance scheduler started', {

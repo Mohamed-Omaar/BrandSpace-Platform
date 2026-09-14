@@ -672,6 +672,280 @@ const brandBrainSchema = z.object({
     .default({}),
 });
 
+// --- Asset Library ----------------------------------------------------------
+
+/**
+ * The largest file size the schema can record: PostgreSQL `integer`.
+ *
+ * Named rather than inlined so the reason travels with the number. Raising it
+ * is a MIGRATION — `asset.sizeBytes` and `asset_upload_session.declaredSizeBytes`
+ * would both have to become `bigint` — not a configuration change.
+ */
+const MAX_STORED_FILE_BYTES = 2_147_483_647;
+
+/**
+ * Asset Library operational policy (Phase 5B-1).
+ *
+ * CLAUDE.md §2.2: none of this may be hard-coded. What a customer may upload,
+ * how large a file may be, how many versions are kept, how long a download link
+ * lives and how long a deleted object is retained are all OPERATIONAL settings
+ * the owner tunes without a release — and every one of them depends on the
+ * hardware and the storage vendor, which are an operator fact rather than a
+ * developer one.
+ *
+ * WHAT IS DELIBERATELY NOT HERE. The STORAGE QUOTA. It is per-plan, it lives in
+ * the `plans` document as `limit.storage_gb` (D-10), and it is resolved through
+ * the entitlements engine like every other quota. Restating a ceiling here that
+ * a plan already sets would be two limits for one question, and the stricter
+ * one would win by accident rather than by design.
+ */
+const assetsSchema = z.object({
+  upload: z
+    .object({
+      /**
+       * Accepted media types, per asset kind.
+       *
+       * KEYED BY KIND rather than a flat list, because the kind decides what
+       * the pipeline DOES: an image gets a thumbnail, a document does not, and
+       * a font gets neither. A flat list would leave the mapping to be
+       * re-derived in code from the MIME string, which is how a type ends up
+       * accepted by the door and unhandled by the pipeline.
+       *
+       * IMAGES ARE ON THIS LIST, unlike `brand-brain`, and the difference is
+       * the point rather than an inconsistency: D-93 refuses images as a
+       * KNOWLEDGE SOURCE because the only way to get text out of one is OCR
+       * and no OCR option clears that feature bar. An Asset Library does not
+       * read its files — it stores, lists and serves them — so nothing about
+       * D-93 applies. OCR remains unsupported and unbuilt.
+       *
+       * SVG IS ABSENT, and that is a decision. docs/SECURITY.md §11.5 requires
+       * it to be sanitised or converted before it is ever served, because an
+       * SVG is a script-bearing document. Nothing sanitises one yet, so
+       * admitting it would mean storing an XSS payload the product promises to
+       * neutralise and does not. An operator can add it, and the signature
+       * check will still refuse a file whose bytes disagree.
+       */
+      allowedMimeTypes: z
+        .object({
+          image: z.array(z.string().min(1)).default(['image/png', 'image/jpeg', 'image/webp']),
+          video: z.array(z.string().min(1)).default(['video/mp4', 'video/webm']),
+          audio: z.array(z.string().min(1)).default(['audio/mpeg', 'audio/wav']),
+          document: z
+            .array(z.string().min(1))
+            .default([
+              'application/pdf',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              'text/plain',
+              'text/csv',
+              'text/markdown',
+            ]),
+          font: z.array(z.string().min(1)).default(['font/woff2', 'font/ttf']),
+        })
+        .default({}),
+
+      /**
+       * Size ceiling per kind. A video is legitimately larger than a font, and
+       * one ceiling for both would either refuse real video or admit a font
+       * nobody should be storing.
+       *
+       * EVERY CEILING IS CAPPED AT WHAT THE COLUMN CAN HOLD. `asset.sizeBytes`
+       * and `asset_upload_session.declaredSizeBytes` are 32-bit integers, so a
+       * value above 2,147,483,647 is not a generous limit — it is an upload
+       * that reaches the database and fails with "value out of range", which a
+       * customer sees as an unexplained error and an operator has no way to
+       * connect back to the number they typed.
+       *
+       * Refusing it at ACTIVATION turns that into a configuration error the
+       * operator sees immediately, next to the field they are editing. Found by
+       * the isolation suite, which set a ceiling above the range and got the
+       * opaque failure.
+       */
+      maxFileBytes: z
+        .object({
+          image: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_STORED_FILE_BYTES)
+            .default(25 * 1024 * 1024),
+          video: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_STORED_FILE_BYTES)
+            .default(500 * 1024 * 1024),
+          audio: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_STORED_FILE_BYTES)
+            .default(100 * 1024 * 1024),
+          document: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_STORED_FILE_BYTES)
+            .default(50 * 1024 * 1024),
+          font: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_STORED_FILE_BYTES)
+            .default(10 * 1024 * 1024),
+        })
+        .default({}),
+
+      /** Per-brand ceiling on live assets, so one brand cannot fill a plan. */
+      maxAssetsPerBrand: z.number().int().positive().default(5_000),
+      /**
+       * How long an initiated upload session may be completed within.
+       *
+       * SHORT ON PURPOSE. A session is a reserved storage key and a spent
+       * quota check; one that lives for hours is a way to hold both without
+       * uploading anything.
+       */
+      sessionTtlSeconds: z
+        .number()
+        .int()
+        .min(60)
+        .max(24 * 3600)
+        .default(900),
+      /** Ceiling on the length of a normalised file name. */
+      maxFileNameLength: z.number().int().min(16).max(512).default(180),
+      /** Ceiling on tags per asset, and on the length of one tag. */
+      maxTagsPerAsset: z.number().int().min(0).max(100).default(20),
+      maxTagLength: z.number().int().min(1).max(128).default(48),
+      /** How deep the folder tree may nest. An unbounded tree is a recursion. */
+      maxFolderDepth: z.number().int().min(1).max(20).default(6),
+    })
+    .default({}),
+
+  versions: z
+    .object({
+      /**
+       * Versions kept per asset, the current one included.
+       *
+       * A CEILING RATHER THAN "UNLIMITED", because every version is a stored
+       * object that counts against the plan quota, and a customer who
+       * re-uploads a working file forty times should not silently pay for
+       * forty copies.
+       */
+      maxVersionsPerAsset: z.number().int().min(1).max(100).default(10),
+    })
+    .default({}),
+
+  derivatives: z
+    .object({
+      /**
+       * Which derivatives are produced, and how large they may be.
+       *
+       * BOUNDED AND APPROVED, never open-ended. Every derivative is work one
+       * customer causes and the whole platform pays for, so the set is a
+       * schema fact (`AssetDerivativeKind`) and the dimensions are an
+       * operator setting.
+       */
+      thumbnailEnabled: z.boolean().default(true),
+      thumbnailMaxEdgePx: z.number().int().min(16).max(2_048).default(320),
+      previewEnabled: z.boolean().default(true),
+      previewMaxEdgePx: z.number().int().min(64).max(8_192).default(1_280),
+      /**
+       * Ceiling on derivatives per asset.
+       *
+       * The database already allows one row per kind, so this is the SECOND
+       * bound rather than the only one. It exists so an operator can turn the
+       * whole pipeline down without editing the enum, and so the ceiling is
+       * assertable in a test that does not have to provoke a unique violation.
+       */
+      maxPerAsset: z.number().int().min(0).max(10).default(2),
+      /** Wall-clock ceiling on deriving one asset. */
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(10 * 60_000)
+        .default(60_000),
+    })
+    .default({}),
+
+  scanning: z
+    .object({
+      /**
+       * Whether an asset must be scanned before it may become READY.
+       *
+       * TRUE BY DEFAULT, and turning it off is an operator decision that must
+       * be deliberate. docs/SECURITY.md §11.3 requires scanning before an
+       * asset becomes usable; the switch exists because an operator with no
+       * scanner configured needs a way to say so explicitly rather than having
+       * every upload sit in PENDING forever with no explanation.
+       */
+      required: z.boolean().default(true),
+      /**
+       * Which scanner the platform uses.
+       *
+       * `mock` is the only implementation that exists, it is deterministic,
+       * and it is what development and tests run against. No production
+       * scanner has been approved, so naming one here would be inventing a
+       * vendor decision — `resolveScanner` refuses `mock` in production, which
+       * is the fail-closed behaviour CLAUDE.md §2.2 asks for.
+       */
+      provider: z.enum(['mock']).default('mock'),
+      /** Wall-clock ceiling on scanning one asset. */
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(10 * 60_000)
+        .default(30_000),
+    })
+    .default({}),
+
+  processing: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).default(3),
+      retryBackoffSeconds: z.number().int().min(1).default(60),
+      /** A job past this is stuck, and the sweep reconciles it. */
+      stuckAfterSeconds: z.number().int().min(60).default(900),
+    })
+    .default({}),
+
+  download: z
+    .object({
+      /**
+       * How long a signed download grant lives.
+       *
+       * SHORT, because a grant is a bearer capability: anyone holding the
+       * token can fetch those bytes until it expires. Long enough that a
+       * library page full of thumbnails does not start 404ing while the
+       * customer reads it.
+       */
+      grantTtlSeconds: z
+        .number()
+        .int()
+        .min(30)
+        .max(24 * 3600)
+        .default(300),
+    })
+    .default({}),
+
+  retention: z
+    .object({
+      /**
+       * How long a soft-deleted asset is recoverable before its objects and
+       * derivatives are purged.
+       *
+       * U-08 recommends a 30-day grace after cancellation, and the same
+       * reasoning applies to a deletion a person may regret. There is no
+       * "forever": the value is bounded, and the purge is what stops a delete
+       * button from being a promise the platform does not keep.
+       */
+      purgeDeletedAfterDays: z.number().int().min(1).max(365).default(30),
+      /** How long an expired upload session and its partial bytes are kept. */
+      purgeExpiredSessionsAfterHours: z.number().int().min(1).max(720).default(24),
+    })
+    .default({}),
+});
+
 // --- Integrations -----------------------------------------------------------
 function providerIntegrationSchema() {
   return z.object({
@@ -810,6 +1084,10 @@ export const CONFIG_DOMAINS = {
   // Phase 5. Upload rules, ingestion tuning, knowledge freshness and the D-78
   // chat retention window — every one an owner setting, none of them in source.
   'brand-brain': { schema: brandBrainSchema, schemaVersion: 1 },
+  // Phase 5B-1. Asset Library upload rules, version and derivative ceilings,
+  // scanning, the download-grant window and retention. The storage QUOTA is
+  // deliberately absent: it is per-plan and lives in `plans` (D-10).
+  assets: { schema: assetsSchema, schemaVersion: 1 },
   'integrations.email': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.storage': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.payment': { schema: providerIntegrationSchema(), schemaVersion: 1 },

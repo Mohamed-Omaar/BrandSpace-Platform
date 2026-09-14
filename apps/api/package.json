@@ -10,13 +10,15 @@
   },
   "dependencies": {
     "@brandspace/ai-gateway": "workspace:*",
+    "@brandspace/assets": "workspace:*",
     "@brandspace/auth": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
-    "@brandspace/jobs": "workspace:*",
     "@brandspace/config": "workspace:*",
-    "@brandspace/entitlements": "workspace:*",
     "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/jobs": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/storage": "workspace:*",
     "fastify": "5.12.1",
     "ioredis": "5.11.1",
     "zod": "3.25.76"

@@ -246,6 +246,48 @@ Structured brand facts and uploaded documents, chunked and embedded for retrieva
 Indexes: `(workspaceId, brandId, type)`, `(workspaceId, brandId, status)`,
 HNSW/IVFFlat on `embedding` **partitioned or filtered by `workspaceId`** so ANN search never scans other tenants.
 
+### 4.2b The Asset Library tables — AS BUILT (Phase 5B-1)
+
+Six tables. Every one is TENANT-OWNED; five are additionally BRAND-SCOPED, and the sixth — `Asset`
+itself — is brand-scoped **optionally**, because a workspace-level file that every brand shares is a
+real shape and not a degenerate one (D-101).
+
+| Table                  | What it holds                                                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `asset_folder`         | A named folder, nesting through a self-reference. `parentId` is composite, so a folder cannot be adopted by another workspace's tree. Depth is bounded by activated configuration, checked in the service. `unique(workspaceId, brandId, parentId, name)` over live rows                   |
+| `asset`                | One logical file. The BYTES ARE NOT HERE — a `storageKey` points into the object store, exactly as `brand_source_document` does. Carries `kind`, `status`, `scanStatus`, `sizeBytes`, `checksumSha256`, `originalFilename` (normalised), provenance and soft delete. `brandId` is nullable |
+| `asset_version`        | APPEND-ONLY history, one row per uploaded revision. Three independent layers hold the invariant (D-102)                                                                                                                                                                                    |
+| `asset_derivative`     | A generated rendition — thumbnail, preview — with its own key, bounds and kind. The MODEL is complete; no encoder produces bytes yet (D-107)                                                                                                                                               |
+| `asset_upload_session` | The reserve-then-commit record for one upload. Holds the declared size and type, the issued grant, an `idempotencyKey` and an expiry. `unique(workspaceId, idempotencyKey)` makes a replayed completion return the first result rather than a second asset                                 |
+| `asset_processing_job` | Lifecycle, attempts, stage and customer-safe failure text — the same shape `brand_ingestion_job` uses, so the reconciliation sweep reasons about both the same way. A partial unique index keeps at most one live job per asset                                                            |
+
+**Enums:** `AssetKind`, `AssetSource`, `AssetScanStatus`, `AssetStatus`, `AssetDerivativeKind`,
+`AssetUploadSessionStatus`, `AssetProcessingStage`.
+
+**Every intra-library foreign key is composite with `workspaceId` (D-99), and this is not belt-and-braces.**
+PostgreSQL evaluates referential integrity with RLS BYPASSED. A plain `folderId` column would therefore
+accept another workspace's folder id — and even where it did not, the difference between "inserted" and
+"constraint violated" answers the question _does this id exist in some workspace?_, which is exactly the
+inference §2.1 of `CLAUDE.md` forbids. Composite keys make the referenced row invisible rather than
+merely unusable. Each parent carries the `@@unique([workspaceId, id])` the child references.
+
+**Duplicate protection is a partial unique index over live rows** (D-100):
+`(workspaceId, checksumSha256) WHERE "deletedAt" IS NULL`. Content identity, not filename identity —
+and scoped to what is still there, so archiving a file does not permanently poison its checksum.
+
+**`asset_version` is append-only in three layers** (D-102), because one is a single mistake away from
+being none:
+
+1. `UPDATE` and `DELETE` are revoked from both application roles — except a column-level
+   `GRANT UPDATE ("scanStatus")`, which is the one field the scanner writes after the row exists.
+2. FORCE RLS is on and the owner has no policy, so even the table owner cannot rewrite history.
+3. A trigger compares every immutable column field by field and raises if any of them moved, so the
+   narrow column grant cannot be used as a doorway.
+
+Migration: `20260914120000_phase_5b_asset_library`. Isolation coverage:
+`tests/isolation/phase5b-asset-tenancy.test.ts` (42 tests) and
+`tests/isolation/assets-lifecycle.test.ts` (51 tests).
+
 ### 4.3 `Campaign`
 
 `id`, `workspaceId`, `brandId`, `name`, `objective`, `description`, `startDate`, `endDate`,

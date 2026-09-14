@@ -50,6 +50,17 @@ export interface TenantFixture {
   readonly conversationId: string;
   readonly messageId: string;
   readonly messageIdempotencyKey: string;
+  // --- Phase 5B-1 (Asset Library) ---
+  readonly assetFolderId: string;
+  readonly workspaceFolderId: string;
+  readonly assetId: string;
+  readonly workspaceAssetId: string;
+  readonly assetChecksum: string;
+  readonly assetVersionId: string;
+  readonly assetDerivativeId: string;
+  readonly uploadSessionId: string;
+  readonly uploadIdempotencyKey: string;
+  readonly assetProcessingJobId: string;
 }
 
 export interface IsolationFixtures {
@@ -727,6 +738,146 @@ async function createTenant(
         },
       });
 
+      /*
+       * Phase 5B-1 — a complete Asset Library for this tenant.
+       *
+       * TWO FOLDERS AND TWO ASSETS EACH, and the pairing is the point. One of
+       * each is BRAND-SCOPED and one is WORKSPACE-LEVEL (brandId null), because
+       * docs/DATABASE.md §4.6 makes a null brand mean "belongs to the
+       * workspace". A suite that only ever saw brand-scoped rows would never
+       * exercise the MATCH SIMPLE exemption, and the exemption is precisely the
+       * thing a reader would most doubt.
+       *
+       * The two tenants share an IDENTICAL asset checksum, which is what proves
+       * the live-dedupe unique index is workspace-scoped: if it were global,
+       * provisioning tenant B would fail outright.
+       */
+      const assetFolder = await db.assetFolder.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          name: 'Campaign photography',
+          createdByUserId: user.id,
+        },
+      });
+
+      const workspaceFolder = await db.assetFolder.create({
+        data: {
+          workspaceId: id,
+          // NULL: a workspace-level folder, shared across every brand.
+          brandId: null,
+          name: 'Legal and contracts',
+          createdByUserId: user.id,
+        },
+      });
+
+      const asset = await db.asset.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          folderId: assetFolder.id,
+          name: 'hero-shot.png',
+          kind: 'IMAGE',
+          mimeType: 'image/png',
+          sizeBytes: 148_221,
+          width: 1600,
+          height: 900,
+          storageKey: `ws/${id}/brand/${brand.id}/asset/fixture-hero`,
+          // Deliberately IDENTICAL across tenants.
+          checksumSha256: 'fixture-asset-checksum-000000000000000000000000000000',
+          tags: ['hero', 'campaign'],
+          scanStatus: 'CLEAN',
+          scannedAt: new Date(),
+          status: 'READY',
+          currentVersion: 1,
+          uploadedByUserId: user.id,
+        },
+      });
+
+      const workspaceAsset = await db.asset.create({
+        data: {
+          workspaceId: id,
+          brandId: null,
+          folderId: workspaceFolder.id,
+          name: 'master-services-agreement.pdf',
+          kind: 'DOCUMENT',
+          mimeType: 'application/pdf',
+          sizeBytes: 92_004,
+          storageKey: `ws/${id}/asset/fixture-msa`,
+          checksumSha256: `fixture-workspace-asset-${slug}`,
+          tags: ['legal'],
+          scanStatus: 'CLEAN',
+          scannedAt: new Date(),
+          status: 'READY',
+          currentVersion: 1,
+          uploadedByUserId: user.id,
+        },
+      });
+
+      const assetVersion = await db.assetVersion.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          assetId: asset.id,
+          versionNumber: 1,
+          storageKey: asset.storageKey,
+          checksumSha256: asset.checksumSha256,
+          mimeType: asset.mimeType,
+          sizeBytes: asset.sizeBytes,
+          width: asset.width,
+          height: asset.height,
+          scanStatus: 'CLEAN',
+          createdByUserId: user.id,
+        },
+      });
+
+      const assetDerivative = await db.assetDerivative.create({
+        data: {
+          workspaceId: id,
+          assetId: asset.id,
+          kind: 'THUMBNAIL',
+          storageKey: `${asset.storageKey}/thumbnail`,
+          mimeType: 'image/png',
+          sizeBytes: 8_120,
+          width: 320,
+          height: 180,
+        },
+      });
+
+      const uploadSession = await db.assetUploadSession.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          folderId: assetFolder.id,
+          assetId: asset.id,
+          declaredFileName: 'hero-shot.png',
+          declaredMimeType: 'image/png',
+          declaredSizeBytes: 148_221,
+          storageKey: asset.storageKey,
+          // COMPLETED so the expiry sweep never claims a fixture row.
+          status: 'COMPLETED',
+          idempotencyKey: `fixture-asset-upload-${slug}`,
+          createdByUserId: user.id,
+          expiresAt: new Date(Date.now() + 3600_000),
+          completedAt: new Date(),
+        },
+      });
+
+      const assetProcessingJob = await db.assetProcessingJob.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          assetId: asset.id,
+          // COMPLETED for the same reason the ingestion fixture is: a suite
+          // that later enqueues real work must not find a fixture parked in
+          // QUEUED forever and reconciled out from under it.
+          stage: 'COMPLETED',
+          attempts: 1,
+          derivativesCreated: 1,
+          completedAt: new Date(),
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -765,6 +916,16 @@ async function createTenant(
         conversationId: conversation.id,
         messageId: message.id,
         messageIdempotencyKey: message.idempotencyKey ?? '',
+        assetFolderId: assetFolder.id,
+        workspaceFolderId: workspaceFolder.id,
+        assetId: asset.id,
+        workspaceAssetId: workspaceAsset.id,
+        assetChecksum: asset.checksumSha256,
+        assetVersionId: assetVersion.id,
+        assetDerivativeId: assetDerivative.id,
+        uploadSessionId: uploadSession.id,
+        uploadIdempotencyKey: uploadSession.idempotencyKey,
+        assetProcessingJobId: assetProcessingJob.id,
       };
     },
     { prisma, bootstrap: true },

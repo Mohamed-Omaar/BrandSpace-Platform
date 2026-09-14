@@ -67,6 +67,56 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('brand_brain.review', 'workspace', 'Approve or reject extracted knowledge'),
   def('brand_brain.delete', 'workspace', 'Archive brand knowledge and remove sources'),
   def('brand_brain.chat', 'workspace', 'Ask Brand Brain questions'),
+
+  /*
+   * Phase 5B-1. The Asset Library, split where the AUTHORITIES genuinely
+   * differ rather than where the screens do.
+   *
+   * docs/SECURITY.md §4.3 has one row — "Upload / manage assets" — and one row
+   * is too coarse to express what that table itself already says: the Designer
+   * holds it outright, the Copywriter holds it only for their OWN work, and
+   * Approver, Analyst and Viewer do not hold it at all. A single
+   * `assets.manage` key cannot say that, and collapsing eight capabilities
+   * into it would mean anyone who may tag a photo may also delete the brand
+   * library.
+   *
+   * Each key below is a different question:
+   *
+   *   - `read` is seeing the library at all.
+   *   - `use` is SELECTING an approved asset for a post or a design. It is
+   *     separate from `read` because it is the capability other modules will
+   *     ask for, and because a role that may browse for reference is not
+   *     automatically one that may put a file in front of the public. It
+   *     grants no write of any kind.
+   *   - `upload` consumes plan storage and creates work for a scanner. It is
+   *     not `edit`: someone who may fix a mistyped caption is not
+   *     automatically someone who may add files to the corpus.
+   *   - `edit` is metadata — name, tags, folder, licence, rights expiry. It
+   *     never touches bytes.
+   *   - `manage_taxonomy` is folders and tags ACROSS the library. Renaming a
+   *     folder changes what every member sees, which is a different blast
+   *     radius from editing one asset.
+   *   - `version` replaces the BYTES behind an asset that other content may
+   *     already reference. That is the most consequential write short of
+   *     deletion, and it is why it is not `edit`.
+   *   - `archive` is reversible removal; `restore` brings it back; `delete` is
+   *     the irreversible one. They are three keys because they are three
+   *     different amounts of trust, and because a role that may tidy up is not
+   *     automatically one that may destroy.
+   *
+   * No new ROLE is introduced. These attach to the roles that already exist,
+   * and the read-only roles stay read-only — `analyst` and `client_viewer`
+   * receive `assets.read` and nothing else, not even `assets.use`.
+   */
+  def('assets.read', 'workspace', 'View the Asset Library'),
+  def('assets.use', 'workspace', 'Select an approved asset for use'),
+  def('assets.upload', 'workspace', 'Upload files to the Asset Library'),
+  def('assets.edit', 'workspace', 'Edit asset metadata, tags and placement'),
+  def('assets.manage_taxonomy', 'workspace', 'Create and rename folders and tags'),
+  def('assets.version', 'workspace', 'Replace the file behind an asset with a new version'),
+  def('assets.archive', 'workspace', 'Archive an asset'),
+  def('assets.restore', 'workspace', 'Restore an archived asset'),
+  def('assets.delete', 'workspace', 'Delete an asset permanently'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */
