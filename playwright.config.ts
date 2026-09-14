@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
@@ -87,6 +88,16 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   const env: Record<string, string> = {
     DATABASE_URL: process.env['DATABASE_URL'] ?? PLACEHOLDER_DATABASE_URL,
     APP_ENV: 'development',
+    /*
+     * ONE OBJECT STORE FOR EVERY PROCESS IN THE SUITE. The dashboard accepts the
+     * upload and the worker reads the bytes back, so a per-process store makes
+     * every queued ingestion fail on a file that "does not exist". Pinning the
+     * directory here also keeps the run self-contained rather than depending on
+     * both processes computing the same temporary path.
+     */
+    BRANDSPACE_OBJECT_STORE_DIR:
+      process.env['BRANDSPACE_OBJECT_STORE_DIR'] ??
+      path.join(os.tmpdir(), 'brandspace-e2e-objects'),
   };
 
   // The design showcase is opt-in and refused in production. The suite enables

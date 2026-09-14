@@ -77,7 +77,14 @@ export {
 export { BrandKnowledgeService, localizedFrom } from './knowledge';
 export type { KnowledgeActor, KnowledgeServiceOptions, StalenessPolicy } from './knowledge';
 
-export { InMemoryObjectStore, buildStorageKey, checksumOf, createObjectStore } from './storage';
+export {
+  FilesystemObjectStore,
+  InMemoryObjectStore,
+  buildStorageKey,
+  checksumOf,
+  createObjectStore,
+  defaultObjectStoreDirectory,
+} from './storage';
 export type { ObjectStore, StoredObject } from './storage';
 
 export {

@@ -487,7 +487,17 @@ test.describe('chat answers, in development, without a real provider', () => {
     // this file have already added to the workspace — but the generic failure
     // is not one of them, and neither is a silent empty panel.
     await expect(
-      panel.getByTestId('chat-insufficient').or(panel.getByTestId('chat-message-assistant')),
+      /*
+       * `.first()` IS LOAD-BEARING. The insufficient-evidence notice renders as a
+       * <span> INSIDE the assistant <article>, so when the brain answers with a
+       * refusal both test ids match and Playwright's strict mode fails the run
+       * on ambiguity rather than on the assertion. Either match satisfies this
+       * test, so take the first.
+       */
+      panel
+        .getByTestId('chat-insufficient')
+        .or(panel.getByTestId('chat-message-assistant'))
+        .first(),
     ).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('chat-error')).toBeHidden();
   });
