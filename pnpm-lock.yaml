@@ -154,6 +154,9 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -178,6 +181,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@brandspace/ui':
         specifier: workspace:*
         version: link:../../packages/ui

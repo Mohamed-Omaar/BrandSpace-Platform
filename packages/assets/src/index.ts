@@ -8,6 +8,7 @@ export {
   resolveAssetPolicy,
   TenantAssetPolicySource,
   type AssetPolicy,
+  type CatalogueReader,
   type DerivativePolicy,
   type ProcessingPolicy,
   type ScanningPolicy,
