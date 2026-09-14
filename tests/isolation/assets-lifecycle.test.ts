@@ -1139,16 +1139,75 @@ describe('pagination is a stable keyset, not an offset', () => {
     });
   });
 
-  it('sorts by name deterministically in both directions', async () => {
+  /*
+   * WHY THIS DOES NOT COMPARE AGAINST JavaScript's `.sort()`.
+   *
+   * It used to, and it was wrong in a way that passed locally and failed in
+   * CI. `ORDER BY` uses the DATABASE's collation; `Array.prototype.sort()`
+   * compares UTF-16 code units. Those are different orderings, and they
+   * disagree the moment a filename contains punctuation:
+   *
+   *   C.UTF-8 (this sandbox) and JS  ->  "bad.png", "bad2.png"
+   *                                      '.' is 0x2E, '2' is 0x32
+   *   en_US.UTF-8 (the CI image)     ->  "bad2.png", "bad.png"
+   *                                      punctuation is ignored at the
+   *                                      primary level, so it compares
+   *                                      "badpng" against "bad2png"
+   *
+   * So the old assertion was not testing the library at all — it was testing
+   * whether the machine running it happened to share JavaScript's collation,
+   * and it would have failed on any deployment whose database does not.
+   *
+   * What keyset pagination actually needs from the ordering is three
+   * properties, and NONE of them names a collation: it must be total, it must
+   * be stable across identical requests, and both directions must agree on it.
+   * The database picks the order; the library must not disturb it.
+   */
+  it('orders by name totally, stably, and identically in reverse', async () => {
     await inA(async (h) => {
-      const ascending = await h.library.browse({
-        actor: actor(),
-        sort: 'name',
-        direction: 'asc',
-        limit: 100,
-      });
-      const names = ascending.items.map((a) => a.name);
-      expect([...names].sort()).toEqual(names);
+      const names = async (direction: 'asc' | 'desc'): Promise<string[]> => {
+        const page = await h.library.browse({
+          actor: actor(),
+          sort: 'name',
+          direction,
+          limit: 100,
+        });
+        return page.items.map((a) => a.name);
+      };
+
+      const ascending = await names('asc');
+      const again = await names('asc');
+      const descending = await names('desc');
+
+      // There is something to order. A vacuous pass here would hide everything
+      // below it.
+      expect(ascending.length).toBeGreaterThan(1);
+
+      // STABLE: the same request twice is the same sequence. Without this a
+      // cursor issued on one page can land mid-way through a reshuffled set.
+      expect(again).toEqual(ascending);
+
+      // TOTAL, and both directions agree: reversing one gives the other
+      // exactly. Ties broken inconsistently would show up here as two names
+      // swapping places rather than the whole list mirroring.
+      expect([...descending].reverse()).toEqual(ascending);
+
+      /*
+       * Non-decreasing UNDER THE DATABASE'S OWN COLLATION, which is the only
+       * authority on what "sorted by name" means here. Without this the test
+       * would pass on an ordering by any other column, since a createdAt sort
+       * is just as stable and just as reversible.
+       *
+       * The raw statement needs no tenant predicate and gets no review under
+       * CLAUDE.md §5: it reads no table. It sorts a literal array that the
+       * query above already returned, using the same collation the ORDER BY
+       * under test used.
+       */
+      const scoped = h.db as unknown as PrismaClient;
+      const collated = await scoped.$queryRaw<{ name: string }[]>`
+        SELECT t.name FROM unnest(${ascending}::text[]) AS t(name) ORDER BY t.name
+      `;
+      expect(collated.map((row) => row.name)).toEqual(ascending);
     });
   });
 });
