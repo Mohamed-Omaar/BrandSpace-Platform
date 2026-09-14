@@ -1803,6 +1803,12 @@ model BrandSourceDocument {
   ingestionJobs  BrandIngestionJob[]
   knowledgeItems BrandKnowledgeItem[]
 
+  /// The composite target every child of a document points at (D-99, D-112,
+  /// F-80). `id` is already the primary key, so this constrains nothing new —
+  /// it exists because PostgreSQL requires a unique index behind a foreign key,
+  /// and a workspace-scoped key is what stops another tenant's document id from
+  /// being referenceable at all.
+  @@unique([workspaceId, id], name: "brand_source_document_workspace_scope")
   @@unique([workspaceId, brandId, checksum])
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, brandId, status])
@@ -1834,7 +1840,14 @@ model BrandSourceChunk {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_source_chunk_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80). A plain `sourceDocumentId` does NOT keep
+  /// the parent inside the tenant: PostgreSQL runs referential integrity with
+  /// RLS BYPASSED, so a chunk carrying its own workspaceId was accepted against
+  /// ANOTHER workspace's document — and the difference between "inserted" and
+  /// "constraint violated" answered *does this document id exist?*. Pairing the
+  /// reference with `workspaceId` collapses that to "is this a document in my
+  /// OWN workspace", which discloses nothing.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_source_chunk_document_fkey")
 
   @@unique([sourceDocumentId, chunkIndex])
   @@index([workspaceId, brandId])
@@ -1930,7 +1943,11 @@ model BrandIngestionJob {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_ingestion_job_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80), for the reason on
+  /// `BrandSourceChunk.document`. A job is the strongest form of the oracle: a
+  /// queued job is observable in the UI, so a reference that merely fails later
+  /// still answers the question at insert time.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_ingestion_job_document_fkey")
 
   @@index([workspaceId, brandId, stage])
   @@index([stage, nextAttemptAt])
@@ -1964,6 +1981,9 @@ model BrandBrainConversation {
 
   messages BrandBrainMessage[]
 
+  /// The composite target every message points at (D-99, D-112, F-80). See the
+  /// note on `BrandSourceDocument`.
+  @@unique([workspaceId, id], name: "brand_brain_conversation_workspace_scope")
   @@index([workspaceId, brandId, lastMessageAt(sort: Desc)])
   @@index([expiresAt])
   @@map("brand_brain_conversation")
@@ -2008,7 +2028,11 @@ model BrandBrainMessage {
 
   workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand        Brand                  @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_brain_message_brand_fkey")
-  conversation BrandBrainConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80). The chat oracle was the sharpest of the
+  /// three: posting into another workspace's conversation id SUCCEEDED, so a
+  /// leaked id was not merely probeable but writable — the message landed in a
+  /// conversation its author could not read.
+  conversation BrandBrainConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_brain_message_conversation_fkey")
 
   @@unique([workspaceId, idempotencyKey])
   @@index([conversationId, createdAt])

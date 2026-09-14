@@ -1090,3 +1090,78 @@ member is not scoped to is `NOT_FOUND`, identical in shape to a cross-tenant mis
 | Hostile filenames, traversal, signature mismatch, size bounds     | `tests/unit/assets-file-safety.test.ts`         |
 | Permission and brand-scope refusals                               | `tests/unit/assets-policy.test.ts`              |
 | The route, its states, AR/EN, RTL/LTR, keyboard and WCAG 2.2 AA   | `tests/e2e/assets.spec.ts`                      |
+
+---
+
+## 22. Implementation Status — F-80 corrective pass (Brand Brain composite foreign keys)
+
+### 22.1 The defect
+
+§2.1 of `CLAUDE.md` forbids a tenant inferring anything about another tenant's data, and says an
+unauthorised access must be shaped identically to a genuine miss. Three Phase 5A foreign keys broke
+that on the WRITE side:
+
+| Column                                 | Referenced                     |
+| -------------------------------------- | ------------------------------ |
+| `brand_source_chunk.sourceDocumentId`  | `brand_source_document(id)`    |
+| `brand_ingestion_job.sourceDocumentId` | `brand_source_document(id)`    |
+| `brand_brain_message.conversationId`   | `brand_brain_conversation(id)` |
+
+PostgreSQL evaluates referential integrity **with RLS bypassed** — as the table owner, not as the
+caller. A row carrying the caller's OWN `workspaceId` therefore satisfies the tenant policy, reaches
+the constraint, and is checked against a parent the caller cannot see. Two consequences:
+
+1. **The write landed.** A message could be posted into another workspace's conversation. It was
+   demonstrated, not argued: `tests/isolation/f80-migration-upgrade.test.ts` performs exactly that
+   insert against a database built at the pre-fix commit and asserts that it succeeds.
+2. **Refusal answered a question.** "Inserted" versus "constraint violated" tells the caller whether
+   an id names a real row somewhere on the platform, which over enough probes enumerates another
+   tenant's documents and conversations.
+
+### 22.2 The fix, and what makes it sufficient
+
+Each key is now composite on `(workspaceId, <parent id>)` against a `(workspaceId, id)` unique on the
+parent (D-99, generalised as D-112). The oracle does not move — it closes: a genuine foreign id and a
+fabricated one produce an **identical** SQLSTATE, constraint name and PostgreSQL message, which
+`tests/isolation/f80-brand-brain-composite-keys.test.ts` asserts by comparing the two refusals
+field for field rather than only checking that both fail.
+
+`ON DELETE CASCADE` is preserved on all three, and both directions are tested: the relationships
+still work and deleting a parent still removes its children.
+
+### 22.3 The migration is not allowed to repair
+
+A row referencing another workspace's parent is evidence of a cross-tenant write. The migration's
+pre-flight **refuses** — naming the tables and counts, never an id — and changes nothing, rather than
+deleting the rows that would have blocked it. A migration that tidied away that evidence would be
+destroying the only record of an incident before anyone had looked at it.
+
+### 22.4 Why the migration lifts FORCE RLS, and why that is not a weakening
+
+Migrations run as `brandspace_migrator`, the table owner. These tables are `FORCE ROW LEVEL SECURITY`
+with policies for `brandspace_app` and `brandspace_platform` only, so **the owner sees zero rows** —
+which means a pre-flight anti-join returns 0 however many offending rows exist, and, measured
+directly, `ALTER TABLE … ADD CONSTRAINT FOREIGN KEY` validates only the visible rows and still marks
+the constraint `convalidated = true`. Without lifting FORCE the migration would have reported success
+and left a constraint that claims more than the data supports.
+
+FORCE is therefore lifted inside the migration's own transaction and restored before it commits
+(D-113). `ALTER TABLE` holds an ACCESS EXCLUSIVE lock for exactly that interval, so no other session
+can read or write the tables while FORCE is off; a rollback restores the catalogue; and a final `DO`
+block refuses to commit unless all five tables are ENABLED and FORCED again. `ENABLE ROW LEVEL
+SECURITY`, the policies and the grants are untouched.
+
+### 22.5 What these claims rest on
+
+| Claim                                                                    | Proven by                                                    |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| A foreign parent id is refused from inside the caller's own workspace    | `tests/isolation/f80-brand-brain-composite-keys.test.ts`     |
+| A real foreign id and a fabricated one fail identically                  | same                                                         |
+| The relationships and their `ON DELETE CASCADE` still work               | same                                                         |
+| The constraints are composite in the catalogue and no plain key survives | same                                                         |
+| RLS, the append-only grants and the brand boundary are unchanged         | same                                                         |
+| The defect was real at the pre-fix commit                                | `tests/isolation/f80-migration-upgrade.test.ts`              |
+| The migration refuses an offending row and changes nothing               | same                                                         |
+| Every valid row survives the upgrade, by id                              | same                                                         |
+| A migrations-only database has zero drift from the Prisma schema         | same                                                         |
+| Brand Brain ingestion, chat, governance and retention still behave       | the seven `tests/isolation/brand-brain-*` suites (122 tests) |
