@@ -7,6 +7,7 @@ import {
 } from '@brandspace/database';
 import {
   assertBrandInScope,
+  brandIdQueryFilter,
   brandIdScopeFilter,
   brandInScope,
   systemClock,
@@ -380,9 +381,14 @@ export class ContentApprovalService {
     note?: string | null;
   }): Promise<Approval> {
     const note = this.#checkNote(input.note);
-    const item = await this.#db.contentItem.findUnique({ where: { id: input.itemId } });
+    // D-132: the scope is a PREDICATE. An out-of-scope item is never read.
+    const item = await this.#db.contentItem.findFirst({
+      where: {
+        id: input.itemId,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
+    });
     if (!item || item.deletedAt) throw contentItemNotFound();
-    assertBrandInScope(input.actor.brandScope, item.brandId);
 
     if (item.status !== 'DRAFT' && item.status !== 'CHANGES_REQUESTED') {
       throw item.status === 'IN_REVIEW' ? alreadyInReview() : notSubmittable();
@@ -529,9 +535,15 @@ export class ContentApprovalService {
     `;
     if (locked.length === 0) throw approvalNotFound();
 
-    const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
+    // D-132: scoped in the WHERE. The lock above is by workspace — the brand
+    // predicate is what makes the row unreadable to a reviewer scoped elsewhere.
+    const approval = await this.#db.approval.findFirst({
+      where: {
+        id: input.approvalId,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
+    });
     if (!approval) throw approvalNotFound();
-    assertBrandInScope(input.actor.brandScope, approval.brandId);
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
 
     /*
@@ -670,9 +682,15 @@ export class ContentApprovalService {
     `;
     if (locked.length === 0) throw approvalNotFound();
 
-    const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
+    // D-132: scoped in the WHERE. The lock above is by workspace — the brand
+    // predicate is what makes the row unreadable to a reviewer scoped elsewhere.
+    const approval = await this.#db.approval.findFirst({
+      where: {
+        id: input.approvalId,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
+    });
     if (!approval) throw approvalNotFound();
-    assertBrandInScope(input.actor.brandScope, approval.brandId);
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
 
     /*
@@ -791,9 +809,14 @@ export class ContentApprovalService {
    * existence.
    */
   async reviewSubject(input: { approvalId: string; actor: ApprovalActor }): Promise<ReviewSubject> {
-    const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
+    // D-132: scoped in the WHERE, so another brand's review is never retrieved.
+    const approval = await this.#db.approval.findFirst({
+      where: {
+        id: input.approvalId,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
+    });
     if (!approval) throw approvalNotFound();
-    assertBrandInScope(input.actor.brandScope, approval.brandId);
 
     const current = await this.policyForBrand(approval.brandId);
     const policy = policyFromSnapshot(approval.policySnapshot, current);
@@ -880,12 +903,12 @@ export class ContentApprovalService {
     itemId: string;
     brandScope: readonly string[];
   }): Promise<Approval[]> {
-    const item = await this.#db.contentItem.findUnique({
-      where: { id: input.itemId },
+    // D-132: scoped in the WHERE.
+    const item = await this.#db.contentItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
       select: { id: true, brandId: true, deletedAt: true },
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
-    assertBrandInScope(input.brandScope, item.brandId);
     return this.#db.approval.findMany({
       where: { workspaceId: this.#workspaceId, contentItemId: item.id },
       orderBy: { cycle: 'asc' },

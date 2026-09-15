@@ -100,6 +100,30 @@ function applyMigration(url: string, name: string): void {
   );
 }
 
+/**
+ * Drop the throwaway database, WITHOUT `WITH (FORCE)`.
+ *
+ * FORCE terminates every backend attached to the database — including an
+ * AUTOVACUUM WORKER, which after 29 migrations of writes is entirely likely to
+ * be attached and is owned by the superuser. The migrator cannot signal it, so
+ * the drop fails with "permission denied to terminate process" and the failure
+ * lands in `afterAll`, turning a passing suite red for a reason that has
+ * nothing to do with what it asserts. Every connection this suite opened is
+ * closed by the time this runs, so a plain DROP is the correct instrument; the
+ * short retry covers a backend still winding down.
+ */
+async function dropDatabase(admin: Client, name: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+      return;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+}
+
 /** ENABLE and FORCE, straight from the catalogue. */
 async function rlsState(
   client: Client,
@@ -135,7 +159,7 @@ describe('the D-112 migration is atomic, including on its own failure path', () 
   afterAll(async () => {
     await migrator?.end();
     if (admin) {
-      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await dropDatabase(admin, database);
       await admin.end();
     }
   }, 60_000);

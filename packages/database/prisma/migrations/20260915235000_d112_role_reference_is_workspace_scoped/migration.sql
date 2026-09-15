@@ -17,6 +17,15 @@
 -- `membership.roleId`, so the thing the missing layer was protecting is the
 -- permission set itself.
 --
+-- THE RULE HAS TWO HALVES, AND THE REALM IS THE SHARPER ONE. `workspaceId IS
+-- NULL` does not mean "workspace system role": PLATFORM roles carry a NULL
+-- workspace too — `platform_owner` among them — and `role`'s RLS policy makes
+-- every one of them visible inside a tenant context. Accepting one would bind a
+-- customer membership to the full platform permission set, because customer
+-- sessions compute their permissions straight from `membership.role.permissions`.
+-- So a role is acceptable only when it is `realm = 'WORKSPACE'` AND either a
+-- system role or this workspace's own.
+--
 -- WHY A TRIGGER AND NOT `SECURITY DEFINER`. The trigger reads `role` as the
 -- INVOKER, which is deliberate and makes the check correct in both realms:
 --
@@ -64,30 +73,31 @@ BEGIN
   SELECT count(*) INTO offending
     FROM "membership" m
     JOIN "role" r ON r."id" = m."roleId"
-   WHERE r."workspaceId" IS NOT NULL
-     AND r."workspaceId" <> m."workspaceId";
+   WHERE r."realm" <> 'WORKSPACE'
+      OR (r."workspaceId" IS NOT NULL AND r."workspaceId" <> m."workspaceId");
   IF offending > 0 THEN
     RAISE EXCEPTION
-      'membership.roleId: % row(s) name a role belonging to another workspace; resolve these before applying this migration', offending;
+      'membership.roleId: % row(s) name a platform-realm role or a role of another workspace; resolve these before applying this migration', offending;
   END IF;
 
   SELECT count(*) INTO offending
     FROM "invitation" i
     JOIN "role" r ON r."id" = i."roleId"
-   WHERE r."workspaceId" IS NOT NULL
-     AND r."workspaceId" <> i."workspaceId";
+   WHERE r."realm" <> 'WORKSPACE'
+      OR (r."workspaceId" IS NOT NULL AND r."workspaceId" <> i."workspaceId");
   IF offending > 0 THEN
     RAISE EXCEPTION
-      'invitation.roleId: % row(s) name a role belonging to another workspace; resolve these before applying this migration', offending;
+      'invitation.roleId: % row(s) name a platform-realm role or a role of another workspace; resolve these before applying this migration', offending;
   END IF;
 END $$;
 
 CREATE OR REPLACE FUNCTION app.role_reference_is_workspace_scoped() RETURNS trigger AS $$
 DECLARE role_workspace UUID;
+        role_realm     TEXT;
         role_found     BOOLEAN;
 BEGIN
-  SELECT r."workspaceId", TRUE
-    INTO role_workspace, role_found
+  SELECT r."workspaceId", r."realm"::text, TRUE
+    INTO role_workspace, role_realm, role_found
     FROM "role" r
    WHERE r."id" = NEW."roleId";
 
@@ -97,7 +107,29 @@ BEGIN
       USING ERRCODE = '23503';
   END IF;
 
-  -- NULL is a SYSTEM role and belongs to everyone. Anything else must match.
+  /*
+   * THE REALM FIRST, AND IT IS THE POINT OF THIS CHECK.
+   *
+   * `workspaceId IS NULL` does NOT mean "workspace system role" — PLATFORM
+   * roles carry a NULL workspace too, `platform_owner` among them, and `role`'s
+   * RLS policy (`"workspaceId" IS NULL OR = app.current_workspace_id()`) makes
+   * every one of them VISIBLE inside a tenant context. A membership bound to
+   * one would carry the whole platform permission set into a customer session,
+   * because `customer-session.ts` computes `permissionKeys` straight from
+   * `membership.role.permissions`.
+   *
+   * `InvitationService.create()` already refuses this; the first version of
+   * this trigger did not, which made the database layer agree with an attacker
+   * rather than with the application.
+   */
+  IF role_realm <> 'WORKSPACE' THEN
+    RAISE EXCEPTION
+      'role % is not a workspace role', NEW."roleId"
+      USING ERRCODE = '23503';
+  END IF;
+
+  -- NULL is a WORKSPACE SYSTEM role and belongs to everyone. Anything else
+  -- must be this workspace's own.
   IF role_workspace IS NOT NULL AND role_workspace <> NEW."workspaceId" THEN
     RAISE EXCEPTION
       'role % belongs to another workspace', NEW."roleId"

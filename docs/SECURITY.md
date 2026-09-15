@@ -1873,3 +1873,109 @@ authoritative tenant-owned registry, asks the catalogue for every single-column
 key between two tenant-owned tables, and allows two structural exceptions — the
 `workspace` anchor, and `role`, whose exclusion is backed by an assertion that
 its trigger exists. Restoring one plain key fails it by name.
+
+### 27.7 The second review of the audit — three that mattered, one that widened
+
+A further security review of the corrected head found three more, and the first
+of them was a hole the correction itself had opened. All three share the shape
+of §27.6: the rule was right, the thing enforcing it was one size too small.
+
+**F-13 (High) — the D-131 trigger accepted PLATFORM roles.** `membership.roleId`
+and `invitation.roleId` cannot take the composite key D-112 mandates, because
+`role` has a nullable tenant key, so §27.2 substituted a trigger. That trigger
+read `role."workspaceId" IS NULL` as "a system role, shared by every workspace".
+**It is not.** Two different things carry a NULL workspace:
+
+- WORKSPACE-realm system roles — `owner`, `admin`, `editor`, `client_viewer` —
+  which genuinely are shared, and
+- **every PLATFORM-realm role**, `platform_owner` among them, which belongs to
+  the Control Center and to no workspace at all.
+
+`role`'s RLS policy is `"workspaceId" IS NULL OR "workspaceId" =
+app.current_workspace_id()`, so a tenant session can **see** every platform
+role; and `customer-session.ts` computes `permissionKeys` straight from
+`membership.role.permissions` without ever checking the realm. A membership
+bound to `platform_owner` would therefore have carried the entire platform
+permission set into a customer session. This was demonstrated, not inferred:
+from inside a tenant context, an invitation naming `platform_owner` was
+**accepted**.
+
+The trigger now checks the REALM FIRST and refuses anything that is not
+`realm = 'WORKSPACE'`, regardless of `workspaceId`; only then does it apply the
+same-workspace rule to custom roles. The migration's pre-flight was wrong in
+exactly the same way and was corrected with it — it had asked only about
+`workspaceId`, so a database already carrying such a binding would have passed
+and had the trigger installed behind it, declaring itself clean for ever after.
+It still REFUSES rather than repairing.
+
+Proved against real PostgreSQL through the unprivileged application role, which
+is the only place a trigger's behaviour can be settled:
+`tests/isolation/d131-role-realm.test.ts` covers all five cases — WORKSPACE
+system role accepted, this workspace's own custom role accepted, another
+workspace's custom role refused, **PLATFORM role refused**, fabricated id
+refused — on BOTH `membership` and `invitation`, asserts that a real foreign
+role and an invented one are refused **identically**, and confirms that raw SQL
+issued by the application role is refused too, so the guarantee does not rest on
+the service layer. Against the pre-fix trigger the suite reports
+`the write was ACCEPTED; the D-131 role trigger has regressed` on the platform
+case and on the direct-write case. `tests/isolation/d131-migration-preflight.test.ts`
+plants the binding in a throwaway database before the trigger exists and shows
+the migration refusing, atomically, with counts and no identifiers in the log.
+
+**F-14 (Medium) — D-132 was still a post-read check on every mutation path.**
+§27.3 moved the _read_ paths into the query predicate and left the paths that
+load a row in order to CHANGE it — `ContentCalendarService.#requireItem` and
+`#requireSlot`, `ContentLibraryService.editVariant` and `transition` — fetching
+by id and then calling `assertBrandInScope` in JavaScript.
+
+The outcome looked the same, which is why it survived: `assertBrandInScope`
+throws a NOT_FOUND by design (F-74). **It was not the same.** Measured on the
+defective form, a real out-of-scope content id answered
+`NOT_FOUND: Brand not found` while a fabricated one answered
+`NOT_FOUND: Content not found.` — two different messages for what must be one
+answer. CLAUDE.md §2.1 forbids exactly that distinction, and inside a workspace
+it let a brand-restricted member enumerate which ids were real.
+
+**The fix went wider than the four methods reported**, because the same pattern
+was found in nine more places the review had not named: `approvals.submit`,
+`decide`, `cancel`, `reviewSubject` and `historyForItem`; `studio.rewrite`;
+`knowledge.upsert`, `rollback`, `archiveItem` and `promoteCandidate`; and the
+asset library's asset, upload-session and folder reads. All now carry the scope
+in the `where`. Assets needed their own helper: a workspace-level asset has
+`brandId IS NULL` and is legitimately visible to every member, and `brandId IN
+(…)` is never true of NULL, so `assetBrandScopeFilter` emits
+`OR [brandId IS NULL, brandId IN (…)]` and keeps the rule it replaces rather
+than becoming quietly stricter. An empty scope stays UNRESTRICTED everywhere.
+
+`AssetLibraryService.#loadFolder` now takes the actor as a required parameter,
+so a future caller cannot reintroduce the post-read form without deleting an
+argument the compiler demands.
+
+Two suites hold it. `tests/isolation/brand-scope-query-pushdown.test.ts` records
+the `where` of every read the mutation paths issue and asserts the brand
+predicate is in it — an outcome-only assertion would pass against the defect, so
+the test looks at the query; six of its cases fail against the post-read form.
+And because three consecutive reviews found this pattern in code the previous
+one had just corrected, `tests/unit/brand-scope-predicate-gate.test.ts` now
+enforces the rule over the SOURCE: the brand handed to a scope assertion must be
+one the caller supplied, never a property read off a row the service just
+fetched. Reintroducing the pattern anywhere in `packages/` fails it by file and
+line.
+
+**F-15 (Medium) — the D-112 gate's exemptions were too broad in one direction
+and too shallow in the other.** F-12's gate excluded `role` as a PARENT, which
+would have pre-authorised a brand-new tenant-owned table with its own plain
+`roleId`. Exemptions are now exact `child.constraint -> parent` entries, each
+carrying its reason, with an assertion that every exempted key still exists so a
+stale entry cannot silently pre-authorise a future relationship spelled the same
+way. Only the `workspace` anchor stays parent-wide, and that one is structural.
+
+The composite-key half was checked by column NAME, which a mis-mapped key
+satisfies while scoping nothing: `("workspaceId","brandId") REFERENCES brand
+("id","workspaceId")` contains a column called `workspaceId` and constrains
+none of it. The assertion now pairs `conkey` with `confkey` **by ordinal** —
+PostgreSQL stores them positionally — and demands a literal
+`workspaceId -> workspaceId` mapping. Planting exactly that mis-mapped key makes
+it fail with
+`content_item.… -> brand (workspaceId->id,brandId->workspaceId)`, which the
+name-only form reported as clean.

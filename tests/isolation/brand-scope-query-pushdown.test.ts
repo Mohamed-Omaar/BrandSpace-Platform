@@ -384,3 +384,254 @@ describe('counts and item reads apply BrandScope in the query', () => {
     ).rejects.toThrow(/not found/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The MUTATION paths — D-132's second half.
+// ---------------------------------------------------------------------------
+
+/**
+ * A client that records the `where` of every read it is asked to perform.
+ *
+ * WHY A RECORDER AND NOT JUST AN ASSERTION ON THE OUTCOME. These four paths
+ * load a row the caller is about to CHANGE, and the post-read form they used to
+ * have threw the very same not-found: `assertBrandInScope` was written for
+ * exactly that (F-74). So an outcome-only test passes against the defect and
+ * proves nothing. What actually changed is WHERE the authorization lives — in
+ * the predicate, so the out-of-scope row is never retrieved at all — and the
+ * only way to assert that is to look at the query that was issued.
+ *
+ * Against the previous `findUnique({ where: { id } })`, every assertion below
+ * fails: the recorded `where` carries an id and nothing else.
+ */
+interface RecordedRead {
+  readonly model: string;
+  readonly op: string;
+  readonly where: Record<string, unknown> | undefined;
+}
+
+const WATCHED = ['contentItem', 'contentVariant', 'calendarSlot'] as const;
+
+function recordingClient<T extends object>(db: T, into: RecordedRead[]): T {
+  return new Proxy(db, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop) as unknown;
+      if (typeof prop !== 'string' || !(WATCHED as readonly string[]).includes(prop)) return value;
+      return new Proxy(value as object, {
+        get(model, op) {
+          const fn = Reflect.get(model, op) as unknown;
+          if (typeof op !== 'string' || typeof fn !== 'function' || !op.startsWith('find')) {
+            return fn;
+          }
+          return (args: { where?: Record<string, unknown> }) => {
+            into.push({ model: prop, op, where: args?.where });
+            return (fn as (a: unknown) => unknown)(args);
+          };
+        },
+      });
+    },
+  }) as T;
+}
+
+/** Does this `where` constrain `brandId`, at the top level or inside an AND? */
+function constrainsBrand(where: Record<string, unknown> | undefined): boolean {
+  if (!where) return false;
+  if ('brandId' in where) return true;
+  const and = where['AND'];
+  return Array.isArray(and) && and.some((c) => c && typeof c === 'object' && 'brandId' in c);
+}
+
+const watchedLibrary = <T>(fn: (s: ContentLibraryService) => Promise<T>) => {
+  const reads: RecordedRead[] = [];
+  const done = withWorkspace(
+    fixtures.a.workspaceId,
+    async (db) =>
+      fn(
+        new ContentLibraryService({
+          db: recordingClient(db as object, reads) as typeof db,
+          workspaceId: fixtures.a.workspaceId,
+          policy: CONTENT_POLICY,
+        }),
+      ),
+    { prisma: app },
+  );
+  return { reads, done };
+};
+
+const watchedCalendar = <T>(fn: (s: ContentCalendarService) => Promise<T>) => {
+  const reads: RecordedRead[] = [];
+  const done = withWorkspace(
+    fixtures.a.workspaceId,
+    async (db) =>
+      fn(
+        new ContentCalendarService({
+          db: recordingClient(db as object, reads) as typeof db,
+          workspaceId: fixtures.a.workspaceId,
+          policy: CONTENT_POLICY,
+          timezone: 'UTC',
+          quota: {
+            limit: async () => null,
+            consume: async () => {
+              throw new Error('this suite does not schedule');
+            },
+            refund: async () => {
+              throw new Error('this suite does not schedule');
+            },
+          },
+        }),
+      ),
+    { prisma: app },
+  );
+  return { reads, done };
+};
+
+/** `YYYY-MM-DDTHH:mm` in the workspace's zone (UTC here), N days out. */
+function futureLocalTime(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 16);
+}
+
+describe('the mutation paths carry BrandScope in the query, not after it', () => {
+  /** Everything in `fixtures.a` belongs to brand A, so this scope excludes it. */
+  const elsewhere = () => [otherBrandId];
+
+  it('transition: the item lookup is SCOPED, and an out-of-scope item is not found', async () => {
+    const { reads, done } = watchedLibrary((s) =>
+      s.transition({
+        itemId: fixtures.a.contentItemId,
+        to: 'ARCHIVED',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: elsewhere(),
+      }),
+    );
+    await expect(done).rejects.toThrow(/not found/i);
+
+    const lookup = reads.find((r) => r.model === 'contentItem');
+    expect(lookup, 'transition must read the item it is about to change').toBeTruthy();
+    expect(
+      constrainsBrand(lookup?.where),
+      'the scope must be part of the WHERE, not applied after the row is fetched',
+    ).toBe(true);
+  });
+
+  it('editVariant: the variant lookup is SCOPED', async () => {
+    const { reads, done } = watchedLibrary((s) =>
+      s.editVariant({
+        variantId: fixtures.a.contentVariantId,
+        body: 'Should never be written.',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: elsewhere(),
+      }),
+    );
+    await expect(done).rejects.toThrow(/not found/i);
+
+    const lookup = reads.find((r) => r.model === 'contentVariant');
+    expect(lookup, 'editVariant must read the variant it is about to change').toBeTruthy();
+    expect(constrainsBrand(lookup?.where)).toBe(true);
+  });
+
+  it('schedule: the item lookup is SCOPED, and refuses before any quota is touched', async () => {
+    const { reads, done } = watchedCalendar((s) =>
+      s.schedule({
+        contentItemId: fixtures.a.contentItemId,
+        localTime: futureLocalTime(1),
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: elsewhere(),
+      }),
+    );
+    // The quota stub throws if consumed, so reaching it would surface here as a
+    // different error entirely.
+    await expect(done).rejects.toThrow(/not found/i);
+
+    const lookup = reads.find((r) => r.model === 'contentItem');
+    expect(lookup).toBeTruthy();
+    expect(constrainsBrand(lookup?.where)).toBe(true);
+  });
+
+  it('cancel: the slot lookup is SCOPED', async () => {
+    const { reads, done } = watchedCalendar((s) =>
+      s.cancel({
+        slotId: fixtures.a.calendarSlotId,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: elsewhere(),
+      }),
+    );
+    await expect(done).rejects.toThrow(/not found/i);
+
+    const lookup = reads.find((r) => r.model === 'calendarSlot');
+    expect(lookup, 'cancel must read the slot it is about to change').toBeTruthy();
+    expect(constrainsBrand(lookup?.where)).toBe(true);
+  });
+
+  it('reschedule: the slot lookup is SCOPED', async () => {
+    const { reads, done } = watchedCalendar((s) =>
+      s.reschedule({
+        slotId: fixtures.a.calendarSlotId,
+        localTime: futureLocalTime(2),
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: elsewhere(),
+      }),
+    );
+    await expect(done).rejects.toThrow(/not found/i);
+
+    const lookup = reads.find((r) => r.model === 'calendarSlot');
+    expect(lookup).toBeTruthy();
+    expect(constrainsBrand(lookup?.where)).toBe(true);
+  });
+
+  it('a REAL out-of-scope id and a FABRICATED one are refused identically', async () => {
+    const message = async (id: string) => {
+      try {
+        await watchedLibrary((s) =>
+          s.transition({
+            itemId: id,
+            to: 'ARCHIVED',
+            actorUserId: fixtures.a.userId,
+            actorBrandScope: elsewhere(),
+          }),
+        ).done;
+      } catch (error) {
+        const e = error as { code?: unknown; message?: unknown };
+        return `${String(e.code)}:${String(e.message)}`;
+      }
+      throw new Error('the mutation was ACCEPTED');
+    };
+    expect(await message(fixtures.a.contentItemId)).toEqual(await message(randomUUID()));
+  });
+
+  it('an EMPTY scope stays UNRESTRICTED, and a same-brand edit still succeeds', async () => {
+    /*
+     * The other half of the platform rule, and the regression this change could
+     * plausibly have caused: pushing the predicate down must not turn "no
+     * restriction" into "matches nothing".
+     */
+    const variant = await withWorkspace(
+      fixtures.a.workspaceId,
+      (db) => db.contentVariant.findUniqueOrThrow({ where: { id: fixtures.a.contentVariantId } }),
+      { prisma: app },
+    );
+
+    const unrestricted = watchedLibrary((s) =>
+      s.editVariant({
+        variantId: fixtures.a.contentVariantId,
+        body: variant.body ?? '',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+    await expect(unrestricted.done).resolves.toBeTruthy();
+    expect(
+      constrainsBrand(unrestricted.reads.find((r) => r.model === 'contentVariant')?.where),
+      'an empty scope must add NO brand predicate at all',
+    ).toBe(false);
+
+    // And the caller's OWN brand is still a successful edit, not a refusal.
+    const inScope = watchedLibrary((s) =>
+      s.editVariant({
+        variantId: fixtures.a.contentVariantId,
+        body: variant.body ?? '',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [fixtures.a.brandId],
+      }),
+    );
+    await expect(inScope.done).resolves.toBeTruthy();
+  });
+});

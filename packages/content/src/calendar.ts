@@ -6,12 +6,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import {
-  assertBrandInScope,
-  brandIdQueryFilter,
-  systemClock,
-  type Clock,
-} from '@brandspace/shared';
+import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import {
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
@@ -401,22 +396,36 @@ export class ContentCalendarService {
 
   // -------------------------------------------------------------------------
 
+  /*
+   * THE SCOPE IS IN THE QUERY, NOT AFTER IT (D-132).
+   *
+   * These read a row the caller is about to MUTATE, and they used to fetch it
+   * by id and then compare `brandId` against the scope in JavaScript. The
+   * outcome was the same — a not-found either way — but the row was read
+   * first, which is the shape D-132 exists to remove: the authorization
+   * predicate belongs in the `where`, so an out-of-scope row is never
+   * retrieved and no later edit can forget the check.
+   *
+   * `brandIdQueryFilter` reads an empty scope as UNRESTRICTED, so an internal
+   * caller with no restriction is unaffected, and the refusal is the same
+   * not-found a genuine miss gives (F-74, docs/SECURITY.md §4.2).
+   */
   async #requireItem(
     contentItemId: string,
     actorBrandScope: readonly string[],
   ): Promise<ContentItem> {
-    const item = await this.#db.contentItem.findUnique({ where: { id: contentItemId } });
+    const item = await this.#db.contentItem.findFirst({
+      where: { id: contentItemId, ...brandIdQueryFilter({ brandScope: actorBrandScope }) },
+    });
     if (!item || item.deletedAt) throw contentItemNotFound();
-    // AFTER the row is known to exist but BEFORE anything is done with it, and
-    // it throws the SAME shape a scope miss would (F-74, docs/SECURITY.md §4.2).
-    assertBrandInScope(actorBrandScope, item.brandId);
     return item;
   }
 
   async #requireSlot(slotId: string, actorBrandScope: readonly string[]): Promise<CalendarSlot> {
-    const slot = await this.#db.calendarSlot.findUnique({ where: { id: slotId } });
+    const slot = await this.#db.calendarSlot.findFirst({
+      where: { id: slotId, ...brandIdQueryFilter({ brandScope: actorBrandScope }) },
+    });
     if (!slot) throw calendarSlotNotFound();
-    assertBrandInScope(actorBrandScope, slot.brandId);
     return slot;
   }
 

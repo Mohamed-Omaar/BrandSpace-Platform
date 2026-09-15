@@ -57,11 +57,29 @@ function tenantTables(): string[] {
   });
 }
 
-/** Parents a single-column key may still point at, with the reason. */
-const STRUCTURAL_EXCEPTIONS: Record<string, string> = {
-  workspace: 'the tenant anchor: workspaceId IS the tenant key',
-  role: 'nullable tenant key (system roles are shared); guarded by a trigger, D-131',
+/**
+ * The ONLY single-column tenant-parent keys that may exist, named EXACTLY.
+ *
+ * PARENT-WIDE EXCEPTIONS ARE HOW A GATE ROTS. Excluding "anything pointing at
+ * `role`" would let Phase 6 add a brand-new tenant-owned table with its own
+ * plain `roleId` and sail straight past a gate whose entire purpose is to catch
+ * that. Each exemption is a specific `child.constraint -> parent`, so a NEW
+ * relationship to the same parent fails until somebody reviews it and gives it
+ * its own protection.
+ *
+ * `workspace` stays parent-wide, and that one is genuinely structural: a key TO
+ * the workspace table is the tenant ANCHOR — `workspaceId` IS the tenant key,
+ * so there is nothing left to scope it by.
+ */
+const EXEMPT_RELATIONSHIPS: Record<string, string> = {
+  'membership.membership_roleId_fkey -> role':
+    'nullable tenant key (system roles are shared); guarded by app.role_reference_is_workspace_scoped(), D-131',
+  'invitation.invitation_roleId_fkey -> role':
+    'nullable tenant key (system roles are shared); guarded by app.role_reference_is_workspace_scoped(), D-131',
 };
+
+/** The one parent a single-column key may always point at. */
+const TENANT_ANCHOR = 'workspace';
 
 describe('D-112 holds across every tenant-owned table, not just Brand Brain', () => {
   it('the registry and the database agree on which tables exist', async () => {
@@ -81,9 +99,8 @@ describe('D-112 holds across every tenant-owned table, not just Brand Brain', ()
      * bypassed — the parent row resolves whoever it belongs to.
      */
     const tables = tenantTables();
-    const exceptions = Object.keys(STRUCTURAL_EXCEPTIONS);
 
-    const offenders = await app.$queryRawUnsafe<
+    const found = await app.$queryRawUnsafe<
       { child: string; constraint: string; parent: string }[]
     >(
       `SELECT child.relname   AS child,
@@ -96,34 +113,60 @@ describe('D-112 holds across every tenant-owned table, not just Brand Brain', ()
           AND cardinality(c.conkey) = 1
           AND child.relname  = ANY($1::text[])
           AND parent.relname = ANY($1::text[])
-          AND parent.relname <> ALL($2::text[])
+          AND parent.relname <> $2
         ORDER BY 1, 2`,
       tables,
-      exceptions,
+      TENANT_ANCHOR,
     );
 
+    const keyOf = (o: { child: string; constraint: string; parent: string }) =>
+      `${o.child}.${o.constraint} -> ${o.parent}`;
+
     expect(
-      offenders.map((o) => `${o.child}.${o.constraint} -> ${o.parent}`),
-      'each of these must become composite on workspaceId, or be added to STRUCTURAL_EXCEPTIONS with a reason',
+      found.map(keyOf).filter((key) => !(key in EXEMPT_RELATIONSHIPS)),
+      'each of these must become composite on workspaceId, or be named in EXEMPT_RELATIONSHIPS with its own reviewed protection',
     ).toEqual([]);
+
+    // The exemptions must be REAL. A stale entry naming a key that no longer
+    // exists would quietly pre-authorise the next relationship that happens to
+    // be spelled the same way.
+    const present = new Set(found.map(keyOf));
+    for (const key of Object.keys(EXEMPT_RELATIONSHIPS)) {
+      expect(present.has(key), `${key} is exempted but no longer exists`).toBe(true);
+    }
   });
 
-  it('every composite tenant key is scoped on workspaceId, not some other pair', async () => {
+  it('every composite tenant key maps workspaceId TO workspaceId on the parent', async () => {
     /*
-     * The complement: a two-column key between tenant-owned tables that does
-     * NOT carry `workspaceId` would satisfy the rule above while scoping
-     * nothing.
+     * The complement, and it is not satisfied by column NAMES alone.
+     *
+     * A two-column key between tenant-owned tables that does not carry
+     * `workspaceId` at all would pass the rule above while scoping nothing. But
+     * so would a key that lists the child's `workspaceId` and then maps it to
+     * some OTHER parent column — `("workspaceId", "brandId") REFERENCES brand
+     * ("organisationId", "id")` contains a column called workspaceId and scopes
+     * precisely nothing, because the parent row is still reachable from any
+     * workspace. Presence is not scoping; the MAPPING is what constrains.
+     *
+     * So this pairs `conkey` with `confkey` BY ORDINAL — PostgreSQL stores the
+     * two arrays positionally, column i of the child maps to column i of the
+     * parent — and demands a `workspaceId -> workspaceId` pair.
      */
     const tables = tenantTables();
     const rows = await app.$queryRawUnsafe<
-      { child: string; constraint: string; columns: string }[]
+      { child: string; constraint: string; parent: string; mapping: string }[]
     >(
-      `SELECT child.relname AS child,
-              c.conname     AS constraint,
-              (SELECT string_agg(att.attname, ',' ORDER BY att.attnum)
-                 FROM unnest(c.conkey) AS k(attnum)
-                 JOIN pg_attribute att
-                   ON att.attrelid = c.conrelid AND att.attnum = k.attnum) AS columns
+      `SELECT child.relname  AS child,
+              c.conname      AS constraint,
+              parent.relname AS parent,
+              (SELECT string_agg(ca.attname || '->' || pa.attname, ',' ORDER BY k.ord)
+                 FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+                 JOIN unnest(c.confkey) WITH ORDINALITY AS f(attnum, ord)
+                   ON f.ord = k.ord
+                 JOIN pg_attribute ca
+                   ON ca.attrelid = c.conrelid  AND ca.attnum = k.attnum
+                 JOIN pg_attribute pa
+                   ON pa.attrelid = c.confrelid AND pa.attnum = f.attnum) AS mapping
          FROM pg_constraint c
          JOIN pg_class child  ON child.oid  = c.conrelid
          JOIN pg_class parent ON parent.oid = c.confrelid
@@ -135,10 +178,10 @@ describe('D-112 holds across every tenant-owned table, not just Brand Brain', ()
       tables,
     );
 
-    const unscoped = rows.filter((r) => !r.columns.split(',').includes('workspaceId'));
+    const unscoped = rows.filter((r) => !r.mapping.split(',').includes('workspaceId->workspaceId'));
     expect(
-      unscoped.map((r) => `${r.child}.${r.constraint} (${r.columns})`),
-      'a composite key between tenant-owned tables must include workspaceId',
+      unscoped.map((r) => `${r.child}.${r.constraint} -> ${r.parent} (${r.mapping})`),
+      'a composite key between tenant-owned tables must map the child workspaceId to the PARENT workspaceId',
     ).toEqual([]);
     // And the rule is not vacuous: there really are composite keys to check.
     expect(rows.length).toBeGreaterThan(5);

@@ -81,3 +81,29 @@ export function assertAssetBrandInScope(actor: AssetActor, brandId: string | nul
   if (brandId === null) return;
   assertBrandInScope(actor.brandScope, brandId);
 }
+
+/**
+ * The SAME rule as a query PREDICATE (D-132).
+ *
+ * `assertAssetBrandInScope` above is the right check in the wrong place when
+ * the brand it is given came out of a row that was just fetched by id: the row
+ * is read, and only then rejected. D-132 says the authorization belongs in the
+ * `where`, so an out-of-scope row is never retrieved at all — and, just as
+ * importantly, an out-of-scope id becomes indistinguishable from an id that
+ * never existed, instead of failing a little later with a different message.
+ *
+ * IT CARRIES THE NULL-BRAND RULE WITH IT, and it has to. A workspace-level
+ * asset or folder has no brand, and `brandId IN (…)` is never true of NULL —
+ * so a bare scope filter would hide the shared logo pack from every member who
+ * has a scope set. The `OR` is what keeps this equivalent to the assertion it
+ * replaces rather than quietly stricter.
+ *
+ * An EMPTY scope is UNRESTRICTED, the platform rule since Phase 2B, and
+ * produces no predicate at all.
+ */
+export function assetBrandScopeFilter(actor: AssetActor): {
+  OR?: ({ brandId: null } | { brandId: { in: string[] } })[];
+} {
+  if (actor.brandScope.length === 0) return {};
+  return { OR: [{ brandId: null }, { brandId: { in: [...actor.brandScope] } }] };
+}

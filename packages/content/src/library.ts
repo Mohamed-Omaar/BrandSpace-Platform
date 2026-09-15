@@ -5,7 +5,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, brandIdQueryFilter } from '@brandspace/shared';
+import { brandIdQueryFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
 import { validateVariant } from './validation';
@@ -156,9 +156,13 @@ export class ContentLibraryService {
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
-    const variant = await this.db.contentVariant.findUnique({ where: { id: input.variantId } });
+    // D-132: the scope is a predicate, so an out-of-scope variant is never
+    // retrieved. Empty scope remains unrestricted; the refusal is the same
+    // not-found a genuine miss gives.
+    const variant = await this.db.contentVariant.findFirst({
+      where: { id: input.variantId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
+    });
     if (!variant) throw contentItemNotFound();
-    assertBrandInScope(input.actorBrandScope, variant.brandId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
@@ -267,9 +271,11 @@ export class ContentLibraryService {
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentItem> {
-    const item = await this.db.contentItem.findUnique({ where: { id: input.itemId } });
+    // D-132, as in `editVariant` above.
+    const item = await this.db.contentItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
+    });
     if (!item || item.deletedAt) throw contentItemNotFound();
-    assertBrandInScope(input.actorBrandScope, item.brandId);
 
     const allowed: Record<string, readonly string[]> = {
       DRAFT: ['ARCHIVED'],

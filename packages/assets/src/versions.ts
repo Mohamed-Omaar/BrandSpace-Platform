@@ -7,7 +7,7 @@ import {
 } from '@brandspace/database';
 import { checksumOf, type ObjectStore } from '@brandspace/storage';
 import { type Clock, systemClock } from '@brandspace/shared';
-import { assertAssetBrandInScope, assertPermission, type AssetActor } from './actor';
+import { assetBrandScopeFilter, assertPermission, type AssetActor } from './actor';
 import {
   assetNotFound,
   contentTypeMismatch,
@@ -80,9 +80,12 @@ export class AssetVersionService {
   }): Promise<{ asset: Asset; version: AssetVersion; job: AssetProcessingJob }> {
     assertPermission(input.actor, 'assets.version');
 
-    const asset = await this.#db.asset.findUnique({ where: { id: input.assetId } });
+    // D-132: the scope is part of the WHERE, so an out-of-scope row is never
+    // read. `assetBrandScopeFilter` keeps the NULL-brand (workspace-level) rule.
+    const asset = await this.#db.asset.findFirst({
+      where: { id: input.assetId, ...assetBrandScopeFilter(input.actor) },
+    });
     if (!asset || asset.deletedAt !== null) throw assetNotFound();
-    assertAssetBrandInScope(input.actor, asset.brandId);
 
     if (input.bytes.byteLength === 0) throw emptyFile();
     if (input.bytes.byteLength > maxBytesForKind(this.#policy.upload, asset.kind)) {
@@ -189,9 +192,12 @@ export class AssetVersionService {
   }): Promise<{ asset: Asset; version: AssetVersion }> {
     assertPermission(input.actor, 'assets.version');
 
-    const asset = await this.#db.asset.findUnique({ where: { id: input.assetId } });
+    // D-132: the scope is part of the WHERE, so an out-of-scope row is never
+    // read. `assetBrandScopeFilter` keeps the NULL-brand (workspace-level) rule.
+    const asset = await this.#db.asset.findFirst({
+      where: { id: input.assetId, ...assetBrandScopeFilter(input.actor) },
+    });
     if (!asset || asset.deletedAt !== null) throw assetNotFound();
-    assertAssetBrandInScope(input.actor, asset.brandId);
 
     const source = await this.#db.assetVersion.findFirst({
       where: { assetId: asset.id, versionNumber: input.versionNumber },

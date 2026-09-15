@@ -1317,10 +1317,25 @@ composite key above is impossible by construction here, not merely missing.
 
 `membership` and `invitation` are guarded instead by
 `app.role_reference_is_workspace_scoped()`
-(`20260915235000_d112_role_reference_is_workspace_scoped`), which refuses a
-`roleId` that is neither a system role nor a role of the row's own workspace. It
-reads `role` as the invoker, so in a tenant context `role`'s own RLS policy —
-`"workspaceId" IS NULL OR "workspaceId" = app.current_workspace_id()` — is
-already the rule, and "not found" is the tenancy check. `role_permission` has no
-tenant key of its own and inherits the role's, so it raises no cross-tenant
-question.
+(`20260915235000_d112_role_reference_is_workspace_scoped`).
+
+**A NULL WORKSPACE IS NOT THE SAME AS A SYSTEM ROLE, AND THE TRIGGER CHECKS THE
+REALM FIRST (D-133).** Two different populations carry `workspaceId IS NULL`:
+WORKSPACE-realm system roles, which genuinely are shared by every workspace, and
+**every PLATFORM-realm role** — `platform_owner` among them — which belongs to
+the Control Center and to no workspace at all. `role`'s RLS policy
+(`"workspaceId" IS NULL OR "workspaceId" = app.current_workspace_id()`) makes
+all of them visible inside a tenant context, and customer sessions compute their
+permissions straight from `membership.role.permissions` without checking the
+realm. So the trigger refuses anything whose `realm <> 'WORKSPACE'` **regardless
+of `workspaceId`**, and only then requires a custom role to belong to the row's
+own workspace.
+
+It reads `role` as the invoker, so in a tenant context another workspace's
+custom role is simply not visible and the lookup finds nothing — refusing on
+"not found" IS the tenancy check, and it is indistinguishable from a fabricated
+id. In a platform context every role is visible, and the explicit comparisons
+are what refuse a cross-wired write.
+
+`role_permission` has no tenant key of its own and inherits the role's, so it
+raises no cross-tenant question.

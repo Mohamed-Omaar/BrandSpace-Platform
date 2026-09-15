@@ -7,7 +7,12 @@ import {
   type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import {
+  assertBrandInScope,
+  brandIdQueryFilter,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import { areaDefinition } from './areas';
 import { mayOverwrite } from './precedence';
 import {
@@ -186,15 +191,16 @@ export class BrandKnowledgeService {
     incomingOrigin?: BrandKnowledgeOrigin;
     changeKind?: string;
   }): Promise<BrandKnowledgeItem> {
-    const existing = await this.db.brandKnowledgeItem.findUnique({
-      where: { id: input.itemId },
+    // D-132: BOTH tenancy checks are PREDICATES. RLS supplies the workspace
+    // one; `brandIdQueryFilter` supplies the brand one, so a row outside the
+    // member's scope is never retrieved rather than retrieved and then
+    // rejected. Every miss produces the same 404 — another tenant's row,
+    // another brand's row, and an id that never existed are indistinguishable
+    // (F-74).
+    const existing = await this.db.brandKnowledgeItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actor.brandScope }) },
     });
-    // RLS already returned null for another tenant. Both cases land here, and
-    // both produce the same 404 — the caller cannot tell them apart.
     if (!existing) throw knowledgeNotFound();
-    // And so does a brand outside the member's scope: the row is legitimately
-    // the tenant's, and this member may not act on it (F-74).
-    assertBrandInScope(input.actor.brandScope, existing.brandId);
 
     const incomingOrigin = input.incomingOrigin ?? 'HUMAN';
     const decision = mayOverwrite(
@@ -266,9 +272,11 @@ export class BrandKnowledgeService {
     actor: KnowledgeActor;
     policy: StalenessPolicy;
   }): Promise<BrandKnowledgeItem> {
-    const item = await this.db.brandKnowledgeItem.findUnique({ where: { id: input.itemId } });
+    // D-132, as in `upsert` above: the scope is part of the WHERE.
+    const item = await this.db.brandKnowledgeItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actor.brandScope }) },
+    });
     if (!item) throw knowledgeNotFound();
-    assertBrandInScope(input.actor.brandScope, item.brandId);
 
     const target = await this.db.brandKnowledgeVersion.findFirst({
       where: { knowledgeItemId: item.id, version: input.toVersion },
@@ -315,9 +323,11 @@ export class BrandKnowledgeService {
     reason?: string | undefined;
     actor: KnowledgeActor;
   }): Promise<BrandKnowledgeItem> {
-    const item = await this.db.brandKnowledgeItem.findUnique({ where: { id: input.itemId } });
+    // D-132, as in `upsert` above: the scope is part of the WHERE.
+    const item = await this.db.brandKnowledgeItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actor.brandScope }) },
+    });
     if (!item) throw knowledgeNotFound();
-    assertBrandInScope(input.actor.brandScope, item.brandId);
 
     const archived = await this.db.brandKnowledgeItem.update({
       where: { id: item.id },
@@ -361,11 +371,14 @@ export class BrandKnowledgeService {
     actor: KnowledgeActor;
     policy: StalenessPolicy;
   }): Promise<{ readonly itemId: string | null; readonly version: number | null }> {
-    const candidate = await this.db.brandKnowledgeCandidate.findUnique({
-      where: { id: input.candidateId },
+    // D-132, as above.
+    const candidate = await this.db.brandKnowledgeCandidate.findFirst({
+      where: {
+        id: input.candidateId,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
     });
     if (!candidate) throw candidateNotFound();
-    assertBrandInScope(input.actor.brandScope, candidate.brandId);
     // Two reviewers opening the same queue is ordinary. The second one must be
     // told, not silently allowed to re-apply a decision.
     if (candidate.status !== 'PENDING') throw alreadyReviewed();
