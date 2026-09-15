@@ -25,9 +25,9 @@ import {
  *
  *   * a member restricted to Brand A was told the title of Brand B's content;
  *   * a suspended or never-accepted member kept being told; and
- *   * a Viewer granted approval for a brand under D-121 was told NOTHING,
- *     because the static permission is not how that grant works — the very
- *     person the grant exists for could not learn they had work.
+ *   * and, under the since-superseded D-121, a Viewer the brand had admitted
+ *     was told nothing. D-62 makes the Viewer strictly read-only, so what is
+ *     asserted now is the opposite: they are never a recipient.
  *
  * All three are asserted here against real memberships, real roles and real
  * role-permission rows, because the defect was precisely that the code reasoned
@@ -254,36 +254,24 @@ describe('an approval-request notification reaches only effective reviewers of T
     expect(recipients).not.toContain(fixtures.a.userId);
   });
 
-  it('INCLUDES a D-121 Viewer once that brand enables it, and not before', async () => {
+  it('NEVER includes a read-only Viewer — D-62, and there is no switch to flip', async () => {
     /*
-     * The grant the static permission cannot see. Before this fix the Viewer
-     * the workspace had deliberately made a reviewer was the one person never
-     * told they had work.
+     * D-121 made this the opposite test: a Viewer the brand had admitted was
+     * supposed to be told they had work. D-62 supersedes it — the MVP Viewer is
+     * strictly read-only — so the Viewer is simply not a reviewer and is never
+     * addressed.
+     *
+     * NOTE WHAT THIS TEST CANNOT DO ANY MORE, which is the real assertion:
+     * there is no `patch: { clientApprovalEnabled: true }` to write. The field
+     * is not in `setPolicyForBrand`'s patch type, `mayApproveForBrand` takes
+     * neither a role key nor a policy, and the database pins the column. The
+     * grant cannot be turned on from anywhere, so the only case left to check
+     * is the permanent one.
      */
-    const before = capturing();
-    await run(
-      (s) => s.submit({ itemId: fixtures.a.contentItemId, actor: author() }),
-      before.notifier,
-    );
-    expect(before.recipients).not.toContain(viewerBrandOne);
-
-    const open = await run((s) => s.openForItem(fixtures.a.contentItemId));
-    await run((s) => s.cancel({ approvalId: open?.id ?? '', actor: author() }));
-    await run((s) =>
-      s.setPolicyForBrand({
-        brandId: fixtures.a.brandId,
-        actorUserId: fixtures.a.userId,
-        actorBrandScope: [],
-        patch: { clientApprovalEnabled: true },
-      }),
-    );
-
-    const after = capturing();
-    await run(
-      (s) => s.submit({ itemId: fixtures.a.contentItemId, actor: author() }),
-      after.notifier,
-    );
-    expect(after.recipients).toContain(viewerBrandOne);
+    const { notifier, recipients } = capturing();
+    await run((s) => s.submit({ itemId: fixtures.a.contentItemId, actor: author() }), notifier);
+    expect(recipients).not.toContain(viewerBrandOne);
+    expect(recipients.length).toBeGreaterThan(0); // real reviewers WERE told
   });
 });
 

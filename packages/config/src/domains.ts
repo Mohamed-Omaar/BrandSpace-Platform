@@ -756,15 +756,20 @@ const contentStudioSchema = z.object({
        */
       allowSelfApproval: z.boolean().default(false),
       /**
-       * D-121, resolving U-06 — docs/SECURITY.md §4.3's "optional client
-       * approval" cell for Viewer (read-only).
+       * RESERVED AND INERT — D-62 supersedes D-121 for the MVP.
        *
-       * DEFAULT OFF. The Viewer role holds `workspace.read` and nothing else,
-       * and this is the one authority it can be granted without widening the
-       * role itself: the right comes from the BRAND's policy, not from the
-       * permission bag, so no other Viewer anywhere gains anything.
+       * `z.literal(false)` rather than `z.boolean()`: Viewer (read-only) is
+       * strictly read-only, so there is no configuration in which this may be
+       * true, and a configuration version that tried to activate it is
+       * REFUSED at validation rather than activated and then ignored. Nothing
+       * reads it to authorize anything in any case — `mayApproveForBrand` is
+       * `content.approve` and nothing else.
+       *
+       * Kept in the schema because a future External Review / Guest Approval
+       * capability is expected to want a switch of this shape, as its own
+       * narrow actor rather than a repurposing of `client_viewer`.
        */
-      clientApprovalEnabled: z.boolean().default(false),
+      clientApprovalEnabled: z.literal(false).default(false),
       /** A bound on the free-text note a requester or reviewer may attach. */
       maxNoteLength: z.number().int().min(40).max(4_000).default(1_000),
       /** How many review cycles one item may go through before it is stuck. */

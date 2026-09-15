@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveActivityScope } from '@brandspace/activity';
 import { mayApproveForBrand } from '@brandspace/content';
 import { NOTIFICATION_TEMPLATE_KEYS, NOTIFICATION_TEMPLATES } from '@brandspace/notifications';
-import { CONFIG_DOMAINS, defaultPayload } from '@brandspace/config';
+import { CONFIG_DOMAINS, defaultPayload, parseConfigPayload } from '@brandspace/config';
 import { ROLE_DEFINITIONS, WORKSPACE_PERMISSIONS, brandInScope } from '@brandspace/shared';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
@@ -12,7 +12,7 @@ import { messages } from '../../apps/dashboard/src/i18n/messages';
  * WHAT IS WORTH TESTING HERE is the part a reader of the code has to take on
  * trust otherwise: that the activity grades in docs/SECURITY.md §4.3 are the
  * grades the resolver produces, that the roles carry exactly the keys the matrix
- * gives them, that the configuration defaults are what D-121 and D-122 say, and
+ * gives them, that the configuration defaults are what D-62 and D-122 say, and
  * that no notification can be produced that the dashboard cannot render in both
  * languages.
  */
@@ -119,17 +119,11 @@ describe('the activity-log scope resolver (docs/SECURITY.md §4.3)', () => {
   });
 });
 
-describe('who may approve (D-121, resolving U-06)', () => {
-  const off = {
-    requireApprovalBeforeScheduling: false,
-    allowSelfApproval: false,
-    clientApprovalEnabled: false,
-  };
-
-  it('the permission alone is enough, whatever the brand says', () => {
+describe('who may approve — D-62: the permission, and nothing else', () => {
+  it('the permission alone is enough', () => {
     for (const role of ['workspace_owner', 'workspace_admin', 'marketing_manager', 'approver']) {
       expect(
-        mayApproveForBrand({ roleKey: role, permissionKeys: perms(role), policy: off }),
+        mayApproveForBrand({ permissionKeys: perms(role) }),
         `${role} holds content.approve per docs/SECURITY.md §4.3`,
       ).toBe(true);
     }
@@ -138,31 +132,41 @@ describe('who may approve (D-121, resolving U-06)', () => {
   it('the roles the matrix marks ➖ cannot approve', () => {
     for (const role of ['content_creator', 'copywriter', 'designer', 'analyst']) {
       expect(
-        mayApproveForBrand({ roleKey: role, permissionKeys: perms(role), policy: off }),
+        mayApproveForBrand({ permissionKeys: perms(role) }),
         `${role} is marked ➖ for Approve / reject`,
       ).toBe(false);
     }
   });
 
-  it('the Viewer is lifted ONLY by the brand switch, and only for that brand', () => {
-    const viewerKeys = perms('client_viewer');
-    expect(
-      mayApproveForBrand({ roleKey: 'client_viewer', permissionKeys: viewerKeys, policy: off }),
-    ).toBe(false);
-    expect(
-      mayApproveForBrand({
-        roleKey: 'client_viewer',
-        permissionKeys: viewerKeys,
-        policy: { ...off, clientApprovalEnabled: true },
-      }),
-    ).toBe(true);
+  it('THE VIEWER CANNOT APPROVE, AND NOTHING CAN LIFT IT', () => {
+    /*
+     * D-62 supersedes D-121. There was a per-brand switch that admitted
+     * `client_viewer` as a reviewer; the MVP has no Client Portal, no client
+     * hand-off and no external reviewer surface for it to belong to, so the
+     * Viewer is strictly read-only and the switch is gone.
+     *
+     * THE STRONGEST FORM THIS ASSERTION CAN TAKE is that there is no argument
+     * to pass. `mayApproveForBrand` no longer accepts a role key or a policy,
+     * so a brand setting has no channel through which to reach it — which is
+     * why this test cannot be written as "and false when the switch is off".
+     */
+    expect(mayApproveForBrand({ permissionKeys: perms('client_viewer') })).toBe(false);
+
+    // Nor by any combination of permissions the Viewer actually holds.
+    for (const key of perms('client_viewer')) {
+      expect(mayApproveForBrand({ permissionKeys: [key] }), `${key} must not approve`).toBe(false);
+    }
+
+    // `content.approve` is the ONLY key that opens it.
+    expect(mayApproveForBrand({ permissionKeys: ['content.approve'] })).toBe(true);
   });
 
-  it('THE VIEWER ROLE ITSELF IS NOT WIDENED — D-58 and D-121 together', () => {
+  it('THE VIEWER ROLE IS EXACTLY `workspace.read` — D-58 and D-62', () => {
     /*
-     * The whole reason the grant lives in the brand's policy rather than in the
-     * permission bag: `client_viewer` still holds `workspace.read` and nothing
-     * else, so no Viewer anywhere else gains anything.
+     * Pinned exactly, not merely "does not contain content.approve": the point
+     * of D-62 is that Viewer is READ-ONLY, so any addition to this list is a
+     * decision somebody has to make deliberately and this test has to be
+     * edited to record.
      */
     expect(perms('client_viewer')).toEqual(['workspace.read']);
   });
@@ -228,8 +232,19 @@ describe('the approvals configuration defaults', () => {
     expect(payload.approvals.allowSelfApproval).toBe(false);
   });
 
-  it('D-121 — Viewer approval is OFF by default', () => {
+  it('D-62 — Viewer approval is not merely off by default, it cannot be on', () => {
+    /*
+     * The schema pins it: `z.literal(false)`. A configuration version that
+     * tried to activate the reserved field is REFUSED at validation rather
+     * than activated and quietly ignored — which is what "inert" has to mean
+     * for it to be worth anything.
+     */
     expect(payload.approvals.clientApprovalEnabled).toBe(false);
+    const withGrant = {
+      ...payload,
+      approvals: { ...payload.approvals, clientApprovalEnabled: true },
+    };
+    expect(() => parseConfigPayload('content', withGrant)).toThrow();
   });
 
   it('the platform-wide gate stays OFF, so no existing workspace is stranded', () => {

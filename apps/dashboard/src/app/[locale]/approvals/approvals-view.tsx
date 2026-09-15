@@ -28,10 +28,10 @@ import type { MessageKey } from '../../../i18n/messages';
  * spacing tokens, inside the shared dashboard shell.
  *
  * EVERY PANEL IS GATED BY A SERVER-RESOLVED FLAG, not by a link being left out.
- * A Viewer reviewing under the D-121 per-brand grant sees the queue for the
- * brands that admit them and the review subject — and not "what you sent"
- * (they cannot send), not the policy editor, and not a link into the content
- * library they hold no permission to read.
+ * A member who may read content but not approve sees "what you sent" and no
+ * verdict controls; one without `approvals.policy.manage` sees no policy
+ * editor. The flags say what the server already decided — they never decide
+ * anything themselves.
  *
  * A SERVER COMPONENT WITH FORMS, and no client JavaScript at all. Every control
  * is a `<form>` posting to a server action, so the screen works with scripting
@@ -56,9 +56,11 @@ export interface ApprovalRow {
   readonly assignedElsewhere: boolean;
   readonly mayWithdraw: boolean;
   /**
-   * Whether to offer the Studio link. A Viewer reviewing under the D-121
-   * per-brand grant holds no `content.read`, so sending them to the composer
-   * would be a link that refuses them — §20 forbids exactly that.
+   * Whether to offer the Studio link — a link that refuses the person who
+   * follows it is what §20 forbids. Every reader of this screen now holds
+   * `content.read` (D-62), so this is true in practice; it stays a prop
+   * because the composer's gate is the composer's to state, not this screen's
+   * to assume.
    */
   readonly mayOpenInStudio: boolean;
 }
@@ -86,7 +88,6 @@ export interface BrandPolicyRow {
   readonly brandName: string;
   readonly requireApprovalBeforeScheduling: boolean;
   readonly allowSelfApproval: boolean;
-  readonly clientApprovalEnabled: boolean;
 }
 
 const STATUS_TONE: Record<ApprovalRow['status'], BadgeTone> = {
@@ -127,10 +128,11 @@ export function ApprovalsView({
   return (
     <Stack>
       {/*
-        THE REVIEW SUBJECT, when one was asked for. This is the whole of what a
-        Viewer reviewing under D-121 may read: the captions under review and the
-        requester's note. It is authorized per approval inside the service, so
-        rendering it here discloses nothing the reader could not already fetch.
+        THE REVIEW SUBJECT, when one was asked for: the captions under review
+        and the requester's note, so a verdict is given on the words rather
+        than on a title. It is authorized per approval inside the service, so
+        rendering it here discloses nothing the reader could not already
+        fetch.
       */}
       {review ? (
         <Card testId="approvals-review-subject">
@@ -278,12 +280,6 @@ export function ApprovalsView({
                     checked={policy.allowSelfApproval}
                     testId={`policy-self-${policy.brandId}`}
                   />
-                  <Checkbox
-                    name="clientApproval"
-                    label={t('approvals.policyClient')}
-                    checked={policy.clientApprovalEnabled}
-                    testId={`policy-client-${policy.brandId}`}
-                  />
                   <button
                     type="submit"
                     style={buttonStyle('ghost')}
@@ -316,10 +312,10 @@ function ApprovalSummary({
         style={{ display: 'flex', gap: spacingTokens.xs, alignItems: 'center', flexWrap: 'wrap' }}
       >
         {/*
-          THE REVIEW CONTEXT, not the content library. A Viewer reviewing under
-          the D-121 per-brand grant holds no `content.read`, so a link to the
-          composer would refuse them — §20 forbids a control that leads nowhere.
-          A reader who MAY open the Studio is offered that separately, below.
+          THE REVIEW CONTEXT, not the content library. The title opens the
+          review it belongs to, which is what a reader of this screen wants
+          from it; opening the draft for EDITING is a different intent and is
+          offered separately, below, as its own link.
         */}
         <Link href={`/${locale}/approvals?review=${row.id}`} style={linkStyle}>
           {row.itemTitle}

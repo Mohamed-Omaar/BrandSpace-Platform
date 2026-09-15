@@ -189,8 +189,10 @@ row above in one respect worth stating: `Comment` is **not** built. Threaded com
 `@mentions` and positions anchored into the text are a collaboration surface of their own; what the
 review workflow needs — the requester's context and the reviewer's reason — lives on the `Approval`
 itself. Approval is **per brand** by policy: whether it is required before scheduling, whether a
-reviewer may approve their own work (D-122, denied by default), and whether Viewer (read-only) may
-approve at all (D-121, off by default). The Activity Log is a read model over `AuditEvent` and adds
+reviewer may approve their own work (D-122, denied by default). **Viewer (read-only) cannot approve
+at all** — D-130 withdraws D-121 and D-62 is authoritative: the MVP has no Client Portal, client
+hand-off or external reviewer surface, and the capability is deferred to a future External Review /
+Guest Approval actor. The Activity Log is a read model over `AuditEvent` and adds
 no table of its own (D-124). Notifications are **in-app only** until a mail transport exists
 (D-123).
 

@@ -585,7 +585,6 @@ export const messages = {
     'approvals.policyBrand': 'العلامة',
     'approvals.policyRequire': 'اشترط الاعتماد قبل الجدولة',
     'approvals.policySelf': 'اسمح باعتماد المحتوى الذي أرسله المراجع نفسه',
-    'approvals.policyClient': 'اسمح للمُشاهِد (قراءة فقط) بالاعتماد',
     'approvals.policySave': 'حفظ السياسة',
     'approvals.policyNoPermission': 'تعديل السياسة يحتاج صلاحية إدارة الموافقات.',
 
@@ -1224,7 +1223,6 @@ export const messages = {
     'approvals.policyBrand': 'Brand',
     'approvals.policyRequire': 'Require approval before scheduling',
     'approvals.policySelf': 'Allow reviewers to approve what they sent themselves',
-    'approvals.policyClient': 'Allow Viewer (read-only) to approve',
     'approvals.policySave': 'Save policy',
     'approvals.policyNoPermission': 'Changing the policy needs approval-management permission.',
 

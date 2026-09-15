@@ -278,16 +278,35 @@ describe('D-126 — the cycle is judged by the policy it was opened under', () =
     expect(decided.status).toBe('APPROVED');
   });
 
-  it('the same holds for the D-121 Viewer grant — an open cycle keeps its answer', async () => {
+  it('A READ-ONLY VIEWER IS REFUSED, WHATEVER THE CYCLE SNAPSHOTTED — D-62', async () => {
+    /*
+     * This once asserted the D-121 grant's snapshot semantics: a cycle opened
+     * before the brand switched the grant on kept its answer, and one opened
+     * after carried it. D-62 removes the grant, so the only correct answer is
+     * "refused", on every cycle, in every direction.
+     *
+     * THE SNAPSHOT IS THE INTERESTING PART. A historical `policySnapshot` is
+     * real data that can still contain `clientApprovalEnabled: true` — rows
+     * written before this change, which the migration deliberately does NOT
+     * rewrite, because an approval is a record of what happened. So the test
+     * forges exactly that and shows it buys nothing: authority is read from
+     * the actor's permissions, never from the snapshot.
+     */
     const id = await openCycle();
-    await run((s) =>
-      s.setPolicyForBrand({
-        brandId: fixtures.a.brandId,
-        actorUserId: fixtures.a.userId,
-        actorBrandScope: [],
-        patch: { clientApprovalEnabled: true },
-      }),
-    );
+
+    /*
+     * AND THE OLD GRANT CANNOT BE SMUGGLED BACK INTO AN OPEN CYCLE EITHER.
+     * `approval_is_write_once` names `policySnapshot` among the columns that
+     * may never change, so even the platform role cannot edit a decided
+     * cycle's rules — which is the reason the migration leaves historical
+     * snapshots alone rather than rewriting them.
+     */
+    await expect(
+      platform.$executeRawUnsafe(
+        `UPDATE "approval" SET "policySnapshot" = jsonb_set("policySnapshot", '{clientApprovalEnabled}', 'true') WHERE "id" = $1::uuid`,
+        id,
+      ),
+    ).rejects.toThrow();
 
     const viewer: ApprovalActor = {
       userId: REVIEWER_A,
@@ -295,18 +314,20 @@ describe('D-126 — the cycle is judged by the policy it was opened under', () =
       permissionKeys: ['workspace.read'],
       brandScope: [],
     };
-    // The cycle was opened while the grant was OFF, so it stays off for it.
     await expect(
       run((s) => s.decide({ approvalId: id, verdict: 'APPROVE', actor: viewer })),
     ).rejects.toThrow();
 
-    // A cycle opened after the flip carries the grant.
+    // And a fresh cycle is no different — there is no state that admits them.
     await run((s) => s.cancel({ approvalId: id, actor: author() }));
     const next = await openCycle();
-    const decided = await run((s) =>
-      s.decide({ approvalId: next, verdict: 'APPROVE', actor: viewer }),
-    );
-    expect(decided.status).toBe('APPROVED');
+    await expect(
+      run((s) => s.decide({ approvalId: next, verdict: 'APPROVE', actor: viewer })),
+    ).rejects.toThrow();
+
+    // The review is still open, so the refusal did not quietly decide it.
+    const still = await run((s) => s.openForItem(fixtures.a.contentItemId));
+    expect(still?.status).toBe('PENDING');
   });
 
   it('MEMBERSHIP AND ROLE STAY CURRENT — only the workflow policy is historical', async () => {

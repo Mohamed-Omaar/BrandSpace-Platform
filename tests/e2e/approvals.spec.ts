@@ -130,7 +130,7 @@ test.describe('the approval workflow', () => {
     await expect(blocked.first()).toBeVisible();
     await expect(page.locator('[data-testid^="approve-"]')).toHaveCount(0);
 
-    // 3. The owner relaxes the brand's policy. This is the D-121/D-122 control
+    // 3. The owner relaxes the brand's policy. This is the D-122 control
     //    surface, and it is gated on a permission only the owner and admin hold.
     await expect(page.getByTestId('approvals-policy')).toBeVisible();
     const selfToggle = page.locator('[data-testid^="policy-self-"]').first();

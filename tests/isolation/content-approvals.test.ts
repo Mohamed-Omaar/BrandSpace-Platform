@@ -483,99 +483,79 @@ describe('D-122 — self-approval', () => {
   });
 });
 
-describe('D-121 — the per-brand Viewer grant (U-06)', () => {
-  it('a Viewer cannot approve by default', () => {
-    expect(
-      mayApproveForBrand({
-        roleKey: 'client_viewer',
-        permissionKeys: ['workspace.read'],
-        policy: {
-          requireApprovalBeforeScheduling: false,
-          allowSelfApproval: false,
-          clientApprovalEnabled: false,
-        },
-      }),
-    ).toBe(false);
+describe('D-62 — the Viewer is strictly read-only, end to end', () => {
+  /*
+   * This block used to prove D-121: a per-brand switch admitted `client_viewer`
+   * as a reviewer. D-62 supersedes it. The MVP has no Client Portal, no client
+   * hand-off workflow and no external reviewer surface, so there is nothing for
+   * such a grant to belong to; the idea is deferred to a future External Review
+   * / Guest Approval capability with its own narrow actor.
+   *
+   * What replaces it is the opposite proof, at every layer that used to carry
+   * the grant.
+   */
+  const viewer = (): ApprovalActor => ({
+    userId: '77777777-6666-4555-8444-333333333333',
+    roleKey: 'client_viewer',
+    permissionKeys: ['workspace.read'],
+    brandScope: [],
   });
 
-  it('a Viewer CAN approve where the brand switched it on', () => {
-    expect(
-      mayApproveForBrand({
-        roleKey: 'client_viewer',
-        permissionKeys: ['workspace.read'],
-        policy: {
-          requireApprovalBeforeScheduling: false,
-          allowSelfApproval: false,
-          clientApprovalEnabled: true,
-        },
-      }),
-    ).toBe(true);
+  it('the rule cannot be told about a role or a brand at all', () => {
+    // No `roleKey`, no `policy` — the signature is the guarantee.
+    expect(mayApproveForBrand({ permissionKeys: ['workspace.read'] })).toBe(false);
+    expect(mayApproveForBrand({ permissionKeys: ['content.read', 'content.submit'] })).toBe(false);
+    expect(mayApproveForBrand({ permissionKeys: ['content.approve'] })).toBe(true);
   });
 
-  it('the switch lifts NOTHING for any other role that lacks the permission', () => {
-    expect(
-      mayApproveForBrand({
-        roleKey: 'copywriter',
-        permissionKeys: ['content.read', 'content.submit'],
-        policy: {
-          requireApprovalBeforeScheduling: false,
-          allowSelfApproval: false,
-          clientApprovalEnabled: true,
-        },
-      }),
-    ).toBe(false);
+  it('a Viewer cannot DECIDE a review', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    await expect(
+      inA(({ approvals }) =>
+        approvals.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: viewer() }),
+      ),
+    ).rejects.toThrow();
+    // Still open: the refusal did not quietly decide it.
+    expect(await statusOf()).toBe('IN_REVIEW');
   });
 
-  it('end to end: the brand switch admits the Viewer, from the NEXT cycle', async () => {
+  it('a Viewer cannot WITHDRAW somebody else’s review', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    await expect(
+      inA(({ approvals }) => approvals.cancel({ approvalId: approval.id, actor: viewer() })),
+    ).rejects.toThrow();
+  });
+
+  it('a Viewer cannot READ the review subject — NOT_FOUND, not FORBIDDEN', async () => {
     /*
-     * D-126 CHANGED WHEN THE SWITCH TAKES EFFECT, and this test with it.
-     *
-     * It used to flip the policy and then decide the review that was ALREADY
-     * open — which is exactly the retroactive behaviour the corrective pass
-     * removed: `policySnapshot` records the rules a requester submitted under,
-     * and re-reading the current policy at decision time made that record a
-     * decoration. A cycle keeps the answer it was opened with; a NEW cycle
-     * carries the new policy.
+     * `reviewSubject()` was the Viewer's one authorized read under D-121, and
+     * it admitted anybody who could decide EVEN WITHOUT `content.read`. That
+     * bypass is closed: the subject is content, and reading content needs the
+     * content permission. The refusal is shaped like a miss so the existence
+     * of the review is not disclosed by the error.
      */
-    const viewer: ApprovalActor = {
-      userId: '77777777-6666-4555-8444-333333333333',
-      roleKey: 'client_viewer',
-      permissionKeys: ['workspace.read'],
-      brandScope: [],
-    };
-    const first = await inA(({ approvals }) =>
+    const approval = await inA(({ approvals }) =>
       approvals.submit({ itemId: itemId(), actor: author() }),
     );
     await expect(
-      inA(({ approvals }) =>
-        approvals.decide({ approvalId: first.id, verdict: 'APPROVE', actor: viewer }),
-      ),
-    ).rejects.toThrow();
+      inA(({ approvals }) => approvals.reviewSubject({ approvalId: approval.id, actor: viewer() })),
+    ).rejects.toThrow(/not found/i);
+  });
 
-    await inA(({ approvals }) =>
-      approvals.setPolicyForBrand({
-        brandId: fixtures.a.brandId,
-        actorUserId: fixtures.a.userId,
-        actorBrandScope: [],
-        patch: { clientApprovalEnabled: true },
-      }),
-    );
-
-    // The open cycle is unmoved by the flip — that is the point.
+  it('a Viewer is not an eligible reviewer, so cannot be ASSIGNED one', async () => {
     await expect(
       inA(({ approvals }) =>
-        approvals.decide({ approvalId: first.id, verdict: 'APPROVE', actor: viewer }),
+        approvals.submit({
+          itemId: itemId(),
+          actor: author(),
+          assignedToUserId: viewer().userId,
+        }),
       ),
     ).rejects.toThrow();
-
-    await inA(({ approvals }) => approvals.cancel({ approvalId: first.id, actor: author() }));
-    const second = await inA(({ approvals }) =>
-      approvals.submit({ itemId: itemId(), actor: author() }),
-    );
-    const decided = await inA(({ approvals }) =>
-      approvals.decide({ approvalId: second.id, verdict: 'APPROVE', actor: viewer }),
-    );
-    expect(decided.status).toBe('APPROVED');
   });
 });
 

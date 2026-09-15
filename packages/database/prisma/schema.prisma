@@ -2924,9 +2924,19 @@ model ApprovalPolicy {
   /// they themselves authored. Default-deny, and an owner may relax it.
   allowSelfApproval Boolean?
 
-  /// D-121 (resolves U-06). Whether Viewer (read-only) may approve for this
-  /// brand — SECURITY.md §4.3's "optional client approval" cell. Off unless
-  /// switched on here.
+  /// RESERVED AND INERT — D-62 supersedes D-121 for the MVP.
+  ///
+  /// D-121 made this the per-brand switch admitting Viewer (read-only) as a
+  /// reviewer. D-62 requires Viewer to be strictly read-only, so the switch has
+  /// no behaviour: nothing reads it to authorize anything, no API patches it,
+  /// no screen renders it, and `approval_policy_client_approval_withdrawn`
+  /// pins it to FALSE or NULL.
+  ///
+  /// Kept as structure for a future External Review / Guest Approval
+  /// capability, which will be a distinct narrow actor rather than a
+  /// repurposing of `client_viewer` — the same treatment as the unreachable
+  /// `ApprovalSubjectType` members and the undeliverable `NotificationChannel`
+  /// values.
   clientApprovalEnabled Boolean?
 
   updatedByUserId String?  @db.Uuid

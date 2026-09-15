@@ -993,7 +993,10 @@ async function createTenant(
           brandId: brand.id,
           requireApprovalBeforeScheduling: true,
           allowSelfApproval: true,
-          clientApprovalEnabled: true,
+          // NOT `clientApprovalEnabled: true` any more: D-62 withdrew the D-121
+          // Viewer grant and `approval_policy_client_approval_withdrawn` now
+          // refuses the row outright. The fixture varies the columns that still
+          // mean something.
           updatedByUserId: user.id,
         },
       });

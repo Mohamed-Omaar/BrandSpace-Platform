@@ -80,24 +80,25 @@ const NAV: readonly {
     icon: <ImageIcon size={20} />,
   },
   /*
-   * Phase 5B-3. `/approvals` is gated on MEMBERSHIP, not on `content.read`, and
-   * that is what makes D-121 reachable.
+   * Phase 5B-3. `/approvals` is gated on `content.read`, matching the route.
    *
-   * The per-brand Viewer grant exists for a member holding `workspace.read` and
-   * nothing else. Gating this entry on a content permission meant a workspace
-   * could switch the grant on and the person it was switched on for would never
-   * see the screen — the feature was unreachable except by typing the URL. The
-   * PAGE resolves what the reader may actually do and renders an explicit
-   * refusal for a member who reviews nothing, which is a better answer than a
-   * 404 for a menu item the product does have. Nothing tenant-specific is
-   * disclosed by the entry itself.
+   * This was briefly `null` — visible to every member — so that D-121's
+   * per-brand Viewer grant was reachable by somebody holding `workspace.read`
+   * and nothing else. D-62 supersedes D-121 and makes the Viewer strictly
+   * read-only, so the entry goes back to the permission the page requires:
+   * offering a link that answers 404 is the dead link §20 forbids.
    *
-   * `/activity` takes the same approach for the same reason.
+   * THE HIDDEN LINK IS TIDINESS, NOT SECURITY. `/approvals` and every action
+   * behind it refuse independently; nothing here is load-bearing.
+   *
+   * `/activity` is deliberately NOT changed: the Activity Log grades what a
+   * reader may see rather than refusing them, so its screen has an honest
+   * answer for every member.
    */
   {
     href: '/approvals',
     key: 'nav.approvals',
-    permission: null,
+    permission: 'content.read',
     icon: <CheckIcon size={20} />,
   },
   {

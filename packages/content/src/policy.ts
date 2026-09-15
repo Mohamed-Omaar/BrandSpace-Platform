@@ -57,7 +57,8 @@ export const contentPolicySchema = z.object({
   approvals: z.object({
     requireApprovalBeforeScheduling: z.boolean(),
     allowSelfApproval: z.boolean(),
-    clientApprovalEnabled: z.boolean(),
+    /** Reserved and inert — D-62 supersedes D-121. See `ResolvedApprovalPolicy`. */
+    clientApprovalEnabled: z.literal(false),
     maxNoteLength: z.number().int().min(1),
     maxCyclesPerItem: z.number().int().min(1),
   }),

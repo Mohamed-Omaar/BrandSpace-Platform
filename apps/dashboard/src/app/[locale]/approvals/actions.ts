@@ -63,21 +63,21 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
   try {
     if (!verdict) throw new Error('unsupported verdict');
     /*
-     * MEMBERSHIP ONLY AT THE DOOR, and the real check inside the service.
+     * `content.read` AT THE DOOR, and the real check inside the service.
      *
-     * This endpoint used to require `content.read`, which made D-121
-     * unreachable: the per-brand Viewer grant exists precisely for a member who
-     * holds `workspace.read` and nothing else, so requiring any content
-     * permission here meant the brand setting could be switched on and still
-     * refuse the person it was switched on for.
+     * This briefly required only membership, so that D-121's per-brand grant
+     * could admit a Viewer holding `workspace.read` and nothing else. D-62
+     * supersedes D-121: the MVP Viewer is strictly read-only, so the door is
+     * closed to them again and the endpoint is not reachable at all.
      *
-     * `requireWorkspace` without a key still proves an authenticated session
-     * and an ACTIVE membership of this workspace — the endpoint is not open. The
-     * authority that decides the request is `mayApproveForBrand` inside
-     * `ContentApprovalService.decide()`, which reads THIS brand's policy and the
-     * cycle's own snapshot, re-checks the brand scope, and refuses anybody else.
+     * THE PERMISSION HERE IS NOT THE AUTHORITY, and must not be mistaken for
+     * it. `content.read` only establishes that this session belongs in the
+     * content surfaces; the authority to decide is `content.approve`, checked
+     * by `mayApproveForBrand` inside `ContentApprovalService.decide()`, which
+     * also re-checks the brand scope, the assignment and the cycle's snapshot.
+     * A member with `content.read` alone reaches this action and is refused.
      */
-    const session = await requireWorkspace(locale);
+    const session = await requireWorkspace(locale, 'content.read');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).decide({ approvalId, verdict, actor: actorOf(session), note }),
     );
@@ -98,9 +98,9 @@ export async function withdrawApprovalAction(formData: FormData): Promise<void> 
 
   let destination: string;
   try {
-    // Membership only, as above: the service requires the caller to be the
-    // requester or somebody who could have decided it.
-    const session = await requireWorkspace(locale);
+    // `content.read` at the door as above; the service then requires the caller
+    // to be the requester or somebody who holds `content.approve`.
+    const session = await requireWorkspace(locale, 'content.read');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: actorOf(session) }),
     );
@@ -128,11 +128,16 @@ export async function saveApprovalPolicyAction(formData: FormData): Promise<void
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'approvals.policy.manage');
-    // An unchecked HTML checkbox posts nothing at all, so presence IS the value.
+    /*
+     * An unchecked HTML checkbox posts nothing at all, so presence IS the value.
+     *
+     * `clientApproval` IS NOT READ, and a forged field carrying it cannot do
+     * anything: `setPolicyForBrand`'s patch type excludes it (D-62), so this
+     * would not compile if it were reintroduced here by accident.
+     */
     const patch = {
       requireApprovalBeforeScheduling: formData.get('requireApproval') !== null,
       allowSelfApproval: formData.get('allowSelfApproval') !== null,
-      clientApprovalEnabled: formData.get('clientApproval') !== null,
     };
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).setPolicyForBrand({

@@ -21,21 +21,21 @@ export const dynamic = 'force-dynamic';
 /**
  * Approvals — Phase 5B-3, docs/PRODUCT.md §5 module 14.
  *
- * WHO MAY OPEN THIS SCREEN, and why it is not one permission.
+ * WHO MAY OPEN THIS SCREEN: a member holding `content.read`, and nobody else.
  *
- * Two different people need it. A member with `content.read` uses it to follow
- * what they sent and — if they also hold review authority — to decide. A
- * **Viewer (read-only)** whose BRAND has switched on D-121's per-brand grant
- * needs it to decide, and holds `workspace.read` and nothing else: gating the
- * route on `content.read` made that grant unreachable, which is the defect
- * finding 2 names. So the page authorizes on MEMBERSHIP, then resolves what
- * this member may actually do, and renders nothing they may not.
+ * This briefly authorized on MEMBERSHIP instead, so that D-121's per-brand
+ * grant could admit a Viewer (read-only) holding `workspace.read` and nothing
+ * else. **D-62 supersedes D-121**: for the MVP the Viewer is strictly
+ * read-only and has no approval surface at all — no queue, no review subject,
+ * no verdict, and no route. The product has no Client Portal, client hand-off
+ * or external reviewer surface for such a grant to belong to, and the idea is
+ * deferred to a future External Review / Guest Approval capability with its
+ * own narrow actor rather than a repurposed customer role.
  *
- * WHAT A VIEWER SEES: the queue for the brands whose policy admits them, and
- * the review subject for one of those reviews — the title, the captions and the
- * requester's note. Not the content library, not other brands' reviews, not
- * "what you sent" (they cannot send), not the policy editor. Every one of those
- * is withheld by a server-side check, not by leaving a link out.
+ * So the gate is back to `content.read`, and a Viewer reaching `/approvals`
+ * gets the same NOT_FOUND any member without the permission gets. The
+ * navigation does not offer the item to them either, but the REFUSAL IS THE
+ * CONTROL — the hidden link is only tidiness.
  *
  * WHAT THE READER MAY DO IS RESOLVED HERE AND ENFORCED IN THE SERVICE. Every
  * `mayDecide` is computed through the SAME `mayApproveForBrand` the service
@@ -52,14 +52,16 @@ export default async function ApprovalsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
 
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
   const reviewId = typeof query.review === 'string' ? query.review : null;
 
-  const maySeeContent = workspace.permissionKeys.includes('content.read');
+  // Implied by the route gate above; kept as a named constant because the view
+  // props read better for it, and because the gate is the thing that may change.
+  const maySeeContent = true;
   const mayManagePolicy = workspace.permissionKeys.includes('approvals.policy.manage');
 
   const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
@@ -82,18 +84,18 @@ export default async function ApprovalsPage({
     brandScope: workspace.brandScope,
   };
 
-  const { policies, reviewableBrandIds, queue, mine, memberNames, review } = await inContentStudio(
+  const { policies, queue, mine, memberNames, review } = await inContentStudio(
     workspace.workspaceId,
     async ({ approvals, db }) => {
       const service = await approvals();
 
       /*
-       * THE BRANDS THIS MEMBER MAY REVIEW, resolved per brand because D-121 is
-       * a per-brand grant: a Viewer enabled for Brand A must see Brand A's
-       * queue and learn nothing at all about Brand B's.
+       * The brands in this member's scope, and their rules. There is no longer
+       * a per-brand question of WHO may review: `content.approve` answers it
+       * for the whole workspace, so a brand contributes its policy and nothing
+       * else.
        */
       const resolved: BrandPolicyRow[] = [];
-      const reviewable: string[] = [];
       for (const brand of brands) {
         const policy: ResolvedApprovalPolicy = await service.policyForBrand(brand.id);
         resolved.push({
@@ -101,62 +103,37 @@ export default async function ApprovalsPage({
           brandName: brand.name,
           requireApprovalBeforeScheduling: policy.requireApprovalBeforeScheduling,
           allowSelfApproval: policy.allowSelfApproval,
-          clientApprovalEnabled: policy.clientApprovalEnabled,
         });
-        if (
-          mayApproveForBrand({
-            roleKey: workspace.roleKey,
-            permissionKeys: workspace.permissionKeys,
-            policy,
-          })
-        ) {
-          reviewable.push(brand.id);
-        }
       }
 
       /*
-       * THE QUEUE'S SCOPE. A member who may read content sees their whole brand
-       * scope; a member who may not sees ONLY the brands that admit them as a
-       * reviewer — which for a Viewer is the entire extent of their access.
-       *
-       * `undefined` is the platform's "unrestricted" for a member with no brand
-       * restriction, which the service reads the same way `brandScopeFilter()`
-       * does everywhere else.
+       * THE QUEUE'S SCOPE is simply the member's brand scope, where `undefined`
+       * is the platform's "unrestricted" — the same reading `brandScopeFilter()`
+       * has everywhere else, and NOT an expansion into every brand id, which is
+       * what made an unrestricted member's queue depend on a list the page had
+       * to build first.
        */
-      const queueScope = maySeeContent
-        ? workspace.brandScope.length > 0
-          ? workspace.brandScope
-          : undefined
-        : reviewable;
-      const pending =
-        maySeeContent || reviewable.length > 0
-          ? await service.queue({ brandScope: queueScope })
-          : [];
+      const queueScope = workspace.brandScope.length > 0 ? workspace.brandScope : undefined;
+      const pending = await service.queue({ brandScope: queueScope });
 
-      /*
-       * "What you sent" is every cycle THIS member opened. A member who cannot
-       * submit has never opened one, so the panel is simply not queried for
-       * them rather than queried and found empty.
-       */
-      const own = maySeeContent
-        ? await db.approval.findMany({
-            where: {
-              workspaceId: workspace.workspaceId,
-              requestedByUserId: customer.userId,
-              ...(workspace.brandScope.length > 0
-                ? { brandId: { in: [...workspace.brandScope] } }
-                : {}),
-            },
-            include: { item: { select: { id: true, title: true } } },
-            orderBy: { createdAt: 'desc' },
-            take: 20,
-          })
-        : [];
+      /* "What you sent" is every cycle THIS member opened. */
+      const own = await db.approval.findMany({
+        where: {
+          workspaceId: workspace.workspaceId,
+          requestedByUserId: customer.userId,
+          ...(workspace.brandScope.length > 0
+            ? { brandId: { in: [...workspace.brandScope] } }
+            : {}),
+        },
+        include: { item: { select: { id: true, title: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
 
       /*
        * THE REVIEW SUBJECT, when one is asked for. Authorized inside the
-       * service against that approval's own brand policy, so a Viewer granted
-       * Brand A asking for a Brand B review gets the same not-found a
+       * service, which requires `content.read` and the brand scope, so a
+       * request for another brand's review gets the same not-found a
        * non-existent id would give.
        */
       const subject = reviewId
@@ -179,7 +156,6 @@ export default async function ApprovalsPage({
 
       return {
         policies: resolved,
-        reviewableBrandIds: reviewable,
         queue: pending,
         mine: own,
         review: subject,
@@ -218,12 +194,7 @@ export default async function ApprovalsPage({
     const policy =
       current === undefined ? undefined : policyFromSnapshot(row.policySnapshot, current);
     const mayApprove =
-      policy !== undefined &&
-      mayApproveForBrand({
-        roleKey: workspace.roleKey,
-        permissionKeys: workspace.permissionKeys,
-        policy,
-      });
+      policy !== undefined && mayApproveForBrand({ permissionKeys: workspace.permissionKeys });
     // D-122, mirrored from the service: the requester AND the author are barred.
     const isSelf =
       row.requestedByUserId === customer.userId || row.item?.createdByUserId === customer.userId;
@@ -311,7 +282,7 @@ export default async function ApprovalsPage({
         mine={mineRows}
         policies={policies}
         review={reviewView}
-        mayReview={reviewableBrandIds.length > 0}
+        mayReview={mayApproveForBrand({ permissionKeys: workspace.permissionKeys })}
         mayReadContent={maySeeContent}
         mayManagePolicy={mayManagePolicy}
         actions={{

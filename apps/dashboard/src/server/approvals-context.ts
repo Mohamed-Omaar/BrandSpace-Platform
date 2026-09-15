@@ -49,9 +49,10 @@ export function approvalNotifier(input: {
         userIds: event.recipientUserIds,
         templateKey: 'approval.requested',
         payload: { itemTitle: event.itemTitle },
-        // The REVIEW context, not the content library: a Viewer approving under
-        // the D-121 per-brand grant holds no `content.read` and must not be
-        // sent somewhere they will be refused (finding 2).
+        // The REVIEW context, not the content library: the notification is
+        // about one cycle, and the review screen is where a reviewer acts on
+        // it. Every recipient holds `content.approve` (D-62), so both routes
+        // would open — this one is simply the right place to land.
         linkPath: `/approvals?review=${event.approvalId}`,
         brandId: event.brandId,
         resourceType: 'Approval',

@@ -49,10 +49,12 @@ import type { ContentPolicy } from './policy';
  *     permits it. The policy in force is SNAPSHOTTED onto the row, so relaxing
  *     the rule tomorrow does not rewrite what yesterday's approval meant.
  *
- *   - VIEWER APPROVAL COMES FROM THE BRAND, NOT THE ROLE (D-121, resolving
- *     U-06). `client_viewer` still holds `workspace.read` and nothing else. The
- *     right is granted per brand and applies to that brand only, so no other
- *     Viewer anywhere gains anything.
+ *   - APPROVAL AUTHORITY IS `content.approve`, AND NOTHING ELSE (D-62).
+ *     D-121 briefly let a BRAND grant it to `client_viewer`; the MVP has no
+ *     Client Portal or external reviewer surface for such a grant to belong
+ *     to, so Viewer is strictly read-only and `mayApproveForBrand` accepts
+ *     neither a role key nor a policy. The idea is deferred to a future
+ *     External Review / Guest Approval capability with its own actor.
  *
  *   - EVERY DECISION IS AUDITED — `content.review_requested`,
  *     `content.approved`, `content.changes_requested`, `content.rejected`,
@@ -64,8 +66,38 @@ import type { ContentPolicy } from './policy';
 export interface ResolvedApprovalPolicy {
   requireApprovalBeforeScheduling: boolean;
   allowSelfApproval: boolean;
+  /**
+   * RESERVED AND INERT — D-62 supersedes D-121 for the MVP.
+   *
+   * Nothing reads this to decide anything. `mayApproveForBrand` cannot even
+   * see it: approval authority is `content.approve` and nothing else, so a
+   * Viewer is strictly read-only whatever this says. It is not patchable
+   * through `setPolicyForBrand`, no screen renders it, and a CHECK constraint
+   * pins the column to false or NULL.
+   *
+   * KEPT rather than dropped because it is part of the policy record a cycle
+   * snapshots, and because a future **External Review / Guest Approval**
+   * capability is expected to want a per-brand switch of this shape. That
+   * capability will be a distinct narrow actor, NOT a repurposing of
+   * `client_viewer`. Until it exists this field is structure, not behaviour —
+   * the same treatment `ApprovalSubjectType.CAMPAIGN` and the undeliverable
+   * `NotificationChannel` values already get.
+   */
   clientApprovalEnabled: boolean;
 }
+
+/**
+ * THE PART OF A POLICY THAT DECIDES ANYTHING.
+ *
+ * `ResolvedApprovalPolicy` is the whole stored record, including the reserved
+ * and inert `clientApprovalEnabled`. This is the subset a verdict is actually
+ * judged against — so a field that governs nothing cannot drift into a
+ * decision path by being carried alongside ones that do.
+ */
+export type EffectiveApprovalPolicy = Pick<
+  ResolvedApprovalPolicy,
+  'requireApprovalBeforeScheduling' | 'allowSelfApproval'
+>;
 
 /**
  * THE POLICY A CYCLE IS JUDGED BY IS THE ONE IT WAS OPENED UNDER (D-126).
@@ -95,11 +127,11 @@ export interface ResolvedApprovalPolicy {
  */
 export function policyFromSnapshot(
   snapshot: unknown,
-  current: ResolvedApprovalPolicy,
-): ResolvedApprovalPolicy {
+  current: EffectiveApprovalPolicy,
+): EffectiveApprovalPolicy {
   if (snapshot === null || typeof snapshot !== 'object') return current;
   const raw = snapshot as Record<string, unknown>;
-  const bool = (key: keyof ResolvedApprovalPolicy): boolean =>
+  const bool = (key: keyof EffectiveApprovalPolicy): boolean =>
     typeof raw[key] === 'boolean' ? (raw[key] as boolean) : current[key];
   return {
     // The scheduling gate is NOT taken from the snapshot: it governs the
@@ -107,7 +139,6 @@ export function policyFromSnapshot(
     // that turns the gate on protects content already in flight.
     requireApprovalBeforeScheduling: current.requireApprovalBeforeScheduling,
     allowSelfApproval: bool('allowSelfApproval'),
-    clientApprovalEnabled: bool('clientApprovalEnabled'),
   };
 }
 
@@ -219,26 +250,26 @@ export interface DenialSink {
 }
 
 /**
- * D-121 / D-122 — may this actor decide a review for this brand?
+ * May this actor decide a review? **D-62: the permission, and nothing else.**
+ *
+ * THE SIGNATURE IS THE GUARANTEE. This took a `roleKey` and a
+ * `ResolvedApprovalPolicy` so that D-121's per-brand switch could lift
+ * `client_viewer` to a reviewer. D-62 makes Viewer strictly read-only for the
+ * MVP, so the switch is gone — and rather than leave the parameters in place
+ * and ignore them, they are REMOVED. A rule that cannot see a role key or a
+ * brand setting cannot be talked into honouring one, by this release or by an
+ * accidental reintroduction in a later one.
+ *
+ * Approval authority is therefore exactly `content.approve`, granted by a role,
+ * and a customer's brand configuration cannot widen it.
  *
  * EXPORTED because the UI needs the same answer to decide what to render, and
  * two implementations of one rule is how a screen and a service come to
  * disagree. The screen asks so it can hide a button; the service asks so it can
  * refuse. Only the second is the control.
  */
-export function mayApproveForBrand(input: {
-  roleKey: string;
-  permissionKeys: readonly string[];
-  policy: ResolvedApprovalPolicy;
-}): boolean {
-  if (input.permissionKeys.includes('content.approve')) return true;
-  /*
-   * The ONLY lift the per-brand switch performs, and it is deliberately
-   * hard-coded to one role key rather than "any role without the permission":
-   * a future role that happens to lack `content.approve` must not silently
-   * inherit approval rights from a customer's brand setting.
-   */
-  return input.roleKey === 'client_viewer' && input.policy.clientApprovalEnabled;
+export function mayApproveForBrand(input: { permissionKeys: readonly string[] }): boolean {
+  return input.permissionKeys.includes('content.approve');
 }
 
 export class ContentApprovalService {
@@ -280,12 +311,21 @@ export class ContentApprovalService {
     };
   }
 
-  /** Change a brand's policy. Gated on `approvals.policy.manage` by the caller. */
+  /**
+   * Change a brand's policy. Gated on `approvals.policy.manage` by the caller.
+   *
+   * `clientApprovalEnabled` IS NOT PATCHABLE, and the type says so rather than
+   * the body silently dropping it. Under D-62 the Viewer is strictly read-only,
+   * so there is no switch for a customer to throw; `Omit` makes an attempt to
+   * throw one a compile error rather than a write that appears to succeed and
+   * changes nothing. The database pins the column too — see
+   * `20260915223000_phase_5b_3_withdraw_viewer_approval`.
+   */
   async setPolicyForBrand(input: {
     brandId: string;
     actorUserId: string;
     actorBrandScope: readonly string[];
-    patch: Partial<ResolvedApprovalPolicy>;
+    patch: Partial<Omit<ResolvedApprovalPolicy, 'clientApprovalEnabled'>>;
   }): Promise<ResolvedApprovalPolicy> {
     assertBrandInScope(input.actorBrandScope, input.brandId);
     const before = await this.policyForBrand(input.brandId);
@@ -301,9 +341,6 @@ export class ContentApprovalService {
       ...(input.patch.allowSelfApproval === undefined
         ? {}
         : { allowSelfApproval: input.patch.allowSelfApproval }),
-      ...(input.patch.clientApprovalEnabled === undefined
-        ? {}
-        : { clientApprovalEnabled: input.patch.clientApprovalEnabled }),
       updatedByUserId: input.actorUserId,
     };
     if (existing) {
@@ -377,7 +414,6 @@ export class ContentApprovalService {
       const eligible = await this.mayUserReview({
         userId: assignedToUserId,
         brandId: item.brandId,
-        policy,
       });
       if (!eligible) throw assigneeNotEligible();
     }
@@ -432,7 +468,6 @@ export class ContentApprovalService {
       ? [approval.assignedToUserId]
       : await this.eligibleReviewers({
           brandId: item.brandId,
-          policy,
           excludeUserId: input.actor.userId,
         });
 
@@ -509,13 +544,7 @@ export class ContentApprovalService {
 
     // WHO the actor is, however, is always read fresh: `mayApproveForBrand`
     // takes the permissions of the session making THIS request.
-    if (
-      !mayApproveForBrand({
-        roleKey: input.actor.roleKey,
-        permissionKeys: input.actor.permissionKeys,
-        policy,
-      })
-    ) {
+    if (!mayApproveForBrand({ permissionKeys: input.actor.permissionKeys })) {
       await this.#auditDenied(input.actor.userId, approval, 'not_permitted');
       throw approvalNotPermitted();
     }
@@ -646,16 +675,15 @@ export class ContentApprovalService {
     assertBrandInScope(input.actor.brandScope, approval.brandId);
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
 
-    // D-126: the cycle's own policy, for the same reason `decide()` uses it.
-    const current = await this.policyForBrand(approval.brandId);
-    const policy = policyFromSnapshot(approval.policySnapshot, current);
+    /*
+     * WITHDRAWING NEEDS NO POLICY LOOKUP ANY MORE. It once resolved the cycle's
+     * snapshot so `mayApproveForBrand` could weigh the brand's D-121 switch;
+     * under D-62 approval authority is the permission alone, and the requester
+     * may always withdraw their own request.
+     */
     const mayCancel =
       approval.requestedByUserId === input.actor.userId ||
-      mayApproveForBrand({
-        roleKey: input.actor.roleKey,
-        permissionKeys: input.actor.permissionKeys,
-        policy,
-      });
+      mayApproveForBrand({ permissionKeys: input.actor.permissionKeys });
     if (!mayCancel) {
       await this.#auditDenied(input.actor.userId, approval, 'not_permitted');
       throw approvalNotPermitted();
@@ -742,14 +770,7 @@ export class ContentApprovalService {
 
   /**
    * THE REVIEW SUBJECT — the narrowest thing a reviewer needs in order to
-   * decide, and nothing else (finding 2, D-121).
-   *
-   * WHY THIS EXISTS. The D-121 per-brand Viewer grant was unreachable: the
-   * approvals screen and the decision action both required `content.read`, and
-   * `client_viewer` holds `workspace.read` and nothing else. The options were
-   * to widen the role — which D-121 exists specifically not to do, because it
-   * would grant every Viewer in every workspace the whole content library — or
-   * to give the review its own authorized read. This is that read.
+   * decide, and nothing else.
    *
    * WHAT IT RETURNS: the title, the brand name, the captions under review, the
    * requester's note and the cycle. WHAT IT DOES NOT: anything else in the
@@ -757,10 +778,17 @@ export class ContentApprovalService {
    * billing. A reviewer cannot judge words they cannot see, and they do not
    * need anything beyond the words.
    *
-   * AUTHORIZED PER APPROVAL, against the brand's own policy and the cycle's own
-   * snapshot — the same `mayApproveForBrand` the verdict uses, so a reader who
-   * could not decide it cannot read it either. Brand B's queue is invisible to
-   * a Viewer granted Brand A, and the refusal is NOT_FOUND-shaped.
+   * ITS ORIGINAL PURPOSE IS GONE, AND IT IS KEPT ON ITS OWN MERITS. This was
+   * written to give a D-121 Viewer an authorized read without handing them the
+   * library. D-62 makes Viewer strictly read-only, so no such reader exists and
+   * the bypass it carried has been removed — `content.read` is now the floor.
+   * What remains is a genuinely narrow projection for the reviewer's card,
+   * useful to every reviewer, and the shape a future External Review actor
+   * would want. It grants nothing on its own.
+   *
+   * AUTHORIZED PER APPROVAL and scoped to the caller's brands, with a
+   * NOT_FOUND-shaped refusal so another brand's review does not betray its
+   * existence.
    */
   async reviewSubject(input: { approvalId: string; actor: ApprovalActor }): Promise<ReviewSubject> {
     const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
@@ -769,18 +797,21 @@ export class ContentApprovalService {
 
     const current = await this.policyForBrand(approval.brandId);
     const policy = policyFromSnapshot(approval.policySnapshot, current);
-    const mayReview = mayApproveForBrand({
-      roleKey: input.actor.roleKey,
-      permissionKeys: input.actor.permissionKeys,
-      policy,
-    });
+    const mayReview = mayApproveForBrand({ permissionKeys: input.actor.permissionKeys });
     /*
-     * A reader holding `content.read` may see the subject because they may see
-     * the content anyway; anybody else may see it ONLY because they may decide
-     * it. Refusing with NOT_FOUND rather than FORBIDDEN keeps the existence of
+     * D-62: `content.read` IS THE FLOOR, with no way past it.
+     *
+     * This once admitted anybody `mayApproveForBrand` admitted, EVEN WITHOUT
+     * `content.read`, so that a D-121 Viewer could read the words they were
+     * being asked to judge. That was the whole of the Viewer's authorized read,
+     * and with the Viewer grant withdrawn it is the one door left that a
+     * read-only member could have walked through. It is closed: the subject is
+     * content, and seeing content requires the content permission.
+     *
+     * Refusing with NOT_FOUND rather than FORBIDDEN keeps the existence of
      * another brand's review out of the answer.
      */
-    if (!mayReview && !input.actor.permissionKeys.includes('content.read')) {
+    if (!input.actor.permissionKeys.includes('content.read')) {
       throw approvalNotFound();
     }
     if (!approval.contentItemId) throw contentItemNotFound();
@@ -882,16 +913,11 @@ export class ContentApprovalService {
    *   2. BRANDSCOPE, with the platform's own semantics — empty is unrestricted,
    *      non-empty must contain this brand. Skipping it told a member scoped to
    *      one brand the title of another brand's content.
-   *   3. EFFECTIVE approval authority: `content.approve` through the role, OR
-   *      the D-121 per-brand Viewer grant when this brand enables it. Reading
-   *      the static permission alone made the Viewer grant invisible to the
-   *      very notification that would tell them they had work.
+   *   3. APPROVAL AUTHORITY: `content.approve` through the role. Under D-62
+   *      that is the whole of it — no brand setting and no role key adds to it,
+   *      which is why `mayApproveForBrand` no longer accepts either.
    */
-  async eligibleReviewers(input: {
-    brandId: string;
-    policy: ResolvedApprovalPolicy;
-    excludeUserId?: string;
-  }): Promise<string[]> {
+  async eligibleReviewers(input: { brandId: string; excludeUserId?: string }): Promise<string[]> {
     const members = await this.#db.membership.findMany({
       where: { workspaceId: this.#workspaceId, status: 'ACTIVE' },
       select: {
@@ -905,23 +931,16 @@ export class ContentApprovalService {
       .filter((m) => brandInScope(m.brandScope, input.brandId))
       .filter((m) =>
         mayApproveForBrand({
-          roleKey: m.role.key,
           permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
-          policy: input.policy,
         }),
       )
       .map((m) => m.userId);
   }
 
   /** Is this ONE member an eligible reviewer for this brand? Same three rules. */
-  async mayUserReview(input: {
-    userId: string;
-    brandId: string;
-    policy: ResolvedApprovalPolicy;
-  }): Promise<boolean> {
+  async mayUserReview(input: { userId: string; brandId: string }): Promise<boolean> {
     const eligible = await this.eligibleReviewers({
       brandId: input.brandId,
-      policy: input.policy,
     });
     return eligible.includes(input.userId);
   }

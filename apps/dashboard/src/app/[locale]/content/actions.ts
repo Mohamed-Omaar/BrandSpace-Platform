@@ -60,10 +60,10 @@ function actorOf(session: WorkspaceSession) {
 /**
  * The approvals actor, built from the SESSION and nothing else.
  *
- * The role key and permission keys travel with it because D-121 lets a BRAND
- * grant approval rights to `client_viewer`, so the service has to know which
- * role is asking. They come from the verified session — never from the form —
- * for the obvious reason.
+ * The permission keys travel with it because the service decides authority
+ * from them, never from the form. The role key travels too: it no longer
+ * affects approval authority (D-62 removed that channel), but the actor is the
+ * session's identity and the audit trail records who acted as what.
  */
 function approvalActorOf(session: WorkspaceSession) {
   return {
