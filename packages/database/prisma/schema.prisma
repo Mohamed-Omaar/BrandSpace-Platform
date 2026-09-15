@@ -372,6 +372,27 @@ model Workspace {
   /// such rather than invented (docs/ADMIN-CONTROL-CENTER.md §3.2).
   lastActivityAt DateTime? @db.Timestamptz(6)
 
+  // --- Phase 5B-2: AI generation policy the CUSTOMER controls ---------------
+
+  /// D-115. The Arabic dialect this workspace writes in, as a configured KEY
+  /// rather than an enum: the supported list and the default both live in the
+  /// activated `content` configuration domain, so adding a dialect is an
+  /// operator change and not a migration (CLAUDE.md §2.2).
+  ///
+  /// NULL means "not configured", which resolves to the activated default —
+  /// shipped as `msa`. It does NOT mean Saudi, and nothing here may make it so.
+  arabicDialect String?
+
+  /// D-117 / F-73. How long persisted AI output is kept, in days.
+  ///
+  /// NULL is the D-116 default: retained while the subscription is active, then
+  /// a grace window after cancellation. A positive value is the CUSTOMER asking
+  /// for something shorter, and the service — never the screen — applies it.
+  ///
+  /// It reaches content only. Audit events, the credit ledger and billing
+  /// records have their own retention and are out of this column's reach.
+  aiContentRetentionDays Int?
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
@@ -413,6 +434,11 @@ model Workspace {
   assetDerivatives    AssetDerivative[]
   assetUploadSessions AssetUploadSession[]
   assetProcessingJobs AssetProcessingJob[]
+
+  /// Phase 5B-2 — AI Content Studio.
+  contentItems    ContentItem[]
+  contentVariants ContentVariant[]
+  calendarSlots   CalendarSlot[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1594,6 +1620,11 @@ model Brand {
 
   status BrandStatus @default(DRAFT)
 
+  /// D-115. This brand's Arabic dialect, overriding the workspace's. NULL means
+  /// "inherit", and the chain is brand → workspace → the activated default.
+  /// A configured key, validated against the activated `content` domain.
+  arabicDialect String?
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   /// Soft delete (docs/DATABASE.md §2). Never applied to ledgers or audit.
@@ -1617,6 +1648,11 @@ model Brand {
   assetVersions       AssetVersion[]
   assetUploadSessions AssetUploadSession[]
   assetProcessingJobs AssetProcessingJob[]
+
+  /// Phase 5B-2 — AI Content Studio.
+  contentItems    ContentItem[]
+  contentVariants ContentVariant[]
+  calendarSlots   CalendarSlot[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -2460,4 +2496,309 @@ model AssetProcessingJob {
   /// The reconciliation sweep: unclaimed work, oldest first.
   @@index([stage, nextAttemptAt])
   @@map("asset_processing_job")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5B-2 — AI Content Studio (docs/PRODUCT.md §5 module 7,
+// docs/DATABASE.md §4.4 and §4.5, docs/ROADMAP.md Phase 5 scope item 3).
+//
+// TWO TENANT-OWNED TABLES, both additionally BRAND-SCOPED, and every foreign
+// key between them composite with `workspaceId` — D-112, which F-80 and F-83
+// established as the platform rule rather than an Asset Library one.
+//
+// THE CONTENT ITEM IS CHANNEL-AGNOSTIC AND THE VARIANT IS NOT. That split is
+// docs/DATABASE.md §4.4/§4.5 and it is the whole point: one idea, written once,
+// rendered per platform and per locale. A single table carrying a
+// `platformKey` would make "the same post for Instagram and LinkedIn" two
+// unrelated rows, and approving one would say nothing about the other.
+// ---------------------------------------------------------------------------
+
+/// docs/DATABASE.md §4.4. What kind of thing a content item is.
+enum ContentType {
+  POST
+  CAROUSEL
+  STORY
+  REEL
+  VIDEO
+  ARTICLE
+  THREAD
+}
+
+/// docs/DATABASE.md §4.4 lifecycle.
+///
+/// PHASE 5B-2 REACHES DRAFT, IN_REVIEW AND ARCHIVED ONLY. The later states are
+/// declared because the lifecycle is a product fact and a partial enum would
+/// have to be migrated by the phase that needs them — but nothing in this
+/// phase writes SCHEDULED or beyond. Approvals (scope item 6) and the Social
+/// Calendar (item 5) own those transitions, and this phase deliberately does
+/// not pre-empt either.
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIALLY_PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+/// Whether a variant's body has been checked against its platform's limits.
+///
+/// `UNVALIDATED` is the honest starting state and is never rendered as "valid":
+/// a caption nobody has measured is not a caption known to fit.
+enum ContentValidationState {
+  UNVALIDATED
+  VALID
+  WARNINGS
+  INVALID
+}
+
+/// How a piece of content came to exist. Provenance the customer can see, and
+/// the thing that makes "AI wrote this" answerable rather than assumed.
+enum ContentOrigin {
+  HUMAN
+  AI_GENERATED
+  AI_ASSISTED
+}
+
+/// Where a calendar slot is in its own short life — docs/DATABASE.md §4.7b.
+///
+/// DELIBERATELY SHORTER THAN §4.7's DESIGN. `LOCKED`, `PUBLISHING`, `PUBLISHED`
+/// and `FAILED` are the publishing pipeline's, and the pipeline is Phase 6. A
+/// state no code can ever enter is a state whose meaning nobody has settled, so
+/// they are absent rather than declared and unreachable.
+enum CalendarSlotStatus {
+  /// On the calendar, and the content is not yet cleared to go.
+  PLANNED
+  /// On the calendar and cleared. The content item is `SCHEDULED` in step.
+  SCHEDULED
+  /// Taken off the calendar. Kept rather than deleted so the audit trail and
+  /// the quota refund both have a row to point at.
+  CANCELLED
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. The canonical content object — docs/DATABASE.md §4.4.
+model ContentItem {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  title       String
+  contentType ContentType @default(POST)
+
+  /// The locale the item was authored in. Variants carry their own, so an
+  /// Arabic item with an English variant is a normal shape rather than a
+  /// contradiction.
+  primaryLocale Locale @default(AR)
+  /// The content pillar this belongs to, when the brand uses pillars.
+  pillar String?
+  tags   String[] @default([])
+
+  status ContentStatus @default(DRAFT)
+
+  /// D-65-style provenance, for the same reason Brand Brain carries it: a
+  /// customer is entitled to know whether a human or a model wrote the words.
+  origin          ContentOrigin @default(HUMAN)
+  createdByUserId String?       @db.Uuid
+  /// The gateway request that produced it. AC-11.5 — the draft is linked to the
+  /// `AiRequest`, so a generation can be traced to its cost and its model.
+  aiRequestId     String?       @db.Uuid
+
+  /// AC-11.4. Which Brand Brain entries and versions grounded the generation:
+  /// `[{ itemId, area, version, locator, sourceDocumentId, fileName }]`.
+  /// Written from what RETRIEVAL returned, never parsed out of model text, so a
+  /// fabricated citation is impossible.
+  citations Json?
+
+  /// True when the generation declined for lack of approved knowledge. Recorded
+  /// so an honest refusal is measurable rather than asserted.
+  insufficientKnowledge Boolean @default(false)
+
+  /// The dialect the item was generated in (D-115), resolved at generation time
+  /// from brand → workspace → the activated default. Recorded rather than
+  /// re-derived, because the configured default can change afterwards and a
+  /// draft must still say what it actually was.
+  arabicDialect String?
+
+  /// Client idempotency key for the generation, so a retried request never
+  /// bills twice and never creates a second draft.
+  idempotencyKey String?
+
+  /// D-116 / D-117 retention. NULL means "retained while the subscription is
+  /// active". A date is either the post-cancellation grace deadline or the
+  /// workspace's own shorter window, whichever the service resolved.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete (docs/DATABASE.md §2).
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_item_brand_fkey")
+
+  variants      ContentVariant[]
+  calendarSlots CalendarSlot[]
+
+  /// The composite target every variant points at (D-112).
+  @@unique([workspaceId, id], name: "content_item_workspace_scope")
+  /// A replayed generation returns the first draft rather than making a second.
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, brandId, updatedAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("content_item")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. Per-platform, per-locale rendering of a content
+/// item — docs/DATABASE.md §4.5.
+model ContentVariant {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  contentItemId String @db.Uuid
+
+  /// The platform key this variant is written for, from the activated `content`
+  /// configuration domain — never an enum, because the set of platforms the
+  /// product supports is an operator's fact (CLAUDE.md §2.2) and Phase 6 will
+  /// add to it without a migration.
+  platformKey String
+  locale      Locale
+
+  /// The caption. THIS IS CUSTOMER CONTENT: nulled by the retention purge while
+  /// the row survives, exactly as `brand_brain_message.body` is, so the shape of
+  /// the work and its accounting links outlive the words.
+  body         String?
+  bodyPurgedAt DateTime? @db.Timestamptz(6)
+
+  hashtags String[] @default([])
+  mentions String[] @default([])
+  linkUrl      String?
+  firstComment String?
+
+  /// Assets selected from the Asset Library. A uuid array rather than a join
+  /// table, matching docs/DATABASE.md §4.5 — a variant references assets, it
+  /// does not own them.
+  ///
+  /// NOT a foreign key, and that is deliberate rather than an oversight: an
+  /// array cannot carry a composite key, so the tenant boundary here is
+  /// enforced in the SERVICE, which resolves every id through the tenant-scoped
+  /// client before writing. The isolation suite proves a foreign asset id is
+  /// refused on that path.
+  assetIds String[] @default([]) @db.Uuid
+
+  platformOptions Json?
+
+  validationState  ContentValidationState @default(UNVALIDATED)
+  validationErrors Json?
+  characterCount   Int                    @default(0)
+
+  origin      ContentOrigin @default(HUMAN)
+  aiRequestId String?       @db.Uuid
+
+  /// The dialect this variant was written in (D-115), for the reason on the item.
+  arabicDialect String?
+
+  /// Retention travels with the item's, so a purge cannot clear a caption and
+  /// leave its translation.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_variant_brand_fkey")
+  /// COMPOSITE (D-112). A plain `contentItemId` would accept another
+  /// workspace's item id — referential integrity runs with RLS bypassed — and
+  /// the difference between accepted and refused would answer whether that id
+  /// exists. F-80 and F-83 are what this line prevents recurring.
+  item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_variant_item_fkey")
+
+  /// docs/DATABASE.md §4.5: one variant per platform per locale.
+  @@unique([contentItemId, platformKey, locale])
+  @@index([workspaceId, contentItemId])
+  @@index([workspaceId, brandId])
+  @@index([expiresAt])
+  @@map("content_variant")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. When a content item goes out — docs/DATABASE.md
+/// §4.7 and §4.7b.
+///
+/// THE SLOT IS THE *WHEN*; THE CONTENT ITEM REMAINS THE SOURCE OF TRUTH FOR THE
+/// WHAT AND THE STATE. A second copy of a caption, a status or a channel list
+/// here would be a second answer to a question `content_item` already answers,
+/// and the two would drift the first time one was updated without the other. So
+/// this row holds a time, a timezone, a target and a link.
+///
+/// WHY THREE TIME COLUMNS AND NOT ONE (AC-14.2, AC-14.3). A timestamp alone
+/// cannot answer "what time did the customer MEAN?" across a daylight-saving
+/// boundary: 09:00 local converted to UTC in January and read back in July is
+/// 08:00 or 10:00, and neither is what anyone asked for. So the INTENT
+/// (`scheduledLocalTime`, `timezone`) is stored beside the INSTANT
+/// (`scheduledAtUtc`), and the instant is recomputed from the intent whenever
+/// the zone's offset changes. Storing only the instant loses the intent; storing
+/// only the intent makes every query a conversion.
+model CalendarSlot {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  contentItemId String @db.Uuid
+
+  /// The instant, in UTC. What every range query and every sweep reads.
+  scheduledAtUtc DateTime @db.Timestamptz(6)
+  /// The wall-clock the customer chose, as `YYYY-MM-DDTHH:mm`. A STRING rather
+  /// than a timestamp on purpose: it is a local intent with no offset, and
+  /// giving it one would be inventing the very fact it exists to preserve.
+  scheduledLocalTime String
+  /// The IANA zone that intent is expressed in, copied from the workspace when
+  /// the slot was created. Copied rather than joined, because a workspace that
+  /// relocates must not silently move every post it already scheduled.
+  timezone String
+
+  status CalendarSlotStatus @default(PLANNED)
+
+  /// AC-14.7 — the publishing target is a MOCK, and says so in the data rather
+  /// than only in a comment. Phase 6 adds real connection targets beside it;
+  /// until then nothing in this system can name one.
+  targetKind String @default("MOCK")
+
+  /// Which channels this slot is for. Derived from the item's variants when the
+  /// slot is created, and kept so a slot still renders its channels after a
+  /// variant is edited — the calendar is a plan, and a plan records what was
+  /// planned.
+  platformKeys String[] @default([])
+
+  createdByUserId String?   @db.Uuid
+  cancelledAt     DateTime? @db.Timestamptz(6)
+
+  /// The usage-quota event this slot consumed (AC-14.5), so cancelling can
+  /// refund exactly what scheduling took and a retry cannot double-count.
+  usageIdempotencyKey String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "calendar_slot_brand_fkey")
+  /// COMPOSITE (D-112). A plain `contentItemId` would accept another
+  /// workspace's item — referential integrity runs with RLS bypassed — and the
+  /// difference between accepted and refused answers whether that id exists.
+  /// F-80 and F-83 are what this line prevents recurring.
+  item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "calendar_slot_item_fkey")
+
+  /// ONE LIVE SLOT PER ITEM. A partial index, so a cancelled slot does not
+  /// block rescheduling the same content — the same shape D-100 settled for the
+  /// asset checksum, and it lives in the migration because Prisma cannot model
+  /// a WHERE clause on a unique index.
+  @@index([workspaceId, scheduledAtUtc])
+  @@index([workspaceId, brandId, scheduledAtUtc])
+  @@index([workspaceId, contentItemId])
+  @@index([status, scheduledAtUtc])
+  @@map("calendar_slot")
 }

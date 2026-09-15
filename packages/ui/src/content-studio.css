@@ -1,0 +1,561 @@
+/*
+ * AI Content Studio — PORTED VERBATIM from the approved demo.
+ *
+ * Source of truth: `demo/styles-1.css`, `demo/styles-2.css`, `demo/styles-3.css`
+ * and `demo/app-2.js` in Mohamed-Omaar/Brandspace-Landing-page at commit
+ * 10765e8cf4f5b89c91b144863330459611248b16. A byte-for-byte snapshot lives in
+ * docs/visual-reference/full-demo/ with its checksums in that directory's
+ * README and in docs/UI-FIDELITY-CONTRACT.md §3.
+ *
+ * The two screens ported here are the demo's own `postsPage()` (the content
+ * library) and `composer()` (the create screen), both in `demo/app-2.js`.
+ *
+ * THIS FILE IS A TRANSCRIPTION, NOT A DESIGN. Every value in §1 is the demo's
+ * own. Changing one without an owner decision recorded under contract rule 9 is
+ * a defect, however much better it looks. §2 holds the accessibility overrides,
+ * each with its measured contrast ratio; §3 holds the additions the demo has no
+ * equivalent for, each naming what it is for.
+ *
+ * Why a stylesheet rather than the inline styles most of this app uses: the
+ * demo depends on `:hover`, `:focus-visible`, descendant selectors and media
+ * queries, none of which an inline style can express. Re-expressing them as
+ * React state would be a reimplementation — the thing the contract forbids.
+ *
+ * WHAT WAS DELIBERATELY NOT PORTED, and why — each is recorded in
+ * docs/UI-FIDELITY-CONTRACT.md §4.1:
+ *   - `copilotPanel()`, the composer's third column. The Copilot is Phase 7.
+ *     Its column is absent, so the grid carries two tracks rather than three.
+ *   - The composer's "Campaign" and "Publish" pickers. Campaigns and scheduling
+ *     are the Social Calendar's, not this scope item's. The `.cs-form-row`
+ *     geometry is ported and carries this scope's own two controls.
+ *   - `.media-strip` and `.thumb`. Attaching media is the publishing pipeline's,
+ *     and `content_variant.assetIds` has no customer-facing picker in this scope
+ *     item. Porting the stylesheet for an element nothing renders would be dead
+ *     code claiming to be fidelity, so the rules are absent rather than unused.
+ *   - `socialPreview()`'s scripted caption. The preview is a real render of the
+ *     selected variant; the demo's hard-coded sentence is demo data.
+ *   - The demo's invented tab counts (`All · 28`) and post titles. Contract
+ *     rules 5 and 6: the position, typography and treatment are unchanged and
+ *     only the numbers and words come from the database.
+ */
+
+/* ========================================================================== */
+/* §1  THE DEMO, TRANSCRIBED                                                  */
+/* ========================================================================== */
+
+.content-page {
+  /*
+   * `:root` in `demo/styles-1.css`, scoped to this page rather than global so
+   * the port cannot recolour a screen it was never about.
+   */
+  --cs-ink: #111114;
+  --cs-soft: #f5f5f6;
+  --cs-purple: #7935fe;
+  --cs-yellow: #ffdd15;
+  --cs-success: #16794b;
+  --cs-warning: #875f00;
+  --cs-soft-shadow: 0 12px 35px rgba(16, 14, 28, 0.06);
+  width: 100%;
+  color: var(--cs-ink);
+}
+
+.content-page * {
+  box-sizing: border-box;
+}
+
+/* --- the toolbar every demo view opens with -------------------------- */
+
+.cs-view-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  min-height: 74px;
+  margin-bottom: 12px;
+}
+
+.cs-view-toolbar h2 {
+  margin: 4px 0 0;
+  letter-spacing: -0.035em;
+  font-size: 29px;
+}
+
+.cs-section-kicker {
+  color: var(--cs-muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* --- tabs and the filter row ----------------------------------------- */
+
+.cs-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border-radius: 13px;
+  background: var(--cs-soft);
+}
+
+.cs-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  overflow: auto;
+  padding-bottom: 2px;
+}
+
+.cs-tabs button,
+.cs-filter-row button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--cs-soft);
+  min-height: 36px;
+  padding: 0 11px;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.cs-tabs button {
+  background: transparent;
+}
+
+.cs-tabs button.selected {
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.05);
+}
+
+.cs-search-field {
+  min-width: 240px;
+  height: 36px;
+  border: 0;
+  outline: 0;
+  border-radius: 11px;
+  background: var(--cs-soft);
+  padding: 0 13px;
+  font-size: 10px;
+}
+
+/* --- the demo's three button treatments ------------------------------ */
+
+.cs-primary-button,
+.cs-dark-button,
+.cs-ghost-button {
+  border: 0;
+  border-radius: 12px;
+  min-height: 40px;
+  padding: 0 15px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cs-primary-button {
+  background: var(--cs-purple);
+  color: #fff;
+}
+
+.cs-dark-button {
+  background: var(--cs-ink);
+  color: #fff;
+}
+
+.cs-ghost-button {
+  background: transparent;
+}
+
+.cs-compact {
+  min-height: 38px;
+}
+
+/*
+ * `.select-like` in the demo, which is a static `<div>` there because nothing
+ * in a prototype has options. It is a real `<select>` here and carries the same
+ * declarations — the demo's own rule already groups `.select-like` with the
+ * filter-row buttons, so this is that rule, not a new treatment.
+ */
+.cs-select {
+  border: 0;
+  border-radius: 10px;
+  background: var(--cs-soft);
+  min-height: 36px;
+  padding: 0 11px;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+/* --- the card grid --------------------------------------------------- */
+
+.cs-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.cs-post-card {
+  border: 0;
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  text-align: start;
+  box-shadow: var(--cs-soft-shadow);
+}
+
+.cs-post-art {
+  aspect-ratio: 1;
+  padding: 20px;
+  display: flex;
+  align-items: end;
+  position: relative;
+}
+
+.cs-post-art > span {
+  font-size: clamp(22px, 2.8vw, 38px);
+  line-height: 0.86;
+  font-weight: 900;
+  letter-spacing: -0.065em;
+}
+
+.cs-post-info {
+  padding: 13px;
+}
+
+.cs-post-info b,
+.cs-post-info small {
+  display: block;
+}
+
+.cs-post-info b {
+  font-size: 10px;
+}
+
+.cs-post-info small {
+  font-size: 8px;
+  color: var(--cs-muted);
+  margin-top: 4px;
+}
+
+.cs-gradient-a {
+  background: linear-gradient(145deg, #efe4ff, #a578ff 45%, #7935fe 74%, #ffdd15 150%);
+}
+
+.cs-gradient-b {
+  background:
+    radial-gradient(circle at 75% 18%, rgba(255, 221, 21, 0.7) 0 15%, transparent 16%),
+    linear-gradient(145deg, #15121b, #7935fe 78%);
+  color: #fff;
+}
+
+.cs-gradient-c {
+  background:
+    radial-gradient(circle at 25% 76%, #ffdd15 0 21%, transparent 22%),
+    linear-gradient(145deg, #fff, #f0e5ff);
+}
+
+.cs-gradient-d {
+  background: linear-gradient(145deg, #fff5b0, #ffdd15, #ff99b9);
+}
+
+/* --- the status pill ------------------------------------------------- */
+
+.cs-status {
+  padding: 6px 8px;
+  border-radius: 99px;
+  background: #e8f8ef;
+  color: var(--cs-success);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.cs-status.review {
+  background: #fff6d3;
+  color: var(--cs-warning);
+}
+
+.cs-status.draft {
+  background: var(--cs-soft);
+  color: var(--cs-muted);
+}
+
+/* --- the composer ---------------------------------------------------- */
+
+.cs-composer {
+  display: grid;
+  grid-template-columns: minmax(350px, 1fr) 340px;
+  gap: 12px;
+  align-items: start;
+}
+
+.cs-surface-card {
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 18px;
+  box-shadow: var(--cs-soft-shadow);
+  padding: 22px;
+}
+
+.cs-field {
+  margin-bottom: 16px;
+}
+
+.cs-field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.cs-field textarea,
+.cs-field input,
+.cs-field select,
+.cs-input-like {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: var(--cs-soft);
+  border-radius: 13px;
+  padding: 12px;
+  font-size: 10px;
+}
+
+.cs-field textarea {
+  min-height: 125px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.cs-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cs-channel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cs-channel {
+  border: 0;
+  border-radius: 10px;
+  background: var(--cs-soft);
+  padding: 9px;
+  font-size: 9px;
+}
+
+.cs-channel.selected {
+  background: var(--cs-ink);
+  color: #fff;
+}
+
+.cs-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* --- the demo's own breakpoints, with its own values ----------------- */
+
+@media (max-width: 1200px) {
+  .cs-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .cs-composer {
+    grid-template-columns: minmax(340px, 1fr) 330px;
+  }
+}
+
+@media (max-width: 900px) {
+  .cs-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cs-view-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cs-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (forced-colors: active) {
+  .content-page button,
+  .content-page input,
+  .content-page textarea,
+  .content-page select,
+  .cs-surface-card,
+  .cs-post-card {
+    outline: 1px solid CanvasText;
+  }
+}
+
+/* ========================================================================== */
+/* §2  ACCESSIBILITY OVERRIDES — the ONLY values that are not the demo's      */
+/* ========================================================================== */
+
+/*
+ * `--muted`, one step darker.
+ *
+ * The demo's `#717179` measures 4.44:1 on its own `--soft` (`#F5F5F6`), where
+ * the draft status pill and the search placeholder sit — just under the WCAG
+ * 2.2 AA 4.5:1 minimum, at 8px and 9px, which is nowhere near large text. This
+ * is NOT a new decision: `packages/ui/src/tokens.ts` already carries `#6A6A72`
+ * as the platform's documented deviation for exactly this value, measured at a
+ * 4.54:1 floor across all thirteen of this system's surfaces, and this port
+ * uses that token's value rather than inventing a second answer.
+ *
+ * Measured: #6A6A72 on #F5F5F6 = 4.92:1. On the card's effective #FCFCFC =
+ * 5.03:1. Not perceptibly different from the demo's value at these sizes.
+ */
+.content-page {
+  --cs-muted: #6a6a72;
+}
+
+/*
+ * A VISIBLE FOCUS RING.
+ *
+ * The demo sets `outline: 0` on every field and ships no `:focus-visible` rule
+ * at all — it is a prototype nobody tabs through. WCAG 2.2 AA (CLAUDE.md §4)
+ * requires a visible focus indicator, and that requirement outranks a
+ * prototype's omission. The ring is drawn OUTSIDE the control, so it changes
+ * nothing about the approved resting appearance: a reader who never uses a
+ * keyboard sees precisely the demo.
+ */
+.content-page :focus-visible {
+  outline: 2px solid var(--cs-purple);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/*
+ * A LABEL THAT IS READ BUT NOT SEEN.
+ *
+ * The demo labels its search box with a `placeholder` alone, which is not an
+ * accessible name: it disappears on the first keystroke and several screen
+ * readers never announce it. WCAG 2.2 AA requires the control to have a name,
+ * and the placeholder stays exactly as the demo wrote it — the visual result is
+ * unchanged, and a reader who cannot see it now gets told what it is.
+ */
+.cs-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ========================================================================== */
+/* §3  ADDITIONS — states the demo, being a static prototype, has none of     */
+/* ========================================================================== */
+
+/*
+ * The demo's post cards are always eight, always filled and always valid. A
+ * real library is empty on day one, a real caption can exceed a platform's
+ * limit, and a real generation can be refused for want of grounding. These
+ * carry no new colour family, font, shadow or layout system — contract §6.2
+ * rule 5 — only the tokens already declared above.
+ */
+
+.cs-empty {
+  padding: 48px 22px;
+  text-align: center;
+  color: var(--cs-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.cs-notice {
+  border-radius: 13px;
+  padding: 12px;
+  font-size: 9px;
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.cs-notice.warning {
+  background: #fff6d3;
+  color: var(--cs-warning);
+}
+
+.cs-notice.info {
+  background: var(--cs-soft);
+  color: var(--cs-ink);
+}
+
+/*
+ * A group's name, where the demo uses a `<label>` it cannot use.
+ *
+ * `.field label` styles the demo's field labels, and the channel row is four
+ * buttons rather than one control — a `<label>` can name only one, so the name
+ * is a `<span>` the group points at with `aria-labelledby`. The DECLARATIONS
+ * are `.field label`'s, unchanged, so the two look identical.
+ */
+.cs-field-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* Helper text under a control. The demo's `.view-toolbar p` treatment. */
+.cs-hint {
+  color: var(--cs-muted);
+  font-size: 9px;
+  line-height: 1.5;
+  margin: 7px 0 0;
+}
+
+/* The live character count beside a caption, and its over-limit state. */
+.cs-counter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--cs-muted);
+}
+
+.cs-counter.over {
+  color: #b83245;
+}
+
+/* The citation list under a generated draft — AC-11.4 made visible. */
+.cs-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.cs-citations span {
+  background: var(--cs-soft);
+  border-radius: 99px;
+  padding: 6px 8px;
+  font-size: 8px;
+  font-weight: 750;
+  color: var(--cs-muted);
+}

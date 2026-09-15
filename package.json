@@ -32,7 +32,7 @@
     "e2e:build": "pnpm --filter @brandspace/web build && pnpm --filter @brandspace/dashboard build && pnpm --filter @brandspace/admin build",
     "verify:all": "pnpm verify && pnpm e2e:build && pnpm test:e2e",
     "db:roles": "echo \"Run: psql -v migrator_password=... -v app_password=... -v platform_password=... -f scripts/sql/setup-database-roles.sql\"",
-    "e2e:seed": "tsx tests/e2e/seed-admin.ts && tsx tests/e2e/seed-ai.ts && tsx tests/e2e/seed-assets.ts && tsx tests/e2e/seed-visual.ts",
+    "e2e:seed": "tsx tests/e2e/seed-admin.ts && tsx tests/e2e/seed-ai.ts && tsx tests/e2e/seed-quotas.ts && tsx tests/e2e/seed-visual.ts && tsx tests/e2e/seed-content.ts",
     "e2e:screenshots": "BRANDSPACE_VISUAL_REVIEW=1 pnpm e2e:seed && BRANDSPACE_VISUAL_REVIEW=1 playwright test --project=visual-review"
   },
   "devDependencies": {

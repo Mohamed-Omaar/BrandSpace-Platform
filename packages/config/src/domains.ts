@@ -529,6 +529,206 @@ const usageLimitsSchema = z.object({
 // --- Brand Brain ------------------------------------------------------------
 
 /**
+ * AI Content Studio policy (Phase 5B-2).
+ *
+ * CLAUDE.md §2.2 again, and this domain carries two decisions the owner made
+ * explicitly, both of which had to land in CONFIGURATION rather than in code:
+ *
+ *   D-115 — the Arabic dialects the product supports and which one a workspace
+ *   that has configured none writes in. An enum in the schema would have made
+ *   "add Emirati" a migration, and — the part the decision is emphatic about —
+ *   would have forced a first value, quietly making some dialect the platform
+ *   default. The default ships as `msa`, which is the form every Arabic reader
+ *   can read, and NO dialect is privileged in source.
+ *
+ *   D-116/D-117 — the post-cancellation grace window. How long a cancelled
+ *   workspace's drafts survive is a commercial promise an owner should be able
+ *   to change without a release.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: the credit PRICE of a generation. That is
+ * `ai.credit-rules` and it stays there — one price, one place. And the system
+ * instruction that keeps generation grounded is not here either, for the same
+ * reason Brand Brain's is not: it is the safety contract of the feature, and an
+ * operator able to edit "never invent a statistic" out of it from an admin
+ * screen could turn a grounded writer into an ungrounded one without a review.
+ */
+const contentStudioSchema = z.object({
+  dialects: z
+    .object({
+      /**
+       * The dialect a workspace that has configured none writes in.
+       *
+       * MSA by owner decision (D-115). It must be a member of `supported`,
+       * which the refinement below enforces rather than trusts.
+       */
+      defaultKey: z.string().min(1).default('msa'),
+      /**
+       * The dialects an operator may offer. `labelKey` is a TRANSLATION KEY,
+       * never a display string: CLAUDE.md §4 forbids user-facing copy in
+       * configuration as firmly as in components, and a dialect named here in
+       * English would appear untranslated in an Arabic interface.
+       */
+      supported: z
+        .array(
+          z.object({
+            key: z
+              .string()
+              .min(1)
+              .regex(/^[a-z0-9-]+$/, 'A dialect key is lowercase letters, digits and hyphens.'),
+            labelKey: z.string().min(1),
+            /** BCP-47, for `lang` attributes and locale-aware formatting. */
+            bcp47: z.string().min(2),
+          }),
+        )
+        .min(1)
+        .default([
+          { key: 'msa', labelKey: 'content.dialect.msa', bcp47: 'ar' },
+          { key: 'gulf', labelKey: 'content.dialect.gulf', bcp47: 'ar-SA' },
+          { key: 'egyptian', labelKey: 'content.dialect.egyptian', bcp47: 'ar-EG' },
+          { key: 'levantine', labelKey: 'content.dialect.levantine', bcp47: 'ar-LB' },
+        ]),
+    })
+    .default({})
+    .refine((value) => value.supported.some((d) => d.key === value.defaultKey), {
+      message: 'The default dialect must be one of the supported dialects.',
+      path: ['defaultKey'],
+    }),
+
+  /**
+   * The platforms a variant may be written for, with the limits that decide
+   * whether a caption VALIDATES.
+   *
+   * Character limits are configuration because platforms change them and a
+   * release should not be what tracks that. Phase 6 adds real connections; this
+   * phase only needs to know what a caption must fit into.
+   */
+  platforms: z
+    .array(
+      z.object({
+        key: z
+          .string()
+          .min(1)
+          .regex(/^[a-z0-9-]+$/, 'A platform key is lowercase letters, digits and hyphens.'),
+        labelKey: z.string().min(1),
+        maxBodyChars: z.number().int().positive(),
+        maxHashtags: z.number().int().min(0),
+        allowsFirstComment: z.boolean().default(false),
+      }),
+    )
+    .min(1)
+    .default([
+      {
+        key: 'instagram',
+        labelKey: 'content.platform.instagram',
+        maxBodyChars: 2_200,
+        maxHashtags: 30,
+        allowsFirstComment: true,
+      },
+      {
+        key: 'linkedin',
+        labelKey: 'content.platform.linkedin',
+        maxBodyChars: 3_000,
+        maxHashtags: 10,
+        allowsFirstComment: false,
+      },
+      {
+        key: 'x',
+        labelKey: 'content.platform.x',
+        maxBodyChars: 280,
+        maxHashtags: 5,
+        allowsFirstComment: false,
+      },
+      {
+        key: 'tiktok',
+        labelKey: 'content.platform.tiktok',
+        maxBodyChars: 2_200,
+        maxHashtags: 20,
+        allowsFirstComment: false,
+      },
+    ]),
+
+  generation: z
+    .object({
+      /** Variants one generation may produce, so one request cannot fan out. */
+      maxVariantsPerRequest: z.number().int().min(1).max(20).default(4),
+      /** Live drafts per brand — the same shape as the Brand Brain ceiling. */
+      maxDraftsPerBrand: z.number().int().positive().default(500),
+      /** Bounds on the grounding context spent, mirroring Brand Brain's. */
+      maxContextItems: z.number().int().min(1).max(100).default(12),
+      maxContextChunks: z.number().int().min(0).max(100).default(8),
+      maxContextChars: z.number().int().min(500).max(200_000).default(12_000),
+      /** Ceiling on the customer's own brief, so a prompt cannot be unbounded. */
+      maxBriefChars: z.number().int().min(50).max(20_000).default(2_000),
+    })
+    .default({}),
+
+  retention: z
+    .object({
+      /**
+       * D-116. Days a cancelled workspace's content survives before the purge
+       * may take it. Retention while the subscription is ACTIVE is not a number
+       * here on purpose — it is "until it is not active", and expressing that as
+       * a very large integer would be a number somebody eventually trims.
+       */
+      cancellationGraceDays: z.number().int().min(1).max(365).default(30),
+      /**
+       * D-117. The shortest window a customer may choose. A floor exists so the
+       * control cannot be set to something that deletes work before the person
+       * who generated it has come back from lunch.
+       */
+      minCustomerRetentionDays: z.number().int().min(1).max(365).default(7),
+    })
+    .default({}),
+
+  /**
+   * The Content Calendar — Phase 5B-2's planning half.
+   *
+   * EVERY VALUE HERE IS AN OPERATOR'S FACT, not a developer's. Which day a week
+   * starts on differs by market before it differs by locale; how far ahead a
+   * post may be planned is a product decision; and whether an item must be
+   * approved before it can be scheduled is a policy the owner turns on when the
+   * Approvals module ships. Hard-coding any of them would be CLAUDE.md §2.2
+   * exactly.
+   */
+  calendar: z
+    .object({
+      /**
+       * 0 = Sunday … 6 = Saturday. Defaults to SUNDAY because the platform's
+       * first market runs a Sunday–Thursday week, and because a calendar whose
+       * week starts on the wrong day is wrong in a way people notice
+       * immediately. It is configuration precisely so the next market can
+       * differ without a release.
+       */
+      weekStartsOn: z.number().int().min(0).max(6).default(0),
+      /**
+       * How far ahead a slot may be placed. A ceiling rather than none, because
+       * an unbounded date is how a typo puts a post in the year 20260.
+       */
+      maxDaysAhead: z.number().int().min(1).max(3_650).default(365),
+      /**
+       * The shortest notice a slot may be given, in minutes. Zero would allow
+       * scheduling something for a moment already past by the time the request
+       * lands, which is not a plan.
+       */
+      minLeadMinutes: z.number().int().min(0).max(10_080).default(5),
+      /** A bound on one day's plan, so the grid stays a grid. */
+      maxSlotsPerDay: z.number().int().min(1).max(200).default(25),
+      /**
+       * AC-14.6. When true, only an APPROVED item may be scheduled.
+       *
+       * DEFAULT FALSE, and that is honesty rather than laxity: the Approvals
+       * module is Phase 5B-3, so until it ships nothing can move an item into
+       * `APPROVED` and a default of `true` would make the calendar unusable
+       * while appearing to enforce a policy nobody can satisfy. The GATE is
+       * built and tested now; the owner turns it on when there is a workflow
+       * behind it.
+       */
+      requireApprovalBeforeScheduling: z.boolean().default(false),
+    })
+    .default({}),
+});
+
+/**
  * Brand Brain operational policy (Phase 5).
  *
  * CLAUDE.md §2.2: none of this may be hard-coded. What a customer may upload,
@@ -1088,6 +1288,11 @@ export const CONFIG_DOMAINS = {
   // scanning, the download-grant window and retention. The storage QUOTA is
   // deliberately absent: it is per-plan and lives in `plans` (D-10).
   assets: { schema: assetsSchema, schemaVersion: 1 },
+  // Phase 5B-2. Supported Arabic dialects and the default (D-115), the
+  // platforms a variant may target with the limits that decide validation, the
+  // generation bounds, and the D-116/D-117 retention windows. It carries no
+  // provider, no model, no price and no credential.
+  content: { schema: contentStudioSchema, schemaVersion: 1 },
   'integrations.email': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.storage': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.payment': { schema: providerIntegrationSchema(), schemaVersion: 1 },

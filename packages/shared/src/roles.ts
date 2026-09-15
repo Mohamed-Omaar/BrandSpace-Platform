@@ -101,6 +101,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'assets.version',
       'assets.archive',
       'assets.restore',
+      // Phase 5B-2. Runs the brand's content end to end, short of deleting it —
+      // including the calendar, which is the planning half of that job.
+      'content.read',
+      'content.create',
+      'content.edit',
+      'content.submit',
+      'content.archive',
+      'content.schedule',
     ],
   },
   {
@@ -128,6 +136,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'assets.upload',
       'assets.edit',
       'assets.manage_taxonomy',
+      // Phase 5B-2. The role the Studio exists for: generates, edits, submits
+      // for review and plans when it goes out. Archiving and deleting stay
+      // elsewhere.
+      'content.read',
+      'content.create',
+      'content.edit',
+      'content.submit',
+      'content.schedule',
     ],
   },
   {
@@ -150,6 +166,15 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // approved assets is unconditional and is granted.
       'assets.read',
       'assets.use',
+      // Phase 5B-2. Writing captions IS this role's job, so it generates,
+      // edits and submits. It still may not archive or delete — and it may not
+      // SCHEDULE: deciding when the brand speaks is a different decision from
+      // deciding what it says, and the F-15 rule says an ungranted capability
+      // is the recoverable mistake.
+      'content.read',
+      'content.create',
+      'content.edit',
+      'content.submit',
     ],
   },
   {
@@ -197,6 +222,11 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // role no asset authority at all, and `use` is a content decision rather
       // than an approval one.
       'assets.read',
+      // Phase 5B-2. Reviews content, so it READS drafts. It does not
+      // generate — that spends credits — and it does not edit: an approver
+      // who rewrites the thing they are approving is not approving it.
+      // The approve/reject ACTION itself belongs to Approvals (scope item 6).
+      'content.read',
     ],
   },
   {
@@ -218,6 +248,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // the capability other modules will ask for before putting a file in
       // front of the public, which is not something a read-only role does.
       'assets.read',
+      // Phase 5B-2. READ-ONLY, symmetrically with the library above.
+      'content.read',
     ],
   },
   {

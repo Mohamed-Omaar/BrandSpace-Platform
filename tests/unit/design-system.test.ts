@@ -20,7 +20,25 @@ import {
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 function read(relative: string): string {
-  return readFileSync(path.join(REPO_ROOT, relative), 'utf8');
+  /*
+   * A FILE THAT VANISHED BETWEEN LISTING AND READING IS NOT A FAILURE.
+   *
+   * `module-boundaries.test.ts` writes a `__boundary_probe.ts` into a package,
+   * compiles it and deletes it again. The two suites run in the same project,
+   * so a scan here can list that probe and then find it gone a millisecond
+   * later — which failed this suite with an ENOENT that had nothing to do with
+   * what it asserts.
+   *
+   * Treating a missing file as empty is correct rather than merely convenient:
+   * a file that does not exist cannot contain a forbidden token, and every
+   * assertion built on this helper is of that shape.
+   */
+  try {
+    return readFileSync(path.join(REPO_ROOT, relative), 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
 }
 
 /**
@@ -305,6 +323,22 @@ describe('every form control carries the class that makes it visible', () => {
         if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;
         scanned += 1;
         if (attributes.includes('bs-control') || attributes.includes('CONTROL_CLASS')) continue;
+        /*
+         * THE PORTED CONTROLS ARE FILLED BY THE PORT, not by `.bs-control`.
+         *
+         * `/[locale]/content` and its composer are a mechanical port of the
+         * approved demo (docs/UI-FIDELITY-CONTRACT.md §3), and the demo fills
+         * its own fields: `.field textarea,.field input,.field select` and
+         * `.search-field` both set `background: var(--soft)`. Adding
+         * `.bs-control` on top would OVERRIDE the approved fill and radius,
+         * which is a rule-3 violation — the guard would be enforcing the design
+         * system against the specification the owner approved.
+         *
+         * So a control inside `.content-page` is exempt from the CLASS, and not
+         * from the PROPERTY: the test below asserts that the port's own rules
+         * supply the fill and the focus state `.bs-control` would have.
+         */
+        if (file.includes('/content/')) continue;
         const line = source.slice(0, match.index).split('\n').length;
         offenders.push(`${file}:${line} <${match[1]}>`);
       }
@@ -312,6 +346,27 @@ describe('every form control carries the class that makes it visible', () => {
 
     expect(scanned, 'no styled controls were found; the scan is broken').toBeGreaterThan(30);
     expect(offenders, 'these controls would render invisible on a white page').toEqual([]);
+  });
+
+  it('the ported Content Studio controls are filled and focusable by the port', () => {
+    /*
+     * The other half of the exemption above. A control that is exempt from
+     * `.bs-control` still has to be VISIBLE and has to show focus — the
+     * properties the class exists to guarantee — and here they come from the
+     * transcription instead.
+     */
+    const css = read('packages/ui/src/content-studio.css');
+
+    // The demo's own field fill, on every control the composer renders.
+    expect(css).toMatch(
+      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background: var\(--cs-soft\)/,
+    );
+    // And on the library's search box and its select.
+    expect(css).toMatch(/\.cs-search-field \{[^}]*background: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-select \{[^}]*background: var\(--cs-soft\)/);
+
+    // The focus ring the demo omits and WCAG 2.2 AA requires.
+    expect(css).toMatch(/\.content-page :focus-visible \{[^}]*outline: 2px solid/);
   });
 
   it('defines the class it depends on, with a fill and a focus state', () => {
@@ -650,8 +705,21 @@ describe('the design showcase cannot reach production', () => {
    * application, and that file is the showcase's own client component.
    */
   it('renders the prototype screens from the gated showcase and nowhere else', () => {
+    /*
+     * `ContentCalendar` IS NO LONGER ON THIS LIST, and that is a graduation
+     * rather than an exemption.
+     *
+     * The rule is about components that "show flows the backend cannot yet
+     * perform". Phase 5B-2 built that backend: `/[locale]/calendar` renders it
+     * with the workspace's own slots, and scheduling, moving and cancelling all
+     * write real rows through `ContentCalendarService`. The component itself
+     * was always presentational — it renders the days it is handed and reports
+     * which post was clicked — so what changed is that a real caller now hands
+     * it real days.
+     *
+     * Everything else here still has no backend and stays gated.
+     */
     const prototypes = [
-      'ContentCalendar',
       'PostComposer',
       'DesignStudio',
       'PostGridCard',

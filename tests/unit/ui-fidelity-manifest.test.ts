@@ -24,6 +24,25 @@ const SNAPSHOT = path.join(ROOT, 'docs/visual-reference/brand-brain-native');
 /** Landing repository commit the Brand Brain route is pinned to. */
 const PINNED_COMMIT = 'b01d94738672c64f651098512c03faf4554ebb97';
 
+/**
+ * The FULL DEMO snapshot, and the second pinned commit.
+ *
+ * D-60 superseded the full demo with `brand-brain-native.*` FOR THE BRAND BRAIN
+ * ROUTE ONLY. Every other customer route — the Content Studio's two among them
+ * — still takes its authority from the full demo, which is where `postsPage()`
+ * and `composer()` live. So the manifest carries two pinned commits, and a row
+ * must name one of them rather than a particular one.
+ */
+const FULL_DEMO_COMMIT = '10765e8cf4f5b89c91b144863330459611248b16';
+const FULL_DEMO = path.join(ROOT, 'docs/visual-reference/full-demo');
+
+const FULL_DEMO_PINNED: ReadonlyArray<readonly [string, string]> = [
+  ['app-2.js', '669339437605cf3c50fc13c23b10f793d0c4f142d1abd1e89d7c8be98ee7e7fe'],
+  ['styles-1.css', '9569b83dedbbc3e24edc090397eadd3da03a9a1228ed1e2ea7b62b9cd1174d75'],
+  ['styles-2.css', 'fffa17614b8a01feb8f33bb36211366a5bbe9c1eac007867358a7893af8a66a9'],
+  ['styles-3.css', '6319a57e97f0c506be1bcdc0cbe7edb3248277243345244f636da5c1d7d228f1'],
+];
+
 const PINNED: ReadonlyArray<readonly [string, string]> = [
   ['brand-brain-native.css', 'e5b8ca5308a6bc84db4789e6424328fe7ea85086e310abbab6aa124820081034'],
   ['brand-brain-native.js', 'dc91db029fb8388aece3b47cdb00de05b654002f2c1df8efd458803722591085'],
@@ -40,6 +59,22 @@ function sha256(file: string): string {
 describe('the vendored Brand Brain reference', () => {
   it.each(PINNED)('%s still matches its pinned checksum', (file, expected) => {
     expect(sha256(file)).toBe(expected);
+  });
+
+  it.each(FULL_DEMO_PINNED)('full-demo/%s still matches its pinned checksum', (file, expected) => {
+    expect(
+      createHash('sha256')
+        .update(readFileSync(path.join(FULL_DEMO, file)))
+        .digest('hex'),
+    ).toBe(expected);
+  });
+
+  it('the contract document names the full demo commit and its checksums', () => {
+    const contract = readFileSync(path.join(ROOT, 'docs/UI-FIDELITY-CONTRACT.md'), 'utf8');
+    expect(contract).toContain(FULL_DEMO_COMMIT);
+    for (const [file, checksum] of FULL_DEMO_PINNED) {
+      expect(contract, `${file} checksum missing from the manifest`).toContain(checksum);
+    }
   });
 
   it('the contract document names the same commit and checksums', () => {
@@ -92,7 +127,10 @@ describe('the vendored Brand Brain reference', () => {
     for (const row of rows) {
       // Route, source, repo, commit, checksum — a row missing either of the last
       // two is a route that cannot be verified.
-      expect(row, `manifest row has no pinned commit: ${row}`).toContain(PINNED_COMMIT);
+      expect(
+        row.includes(PINNED_COMMIT) || row.includes(FULL_DEMO_COMMIT),
+        `manifest row has no pinned commit: ${row}`,
+      ).toBe(true);
       expect(row, `manifest row has no checksum: ${row}`).toMatch(/[0-9a-f]{64}/);
     }
   });

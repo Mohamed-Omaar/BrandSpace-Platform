@@ -122,6 +122,20 @@ export interface AiGatewayRequest {
   readonly creditMultiplierBasisPoints?: number;
 }
 
+/**
+ * The answer to "what would this cost?" — see `AiGateway.quote`.
+ *
+ * `estimateMilli` is milli-credits, the unit every other credit number in the
+ * system uses: integers all the way down, because a float anywhere near money
+ * is how rounding becomes revenue.
+ */
+export interface AiQuote {
+  readonly taskKey: string;
+  readonly estimateMilli: bigint;
+  /** The models that would be attempted, primary first. */
+  readonly modelKeys: readonly string[];
+}
+
 export interface AiGatewayResult {
   readonly requestId: string;
   readonly status: 'SUCCEEDED' | 'FAILED' | 'TIMEOUT' | 'MODERATION_BLOCKED';
@@ -285,6 +299,62 @@ export class AiGateway {
       requestId: aiRequest.id,
       config,
     });
+  }
+
+  /**
+   * What would this request cost, without doing it?
+   *
+   * AC-11.1 requires the customer to see the credit cost BEFORE confirming a
+   * generation, and a price shown before a purchase has to be the price the
+   * purchase will actually reserve. So this does not estimate independently:
+   * it runs the SAME route resolution, the same worst-case sizing and the same
+   * `estimateReservationMilli` over the same chain that `execute` does, and
+   * returns the number `execute` would reserve.
+   *
+   * WHAT IT DELIBERATELY DOES NOT DO: touch the wallet, write an `AiRequest`,
+   * consume an idempotency key, or call a provider. A quote is a read. It also
+   * does not check the budget — a customer looking at a price they cannot
+   * afford should be told the price and then refused at generation with the
+   * budget's own message, rather than shown a blank where the number goes.
+   *
+   * A routing failure propagates as `RoutingError`, because "we cannot price
+   * this" is exactly the configuration problem AC-11.8 wants surfaced rather
+   * than papered over with a guess.
+   */
+  async quote(request: {
+    workspaceId: string;
+    taskKey: string;
+    planKey: string | null;
+    input: AiInput;
+    creditMultiplierBasisPoints?: number;
+  }): Promise<AiQuote> {
+    const config = await this.#configuration.load();
+    const route = resolveRoute(
+      { taskKey: request.taskKey, workspaceId: request.workspaceId, planKey: request.planKey },
+      config.routingRules,
+      config.models,
+    );
+
+    const multiplier = request.creditMultiplierBasisPoints ?? 10_000;
+    const worstCase = worstCaseUsage(
+      {
+        workspaceId: request.workspaceId,
+        userId: null,
+        taskKey: request.taskKey,
+        planKey: request.planKey,
+        idempotencyKey: 'quote',
+        input: request.input,
+      },
+      route,
+    );
+
+    const estimateMilli = route.chain.reduce((highest, candidate) => {
+      const rule = findCreditRule(config.creditRules, request.taskKey, candidate);
+      const estimate = estimateReservationMilli(rule, worstCase, multiplier);
+      return estimate > highest ? estimate : highest;
+    }, 0n);
+
+    return { taskKey: request.taskKey, estimateMilli, modelKeys: route.chain };
   }
 
   // ---------------------------------------------------------------------------

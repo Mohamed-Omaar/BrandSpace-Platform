@@ -61,6 +61,12 @@ export interface TenantFixture {
   readonly uploadSessionId: string;
   readonly uploadIdempotencyKey: string;
   readonly assetProcessingJobId: string;
+  // --- Phase 5B-2 (AI Content Studio) ---
+  readonly contentItemId: string;
+  readonly contentVariantId: string;
+  readonly contentIdempotencyKey: string;
+  /** Phase 5B-2 — the Content Calendar. A live slot for the draft above. */
+  readonly calendarSlotId: string;
 }
 
 export interface IsolationFixtures {
@@ -878,6 +884,73 @@ async function createTenant(
         },
       });
 
+      /*
+       * Phase 5B-2 — one AI-generated draft with one platform variant.
+       *
+       * The BODY carries the tenant slug, so a test that reads a caption across
+       * the boundary can tell WHOSE words it got rather than merely counting
+       * rows. The idempotency key is tenant-distinct for the same reason the
+       * Brand Brain one is: `unique(workspaceId, idempotencyKey)` must be
+       * provably workspace-scoped, and two tenants sharing a key is what proves
+       * it.
+       */
+      const contentItem = await db.contentItem.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          title: `Spring launch — ${slug}`,
+          contentType: 'POST',
+          primaryLocale: 'EN',
+          status: 'DRAFT',
+          origin: 'AI_GENERATED',
+          createdByUserId: user.id,
+          arabicDialect: 'msa',
+          idempotencyKey: `fixture-content-${slug}`,
+          citations: [
+            { kind: 'knowledge', id: knowledgeItem.id, label: 'Positioning', version: 1 },
+          ],
+        },
+      });
+
+      const contentVariant = await db.contentVariant.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          contentItemId: contentItem.id,
+          platformKey: 'instagram',
+          locale: 'EN',
+          body: `Confidential campaign caption for ${slug} only.`,
+          hashtags: ['launch'],
+          characterCount: 48,
+          validationState: 'VALID',
+          origin: 'AI_GENERATED',
+        },
+      });
+
+      /*
+       * A LIVE CALENDAR SLOT for the draft above.
+       *
+       * Scheduled a year out and at a fixed wall-clock, so the fixture never
+       * drifts into the past and never depends on when the suite runs. The
+       * instant is computed here rather than by the service because the fixture
+       * is provisioning state, not exercising the scheduling rules.
+       */
+      const slotLocalTime = `${new Date().getUTCFullYear() + 1}-03-12T09:00`;
+      const calendarSlot = await db.calendarSlot.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          contentItemId: contentItem.id,
+          scheduledAtUtc: new Date(`${slotLocalTime}:00.000Z`),
+          scheduledLocalTime: slotLocalTime,
+          timezone: 'Asia/Riyadh',
+          status: 'SCHEDULED',
+          platformKeys: ['instagram'],
+          createdByUserId: user.id,
+          usageIdempotencyKey: `fixture-calendar-${slug}`,
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -926,6 +999,10 @@ async function createTenant(
         uploadSessionId: uploadSession.id,
         uploadIdempotencyKey: uploadSession.idempotencyKey,
         assetProcessingJobId: assetProcessingJob.id,
+        contentItemId: contentItem.id,
+        contentVariantId: contentVariant.id,
+        contentIdempotencyKey: `fixture-content-${slug}`,
+        calendarSlotId: calendarSlot.id,
       };
     },
     { prisma, bootstrap: true },

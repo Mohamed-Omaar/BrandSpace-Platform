@@ -14,6 +14,7 @@
     "@brandspace/auth": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
     "@brandspace/config": "workspace:*",
+    "@brandspace/content": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/jobs": "workspace:*",

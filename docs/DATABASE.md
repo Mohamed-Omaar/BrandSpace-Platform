@@ -389,6 +389,54 @@ Per-platform, per-locale rendering of a content item.
 Constraints: `unique(contentItemId, platformKey, locale)`.
 Indexes: `(workspaceId, contentItemId)`.
 
+### 4.4b The AI Content Studio tables — AS BUILT (Phase 5B-2)
+
+§4.4 and §4.5 above are the DESIGN. This is what the migration
+`20260915090000_phase_5b_2_ai_content_studio` actually created, which is narrower in two ways
+and wider in three.
+
+**NARROWER.** `campaignId`, `pillar`, `approvalRequired` and `currentApprovalId` are **not**
+created: campaigns belong to the Social Calendar and approvals to the Approvals module, and a
+column with no writer is a column whose meaning nobody has settled. `CalendarSlot`, `Approval`
+and `Comment` are likewise untouched. The lifecycle diagram above stands as the design; Phase
+5B-2 reaches **`DRAFT`, `IN_REVIEW` and `ARCHIVED` only**, and `ContentStudioService.transition`
+refuses every other target rather than half-implementing the next phase's states.
+
+**WIDER**, in three columns the design predates:
+
+| Column                                     | Table                          | Why                                                                                                                                                                  |
+| ------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `arabicDialect`                            | both, and `workspace`, `brand` | D-115. The dialect a draft was WRITTEN IN, recorded on the row — because the configured default can change and a draft must still be able to say what it actually is |
+| `citations jsonb`, `insufficientKnowledge` | `content_item`                 | AC-11.4 and the free-refusal path: what retrieval returned, and whether it returned enough. Written from RETRIEVAL, never from the model's own text                  |
+| `expiresAt`, `bodyPurgedAt`                | both                           | D-116 and D-117. When this content may be purged, and when its body actually was — so a purged draft is visibly purged rather than silently blank                    |
+
+**Tenancy.** Both tables carry `workspaceId`, both have RLS `ENABLED` and `FORCED`, and **every
+foreign key to a tenant-owned parent is composite** — `content_item_brand_fkey` on
+`(workspaceId, brandId)` and `content_variant_item_fkey` on `(workspaceId, contentItemId)`.
+D-112 made that the platform rule after F-80 and F-83; these are the first keys written under it,
+and `tests/isolation/phase5b2-content-tenancy.test.ts` asserts the refusal from inside the
+attacker's OWN workspace, which is the case RLS does not cover.
+
+**`content_item` constraints and indexes.** `unique(workspaceId, id)` (the composite-FK parent
+scope), `unique(workspaceId, idempotencyKey)` (AC-11.2 — a retried generation returns the first
+draft rather than billing twice), and indexes on `(workspaceId, brandId, status)`,
+`(workspaceId, brandId, updatedAt desc)` and `(expiresAt)` for the purge sweep.
+
+**`content_variant` constraints and indexes.** `unique(contentItemId, platformKey, locale)` as
+designed, plus `(workspaceId, contentItemId)` and `(expiresAt)`.
+
+**`assetIds uuid[]` carries no foreign key, and cannot.** PostgreSQL has no array element
+reference, so the array is validated in the service rather than by the database. Recorded here
+rather than left to be discovered: it is the one place in these tables where referential
+integrity is the application's job, and a reader should not have to infer that from its absence.
+
+**`workspace.aiContentRetentionDays`** is the D-117 control. `NULL` means "follow the
+subscription" (D-116); a value means the customer asked for something shorter. It is bounded by
+the CHECK `workspace_ai_content_retention_days_positive` (`> 0`), so "delete on write" is not
+expressible even through a crafted request, and floored at write time by
+`content.retention.minCustomerRetentionDays`. It can only ever SHORTEN the window — a large value
+does not extend a cancelled account's grace period past what the owner approved.
+
 ### 4.6 `Asset`
 
 `id`, `workspaceId`, `brandId` (null = workspace-level), `folderId`, `name`, `kind`
@@ -412,6 +460,60 @@ Rule: an asset is usable only when `status='ready' AND scanStatus='clean'`.
 
 Indexes: `(workspaceId, brandId, scheduledAtUtc)`, `(status, scheduledAtUtc)` for the due-slot sweeper.
 Constraint: a slot may not enter `scheduled` if its content item requires approval and is not `Approved`.
+
+### 4.7b The Content Calendar table — AS BUILT (Phase 5B-2)
+
+§4.7 above is the DESIGN. This is what the migration
+`20260915120000_phase_5b_2_content_calendar` actually created, which is narrower in three ways
+and wider in three.
+
+**NARROWER.** `socialConnectionIds`, `publishJobIds`, `recurrenceRule`, `lockedAt` and `lockedBy`
+are **not** created: every one of them belongs to the publishing pipeline, and the pipeline is
+Phase 6. `status` likewise carries `PLANNED`, `SCHEDULED` and `CANCELLED` only — `LOCKED`,
+`PUBLISHING`, `PUBLISHED` and `FAILED` are states no code in this phase can enter, and a state
+nothing can reach is a state whose meaning nobody has settled.
+
+**WIDER**, in three columns the design predates:
+
+| Column                | Why                                                                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `targetKind`          | AC-14.7. The publishing target is a MOCK, said in the data rather than only in a comment. Phase 6 adds real connection targets beside it; until then nothing in the system can name one |
+| `platformKeys`        | Derived from the item's variants when the slot is created, so a slot still renders its channels after a variant is edited. A calendar is a plan, and a plan records what was planned    |
+| `usageIdempotencyKey` | AC-14.5. The quota event this slot consumed, so cancelling refunds exactly what scheduling took and a retry cannot double-count                                                         |
+
+**THE SLOT IS THE _WHEN_; `ContentItem` REMAINS THE SOURCE OF TRUTH FOR THE WHAT AND THE STATE.**
+There is no caption, no status copy and no channel list here that `content_item` already answers.
+`ContentCalendarService.schedule()` moves the item to `SCHEDULED` in the same transaction as the
+slot write and `cancel()` moves it back, so the two can never disagree about whether something is
+on the calendar — and `ContentLibraryService.transition()` refuses to move a `SCHEDULED` item at
+all, so it cannot be archived out from under a live slot.
+
+**THREE TIME COLUMNS, AND WHY ONE IS NOT ENOUGH (AC-14.2, AC-14.3).** A timestamp cannot answer
+"what time did the customer MEAN?" across a daylight-saving boundary: 09:00 local converted to UTC
+in January and read back in July is 08:00 or 10:00, and neither is what anyone asked for. So the
+INTENT (`scheduledLocalTime` + `timezone`) is stored beside the INSTANT (`scheduledAtUtc`), and the
+instant is derived from the intent. `scheduledLocalTime` is TEXT rather than a timestamp
+deliberately — it is a wall-clock with no offset, and giving it one would invent the very fact the
+column exists to preserve. `timezone` is COPIED from the workspace rather than joined, because a
+workspace that relocates must not silently move every post it has already scheduled.
+
+**Tenancy.** `workspaceId`, RLS `ENABLED` and `FORCED`, and **both foreign keys to a tenant-owned
+parent composite** — `calendar_slot_brand_fkey` on `(workspaceId, brandId)` and
+`calendar_slot_item_fkey` on `(workspaceId, contentItemId)`. The second is exactly F-80 and F-83's
+shape, and `tests/isolation/phase5b2-calendar-tenancy.test.ts` asserts the refusal from inside the
+attacker's OWN workspace — the case RLS does not cover — and that a real foreign draft id and a
+fabricated one fail identically.
+
+**Constraints.** `calendar_slot_local_time_shape` (`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$`) keeps the
+intent recomputable; `calendar_slot_cancelled_consistently` keeps `status` and `cancelledAt` from
+disagreeing; and `calendar_slot_one_live_per_item` is a PARTIAL unique index on
+`(workspaceId, contentItemId) WHERE status <> 'CANCELLED'` — partial because a full one would mean
+a draft taken off the calendar could never be put back, the same shape D-100 settled for the asset
+checksum.
+
+**Indexes.** `(workspaceId, scheduledAtUtc)` and `(workspaceId, brandId, scheduledAtUtc)` for the
+month and week ranges, `(workspaceId, contentItemId)` for the item's own lookup, and
+`(status, scheduledAtUtc)` for the due-slot sweep Phase 6 will add.
 
 ### 4.8 `Approval` and `Comment`
 

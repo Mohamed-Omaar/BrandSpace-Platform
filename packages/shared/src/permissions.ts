@@ -117,6 +117,32 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('assets.archive', 'workspace', 'Archive an asset'),
   def('assets.restore', 'workspace', 'Restore an archived asset'),
   def('assets.delete', 'workspace', 'Delete an asset permanently'),
+
+  /*
+   * Phase 5B-2 — AI Content Studio (docs/PRODUCT.md §5 module 7).
+   *
+   * SEPARATED THE SAME WAY THE LIBRARY IS, and for the same reason: a key that
+   * meant "content" would collapse four different amounts of trust into one.
+   *
+   *   - `read` is the library of drafts. A reviewer needs it and nothing else.
+   *   - `create` SPENDS AI CREDITS. That is the distinction that matters most
+   *     here and it has no parallel in the Asset Library: every other write on
+   *     this list is free, and this one moves money. A role that may edit a
+   *     caption is not thereby a role that may run up a bill.
+   *   - `edit` is changing words that already exist — free, and a different
+   *     act from generating new ones.
+   *   - `submit` moves a draft into review. It is the point at which one
+   *     person's work becomes another person's queue.
+   *   - `archive` is reversible removal; `delete` is not, and stays with the
+   *     admins exactly as `assets.delete` and `brand_brain.delete` do.
+   */
+  def('content.read', 'workspace', 'View content drafts and variants'),
+  def('content.create', 'workspace', 'Generate content with AI (spends credits)'),
+  def('content.edit', 'workspace', 'Edit content drafts and captions'),
+  def('content.submit', 'workspace', 'Submit content for review'),
+  def('content.archive', 'workspace', 'Archive a content draft'),
+  def('content.schedule', 'workspace', 'Place content on the calendar and move it'),
+  def('content.delete', 'workspace', 'Delete content permanently'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */

@@ -1197,3 +1197,206 @@ SECURITY`, the policies and the grants are untouched.
 | An item with recorded history still cannot be deleted (append-only wins)      | same                                                         |
 | A migrations-only database has zero drift from the Prisma schema              | same                                                         |
 | Brand Brain ingestion, chat, governance and retention still behave            | the seven `tests/isolation/brand-brain-*` suites (122 tests) |
+
+---
+
+## 23. Implementation Status — Phase 5B-2 (AI Content Studio)
+
+Scope item 3 of Phase 5. What was built, and the properties a reviewer should be able to check
+rather than take on trust.
+
+### 23.1 Tenancy
+
+`content_item` and `content_variant` are tenant-owned. Both carry `workspaceId`, both have RLS
+`ENABLED` **and** `FORCED`, both carry the `tenant_isolation` and `platform_access` policies, and
+the tenant role's privileges are the usual `SELECT/INSERT/UPDATE/DELETE` with no `BYPASSRLS`.
+
+**Every foreign key to a tenant-owned parent is COMPOSITE.** `content_item_brand_fkey` is on
+`(workspaceId, brandId)` and `content_variant_item_fkey` on `(workspaceId, contentItemId)`. These
+are the first keys written after D-112 generalised the rule, and they exist in this shape because
+of what F-80 and F-83 were: PostgreSQL evaluates referential integrity as the table OWNER, with
+RLS bypassed, so a plain `contentItemId` would resolve another workspace's draft perfectly well
+and accept the row. The difference between "inserted" and "constraint violated" is then an
+existence oracle across the tenant boundary.
+
+`tests/isolation/phase5b2-content-tenancy.test.ts` asserts the refusal from inside the attacker's
+**own** workspace context — the case RLS does not cover — and asserts that a real foreign draft id
+and a fabricated one fail **identically**, down to the SQLSTATE and the constraint name, so the
+oracle is closed rather than moved.
+
+### 23.2 The two identities, and why generation is not in the dashboard
+
+The AI Gateway reads platform-owned `ai.*` configuration and settles credits in its own
+transactions, so it needs the PLATFORM database identity, which F-07 keeps out of the customer
+dashboard. Generation, the quote and the editing tools therefore execute in `apps/api` (the
+designated platform surface) and the dashboard proxies to it, forwarding the session cookie as a
+bearer token and **nothing else** — not the cookie jar, not the client's headers, not its origin.
+The upstream path is a constant at each call site rather than a value from the request, so a
+browser cannot aim that credential at another route.
+
+The boundary is enforced by the TYPE and not by a comment: the dashboard can construct only
+`ContentLibraryService`, which has no `generate()` to call. Browsing, reading, a person's own edit
+and the state transitions touch only tenant tables under RLS and run in the dashboard directly.
+
+### 23.3 What a response and a screen may say
+
+No provider name, no model key, no prompt, no system instruction and no raw provider error reaches
+a customer. The API returns the draft, its variants, the retrieved citations and the credits
+charged; a failure returns a **code** from a closed set and the screen chooses the words, so no
+exception text can reach the address bar, the browser history or an access log. A malformed
+provider response is refused with a neutral sentence that says nothing about there being a model.
+
+Audit events record **counts, never content**: how many variants, how many citations, how many
+knowledge items and chunks grounded it, and which dialect — never the brief and never a caption. A
+draft caption is routinely the most commercially sensitive string in the record.
+
+### 23.4 Credits
+
+`quote()` runs the gateway's own route resolution and returns the number `generate()` will reserve,
+so the price a customer confirms is the price they are charged (AC-11.1). It is registered as a
+READ (`content.read`): it reserves nothing, writes no `ai_request` and moves no credit.
+
+A **refusal is free**. When retrieval finds nothing to ground on, no gateway call is made and no
+credits move; the draft is still created, empty and marked, so the refusal is visible in the
+library rather than only in a toast that disappeared.
+
+Idempotency is per BRIEF, not per click: the key is derived from the brand, the brief, the channels
+and the language, so a retry after a lost response returns the first draft and makes no second
+gateway call.
+
+### 23.5 Retention (D-116, D-117)
+
+`workspace.aiContentRetentionDays` is the customer's own control, and it is **enforced
+server-side**: by `saveRetentionAction`, by `resolveContentExpiry` when content is written, and by
+the `workspace_ai_content_retention_days_positive` CHECK in the database. A crafted POST carrying
+`0` or `-1` is refused by PostgreSQL even if the action were bypassed entirely.
+
+The control can only ever SHORTEN the window. A large value does not extend a cancelled account's
+grace period past what the owner approved, and the value is floored by
+`content.retention.minCustomerRetentionDays` so it cannot be used to delete work before the person
+who generated it has come back from lunch.
+
+`RETENTION_EXCLUDED_TABLES` names what the purge must never reach — `audit_event`,
+`credit_transaction`, `ai_usage_ledger`, `ai_request`, `invoice` — and
+`tests/isolation/content-studio-lifecycle.test.ts` asserts it against the purge's actual behaviour
+rather than against the constant. The credit ledger is a financial record and the audit log is a
+security record; a content-retention control able to erase either would be a control that erases
+evidence.
+
+`AI_OUTPUT_RETENTION_REGISTRY` is the F-73 half that is easy to lose in a refactor: every feature
+that persists generated AI output declares a retention **owner** and its behaviour, and a unit test
+fails the build when one does not. The failure mode it exists for is silent — a future feature that
+persists output and forgets leaves customer content on disk with nobody responsible for deleting
+it, and nothing else in the system would notice.
+
+### 23.6 Untrusted input, at three boundaries
+
+1. **The request body** is parsed with a schema at the edge (`packages/content/src/requests.ts`).
+   None of the three bodies has a `workspaceId` field — the workspace comes from the session, so a
+   crafted payload naming another tenant has nowhere to name it.
+2. **The retrieved brand material** travels in the same fenced untrusted-context channel Brand
+   Brain established, and the system instruction states in as many words that it is brand content
+   and never an instruction.
+3. **The model's output** is parsed before it is persisted (AC-11.9). A variant for a platform
+   nobody asked for is dropped, a duplicate per platform is dropped, the count is bounded by the
+   configured ceiling, and a response that is not JSON at all never becomes a row.
+
+### 23.7 Permissions
+
+`content.read`, `content.create`, `content.edit`, `content.submit`, `content.archive` and
+`content.delete`. Each action names the permission it needs **twice** — `requireWorkspace` refuses
+the request and the service refuses the call — and the brand scope is a required parameter on every
+service call, so a new call site cannot silently omit it (F-74). A brand outside the member's scope
+answers the same 404 as one that does not exist, and the scope check happens **before** any read.
+
+---
+
+## 24. Implementation Status — Phase 5B-2 (Content Calendar)
+
+The planning half of scope item 3's milestone. What was built, and the properties a reviewer should
+be able to check rather than take on trust.
+
+### 24.1 Tenancy
+
+`calendar_slot` is tenant-owned: `workspaceId`, RLS `ENABLED` **and** `FORCED`, the
+`tenant_isolation` and `platform_access` policies, and the usual least-privilege grants.
+
+**Both foreign keys to a tenant-owned parent are COMPOSITE (D-112).**
+`calendar_slot_brand_fkey` is on `(workspaceId, brandId)` and `calendar_slot_item_fkey` on
+`(workspaceId, contentItemId)`. The second is the third key written under that rule and is exactly
+the shape F-80 and F-83 were about — a child pointing at a tenant-owned parent by id alone. A plain
+key would have let one tenant put another tenant's draft on its own calendar, and the difference
+between "inserted" and "constraint violated" would have answered whether that draft id exists.
+
+**A CALENDAR IS A DIFFERENT DISCLOSURE FROM A DRAFT.** A leaked caption is bad; the DATE an
+unannounced launch goes out is a company's strategy. `tests/isolation/phase5b2-calendar-tenancy.test.ts`
+therefore asserts the instant and the local intent separately from the row's existence, including
+against a range query spanning every slot either tenant holds.
+
+### 24.2 What the database enforces, not just the service
+
+- `calendar_slot_local_time_shape` — `scheduledLocalTime` must be `YYYY-MM-DDTHH:mm`. A column the
+  service is the only guard for is a column that eventually holds whatever a future call site
+  passes, at which point the instant can no longer be recomputed from the intent. An offset is
+  refused too: it would be a second, contradictory answer to the question `timezone` answers.
+- `calendar_slot_cancelled_consistently` — a cancelled slot carries a cancellation time and a live
+  one does not, so the two facts cannot disagree and no reader has to decide which to trust.
+- `calendar_slot_one_live_per_item` — a PARTIAL unique index. Two live slots for one draft is a
+  calendar showing the same post twice and a quota charged twice. Partial, so a cancelled slot does
+  not strand the draft for ever.
+
+### 24.3 Time, and why the intent is stored
+
+`scheduledAtUtc` is the instant every range query reads. `scheduledLocalTime` + `timezone` is the
+INTENT, and it is the only one of the two that survives an offset change with its meaning intact
+(AC-14.2, AC-14.3). `packages/content/src/timezone.ts` carries the arithmetic, including the two
+cases a naive conversion gets wrong:
+
+- A **skipped** wall-clock (spring forward) resolves to the instant the clock jumps TO, never
+  backward — landing before the gap would move a post earlier than asked and reorder it against
+  its neighbours.
+- An **ambiguous** wall-clock (fall back) resolves to the EARLIER of the two occurrences, and the
+  caller is told, because "01:30 on the day the clocks go back" is a real choice and silently
+  picking one is how a post goes out an hour late.
+
+The zone is copied onto the slot rather than joined, so a workspace that relocates does not silently
+move every post it already scheduled.
+
+### 24.4 Authorization
+
+`content.schedule` is its own permission, separate from `content.edit`. Marketing Manager and
+Content Creator hold it; **Copywriter deliberately does not** — deciding when the brand speaks is a
+different decision from deciding what it says, and the F-15 rule says an ungranted capability is the
+recoverable mistake. Every action names the permission twice: `requireWorkspace` refuses the request
+and the service refuses the call, and the brand scope is a required parameter so a new call site
+cannot silently omit it (F-74).
+
+The workspace and the timezone are **never** taken from a form. A timezone in a request body would
+let a crafted POST schedule a post in a zone the workspace does not use, and the stored intent would
+then mean something nobody chose.
+
+### 24.5 Quota (AC-14.5)
+
+The plan's `limit.scheduled_posts` is resolved through the entitlements engine — plan, override,
+flag, default — and consumed BEFORE the slot row exists, because a ceiling checked afterwards is a
+ceiling a concurrent request walks through. Cancelling refunds it.
+
+The quota key is per SLOT, not per item, and the slot's id is minted in the service for that reason.
+Keying on the item was wrong in both directions and the tests caught it: a draft scheduled,
+cancelled and scheduled again would have consumed **once for two slots**, and the refund — which the
+usage service records as a negative event under its own key — would have collided with the
+consumption it was reversing.
+
+### 24.6 Nothing publishes (AC-14.7)
+
+Every slot's `targetKind` is `MOCK`, in the data. There is no connector, no OAuth, no token and no
+outbound call in `packages/content/src/calendar.ts` or anything it reaches — asserted against the
+source itself, because "we did not call a social API" is exactly the claim that stays true until
+somebody adds an import. Real publishing is Phase 6.
+
+### 24.7 Audit (AC-14.9)
+
+`content.scheduled`, `content.rescheduled` and `content.schedule_cancelled`, each carrying the
+times, the zone and a channel COUNT — and never a caption or a title. A scheduled launch caption is
+the most commercially sensitive string the product holds, and an audit record is read by more people
+than the draft is. The test asserts the absence, not just the presence.
