@@ -1197,3 +1197,114 @@ SECURITY`, the policies and the grants are untouched.
 | An item with recorded history still cannot be deleted (append-only wins)      | same                                                         |
 | A migrations-only database has zero drift from the Prisma schema              | same                                                         |
 | Brand Brain ingestion, chat, governance and retention still behave            | the seven `tests/isolation/brand-brain-*` suites (122 tests) |
+
+---
+
+## 23. Implementation Status — Phase 5B-2 (AI Content Studio)
+
+Scope item 3 of Phase 5. What was built, and the properties a reviewer should be able to check
+rather than take on trust.
+
+### 23.1 Tenancy
+
+`content_item` and `content_variant` are tenant-owned. Both carry `workspaceId`, both have RLS
+`ENABLED` **and** `FORCED`, both carry the `tenant_isolation` and `platform_access` policies, and
+the tenant role's privileges are the usual `SELECT/INSERT/UPDATE/DELETE` with no `BYPASSRLS`.
+
+**Every foreign key to a tenant-owned parent is COMPOSITE.** `content_item_brand_fkey` is on
+`(workspaceId, brandId)` and `content_variant_item_fkey` on `(workspaceId, contentItemId)`. These
+are the first keys written after D-112 generalised the rule, and they exist in this shape because
+of what F-80 and F-83 were: PostgreSQL evaluates referential integrity as the table OWNER, with
+RLS bypassed, so a plain `contentItemId` would resolve another workspace's draft perfectly well
+and accept the row. The difference between "inserted" and "constraint violated" is then an
+existence oracle across the tenant boundary.
+
+`tests/isolation/phase5b2-content-tenancy.test.ts` asserts the refusal from inside the attacker's
+**own** workspace context — the case RLS does not cover — and asserts that a real foreign draft id
+and a fabricated one fail **identically**, down to the SQLSTATE and the constraint name, so the
+oracle is closed rather than moved.
+
+### 23.2 The two identities, and why generation is not in the dashboard
+
+The AI Gateway reads platform-owned `ai.*` configuration and settles credits in its own
+transactions, so it needs the PLATFORM database identity, which F-07 keeps out of the customer
+dashboard. Generation, the quote and the editing tools therefore execute in `apps/api` (the
+designated platform surface) and the dashboard proxies to it, forwarding the session cookie as a
+bearer token and **nothing else** — not the cookie jar, not the client's headers, not its origin.
+The upstream path is a constant at each call site rather than a value from the request, so a
+browser cannot aim that credential at another route.
+
+The boundary is enforced by the TYPE and not by a comment: the dashboard can construct only
+`ContentLibraryService`, which has no `generate()` to call. Browsing, reading, a person's own edit
+and the state transitions touch only tenant tables under RLS and run in the dashboard directly.
+
+### 23.3 What a response and a screen may say
+
+No provider name, no model key, no prompt, no system instruction and no raw provider error reaches
+a customer. The API returns the draft, its variants, the retrieved citations and the credits
+charged; a failure returns a **code** from a closed set and the screen chooses the words, so no
+exception text can reach the address bar, the browser history or an access log. A malformed
+provider response is refused with a neutral sentence that says nothing about there being a model.
+
+Audit events record **counts, never content**: how many variants, how many citations, how many
+knowledge items and chunks grounded it, and which dialect — never the brief and never a caption. A
+draft caption is routinely the most commercially sensitive string in the record.
+
+### 23.4 Credits
+
+`quote()` runs the gateway's own route resolution and returns the number `generate()` will reserve,
+so the price a customer confirms is the price they are charged (AC-11.1). It is registered as a
+READ (`content.read`): it reserves nothing, writes no `ai_request` and moves no credit.
+
+A **refusal is free**. When retrieval finds nothing to ground on, no gateway call is made and no
+credits move; the draft is still created, empty and marked, so the refusal is visible in the
+library rather than only in a toast that disappeared.
+
+Idempotency is per BRIEF, not per click: the key is derived from the brand, the brief, the channels
+and the language, so a retry after a lost response returns the first draft and makes no second
+gateway call.
+
+### 23.5 Retention (D-116, D-117)
+
+`workspace.aiContentRetentionDays` is the customer's own control, and it is **enforced
+server-side**: by `saveRetentionAction`, by `resolveContentExpiry` when content is written, and by
+the `workspace_ai_content_retention_days_positive` CHECK in the database. A crafted POST carrying
+`0` or `-1` is refused by PostgreSQL even if the action were bypassed entirely.
+
+The control can only ever SHORTEN the window. A large value does not extend a cancelled account's
+grace period past what the owner approved, and the value is floored by
+`content.retention.minCustomerRetentionDays` so it cannot be used to delete work before the person
+who generated it has come back from lunch.
+
+`RETENTION_EXCLUDED_TABLES` names what the purge must never reach — `audit_event`,
+`credit_transaction`, `ai_usage_ledger`, `ai_request`, `invoice` — and
+`tests/isolation/content-studio-lifecycle.test.ts` asserts it against the purge's actual behaviour
+rather than against the constant. The credit ledger is a financial record and the audit log is a
+security record; a content-retention control able to erase either would be a control that erases
+evidence.
+
+`AI_OUTPUT_RETENTION_REGISTRY` is the F-73 half that is easy to lose in a refactor: every feature
+that persists generated AI output declares a retention **owner** and its behaviour, and a unit test
+fails the build when one does not. The failure mode it exists for is silent — a future feature that
+persists output and forgets leaves customer content on disk with nobody responsible for deleting
+it, and nothing else in the system would notice.
+
+### 23.6 Untrusted input, at three boundaries
+
+1. **The request body** is parsed with a schema at the edge (`packages/content/src/requests.ts`).
+   None of the three bodies has a `workspaceId` field — the workspace comes from the session, so a
+   crafted payload naming another tenant has nowhere to name it.
+2. **The retrieved brand material** travels in the same fenced untrusted-context channel Brand
+   Brain established, and the system instruction states in as many words that it is brand content
+   and never an instruction.
+3. **The model's output** is parsed before it is persisted (AC-11.9). A variant for a platform
+   nobody asked for is dropped, a duplicate per platform is dropped, the count is bounded by the
+   configured ceiling, and a response that is not JSON at all never becomes a row.
+
+### 23.7 Permissions
+
+`content.read`, `content.create`, `content.edit`, `content.submit`, `content.archive` and
+`content.delete`. Each action names the permission it needs **twice** — `requireWorkspace` refuses
+the request and the service refuses the call — and the brand scope is a required parameter on every
+service call, so a new call site cannot silently omit it (F-74). A brand outside the member's scope
+answers the same 404 as one that does not exist, and the scope check happens **before** any read.

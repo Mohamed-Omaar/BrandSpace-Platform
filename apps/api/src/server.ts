@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { registerBrandBrainRoutes } from './routes/brand-brain';
+import { registerContentRoutes } from './routes/content';
 import { registerHealthRoutes } from './routes/health';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
@@ -31,6 +32,7 @@ export async function buildServer() {
   // dashboard: the gateway needs the platform identity, and F-07 keeps that out
   // of tenant-facing apps. See routes/brand-brain.ts for the full reasoning.
   registerBrandBrainRoutes(app);
+  registerContentRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

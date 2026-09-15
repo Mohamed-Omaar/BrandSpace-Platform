@@ -73,6 +73,10 @@ export const STRICT_TENANT_MODELS = [
   'AssetDerivative',
   'AssetUploadSession',
   'AssetProcessingJob',
+
+  // --- Phase 5B-2: AI Content Studio ---------------------------------------
+  'ContentItem',
+  'ContentVariant',
 ] as const;
 
 /**
@@ -207,6 +211,8 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   AssetDerivative: 'asset_derivative',
   AssetUploadSession: 'asset_upload_session',
   AssetProcessingJob: 'asset_processing_job',
+  ContentItem: 'content_item',
+  ContentVariant: 'content_variant',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

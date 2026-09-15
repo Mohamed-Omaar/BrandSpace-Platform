@@ -35,3 +35,7 @@ packages/database/generated/
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Redis snapshots. A runtime artifact of a local `redis-server`, never project
+# content — and a data dump has no business in history (CLAUDE.md §2.6).
+*.rdb

@@ -305,6 +305,22 @@ describe('every form control carries the class that makes it visible', () => {
         if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;
         scanned += 1;
         if (attributes.includes('bs-control') || attributes.includes('CONTROL_CLASS')) continue;
+        /*
+         * THE PORTED CONTROLS ARE FILLED BY THE PORT, not by `.bs-control`.
+         *
+         * `/[locale]/content` and its composer are a mechanical port of the
+         * approved demo (docs/UI-FIDELITY-CONTRACT.md §3), and the demo fills
+         * its own fields: `.field textarea,.field input,.field select` and
+         * `.search-field` both set `background: var(--soft)`. Adding
+         * `.bs-control` on top would OVERRIDE the approved fill and radius,
+         * which is a rule-3 violation — the guard would be enforcing the design
+         * system against the specification the owner approved.
+         *
+         * So a control inside `.content-page` is exempt from the CLASS, and not
+         * from the PROPERTY: the test below asserts that the port's own rules
+         * supply the fill and the focus state `.bs-control` would have.
+         */
+        if (file.includes('/content/')) continue;
         const line = source.slice(0, match.index).split('\n').length;
         offenders.push(`${file}:${line} <${match[1]}>`);
       }
@@ -312,6 +328,27 @@ describe('every form control carries the class that makes it visible', () => {
 
     expect(scanned, 'no styled controls were found; the scan is broken').toBeGreaterThan(30);
     expect(offenders, 'these controls would render invisible on a white page').toEqual([]);
+  });
+
+  it('the ported Content Studio controls are filled and focusable by the port', () => {
+    /*
+     * The other half of the exemption above. A control that is exempt from
+     * `.bs-control` still has to be VISIBLE and has to show focus — the
+     * properties the class exists to guarantee — and here they come from the
+     * transcription instead.
+     */
+    const css = read('packages/ui/src/content-studio.css');
+
+    // The demo's own field fill, on every control the composer renders.
+    expect(css).toMatch(
+      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background: var\(--cs-soft\)/,
+    );
+    // And on the library's search box and its select.
+    expect(css).toMatch(/\.cs-search-field \{[^}]*background: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-select \{[^}]*background: var\(--cs-soft\)/);
+
+    // The focus ring the demo omits and WCAG 2.2 AA requires.
+    expect(css).toMatch(/\.content-page :focus-visible \{[^}]*outline: 2px solid/);
   });
 
   it('defines the class it depends on, with a fill and a focus state', () => {

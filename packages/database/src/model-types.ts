@@ -27,6 +27,9 @@ export type {
   BrandKnowledgeVersion,
   BrandSourceChunk,
   BrandSourceDocument,
+  // Phase 5B-2 — AI Content Studio.
+  ContentItem,
+  ContentVariant,
 } from '@prisma/client';
 
 export type {
@@ -45,5 +48,9 @@ export type {
   BrandMemoryLayer,
   BrandSourceStatus,
   BrandStatus,
+  ContentOrigin,
+  ContentStatus,
+  ContentType,
+  ContentValidationState,
   Locale,
 } from '@prisma/client';

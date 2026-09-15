@@ -61,6 +61,10 @@ export interface TenantFixture {
   readonly uploadSessionId: string;
   readonly uploadIdempotencyKey: string;
   readonly assetProcessingJobId: string;
+  // --- Phase 5B-2 (AI Content Studio) ---
+  readonly contentItemId: string;
+  readonly contentVariantId: string;
+  readonly contentIdempotencyKey: string;
 }
 
 export interface IsolationFixtures {
@@ -878,6 +882,49 @@ async function createTenant(
         },
       });
 
+      /*
+       * Phase 5B-2 — one AI-generated draft with one platform variant.
+       *
+       * The BODY carries the tenant slug, so a test that reads a caption across
+       * the boundary can tell WHOSE words it got rather than merely counting
+       * rows. The idempotency key is tenant-distinct for the same reason the
+       * Brand Brain one is: `unique(workspaceId, idempotencyKey)` must be
+       * provably workspace-scoped, and two tenants sharing a key is what proves
+       * it.
+       */
+      const contentItem = await db.contentItem.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          title: `Spring launch — ${slug}`,
+          contentType: 'POST',
+          primaryLocale: 'EN',
+          status: 'DRAFT',
+          origin: 'AI_GENERATED',
+          createdByUserId: user.id,
+          arabicDialect: 'msa',
+          idempotencyKey: `fixture-content-${slug}`,
+          citations: [
+            { kind: 'knowledge', id: knowledgeItem.id, label: 'Positioning', version: 1 },
+          ],
+        },
+      });
+
+      const contentVariant = await db.contentVariant.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          contentItemId: contentItem.id,
+          platformKey: 'instagram',
+          locale: 'EN',
+          body: `Confidential campaign caption for ${slug} only.`,
+          hashtags: ['launch'],
+          characterCount: 48,
+          validationState: 'VALID',
+          origin: 'AI_GENERATED',
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -926,6 +973,9 @@ async function createTenant(
         uploadSessionId: uploadSession.id,
         uploadIdempotencyKey: uploadSession.idempotencyKey,
         assetProcessingJobId: assetProcessingJob.id,
+        contentItemId: contentItem.id,
+        contentVariantId: contentVariant.id,
+        contentIdempotencyKey: `fixture-content-${slug}`,
       };
     },
     { prisma, bootstrap: true },

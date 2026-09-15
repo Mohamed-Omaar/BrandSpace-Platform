@@ -345,6 +345,16 @@ export function PaperclipIcon(props: IconProps) {
   );
 }
 
+/** The Content Studio: a pen, for the module that writes. */
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+      <path d="M14.5 6.5 17.5 9.5" />
+    </Icon>
+  );
+}
+
 export function ImageIcon(props: IconProps) {
   return (
     <Icon {...props}>

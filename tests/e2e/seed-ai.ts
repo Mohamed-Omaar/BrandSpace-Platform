@@ -55,6 +55,17 @@ const MOCK_SECRET_REF = 'ai-provider/mock/development/api-key';
 const MODEL_KEY = 'mock-fast';
 const TASK_KEY = 'copilot.chat';
 
+/**
+ * The Content Studio's task.
+ *
+ * A SECOND TASK RATHER THAN A REUSE OF `copilot.chat`, because routing is
+ * per-task by design: an operator has to be able to serve captions from a
+ * different model than chat, and a seed that collapsed the two would make that
+ * distinction untestable. Its rule, its cost and its parameters are separate
+ * below for the same reason.
+ */
+const CONTENT_TASK_KEY = 'caption.generate';
+
 /** Enough for a long session of development chat; refilled by re-running. */
 const DEVELOPMENT_CREDIT_GRANT = 5_000;
 
@@ -205,6 +216,34 @@ const PAYLOADS = {
         moderateInput: false,
         moderationModelKey: null,
       },
+      {
+        taskKey: CONTENT_TASK_KEY,
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 10_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.6,
+          maxOutputTokens: 900,
+          promptTemplateVersion: 1,
+          /*
+           * OFF, and D-78 again. The Content Studio owns its artifact: the
+           * caption lives in `content_variant` under the D-116/D-117 window.
+           * Asking the gateway to persist it too would make the gateway a
+           * second content store — and a second retention owner for the same
+           * text, which is exactly what the F-73 registry exists to prevent.
+           */
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
     ],
   },
   /*
@@ -218,6 +257,15 @@ const PAYLOADS = {
    * whatever the last test to activate a version happened to set.
    */
   'brand-brain': {},
+  /*
+   * THE CONTENT STUDIO DEFAULTS, ACTIVATED EXPLICITLY.
+   *
+   * An empty payload, so every dialect, channel, limit and retention window is
+   * the schema's own — and activated rather than left unset so the tenant
+   * projection exists and the dashboard exercises the path production takes
+   * rather than the "nothing activated yet" fallback.
+   */
+  content: {},
   'ai.credit-rules': {
     costs: [
       {
@@ -225,6 +273,13 @@ const PAYLOADS = {
         modelKey: MODEL_KEY,
         baseMilliCredits: 100,
         perUnitMilliCredits: 50,
+        unit: '1k_tokens',
+      },
+      {
+        taskKey: CONTENT_TASK_KEY,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 250,
+        perUnitMilliCredits: 90,
         unit: '1k_tokens',
       },
     ],

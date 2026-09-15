@@ -8,6 +8,7 @@ import {
   CreditIcon,
   HomeIcon,
   ImageIcon,
+  PencilIcon,
   LanguageSwitcher,
   SettingsIcon,
   ShieldIcon,
@@ -55,6 +56,12 @@ const NAV: readonly {
     key: 'nav.brandBrain',
     permission: 'brand_brain.read',
     icon: <SparkIcon size={20} />,
+  },
+  {
+    href: '/content',
+    key: 'nav.content',
+    permission: 'content.read',
+    icon: <PencilIcon size={20} />,
   },
   {
     href: '/assets',

@@ -56,6 +56,7 @@ export { purgeExpiredOutputs } from './gateway';
 export { AiGateway } from './gateway';
 export type {
   AiConfiguration,
+  AiQuote,
   AiSweepResult,
   AiConfigurationSource,
   AiGatewayOptions,

@@ -92,6 +92,14 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
   // no credential — the storage VENDOR lives in `integrations.storage`, and the
   // storage QUOTA in `plans`, neither of which is projected.
   'assets',
+  // Phase 5B-2. The Content Studio policy the CUSTOMER's own screen states or
+  // enforces: which dialects they may pick (D-115), which platforms a variant
+  // may target and the character limit each imposes, the brief ceiling, and the
+  // retention floor their own control is bounded by (D-117). The composer has
+  // to know the limit BEFORE the caption is too long, and the settings screen
+  // has to state the floor it is enforcing. Restating any of it in the
+  // dashboard would be a second setting.
+  'content',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

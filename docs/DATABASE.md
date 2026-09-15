@@ -389,6 +389,54 @@ Per-platform, per-locale rendering of a content item.
 Constraints: `unique(contentItemId, platformKey, locale)`.
 Indexes: `(workspaceId, contentItemId)`.
 
+### 4.4b The AI Content Studio tables — AS BUILT (Phase 5B-2)
+
+§4.4 and §4.5 above are the DESIGN. This is what the migration
+`20260915090000_phase_5b_2_ai_content_studio` actually created, which is narrower in two ways
+and wider in three.
+
+**NARROWER.** `campaignId`, `pillar`, `approvalRequired` and `currentApprovalId` are **not**
+created: campaigns belong to the Social Calendar and approvals to the Approvals module, and a
+column with no writer is a column whose meaning nobody has settled. `CalendarSlot`, `Approval`
+and `Comment` are likewise untouched. The lifecycle diagram above stands as the design; Phase
+5B-2 reaches **`DRAFT`, `IN_REVIEW` and `ARCHIVED` only**, and `ContentStudioService.transition`
+refuses every other target rather than half-implementing the next phase's states.
+
+**WIDER**, in three columns the design predates:
+
+| Column                                     | Table                          | Why                                                                                                                                                                  |
+| ------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `arabicDialect`                            | both, and `workspace`, `brand` | D-115. The dialect a draft was WRITTEN IN, recorded on the row — because the configured default can change and a draft must still be able to say what it actually is |
+| `citations jsonb`, `insufficientKnowledge` | `content_item`                 | AC-11.4 and the free-refusal path: what retrieval returned, and whether it returned enough. Written from RETRIEVAL, never from the model's own text                  |
+| `expiresAt`, `bodyPurgedAt`                | both                           | D-116 and D-117. When this content may be purged, and when its body actually was — so a purged draft is visibly purged rather than silently blank                    |
+
+**Tenancy.** Both tables carry `workspaceId`, both have RLS `ENABLED` and `FORCED`, and **every
+foreign key to a tenant-owned parent is composite** — `content_item_brand_fkey` on
+`(workspaceId, brandId)` and `content_variant_item_fkey` on `(workspaceId, contentItemId)`.
+D-112 made that the platform rule after F-80 and F-83; these are the first keys written under it,
+and `tests/isolation/phase5b2-content-tenancy.test.ts` asserts the refusal from inside the
+attacker's OWN workspace, which is the case RLS does not cover.
+
+**`content_item` constraints and indexes.** `unique(workspaceId, id)` (the composite-FK parent
+scope), `unique(workspaceId, idempotencyKey)` (AC-11.2 — a retried generation returns the first
+draft rather than billing twice), and indexes on `(workspaceId, brandId, status)`,
+`(workspaceId, brandId, updatedAt desc)` and `(expiresAt)` for the purge sweep.
+
+**`content_variant` constraints and indexes.** `unique(contentItemId, platformKey, locale)` as
+designed, plus `(workspaceId, contentItemId)` and `(expiresAt)`.
+
+**`assetIds uuid[]` carries no foreign key, and cannot.** PostgreSQL has no array element
+reference, so the array is validated in the service rather than by the database. Recorded here
+rather than left to be discovered: it is the one place in these tables where referential
+integrity is the application's job, and a reader should not have to infer that from its absence.
+
+**`workspace.aiContentRetentionDays`** is the D-117 control. `NULL` means "follow the
+subscription" (D-116); a value means the customer asked for something shorter. It is bounded by
+the CHECK `workspace_ai_content_retention_days_positive` (`> 0`), so "delete on write" is not
+expressible even through a crafted request, and floored at write time by
+`content.retention.minCustomerRetentionDays`. It can only ever SHORTEN the window — a large value
+does not extend a cancelled account's grace period past what the owner approved.
+
 ### 4.6 `Asset`
 
 `id`, `workspaceId`, `brandId` (null = workspace-level), `folderId`, `name`, `kind`

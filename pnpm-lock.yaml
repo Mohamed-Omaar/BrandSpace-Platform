@@ -117,6 +117,9 @@ importers:
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -166,6 +169,9 @@ importers:
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -407,6 +413,34 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/content:
+    dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../ai-gateway
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../brand-brain
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/database:
     dependencies:
       '@brandspace/auth':
@@ -599,6 +633,9 @@ importers:
       '@brandspace/config':
         specifier: workspace:*
         version: link:../packages/config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../packages/content
       '@brandspace/database':
         specifier: workspace:*
         version: link:../packages/database

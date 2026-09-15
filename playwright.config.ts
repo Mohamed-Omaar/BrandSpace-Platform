@@ -244,7 +244,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -254,7 +254,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -345,6 +345,24 @@ export default defineConfig({
        */
       name: 'assets',
       testMatch: /assets\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * The AI Content Studio gets its own SERIAL project, for the reason Brand
+       * Brain and the Asset Library already have one: it signs in, creates a
+       * brand, writes approved knowledge and generates real drafts into a shared
+       * workspace, and then asserts on what comes back. Two browsers running it
+       * in parallel would each be asserting on the other's rows — and a
+       * generation is not idempotent across runs.
+       */
+      name: 'content-studio',
+      testMatch: /content-studio\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],
