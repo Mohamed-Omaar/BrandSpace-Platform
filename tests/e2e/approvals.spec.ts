@@ -107,6 +107,15 @@ test.describe('the approval workflow', () => {
     await signIn(page);
     await openReviewableDraft(page);
 
+    /*
+     * THE PRECONDITION, STATED. `pnpm e2e:seed` resets this draft to DRAFT with
+     * no review history; if something else moved it, the submit button is
+     * absent and `clickUntil` below would time out twenty seconds later with an
+     * error pointing at the click rather than at the state. Asserting it here
+     * makes the real cause the first thing the failure says.
+     */
+    await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
+
     // 1. Submit for review.
     await clickUntil(page, '[data-testid="submit-for-review"]', async () => {
       await expect.poll(() => page.url(), { timeout: 3_000 }).toMatch(/ok=SUBMITTED|error=/);

@@ -205,6 +205,19 @@ test.describe('placing content on the calendar', () => {
      * `days` the grid does, so a slot outside the month on screen is correctly
      * not shown by either. The URL is what moves the page to it.
      */
+    /*
+     * THE DRAFT IS CHOSEN BY NAME, not left to whichever the picker lists first.
+     *
+     * `pnpm e2e:seed` leaves TWO schedulable drafts from Phase 5B-3 onward —
+     * this suite's "Seasonal note" and the approvals suite's "Launch
+     * announcement" — and the two projects run in parallel. Taking the first
+     * option scheduled whichever one happened to sort first, which failed this
+     * assertion and stripped the OTHER suite's fixture of its submit button at
+     * the same time. Naming it makes each suite own its own fixture.
+     */
+    await page.getByTestId('schedule-item').selectOption({ label: 'Seasonal note' });
+    await expect(page.getByTestId('schedule-item')).toHaveValue(/.+/);
+
     const when = futureDate(21);
     await page.getByTestId('schedule-date').fill(when);
     await page.getByTestId('schedule-time').fill('09:00');
