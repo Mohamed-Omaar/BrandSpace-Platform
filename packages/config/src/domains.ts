@@ -679,6 +679,53 @@ const contentStudioSchema = z.object({
       minCustomerRetentionDays: z.number().int().min(1).max(365).default(7),
     })
     .default({}),
+
+  /**
+   * The Content Calendar — Phase 5B-2's planning half.
+   *
+   * EVERY VALUE HERE IS AN OPERATOR'S FACT, not a developer's. Which day a week
+   * starts on differs by market before it differs by locale; how far ahead a
+   * post may be planned is a product decision; and whether an item must be
+   * approved before it can be scheduled is a policy the owner turns on when the
+   * Approvals module ships. Hard-coding any of them would be CLAUDE.md §2.2
+   * exactly.
+   */
+  calendar: z
+    .object({
+      /**
+       * 0 = Sunday … 6 = Saturday. Defaults to SUNDAY because the platform's
+       * first market runs a Sunday–Thursday week, and because a calendar whose
+       * week starts on the wrong day is wrong in a way people notice
+       * immediately. It is configuration precisely so the next market can
+       * differ without a release.
+       */
+      weekStartsOn: z.number().int().min(0).max(6).default(0),
+      /**
+       * How far ahead a slot may be placed. A ceiling rather than none, because
+       * an unbounded date is how a typo puts a post in the year 20260.
+       */
+      maxDaysAhead: z.number().int().min(1).max(3_650).default(365),
+      /**
+       * The shortest notice a slot may be given, in minutes. Zero would allow
+       * scheduling something for a moment already past by the time the request
+       * lands, which is not a plan.
+       */
+      minLeadMinutes: z.number().int().min(0).max(10_080).default(5),
+      /** A bound on one day's plan, so the grid stays a grid. */
+      maxSlotsPerDay: z.number().int().min(1).max(200).default(25),
+      /**
+       * AC-14.6. When true, only an APPROVED item may be scheduled.
+       *
+       * DEFAULT FALSE, and that is honesty rather than laxity: the Approvals
+       * module is Phase 5B-3, so until it ships nothing can move an item into
+       * `APPROVED` and a default of `true` would make the calendar unusable
+       * while appearing to enforce a policy nobody can satisfy. The GATE is
+       * built and tested now; the owner turns it on when there is a workflow
+       * behind it.
+       */
+      requireApprovalBeforeScheduling: z.boolean().default(false),
+    })
+    .default({}),
 });
 
 /**

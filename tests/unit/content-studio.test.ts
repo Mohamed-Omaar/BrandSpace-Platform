@@ -57,6 +57,13 @@ const POLICY: ContentPolicy = {
     maxBriefChars: 2_000,
   },
   retention: { cancellationGraceDays: 30, minCustomerRetentionDays: 7 },
+  calendar: {
+    weekStartsOn: 0,
+    maxDaysAhead: 365,
+    minLeadMinutes: 5,
+    maxSlotsPerDay: 25,
+    requireApprovalBeforeScheduling: false,
+  },
 };
 
 const clockAt = (iso: string) => ({ now: () => new Date(iso) });

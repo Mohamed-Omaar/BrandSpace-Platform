@@ -141,6 +141,7 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('content.edit', 'workspace', 'Edit content drafts and captions'),
   def('content.submit', 'workspace', 'Submit content for review'),
   def('content.archive', 'workspace', 'Archive a content draft'),
+  def('content.schedule', 'workspace', 'Place content on the calendar and move it'),
   def('content.delete', 'workspace', 'Delete content permanently'),
 ] as const;
 

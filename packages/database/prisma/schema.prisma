@@ -438,6 +438,7 @@ model Workspace {
   /// Phase 5B-2 — AI Content Studio.
   contentItems    ContentItem[]
   contentVariants ContentVariant[]
+  calendarSlots   CalendarSlot[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1651,6 +1652,7 @@ model Brand {
   /// Phase 5B-2 — AI Content Studio.
   contentItems    ContentItem[]
   contentVariants ContentVariant[]
+  calendarSlots   CalendarSlot[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -2562,6 +2564,22 @@ enum ContentOrigin {
   AI_ASSISTED
 }
 
+/// Where a calendar slot is in its own short life — docs/DATABASE.md §4.7b.
+///
+/// DELIBERATELY SHORTER THAN §4.7's DESIGN. `LOCKED`, `PUBLISHING`, `PUBLISHED`
+/// and `FAILED` are the publishing pipeline's, and the pipeline is Phase 6. A
+/// state no code can ever enter is a state whose meaning nobody has settled, so
+/// they are absent rather than declared and unreachable.
+enum CalendarSlotStatus {
+  /// On the calendar, and the content is not yet cleared to go.
+  PLANNED
+  /// On the calendar and cleared. The content item is `SCHEDULED` in step.
+  SCHEDULED
+  /// Taken off the calendar. Kept rather than deleted so the audit trail and
+  /// the quota refund both have a row to point at.
+  CANCELLED
+}
+
 /// TENANT-OWNED, BRAND-SCOPED. The canonical content object — docs/DATABASE.md §4.4.
 model ContentItem {
   id          String @id @default(uuid()) @db.Uuid
@@ -2622,7 +2640,8 @@ model ContentItem {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_item_brand_fkey")
 
-  variants ContentVariant[]
+  variants      ContentVariant[]
+  calendarSlots CalendarSlot[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -2705,4 +2724,81 @@ model ContentVariant {
   @@index([workspaceId, brandId])
   @@index([expiresAt])
   @@map("content_variant")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. When a content item goes out — docs/DATABASE.md
+/// §4.7 and §4.7b.
+///
+/// THE SLOT IS THE *WHEN*; THE CONTENT ITEM REMAINS THE SOURCE OF TRUTH FOR THE
+/// WHAT AND THE STATE. A second copy of a caption, a status or a channel list
+/// here would be a second answer to a question `content_item` already answers,
+/// and the two would drift the first time one was updated without the other. So
+/// this row holds a time, a timezone, a target and a link.
+///
+/// WHY THREE TIME COLUMNS AND NOT ONE (AC-14.2, AC-14.3). A timestamp alone
+/// cannot answer "what time did the customer MEAN?" across a daylight-saving
+/// boundary: 09:00 local converted to UTC in January and read back in July is
+/// 08:00 or 10:00, and neither is what anyone asked for. So the INTENT
+/// (`scheduledLocalTime`, `timezone`) is stored beside the INSTANT
+/// (`scheduledAtUtc`), and the instant is recomputed from the intent whenever
+/// the zone's offset changes. Storing only the instant loses the intent; storing
+/// only the intent makes every query a conversion.
+model CalendarSlot {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  contentItemId String @db.Uuid
+
+  /// The instant, in UTC. What every range query and every sweep reads.
+  scheduledAtUtc DateTime @db.Timestamptz(6)
+  /// The wall-clock the customer chose, as `YYYY-MM-DDTHH:mm`. A STRING rather
+  /// than a timestamp on purpose: it is a local intent with no offset, and
+  /// giving it one would be inventing the very fact it exists to preserve.
+  scheduledLocalTime String
+  /// The IANA zone that intent is expressed in, copied from the workspace when
+  /// the slot was created. Copied rather than joined, because a workspace that
+  /// relocates must not silently move every post it already scheduled.
+  timezone String
+
+  status CalendarSlotStatus @default(PLANNED)
+
+  /// AC-14.7 — the publishing target is a MOCK, and says so in the data rather
+  /// than only in a comment. Phase 6 adds real connection targets beside it;
+  /// until then nothing in this system can name one.
+  targetKind String @default("MOCK")
+
+  /// Which channels this slot is for. Derived from the item's variants when the
+  /// slot is created, and kept so a slot still renders its channels after a
+  /// variant is edited — the calendar is a plan, and a plan records what was
+  /// planned.
+  platformKeys String[] @default([])
+
+  createdByUserId String?   @db.Uuid
+  cancelledAt     DateTime? @db.Timestamptz(6)
+
+  /// The usage-quota event this slot consumed (AC-14.5), so cancelling can
+  /// refund exactly what scheduling took and a retry cannot double-count.
+  usageIdempotencyKey String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "calendar_slot_brand_fkey")
+  /// COMPOSITE (D-112). A plain `contentItemId` would accept another
+  /// workspace's item — referential integrity runs with RLS bypassed — and the
+  /// difference between accepted and refused answers whether that id exists.
+  /// F-80 and F-83 are what this line prevents recurring.
+  item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "calendar_slot_item_fkey")
+
+  /// ONE LIVE SLOT PER ITEM. A partial index, so a cancelled slot does not
+  /// block rescheduling the same content — the same shape D-100 settled for the
+  /// asset checksum, and it lives in the migration because Prisma cannot model
+  /// a WHERE clause on a unique index.
+  @@index([workspaceId, scheduledAtUtc])
+  @@index([workspaceId, brandId, scheduledAtUtc])
+  @@index([workspaceId, contentItemId])
+  @@index([status, scheduledAtUtc])
+  @@map("calendar_slot")
 }

@@ -311,6 +311,25 @@ This is the most important group in the slice.
 | AC-14.8 | Rescheduling and cancelling update the slot and write audit events                                        | [E2E][INT] |
 | AC-14.9 | `content.scheduled` audit event exists                                                                    | [INT]      |
 
+**Verified in Phase 5B-2.** Where each criterion is proven:
+
+| ID          | Proof                                                                                                                                                                                                                                                                                                                |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-14.1** | `ContentCalendarService.schedule()` places a draft at a chosen wall-clock; `tests/e2e/content-calendar.spec.ts` drives it from the picker to a chip in the agenda                                                                                                                                                    |
+| **AC-14.2** | A `CalendarSlot` storing `scheduledAtUtc`, `scheduledLocalTime` and `timezone`. The isolation suite asserts all three agree, and the arithmetic is checked independently: Riyadh is UTC+3, so 09:00 local is 06:00Z                                                                                                  |
+| **AC-14.3** | The same wall-clock is a DIFFERENT instant either side of a DST boundary — New York 09:00 is 14:00Z in January and 13:00Z in July — and both render back as 09:00. A skipped hour resolves forward to the jump target; an ambiguous one to the earlier occurrence. `tests/unit/content-calendar.test.ts` covers each |
+| **AC-14.4** | The month grid is a real `role="grid"` with seven column headers; the E2E asserts `dir="rtl"`, Arabic weekday names with no English fallback, computed `direction: rtl` on the grid, and that the first column is the configured week start                                                                          |
+| **AC-14.5** | `limit.scheduled_posts` resolved through the entitlements engine and consumed BEFORE the row exists. Beyond the ceiling the refusal is `QUOTA_EXCEEDED` — the code the dashboard already turns into an upgrade prompt — and nothing is written. Cancelling refunds it                                                |
+| **AC-14.6** | `calendar.requireApprovalBeforeScheduling`. With the gate on, an unapproved item is refused and an `APPROVED` one is admitted — both asserted. **Partially met, and honestly**: the gate is built and tested, but the workflow that grants approval is Phase 5B-3, so the gate ships OFF                             |
+| **AC-14.7** | Every slot's `targetKind` is `MOCK`, asserted over all of them. A test reads `packages/content/src/calendar.ts` itself and fails on `fetch(`, `node:http`, `axios`, `undici` or `social-connectors`, because "we did not call a social API" stays true only until somebody adds an import                            |
+| **AC-14.8** | Rescheduling moves the slot and writes `content.rescheduled` carrying both times; cancelling writes `content.schedule_cancelled`, refunds the quota and returns the item to `DRAFT`. The E2E does all three in one journey                                                                                           |
+| **AC-14.9** | `content.scheduled` exists, carries the local time, the zone and a channel COUNT — and the test asserts the caption and the title are **absent**, not merely that the times are present                                                                                                                              |
+
+**Two deviations, both recorded.** AC-14.6 is partially met as described above. AC-14.2's
+`CalendarSlot` is narrower than `docs/DATABASE.md` §4.7's design — no `socialConnectionIds`,
+`publishJobIds`, `recurrenceRule` or lock columns, and no publishing states — because every one of
+them belongs to the Phase 6 pipeline. §4.7b records what was built and why.
+
 ---
 
 ## 16. Step 15 — Audit Events Are Visible

@@ -47,6 +47,13 @@ export const contentPolicySchema = z.object({
     cancellationGraceDays: z.number().int().min(1),
     minCustomerRetentionDays: z.number().int().min(1),
   }),
+  calendar: z.object({
+    weekStartsOn: z.number().int().min(0).max(6),
+    maxDaysAhead: z.number().int().min(1),
+    minLeadMinutes: z.number().int().min(0),
+    maxSlotsPerDay: z.number().int().min(1),
+    requireApprovalBeforeScheduling: z.boolean(),
+  }),
 });
 
 export type ContentDialect = z.infer<typeof dialectSchema>;

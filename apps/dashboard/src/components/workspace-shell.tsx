@@ -7,6 +7,7 @@ import {
   menuItemStyle,
   CreditIcon,
   HomeIcon,
+  CalendarIcon,
   ImageIcon,
   PencilIcon,
   LanguageSwitcher,
@@ -62,6 +63,12 @@ const NAV: readonly {
     key: 'nav.content',
     permission: 'content.read',
     icon: <PencilIcon size={20} />,
+  },
+  {
+    href: '/calendar',
+    key: 'nav.calendar',
+    permission: 'content.read',
+    icon: <CalendarIcon size={20} />,
   },
   {
     href: '/assets',

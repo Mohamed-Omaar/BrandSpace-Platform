@@ -1,5 +1,5 @@
 /**
- * Enable the Asset Library's storage quota for development and end-to-end runs.
+ * Enable the QUOTA FEATURES development and end-to-end runs need.
  *
  * WHAT PROBLEM THIS SOLVES. The entitlements engine fails CLOSED, deliberately:
  * a feature nothing grants resolves to `enabled: false`, and `limit()` reports
@@ -41,16 +41,23 @@ import { loadE2eEnv } from './env';
 loadE2eEnv();
 
 const ENVIRONMENT: Environment = 'DEVELOPMENT';
-const REASON = 'Development fixture: enable the Asset Library storage quota.';
+const REASON = 'Development fixture: enable the quota features the product needs to be usable.';
 
 /**
- * The quota features the Asset Library needs switched on.
+ * The quota features that must be switched on for the product to be usable at
+ * all on a freshly seeded database.
  *
- * ONE KEY, and it is the one the upload path actually consults. Turning on
- * anything else would be granting capabilities a test does not need, which is
- * the habit F-15 warns about.
+ * EXACTLY THESE TWO, and each is one a customer-facing path actually consults —
+ * uploading a file, and putting a post on the calendar. Turning on anything
+ * else would be granting capabilities a test does not need, which is the habit
+ * F-15 warns about.
+ *
+ * `limit.scheduled_posts` is here for precisely the reason `limit.storage_gb`
+ * is: the engine fails closed, so an ungranted quota feature reports a limit of
+ * ZERO — "not unlimited, none" — and every scheduling attempt is refused with a
+ * quota error. The Content Calendar is then untestable through the product.
  */
-const STORAGE_FEATURE = 'limit.storage_gb';
+const QUOTA_FEATURES = ['limit.storage_gb', 'limit.scheduled_posts'] as const;
 
 function assertNotProduction(): void {
   if ((process.env['APP_ENV'] ?? 'development') === 'production') {
@@ -104,7 +111,7 @@ async function main(): Promise<void> {
     const actor = await actorFor(prisma);
     const configuration = new ConfigurationService({ prisma, cacheTtlMs: 0 });
 
-    console.log('› enabling the Asset Library storage quota (development only) …');
+    console.log('› enabling the quota features the product needs (development only) …');
 
     /*
      * READ THE CURRENT FLAGS AND ADD TO THEM, rather than replacing the
@@ -114,13 +121,15 @@ async function main(): Promise<void> {
      * worse than one that does nothing.
      */
     const current = await configuration.get('feature-flags', ENVIRONMENT);
-    const others = current.flags.filter((flag) => flag.featureKey !== STORAGE_FEATURE);
+    const others = current.flags.filter(
+      (flag) => !(QUOTA_FEATURES as readonly string[]).includes(flag.featureKey),
+    );
 
     const draft = await configuration.createDraft(actor, 'feature-flags', ENVIRONMENT, REASON, {
       flags: [
         ...others,
-        {
-          featureKey: STORAGE_FEATURE,
+        ...QUOTA_FEATURES.map((featureKey) => ({
+          featureKey,
           // ON, with no limit stated. The limit comes from the plan, and with
           // no plan assigned the engine already reads that as unlimited.
           globalEnabled: true,
@@ -142,7 +151,7 @@ async function main(): Promise<void> {
           activeFrom: null,
           activeUntil: null,
           percentageRollout: null,
-        },
+        })),
       ],
     });
 
@@ -150,14 +159,14 @@ async function main(): Promise<void> {
     const report = await configuration.validateDraft(actor, draft.id);
     if (!report.valid) {
       throw new Error(
-        `The storage-quota fixture failed validation: ${report.issues
+        `The quota fixture failed validation: ${report.issues
           .map((issue) => `${issue.path}: ${issue.message}`)
           .join('; ')}`,
       );
     }
     await configuration.activate(actor, draft.id, { acknowledgeHighImpact: true });
 
-    console.log(`\n✔ ${STORAGE_FEATURE} enabled with no configured ceiling`);
+    console.log(`\n✔ ${QUOTA_FEATURES.join(', ')} enabled with no configured ceiling`);
     console.log('  No plan, no price and no quota value was written.');
   } finally {
     await prisma.$disconnect();

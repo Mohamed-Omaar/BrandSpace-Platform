@@ -65,6 +65,8 @@ export interface TenantFixture {
   readonly contentItemId: string;
   readonly contentVariantId: string;
   readonly contentIdempotencyKey: string;
+  /** Phase 5B-2 — the Content Calendar. A live slot for the draft above. */
+  readonly calendarSlotId: string;
 }
 
 export interface IsolationFixtures {
@@ -925,6 +927,30 @@ async function createTenant(
         },
       });
 
+      /*
+       * A LIVE CALENDAR SLOT for the draft above.
+       *
+       * Scheduled a year out and at a fixed wall-clock, so the fixture never
+       * drifts into the past and never depends on when the suite runs. The
+       * instant is computed here rather than by the service because the fixture
+       * is provisioning state, not exercising the scheduling rules.
+       */
+      const slotLocalTime = `${new Date().getUTCFullYear() + 1}-03-12T09:00`;
+      const calendarSlot = await db.calendarSlot.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          contentItemId: contentItem.id,
+          scheduledAtUtc: new Date(`${slotLocalTime}:00.000Z`),
+          scheduledLocalTime: slotLocalTime,
+          timezone: 'Asia/Riyadh',
+          status: 'SCHEDULED',
+          platformKeys: ['instagram'],
+          createdByUserId: user.id,
+          usageIdempotencyKey: `fixture-calendar-${slug}`,
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -976,6 +1002,7 @@ async function createTenant(
         contentItemId: contentItem.id,
         contentVariantId: contentVariant.id,
         contentIdempotencyKey: `fixture-content-${slug}`,
+        calendarSlotId: calendarSlot.id,
       };
     },
     { prisma, bootstrap: true },

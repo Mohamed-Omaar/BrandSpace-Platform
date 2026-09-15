@@ -1,10 +1,14 @@
 import 'server-only';
 import {
+  ContentCalendarService,
   ContentLibraryService,
   TenantContentPolicySource,
   type CatalogueReader,
   type ContentPolicy,
+  type ScheduleQuota,
 } from '@brandspace/content';
+import { QUOTA_FEATURES } from '@brandspace/entitlements';
+import { isAppError } from '@brandspace/shared';
 import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
 
 /**
@@ -56,6 +60,15 @@ export interface ContentServices extends ScopedServices {
    * fail before it rendered a row when the catalogue was unavailable.
    */
   library(): Promise<ContentLibraryService>;
+  /**
+   * The calendar, built on the SAME policy and the SAME scoped client.
+   *
+   * It needs one thing the library does not — the workspace's IANA zone — and
+   * it reads it from the workspace row rather than taking it from a caller: a
+   * timezone that arrived in a request body would let a crafted POST schedule a
+   * post in a zone the workspace does not use.
+   */
+  calendar(): Promise<ContentCalendarService>;
 }
 
 export async function inContentStudio<T>(
@@ -64,11 +77,68 @@ export async function inContentStudio<T>(
 ): Promise<T> {
   return inWorkspace(workspaceId, async (scoped) => {
     const policy = () => contentPolicy(scoped.db);
+    /*
+     * AC-14.5 — the plan's monthly scheduled-post ceiling, resolved through the
+     * ENTITLEMENTS ENGINE rather than counted here.
+     *
+     * D-10 puts the limit in the plan (`limit.scheduled_posts`), resolved
+     * through plan, override, flag and default in that precedence. A second
+     * implementation of that precedence is a second answer, which is the
+     * mistake `inAssetLibrary` already records for `limit.storage_gb`.
+     */
+    const quota: ScheduleQuota = {
+      limit: async () =>
+        scoped.entitlements.limit(workspaceId, QUOTA_FEATURES.scheduledPostsPerMonth),
+      consume: async (idempotencyKey) => {
+        try {
+          await scoped.usage.consume({
+            workspaceId,
+            featureKey: QUOTA_FEATURES.scheduledPostsPerMonth,
+            limitValue: await scoped.entitlements.limit(
+              workspaceId,
+              QUOTA_FEATURES.scheduledPostsPerMonth,
+            ),
+            period: 'month',
+            idempotencyKey,
+          });
+          return true;
+        } catch (error: unknown) {
+          // A refusal is a QUOTA_EXCEEDED from the usage service, and it is the
+          // only failure this boolean is allowed to swallow. Anything else — a
+          // connection fault, a conflicting key — is a real error and must not
+          // be reported to the caller as "the plan is full".
+          if (isAppError(error) && error.code === 'QUOTA_EXCEEDED') return false;
+          throw error;
+        }
+      },
+      refund: async (idempotencyKey) => {
+        await scoped.usage.refund({
+          workspaceId,
+          featureKey: QUOTA_FEATURES.scheduledPostsPerMonth,
+          period: 'month',
+          idempotencyKey,
+        });
+      },
+    };
+
     return fn({
       ...scoped,
       policy,
       library: async () =>
         new ContentLibraryService({ db: scoped.db, workspaceId, policy: await policy() }),
+      calendar: async () => {
+        const workspace = await scoped.db.workspace.findUniqueOrThrow({
+          where: { id: workspaceId },
+          select: { timezone: true },
+        });
+        return new ContentCalendarService({
+          db: scoped.db,
+          workspaceId,
+          policy: await policy(),
+          timezone: workspace.timezone,
+          quota,
+        });
+      },
     });
   });
 }

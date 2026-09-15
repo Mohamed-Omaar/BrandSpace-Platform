@@ -30,6 +30,8 @@ export type {
   // Phase 5B-2 — AI Content Studio.
   ContentItem,
   ContentVariant,
+  // Phase 5B-2 — Content Calendar.
+  CalendarSlot,
 } from '@prisma/client';
 
 export type {
@@ -48,6 +50,7 @@ export type {
   BrandMemoryLayer,
   BrandSourceStatus,
   BrandStatus,
+  CalendarSlotStatus,
   ContentOrigin,
   ContentStatus,
   ContentType,

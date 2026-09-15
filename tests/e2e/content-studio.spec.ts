@@ -89,7 +89,18 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
     await page.keyboard.press('Escape');
     return;
   }
-  await page.fill('[data-testid="new-item-key"]', `voice-${Date.now()}`);
+  /*
+   * A FIXED KEY, not a timestamped one.
+   *
+   * `brand_knowledge_item` is unique on (workspace, brand, area, key), so a
+   * fixed key makes the second run a refused duplicate and a no-op — which is
+   * what a fixture should be. A `Date.now()` key instead added ANOTHER copy on
+   * every run, and five copies of the same fact crowded the Brand Brain chat's
+   * retrieval until a neighbouring suite's grounding assertion failed. A
+   * fixture that grows without bound eventually breaks something that is not
+   * about it.
+   */
+  await page.fill('[data-testid="new-item-key"]', 'e2e-studio-voice');
   await page.fill('[data-testid="new-item-title-en"]', 'Voice');
   await page.fill(
     '[data-testid="new-item-body-en"]',

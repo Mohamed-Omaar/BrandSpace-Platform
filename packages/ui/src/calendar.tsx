@@ -16,9 +16,14 @@ import { StateMessage } from './feedback';
  * into 390px, where a 7-column layout gives each day about 50 pixels and every
  * post becomes an unreadable sliver.
  *
- * PROTOTYPE BOUNDARY. This renders supplied fixtures and reports selection. It
- * schedules nothing, publishes nothing and talks to no platform; the Phase 3
- * calendar will reuse this composition with real data behind it.
+ * PRESENTATIONAL, AND THAT IS THE WHOLE CONTRACT. It renders the days it is
+ * handed and reports which post was clicked. It schedules nothing, publishes
+ * nothing and talks to no platform — the caller owns all of that.
+ *
+ * Phase 5B-2 built the caller: `/[locale]/calendar` supplies the workspace's own
+ * slots and owns scheduling, moving and cancelling. The design-system showcase
+ * still supplies fixtures to the same component, which is what makes the two
+ * agree about how a calendar looks.
  */
 
 export type CalendarView = 'month' | 'week' | 'agenda';
@@ -298,6 +303,10 @@ export function ContentCalendar({
   onOpenPost,
   createAction,
   testId,
+  onPrevious,
+  onNext,
+  onToday,
+  busy,
 }: {
   readonly periodLabel: string;
   readonly days: readonly CalendarDay[];
@@ -307,6 +316,20 @@ export function ContentCalendar({
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
   readonly createAction?: ReactNode;
   readonly testId?: string | undefined;
+  /**
+   * Period navigation.
+   *
+   * OPTIONAL, because the design-system showcase renders a fixed month and has
+   * nowhere to navigate to. When a caller supplies them the three controls
+   * become live; when it does not they are DISABLED rather than inert, so a
+   * control that cannot do anything says so instead of silently ignoring the
+   * click — which is the difference between a prototype and a broken product.
+   */
+  readonly onPrevious?: (() => void) | undefined;
+  readonly onNext?: (() => void) | undefined;
+  readonly onToday?: (() => void) | undefined;
+  /** Marks the grid busy while a navigation is in flight. */
+  readonly busy?: boolean | undefined;
 }) {
   const [view, setView] = useState<CalendarView>('month');
 
@@ -339,6 +362,7 @@ export function ContentCalendar({
   return (
     <section
       data-testid={testId ?? 'content-calendar'}
+      aria-busy={busy ?? undefined}
       style={{ display: 'grid', gap: spacingTokens.lg }}
     >
       <div
@@ -356,6 +380,8 @@ export function ContentCalendar({
             size="sm"
             icon={<ChevronStartIcon size={18} />}
             data-testid="calendar-previous"
+            disabled={!onPrevious}
+            {...(onPrevious ? { onClick: onPrevious } : {})}
           />
           <IconButton
             label={labels.next}
@@ -363,8 +389,16 @@ export function ContentCalendar({
             size="sm"
             icon={<ChevronEndIcon size={18} />}
             data-testid="calendar-next"
+            disabled={!onNext}
+            {...(onNext ? { onClick: onNext } : {})}
           />
-          <Button variant="neutral" size="sm" data-testid="calendar-today">
+          <Button
+            variant="neutral"
+            size="sm"
+            data-testid="calendar-today"
+            disabled={!onToday}
+            {...(onToday ? { onClick: onToday } : {})}
+          >
             {labels.today}
           </Button>
         </ButtonRow>

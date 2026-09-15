@@ -1308,3 +1308,95 @@ it, and nothing else in the system would notice.
 the request and the service refuses the call — and the brand scope is a required parameter on every
 service call, so a new call site cannot silently omit it (F-74). A brand outside the member's scope
 answers the same 404 as one that does not exist, and the scope check happens **before** any read.
+
+---
+
+## 24. Implementation Status — Phase 5B-2 (Content Calendar)
+
+The planning half of scope item 3's milestone. What was built, and the properties a reviewer should
+be able to check rather than take on trust.
+
+### 24.1 Tenancy
+
+`calendar_slot` is tenant-owned: `workspaceId`, RLS `ENABLED` **and** `FORCED`, the
+`tenant_isolation` and `platform_access` policies, and the usual least-privilege grants.
+
+**Both foreign keys to a tenant-owned parent are COMPOSITE (D-112).**
+`calendar_slot_brand_fkey` is on `(workspaceId, brandId)` and `calendar_slot_item_fkey` on
+`(workspaceId, contentItemId)`. The second is the third key written under that rule and is exactly
+the shape F-80 and F-83 were about — a child pointing at a tenant-owned parent by id alone. A plain
+key would have let one tenant put another tenant's draft on its own calendar, and the difference
+between "inserted" and "constraint violated" would have answered whether that draft id exists.
+
+**A CALENDAR IS A DIFFERENT DISCLOSURE FROM A DRAFT.** A leaked caption is bad; the DATE an
+unannounced launch goes out is a company's strategy. `tests/isolation/phase5b2-calendar-tenancy.test.ts`
+therefore asserts the instant and the local intent separately from the row's existence, including
+against a range query spanning every slot either tenant holds.
+
+### 24.2 What the database enforces, not just the service
+
+- `calendar_slot_local_time_shape` — `scheduledLocalTime` must be `YYYY-MM-DDTHH:mm`. A column the
+  service is the only guard for is a column that eventually holds whatever a future call site
+  passes, at which point the instant can no longer be recomputed from the intent. An offset is
+  refused too: it would be a second, contradictory answer to the question `timezone` answers.
+- `calendar_slot_cancelled_consistently` — a cancelled slot carries a cancellation time and a live
+  one does not, so the two facts cannot disagree and no reader has to decide which to trust.
+- `calendar_slot_one_live_per_item` — a PARTIAL unique index. Two live slots for one draft is a
+  calendar showing the same post twice and a quota charged twice. Partial, so a cancelled slot does
+  not strand the draft for ever.
+
+### 24.3 Time, and why the intent is stored
+
+`scheduledAtUtc` is the instant every range query reads. `scheduledLocalTime` + `timezone` is the
+INTENT, and it is the only one of the two that survives an offset change with its meaning intact
+(AC-14.2, AC-14.3). `packages/content/src/timezone.ts` carries the arithmetic, including the two
+cases a naive conversion gets wrong:
+
+- A **skipped** wall-clock (spring forward) resolves to the instant the clock jumps TO, never
+  backward — landing before the gap would move a post earlier than asked and reorder it against
+  its neighbours.
+- An **ambiguous** wall-clock (fall back) resolves to the EARLIER of the two occurrences, and the
+  caller is told, because "01:30 on the day the clocks go back" is a real choice and silently
+  picking one is how a post goes out an hour late.
+
+The zone is copied onto the slot rather than joined, so a workspace that relocates does not silently
+move every post it already scheduled.
+
+### 24.4 Authorization
+
+`content.schedule` is its own permission, separate from `content.edit`. Marketing Manager and
+Content Creator hold it; **Copywriter deliberately does not** — deciding when the brand speaks is a
+different decision from deciding what it says, and the F-15 rule says an ungranted capability is the
+recoverable mistake. Every action names the permission twice: `requireWorkspace` refuses the request
+and the service refuses the call, and the brand scope is a required parameter so a new call site
+cannot silently omit it (F-74).
+
+The workspace and the timezone are **never** taken from a form. A timezone in a request body would
+let a crafted POST schedule a post in a zone the workspace does not use, and the stored intent would
+then mean something nobody chose.
+
+### 24.5 Quota (AC-14.5)
+
+The plan's `limit.scheduled_posts` is resolved through the entitlements engine — plan, override,
+flag, default — and consumed BEFORE the slot row exists, because a ceiling checked afterwards is a
+ceiling a concurrent request walks through. Cancelling refunds it.
+
+The quota key is per SLOT, not per item, and the slot's id is minted in the service for that reason.
+Keying on the item was wrong in both directions and the tests caught it: a draft scheduled,
+cancelled and scheduled again would have consumed **once for two slots**, and the refund — which the
+usage service records as a negative event under its own key — would have collided with the
+consumption it was reversing.
+
+### 24.6 Nothing publishes (AC-14.7)
+
+Every slot's `targetKind` is `MOCK`, in the data. There is no connector, no OAuth, no token and no
+outbound call in `packages/content/src/calendar.ts` or anything it reaches — asserted against the
+source itself, because "we did not call a social API" is exactly the claim that stays true until
+somebody adds an import. Real publishing is Phase 6.
+
+### 24.7 Audit (AC-14.9)
+
+`content.scheduled`, `content.rescheduled` and `content.schedule_cancelled`, each carrying the
+times, the zone and a channel COUNT — and never a caption or a title. A scheduled launch caption is
+the most commercially sensitive string the product holds, and an audit record is read by more people
+than the draft is. The test asserts the absence, not just the presence.

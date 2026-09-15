@@ -20,7 +20,25 @@ import {
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 function read(relative: string): string {
-  return readFileSync(path.join(REPO_ROOT, relative), 'utf8');
+  /*
+   * A FILE THAT VANISHED BETWEEN LISTING AND READING IS NOT A FAILURE.
+   *
+   * `module-boundaries.test.ts` writes a `__boundary_probe.ts` into a package,
+   * compiles it and deletes it again. The two suites run in the same project,
+   * so a scan here can list that probe and then find it gone a millisecond
+   * later — which failed this suite with an ENOENT that had nothing to do with
+   * what it asserts.
+   *
+   * Treating a missing file as empty is correct rather than merely convenient:
+   * a file that does not exist cannot contain a forbidden token, and every
+   * assertion built on this helper is of that shape.
+   */
+  try {
+    return readFileSync(path.join(REPO_ROOT, relative), 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
 }
 
 /**
@@ -687,8 +705,21 @@ describe('the design showcase cannot reach production', () => {
    * application, and that file is the showcase's own client component.
    */
   it('renders the prototype screens from the gated showcase and nowhere else', () => {
+    /*
+     * `ContentCalendar` IS NO LONGER ON THIS LIST, and that is a graduation
+     * rather than an exemption.
+     *
+     * The rule is about components that "show flows the backend cannot yet
+     * perform". Phase 5B-2 built that backend: `/[locale]/calendar` renders it
+     * with the workspace's own slots, and scheduling, moving and cancelling all
+     * write real rows through `ContentCalendarService`. The component itself
+     * was always presentational — it renders the days it is handed and reports
+     * which post was clicked — so what changed is that a real caller now hands
+     * it real days.
+     *
+     * Everything else here still has no backend and stays gated.
+     */
     const prototypes = [
-      'ContentCalendar',
       'PostComposer',
       'DesignStudio',
       'PostGridCard',

@@ -159,10 +159,17 @@ export class ContentLibraryService {
   /**
    * DRAFT → IN_REVIEW → ARCHIVED, and nothing further.
    *
-   * Scheduling belongs to the Social Calendar and approval to Approvals, so a
-   * transition into SCHEDULED or APPROVED is refused here rather than
-   * half-implemented. A phase that quietly implemented the next phase's states
-   * would leave those phases with behaviour they never designed.
+   * SCHEDULED IS NOT REACHABLE FROM HERE, and an item that IS scheduled cannot
+   * be moved from here either. The calendar owns that edge in both directions:
+   * `ContentCalendarService.schedule()` sets it alongside creating the slot and
+   * `cancel()` clears it alongside cancelling the slot, in the same transaction
+   * each time. A second path into or out of `SCHEDULED` would let an item be
+   * archived out from under a live calendar entry, which is a plan pointing at
+   * content that is no longer planned.
+   *
+   * APPROVED likewise stays out: approval is the Approvals module's (5B-3), and
+   * a phase that quietly implemented the next phase's states would leave that
+   * phase with behaviour it never designed.
    */
   async transition(input: {
     itemId: string;
@@ -178,6 +185,8 @@ export class ContentLibraryService {
       DRAFT: ['IN_REVIEW', 'ARCHIVED'],
       IN_REVIEW: ['DRAFT', 'ARCHIVED'],
       ARCHIVED: ['DRAFT'],
+      // Deliberately empty: take it off the calendar first. See above.
+      SCHEDULED: [],
     };
     if (!(allowed[item.status] ?? []).includes(input.to)) throw transitionNotAllowed();
 

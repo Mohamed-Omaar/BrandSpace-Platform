@@ -19,6 +19,22 @@ export type { ContentGenerateRequest, ContentQuoteRequest, ContentToolRequest } 
 export { ContentLibraryService } from './library';
 export type { ContentLibraryOptions } from './library';
 
+export { ContentCalendarService } from './calendar';
+export type { CalendarOptions, CalendarSlotView, ScheduleInput, ScheduleQuota } from './calendar';
+
+export {
+  LOCAL_TIME_PATTERN,
+  formatLocalTime,
+  instantForIntent,
+  isKnownTimeZone,
+  monthRangeUtc,
+  offsetMinutesAt,
+  parseLocalTime,
+  partsInZone,
+  resolveZonedTime,
+} from './timezone';
+export type { LocalParts, ZonedResolution } from './timezone';
+
 export {
   CONTENT_CONFIG_DOMAIN,
   TenantContentPolicySource,
@@ -46,10 +62,19 @@ export { purgeExpiredContent } from './purge';
 export type { ContentPurgeResult } from './purge';
 
 export {
+  alreadyScheduled,
+  approvalRequiredBeforeScheduling,
   briefTooLong,
+  calendarSlotNotFound,
   contentItemNotFound,
   contentVariantNotFound,
+  dayIsFull,
   draftLimitReached,
+  invalidScheduleTime,
+  nothingToSchedule,
+  scheduleQuotaExceeded,
+  scheduleTooFarAhead,
+  scheduleTooSoon,
   transitionNotAllowed,
   unsupportedDialect,
   unsupportedPlatform,
