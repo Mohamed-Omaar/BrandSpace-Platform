@@ -225,8 +225,51 @@ embedding: D-13 deferred provider selection, and `embeddingModelKey` is recorded
 change is detectable. A pgvector column and an ANN index replace it behind the same interface once a
 provider is approved.
 
-Migration: `20260913140000_phase_5_brand_brain`. Isolation coverage:
-`tests/isolation/phase5-tenancy.test.ts` (41 tests).
+**Foreign keys BETWEEN these tables are composite with `workspaceId` too** (D-112, F-80, F-83), for
+the reason §4.6 gives about the Asset Library: PostgreSQL evaluates referential integrity with RLS
+BYPASSED, so a plain parent id is an existence oracle over the whole platform. Phase 5A shipped
+**eight** plain ones and all eight were confirmed exploitable:
+
+| Key                                          | Now references                             | `ON DELETE`                        |
+| -------------------------------------------- | ------------------------------------------ | ---------------------------------- |
+| `brand_source_chunk.sourceDocumentId`        | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_ingestion_job.sourceDocumentId`       | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_brain_message.conversationId`         | `brand_brain_conversation(workspaceId,id)` | `CASCADE`                          |
+| `brand_knowledge_candidate.sourceDocumentId` | `brand_source_document(workspaceId,id)`    | `CASCADE`                          |
+| `brand_knowledge_candidate.targetItemId`     | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("targetItemId")`        |
+| `brand_knowledge_item.sourceDocumentId`      | `brand_source_document(workspaceId,id)`    | `SET NULL ("sourceDocumentId")`    |
+| `brand_knowledge_item.conflictsWithItemId`   | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("conflictsWithItemId")` |
+| `brand_knowledge_version.knowledgeItemId`    | `brand_knowledge_item(workspaceId,id)`     | `CASCADE`                          |
+
+The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
+rather than the four tables F-80 happened to name. `brand_source_document`,
+`brand_brain_conversation` and `brand_knowledge_item` each carry the `@@unique([workspaceId, id])`
+those keys reference. Every referential action is unchanged from Phase 5A.
+
+**A composite `ON DELETE SET NULL` names its column** (D-114). PostgreSQL nulls EVERY referencing
+column of a key, so a bare `SET NULL` on `(workspaceId, targetItemId)` would null `workspaceId` —
+which is `NOT NULL`, so the parent delete would FAIL rather than null the reference. The column list
+restricts it to the one nullable reference, and `pg_constraint.confdelsetcols` is what the isolation
+suite asserts. Prisma cannot express the list and warns about these three relations; the migration is
+hand-written for exactly that reason, and a migrations-only database still shows no drift.
+
+**A migration that validates tenant data must lift FORCE RLS to see it** (D-113). Migrations run as
+the table owner, `brandspace_migrator`, which no policy on these tables names; under FORCE RLS the
+owner therefore reads nothing, and `ADD CONSTRAINT FOREIGN KEY` will validate against an empty set
+and still mark the constraint valid. The migration lifts FORCE inside its own transaction — under the
+ACCESS EXCLUSIVE lock `ALTER TABLE` already holds, so no other session can observe it — and refuses
+to commit unless all eight tables are ENABLED and FORCED again.
+
+**An item with recorded history cannot be deleted at all**, and that is Phase 5A behaviour the
+composite key preserved rather than introduced: `brand_knowledge_version.knowledgeItemId` cascades,
+and the cascade reaches the append-only trigger, which refuses the DELETE and takes the statement
+with it.
+
+Migrations: `20260913140000_phase_5_brand_brain`,
+`20260914200000_f80_brand_brain_composite_foreign_keys`. Isolation coverage:
+`tests/isolation/phase5-tenancy.test.ts` (41 tests),
+`tests/isolation/f80-brand-brain-composite-keys.test.ts` (38 tests) and
+`tests/isolation/f80-migration-upgrade.test.ts` (15 tests).
 
 ### 4.2a `BrandKnowledge` — the original Phase 0 sketch
 
@@ -264,7 +307,8 @@ real shape and not a degenerate one (D-101).
 **Enums:** `AssetKind`, `AssetSource`, `AssetScanStatus`, `AssetStatus`, `AssetDerivativeKind`,
 `AssetUploadSessionStatus`, `AssetProcessingStage`.
 
-**Every intra-library foreign key is composite with `workspaceId` (D-99), and this is not belt-and-braces.**
+**Every intra-library foreign key is composite with `workspaceId` (D-99, generalised to the whole
+platform as D-112), and this is not belt-and-braces.**
 PostgreSQL evaluates referential integrity with RLS BYPASSED. A plain `folderId` column would therefore
 accept another workspace's folder id — and even where it did not, the difference between "inserted" and
 "constraint violated" answers the question _does this id exist in some workspace?_, which is exactly the
@@ -890,18 +934,19 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 
 ## 12. Constraints That Encode Business Rules
 
-| Rule                                   | Enforcement                                                                     |
-| -------------------------------------- | ------------------------------------------------------------------------------- |
-| Credit balance never negative          | `CHECK (currentBalance >= 0)` + `FOR UPDATE` lock                               |
-| No duplicate AI charge                 | `unique(AIRequest.idempotencyKey)` + `unique(CreditTransaction.idempotencyKey)` |
-| No double publish                      | `unique(PublishJob.idempotencyKey)` and `unique(variant, connection, slot)`     |
-| One active config per domain/env       | partial unique index on `status='active'`                                       |
-| One active credential per provider/env | partial unique index                                                            |
-| Brand belongs to workspace             | composite FK `(workspaceId, brandId)` referencing `Brand(workspaceId, id)`      |
-| Workspace keeps an owner               | transactional guard on membership/role change                                   |
-| Only approved content publishes        | guard on `CalendarSlot` transition + re-check at job execution time             |
-| Analytics ingestion is idempotent      | natural unique key + upsert                                                     |
-| Ledgers are append-only                | `REVOKE UPDATE, DELETE` from the application role                               |
+| Rule                                               | Enforcement                                                                                                          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Credit balance never negative                      | `CHECK (currentBalance >= 0)` + `FOR UPDATE` lock                                                                    |
+| No duplicate AI charge                             | `unique(AIRequest.idempotencyKey)` + `unique(CreditTransaction.idempotencyKey)`                                      |
+| No double publish                                  | `unique(PublishJob.idempotencyKey)` and `unique(variant, connection, slot)`                                          |
+| One active config per domain/env                   | partial unique index on `status='active'`                                                                            |
+| One active credential per provider/env             | partial unique index                                                                                                 |
+| Brand belongs to workspace                         | composite FK `(workspaceId, brandId)` referencing `Brand(workspaceId, id)`                                           |
+| A referenced row belongs to the caller's workspace | every tenant-to-tenant FK is composite on `workspaceId` against the parent's `unique(workspaceId, id)` (D-99, D-112) |
+| Workspace keeps an owner                           | transactional guard on membership/role change                                                                        |
+| Only approved content publishes                    | guard on `CalendarSlot` transition + re-check at job execution time                                                  |
+| Analytics ingestion is idempotent                  | natural unique key + upsert                                                                                          |
+| Ledgers are append-only                            | `REVOKE UPDATE, DELETE` from the application role                                                                    |
 
 ---
 

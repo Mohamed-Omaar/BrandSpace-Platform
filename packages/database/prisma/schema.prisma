@@ -1690,17 +1690,34 @@ model BrandKnowledgeItem {
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand                @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_item_brand_fkey")
-  source    BrandSourceDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83). Same oracle as the rest of the module, and
+  /// the same collapse to "is this a document in my OWN workspace".
+  ///
+  /// `onDelete: SetNull` here is `ON DELETE SET NULL ("sourceDocumentId")` in
+  /// the migration — the column list is NOT decoration. A bare SET NULL on a
+  /// composite key nulls EVERY referencing column, `workspaceId` included, and
+  /// `workspaceId` is NOT NULL, so deleting a source document would have begun
+  /// failing outright. Prisma has no syntax for the column list; the migration
+  /// carries it and D-114 records why.
+  source    BrandSourceDocument? @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_source_fkey")
 
   versions   BrandKnowledgeVersion[]
   candidates BrandKnowledgeCandidate[]
 
-  conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [conflictsWithItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83), and a SELF-reference, so the oracle it
+  /// closed was the sharpest kind: "is this id a knowledge item somewhere on
+  /// the platform" asked of the very table that holds every tenant's approved
+  /// brand knowledge. Column-scoped SET NULL, for the reason on `source`.
+  conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [workspaceId, conflictsWithItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_conflict_fkey")
   conflicting   BrandKnowledgeItem[] @relation("BrandKnowledgeConflict")
 
   /// One live item per key per area. A second row with the same key is an
   /// EDIT (a new version), not a duplicate — enforced here rather than hoped
   /// for in a service.
+  /// The composite target every child of an item points at (D-99, D-112, F-83)
+  /// — its versions, the candidates that would edit it, and the items that
+  /// conflict with it.
+  @@unique([workspaceId, id], name: "brand_knowledge_item_workspace_scope")
   @@unique([workspaceId, brandId, area, itemKey])
   @@index([workspaceId, brandId, area, status])
   @@index([workspaceId, brandId, status, memory])
@@ -1745,7 +1762,11 @@ model BrandKnowledgeVersion {
 
   workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand              @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_version_brand_fkey")
-  item      BrandKnowledgeItem @relation(fields: [knowledgeItemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83). The append-only history is the last place
+  /// a row should be attachable to another tenant's item: a version names the
+  /// title and body it recorded, so a misattached row is that tenant's approved
+  /// knowledge filed under someone else's identity.
+  item      BrandKnowledgeItem @relation(fields: [workspaceId, knowledgeItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_version_item_fkey")
 
   @@unique([knowledgeItemId, version])
   @@index([workspaceId, brandId, recordedAt(sort: Desc)])
@@ -1803,6 +1824,12 @@ model BrandSourceDocument {
   ingestionJobs  BrandIngestionJob[]
   knowledgeItems BrandKnowledgeItem[]
 
+  /// The composite target every child of a document points at (D-99, D-112,
+  /// F-80). `id` is already the primary key, so this constrains nothing new —
+  /// it exists because PostgreSQL requires a unique index behind a foreign key,
+  /// and a workspace-scoped key is what stops another tenant's document id from
+  /// being referenceable at all.
+  @@unique([workspaceId, id], name: "brand_source_document_workspace_scope")
   @@unique([workspaceId, brandId, checksum])
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, brandId, status])
@@ -1834,7 +1861,14 @@ model BrandSourceChunk {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_source_chunk_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80). A plain `sourceDocumentId` does NOT keep
+  /// the parent inside the tenant: PostgreSQL runs referential integrity with
+  /// RLS BYPASSED, so a chunk carrying its own workspaceId was accepted against
+  /// ANOTHER workspace's document — and the difference between "inserted" and
+  /// "constraint violated" answered *does this document id exist?*. Pairing the
+  /// reference with `workspaceId` collapses that to "is this a document in my
+  /// OWN workspace", which discloses nothing.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_source_chunk_document_fkey")
 
   @@unique([sourceDocumentId, chunkIndex])
   @@index([workspaceId, brandId])
@@ -1884,8 +1918,16 @@ model BrandKnowledgeCandidate {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_candidate_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  target    BrandKnowledgeItem? @relation(fields: [targetItemId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-83), for the reason on
+  /// `BrandSourceChunk.document`.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_candidate_document_fkey")
+  /// COMPOSITE (D-99, D-112, F-83). This one crosses the GOVERNANCE boundary:
+  /// `targetItemId` is the item a candidate would edit once accepted, so a
+  /// foreign id here pointed the review screen's diff at another tenant's
+  /// approved knowledge. NULL is legal and means "proposes something new",
+  /// which MATCH SIMPLE exempts by construction. Column-scoped SET NULL, for
+  /// the reason on `BrandKnowledgeItem.source`.
+  target    BrandKnowledgeItem? @relation(fields: [workspaceId, targetItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_target_fkey")
 
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, area, status])
@@ -1930,7 +1972,11 @@ model BrandIngestionJob {
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_ingestion_job_brand_fkey")
-  document  BrandSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80), for the reason on
+  /// `BrandSourceChunk.document`. A job is the strongest form of the oracle: a
+  /// queued job is observable in the UI, so a reference that merely fails later
+  /// still answers the question at insert time.
+  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_ingestion_job_document_fkey")
 
   @@index([workspaceId, brandId, stage])
   @@index([stage, nextAttemptAt])
@@ -1964,6 +2010,9 @@ model BrandBrainConversation {
 
   messages BrandBrainMessage[]
 
+  /// The composite target every message points at (D-99, D-112, F-80). See the
+  /// note on `BrandSourceDocument`.
+  @@unique([workspaceId, id], name: "brand_brain_conversation_workspace_scope")
   @@index([workspaceId, brandId, lastMessageAt(sort: Desc)])
   @@index([expiresAt])
   @@map("brand_brain_conversation")
@@ -2008,7 +2057,11 @@ model BrandBrainMessage {
 
   workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand        Brand                  @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_brain_message_brand_fkey")
-  conversation BrandBrainConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// COMPOSITE (D-99, D-112, F-80). The chat oracle was the sharpest of the
+  /// three: posting into another workspace's conversation id SUCCEEDED, so a
+  /// leaked id was not merely probeable but writable — the message landed in a
+  /// conversation its author could not read.
+  conversation BrandBrainConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_brain_message_conversation_fkey")
 
   @@unique([workspaceId, idempotencyKey])
   @@index([conversationId, createdAt])
