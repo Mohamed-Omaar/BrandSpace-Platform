@@ -98,17 +98,37 @@ async function main(): Promise<void> {
       async (db) => {
         /*
          * A BRAND IS REQUIRED, because content is brand-scoped and the
-         * composite foreign key says so. The end-to-end suites create one
-         * through the Brand Brain screen; if none exists yet there is nothing
-         * to attach a draft to, and saying so is better than inventing one that
-         * the product's own flow would not have made.
+         * composite foreign key says so.
+         *
+         * THE SEED CREATES ONE IF NONE EXISTS, rather than bailing. Bailing was
+         * the first version and it failed in CI for a reason that only shows up
+         * there: on a developer's reused database a brand is always left over
+         * from an earlier run, and on a FRESH one — which is what CI has — the
+         * brands are created by the suites DURING the run, long after the seed
+         * has finished. So the seed wrote nothing, the calendar had nothing to
+         * schedule, and AC-14.1's end-to-end proof failed on the one machine it
+         * most needed to run.
+         *
+         * A fixture's job is to establish its own precondition. `seed-visual`
+         * already creates a brand for the same reason.
          */
-        const brand = await db.brand.findFirst({
+        const existingBrand = await db.brand.findFirst({
           where: { deletedAt: null },
           orderBy: { createdAt: 'asc' },
           select: { id: true },
         });
-        if (!brand) return { created: false as const };
+        const brand =
+          existingBrand ??
+          (await db.brand.create({
+            data: {
+              workspaceId,
+              slug: 'e2e-content-fixture',
+              name: 'E2E Content Fixture',
+              defaultLocale: 'EN',
+              status: 'ACTIVE',
+            },
+            select: { id: true },
+          }));
 
         const existing = await db.contentItem.findFirst({
           where: { idempotencyKey: IDEMPOTENCY_KEY },
@@ -180,11 +200,6 @@ async function main(): Promise<void> {
       { prisma },
     );
 
-    if (!result.created && !('id' in result)) {
-      console.log('\n• No brand exists yet, so no schedulable draft was seeded.');
-      console.log('  The calendar suite will skip its scheduling test, and say so.');
-      return;
-    }
     console.log(`\n✔ Schedulable draft ${'replayed' in result ? 'reset' : 'created'}: ${TITLE}`);
     console.log('  One DRAFT item with one caption. Nothing is scheduled and nothing publishes.');
   } finally {
