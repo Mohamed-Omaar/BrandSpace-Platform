@@ -1,8 +1,8 @@
 import { formatLocalTime, partsInZone } from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { systemClock } from '@brandspace/shared';
 import type { CalendarDay, PostRecord, SocialPlatform } from '@brandspace/ui';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -80,18 +80,6 @@ export default async function CalendarPage({
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
 
-  const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    db.brand.findMany({
-      where: {
-        deletedAt: null,
-        status: { in: ['ACTIVE', 'DRAFT'] },
-        ...brandScopeFilter(workspace.brandScope),
-      },
-      select: { id: true, name: true },
-    }),
-  );
-  const brandIds = new Set(brands.map((brand) => brand.id));
-
   const data = await inContentStudio(workspace.workspaceId, async (services) => {
     const calendar = await services.calendar();
     const library = await services.library();
@@ -100,16 +88,22 @@ export default async function CalendarPage({
     const now = systemClock.now();
     const { year, month } = requestedMonth(single('month'), timezone, now);
 
-    const views = await calendar.monthView({ year, month });
     /*
-     * THE MEMBER'S OWN BRANDS. RLS already keeps another tenant's slots out;
-     * this keeps a brand outside the member's scope out too, and it filters
-     * rather than refusing — the same reason the content library does
-     * (docs/SECURITY.md §4.2, F-74).
+     * THE MEMBER'S OWN BRANDS, APPLIED IN THE QUERY.
+     *
+     * RLS already keeps another tenant's slots out; the scope keeps a brand
+     * outside this member's own scope out too. It used to be a `.filter()`
+     * over the whole workspace's month — which fetched rows the reader may not
+     * see so that JavaScript could drop them, and would have made any count or
+     * page boundary computed from the list a boundary over invisible rows.
+     * `brandIdScopeFilter` reads an empty scope as UNRESTRICTED, which is the
+     * platform rule, so passing it straight through is correct for both cases.
      */
-    const visible = views.filter(
-      (view) => workspace.brandScope.length === 0 || brandIds.has(view.slot.brandId),
-    );
+    const visible = await calendar.monthView({
+      year,
+      month,
+      brandScope: workspace.brandScope,
+    });
 
     /*
      * DRAFTS THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
@@ -117,11 +111,9 @@ export default async function CalendarPage({
      * refuses it — so offering it in the picker would be offering a choice that
      * fails. The list is what the service would accept, computed the same way.
      */
-    const schedulable = (await library.listItems({ status: 'DRAFT', limit: 200 })).filter(
-      (item) =>
-        item.variants.length > 0 &&
-        (workspace.brandScope.length === 0 || brandIds.has(item.brandId)),
-    );
+    const schedulable = (
+      await library.listItems({ status: 'DRAFT', limit: 200, brandScope: workspace.brandScope })
+    ).filter((item) => item.variants.length > 0);
 
     const [quotaLimit, counter] = await Promise.all([
       services.entitlements.limit(workspace.workspaceId, QUOTA_FEATURES.scheduledPostsPerMonth),
@@ -135,7 +127,6 @@ export default async function CalendarPage({
       timezone,
       year,
       month,
-      views,
       visible,
       schedulable,
       quotaLimit,

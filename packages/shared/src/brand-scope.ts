@@ -95,3 +95,46 @@ export function brandIdScopeFilter(brandScope: readonly string[] | null | undefi
   if (!brandScope || brandScope.length === 0) return {};
   return { brandId: { in: [...brandScope] } };
 }
+
+/**
+ * THE ONE WAY TO COMBINE A CALLER'S BRAND FILTER WITH THEIR AUTHORIZATION
+ * SCOPE. Returns an `AND` so the two INTERSECT and neither can replace the
+ * other.
+ *
+ * WHY THIS EXISTS RATHER THAN TWO SPREADS. The obvious composition is wrong in
+ * a way that reads as correct:
+ *
+ *     ...(input.brandId ? { brandId: input.brandId } : {}),
+ *     ...brandIdScopeFilter(input.brandScope),
+ *
+ * Both fragments set the SAME key, and in an object literal the later one
+ * WINS — so a non-empty scope silently REPLACED the caller's explicit brand
+ * rather than narrowing it. That is the identical "later key wins" defect the
+ * Activity Log was corrected for, reintroduced one milestone later by the very
+ * change that was meant to make scope a query predicate. A helper that can only
+ * produce an `AND` is the way it stops recurring.
+ *
+ * THE SEMANTICS, stated so the tests can assert them directly:
+ *
+ *   | `brandId` | `brandScope` | result                                |
+ *   | --------- | ------------ | ------------------------------------- |
+ *   | —         | `[]`         | unrestricted within the workspace     |
+ *   | —         | `[A]`        | only A                                |
+ *   | B         | `[]`         | only B                                |
+ *   | A         | `[A, B]`     | only A                                |
+ *   | C         | `[A, B]`     | nothing — C is outside the scope      |
+ *
+ * The last row matters: an out-of-scope `brandId` yields an empty result rather
+ * than an error, which is the masked-empty behaviour §2.1 asks for — a member
+ * learns nothing about whether brand C exists.
+ */
+export function brandIdQueryFilter(input: {
+  brandId?: string | undefined;
+  brandScope?: readonly string[] | null | undefined;
+}): { AND: { brandId?: string | { in: string[] } }[] } {
+  const clauses: { brandId?: string | { in: string[] } }[] = [];
+  if (input.brandId) clauses.push({ brandId: input.brandId });
+  const scope = brandIdScopeFilter(input.brandScope);
+  if (scope.brandId) clauses.push(scope);
+  return { AND: clauses };
+}

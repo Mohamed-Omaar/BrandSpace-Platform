@@ -5,7 +5,13 @@ import {
   type ContentVariant,
   type Locale,
 } from '@brandspace/database';
-import { AppError, assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import {
+  AppError,
+  assertBrandInScope,
+  brandIdQueryFilter,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
 import { BrandBrainRetriever, fenceUntrusted, type Citation } from '@brandspace/brand-brain';
 import {
@@ -314,9 +320,14 @@ export class ContentStudioService extends ContentLibraryService {
     planKey: string | null;
     actorBrandScope: readonly string[];
   }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
-    const variant = await this.db.contentVariant.findUnique({ where: { id: input.variantId } });
+    // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
+    const variant = await this.db.contentVariant.findFirst({
+      where: {
+        id: input.variantId,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+    });
     if (!variant) throw contentItemNotFound();
-    assertBrandInScope(input.actorBrandScope, variant.brandId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();

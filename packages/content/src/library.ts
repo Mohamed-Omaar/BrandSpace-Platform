@@ -5,7 +5,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope } from '@brandspace/shared';
+import { brandIdQueryFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
 import { validateVariant } from './validation';
@@ -57,6 +57,18 @@ export class ContentLibraryService {
 
   async listItems(input: {
     brandId?: string | undefined;
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED —
+     * the platform rule `brandInScope()` has carried since Phase 2B.
+     *
+     * APPLIED IN THE QUERY, AND THAT MATTERS HERE MORE THAN ANYWHERE. `limit`
+     * is applied by the database, so a caller that filtered by brand AFTER
+     * this returned would be filtering a page that had already been truncated:
+     * a member scoped to one brand, in a workspace whose most recent 200
+     * drafts belong to another, would be shown nothing at all and told it was
+     * empty. The calendar's draft picker did exactly that.
+     */
+    brandScope?: readonly string[] | null | undefined;
     status?: ContentItem['status'] | undefined;
     search?: string | undefined;
     limit?: number | undefined;
@@ -64,7 +76,8 @@ export class ContentLibraryService {
     return this.db.contentItem.findMany({
       where: {
         deletedAt: null,
-        ...(input.brandId ? { brandId: input.brandId } : {}),
+        // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
         ...(input.status ? { status: input.status } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
@@ -84,12 +97,23 @@ export class ContentLibraryService {
   }
 
   /** Counts per status, for the library's tabs. One query, not six. */
-  async countsByStatus(
-    brandId?: string | undefined,
-  ): Promise<Record<ContentItem['status'], number>> {
+  async countsByStatus(input?: {
+    brandId?: string | undefined;
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED.
+     *
+     * A COUNT IS A DISCLOSURE. Without this, the library's status tabs told a
+     * member scoped to one brand how many drafts, approved items and archived
+     * items the workspace's OTHER brands hold — a number they could watch move.
+     */
+    brandScope?: readonly string[] | null | undefined;
+  }): Promise<Record<ContentItem['status'], number>> {
     const rows = await this.db.contentItem.groupBy({
       by: ['status'],
-      where: { deletedAt: null, ...(brandId ? { brandId } : {}) },
+      where: {
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandId: input?.brandId, brandScope: input?.brandScope }),
+      },
       _count: { _all: true },
     });
     const counts = {} as Record<ContentItem['status'], number>;
@@ -97,9 +121,26 @@ export class ContentLibraryService {
     return counts;
   }
 
-  async getItem(itemId: string): Promise<ContentItem & { variants: ContentVariant[] }> {
-    const item = await this.db.contentItem.findUnique({
-      where: { id: itemId },
+  async getItem(
+    itemId: string,
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED.
+     *
+     * A PREDICATE, NOT AN AFTERTHOUGHT (D-132). The composer used to fetch the
+     * item and then compare `item.brandId` against the scope in JavaScript.
+     * The outcome was the same — a 404 either way — but the row was read
+     * first, so the check lived in a caller that could forget it, and every
+     * future caller had to remember. Refusing in the `where` means a draft
+     * outside the member's brands is NOT FOUND to the database, which is the
+     * same answer a draft that never existed gives.
+     */
+    brandScope?: readonly string[] | null | undefined,
+  ): Promise<ContentItem & { variants: ContentVariant[] }> {
+    const item = await this.db.contentItem.findFirst({
+      where: {
+        id: itemId,
+        ...brandIdQueryFilter({ brandScope }),
+      },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
@@ -115,9 +156,13 @@ export class ContentLibraryService {
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
-    const variant = await this.db.contentVariant.findUnique({ where: { id: input.variantId } });
+    // D-132: the scope is a predicate, so an out-of-scope variant is never
+    // retrieved. Empty scope remains unrestricted; the refusal is the same
+    // not-found a genuine miss gives.
+    const variant = await this.db.contentVariant.findFirst({
+      where: { id: input.variantId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
+    });
     if (!variant) throw contentItemNotFound();
-    assertBrandInScope(input.actorBrandScope, variant.brandId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
@@ -226,9 +271,11 @@ export class ContentLibraryService {
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentItem> {
-    const item = await this.db.contentItem.findUnique({ where: { id: input.itemId } });
+    // D-132, as in `editVariant` above.
+    const item = await this.db.contentItem.findFirst({
+      where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
+    });
     if (!item || item.deletedAt) throw contentItemNotFound();
-    assertBrandInScope(input.actorBrandScope, item.brandId);
 
     const allowed: Record<string, readonly string[]> = {
       DRAFT: ['ARCHIVED'],

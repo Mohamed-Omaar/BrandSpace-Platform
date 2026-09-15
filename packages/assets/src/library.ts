@@ -9,7 +9,12 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
-import { assertAssetBrandInScope, assertPermission, type AssetActor } from './actor';
+import {
+  assetBrandScopeFilter,
+  assertAssetBrandInScope,
+  assertPermission,
+  type AssetActor,
+} from './actor';
 import {
   assetNotFound,
   assetNotUsable,
@@ -144,11 +149,14 @@ export class AssetLibraryService {
 
   async get(assetId: string, actor: AssetActor): Promise<Asset> {
     assertPermission(actor, 'assets.read');
-    const asset = await this.#db.asset.findUnique({ where: { id: assetId } });
     // Another workspace's asset is invisible to RLS and arrives as null — the
     // same answer a missing one gives, which is the point (CLAUDE.md §2.1).
+    // D-132 puts the BRAND scope in the same place, so an out-of-scope asset
+    // is refused by the query rather than after it.
+    const asset = await this.#db.asset.findFirst({
+      where: { id: assetId, ...assetBrandScopeFilter(actor) },
+    });
     if (!asset || asset.deletedAt !== null) throw assetNotFound();
-    assertAssetBrandInScope(actor, asset.brandId);
     return asset;
   }
 
@@ -234,7 +242,7 @@ export class AssetLibraryService {
        * brand.
        */
       if (input.folderId !== null) {
-        await this.#assertFolderAccepts(input.folderId, asset.brandId);
+        await this.#assertFolderAccepts(input.folderId, asset.brandId, input.actor);
       }
       data.folderId = input.folderId;
     }
@@ -367,7 +375,7 @@ export class AssetLibraryService {
     if (name === '') throw new AppError('VALIDATION_FAILED', 'A folder name is required.');
 
     if (input.parentFolderId !== null) {
-      const parent = await this.#loadFolder(input.parentFolderId);
+      const parent = await this.#loadFolder(input.parentFolderId, input.actor);
       if (parent.brandId !== input.brandId) throw folderNotFound();
       const depth = await this.#depthOf(parent.id);
       /*
@@ -417,8 +425,7 @@ export class AssetLibraryService {
     readonly name: string;
   }): Promise<AssetFolder> {
     assertPermission(input.actor, 'assets.manage_taxonomy');
-    const folder = await this.#loadFolder(input.folderId);
-    assertAssetBrandInScope(input.actor, folder.brandId);
+    const folder = await this.#loadFolder(input.folderId, input.actor);
     const name = input.name.trim();
     if (name === '') throw new AppError('VALIDATION_FAILED', 'A folder name is required.');
 
@@ -445,12 +452,11 @@ export class AssetLibraryService {
     readonly parentFolderId: string | null;
   }): Promise<AssetFolder> {
     assertPermission(input.actor, 'assets.manage_taxonomy');
-    const folder = await this.#loadFolder(input.folderId);
-    assertAssetBrandInScope(input.actor, folder.brandId);
+    const folder = await this.#loadFolder(input.folderId, input.actor);
 
     if (input.parentFolderId !== null) {
       if (input.parentFolderId === folder.id) throw folderCycle();
-      const parent = await this.#loadFolder(input.parentFolderId);
+      const parent = await this.#loadFolder(input.parentFolderId, input.actor);
       if (parent.brandId !== folder.brandId) throw folderNotFound();
       /*
        * A FOLDER CANNOT BE MOVED INSIDE ITS OWN SUBTREE.
@@ -500,8 +506,7 @@ export class AssetLibraryService {
    */
   async deleteFolder(input: { actor: AssetActor; folderId: string }): Promise<void> {
     assertPermission(input.actor, 'assets.manage_taxonomy');
-    const folder = await this.#loadFolder(input.folderId);
-    assertAssetBrandInScope(input.actor, folder.brandId);
+    const folder = await this.#loadFolder(input.folderId, input.actor);
 
     const [assetCount, childCount] = await Promise.all([
       this.#db.asset.count({ where: { folderId: folder.id, deletedAt: null } }),
@@ -591,14 +596,28 @@ export class AssetLibraryService {
     return unique;
   }
 
-  async #loadFolder(folderId: string): Promise<AssetFolder> {
-    const folder = await this.#db.assetFolder.findUnique({ where: { id: folderId } });
+  /**
+   * D-132: the ACTOR is required, so the brand scope is applied in the query.
+   *
+   * It is a parameter rather than something a caller may forget: every folder
+   * read went through here already, so making the scope part of the signature
+   * means a new caller cannot reintroduce the post-read form without deleting
+   * an argument the compiler demands.
+   */
+  async #loadFolder(folderId: string, actor: AssetActor): Promise<AssetFolder> {
+    const folder = await this.#db.assetFolder.findFirst({
+      where: { id: folderId, ...assetBrandScopeFilter(actor) },
+    });
     if (!folder || folder.deletedAt !== null) throw folderNotFound();
     return folder;
   }
 
-  async #assertFolderAccepts(folderId: string, brandId: string | null): Promise<void> {
-    const folder = await this.#loadFolder(folderId);
+  async #assertFolderAccepts(
+    folderId: string,
+    brandId: string | null,
+    actor: AssetActor,
+  ): Promise<void> {
+    const folder = await this.#loadFolder(folderId, actor);
     if (folder.brandId !== null && folder.brandId !== brandId) throw folderNotFound();
   }
 

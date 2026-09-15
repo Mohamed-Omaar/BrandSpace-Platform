@@ -8,7 +8,12 @@ import {
 import { QUOTA_FEATURES, QuotaExceededError, type UsageService } from '@brandspace/entitlements';
 import { checksumOf, type ObjectStore } from '@brandspace/storage';
 import { type Clock, systemClock } from '@brandspace/shared';
-import { assertAssetBrandInScope, assertPermission, type AssetActor } from './actor';
+import {
+  assetBrandScopeFilter,
+  assertAssetBrandInScope,
+  assertPermission,
+  type AssetActor,
+} from './actor';
 import {
   assetLimitReached,
   contentTypeMismatch,
@@ -248,13 +253,13 @@ export class AssetUploadService {
   }): Promise<{ asset: Asset; job: AssetProcessingJob | null; replayed: boolean }> {
     assertPermission(input.actor, 'assets.upload');
 
-    const session = await this.#db.assetUploadSession.findUnique({
-      where: { id: input.sessionId },
-    });
     // A session in another workspace is invisible to RLS and arrives here as
-    // null — the same answer a session that never existed gives.
+    // null — the same answer a session that never existed gives. D-132 puts the
+    // BRAND scope in the same place rather than checking it after the read.
+    const session = await this.#db.assetUploadSession.findFirst({
+      where: { id: input.sessionId, ...assetBrandScopeFilter(input.actor) },
+    });
     if (!session) throw uploadSessionNotFound();
-    assertAssetBrandInScope(input.actor, session.brandId);
 
     // REPLAY. The session already produced an asset; return it untouched.
     if (session.status === 'COMPLETED' && session.assetId !== null) {

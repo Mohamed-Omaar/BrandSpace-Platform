@@ -1,6 +1,6 @@
 import type { Asset, TenantScopedClient } from '@brandspace/database';
 import type { DownloadDisposition, DownloadGrant, DownloadGrantIssuer } from '@brandspace/storage';
-import { assertAssetBrandInScope, assertPermission, type AssetActor } from './actor';
+import { assetBrandScopeFilter, assertPermission, type AssetActor } from './actor';
 import { assetNotFound, assetNotUsable } from './errors';
 import { isSelectable } from './library';
 import type { AssetPolicy } from './policy';
@@ -63,11 +63,13 @@ export class AssetDownloadService {
   }): Promise<{ asset: Asset; grant: DownloadGrant }> {
     assertPermission(input.actor, 'assets.read');
 
-    const asset = await this.#db.asset.findUnique({ where: { id: input.assetId } });
     // Another workspace's asset is invisible to RLS and arrives as null — the
-    // same answer a missing one gives.
+    // same answer a missing one gives. D-132 puts the BRAND scope in the same
+    // place, so an out-of-scope asset is equally never read.
+    const asset = await this.#db.asset.findFirst({
+      where: { id: input.assetId, ...assetBrandScopeFilter(input.actor) },
+    });
     if (!asset || asset.deletedAt !== null) throw assetNotFound();
-    assertAssetBrandInScope(input.actor, asset.brandId);
     if (!isSelectable(asset)) throw assetNotUsable();
 
     const grant = this.#issuer.issue({
@@ -104,9 +106,12 @@ export class AssetDownloadService {
   }): Promise<DownloadGrant> {
     assertPermission(input.actor, 'assets.read');
 
-    const asset = await this.#db.asset.findUnique({ where: { id: input.assetId } });
+    // D-132: the scope is part of the WHERE, so an out-of-scope row is never
+    // read. `assetBrandScopeFilter` keeps the NULL-brand (workspace-level) rule.
+    const asset = await this.#db.asset.findFirst({
+      where: { id: input.assetId, ...assetBrandScopeFilter(input.actor) },
+    });
     if (!asset || asset.deletedAt !== null) throw assetNotFound();
-    assertAssetBrandInScope(input.actor, asset.brandId);
 
     const version = await this.#db.assetVersion.findFirst({
       where: { assetId: asset.id, versionNumber: input.versionNumber },

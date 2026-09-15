@@ -1703,3 +1703,279 @@ and assignment all refused), `tests/isolation/approval-recipients.test.ts` (neve
 a recipient), and `tests/unit/approvals-activity-notifications.test.ts` (the
 role's exact permission list, and the configuration refusing to activate the
 reserved field).
+
+## 27. Cross-phase technical audit — Phase 0 through Phase 5B-3
+
+The audit before Social Publishing begins. It looked across phase boundaries
+rather than inside one milestone, which is where the findings were: each was
+correct when it was written, and became wrong when a later decision made the
+rule broader than the code that implemented it.
+
+### 27.1 D-112 had never left Brand Brain
+
+D-112 made the composite workspace-scoped foreign key a **platform-wide** rule,
+but it was written while fixing F-80/F-83 and applied to those eight keys only.
+Parsing every `@relation` in the schema found five older relationships still
+referencing a tenant-owned parent by id alone:
+
+| Relationship                                          | Phase | Demonstrated                         |
+| ----------------------------------------------------- | ----- | ------------------------------------ |
+| `credit_transaction."walletId"` → `credit_wallet(id)` | 3     | **ACCEPTED** a cross-workspace write |
+| `credit_grant."walletId"` → `credit_wallet(id)`       | 3     | same shape                           |
+| `credit_reservation."walletId"` → `credit_wallet(id)` | 3     | same shape                           |
+| `ai_usage_ledger."aiRequestId"` → `ai_request(id)`    | 4     | **ACCEPTED** a cross-workspace write |
+| `ai_usage_ledger."correctsLedgerId"` → itself         | 4     | same shape, self-referential         |
+
+**Two were confirmed before the fix was written**, from inside workspace A
+against workspace B's rows. The credit keys are the worse pair: they attach a
+MONEY LEDGER row to another tenant's wallet. The application never does this —
+it resolves the wallet from the workspace in `#lockWallet` and never accepts a
+wallet id from input — and that is exactly why this survived four phases.
+CLAUDE.md §2.1 requires two independent layers; the second was open.
+
+All five are now composite on `workspaceId`
+(`20260915234500_d112_credit_and_ai_composite_foreign_keys`), written in the
+same shape as `20260914200000`: lift FORCE RLS so the pre-flight can see real
+rows, refuse with counts and never identifiers, add the referenced uniques,
+swap each key, restore FORCE and **assert** it.
+
+`tests/isolation/d112-credit-and-ai-composite-keys.test.ts` proves the
+relationships still work, that a foreign parent is refused, and — the assertion
+that makes the refusals sufficient — that **a real foreign id and a fabricated
+one fail identically**, down to SQLSTATE and constraint name. Restoring the
+plain key fails the suite.
+
+### 27.2 `role` is the documented exception, and has a trigger instead
+
+`role`'s tenant key is NULLABLE: a system role is shared by every workspace, a
+custom role belongs to one. A child whose `workspaceId` is NOT NULL can never
+match a parent whose `workspaceId` IS NULL, so a composite key is impossible by
+construction rather than merely absent.
+
+The gap was real: workspace B could write an `invitation` naming workspace A's
+custom role, and **permissions resolve straight through `membership.roleId`**.
+The application already refused it (`packages/auth/src/invitations.ts`), so this
+was a defence-in-depth gap rather than a reachable exploit — the same shape as
+the credit keys, one layer up.
+
+`app.role_reference_is_workspace_scoped()` now guards `membership` and
+`invitation`. It reads `role` as the **invoker**, deliberately: in a tenant
+context `role`'s own RLS policy is already exactly this rule, so another
+workspace's role is simply invisible and "not found" IS the tenancy check; in a
+platform context every role is visible and the explicit comparison refuses a
+cross-wired write. A system role is visible under both policies, so workspace
+provisioning — the flow most at risk from a trigger here — is untouched, and
+the 176 auth and tenancy assertions confirm it.
+
+### 27.3 BrandScope was applied after retrieval on the calendar
+
+Recorded as **D-132**. The calendar page fetched the workspace's whole month and
+dropped out-of-scope brands in JavaScript. Nothing leaked across tenants — RLS
+held — but `listItems` applies `limit` in the database, so filtering afterwards
+filtered an already-truncated page: **a member scoped to one brand, in a
+workspace whose newest drafts belong to another, was shown nothing to schedule
+and told it was empty.** That is a customer-visible bug, not an architectural
+preference. Both services now take `brandScope` and apply it in the `where`.
+`tests/isolation/brand-scope-query-pushdown.test.ts` pins it, including the
+truncation case that reproduces the original defect.
+
+### 27.4 What was audited and found correct
+
+Recorded because a clean result is a result:
+
+- **Server authorization.** Every customer-facing mutation resolves its
+  workspace, role, permissions and BrandScope from the SESSION, never the form.
+  Every dashboard action names a permission except the two notification actions,
+  which are membership-only by design and scoped to the reader's own id. The API
+  enforces a route/permission contract **at registration**, so a non-public
+  route that declares no permission fails to start.
+- **`client_viewer`** is exactly `['workspace.read']`, and `mayApproveForBrand`
+  accepts neither a role key nor a policy (D-130). No Client Portal, client
+  hand-off or Viewer-approval behaviour is reachable.
+- **Localization.** 577/577 dashboard and 151/151 admin keys exist in both
+  locales, and **every Arabic value contains Arabic characters** — there are no
+  untranslated placeholders hiding behind a present key.
+- **Append-only ledgers.** `credit_transaction` and `ai_usage_ledger` refuse
+  DELETE even to the table owner; this was met head-on while clearing probe rows
+  and is working as designed.
+
+### 27.5 Deferred, with reasons
+
+- **Calendar drag-to-reschedule** stays deferred. Moving a slot is implemented
+  and fully keyboard-operable; native drag has no accessible equivalent this
+  module has built, and shipping the mouse half alone would exclude exactly the
+  people WCAG 2.2 AA is for. Adding it in an audit milestone would be the
+  feature expansion this milestone is not.
+- **`RolePermission`** carries no tenant key of its own and inherits the role's,
+  so it raises no cross-tenant question and was deliberately left alone.
+- **Phase 8 retention** remains the recorded launch dependency (D-116, D-117).
+  This milestone did not build a retention engine.
+
+### 27.6 The review of the audit — four things the first pass got wrong
+
+A code-level review of the audit's own head found four gaps. Recording them
+here rather than quietly amending §27.1–27.5, because three of the four are the
+same lesson: **a rule is only as good as the thing that enforces it**, and the
+first pass wrote rules while leaving the enforcement one size too small.
+
+**F-09 (High) — the D-112 migration was not atomic.** It lifts FORCE ROW LEVEL
+SECURITY on six tables and restores it at the end, and its comments claimed a
+RAISE would "leave the database exactly as it was". **It would not have.**
+Prisma does not wrap a migration file in a transaction — `20260914200000` §0
+records exactly this (D-113) and opens one explicitly — so the `NO FORCE`
+statements would have committed individually and a failing pre-flight would have
+left six tables readable by their owner outside RLS. No later migration could
+repair that: a later migration only runs once this one is marked resolved.
+
+Corrected in the migration itself, before merge, and proved by making it fail on
+purpose: `tests/isolation/d112-migration-atomicity.test.ts` plants an offending
+row, runs the migration through `psql` the way Prisma runs it, asserts the
+refusal, and then asks the catalogue whether all six tables are still
+ENABLE + FORCE. With `BEGIN`/`COMMIT` removed the suite reports
+`credit_wallet … { enabled: true, forced: false }` — the regression, visible.
+The same treatment was applied to the role-trigger migration, which also gained
+a **count-only pre-flight over existing rows**: a trigger guards future writes
+and says nothing about rows already present, and it REFUSES rather than
+repairing, because rebinding somebody's role changes who can do what.
+
+**F-10 (High) — D-132 was only half-applied.** The Content page scoped the brand
+_dropdown_ and not the _items_: `listItems` was called without the membership
+scope, and `countsByStatus` had no scope parameter at all. A member restricted to
+one brand received every other brand's titles and metadata as soon as they
+cleared the filter, and the status tabs counted those rows. **A count is a
+disclosure** — a number the reader can watch move. Both now take `brandScope`,
+as does `getItem`, whose scope check the composer used to perform in JavaScript
+_after_ reading the row.
+
+**F-11 (Medium-High) — an explicit brand and the scope overwrote each other.**
+The first pass composed them as two spreads setting the same key:
+
+```ts
+...(input.brandId ? { brandId: input.brandId } : {}),
+...brandIdScopeFilter(input.brandScope),
+```
+
+The later key wins, so a non-empty scope silently **replaced** the caller's
+explicit brand instead of narrowing it: asking for brand A while scoped to
+`[A, B]` returned both. This is the identical "later key wins" defect §26.1
+corrected in the Activity Log, reintroduced one milestone later by the change
+meant to make scope a predicate. `brandIdQueryFilter` can only emit an `AND`,
+and the six-row intersection matrix in
+`tests/isolation/brand-scope-query-pushdown.test.ts` fails on the defective
+form.
+
+**F-12 (Medium-High) — D-112 was not actually machine-enforced.** D-131 claimed
+the schema was machine-checked; it was not. The whole-module guard F-80 shipped
+is scoped `relname LIKE 'brand%'`, and the new suite tested the five keys it had
+just fixed. **That is precisely how the Phase 3 and Phase 4 keys survived a rule
+that already forbade them.** `d112-platform-wide-invariant.test.ts` now reads the
+authoritative tenant-owned registry, asks the catalogue for every single-column
+key between two tenant-owned tables, and allows two structural exceptions — the
+`workspace` anchor, and `role`, whose exclusion is backed by an assertion that
+its trigger exists. Restoring one plain key fails it by name.
+
+### 27.7 The second review of the audit — three that mattered, one that widened
+
+A further security review of the corrected head found three more, and the first
+of them was a hole the correction itself had opened. All three share the shape
+of §27.6: the rule was right, the thing enforcing it was one size too small.
+
+**F-13 (High) — the D-131 trigger accepted PLATFORM roles.** `membership.roleId`
+and `invitation.roleId` cannot take the composite key D-112 mandates, because
+`role` has a nullable tenant key, so §27.2 substituted a trigger. That trigger
+read `role."workspaceId" IS NULL` as "a system role, shared by every workspace".
+**It is not.** Two different things carry a NULL workspace:
+
+- WORKSPACE-realm system roles — `owner`, `admin`, `editor`, `client_viewer` —
+  which genuinely are shared, and
+- **every PLATFORM-realm role**, `platform_owner` among them, which belongs to
+  the Control Center and to no workspace at all.
+
+`role`'s RLS policy is `"workspaceId" IS NULL OR "workspaceId" =
+app.current_workspace_id()`, so a tenant session can **see** every platform
+role; and `customer-session.ts` computes `permissionKeys` straight from
+`membership.role.permissions` without ever checking the realm. A membership
+bound to `platform_owner` would therefore have carried the entire platform
+permission set into a customer session. This was demonstrated, not inferred:
+from inside a tenant context, an invitation naming `platform_owner` was
+**accepted**.
+
+The trigger now checks the REALM FIRST and refuses anything that is not
+`realm = 'WORKSPACE'`, regardless of `workspaceId`; only then does it apply the
+same-workspace rule to custom roles. The migration's pre-flight was wrong in
+exactly the same way and was corrected with it — it had asked only about
+`workspaceId`, so a database already carrying such a binding would have passed
+and had the trigger installed behind it, declaring itself clean for ever after.
+It still REFUSES rather than repairing.
+
+Proved against real PostgreSQL through the unprivileged application role, which
+is the only place a trigger's behaviour can be settled:
+`tests/isolation/d131-role-realm.test.ts` covers all five cases — WORKSPACE
+system role accepted, this workspace's own custom role accepted, another
+workspace's custom role refused, **PLATFORM role refused**, fabricated id
+refused — on BOTH `membership` and `invitation`, asserts that a real foreign
+role and an invented one are refused **identically**, and confirms that raw SQL
+issued by the application role is refused too, so the guarantee does not rest on
+the service layer. Against the pre-fix trigger the suite reports
+`the write was ACCEPTED; the D-131 role trigger has regressed` on the platform
+case and on the direct-write case. `tests/isolation/d131-migration-preflight.test.ts`
+plants the binding in a throwaway database before the trigger exists and shows
+the migration refusing, atomically, with counts and no identifiers in the log.
+
+**F-14 (Medium) — D-132 was still a post-read check on every mutation path.**
+§27.3 moved the _read_ paths into the query predicate and left the paths that
+load a row in order to CHANGE it — `ContentCalendarService.#requireItem` and
+`#requireSlot`, `ContentLibraryService.editVariant` and `transition` — fetching
+by id and then calling `assertBrandInScope` in JavaScript.
+
+The outcome looked the same, which is why it survived: `assertBrandInScope`
+throws a NOT_FOUND by design (F-74). **It was not the same.** Measured on the
+defective form, a real out-of-scope content id answered
+`NOT_FOUND: Brand not found` while a fabricated one answered
+`NOT_FOUND: Content not found.` — two different messages for what must be one
+answer. CLAUDE.md §2.1 forbids exactly that distinction, and inside a workspace
+it let a brand-restricted member enumerate which ids were real.
+
+**The fix went wider than the four methods reported**, because the same pattern
+was found in nine more places the review had not named: `approvals.submit`,
+`decide`, `cancel`, `reviewSubject` and `historyForItem`; `studio.rewrite`;
+`knowledge.upsert`, `rollback`, `archiveItem` and `promoteCandidate`; and the
+asset library's asset, upload-session and folder reads. All now carry the scope
+in the `where`. Assets needed their own helper: a workspace-level asset has
+`brandId IS NULL` and is legitimately visible to every member, and `brandId IN
+(…)` is never true of NULL, so `assetBrandScopeFilter` emits
+`OR [brandId IS NULL, brandId IN (…)]` and keeps the rule it replaces rather
+than becoming quietly stricter. An empty scope stays UNRESTRICTED everywhere.
+
+`AssetLibraryService.#loadFolder` now takes the actor as a required parameter,
+so a future caller cannot reintroduce the post-read form without deleting an
+argument the compiler demands.
+
+Two suites hold it. `tests/isolation/brand-scope-query-pushdown.test.ts` records
+the `where` of every read the mutation paths issue and asserts the brand
+predicate is in it — an outcome-only assertion would pass against the defect, so
+the test looks at the query; six of its cases fail against the post-read form.
+And because three consecutive reviews found this pattern in code the previous
+one had just corrected, `tests/unit/brand-scope-predicate-gate.test.ts` now
+enforces the rule over the SOURCE: the brand handed to a scope assertion must be
+one the caller supplied, never a property read off a row the service just
+fetched. Reintroducing the pattern anywhere in `packages/` fails it by file and
+line.
+
+**F-15 (Medium) — the D-112 gate's exemptions were too broad in one direction
+and too shallow in the other.** F-12's gate excluded `role` as a PARENT, which
+would have pre-authorised a brand-new tenant-owned table with its own plain
+`roleId`. Exemptions are now exact `child.constraint -> parent` entries, each
+carrying its reason, with an assertion that every exempted key still exists so a
+stale entry cannot silently pre-authorise a future relationship spelled the same
+way. Only the `workspace` anchor stays parent-wide, and that one is structural.
+
+The composite-key half was checked by column NAME, which a mis-mapped key
+satisfies while scoping nothing: `("workspaceId","brandId") REFERENCES brand
+("id","workspaceId")` contains a column called `workspaceId` and constrains
+none of it. The assertion now pairs `conkey` with `confkey` **by ordinal** —
+PostgreSQL stores them positionally — and demands a literal
+`workspaceId -> workspaceId` mapping. Planting exactly that mis-mapped key makes
+it fail with
+`content_item.… -> brand (workspaceId->id,brandId->workspaceId)`, which the
+name-only form reported as clean.
