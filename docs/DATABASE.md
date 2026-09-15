@@ -528,6 +528,73 @@ month and week ranges, `(workspaceId, contentItemId)` for the item's own lookup,
 
 Indexes: `(workspaceId, subjectType, subjectId)`, `(workspaceId, assignedToUserId, status)`.
 
+### 4.8b The Approvals tables — AS BUILT (Phase 5B-3)
+
+§4.8 above is the DESIGN. This is what the migration
+`20260915180000_phase_5b_3_approvals_activity_notifications` actually created.
+
+**`approval` — NARROWER than §4.8 in three ways.**
+
+`assignedToRoleId`, `dueAt` and `stepIndex` are **not** created. Assignment to a ROLE, review
+deadlines and multi-step chains are a workflow builder, and this milestone builds a single-step
+review. A column with no writer is a column whose meaning nobody has settled — the same rule §4.4b
+applied to `campaignId`. `subjectType` carries `CONTENT_ITEM`, `CAMPAIGN` and `ASSET` because the
+design names all three, but only `CONTENT_ITEM` is reachable: the others have no service behind
+them, and `contentItemId` is a real typed column rather than a polymorphic id precisely so the
+composite foreign key D-112 requires can exist at all.
+
+**WIDER**, in three columns the design predates:
+
+| Column        | Why                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brandId`     | Every approval is brand-scoped, and the composite key to `brand(workspaceId, id)` is what makes the BRAND boundary a database fact rather than a service convention |
+| `requestNote` | §4.8 has one `note`. A requester's context and a reviewer's verdict are different statements by different people and are kept apart, so the history can show both   |
+| `cycle`       | Which round of review this is, from 1. Makes the history orderable without depending on clock resolution, and gives the policy ceiling something to count           |
+
+**Constraints that encode the rules.** `approval_subject_present` — a `CONTENT_ITEM` approval must
+name its item. `approval_decision_consistent` — a decided row carries both its decider and its
+timestamp, and a pending one carries neither, so half a decision is not a state the history can
+render. `approval_one_open_per_item`, a PARTIAL unique index on `status = 'PENDING'` — two open
+reviews for one draft is two reviewers each believing their verdict decided it, and a full unique
+index would stop a closed cycle ever being followed by another.
+
+**`approval_policy` — the per-brand rules** (ROADMAP Phase 5 scope item 6, "policy per brand").
+Every column is NULLABLE and **NULL means "no opinion"**, resolving to the activated
+`content.approvals` default. A row exists only once somebody has deliberately departed from the
+defaults, so changing a default still reaches every brand that never chose otherwise. One row per
+brand, by unique index.
+
+### 9.3b The `notification` table — AS BUILT (Phase 5B-3)
+
+§9.3 above is the DESIGN. Three differences, each with a reason.
+
+**`userId` IS NOT NULL.** §9.3 allows NULL for "workspace-wide". A workspace-wide row has no
+per-reader unread state, which is the single thing this table exists to hold; fan-out to several
+members is several rows, each independently readable and independently marked.
+
+**NO RENDERED TEXT.** `renderedSubject` and `renderedBodyRef` are not created. The row carries a
+`templateKey` and a payload, and the reader's locale picks the sentence at READ time — storing one
+language would make a bilingual workspace's inbox monolingual in whichever language the actor
+happened to be using.
+
+**NO DELIVERY COLUMNS.** `status`, `sentAt`, `providerMessageId`, `failureCode`, `priority` and
+`groupKey` are not created, and a CHECK pins `channel` to `IN_APP` (D-123). There is no transport in
+this platform to deliver with; a delivery status on a row nothing delivers would be a fiction, and
+the CHECK is what makes the limitation a fact rather than a convention.
+
+**WIDER** in `linkPath`, `brandId`, `resourceType` and `resourceId` — where the notification points.
+`notification_link_is_relative` refuses anything that is not a relative path, so a row can never
+carry an absolute redirect target written by one tenant and followed by another's browser.
+
+### The Activity Log adds NO TABLE (Phase 5B-3, D-124)
+
+`docs/PRODUCT.md` §5 module 17 lists `AuditEvent` as the Activity Log's entity, and that is exactly
+what it reads. There is no customer-facing event table: a second record of the same facts would
+drift from the first at the earliest writer that updated one and forgot the other, and it would be a
+MUTABLE one — which is what AC-15.7 and the append-only trigger on `audit_event` exist to prevent.
+The customer screen is a scoped, paged projection that returns actor, action, resource and outcome,
+and never the `before`/`after` diffs.
+
 ---
 
 ## 5. Social

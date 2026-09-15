@@ -25,7 +25,7 @@ import type { MessageKey } from '../../../i18n/messages';
 export interface ContentCardData {
   readonly id: string;
   readonly title: string;
-  readonly status: 'DRAFT' | 'IN_REVIEW' | 'ARCHIVED';
+  readonly status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'ARCHIVED';
   readonly brandName: string | null;
   readonly updatedAt: string;
   readonly variantCount: number;
@@ -37,7 +37,14 @@ export interface ContentLibraryViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
   readonly cards: readonly ContentCardData[];
-  readonly counts: { all: number; DRAFT: number; IN_REVIEW: number; ARCHIVED: number };
+  readonly counts: {
+    all: number;
+    DRAFT: number;
+    IN_REVIEW: number;
+    CHANGES_REQUESTED: number;
+    APPROVED: number;
+    ARCHIVED: number;
+  };
   readonly brands: readonly { id: string; name: string }[];
   readonly filters: { search?: string; status?: string; brand?: string };
   readonly canCreate: boolean;
@@ -73,8 +80,14 @@ function artText(title: string): string {
 const STATUS_CLASS: Record<ContentCardData['status'], string> = {
   DRAFT: 'draft',
   IN_REVIEW: 'review',
-  // The demo's default `.status` — its green "Published" pill. An archived
-  // draft is the only settled state this scope reaches.
+  // A reviewer asked for changes: the same warm treatment as "in review",
+  // because both mean somebody is waiting on somebody.
+  CHANGES_REQUESTED: 'review',
+  // The demo's DEFAULT `.status` — its green settled pill. Approved content is
+  // exactly what that treatment is for, and using it costs no new CSS: the
+  // fidelity transcription test fails on a declaration ADDED to the ported
+  // stylesheet as readily as on one lost (UI-FIDELITY-CONTRACT §5).
+  APPROVED: '',
   ARCHIVED: '',
 };
 
@@ -146,6 +159,8 @@ export function ContentLibraryView({
         {tab(undefined, 'content.tab.all', counts.all)}
         {tab('DRAFT', 'content.tab.draft', counts.DRAFT)}
         {tab('IN_REVIEW', 'content.tab.review', counts.IN_REVIEW)}
+        {tab('CHANGES_REQUESTED', 'content.tab.changesRequested', counts.CHANGES_REQUESTED)}
+        {tab('APPROVED', 'content.tab.approved', counts.APPROVED)}
         {tab('ARCHIVED', 'content.tab.archived', counts.ARCHIVED)}
       </div>
 

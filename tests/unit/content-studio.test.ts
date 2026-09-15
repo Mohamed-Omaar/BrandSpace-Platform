@@ -64,6 +64,13 @@ const POLICY: ContentPolicy = {
     maxSlotsPerDay: 25,
     requireApprovalBeforeScheduling: false,
   },
+  approvals: {
+    requireApprovalBeforeScheduling: false,
+    allowSelfApproval: false,
+    clientApprovalEnabled: false,
+    maxNoteLength: 1_000,
+    maxCyclesPerItem: 25,
+  },
 };
 
 const clockAt = (iso: string) => ({ now: () => new Date(iso) });

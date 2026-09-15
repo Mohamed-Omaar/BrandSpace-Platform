@@ -184,6 +184,16 @@ today_, _Failed publishes_, _AI credits remaining + burn rate_, _Top performing 
 _Connection health warnings_, _Trial/plan status_. Every widget respects the viewer's permissions; a
 Viewer (read-only) sees a read-only subset.
 
+**Team and Approvals · Notifications · Activity Log** — built in Phase 5B-3, and narrower than the
+row above in one respect worth stating: `Comment` is **not** built. Threaded comments with
+`@mentions` and positions anchored into the text are a collaboration surface of their own; what the
+review workflow needs — the requester's context and the reviewer's reason — lives on the `Approval`
+itself. Approval is **per brand** by policy: whether it is required before scheduling, whether a
+reviewer may approve their own work (D-122, denied by default), and whether Viewer (read-only) may
+approve at all (D-121, off by default). The Activity Log is a read model over `AuditEvent` and adds
+no table of its own (D-124). Notifications are **in-app only** until a mail transport exists
+(D-123).
+
 **Brand Brain** — the differentiator. Structured sections (identity, audience segments, tone of voice,
 products/offers, proof points, objections, do/don't rules, glossary, competitors) plus uploaded documents
 that are chunked and embedded for retrieval. Every AI generation cites which Brand Brain sections it used,

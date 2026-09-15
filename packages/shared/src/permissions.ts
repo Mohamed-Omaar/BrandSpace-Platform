@@ -143,6 +143,37 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('content.archive', 'workspace', 'Archive a content draft'),
   def('content.schedule', 'workspace', 'Place content on the calendar and move it'),
   def('content.delete', 'workspace', 'Delete content permanently'),
+
+  /*
+   * Phase 5B-3 — Approvals, Activity Log, Notifications.
+   *
+   * `content.approve` IS NOT `content.edit`. docs/SECURITY.md §4.3 gives the
+   * Approver role review authority and no authoring authority at all, and the
+   * separation is the whole reason an approval record means anything: an
+   * approver who rewrites the thing they are approving has not approved it.
+   *
+   * THE ACTIVITY LOG GRADES `audit.read`, IT DOES NOT REPLACE IT. That key has
+   * existed since Phase 1 and already carries the §4.3 rows marked ✅ or
+   * 🟡 brand-scoped; adding a parallel `activity.*` family would have been a
+   * second permission for the same capability, which is how two answers to one
+   * question get shipped. So `audit.read` keeps its meaning — "you may see more
+   * of the log than your own actions" — and two REFINEMENTS sit beside it:
+   *
+   *   `audit.read_workspace`  the whole workspace (Owner, Admin)
+   *   `audit.read`            brands in your scope (Marketing Manager, Analyst)
+   *   `audit.read_own`        your own actions (Creator, Copywriter, Designer,
+   *                           Approver)
+   *   none                    Viewer (read-only)
+   *
+   * The scope is resolved from PERMISSIONS, never from the role key. A role in
+   * this platform IS its permission set; a capability that secretly consulted
+   * the role name could not be reasoned about, could not be overridden, and
+   * would mis-grade any role added later. Most privileged wins.
+   */
+  def('content.approve', 'workspace', 'Approve, reject or request changes on content'),
+  def('approvals.policy.manage', 'workspace', "Change a brand's approval policy"),
+  def('audit.read_own', 'workspace', 'View your own actions in the activity log'),
+  def('audit.read_workspace', 'workspace', 'View all workspace activity'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */

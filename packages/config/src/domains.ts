@@ -726,6 +726,51 @@ const contentStudioSchema = z.object({
       requireApprovalBeforeScheduling: z.boolean().default(false),
     })
     .default({}),
+
+  /**
+   * Phase 5B-3 — the WORKSPACE-WIDE DEFAULTS for the approval workflow. A brand
+   * may depart from any of them through `approval_policy`; a brand with no row
+   * uses these, so changing one still reaches every brand that never chose
+   * otherwise.
+   */
+  approvals: z
+    .object({
+      /**
+       * AC-14.6, and the default form of the gate D-120 shipped OFF because
+       * nothing could grant approval yet. The workflow now exists, so the gate
+       * is switchable per brand — but the platform-wide default stays FALSE:
+       * turning review on for every existing workspace at once would strand
+       * every draft already in flight behind a queue nobody asked for.
+       */
+      requireApprovalBeforeScheduling: z.boolean().default(false),
+      /**
+       * D-122. Whether a member holding `content.approve` may approve content
+       * they themselves authored.
+       *
+       * DEFAULT DENY, because an approval record whose approver is its author
+       * is not evidence of a second pair of eyes. It is a DEFAULT rather than a
+       * law: a one-person workspace would otherwise be unable to move its own
+       * content past review at all, which turns a safety property into a
+       * deadlock. The owner relaxes it deliberately, per brand, and the choice
+       * is snapshotted onto every approval it affects.
+       */
+      allowSelfApproval: z.boolean().default(false),
+      /**
+       * D-121, resolving U-06 — docs/SECURITY.md §4.3's "optional client
+       * approval" cell for Viewer (read-only).
+       *
+       * DEFAULT OFF. The Viewer role holds `workspace.read` and nothing else,
+       * and this is the one authority it can be granted without widening the
+       * role itself: the right comes from the BRAND's policy, not from the
+       * permission bag, so no other Viewer anywhere gains anything.
+       */
+      clientApprovalEnabled: z.boolean().default(false),
+      /** A bound on the free-text note a requester or reviewer may attach. */
+      maxNoteLength: z.number().int().min(40).max(4_000).default(1_000),
+      /** How many review cycles one item may go through before it is stuck. */
+      maxCyclesPerItem: z.number().int().min(1).max(100).default(25),
+    })
+    .default({}),
 });
 
 /**

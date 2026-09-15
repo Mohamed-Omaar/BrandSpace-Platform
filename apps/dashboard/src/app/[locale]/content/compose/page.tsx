@@ -6,7 +6,12 @@ import { inWorkspace, requireWorkspace } from '../../../../server/customer-conte
 import { inContentStudio } from '../../../../server/content-context';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
-import { saveVariantAction, transitionItemAction } from '../actions';
+import {
+  cancelReviewAction,
+  saveVariantAction,
+  submitForReviewAction,
+  transitionItemAction,
+} from '../actions';
 import {
   ComposerView,
   type ComposerDraft,
@@ -62,22 +67,30 @@ export default async function ComposePage({
     }),
   );
 
-  const { policy, draft } = await inContentStudio(workspace.workspaceId, async (services) => {
-    const resolved = await services.policy();
-    /*
-     * A DRAFT THE MEMBER MAY NOT SEE IS A 404, shaped exactly like one that
-     * never existed. RLS has already made another tenant's draft invisible;
-     * this keeps a brand outside the member's scope from being a tell
-     * (docs/SECURITY.md §4.2).
-     */
-    if (itemId === undefined) return { policy: resolved, draft: null };
-    const item = await (await services.library()).getItem(itemId).catch(() => null);
-    if (!item) return { policy: resolved, draft: null as null };
-    if (workspace.brandScope.length > 0 && !workspace.brandScope.includes(item.brandId)) {
-      return { policy: resolved, draft: null as null };
-    }
-    return { policy: resolved, draft: item };
-  });
+  const { policy, draft, openApprovalId } = await inContentStudio(
+    workspace.workspaceId,
+    async (services) => {
+      const resolved = await services.policy();
+      /*
+       * A DRAFT THE MEMBER MAY NOT SEE IS A 404, shaped exactly like one that
+       * never existed. RLS has already made another tenant's draft invisible;
+       * this keeps a brand outside the member's scope from being a tell
+       * (docs/SECURITY.md §4.2).
+       */
+      if (itemId === undefined) {
+        return { policy: resolved, draft: null, openApprovalId: null as string | null };
+      }
+      const item = await (await services.library()).getItem(itemId).catch(() => null);
+      if (!item) return { policy: resolved, draft: null as null, openApprovalId: null };
+      if (workspace.brandScope.length > 0 && !workspace.brandScope.includes(item.brandId)) {
+        return { policy: resolved, draft: null as null, openApprovalId: null };
+      }
+      // Phase 5B-3 — the open cycle, so the composer can offer "withdraw" only
+      // when there is in fact something to withdraw.
+      const open = await (await services.approvals()).openForItem(item.id);
+      return { policy: resolved, draft: item, openApprovalId: open?.id ?? null };
+    },
+  );
 
   if (itemId !== undefined && draft === null) notFound();
 
@@ -97,6 +110,7 @@ export default async function ComposePage({
         id: draft.id,
         title: draft.title,
         status: draft.status as ComposerDraft['status'],
+        openApprovalId,
         brandId: draft.brandId,
         arabicDialect: draft.arabicDialect,
         insufficientKnowledge: draft.insufficientKnowledge,
@@ -155,7 +169,12 @@ export default async function ComposePage({
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
         }}
-        actions={{ save: saveVariantAction, transition: transitionItemAction }}
+        actions={{
+          save: saveVariantAction,
+          transition: transitionItemAction,
+          submitForReview: submitForReviewAction,
+          cancelReview: cancelReviewAction,
+        }}
       />
     </WorkspaceShell>
   );

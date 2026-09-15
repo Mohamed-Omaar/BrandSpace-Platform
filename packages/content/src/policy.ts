@@ -54,6 +54,13 @@ export const contentPolicySchema = z.object({
     maxSlotsPerDay: z.number().int().min(1),
     requireApprovalBeforeScheduling: z.boolean(),
   }),
+  approvals: z.object({
+    requireApprovalBeforeScheduling: z.boolean(),
+    allowSelfApproval: z.boolean(),
+    clientApprovalEnabled: z.boolean(),
+    maxNoteLength: z.number().int().min(1),
+    maxCyclesPerItem: z.number().int().min(1),
+  }),
 });
 
 export type ContentDialect = z.infer<typeof dialectSchema>;

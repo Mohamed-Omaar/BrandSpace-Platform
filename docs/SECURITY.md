@@ -1400,3 +1400,105 @@ somebody adds an import. Real publishing is Phase 6.
 times, the zone and a channel COUNT — and never a caption or a title. A scheduled launch caption is
 the most commercially sensitive string the product holds, and an audit record is read by more people
 than the draft is. The test asserts the absence, not just the presence.
+
+---
+
+## 25. Implementation Status — Phase 5B-3 (Approvals, Activity Log, Notifications)
+
+The governance half of the customer journey. What was built, and the properties a reviewer should be
+able to check rather than take on trust.
+
+### 25.1 Tenant isolation
+
+Three new tenant-owned tables — `approval`, `approval_policy`, `notification` — each with RLS
+**enabled and forced**, a `tenant_isolation` policy for the application role and a `platform_access`
+policy for the platform role, exactly as every table since the Phase 1 migration.
+
+**Every foreign key to a tenant-owned parent is COMPOSITE on `workspaceId`** (D-112).
+`approval_item_fkey` on `(workspaceId, contentItemId)` is the fourth key written under that rule
+after F-80, F-83 and the calendar's, and it is the same shape those findings were about: PostgreSQL
+evaluates referential integrity as the table OWNER with RLS BYPASSED, so a plain `contentItemId`
+would have resolved another workspace's draft, accepted the row, and — by the difference between
+"inserted" and "violates foreign key" — answered _does that draft exist?_
+
+`tests/isolation/phase5b3-approvals-tenancy.test.ts` asserts the refusal **from inside the
+attacker's own workspace context**, which is the case RLS does not cover, and asserts that a real
+foreign id and a fabricated one fail identically down to the error code and the constraint name.
+
+**What is asserted beyond the row's existence**, because these tables hold more than rows:
+
+| Property                                        | Why it is asserted separately                                                                                                                                                     |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The verdict, the decider and the timestamp      | "Who in this company signs off on what, and how quickly" is an organisational chart drawn from another tenant's workflow                                                          |
+| The request and decision NOTES                  | A review note is candid by design — it is where somebody writes why a colleague's work is not ready                                                                               |
+| `allowSelfApproval` and `clientApprovalEnabled` | Reading another tenant's approval policy is a map of where their controls are weakest, which is worth more than any single row                                                    |
+| The notification `payload`                      | It carries the customer's own content title                                                                                                                                       |
+| The idempotency key namespace                   | The unique index is `(workspaceId, idempotencyKey)`, not the key alone: one tenant choosing a guessable key must not be able to BLOCK another tenant's notification from existing |
+
+### 25.2 Authorization
+
+**Every transition is enforced in the service, never by the screen.** Each server action names the
+permission it needs and `requireWorkspace` refuses without it; the service then re-reads the subject,
+re-checks the brand scope and re-resolves the authority from the brand's own policy. A hidden button
+is a courtesy — a server action is a public HTTP endpoint.
+
+**D-122 — self-approval is denied by default.** Both the author and the requester are barred, because
+an author who asks a colleague to submit on their behalf would otherwise approve their own words. The
+policy in force is SNAPSHOTTED onto the approval, so relaxing the rule later does not rewrite what an
+earlier decision meant.
+
+**D-121 — the Viewer grant comes from the BRAND, not the role.** `client_viewer` still holds
+`workspace.read` and nothing else, and a unit test pins that. `mayApproveForBrand` lifts exactly one
+role key and only where the brand switched it on, so no Viewer in any other workspace gains anything.
+
+**The escalation that is deliberately prevented.** `approvals.policy.manage` can turn self-approval
+on, so it is held only by the Workspace Owner and Workspace Admin — and NOT by the Marketing Manager,
+who can approve. A role able to both approve and change the approval policy could grant itself the
+right to approve its own work. A unit test asserts the two sets do not overlap in that direction.
+
+**Denied attempts are audited (AC-15.6), on a separate connection.** A refusal throws, which rolls
+back the transaction it was raised in — so an audit row written just before the throw would roll back
+with it. `ApprovalOptions.denialSink` writes the denial on its own connection, which commits whatever
+happens to the one that refused. `packages/auth`'s workspace-access denial has always done the same.
+
+### 25.3 The audit trail is unchanged, and the Activity Log reads it
+
+The Activity Log adds **no table and no writer** (D-124). `audit_event` keeps its append-only
+guarantee — UPDATE and DELETE revoked from both roles, plus a trigger — and the isolation suite
+re-asserts both (AC-15.7). The customer screen returns actor, action, resource and outcome, and
+**never the `before`/`after` diffs**: those are written redacted, but "redacted" is a property of
+every past and future writer having got it right, and a customer screen should not depend on that.
+
+**The reader's grade is a QUERY PREDICATE, not a filter** (AC-15.3). A reader graded "own" gets
+`actorId = me` inside the SQL; a page boundary or a count computed over rows they may not see would
+itself be a disclosure. A brand-graded reader with an empty scope matches **nothing**, not
+everything — omitting the clause would silently widen them to the whole workspace, and a unit test
+pins that behaviour.
+
+`audit.read` is GRADED rather than replaced (D-125): `audit.read_workspace` above it,
+`audit.read_own` below, matching `docs/SECURITY.md` §4.3's four grades, resolved from permissions
+and never from the role key.
+
+### 25.4 Notifications
+
+Written from **domain events**, never from a UI handler: the service that changed the state calls the
+notification service, so a notification cannot exist for something that did not happen. Recipients
+are computed **server-side** from memberships and permissions — a caller that could name them could
+address a notification to somebody who may not see the thing it points at, and a notification's title
+is itself a disclosure that content exists.
+
+A notification is a **pointer, not a copy**: it carries a title and a link, and following the link
+runs the ordinary permission checks. Read state is server-enforced — `markRead` puts the reader's own
+`userId` in the `where` clause, so another member's id matches no row and changes nothing, which is
+the same outcome as an id that never existed.
+
+**In-app only (D-123)**, enforced by a CHECK constraint rather than by convention.
+
+### 25.5 What this phase deliberately did NOT do
+
+| Not done                                               | Why                                                                                                                                             |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 8 launch hardening (D-123)                                                         |
+| Multi-step approval chains, role assignment, due dates | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten            |
+| Threaded comments with mentions and anchors            | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own. The approval's request and decision notes carry the review's context |
+| Weakening the audit trail for the UI                   | The screen was shaped to the append-only record, not the reverse                                                                                |

@@ -397,25 +397,25 @@ model Workspace {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  memberships        Membership[]
-  roles              Role[]
-  auditEvents        AuditEvent[]
-  supportSessions    SupportModeSession[]
-  invitations        Invitation[]
-  overrides          WorkspaceOverride[]
-  creditWallet       CreditWallet?
-  creditLedger       CreditTransaction[]
+  memberships              Membership[]
+  roles                    Role[]
+  auditEvents              AuditEvent[]
+  supportSessions          SupportModeSession[]
+  invitations              Invitation[]
+  overrides                WorkspaceOverride[]
+  creditWallet             CreditWallet?
+  creditLedger             CreditTransaction[]
   // --- Phase 3 -------------------------------------------------------------
-  subscription       WorkspaceSubscription?
-  creditGrants       CreditGrant[]
-  creditReservations CreditReservation[]
-  usageCounters      UsageCounter[]
-  usageEvents        UsageEvent[]
-  betaCohorts        BetaCohortMembership[]
-  emailMessages      EmailMessage[]
+  subscription             WorkspaceSubscription?
+  creditGrants             CreditGrant[]
+  creditReservations       CreditReservation[]
+  usageCounters            UsageCounter[]
+  usageEvents              UsageEvent[]
+  betaCohorts              BetaCohortMembership[]
+  emailMessages            EmailMessage[]
   // --- Phase 4 -------------------------------------------------------------
-  aiRequests         AiRequest[]
-  aiUsageLedger      AiUsageLedger[]
+  aiRequests               AiRequest[]
+  aiUsageLedger            AiUsageLedger[]
   // --- Phase 5 -------------------------------------------------------------
   brands                   Brand[]
   brandKnowledgeItems      BrandKnowledgeItem[]
@@ -439,6 +439,14 @@ model Workspace {
   contentItems    ContentItem[]
   contentVariants ContentVariant[]
   calendarSlots   CalendarSlot[]
+
+  /// Phase 5B-3 — Approvals.
+  approvals        Approval[]
+  approvalPolicies ApprovalPolicy[]
+
+  /// Phase 5B-3 — Notifications. Workspace-owned only: a notification is
+  /// addressed to a member OF this workspace, never to a user globally.
+  notifications Notification[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1353,7 +1361,6 @@ model BetaCohortMembership {
   @@map("beta_cohort_membership")
 }
 
-
 /// TENANT-OWNED. One logical AI action — docs/DATABASE.md §6.5.
 ///
 /// NO RAW PROMPT OR RESPONSE IS STORED HERE. `inputSummary` holds audit-safe
@@ -1367,15 +1374,15 @@ model AiRequest {
   /// Null for a platform- or system-initiated request.
   userId      String? @db.Uuid
 
-  taskKey String
+  taskKey        String
   /// Unique. A retry with the same key returns the ORIGINAL result and never
   /// touches the wallet (docs/AI-GATEWAY.md §7.4 guarantee 2).
   idempotencyKey String @unique
 
   /// Which routing rule resolved, and to what. Model keys, not database ids:
   /// the registry is CONFIGURATION, so there is no model table to point at.
-  routingTaskKey    String?
-  resolvedModelKey  String?
+  routingTaskKey     String?
+  resolvedModelKey   String?
   /// Every model tried, in order, including the ones that failed. Fallback is
   /// invisible in reporting without it.
   ///
@@ -1385,8 +1392,8 @@ model AiRequest {
   /// this column would violate NOT NULL.
   attemptedModelKeys String[] @default([])
 
-  status       AiRequestStatus @default(PENDING)
-  failureClass AiFailureClass?
+  status         AiRequestStatus @default(PENDING)
+  failureClass   AiFailureClass?
   /// Safe to show a customer. Never a raw provider error or a credential.
   failureMessage String?
 
@@ -1426,7 +1433,7 @@ model AiRequest {
   creditReservationId String? @unique @db.Uuid
 
   latencyMs  Int?
-  retryCount Int @default(0)
+  retryCount Int  @default(0)
 
   /// BYOK: the customer supplied the provider credential. Provider cost to
   /// BrandSpace is zero and the ledger says so, keeping margin honest.
@@ -1480,7 +1487,7 @@ model AiUsageLedger {
   /// request writes a ledger row with zero credits and no transaction.
   creditTransactionId String? @db.Uuid
 
-  byok        Boolean @default(false)
+  byok        Boolean               @default(false)
   environment DeploymentEnvironment
 
   /// Set only on a correction row. Never edited; never deleted.
@@ -1607,10 +1614,10 @@ model Brand {
   slug String
   name String
 
-  industry        String?
-  description     String?
-  websiteUrl      String?
-  defaultLocale   Locale   @default(EN)
+  industry         String?
+  description      String?
+  websiteUrl       String?
+  defaultLocale    Locale   @default(EN)
   supportedLocales Locale[] @default([])
 
   /// Brand kit. Structured, and validated at the boundary rather than trusted.
@@ -1653,6 +1660,10 @@ model Brand {
   contentItems    ContentItem[]
   contentVariants ContentVariant[]
   calendarSlots   CalendarSlot[]
+
+  /// Phase 5B-3 — Approvals.
+  approvals        Approval[]
+  approvalPolicies ApprovalPolicy[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -1707,9 +1718,9 @@ model BrandKnowledgeItem {
   /// provider is approved (D-13), so this holds the local, reproducible
   /// index described in packages/brand-brain/src/retrieval.ts. The model key
   /// is recorded so re-indexing on a change is detectable.
-  indexVector       Float[] @default([])
-  indexModelKey     String?
-  indexedAt         DateTime? @db.Timestamptz(6)
+  indexVector   Float[]   @default([])
+  indexModelKey String?
+  indexedAt     DateTime? @db.Timestamptz(6)
 
   /// Staleness. `reviewDueAt` is derived from validated configuration, never
   /// from a hard-coded interval.
@@ -1720,8 +1731,8 @@ model BrandKnowledgeItem {
   /// it. D-65: a conflict is SURFACED, never silently resolved.
   conflictsWithItemId String? @db.Uuid
 
-  createdAt DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
   archivedAt DateTime? @db.Timestamptz(6)
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1819,33 +1830,33 @@ model BrandSourceDocument {
   workspaceId String @db.Uuid
   brandId     String @db.Uuid
 
-  fileName    String
-  mimeType    String
-  byteSize    Int
+  fileName   String
+  mimeType   String
+  byteSize   Int
   /// SHA-256 of the content. Duplicate protection is a UNIQUE constraint on
   /// it per brand, so re-uploading the same file is idempotent by identity
   /// rather than by filename.
-  checksum    String
+  checksum   String
   /// Opaque object-storage key. Never a URL, never a signed one: a signature
   /// in a database column is a credential with a long life.
-  storageKey  String
+  storageKey String
 
-  status BrandSourceStatus @default(UPLOADED)
+  status         BrandSourceStatus @default(UPLOADED)
   /// Safe to show a customer. Never a raw extractor error or a path.
   failureMessage String?
 
   /// Populated by extraction. `pageCount` is null for formats without pages.
   pageCount  Int?
-  chunkCount Int @default(0)
+  chunkCount Int  @default(0)
   /// Extracted characters — a size signal for the UI that is not the text.
-  textLength Int @default(0)
+  textLength Int  @default(0)
 
   /// Which area the uploader targeted, when they dropped the file on one.
   targetArea BrandKnowledgeArea?
 
   uploadedByUserId String? @db.Uuid
   /// The client's idempotency key for the upload itself.
-  idempotencyKey String
+  idempotencyKey   String
 
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
@@ -1885,7 +1896,7 @@ model BrandSourceChunk {
 
   /// The chunk text. This IS customer content, which is why the chunk table is
   /// never read by any operator surface and never enters a log.
-  text String
+  text    String
   /// Human-readable location — "page 4", "section 2.1" — so a citation points
   /// somewhere a person can check.
   locator String?
@@ -1922,10 +1933,10 @@ model BrandKnowledgeCandidate {
   workspaceId String @db.Uuid
   brandId     String @db.Uuid
 
-  sourceDocumentId String @db.Uuid
+  sourceDocumentId String  @db.Uuid
   /// The item this candidate would change, when one already exists. Null means
   /// it proposes something new. This is what the review screen diffs.
-  targetItemId String? @db.Uuid
+  targetItemId     String? @db.Uuid
 
   area    BrandKnowledgeArea
   itemKey String
@@ -1935,8 +1946,8 @@ model BrandKnowledgeCandidate {
   extractedTitle Json
   extractedBody  Json
   /// A reviewer's edit, when they changed it before accepting.
-  reviewedTitle Json?
-  reviewedBody  Json?
+  reviewedTitle  Json?
+  reviewedBody   Json?
 
   confidenceMilli Int
   evidence        Json
@@ -1983,15 +1994,15 @@ model BrandIngestionJob {
 
   sourceDocumentId String @db.Uuid
 
-  stage    BrandIngestionStage @default(QUEUED)
-  attempts Int                 @default(0)
-  maxAttempts Int              @default(3)
+  stage       BrandIngestionStage @default(QUEUED)
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(3)
 
   /// Safe to show a customer.
   failureMessage String?
   /// The internal reason, for operators. Never rendered to a customer and
   /// never a provider string.
-  failureCode String?
+  failureCode    String?
 
   /// Counters the UI reports honestly rather than guessing.
   chunksCreated     Int @default(0)
@@ -2001,9 +2012,9 @@ model BrandIngestionJob {
   /// an extraction can be traced to its gateway request and its cost.
   aiRequestId String? @db.Uuid
 
-  queuedAt    DateTime  @default(now()) @db.Timestamptz(6)
-  startedAt   DateTime? @db.Timestamptz(6)
-  completedAt DateTime? @db.Timestamptz(6)
+  queuedAt      DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt     DateTime? @db.Timestamptz(6)
+  completedAt   DateTime? @db.Timestamptz(6)
   nextAttemptAt DateTime? @db.Timestamptz(6)
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -2033,7 +2044,7 @@ model BrandBrainConversation {
 
   startedByUserId String? @db.Uuid
 
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
   lastMessageAt DateTime @default(now()) @db.Timestamptz(6)
 
   /// D-78 RETENTION. Set from validated configuration when the conversation is
@@ -2067,10 +2078,10 @@ model BrandBrainMessage {
   conversationId String @db.Uuid
 
   /// `user` or `assistant`. A system prompt is never persisted.
-  role String
+  role         String
   /// The message text. Nulled by the retention purge; the row survives so the
   /// conversation's shape and its accounting links remain.
-  body String?
+  body         String?
   /// True once the body has been purged, so the UI says "expired" rather than
   /// rendering an empty bubble.
   bodyPurgedAt DateTime? @db.Timestamptz(6)
@@ -2084,11 +2095,11 @@ model BrandBrainMessage {
   /// so "honest refusal" is measurable rather than asserted.
   insufficientKnowledge Boolean @default(false)
 
-  aiRequestId String? @db.Uuid
+  aiRequestId    String? @db.Uuid
   /// Client idempotency key, so a retried send never bills twice.
   idempotencyKey String?
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
   expiresAt DateTime? @db.Timestamptz(6)
 
   workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -2592,10 +2603,10 @@ model ContentItem {
   /// The locale the item was authored in. Variants carry their own, so an
   /// Arabic item with an English variant is a normal shape rather than a
   /// contradiction.
-  primaryLocale Locale @default(AR)
+  primaryLocale Locale   @default(AR)
   /// The content pillar this belongs to, when the brand uses pillars.
-  pillar String?
-  tags   String[] @default([])
+  pillar        String?
+  tags          String[] @default([])
 
   status ContentStatus @default(DRAFT)
 
@@ -2642,6 +2653,7 @@ model ContentItem {
 
   variants      ContentVariant[]
   calendarSlots CalendarSlot[]
+  approvals     Approval[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -2675,8 +2687,8 @@ model ContentVariant {
   body         String?
   bodyPurgedAt DateTime? @db.Timestamptz(6)
 
-  hashtags String[] @default([])
-  mentions String[] @default([])
+  hashtags     String[] @default([])
+  mentions     String[] @default([])
   linkUrl      String?
   firstComment String?
 
@@ -2751,7 +2763,7 @@ model CalendarSlot {
   contentItemId String @db.Uuid
 
   /// The instant, in UTC. What every range query and every sweep reads.
-  scheduledAtUtc DateTime @db.Timestamptz(6)
+  scheduledAtUtc     DateTime @db.Timestamptz(6)
   /// The wall-clock the customer chose, as `YYYY-MM-DDTHH:mm`. A STRING rather
   /// than a timestamp on purpose: it is a local intent with no offset, and
   /// giving it one would be inventing the very fact it exists to preserve.
@@ -2759,7 +2771,7 @@ model CalendarSlot {
   /// The IANA zone that intent is expressed in, copied from the workspace when
   /// the slot was created. Copied rather than joined, because a workspace that
   /// relocates must not silently move every post it already scheduled.
-  timezone String
+  timezone           String
 
   status CalendarSlotStatus @default(PLANNED)
 
@@ -2801,4 +2813,195 @@ model CalendarSlot {
   @@index([workspaceId, contentItemId])
   @@index([status, scheduledAtUtc])
   @@map("calendar_slot")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5B-3 — Approvals, Activity Log, Notifications
+// (docs/PRODUCT.md §5 modules 1, 14, 16, 17; docs/DATABASE.md §4.8 and §9.3)
+// ---------------------------------------------------------------------------
+
+/// Where a review request currently stands. `CANCELLED` is withdrawal by the
+/// requester or by a later edit; `CHANGES_REQUESTED` is a reviewer's verdict
+/// and is distinct from `REJECTED` because one invites a resubmission and the
+/// other closes the question.
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+  CANCELLED
+}
+
+/// What an approval is attached to. Only `CONTENT_ITEM` is reachable in this
+/// phase; the others are declared because docs/DATABASE.md §4.8 designs them
+/// and a later phase should extend the enum rather than redesign the table.
+enum ApprovalSubjectType {
+  CONTENT_ITEM
+  CAMPAIGN
+  ASSET
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One review CYCLE over one subject — the record
+/// of a request and the verdict that closed it (docs/DATABASE.md §4.8).
+///
+/// ONE CYCLE PER ROW, and the history is the rows. Resubmitting after changes
+/// were requested opens a NEW row rather than reopening the old one, so
+/// "who approved this, when, and against which policy" keeps a stable answer
+/// after the next edit.
+model Approval {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  subjectType   ApprovalSubjectType @default(CONTENT_ITEM)
+  /// The content item under review. A COLUMN rather than a polymorphic id,
+  /// because a composite foreign key (D-112) cannot be written against a
+  /// column whose target table varies — and an uncheckable reference is how a
+  /// cross-tenant id gets accepted.
+  contentItemId String?             @db.Uuid
+
+  requestedByUserId String  @db.Uuid
+  /// Optional assignment. NULL means "anyone who may approve", which is the
+  /// common case in a small team and is not the same as unassigned-and-stuck.
+  assignedToUserId  String? @db.Uuid
+
+  status ApprovalStatus @default(PENDING)
+
+  /// The requester's context, and the reviewer's. Free text from a member of
+  /// the workspace, bounded by the service and never interpolated into a
+  /// prompt.
+  requestNote  String?
+  decisionNote String?
+
+  decidedByUserId String?   @db.Uuid
+  decidedAt       DateTime? @db.Timestamptz(6)
+
+  /// The approval rules in force when the request was made — `{ selfApproval,
+  /// clientApproval, requireApprovalBeforeScheduling }`. Snapshotted rather
+  /// than joined, because a policy that changes afterwards must not rewrite
+  /// what an earlier decision meant.
+  policySnapshot Json?
+
+  /// Which cycle this is for the subject, starting at 1. Makes the history
+  /// orderable without depending on clock resolution.
+  cycle Int @default(1)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand        @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "approval_brand_fkey")
+  /// COMPOSITE (D-112), exactly as `calendar_slot_item_fkey`. A plain
+  /// `contentItemId` would resolve another workspace's draft, and the
+  /// difference between accepted and refused answers whether it exists.
+  item      ContentItem? @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "approval_item_fkey")
+
+  @@index([workspaceId, status, createdAt(sort: Desc)])
+  @@index([workspaceId, contentItemId, cycle(sort: Desc)])
+  @@index([workspaceId, assignedToUserId, status])
+  @@index([workspaceId, brandId, status])
+  @@map("approval")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. The per-brand approval policy — ROADMAP Phase 5
+/// scope item 6, "policy per brand".
+///
+/// ABSENCE IS NOT A STATE. A brand with no row uses the activated
+/// `content.approvals` configuration defaults; the row exists only once
+/// somebody has deliberately departed from them, so a default that changes
+/// still reaches every brand that never chose otherwise.
+model ApprovalPolicy {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  /// AC-14.6. When true, only an APPROVED item may be placed on the calendar.
+  /// This is the per-brand form of the gate D-120 shipped OFF; the workflow
+  /// behind it now exists.
+  requireApprovalBeforeScheduling Boolean?
+
+  /// D-122. Whether a member holding `content.approve` may approve content
+  /// they themselves authored. Default-deny, and an owner may relax it.
+  allowSelfApproval Boolean?
+
+  /// D-121 (resolves U-06). Whether Viewer (read-only) may approve for this
+  /// brand — SECURITY.md §4.3's "optional client approval" cell. Off unless
+  /// switched on here.
+  clientApprovalEnabled Boolean?
+
+  updatedByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "approval_policy_brand_fkey")
+
+  /// One policy per brand.
+  @@unique([workspaceId, brandId])
+  @@map("approval_policy")
+}
+
+/// How a notification reaches its recipient. Only `IN_APP` is deliverable in
+/// this phase — no mail transport exists in the platform, and D-123 records
+/// that external delivery is Phase 8 launch hardening. The enum is declared in
+/// full because docs/DATABASE.md §9.3 designs it.
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+/// TENANT-OWNED. One in-app notification for one member — docs/DATABASE.md
+/// §9.3.
+///
+/// WRITTEN FROM DOMAIN EVENTS, never from a UI handler. `packages/notifications`
+/// is the only writer, and it is called by the service that changed the state,
+/// so a notification cannot exist for something that did not happen.
+model Notification {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// The recipient. NOT NULL: a workspace-wide notification would have no
+  /// per-reader unread state, which is the one thing this table is for.
+  /// Fan-out to several members is several rows, each independently readable.
+  userId String @db.Uuid
+
+  /// The event key — `approval.requested`, `approval.approved`,
+  /// `approval.changes_requested`, `approval.rejected`. The rendered STRING is
+  /// not stored: the reader's locale is known at read time, and storing one
+  /// language would make the inbox monolingual for a bilingual workspace.
+  templateKey String
+
+  /// The values the template interpolates: `{ itemTitle, brandName, actorName }`.
+  /// Bounded and free of secrets; the redaction layer applies as everywhere.
+  payload Json?
+
+  channel NotificationChannel @default(IN_APP)
+
+  /// Where the notification points. A workspace-relative path, locale-prefixed
+  /// at render time, so a deep link cannot leak another workspace's route.
+  linkPath String?
+
+  brandId      String? @db.Uuid
+  resourceType String?
+  resourceId   String? @db.Uuid
+
+  /// NULL until the recipient reads it. The one mutable column, and the reason
+  /// this is not derived from `audit_event`, which is append-only by design.
+  readAt DateTime? @db.Timestamptz(6)
+
+  /// One notification per logical event per recipient, however many times the
+  /// producing action is retried.
+  idempotencyKey String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, userId, readAt, createdAt(sort: Desc)])
+  @@index([workspaceId, userId, createdAt(sort: Desc)])
+  @@map("notification")
 }

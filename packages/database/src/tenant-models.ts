@@ -78,6 +78,13 @@ export const STRICT_TENANT_MODELS = [
   'ContentItem',
   'ContentVariant',
   'CalendarSlot',
+
+  // --- Phase 5B-3: Approvals, Activity Log, Notifications ------------------
+  // The Activity Log adds no model: it is a read view over `AuditEvent`, which
+  // is already registered, already RLS-protected and already append-only.
+  'Approval',
+  'ApprovalPolicy',
+  'Notification',
 ] as const;
 
 /**
@@ -215,6 +222,9 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   ContentItem: 'content_item',
   ContentVariant: 'content_variant',
   CalendarSlot: 'calendar_slot',
+  Approval: 'approval',
+  ApprovalPolicy: 'approval_policy',
+  Notification: 'notification',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

@@ -16,7 +16,10 @@ import {
   statusTone,
   typographyTokens,
 } from '@brandspace/ui';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inContentStudio } from '../../../server/content-context';
+import { activityService, notificationService } from '../../../server/approvals-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
@@ -50,6 +53,8 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const maySeeCredits = workspace.permissionKeys.includes('credits.read');
   const maySeeMembers = workspace.permissionKeys.includes('member.read');
 
+  const maySeeContent = workspace.permissionKeys.includes('content.read');
+
   const { effective, wallet, memberCount } = await inWorkspace(
     workspace.workspaceId,
     async ({ entitlements, credits, db }) => ({
@@ -62,6 +67,100 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         : null,
     }),
   );
+
+  /*
+   * PHASE 5B-3 — THE COMMAND CENTER AGGREGATES; IT DOES NOT DUPLICATE.
+   *
+   * Every figure below is read through the module that owns it — the approvals
+   * queue from `ContentApprovalService`, upcoming slots from the calendar's own
+   * table, recent activity from `ActivityLogService`, the unread badge from
+   * `NotificationService` — so the home screen and the module screens cannot
+   * disagree. A dashboard that counted rows itself would be a second
+   * implementation of four different scoping rules, and the activity one is
+   * graded three ways.
+   *
+   * WHAT IS STILL NOT HERE, and for the same reason it never was: published
+   * counts and engagement need the publishing pipeline (Phase 6) and analytics
+   * ingestion (Phase 7). Those panels keep saying so.
+   */
+  const summary = await inWorkspace(workspace.workspaceId, async (scoped) => {
+    const notifications = notificationService({
+      db: scoped.db,
+      workspaceId: workspace.workspaceId,
+    });
+    const activity = activityService({ db: scoped.db, workspaceId: workspace.workspaceId });
+    const viewer = {
+      userId: customer.userId,
+      permissionKeys: workspace.permissionKeys,
+      brandScope: workspace.brandScope,
+    };
+    const recent = await activity.recent({ viewer, take: 6 });
+    const unread = await notifications.unreadCount(customer.userId);
+
+    if (!maySeeContent) {
+      return { recent, unread, pendingApprovals: 0, inReview: 0, upcoming: [], scope: 'none' };
+    }
+
+    const brands = await scoped.db.brand.findMany({
+      where: {
+        workspaceId: workspace.workspaceId,
+        deletedAt: null,
+        ...brandScopeFilter(workspace.brandScope),
+      },
+      select: { id: true, name: true },
+    });
+    const scope = workspace.brandScope.length > 0 ? workspace.brandScope : brands.map((b) => b.id);
+
+    const upcoming = await scoped.db.calendarSlot.findMany({
+      where: {
+        workspaceId: workspace.workspaceId,
+        status: { not: 'CANCELLED' },
+        brandId: { in: [...scope] },
+        scheduledAtUtc: { gte: systemClock.now() },
+      },
+      orderBy: { scheduledAtUtc: 'asc' },
+      take: 5,
+      select: {
+        id: true,
+        scheduledAtUtc: true,
+        contentItemId: true,
+        item: { select: { title: true, status: true } },
+      },
+    });
+    const inReview = await scoped.db.contentItem.count({
+      where: {
+        workspaceId: workspace.workspaceId,
+        deletedAt: null,
+        status: 'IN_REVIEW',
+        brandId: { in: [...scope] },
+      },
+    });
+    return { recent, unread, pendingApprovals: 0, inReview, upcoming, scope: 'ok' };
+  });
+
+  // The queue count comes from the Approvals service itself, which applies the
+  // same brand scoping its own screen does.
+  const pendingApprovals = maySeeContent
+    ? await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
+        const brands = await db.brand.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            deletedAt: null,
+            ...brandScopeFilter(workspace.brandScope),
+          },
+          select: { id: true },
+        });
+        const scope =
+          workspace.brandScope.length > 0 ? workspace.brandScope : brands.map((b) => b.id);
+        return (await approvals()).pendingCount(scope);
+      })
+    : 0;
+
+  const overviewDateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  });
 
   /*
    * Both hero actions go somewhere real, and to a page the reader is actually
@@ -162,10 +261,31 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             testId="metric-members"
           />
           {/*
-            Publishing is a Phase 3 capability. The card states that plainly
-            rather than rendering a zero that would read as "you published
-            nothing today" — a fabricated measurement of a feature that does
-            not exist.
+            PHASE 5B-3 REPLACED THE FOURTH PLACEHOLDER WITH A REAL FIGURE. "In
+            review" is now measurable because there is a review workflow behind
+            it; "published" still is not, and has moved below rather than being
+            quietly rendered as a zero.
+          */}
+          <MetricCard
+            label={t('overview.metric.inReview')}
+            value={maySeeContent ? String(summary.inReview) : undefined}
+            unavailable={!maySeeContent}
+            unavailableLabel={t('overview.metric.hidden')}
+            testId="metric-in-review"
+          />
+          <MetricCard
+            label={t('overview.metric.scheduled')}
+            value={maySeeContent ? String(summary.upcoming.length) : undefined}
+            unavailable={!maySeeContent}
+            unavailableLabel={t('overview.metric.hidden')}
+            hint={t('overview.metric.scheduledHint')}
+            testId="metric-scheduled"
+          />
+          {/*
+            Publishing belongs to Phase 6 and engagement to Phase 7. The card
+            states that plainly rather than rendering a zero that would read as
+            "you published nothing" — a fabricated measurement of a feature that
+            does not exist (CLAUDE.md §2.2).
           */}
           <MetricCard
             label={t('overview.metric.published')}
@@ -186,23 +306,123 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
               <SectionHeader
                 eyebrow={t('overview.upcomingKicker')}
                 title={t('overview.upcoming')}
+                actions={
+                  maySeeContent ? (
+                    <Link href={`/${locale}/calendar`} style={buttonStyle('neutral', 'sm')}>
+                      {t('overview.upcomingSeeAll')}
+                    </Link>
+                  ) : undefined
+                }
               />
-              <StateMessage
-                title={t('overview.upcomingEmptyTitle')}
-                description={t('overview.upcomingEmptyBody')}
+              {summary.upcoming.length === 0 ? (
+                <StateMessage
+                  title={t('overview.upcomingEmptyTitle')}
+                  description={t('overview.upcomingEmptyBody')}
+                />
+              ) : (
+                <ul style={panelListStyle} data-testid="overview-upcoming-list">
+                  {summary.upcoming.map((slot) => (
+                    <li key={slot.id} style={panelRowStyle}>
+                      <Link
+                        href={`/${locale}/content/compose?item=${slot.contentItemId}`}
+                        style={{ ...typographyTokens.bodySm, fontWeight: 600 }}
+                      >
+                        {slot.item?.title ?? '—'}
+                      </Link>
+                      <span style={panelMetaStyle}>
+                        <time dateTime={slot.scheduledAtUtc.toISOString()}>
+                          {overviewDateFormat.format(slot.scheduledAtUtc)}
+                        </time>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+
+            {/*
+              PHASE 5B-3 — "NEEDS YOUR APPROVAL", the widget docs/PRODUCT.md
+              §5.1 names first. The count comes from the Approvals service, so it
+              carries that module's brand scoping rather than a second copy of it.
+            */}
+            <Card testId="overview-approvals">
+              <SectionHeader
+                eyebrow={t('overview.needsApprovalKicker')}
+                title={t('overview.needsApproval')}
+                actions={
+                  maySeeContent ? (
+                    <Link href={`/${locale}/approvals`} style={buttonStyle('neutral', 'sm')}>
+                      {t('overview.approvalsSeeAll')}
+                    </Link>
+                  ) : undefined
+                }
               />
+              {pendingApprovals === 0 ? (
+                <StateMessage
+                  title={t('overview.needsApprovalEmptyTitle')}
+                  description={t('overview.needsApprovalEmptyBody')}
+                />
+              ) : (
+                <p
+                  style={{ margin: 0, ...typographyTokens.bodySm }}
+                  data-testid="overview-approvals-count"
+                >
+                  {pendingApprovals}
+                </p>
+              )}
             </Card>
 
             <Card testId="overview-activity">
-              <SectionHeader title={t('overview.activity')} />
-              <StateMessage
-                title={t('overview.activityEmptyTitle')}
-                description={t('overview.activityEmptyBody')}
+              <SectionHeader
+                title={t('overview.activity')}
+                actions={
+                  <Link href={`/${locale}/activity`} style={buttonStyle('neutral', 'sm')}>
+                    {t('overview.activitySeeAll')}
+                  </Link>
+                }
               />
+              {summary.recent.length === 0 ? (
+                <StateMessage
+                  title={t('overview.activityEmptyTitle')}
+                  description={t('overview.activityEmptyBody')}
+                />
+              ) : (
+                <ul style={panelListStyle} data-testid="overview-activity-list">
+                  {summary.recent.map((entry) => (
+                    <li key={entry.id} style={panelRowStyle}>
+                      <span style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
+                        {entry.action}
+                      </span>
+                      <span style={panelMetaStyle}>
+                        <time dateTime={entry.occurredAt.toISOString()}>
+                          {overviewDateFormat.format(entry.occurredAt)}
+                        </time>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Card>
           </Stack>
 
           <Stack>
+            <Card
+              testId="overview-notifications"
+              title={t('notifications.title')}
+              actions={
+                <Link href={`/${locale}/notifications`} style={buttonStyle('neutral', 'sm')}>
+                  {t('notifications.open')}
+                </Link>
+              }
+            >
+              <p
+                style={{ margin: 0, ...typographyTokens.bodySm }}
+                data-testid="overview-unread-count"
+              >
+                {t('notifications.unread')}: {summary.unread}
+              </p>
+            </Card>
+
             <Card testId="overview-copilot">
               <SectionHeader eyebrow={t('overview.copilotKicker')} title={t('overview.copilot')} />
               <StateMessage
@@ -291,3 +511,21 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
     </WorkspaceShell>
   );
 }
+
+const panelListStyle = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'grid',
+  gap: spacingTokens.xs,
+} as const;
+
+const panelRowStyle = {
+  display: 'flex',
+  gap: spacingTokens.xs,
+  justifyContent: 'space-between',
+  alignItems: 'baseline',
+  flexWrap: 'wrap',
+} as const;
+
+const panelMetaStyle = { ...typographyTokens.caption, color: colorTokens.textMuted } as const;

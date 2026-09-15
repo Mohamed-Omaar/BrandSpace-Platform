@@ -136,13 +136,16 @@ test.describe('the content library', () => {
     await expect(page.locator('.cs-filter-row')).toBeVisible();
 
     /*
-     * FOUR TABS, NOT THE DEMO'S FIVE.
+     * SIX TABS — the states that are REACHABLE, not the demo's five fixed ones.
      *
-     * Scheduled and Published are states Phase 5B-2 cannot reach, and a tab
-     * that can only ever read zero is an invented number
-     * (docs/UI-FIDELITY-CONTRACT.md §4.1).
+     * The rule (docs/UI-FIDELITY-CONTRACT.md §4.1) is that a tab exists when its
+     * state can actually occur, because a tab that can only ever read zero is an
+     * invented number. Phase 5B-2 rendered four; Phase 5B-3 added Changes
+     * requested and Approved, which became reachable when the approvals workflow
+     * shipped — and content in a state with no tab is content this screen
+     * cannot find. Scheduled and Published stay out until Phase 6.
      */
-    await expect(page.locator('.cs-tabs button')).toHaveCount(4);
+    await expect(page.locator('.cs-tabs button')).toHaveCount(6);
 
     // Every count is a real number, not the demo's `· 28`.
     for (const label of await page.locator('.cs-tabs button').allTextContents()) {

@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  ContentApprovalService,
   ContentCalendarService,
   ContentLibraryService,
   TenantContentPolicySource,
@@ -7,6 +8,7 @@ import {
   type ContentPolicy,
   type ScheduleQuota,
 } from '@brandspace/content';
+import { approvalNotifier, denialSink } from './approvals-context';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { isAppError } from '@brandspace/shared';
 import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
@@ -69,6 +71,12 @@ export interface ContentServices extends ScopedServices {
    * post in a zone the workspace does not use.
    */
   calendar(): Promise<ContentCalendarService>;
+  /**
+   * Phase 5B-3 — Approvals. Built on the SAME scoped client and the SAME
+   * policy, so the gate the calendar consults and the workflow that satisfies
+   * it cannot disagree about a brand's rules.
+   */
+  approvals(): Promise<ContentApprovalService>;
 }
 
 export async function inContentStudio<T>(
@@ -121,9 +129,19 @@ export async function inContentStudio<T>(
       },
     };
 
+    const approvals = async () =>
+      new ContentApprovalService({
+        db: scoped.db,
+        workspaceId,
+        policy: await policy(),
+        notifier: approvalNotifier({ db: scoped.db, workspaceId }),
+        denialSink: denialSink(workspaceId),
+      });
+
     return fn({
       ...scoped,
       policy,
+      approvals,
       library: async () =>
         new ContentLibraryService({ db: scoped.db, workspaceId, policy: await policy() }),
       calendar: async () => {
@@ -137,6 +155,12 @@ export async function inContentStudio<T>(
           policy: await policy(),
           timezone: workspace.timezone,
           quota,
+          /*
+           * AC-14.6 — the calendar asks the Approvals module whether THIS brand
+           * requires approval, rather than reading one workspace-wide default.
+           * D-120's gate is now backed by a workflow that can satisfy it.
+           */
+          approvalGate: await approvals(),
         });
       },
     });

@@ -154,6 +154,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@brandspace/activity':
+        specifier: workspace:*
+        version: link:../../packages/activity
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
@@ -181,6 +184,9 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@brandspace/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -274,6 +280,19 @@ importers:
       tsx:
         specifier: 4.23.13
         version: 4.23.13
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/activity:
+    dependencies:
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -507,6 +526,19 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/notifications:
+    dependencies:
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/observability:
     dependencies:
       '@brandspace/shared':
@@ -618,6 +650,9 @@ importers:
 
   tests:
     dependencies:
+      '@brandspace/activity':
+        specifier: workspace:*
+        version: link:../packages/activity
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../packages/ai-gateway
@@ -645,6 +680,9 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../packages/jobs
+      '@brandspace/notifications':
+        specifier: workspace:*
+        version: link:../packages/notifications
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../packages/observability

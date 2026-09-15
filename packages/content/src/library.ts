@@ -153,11 +153,52 @@ export class ContentLibraryService {
       brandId: variant.brandId,
       after: { characterCount: validation.characterCount, validationState: validation.state },
     });
+
+    /*
+     * PHASE 5B-3 — AN EDIT REVOKES AN APPROVAL.
+     *
+     * An approval is a judgement about particular words. Once those words
+     * change, the record still says "approved" while nobody has read what it now
+     * approves — and with the calendar gate on, that difference is the whole
+     * control. So an edit to an APPROVED item returns it to DRAFT, audibly.
+     *
+     * A SCHEDULED item is not touched here, and cannot be: `transition()`
+     * refuses to move it and the calendar owns that edge. Editing the caption of
+     * something already planned is a Phase 6 question — there is a slot pointing
+     * at it — and this phase does not answer it by silently unscheduling.
+     */
+    await this.#revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
     return updated;
   }
 
+  /** See `editVariant`. Separate so the reason has somewhere to live. */
+  async #revokeApprovalOnEdit(
+    actorUserId: string,
+    contentItemId: string,
+    brandId: string,
+  ): Promise<void> {
+    const item = await this.db.contentItem.findUnique({
+      where: { id: contentItemId },
+      select: { id: true, status: true },
+    });
+    if (item?.status !== 'APPROVED') return;
+    await this.db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'content.approval_revoked',
+      actorType: 'USER',
+      actorId: actorUserId,
+      resourceType: 'ContentItem',
+      resourceId: item.id,
+      brandId,
+      severity: 'NOTICE',
+      reason: 'edited_after_approval',
+      before: { status: 'APPROVED' },
+      after: { status: 'DRAFT' },
+    });
+  }
+
   /**
-   * DRAFT → IN_REVIEW → ARCHIVED, and nothing further.
+   * The states a member may move content between DIRECTLY.
    *
    * SCHEDULED IS NOT REACHABLE FROM HERE, and an item that IS scheduled cannot
    * be moved from here either. The calendar owns that edge in both directions:
@@ -167,13 +208,21 @@ export class ContentLibraryService {
    * archived out from under a live calendar entry, which is a plan pointing at
    * content that is no longer planned.
    *
-   * APPROVED likewise stays out: approval is the Approvals module's (5B-3), and
-   * a phase that quietly implemented the next phase's states would leave that
-   * phase with behaviour it never designed.
+   * PHASE 5B-3 REMOVED `IN_REVIEW` FROM THIS TABLE, and that is the milestone's
+   * central integrity change rather than a tightening. A direct DRAFT →
+   * IN_REVIEW move produced an item in a queue with NO `approval` row behind it:
+   * no requester, no policy snapshot, no cycle, nothing for a reviewer to
+   * decide and nothing for the history to show. Review is entered through
+   * `ContentApprovalService.submit()` and left through `decide()` or `cancel()`,
+   * so there is one lifecycle with one writer per edge.
+   *
+   * `APPROVED` is likewise not a target here: it is a verdict, and a verdict
+   * that could be self-assigned through the library would make the whole module
+   * decorative.
    */
   async transition(input: {
     itemId: string;
-    to: 'IN_REVIEW' | 'DRAFT' | 'ARCHIVED';
+    to: 'DRAFT' | 'ARCHIVED';
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentItem> {
@@ -182,8 +231,17 @@ export class ContentLibraryService {
     assertBrandInScope(input.actorBrandScope, item.brandId);
 
     const allowed: Record<string, readonly string[]> = {
-      DRAFT: ['IN_REVIEW', 'ARCHIVED'],
-      IN_REVIEW: ['DRAFT', 'ARCHIVED'],
+      DRAFT: ['ARCHIVED'],
+      // Withdraw the review instead: `ContentApprovalService.cancel()` closes
+      // the cycle AND returns the item, so the queue cannot be emptied by a
+      // route that leaves a PENDING row pointing at a draft.
+      IN_REVIEW: [],
+      // A reviewer asked for changes. The item is editable and resubmittable;
+      // archiving it is also a legitimate answer to "we are not doing this".
+      CHANGES_REQUESTED: ['DRAFT', 'ARCHIVED'],
+      // An approved item may be shelved. It may NOT be walked back to a draft
+      // from here — editing it does that, audibly, and that path records why.
+      APPROVED: ['ARCHIVED'],
       ARCHIVED: ['DRAFT'],
       // Deliberately empty: take it off the calendar first. See above.
       SCHEDULED: [],

@@ -345,6 +345,69 @@ them belongs to the Phase 6 pipeline. §4.7b records what was built and why.
 | AC-15.7 | Audit events cannot be updated or deleted through any application code path                                               | [INT][SEC] |
 | AC-15.8 | Events carry `requestId` and `traceId` that correlate with application logs                                               | [INT]      |
 
+**Verified in Phase 5B-3**, for the rows this milestone owns. Where each is proven:
+
+| ID          | Proof                                                                                                                                                                                                                                                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-15.2** | `/[locale]/activity` renders the workspace's events with actor, action, resource and time, in the reader's own language. `tests/e2e/approvals.spec.ts` asserts the list renders, that the page STATES which grade the reader has, and that the Arabic route is `dir="rtl"` with Arabic text rather than a key falling through |
+| **AC-15.3** | The `workspaceId` predicate is in the query and RLS enforces it independently. `tests/isolation/phase5b3-approvals-tenancy.test.ts` asserts A's events exclude B's. The reader's GRADE is also a predicate: a brand-graded reader with an empty scope matches nothing, which a unit test pins                                 |
+| **AC-15.6** | A refused approval writes `content.approval_denied` with `outcome = DENIED` and its reason. It is written through `denialSink` on a SEPARATE connection, because the refusal rolls back the transaction it was raised in — `tests/isolation/content-approvals.test.ts` asserts the row survives                               |
+| **AC-15.7** | Unchanged and re-asserted: UPDATE and DELETE on `audit_event` are revoked from both roles and refused by a trigger. The Activity Log adds no writer at all (D-124)                                                                                                                                                            |
+
+---
+
+## 16A. Phase 5B-3 — Approvals, Command Center, Activity Log, Notifications
+
+The 16-step journey does not contain an approval step: `docs/MVP-ACCEPTANCE-CRITERIA.md` §1 puts the
+approvals workflow explicitly **out of the vertical slice** ("present as data, not required by the
+slice"). The milestone is nevertheless a required part of Phase 5 — ROADMAP scope items 6, 7 and 8 —
+so its criteria are stated here rather than left unwritten, in the same form as the steps above.
+
+| ID       | Criterion                                                                                                                                       | Method      |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| AC-16.1  | A member with `content.submit` can send a draft for review; the item moves to `IN_REVIEW` and an `Approval` cycle opens in the same transaction | [INT][E2E]  |
+| AC-16.2  | A reviewer can approve, request changes, or reject; each verdict moves the item's own status and is recorded against the person who gave it     | [INT][E2E]  |
+| AC-16.3  | Both refusals return the content to an **editable** state — content is never trapped by the workflow                                            | [INT]       |
+| AC-16.4  | `IN_REVIEW` and `APPROVED` are unreachable except through the approvals service — there is **one** content lifecycle                            | [INT]       |
+| AC-16.5  | Self-approval is refused by default and permitted only where the brand's policy allows it (D-122); the policy in force is snapshotted           | [INT][E2E]  |
+| AC-16.6  | Viewer (read-only) may approve only where the brand's policy grants it, and the role itself is not widened (D-121, resolving U-06)              | [INT][UNIT] |
+| AC-16.7  | The approval history for an item shows every cycle, its verdict, its decider and its round number, to members who may read the content          | [INT]       |
+| AC-16.8  | Editing an approved item revokes the approval and records why                                                                                   | [INT]       |
+| AC-16.9  | Calendar scheduling honours the **real** approval state, per brand — closing AC-14.6 and D-120                                                  | [INT]       |
+| AC-16.10 | Every approval-changing operation is tenant-scoped, permission-checked and audited, including denials                                           | [ISO][INT]  |
+| AC-16.11 | The Command Center aggregates the modules rather than duplicating them, and still states what it cannot measure                                 | [E2E]       |
+| AC-16.12 | The Activity Log is workspace-scoped, permission-graded, chronological and filterable, and leaks no cross-workspace actor or object             | [ISO][E2E]  |
+| AC-16.13 | Notifications are produced from domain events, scoped to the workspace, addressed per member, with server-enforced read state and a badge       | [INT][E2E]  |
+| AC-16.14 | No external delivery of any kind occurs — in-app only (D-123), enforced by a database constraint                                                | [INT][SEC]  |
+| AC-16.15 | Every new screen works in Arabic and English, in RTL and LTR, on a phone, by keyboard, and is clean under axe at WCAG 2.2 AA                    | [E2E]       |
+
+**Verified in Phase 5B-3.** Where each criterion is proven:
+
+| ID           | Proof                                                                                                                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AC-16.1**  | `ContentApprovalService.submit()` writes the `approval` and moves the item inside one `withWorkspace` transaction. `tests/isolation/content-approvals.test.ts` asserts both; the E2E drives it from the composer's own button                                                                           |
+| **AC-16.2**  | `decide()` with each of the three verdicts, asserted against the item's resulting status AND the approval's `decidedByUserId` and `decidedAt`. A decided cycle refuses a second verdict                                                                                                                 |
+| **AC-16.3**  | `REQUEST_CHANGES` → `CHANGES_REQUESTED`, `REJECT` → `DRAFT`. Both editable, both resubmittable, and the difference between them survives in the history rather than in the item's status                                                                                                                |
+| **AC-16.4**  | `ContentLibraryService.transition()` no longer accepts `IN_REVIEW`, and never accepted `APPROVED`. A test asserts the direct move is refused and the item stays a draft — the milestone's central integrity change, measured rather than described                                                      |
+| **AC-16.5**  | Refused for the requester AND for the author when somebody else submitted, permitted once the brand allows it. The snapshot is asserted by changing the policy afterwards and re-reading the row. The E2E meets the refusal in the browser and lifts it through the policy form                         |
+| **AC-16.6**  | `mayApproveForBrand` is unit-tested across every role against both policy states, and end-to-end through the service. A separate test pins `client_viewer` to exactly `['workspace.read']`, so the role cannot be widened by accident                                                                   |
+| **AC-16.7**  | `historyForItem()` returns every cycle ordered by round; a test drives two rounds and asserts `['CHANGES_REQUESTED', 'APPROVED']` and `[1, 2]`. The screen renders it for members who may read the content                                                                                              |
+| **AC-16.8**  | `editVariant` on an `APPROVED` item returns it to `DRAFT` and writes `content.approval_revoked` with `reason: edited_after_approval`. Asserted directly                                                                                                                                                 |
+| **AC-16.9**  | With the brand gate on, an unapproved item is refused and one approved THROUGH THE WORKFLOW schedules. In 5B-2 that second test could only be written by setting the column directly, which is why D-120 shipped the gate off. `CHANGES_REQUESTED` content cannot be scheduled at all                   |
+| **AC-16.10** | `tests/isolation/phase5b3-approvals-tenancy.test.ts` — 28 assertions across the three tables, including the composite-key refusal from inside the attacker's own workspace and the identical failure of a real and a fabricated id. Denials are audited on a separate connection (AC-15.6)              |
+| **AC-16.11** | Every Command Center figure is read through the module that owns it — the approvals queue through `ContentApprovalService.pendingCount`, activity through `ActivityLogService`, the badge through `NotificationService`. The publishing card still states its reason; the E2E asserts it is still there |
+| **AC-16.12** | Scope is a query predicate, graded four ways from `audit.read` (D-125). Keyset paged on `(occurredAt, id)`. The filter's options are the actions occurring within the reader's own scope, so it cannot be used to probe                                                                                 |
+| **AC-16.13** | `NotificationService.create` is called by the approvals service, never by a route. `(workspaceId, idempotencyKey)` is unique, so a replayed event writes nothing; `markRead` filters on the reader's own id, so a stranger's attempt changes nothing and reads as a miss                                |
+| **AC-16.14** | `notification_channel_is_deliverable` — a CHECK constraint pinning every row to `IN_APP`. No mail, SMS, push or webhook client is imported anywhere in the milestone                                                                                                                                    |
+| **AC-16.15** | `tests/e2e/approvals.spec.ts` runs axe over all three routes in both locales, asserts `dir="rtl"` and real Arabic on the Arabic route, asserts the navigation links are reachable by role, and asserts the approvals screen does not scroll horizontally at 390px                                       |
+
+**Two deviations, both recorded.** Notifications are **in-app only** where ROADMAP scope item 8 says
+"in-app + email": no mail transport exists in the platform, and D-123 records email as Phase 8
+launch hardening. `docs/DATABASE.md` §4.8's **`Comment`** is not built — threads, mentions and
+anchored positions are a collaboration surface of their own; the approval's request and decision
+notes carry the review's context. Both are listed in `docs/ROADMAP.md` under "deliberately not
+built".
+
 ---
 
 ## 17. Step 16 — Automated Tests Prove Isolation and Credit Accounting

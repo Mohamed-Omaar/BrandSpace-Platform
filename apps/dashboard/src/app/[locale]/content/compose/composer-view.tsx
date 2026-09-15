@@ -53,7 +53,9 @@ export interface ComposerVariant {
 export interface ComposerDraft {
   readonly id: string;
   readonly title: string;
-  readonly status: 'DRAFT' | 'IN_REVIEW' | 'ARCHIVED';
+  readonly status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'ARCHIVED';
+  /** Phase 5B-3 — the open review, when there is one. */
+  readonly openApprovalId: string | null;
   readonly brandId: string;
   readonly arabicDialect: string | null;
   readonly insufficientKnowledge: boolean;
@@ -75,6 +77,8 @@ export interface ComposerViewProps {
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
+    submitForReview(formData: FormData): Promise<void>;
+    cancelReview(formData: FormData): Promise<void>;
   };
 }
 
@@ -409,6 +413,18 @@ export function ComposerView({
             <p className="cs-empty">{t['content.composer.resultsEmpty']}</p>
           ) : (
             <>
+              {/*
+                PHASE 5B-3 — THE LIFECYCLE STATE, ON THE SCREEN.
+                With a review workflow behind it the status is no longer a
+                detail: it is the difference between content a person may edit,
+                content somebody is reading, and content that has been approved.
+                A composer that showed the buttons but not the state left the
+                reader to infer which of the three they were looking at.
+              */}
+              <p className="cs-hint" data-testid="composer-status">
+                {t[`content.status.${draft.status}`] ?? draft.status}
+              </p>
+
               {draft.arabicDialect ? (
                 <p className="cs-hint" data-testid="content-dialect">
                   {t['content.composer.dialect']}:{' '}
@@ -505,19 +521,49 @@ export function ComposerView({
               ) : null}
 
               <div className="cs-form-actions">
-                {can.submit && draft.status !== 'IN_REVIEW' ? (
+                {/*
+                  PHASE 5B-3 — THREE CONTROLS WHERE THERE WAS ONE, because the
+                  three moves are now genuinely different things. Restoring an
+                  archived draft is a plain status change; SUBMITTING opens an
+                  approval cycle; WITHDRAWING closes it. The old single button
+                  posted `to=IN_REVIEW` and left nothing for a reviewer to act
+                  on.
+                */}
+                {can.submit && draft.status === 'ARCHIVED' ? (
                   <form action={actions.transition}>
                     <input type="hidden" name="locale" value={locale} />
                     <input type="hidden" name="itemId" value={draft.id} />
-                    <input
-                      type="hidden"
-                      name="to"
-                      value={draft.status === 'ARCHIVED' ? 'DRAFT' : 'IN_REVIEW'}
-                    />
+                    <input type="hidden" name="to" value="DRAFT" />
                     <button type="submit" className="cs-ghost-button cs-compact">
-                      {draft.status === 'ARCHIVED'
-                        ? t['content.composer.restore']
-                        : t['content.composer.submit']}
+                      {t['content.composer.restore']}
+                    </button>
+                  </form>
+                ) : null}
+                {can.submit &&
+                (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED') ? (
+                  <form action={actions.submitForReview}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    <button
+                      type="submit"
+                      className="cs-ghost-button cs-compact"
+                      data-testid="submit-for-review"
+                    >
+                      {t['content.composer.submit']}
+                    </button>
+                  </form>
+                ) : null}
+                {can.submit && draft.status === 'IN_REVIEW' && draft.openApprovalId ? (
+                  <form action={actions.cancelReview}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    <input type="hidden" name="approvalId" value={draft.openApprovalId} />
+                    <button
+                      type="submit"
+                      className="cs-ghost-button cs-compact"
+                      data-testid="withdraw-review"
+                    >
+                      {t['content.composer.withdraw']}
                     </button>
                   </form>
                 ) : null}

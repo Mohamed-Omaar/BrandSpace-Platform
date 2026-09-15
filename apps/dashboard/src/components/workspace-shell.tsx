@@ -5,9 +5,12 @@ import {
   ProfileCard,
   TopbarActions,
   menuItemStyle,
+  AlertIcon,
+  CheckIcon,
   CreditIcon,
   HomeIcon,
   CalendarIcon,
+  ListIcon,
   ImageIcon,
   PencilIcon,
   LanguageSwitcher,
@@ -75,6 +78,33 @@ const NAV: readonly {
     key: 'nav.assets',
     permission: 'assets.read',
     icon: <ImageIcon size={20} />,
+  },
+  /*
+   * Phase 5B-3. `/approvals` is gated on `content.read` rather than on
+   * `content.approve`: a member who SUBMITS content needs the screen to follow
+   * what became of it, and the decision controls inside it are gated separately.
+   * `/activity` takes the widest of the three activity grades — the page itself
+   * re-resolves the reader's scope and renders an explicit refusal for a role
+   * that has none, which is a better answer than a 404 for a menu item the
+   * product does have.
+   */
+  {
+    href: '/approvals',
+    key: 'nav.approvals',
+    permission: 'content.read',
+    icon: <CheckIcon size={20} />,
+  },
+  {
+    href: '/activity',
+    key: 'nav.activity',
+    permission: null,
+    icon: <ListIcon size={20} />,
+  },
+  {
+    href: '/notifications',
+    key: 'nav.notifications',
+    permission: null,
+    icon: <AlertIcon size={20} />,
   },
   { href: '/members', key: 'nav.members', permission: 'member.read', icon: <TeamIcon size={20} /> },
   { href: '/permissions', key: 'perms.title', permission: null, icon: <ShieldIcon size={20} /> },

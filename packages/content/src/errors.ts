@@ -117,3 +117,70 @@ export function alreadyScheduled(): AppError {
 export function nothingToSchedule(): AppError {
   return new AppError('VALIDATION_FAILED', 'Write at least one caption before scheduling.');
 }
+
+/* --------------------------------------------------------------------------
+ * Phase 5B-3 — Approvals.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * A review request that does not exist, belongs to another workspace, or names
+ * a brand outside the caller's scope. ONE SHAPE for all three (CLAUDE.md §2.1).
+ */
+export function approvalNotFound(): AppError {
+  return new AppError('NOT_FOUND', 'Review request not found.');
+}
+
+/** The item is not in a state a review can be requested from. */
+export function notSubmittable(): AppError {
+  return new AppError('CONFLICT', 'This content cannot be sent for review from its current state.');
+}
+
+/** A second open review for the same item. The partial unique index agrees. */
+export function alreadyInReview(): AppError {
+  return new AppError('CONFLICT', 'This content is already waiting for review.');
+}
+
+/** The cycle was already decided, or withdrawn, and a verdict cannot land twice. */
+export function approvalAlreadyDecided(): AppError {
+  return new AppError('CONFLICT', 'That review has already been decided.');
+}
+
+/**
+ * D-122 — the actor authored (or requested review of) the content they are
+ * trying to approve, and this brand's policy does not permit self-approval.
+ *
+ * NAMES THE RULE, NOT THE PERSON. Saying who else may approve would disclose
+ * membership to a caller who has just been refused.
+ */
+export function selfApprovalNotPermitted(): AppError {
+  return new AppError(
+    'FORBIDDEN',
+    'You cannot approve content you submitted. Ask another reviewer.',
+  );
+}
+
+/**
+ * The actor may not judge this brand's content.
+ *
+ * FORBIDDEN rather than NOT_FOUND, deliberately and narrowly: the caller has
+ * already been shown the item — they hold `content.read` and the brand is in
+ * their scope — so refusing with a 404 here would hide a capability boundary
+ * rather than a row's existence, and teach the reader their data had vanished.
+ * Where the SUBJECT itself is out of reach the not-found shape still applies.
+ */
+export function approvalNotPermitted(): AppError {
+  return new AppError('FORBIDDEN', 'You do not have permission to decide this review.');
+}
+
+/** The item has been through more review cycles than the policy allows. */
+export function reviewCycleLimitReached(): AppError {
+  return new AppError(
+    'CONFLICT',
+    'This content has been through too many review cycles. Start a new draft.',
+  );
+}
+
+/** A note longer than the activated policy permits. */
+export function noteTooLong(): AppError {
+  return new AppError('VALIDATION_FAILED', 'That note is too long.');
+}
