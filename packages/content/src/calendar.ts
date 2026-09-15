@@ -8,7 +8,7 @@ import {
 } from '@brandspace/database';
 import {
   assertBrandInScope,
-  brandIdScopeFilter,
+  brandIdQueryFilter,
   systemClock,
   type Clock,
 } from '@brandspace/shared';
@@ -372,8 +372,8 @@ export class ContentCalendarService {
     const slots = await this.#db.calendarSlot.findMany({
       where: {
         scheduledAtUtc: { gte: input.start, lt: input.end },
-        ...(input.brandId ? { brandId: input.brandId } : {}),
-        ...brandIdScopeFilter(input.brandScope),
+        // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
         ...(input.includeCancelled ? {} : { status: { not: 'CANCELLED' } }),
       },
       orderBy: { scheduledAtUtc: 'asc' },

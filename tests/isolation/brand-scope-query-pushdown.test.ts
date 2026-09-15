@@ -267,3 +267,120 @@ describe('the calendar month view applies BrandScope inside the query', () => {
     expect(unrestricted.length).toBe(noScopeArgument.length);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The intersection matrix. An explicit brand filter and the authorization
+// scope must AND together — neither may replace the other.
+// ---------------------------------------------------------------------------
+
+describe('an explicit brandId INTERSECTS the BrandScope, never overwrites it', () => {
+  /*
+   * THE DEFECT THIS PINS, because it was introduced by the very change that
+   * made scope a query predicate:
+   *
+   *     ...(input.brandId ? { brandId: input.brandId } : {}),
+   *     ...brandIdScopeFilter(input.brandScope),
+   *
+   * Both fragments set `brandId`, and in an object literal the LATER one wins.
+   * So a non-empty scope silently REPLACED the caller's explicit brand: asking
+   * for brand A while scoped to [A, B] returned A *and* B. That is the same
+   * "later key wins" defect the Activity Log was corrected for, reintroduced
+   * one milestone later. `brandIdQueryFilter` can only produce an `AND`.
+   */
+  const bothBrands = () => [fixtures.a.brandId, otherBrandId];
+
+  it('no brandId + scope [other] => only other', async () => {
+    const rows = await library((s) => s.listItems({ status: 'DRAFT', brandScope: [otherBrandId] }));
+    expect(rows.length).toBe(NOISE);
+    expect(rows.every((i) => i.brandId === otherBrandId)).toBe(true);
+  });
+
+  it('brandId A + scope [A, other] => ONLY A — the case that used to leak', async () => {
+    const rows = await library((s) =>
+      s.listItems({ status: 'DRAFT', brandId: fixtures.a.brandId, brandScope: bothBrands() }),
+    );
+    expect(rows.every((i) => i.brandId === fixtures.a.brandId)).toBe(true);
+    expect(rows.some((i) => i.brandId === otherBrandId)).toBe(false);
+  });
+
+  it('brandId other + scope [A, other] => only other', async () => {
+    const rows = await library((s) =>
+      s.listItems({ status: 'DRAFT', brandId: otherBrandId, brandScope: bothBrands() }),
+    );
+    expect(rows.length).toBe(NOISE);
+    expect(rows.every((i) => i.brandId === otherBrandId)).toBe(true);
+  });
+
+  it('brandId OUTSIDE the scope => empty, and says nothing about that brand', async () => {
+    const outside = randomUUID();
+    const rows = await library((s) =>
+      s.listItems({ status: 'DRAFT', brandId: outside, brandScope: [fixtures.a.brandId] }),
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it('empty scope + brandId other => only other (scope contributes nothing)', async () => {
+    const rows = await library((s) =>
+      s.listItems({ status: 'DRAFT', brandId: otherBrandId, brandScope: [] }),
+    );
+    expect(rows.length).toBe(NOISE);
+    expect(rows.every((i) => i.brandId === otherBrandId)).toBe(true);
+  });
+
+  it('empty scope + no brandId => unrestricted within the workspace', async () => {
+    const rows = await library((s) => s.listItems({ status: 'DRAFT', brandScope: [] }));
+    expect(rows.some((i) => i.brandId === otherBrandId)).toBe(true);
+    expect(rows.some((i) => i.brandId === fixtures.a.brandId)).toBe(true);
+  });
+
+  it('the calendar obeys the same matrix', async () => {
+    const now = new Date();
+    const month = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+    const scopedToA = await calendar((s) =>
+      s.monthView({ ...month, brandId: fixtures.a.brandId, brandScope: bothBrands() }),
+    );
+    expect(scopedToA.every((v) => v.slot.brandId === fixtures.a.brandId)).toBe(true);
+
+    const outside = await calendar((s) =>
+      s.monthView({ ...month, brandId: randomUUID(), brandScope: [fixtures.a.brandId] }),
+    );
+    expect(outside).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Counts and single-item reads are scoped too.
+// ---------------------------------------------------------------------------
+
+describe('counts and item reads apply BrandScope in the query', () => {
+  it('A COUNT IS A DISCLOSURE: status tabs never count another brand', async () => {
+    const scoped = await library((s) => s.countsByStatus({ brandScope: [fixtures.a.brandId] }));
+    const unrestricted = await library((s) => s.countsByStatus({ brandScope: [] }));
+    expect(unrestricted['DRAFT'] ?? 0).toBeGreaterThan(scoped['DRAFT'] ?? 0);
+    expect(scoped['DRAFT'] ?? 0).toBeGreaterThan(0);
+  });
+
+  it('countsByStatus intersects an explicit brand with the scope', async () => {
+    const both = [fixtures.a.brandId, otherBrandId];
+    const counts = await library((s) =>
+      s.countsByStatus({ brandId: fixtures.a.brandId, brandScope: both }),
+    );
+    const onlyA = await library((s) => s.countsByStatus({ brandScope: [fixtures.a.brandId] }));
+    expect(counts['DRAFT'] ?? 0).toBe(onlyA['DRAFT'] ?? 0);
+  });
+
+  it('getItem refuses an out-of-scope draft in the QUERY, not afterwards', async () => {
+    const noise = await library((s) =>
+      s.listItems({ status: 'DRAFT', brandScope: [otherBrandId], limit: 1 }),
+    );
+    const foreignItemId = noise[0]?.id;
+    expect(foreignItemId, 'the fixture should provide an out-of-scope draft').toBeTruthy();
+
+    // Unrestricted: found.
+    await expect(library((s) => s.getItem(foreignItemId as string, []))).resolves.toBeTruthy();
+    // Scoped elsewhere: NOT FOUND, exactly as a draft that never existed.
+    await expect(
+      library((s) => s.getItem(foreignItemId as string, [fixtures.a.brandId])),
+    ).rejects.toThrow(/not found/i);
+  });
+});

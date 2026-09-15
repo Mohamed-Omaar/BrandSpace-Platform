@@ -80,11 +80,12 @@ export default async function ComposePage({
       if (itemId === undefined) {
         return { policy: resolved, draft: null, openApprovalId: null as string | null };
       }
-      const item = await (await services.library()).getItem(itemId).catch(() => null);
+      const item = await (
+        await services.library()
+      )
+        .getItem(itemId, workspace.brandScope)
+        .catch(() => null);
       if (!item) return { policy: resolved, draft: null as null, openApprovalId: null };
-      if (workspace.brandScope.length > 0 && !workspace.brandScope.includes(item.brandId)) {
-        return { policy: resolved, draft: null as null, openApprovalId: null };
-      }
       // Phase 5B-3 — the open cycle, so the composer can offer "withdraw" only
       // when there is in fact something to withdraw.
       const open = await (await services.approvals()).openForItem(item.id);

@@ -5,7 +5,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, brandIdScopeFilter } from '@brandspace/shared';
+import { assertBrandInScope, brandIdQueryFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
 import { validateVariant } from './validation';
@@ -76,8 +76,8 @@ export class ContentLibraryService {
     return this.db.contentItem.findMany({
       where: {
         deletedAt: null,
-        ...(input.brandId ? { brandId: input.brandId } : {}),
-        ...brandIdScopeFilter(input.brandScope),
+        // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
         ...(input.status ? { status: input.status } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
@@ -97,12 +97,23 @@ export class ContentLibraryService {
   }
 
   /** Counts per status, for the library's tabs. One query, not six. */
-  async countsByStatus(
-    brandId?: string | undefined,
-  ): Promise<Record<ContentItem['status'], number>> {
+  async countsByStatus(input?: {
+    brandId?: string | undefined;
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED.
+     *
+     * A COUNT IS A DISCLOSURE. Without this, the library's status tabs told a
+     * member scoped to one brand how many drafts, approved items and archived
+     * items the workspace's OTHER brands hold — a number they could watch move.
+     */
+    brandScope?: readonly string[] | null | undefined;
+  }): Promise<Record<ContentItem['status'], number>> {
     const rows = await this.db.contentItem.groupBy({
       by: ['status'],
-      where: { deletedAt: null, ...(brandId ? { brandId } : {}) },
+      where: {
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandId: input?.brandId, brandScope: input?.brandScope }),
+      },
       _count: { _all: true },
     });
     const counts = {} as Record<ContentItem['status'], number>;
@@ -110,9 +121,26 @@ export class ContentLibraryService {
     return counts;
   }
 
-  async getItem(itemId: string): Promise<ContentItem & { variants: ContentVariant[] }> {
-    const item = await this.db.contentItem.findUnique({
-      where: { id: itemId },
+  async getItem(
+    itemId: string,
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED.
+     *
+     * A PREDICATE, NOT AN AFTERTHOUGHT (D-132). The composer used to fetch the
+     * item and then compare `item.brandId` against the scope in JavaScript.
+     * The outcome was the same — a 404 either way — but the row was read
+     * first, so the check lived in a caller that could forget it, and every
+     * future caller had to remember. Refusing in the `where` means a draft
+     * outside the member's brands is NOT FOUND to the database, which is the
+     * same answer a draft that never existed gives.
+     */
+    brandScope?: readonly string[] | null | undefined,
+  ): Promise<ContentItem & { variants: ContentVariant[] }> {
+    const item = await this.db.contentItem.findFirst({
+      where: {
+        id: itemId,
+        ...brandIdQueryFilter({ brandScope }),
+      },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
     });
     if (!item || item.deletedAt) throw contentItemNotFound();

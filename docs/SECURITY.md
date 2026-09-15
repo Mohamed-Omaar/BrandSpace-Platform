@@ -1810,3 +1810,66 @@ Recorded because a clean result is a result:
   so it raises no cross-tenant question and was deliberately left alone.
 - **Phase 8 retention** remains the recorded launch dependency (D-116, D-117).
   This milestone did not build a retention engine.
+
+### 27.6 The review of the audit — four things the first pass got wrong
+
+A code-level review of the audit's own head found four gaps. Recording them
+here rather than quietly amending §27.1–27.5, because three of the four are the
+same lesson: **a rule is only as good as the thing that enforces it**, and the
+first pass wrote rules while leaving the enforcement one size too small.
+
+**F-09 (High) — the D-112 migration was not atomic.** It lifts FORCE ROW LEVEL
+SECURITY on six tables and restores it at the end, and its comments claimed a
+RAISE would "leave the database exactly as it was". **It would not have.**
+Prisma does not wrap a migration file in a transaction — `20260914200000` §0
+records exactly this (D-113) and opens one explicitly — so the `NO FORCE`
+statements would have committed individually and a failing pre-flight would have
+left six tables readable by their owner outside RLS. No later migration could
+repair that: a later migration only runs once this one is marked resolved.
+
+Corrected in the migration itself, before merge, and proved by making it fail on
+purpose: `tests/isolation/d112-migration-atomicity.test.ts` plants an offending
+row, runs the migration through `psql` the way Prisma runs it, asserts the
+refusal, and then asks the catalogue whether all six tables are still
+ENABLE + FORCE. With `BEGIN`/`COMMIT` removed the suite reports
+`credit_wallet … { enabled: true, forced: false }` — the regression, visible.
+The same treatment was applied to the role-trigger migration, which also gained
+a **count-only pre-flight over existing rows**: a trigger guards future writes
+and says nothing about rows already present, and it REFUSES rather than
+repairing, because rebinding somebody's role changes who can do what.
+
+**F-10 (High) — D-132 was only half-applied.** The Content page scoped the brand
+_dropdown_ and not the _items_: `listItems` was called without the membership
+scope, and `countsByStatus` had no scope parameter at all. A member restricted to
+one brand received every other brand's titles and metadata as soon as they
+cleared the filter, and the status tabs counted those rows. **A count is a
+disclosure** — a number the reader can watch move. Both now take `brandScope`,
+as does `getItem`, whose scope check the composer used to perform in JavaScript
+_after_ reading the row.
+
+**F-11 (Medium-High) — an explicit brand and the scope overwrote each other.**
+The first pass composed them as two spreads setting the same key:
+
+```ts
+...(input.brandId ? { brandId: input.brandId } : {}),
+...brandIdScopeFilter(input.brandScope),
+```
+
+The later key wins, so a non-empty scope silently **replaced** the caller's
+explicit brand instead of narrowing it: asking for brand A while scoped to
+`[A, B]` returned both. This is the identical "later key wins" defect §26.1
+corrected in the Activity Log, reintroduced one milestone later by the change
+meant to make scope a predicate. `brandIdQueryFilter` can only emit an `AND`,
+and the six-row intersection matrix in
+`tests/isolation/brand-scope-query-pushdown.test.ts` fails on the defective
+form.
+
+**F-12 (Medium-High) — D-112 was not actually machine-enforced.** D-131 claimed
+the schema was machine-checked; it was not. The whole-module guard F-80 shipped
+is scoped `relname LIKE 'brand%'`, and the new suite tested the five keys it had
+just fixed. **That is precisely how the Phase 3 and Phase 4 keys survived a rule
+that already forbade them.** `d112-platform-wide-invariant.test.ts` now reads the
+authoritative tenant-owned registry, asks the catalogue for every single-column
+key between two tenant-owned tables, and allows two structural exceptions — the
+`workspace` anchor, and `role`, whose exclusion is backed by an assertion that
+its trigger exists. Restoring one plain key fails it by name.

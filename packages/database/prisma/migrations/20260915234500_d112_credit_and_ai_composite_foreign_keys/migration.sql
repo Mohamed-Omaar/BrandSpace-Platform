@@ -29,6 +29,26 @@
 -- about its own: `correctsLedgerId` asks "is this ledger id real?" and answers.
 
 -- ---------------------------------------------------------------------------
+-- 0. ONE TRANSACTION, EXPLICITLY.
+--
+-- PRISMA DOES NOT WRAP A MIGRATION FILE IN A TRANSACTION — it applies the
+-- statements one at a time. Atomicity therefore has to be ASKED FOR, and this
+-- migration genuinely needs it: §1 lifts a protection that §5 restores, and
+-- those two must be inseparable.
+--
+-- WITHOUT THIS, the §2 pre-flight's own RAISE would be a tenant-isolation
+-- REGRESSION rather than a safe refusal: the `NO FORCE` statements would have
+-- committed individually, so six tables would be left readable by their owner
+-- outside RLS, and no later migration could repair it — a later migration only
+-- runs if this one is marked resolved, and by then the window has been open for
+-- as long as the operator took to notice. `20260914200000` §0 records the same
+-- rule (D-113); this migration was written without it and is corrected here
+-- before merge, which is why there is no follow-up migration to do it.
+-- ---------------------------------------------------------------------------
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
 -- 1. RLS. Every table touched below is ENABLE + FORCE, so the migrator — which
 --    OWNS them — is still subject to their policies. A pre-flight anti-join run
 --    under FORCE would see ZERO rows and report a clean database no matter what
@@ -212,3 +232,10 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- 6. COMMIT. Everything above succeeded together, or none of it happened and
+--    FORCE was never lifted as far as any other session could observe.
+-- ---------------------------------------------------------------------------
+
+COMMIT;

@@ -32,6 +32,56 @@
 -- unaffected. That is the flow most at risk from a trigger here, and it is the
 -- one this formulation deliberately leaves alone.
 
+-- ---------------------------------------------------------------------------
+-- 0. ONE TRANSACTION, AND A PRE-FLIGHT OVER EXISTING ROWS.
+--
+-- Prisma does not wrap a migration file in a transaction (D-113), so atomicity
+-- is asked for explicitly: the function and both triggers arrive together or
+-- not at all, rather than leaving one table guarded and the other not.
+--
+-- A TRIGGER ONLY GUARDS FUTURE WRITES. Adding one says nothing about rows that
+-- are already there, so this refuses to install if any existing membership or
+-- invitation already names a role belonging to another workspace. It REFUSES
+-- rather than repairing: rebinding somebody's role is a change to who can do
+-- what, and that is a product decision, not a migration's to make silently.
+--
+-- The counts carry no ids, no emails and no workspace — a migration log is not
+-- a place customer data belongs. `membership` and `invitation` are ENABLE +
+-- FORCE RLS, so FORCE is lifted for the pre-flight and restored below, for the
+-- same reason `20260915234500` does it: under FORCE the anti-join would see
+-- zero rows and pronounce any database clean.
+-- ---------------------------------------------------------------------------
+
+BEGIN;
+
+ALTER TABLE "membership" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE "invitation" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE "role"       NO FORCE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE offending BIGINT;
+BEGIN
+  SELECT count(*) INTO offending
+    FROM "membership" m
+    JOIN "role" r ON r."id" = m."roleId"
+   WHERE r."workspaceId" IS NOT NULL
+     AND r."workspaceId" <> m."workspaceId";
+  IF offending > 0 THEN
+    RAISE EXCEPTION
+      'membership.roleId: % row(s) name a role belonging to another workspace; resolve these before applying this migration', offending;
+  END IF;
+
+  SELECT count(*) INTO offending
+    FROM "invitation" i
+    JOIN "role" r ON r."id" = i."roleId"
+   WHERE r."workspaceId" IS NOT NULL
+     AND r."workspaceId" <> i."workspaceId";
+  IF offending > 0 THEN
+    RAISE EXCEPTION
+      'invitation.roleId: % row(s) name a role belonging to another workspace; resolve these before applying this migration', offending;
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION app.role_reference_is_workspace_scoped() RETURNS trigger AS $$
 DECLARE role_workspace UUID;
         role_found     BOOLEAN;
@@ -70,3 +120,28 @@ DROP TRIGGER IF EXISTS invitation_role_is_workspace_scoped ON "invitation";
 CREATE TRIGGER invitation_role_is_workspace_scoped
   BEFORE INSERT OR UPDATE OF "roleId", "workspaceId" ON "invitation"
   FOR EACH ROW EXECUTE FUNCTION app.role_reference_is_workspace_scoped();
+
+-- ---------------------------------------------------------------------------
+-- Restore FORCE, and ASSERT it rather than trust it.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE "membership" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "invitation" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "role"       FORCE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['membership','invitation','role'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_class
+       WHERE oid = format('%I', t)::regclass
+         AND relrowsecurity IS TRUE
+         AND relforcerowsecurity IS TRUE
+    ) THEN
+      RAISE EXCEPTION '% must have RLS ENABLED and FORCED after this migration', t;
+    END IF;
+  END LOOP;
+END $$;
+
+COMMIT;

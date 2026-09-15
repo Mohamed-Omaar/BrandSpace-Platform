@@ -83,13 +83,28 @@ export default async function ContentPage({
   const { cards, counts } = await inContentStudio(workspace.workspaceId, async (services) => {
     const library = await services.library();
     const [items, byStatus] = await Promise.all([
+      /*
+       * THE MEMBERSHIP SCOPE GOES INTO THE QUERY, ALONGSIDE the caller's own
+       * brand filter rather than instead of it (D-132).
+       *
+       * Without it, the brand DROPDOWN was scoped and the ITEMS were not: a
+       * member restricted to one brand received the titles and metadata of
+       * every other brand in the workspace as soon as they cleared the filter,
+       * and the status tabs counted those rows too. `brandIdQueryFilter`
+       * intersects the two, so an explicit brand narrows within the scope and
+       * can never widen past it.
+       */
       library.listItems({
         ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
+        brandScope: workspace.brandScope,
         ...(status ? { status } : {}),
         ...(search ? { search } : {}),
         limit: 48,
       }),
-      library.countsByStatus(effectiveBrand),
+      library.countsByStatus({
+        ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
+        brandScope: workspace.brandScope,
+      }),
     ]);
 
     return {
