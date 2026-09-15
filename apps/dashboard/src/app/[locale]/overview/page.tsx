@@ -16,7 +16,7 @@ import {
   statusTone,
   typographyTokens,
 } from '@brandspace/ui';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
 import { activityService, notificationService } from '../../../server/approvals-context';
@@ -101,21 +101,17 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       return { recent, unread, pendingApprovals: 0, inReview: 0, upcoming: [], scope: 'none' };
     }
 
-    const brands = await scoped.db.brand.findMany({
-      where: {
-        workspaceId: workspace.workspaceId,
-        deletedAt: null,
-        ...brandScopeFilter(workspace.brandScope),
-      },
-      select: { id: true, name: true },
-    });
-    const scope = workspace.brandScope.length > 0 ? workspace.brandScope : brands.map((b) => b.id);
-
+    /*
+     * `brandIdScopeFilter` IS THE RULE, applied once. An empty membership scope
+     * is UNRESTRICTED, so it contributes no clause — this page used to expand
+     * it into "every brand id" to work around a service that read empty as
+     * "none", which was the rule implemented a second time in a page.
+     */
     const upcoming = await scoped.db.calendarSlot.findMany({
       where: {
         workspaceId: workspace.workspaceId,
         status: { not: 'CANCELLED' },
-        brandId: { in: [...scope] },
+        ...brandIdScopeFilter(workspace.brandScope),
         scheduledAtUtc: { gte: systemClock.now() },
       },
       orderBy: { scheduledAtUtc: 'asc' },
@@ -132,28 +128,28 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         workspaceId: workspace.workspaceId,
         deletedAt: null,
         status: 'IN_REVIEW',
-        brandId: { in: [...scope] },
+        ...brandIdScopeFilter(workspace.brandScope),
       },
     });
     return { recent, unread, pendingApprovals: 0, inReview, upcoming, scope: 'ok' };
   });
 
-  // The queue count comes from the Approvals service itself, which applies the
-  // same brand scoping its own screen does.
+  /*
+   * The queue count comes from the Approvals service itself, which applies the
+   * same brand scoping its own screen does.
+   *
+   * THE MEMBERSHIP SCOPE IS PASSED THROUGH UNCHANGED. It used to be expanded
+   * here — an empty scope was replaced with "every brand id" — because the
+   * service read an empty list as "no brands" and would otherwise have returned
+   * zero. That workaround was a second implementation of the BrandScope rule
+   * living in a page, and the place the two would drift apart. The service now
+   * honours the platform rule directly, so the page hands it what the session
+   * holds and nothing more.
+   */
   const pendingApprovals = maySeeContent
-    ? await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
-        const brands = await db.brand.findMany({
-          where: {
-            workspaceId: workspace.workspaceId,
-            deletedAt: null,
-            ...brandScopeFilter(workspace.brandScope),
-          },
-          select: { id: true },
-        });
-        const scope =
-          workspace.brandScope.length > 0 ? workspace.brandScope : brands.map((b) => b.id);
-        return (await approvals()).pendingCount(scope);
-      })
+    ? await inContentStudio(workspace.workspaceId, async ({ approvals }) =>
+        (await approvals()).pendingCount(workspace.brandScope),
+      )
     : 0;
 
   const overviewDateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {

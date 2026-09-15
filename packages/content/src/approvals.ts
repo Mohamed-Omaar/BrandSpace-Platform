@@ -5,12 +5,19 @@ import {
   type ContentItem,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, systemClock, type Clock } from '@brandspace/shared';
+import {
+  assertBrandInScope,
+  brandIdScopeFilter,
+  brandInScope,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import {
   alreadyInReview,
   approvalAlreadyDecided,
   approvalNotFound,
   approvalNotPermitted,
+  assigneeNotEligible,
   contentItemNotFound,
   noteTooLong,
   notSubmittable,
@@ -60,6 +67,43 @@ export interface ResolvedApprovalPolicy {
   clientApprovalEnabled: boolean;
 }
 
+/**
+ * THE POLICY A CYCLE IS JUDGED BY IS THE ONE IT WAS OPENED UNDER (D-126).
+ *
+ * `policySnapshot` was being written and then ignored: `decide()` re-read the
+ * brand's CURRENT policy, so flipping `allowSelfApproval` on would retroactively
+ * permit a self-approval on a cycle somebody submitted expecting review — and
+ * the row would still carry the snapshot saying it had not been allowed. The
+ * snapshot is the record of what the requester was promised, so it is what the
+ * verdict is judged against.
+ *
+ * WHAT STAYS CURRENT: membership, role and permissions. A member removed from
+ * the workspace, or moved out of the brand, must not still be able to decide a
+ * cycle opened while they could. Only the WORKFLOW POLICY for the cycle is
+ * historical; who you are is always read fresh.
+ *
+ * An unreadable or absent snapshot falls back to the current policy — a cycle
+ * predating this column, or one whose JSON a future migration reshapes, must
+ * still be decidable rather than permanently stuck.
+ */
+function policyFromSnapshot(
+  snapshot: unknown,
+  current: ResolvedApprovalPolicy,
+): ResolvedApprovalPolicy {
+  if (snapshot === null || typeof snapshot !== 'object') return current;
+  const raw = snapshot as Record<string, unknown>;
+  const bool = (key: keyof ResolvedApprovalPolicy): boolean =>
+    typeof raw[key] === 'boolean' ? (raw[key] as boolean) : current[key];
+  return {
+    // The scheduling gate is NOT taken from the snapshot: it governs the
+    // calendar, not this decision, and the calendar reads it live so a brand
+    // that turns the gate on protects content already in flight.
+    requireApprovalBeforeScheduling: current.requireApprovalBeforeScheduling,
+    allowSelfApproval: bool('allowSelfApproval'),
+    clientApprovalEnabled: bool('clientApprovalEnabled'),
+  };
+}
+
 /** Who is acting, as the SERVER knows them. */
 export interface ApprovalActor {
   userId: string;
@@ -75,6 +119,29 @@ export interface ApprovalWithItem extends Approval {
   item: Pick<ContentItem, 'id' | 'title' | 'status' | 'brandId' | 'createdByUserId'> | null;
 }
 
+/** What a reviewer is shown in order to decide, and the whole of it. */
+export interface ReviewSubject {
+  approvalId: string;
+  itemId: string;
+  itemTitle: string;
+  brandId: string;
+  brandName: string;
+  itemStatus: ContentItem['status'];
+  status: ApprovalStatus;
+  cycle: number;
+  requestNote: string | null;
+  requestedByUserId: string;
+  assignedToUserId: string | null;
+  mayDecide: boolean;
+  variants: readonly {
+    id: string;
+    platformKey: string;
+    locale: string;
+    body: string;
+    hashtags: readonly string[];
+  }[];
+}
+
 /** Told when a review changes hands, so somebody is informed. */
 export interface ApprovalNotifier {
   approvalRequested(input: {
@@ -84,6 +151,19 @@ export interface ApprovalNotifier {
     brandId: string;
     requestedByUserId: string;
     assignedToUserId: string | null;
+    /*
+     * THE RECIPIENTS ARE RESOLVED BY THE SERVICE, not by the notifier.
+     *
+     * The first version had the dashboard adapter list everyone holding
+     * `content.approve` and send to all of them — which ignored membership
+     * status and BrandScope entirely, so a member restricted to Brand A was
+     * told the TITLE of content in Brand B, and a member whose membership had
+     * been suspended kept receiving it. A notification is a disclosure: it says
+     * that content exists, in that brand, awaiting review. Who may receive one
+     * is an authorization question, and it belongs where the other
+     * authorization lives.
+     */
+    recipientUserIds: readonly string[];
   }): Promise<void>;
   approvalDecided(input: {
     approvalId: string;
@@ -272,6 +352,30 @@ export class ContentApprovalService {
     const policy = await this.policyForBrand(item.brandId);
 
     /*
+     * AN ASSIGNMENT IS VALIDATED BEFORE IT IS PERSISTED.
+     *
+     * It was previously written straight from the form: any uuid at all became
+     * the assignee, including a member of another brand, a suspended member, or
+     * somebody with no review authority — and `decide()` then ignored the field
+     * entirely, so the screen said a review was assigned to a person who could
+     * never act on it. Assignment is real now (see `decide()`), so it has to
+     * name somebody who can actually decide.
+     *
+     * The refusal is NOT_FOUND-shaped: confirming that a given uuid is a member
+     * of this workspace, or is scoped to this brand, would answer a question the
+     * requester has not been granted (CLAUDE.md §2.1).
+     */
+    const assignedToUserId = input.assignedToUserId ?? null;
+    if (assignedToUserId !== null) {
+      const eligible = await this.mayUserReview({
+        userId: assignedToUserId,
+        brandId: item.brandId,
+        policy,
+      });
+      if (!eligible) throw assigneeNotEligible();
+    }
+
+    /*
      * THE ROW AND THE ITEM'S STATUS MOVE TOGETHER, and they already do: every
      * caller reaches this service inside `withWorkspace`, which binds the tenant
      * GUC with `set_config(..., true)` — transaction-local — so the whole
@@ -311,6 +415,20 @@ export class ContentApprovalService {
       },
     });
 
+    /*
+     * AN ASSIGNED REVIEW GOES TO THAT PERSON ALONE; an unassigned one goes to
+     * everyone who could pick it up — minus the requester, who knows. Both
+     * lists come from `eligibleReviewers`, so the notification cannot reach
+     * somebody who may not act on it or may not see the brand.
+     */
+    const recipientUserIds = approval.assignedToUserId
+      ? [approval.assignedToUserId]
+      : await this.eligibleReviewers({
+          brandId: item.brandId,
+          policy,
+          excludeUserId: input.actor.userId,
+        });
+
     await this.#notifier?.approvalRequested({
       approvalId: approval.id,
       itemId: item.id,
@@ -318,6 +436,7 @@ export class ContentApprovalService {
       brandId: item.brandId,
       requestedByUserId: input.actor.userId,
       assignedToUserId: approval.assignedToUserId,
+      recipientUserIds,
     });
 
     return approval;
@@ -343,12 +462,46 @@ export class ContentApprovalService {
     note?: string | null;
   }): Promise<Approval> {
     const note = this.#checkNote(input.note);
+
+    /*
+     * THE ROW IS LOCKED BEFORE IT IS READ (finding 5).
+     *
+     * `SELECT … FOR UPDATE` on the approval, so a second verdict on the same
+     * cycle BLOCKS here until the first commits and then sees `APPROVED` rather
+     * than `PENDING`. The previous read-then-update by id alone let two
+     * concurrent reviewers both see `PENDING`, both pass the guard, and both
+     * write — last writer winning, the loser's verdict vanishing, and two audit
+     * events claiming to have decided the same review. A conditional `updateMany`
+     * on `status = 'PENDING'` would close the write race but not the read race:
+     * the self-approval and authority checks are made against the row, so they
+     * have to be made against a row nobody else can move underneath them.
+     *
+     * Every caller is already inside `withWorkspace`'s transaction, so the lock
+     * is held until that transaction commits — which is what makes the approval
+     * write, the item write, the audit event and the notification one unit.
+     */
+    const locked = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "approval"
+      WHERE "id" = ${input.approvalId}::uuid AND "workspaceId" = ${this.#workspaceId}::uuid
+      FOR UPDATE
+    `;
+    if (locked.length === 0) throw approvalNotFound();
+
     const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
     if (!approval) throw approvalNotFound();
     assertBrandInScope(input.actor.brandScope, approval.brandId);
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
 
-    const policy = await this.policyForBrand(approval.brandId);
+    /*
+     * D-126 — THE CYCLE IS JUDGED BY THE POLICY IT WAS OPENED UNDER. The
+     * current policy is still read, because `policyFromSnapshot` falls back to
+     * it and because the scheduling gate is deliberately live.
+     */
+    const current = await this.policyForBrand(approval.brandId);
+    const policy = policyFromSnapshot(approval.policySnapshot, current);
+
+    // WHO the actor is, however, is always read fresh: `mayApproveForBrand`
+    // takes the permissions of the session making THIS request.
     if (
       !mayApproveForBrand({
         roleKey: input.actor.roleKey,
@@ -357,6 +510,16 @@ export class ContentApprovalService {
       })
     ) {
       await this.#auditDenied(input.actor.userId, approval, 'not_permitted');
+      throw approvalNotPermitted();
+    }
+
+    /*
+     * AN ASSIGNED REVIEW IS THAT PERSON'S TO DECIDE. Assignment was recorded
+     * and then ignored, which is a misleading half-behaviour: the screen said a
+     * review was assigned and anyone who could approve could still decide it.
+     */
+    if (approval.assignedToUserId && approval.assignedToUserId !== input.actor.userId) {
+      await this.#auditDenied(input.actor.userId, approval, 'assigned_to_another');
       throw approvalNotPermitted();
     }
 
@@ -393,9 +556,13 @@ export class ContentApprovalService {
           : 'DRAFT';
 
     const now = this.#clock.now();
-    // One transaction, as in `submit()` — see the note there.
-    const decided = await this.#db.approval.update({
-      where: { id: approval.id },
+    /*
+     * CONDITIONAL ON `PENDING` AS WELL AS LOCKED — belt and braces, and the
+     * braces are what a future caller outside a transaction would be left with.
+     * `updateMany` returns a count, so a zero says somebody else decided it.
+     */
+    const moved = await this.#db.approval.updateMany({
+      where: { id: approval.id, workspaceId: this.#workspaceId, status: 'PENDING' },
       data: {
         status: nextApproval,
         decidedByUserId: input.actor.userId,
@@ -403,6 +570,8 @@ export class ContentApprovalService {
         decisionNote: note,
       },
     });
+    if (moved.count === 0) throw approvalAlreadyDecided();
+    const decided = await this.#db.approval.findUniqueOrThrow({ where: { id: approval.id } });
     await this.#db.contentItem.update({ where: { id: item.id }, data: { status: nextItem } });
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
@@ -454,12 +623,25 @@ export class ContentApprovalService {
     note?: string | null;
   }): Promise<Approval> {
     const note = this.#checkNote(input.note);
+
+    // THE SAME LOCK `decide()` TAKES, so a decide/cancel race has one
+    // authoritative winner rather than a verdict landing on a withdrawn cycle
+    // or a withdrawal erasing a verdict somebody already gave.
+    const locked = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "approval"
+      WHERE "id" = ${input.approvalId}::uuid AND "workspaceId" = ${this.#workspaceId}::uuid
+      FOR UPDATE
+    `;
+    if (locked.length === 0) throw approvalNotFound();
+
     const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
     if (!approval) throw approvalNotFound();
     assertBrandInScope(input.actor.brandScope, approval.brandId);
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
 
-    const policy = await this.policyForBrand(approval.brandId);
+    // D-126: the cycle's own policy, for the same reason `decide()` uses it.
+    const current = await this.policyForBrand(approval.brandId);
+    const policy = policyFromSnapshot(approval.policySnapshot, current);
     const mayCancel =
       approval.requestedByUserId === input.actor.userId ||
       mayApproveForBrand({
@@ -472,10 +654,12 @@ export class ContentApprovalService {
       throw approvalNotPermitted();
     }
 
-    const cancelled = await this.#db.approval.update({
-      where: { id: approval.id },
+    const withdrawn = await this.#db.approval.updateMany({
+      where: { id: approval.id, workspaceId: this.#workspaceId, status: 'PENDING' },
       data: { status: 'CANCELLED', decisionNote: note },
     });
+    if (withdrawn.count === 0) throw approvalAlreadyDecided();
+    const cancelled = await this.#db.approval.findUniqueOrThrow({ where: { id: approval.id } });
     if (approval.contentItemId) {
       const current = await this.#db.contentItem.findUnique({
         where: { id: approval.contentItemId },
@@ -513,7 +697,7 @@ export class ContentApprovalService {
    * CLAUDE.md §2.1 forbids.
    */
   async queue(input: {
-    brandScope: readonly string[];
+    brandScope: readonly string[] | null | undefined;
     assignedToUserId?: string;
     take?: number;
   }): Promise<ApprovalWithItem[]> {
@@ -521,7 +705,11 @@ export class ContentApprovalService {
       where: {
         workspaceId: this.#workspaceId,
         status: 'PENDING',
-        brandId: { in: [...input.brandScope] },
+        // AN EMPTY SCOPE IS UNRESTRICTED — the platform rule `brandInScope()`
+        // and `brandScopeFilter()` have carried since Phase 2B. Reading it as
+        // "no brands" showed an unrestricted member an empty queue, and made
+        // every caller compensate by expanding the scope itself.
+        ...brandIdScopeFilter(input.brandScope),
         ...(input.assignedToUserId ? { assignedToUserId: input.assignedToUserId } : {}),
       },
       include: {
@@ -535,15 +723,102 @@ export class ContentApprovalService {
   }
 
   /** How many reviews are open in the caller's brands. For the Command Center. */
-  async pendingCount(brandScope: readonly string[]): Promise<number> {
-    if (brandScope.length === 0) return 0;
+  async pendingCount(brandScope: readonly string[] | null | undefined): Promise<number> {
     return this.#db.approval.count({
       where: {
         workspaceId: this.#workspaceId,
         status: 'PENDING',
-        brandId: { in: [...brandScope] },
+        ...brandIdScopeFilter(brandScope),
       },
     });
+  }
+
+  /**
+   * THE REVIEW SUBJECT — the narrowest thing a reviewer needs in order to
+   * decide, and nothing else (finding 2, D-121).
+   *
+   * WHY THIS EXISTS. The D-121 per-brand Viewer grant was unreachable: the
+   * approvals screen and the decision action both required `content.read`, and
+   * `client_viewer` holds `workspace.read` and nothing else. The options were
+   * to widen the role — which D-121 exists specifically not to do, because it
+   * would grant every Viewer in every workspace the whole content library — or
+   * to give the review its own authorized read. This is that read.
+   *
+   * WHAT IT RETURNS: the title, the brand name, the captions under review, the
+   * requester's note and the cycle. WHAT IT DOES NOT: anything else in the
+   * library, any other draft, Brand Brain, assets, analytics, settings or
+   * billing. A reviewer cannot judge words they cannot see, and they do not
+   * need anything beyond the words.
+   *
+   * AUTHORIZED PER APPROVAL, against the brand's own policy and the cycle's own
+   * snapshot — the same `mayApproveForBrand` the verdict uses, so a reader who
+   * could not decide it cannot read it either. Brand B's queue is invisible to
+   * a Viewer granted Brand A, and the refusal is NOT_FOUND-shaped.
+   */
+  async reviewSubject(input: { approvalId: string; actor: ApprovalActor }): Promise<ReviewSubject> {
+    const approval = await this.#db.approval.findUnique({ where: { id: input.approvalId } });
+    if (!approval) throw approvalNotFound();
+    assertBrandInScope(input.actor.brandScope, approval.brandId);
+
+    const current = await this.policyForBrand(approval.brandId);
+    const policy = policyFromSnapshot(approval.policySnapshot, current);
+    const mayReview = mayApproveForBrand({
+      roleKey: input.actor.roleKey,
+      permissionKeys: input.actor.permissionKeys,
+      policy,
+    });
+    /*
+     * A reader holding `content.read` may see the subject because they may see
+     * the content anyway; anybody else may see it ONLY because they may decide
+     * it. Refusing with NOT_FOUND rather than FORBIDDEN keeps the existence of
+     * another brand's review out of the answer.
+     */
+    if (!mayReview && !input.actor.permissionKeys.includes('content.read')) {
+      throw approvalNotFound();
+    }
+    if (!approval.contentItemId) throw contentItemNotFound();
+
+    const item = await this.#db.contentItem.findUnique({
+      where: { id: approval.contentItemId },
+      select: {
+        id: true,
+        title: true,
+        brandId: true,
+        status: true,
+        deletedAt: true,
+        brand: { select: { name: true } },
+        variants: {
+          orderBy: { platformKey: 'asc' },
+          select: { id: true, platformKey: true, locale: true, body: true, hashtags: true },
+        },
+      },
+    });
+    if (!item || item.deletedAt) throw contentItemNotFound();
+
+    return {
+      approvalId: approval.id,
+      itemId: item.id,
+      itemTitle: item.title,
+      brandId: item.brandId,
+      brandName: item.brand.name,
+      itemStatus: item.status,
+      status: approval.status,
+      cycle: approval.cycle,
+      requestNote: approval.requestNote,
+      requestedByUserId: approval.requestedByUserId,
+      assignedToUserId: approval.assignedToUserId,
+      mayDecide: mayReview && approval.status === 'PENDING',
+      variants: item.variants.map((v) => ({
+        id: v.id,
+        platformKey: v.platformKey,
+        locale: v.locale,
+        // A purged body (D-116 retention) reads as empty rather than as
+        // `null` reaching a template: the reviewer sees that there is nothing
+        // to read, which is the honest rendering of content that has expired.
+        body: v.body ?? '',
+        hashtags: v.hashtags,
+      })),
+    };
   }
 
   /** Every cycle this item has been through, oldest first. The history. */
@@ -568,6 +843,64 @@ export class ContentApprovalService {
     return this.#db.approval.findFirst({
       where: { workspaceId: this.#workspaceId, contentItemId: itemId, status: 'PENDING' },
     });
+  }
+
+  /**
+   * WHO MAY DECIDE A REVIEW FOR THIS BRAND, RIGHT NOW.
+   *
+   * One implementation, used both to validate an assignment before it is
+   * persisted and to address the notification afterwards — because "who may
+   * review this" and "who may be told about it" have to be the same answer.
+   *
+   * Three conditions, all of them checked here rather than assumed:
+   *
+   *   1. ACTIVE MEMBERSHIP. An invited-but-not-accepted or suspended member is
+   *      not a reviewer, however their role reads.
+   *   2. BRANDSCOPE, with the platform's own semantics — empty is unrestricted,
+   *      non-empty must contain this brand. Skipping it told a member scoped to
+   *      one brand the title of another brand's content.
+   *   3. EFFECTIVE approval authority: `content.approve` through the role, OR
+   *      the D-121 per-brand Viewer grant when this brand enables it. Reading
+   *      the static permission alone made the Viewer grant invisible to the
+   *      very notification that would tell them they had work.
+   */
+  async eligibleReviewers(input: {
+    brandId: string;
+    policy: ResolvedApprovalPolicy;
+    excludeUserId?: string;
+  }): Promise<string[]> {
+    const members = await this.#db.membership.findMany({
+      where: { workspaceId: this.#workspaceId, status: 'ACTIVE' },
+      select: {
+        userId: true,
+        brandScope: true,
+        role: { select: { key: true, permissions: { select: { permission: true } } } },
+      },
+    });
+    return members
+      .filter((m) => m.userId !== input.excludeUserId)
+      .filter((m) => brandInScope(m.brandScope, input.brandId))
+      .filter((m) =>
+        mayApproveForBrand({
+          roleKey: m.role.key,
+          permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
+          policy: input.policy,
+        }),
+      )
+      .map((m) => m.userId);
+  }
+
+  /** Is this ONE member an eligible reviewer for this brand? Same three rules. */
+  async mayUserReview(input: {
+    userId: string;
+    brandId: string;
+    policy: ResolvedApprovalPolicy;
+  }): Promise<boolean> {
+    const eligible = await this.eligibleReviewers({
+      brandId: input.brandId,
+      policy: input.policy,
+    });
+    return eligible.includes(input.userId);
   }
 
   #checkNote(note: string | null | undefined): string | null {

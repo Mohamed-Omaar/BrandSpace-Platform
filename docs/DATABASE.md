@@ -564,6 +564,22 @@ Every column is NULLABLE and **NULL means "no opinion"**, resolving to the activ
 defaults, so changing a default still reaches every brand that never chose otherwise. One row per
 brand, by unique index.
 
+### 4.8c Approval integrity — the corrective pass (Phase 5B-3, D-128)
+
+`20260915210000_phase_5b_3_approval_integrity` narrows what
+`20260915180000` granted, because that migration's grants did not match its own
+comment: §9 said `notification` was "the only one of the three the application
+may DELETE" and then granted DELETE on all three.
+
+|                                                                              |                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DELETE revoked** from `brandspace_app` on `approval` and `approval_policy` | An approval is the record that somebody reviewed something. A policy row is reset by setting its columns back to NULL — "no opinion", which is what an absent row means — so DELETE buys nothing there either, and `updatedByUserId` is worth keeping. The PLATFORM role keeps DELETE for tenant offboarding and the D-116 purge |
+| **`approval_write_once`**, a `BEFORE UPDATE` trigger                         | A decided or withdrawn cycle never changes again, and a cycle's IDENTITY — `subjectType`, `contentItemId`, `requestedByUserId`, `cycle`, `createdAt`, `policySnapshot` — never changes at all. The legitimate `PENDING` → terminal transition is untouched, which is the whole workflow                                          |
+
+A trigger rather than a CHECK because the rule is about the TRANSITION — old row
+versus new row — and a CHECK sees only the new one. Test fixtures clean up as
+the PLATFORM role rather than the production grant being widened to suit them.
+
 ### 9.3b The `notification` table — AS BUILT (Phase 5B-3)
 
 §9.3 above is the DESIGN. Three differences, each with a reason.

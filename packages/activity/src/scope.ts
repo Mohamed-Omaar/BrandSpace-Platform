@@ -21,22 +21,34 @@
  * name instead could not be reasoned about, could not be overridden, and would
  * silently mis-grade any role added later. Most privileged wins, so a role
  * holding two keys gets the wider view rather than an arbitrary one.
+ *
+ * AN EMPTY `brandScope` MEANS UNRESTRICTED — the platform rule, not a local
+ * one. `brandInScope()` and `brandScopeFilter()` have said so since Phase 2B: a
+ * membership with no brands listed is scoped to ALL the workspace's brands, and
+ * a membership listing brands is scoped to those. The first version of this
+ * file read an empty list as "no brands", which inverted the rule and would
+ * have shown a brand-graded member with an unrestricted membership NOTHING —
+ * failing closed, but wrongly, and disagreeing with every other reader of the
+ * same field. `kind: 'brand'` with `brandIds: null` is that case, stated in the
+ * type so a consumer cannot forget it.
  */
 
 export type ActivityScope =
   | { kind: 'workspace' }
-  | { kind: 'brand'; brandIds: readonly string[] }
+  /** `brandIds: null` is UNRESTRICTED — an empty membership scope, per the platform rule. */
+  | { kind: 'brand'; brandIds: readonly string[] | null }
   | { kind: 'own'; userId: string }
   | { kind: 'none' };
 
 export function resolveActivityScope(input: {
   permissionKeys: readonly string[];
   userId: string;
-  brandScope: readonly string[];
+  brandScope: readonly string[] | null | undefined;
 }): ActivityScope {
   if (input.permissionKeys.includes('audit.read_workspace')) return { kind: 'workspace' };
   if (input.permissionKeys.includes('audit.read')) {
-    return { kind: 'brand', brandIds: input.brandScope };
+    const scope = input.brandScope;
+    return { kind: 'brand', brandIds: !scope || scope.length === 0 ? null : [...scope] };
   }
   if (input.permissionKeys.includes('audit.read_own')) {
     return { kind: 'own', userId: input.userId };

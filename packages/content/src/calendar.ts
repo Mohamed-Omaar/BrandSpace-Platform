@@ -103,18 +103,26 @@ export interface CalendarSlotView {
 /**
  * States a content item may be scheduled FROM.
  *
- * `CHANGES_REQUESTED` IS NOT ON THIS LIST (Phase 5B-3). A reviewer has actively
- * said the content is not ready; letting it be planned anyway would make the
- * verdict advisory. `DRAFT` and `IN_REVIEW` remain schedulable because with the
- * gate OFF a plan is just a plan — with the gate on, the check below refuses
- * everything but `APPROVED` regardless.
+ * `IN_REVIEW` IS NOT ON THIS LIST, and removing it closes a real divergence
+ * between the two modules rather than tightening a rule.
+ *
+ * WHAT WENT WRONG WHILE IT WAS: with the approval gate OFF, an item submitted
+ * for review could also be scheduled — `schedule()` moved it to `SCHEDULED`
+ * while its PENDING approval was still open. The reviewer's verdict then moved
+ * it again, out from under a live calendar slot: an approval sent it to
+ * `APPROVED` and a rejection to `DRAFT`, in both cases leaving a slot pointing
+ * at content the item no longer claims to be scheduled. `transition()` refuses
+ * to move a scheduled item precisely so that cannot happen, and this path went
+ * around it.
+ *
+ * THE INVARIANT IS THE SIMPLE ONE: an item in review is not schedulable. With
+ * the gate OFF a DRAFT may still be planned directly, which is the whole point
+ * of the gate being optional; with the gate ON only `APPROVED` may.
+ *
+ * `CHANGES_REQUESTED` is likewise absent: a reviewer has actively said the
+ * content is not ready, and planning it anyway would make the verdict advisory.
  */
-const SCHEDULABLE_FROM: readonly ContentItem['status'][] = [
-  'DRAFT',
-  'IN_REVIEW',
-  'APPROVED',
-  'SCHEDULED',
-];
+const SCHEDULABLE_FROM: readonly ContentItem['status'][] = ['DRAFT', 'APPROVED', 'SCHEDULED'];
 
 export class ContentCalendarService {
   readonly #db: TenantScopedClient;

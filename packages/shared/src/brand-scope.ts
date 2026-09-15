@@ -73,3 +73,25 @@ export function brandScopeFilter(brandScope: readonly string[] | null | undefine
   if (!brandScope || brandScope.length === 0) return {};
   return { id: { in: [...brandScope] } };
 }
+
+/**
+ * A Prisma `where` fragment restricting a BRAND-SCOPED CHILD row to the
+ * member's scope — `calendar_slot`, `approval`, `content_item`, `audit_event`.
+ *
+ * The sibling of `brandScopeFilter()`, which filters the `brand` table itself
+ * by `id`; this one filters anything that REFERENCES a brand, by `brandId`.
+ * Both read an empty or absent scope as UNRESTRICTED and contribute no clause,
+ * which is the platform rule `brandInScope()` has carried since Phase 2B.
+ *
+ * IT EXISTS BECAUSE THE RULE WAS RE-IMPLEMENTED THREE TIMES and got a different
+ * answer each time: the approvals queue read an empty scope as "no brands" and
+ * returned nothing, the activity log did the same, and two dashboard pages
+ * compensated by expanding an empty scope into "every brand id" before calling
+ * them. One helper, one answer.
+ */
+export function brandIdScopeFilter(brandScope: readonly string[] | null | undefined): {
+  brandId?: { in: string[] };
+} {
+  if (!brandScope || brandScope.length === 0) return {};
+  return { brandId: { in: [...brandScope] } };
+}

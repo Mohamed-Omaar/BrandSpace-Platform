@@ -1,15 +1,15 @@
 import Link from 'next/link';
 import {
   Card,
+  CONTROL_CLASS,
   Field,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
   buttonStyle,
-  inputStyle,
-  CONTROL_CLASS,
   colorTokens,
+  inputStyle,
   spacingTokens,
   typographyTokens,
   type BadgeTone,
@@ -25,7 +25,13 @@ import type { MessageKey } from '../../../i18n/messages';
  * design behind it, exactly the case §6.1 was written for after the Asset
  * Library. So the screen is composed from what already ships: `Card`,
  * `SectionHeader`, `StateMessage`, `StatusBadge`, `Field` and the button and
- * spacing tokens, inside the shared dashboard shell. Nothing new was invented.
+ * spacing tokens, inside the shared dashboard shell.
+ *
+ * EVERY PANEL IS GATED BY A SERVER-RESOLVED FLAG, not by a link being left out.
+ * A Viewer reviewing under the D-121 per-brand grant sees the queue for the
+ * brands that admit them and the review subject — and not "what you sent"
+ * (they cannot send), not the policy editor, and not a link into the content
+ * library they hold no permission to read.
  *
  * A SERVER COMPONENT WITH FORMS, and no client JavaScript at all. Every control
  * is a `<form>` posting to a server action, so the screen works with scripting
@@ -46,7 +52,33 @@ export interface ApprovalRow {
   readonly mayDecide: boolean;
   /** True when the reader submitted it and the brand forbids self-approval. */
   readonly blockedAsSelf: boolean;
+  /** True when the review is assigned to somebody else, who alone may decide it. */
+  readonly assignedElsewhere: boolean;
   readonly mayWithdraw: boolean;
+  /**
+   * Whether to offer the Studio link. A Viewer reviewing under the D-121
+   * per-brand grant holds no `content.read`, so sending them to the composer
+   * would be a link that refuses them — §20 forbids exactly that.
+   */
+  readonly mayOpenInStudio: boolean;
+}
+
+/** The narrowest thing a reviewer needs in order to decide. */
+export interface ReviewSubjectView {
+  readonly approvalId: string;
+  readonly itemId: string;
+  readonly itemTitle: string;
+  readonly brandName: string;
+  readonly cycle: number;
+  readonly requestNote: string | null;
+  readonly requestedByLabel: string;
+  readonly mayDecide: boolean;
+  readonly variants: readonly {
+    readonly id: string;
+    readonly platformKey: string;
+    readonly body: string;
+    readonly hashtags: readonly string[];
+  }[];
 }
 
 export interface BrandPolicyRow {
@@ -71,7 +103,9 @@ export function ApprovalsView({
   queue,
   mine,
   policies,
+  review,
   mayReview,
+  mayReadContent,
   mayManagePolicy,
   actions,
 }: {
@@ -80,7 +114,9 @@ export function ApprovalsView({
   readonly queue: readonly ApprovalRow[];
   readonly mine: readonly ApprovalRow[];
   readonly policies: readonly BrandPolicyRow[];
+  readonly review: ReviewSubjectView | null;
   readonly mayReview: boolean;
+  readonly mayReadContent: boolean;
   readonly mayManagePolicy: boolean;
   readonly actions: {
     decide(formData: FormData): Promise<void>;
@@ -90,6 +126,43 @@ export function ApprovalsView({
 }) {
   return (
     <Stack>
+      {/*
+        THE REVIEW SUBJECT, when one was asked for. This is the whole of what a
+        Viewer reviewing under D-121 may read: the captions under review and the
+        requester's note. It is authorized per approval inside the service, so
+        rendering it here discloses nothing the reader could not already fetch.
+      */}
+      {review ? (
+        <Card testId="approvals-review-subject">
+          <SectionHeader
+            eyebrow={`${review.brandName} · ${t('approvals.cycle')} ${review.cycle}`}
+            title={review.itemTitle}
+            description={`${t('approvals.requestedBy')} ${review.requestedByLabel}`}
+          />
+          {review.requestNote ? <p style={noteStyle}>{review.requestNote}</p> : null}
+          <ul style={listStyle} data-testid="review-variants">
+            {review.variants.map((variant) => (
+              <li key={variant.id} style={rowStyle}>
+                <span style={metaStyle}>{variant.platformKey}</span>
+                <p style={bodyStyle}>{variant.body}</p>
+                {variant.hashtags.length > 0 ? (
+                  <span style={metaStyle}>{variant.hashtags.map((h) => `#${h}`).join(' ')}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {review.mayDecide ? (
+            <DecisionForm
+              locale={locale}
+              t={t}
+              approvalId={review.approvalId}
+              itemId={review.itemId}
+              action={actions.decide}
+            />
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card testId="approvals-queue">
         <SectionHeader eyebrow={t('approvals.eyebrow')} title={t('approvals.queue')} />
         {!mayReview ? (
@@ -108,50 +181,17 @@ export function ApprovalsView({
               <li key={row.id} style={rowStyle} data-testid={`approval-${row.itemId}`}>
                 <ApprovalSummary locale={locale} t={t} row={row} />
                 {row.mayDecide ? (
-                  <form action={actions.decide} style={formStyle}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="approvalId" value={row.id} />
-                    <Field label={t('approvals.decisionNote')} htmlFor={`note-${row.id}`}>
-                      <input
-                        id={`note-${row.id}`}
-                        name="note"
-                        type="text"
-                        style={inputStyle()}
-                        className={CONTROL_CLASS}
-                        placeholder={t('approvals.notePlaceholder')}
-                        maxLength={1000}
-                      />
-                    </Field>
-                    <div style={buttonRowStyle}>
-                      <button
-                        type="submit"
-                        name="verdict"
-                        value="APPROVE"
-                        style={buttonStyle('primary')}
-                        data-testid={`approve-${row.itemId}`}
-                      >
-                        {t('approvals.approve')}
-                      </button>
-                      <button
-                        type="submit"
-                        name="verdict"
-                        value="REQUEST_CHANGES"
-                        style={buttonStyle('ghost')}
-                        data-testid={`request-changes-${row.itemId}`}
-                      >
-                        {t('approvals.requestChanges')}
-                      </button>
-                      <button
-                        type="submit"
-                        name="verdict"
-                        value="REJECT"
-                        style={buttonStyle('ghost')}
-                        data-testid={`reject-${row.itemId}`}
-                      >
-                        {t('approvals.reject')}
-                      </button>
-                    </div>
-                  </form>
+                  <DecisionForm
+                    locale={locale}
+                    t={t}
+                    approvalId={row.id}
+                    itemId={row.itemId}
+                    action={actions.decide}
+                  />
+                ) : row.assignedElsewhere ? (
+                  <p style={noteStyle} data-testid={`assigned-elsewhere-${row.itemId}`}>
+                    {t('approvals.assignedElsewhere')}
+                  </p>
                 ) : row.blockedAsSelf ? (
                   /*
                    * D-122. The reader submitted this and the brand forbids
@@ -169,83 +209,92 @@ export function ApprovalsView({
         )}
       </Card>
 
-      <Card testId="approvals-mine">
-        <SectionHeader title={t('approvals.mine')} />
-        {mine.length === 0 ? (
-          <StateMessage
-            title={t('approvals.mineEmptyTitle')}
-            description={t('approvals.mineEmptyBody')}
-          />
-        ) : (
-          <ul style={listStyle} data-testid="approvals-mine-list">
-            {mine.map((row) => (
-              <li key={row.id} style={rowStyle} data-testid={`mine-${row.itemId}`}>
-                <ApprovalSummary locale={locale} t={t} row={row} />
-                {row.mayWithdraw ? (
-                  <form action={actions.withdraw}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="approvalId" value={row.id} />
-                    <button
-                      type="submit"
-                      style={buttonStyle('ghost')}
-                      data-testid={`withdraw-${row.itemId}`}
-                    >
-                      {t('approvals.withdraw')}
-                    </button>
-                  </form>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {/*
+        "What you sent" belongs to members who can send. A Viewer has never
+        opened a cycle, so the panel is withheld rather than shown empty — and
+        the page does not query it for them either.
+      */}
+      {mayReadContent ? (
+        <Card testId="approvals-mine">
+          <SectionHeader title={t('approvals.mine')} />
+          {mine.length === 0 ? (
+            <StateMessage
+              title={t('approvals.mineEmptyTitle')}
+              description={t('approvals.mineEmptyBody')}
+            />
+          ) : (
+            <ul style={listStyle} data-testid="approvals-mine-list">
+              {mine.map((row) => (
+                <li key={row.id} style={rowStyle} data-testid={`mine-${row.itemId}`}>
+                  <ApprovalSummary locale={locale} t={t} row={row} />
+                  {row.mayWithdraw ? (
+                    <form action={actions.withdraw}>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="approvalId" value={row.id} />
+                      <button
+                        type="submit"
+                        style={buttonStyle('ghost')}
+                        data-testid={`withdraw-${row.itemId}`}
+                      >
+                        {t('approvals.withdraw')}
+                      </button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
 
-      {policies.length > 0 ? (
+      {/*
+        The policy editor is rendered only for the permission that may change it.
+        It can enable self-approval, so it is Owner and Admin only — a role that
+        can approve must not also be able to grant itself the right to approve
+        its own work.
+      */}
+      {mayManagePolicy && policies.length > 0 ? (
         <Card testId="approvals-policy">
           <SectionHeader
             title={t('approvals.policyTitle')}
             description={t('approvals.policyBody')}
           />
-          {!mayManagePolicy ? (
-            <p style={noteStyle}>{t('approvals.policyNoPermission')}</p>
-          ) : (
-            <ul style={listStyle}>
-              {policies.map((policy) => (
-                <li key={policy.brandId} style={rowStyle}>
-                  <form action={actions.savePolicy} style={formStyle}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="brandId" value={policy.brandId} />
-                    <strong style={typographyTokens.bodySm}>{policy.brandName}</strong>
-                    <Checkbox
-                      name="requireApproval"
-                      label={t('approvals.policyRequire')}
-                      checked={policy.requireApprovalBeforeScheduling}
-                      testId={`policy-require-${policy.brandId}`}
-                    />
-                    <Checkbox
-                      name="allowSelfApproval"
-                      label={t('approvals.policySelf')}
-                      checked={policy.allowSelfApproval}
-                      testId={`policy-self-${policy.brandId}`}
-                    />
-                    <Checkbox
-                      name="clientApproval"
-                      label={t('approvals.policyClient')}
-                      checked={policy.clientApprovalEnabled}
-                      testId={`policy-client-${policy.brandId}`}
-                    />
-                    <button
-                      type="submit"
-                      style={buttonStyle('ghost')}
-                      data-testid={`policy-save-${policy.brandId}`}
-                    >
-                      {t('approvals.policySave')}
-                    </button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul style={listStyle}>
+            {policies.map((policy) => (
+              <li key={policy.brandId} style={rowStyle}>
+                <form action={actions.savePolicy} style={formStyle}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="brandId" value={policy.brandId} />
+                  <strong style={typographyTokens.bodySm}>{policy.brandName}</strong>
+                  <Checkbox
+                    name="requireApproval"
+                    label={t('approvals.policyRequire')}
+                    checked={policy.requireApprovalBeforeScheduling}
+                    testId={`policy-require-${policy.brandId}`}
+                  />
+                  <Checkbox
+                    name="allowSelfApproval"
+                    label={t('approvals.policySelf')}
+                    checked={policy.allowSelfApproval}
+                    testId={`policy-self-${policy.brandId}`}
+                  />
+                  <Checkbox
+                    name="clientApproval"
+                    label={t('approvals.policyClient')}
+                    checked={policy.clientApprovalEnabled}
+                    testId={`policy-client-${policy.brandId}`}
+                  />
+                  <button
+                    type="submit"
+                    style={buttonStyle('ghost')}
+                    data-testid={`policy-save-${policy.brandId}`}
+                  >
+                    {t('approvals.policySave')}
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
         </Card>
       ) : null}
     </Stack>
@@ -266,7 +315,13 @@ function ApprovalSummary({
       <div
         style={{ display: 'flex', gap: spacingTokens.xs, alignItems: 'center', flexWrap: 'wrap' }}
       >
-        <Link href={`/${locale}/content/compose?item=${row.itemId}`} style={linkStyle}>
+        {/*
+          THE REVIEW CONTEXT, not the content library. A Viewer reviewing under
+          the D-121 per-brand grant holds no `content.read`, so a link to the
+          composer would refuse them — §20 forbids a control that leads nowhere.
+          A reader who MAY open the Studio is offered that separately, below.
+        */}
+        <Link href={`/${locale}/approvals?review=${row.id}`} style={linkStyle}>
           {row.itemTitle}
         </Link>
         <StatusBadge
@@ -280,7 +335,83 @@ function ApprovalSummary({
         {t('approvals.requestedAt')} {row.requestedAtLabel} · {t('approvals.cycle')} {row.cycle}
       </span>
       {row.requestNote ? <p style={noteStyle}>{row.requestNote}</p> : null}
+      {row.mayOpenInStudio && row.itemId ? (
+        <Link
+          href={`/${locale}/content/compose?item=${row.itemId}`}
+          style={metaStyle}
+          data-testid={`open-in-studio-${row.itemId}`}
+        >
+          {t('calendar.openInStudio')}
+        </Link>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The three verdicts, in one place.
+ *
+ * Shared by the queue row and the review-subject panel rather than duplicated,
+ * because a second copy is where the two would come to offer different buttons.
+ */
+function DecisionForm({
+  locale,
+  t,
+  approvalId,
+  itemId,
+  action,
+}: {
+  readonly locale: string;
+  readonly t: (key: MessageKey) => string;
+  readonly approvalId: string;
+  readonly itemId: string;
+  readonly action: (formData: FormData) => Promise<void>;
+}) {
+  return (
+    <form action={action} style={formStyle}>
+      <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="approvalId" value={approvalId} />
+      <Field label={t('approvals.decisionNote')} htmlFor={`note-${approvalId}`}>
+        <input
+          id={`note-${approvalId}`}
+          name="note"
+          type="text"
+          style={inputStyle()}
+          className={CONTROL_CLASS}
+          placeholder={t('approvals.notePlaceholder')}
+          maxLength={1000}
+        />
+      </Field>
+      <div style={buttonRowStyle}>
+        <button
+          type="submit"
+          name="verdict"
+          value="APPROVE"
+          style={buttonStyle('primary')}
+          data-testid={`approve-${itemId}`}
+        >
+          {t('approvals.approve')}
+        </button>
+        <button
+          type="submit"
+          name="verdict"
+          value="REQUEST_CHANGES"
+          style={buttonStyle('ghost')}
+          data-testid={`request-changes-${itemId}`}
+        >
+          {t('approvals.requestChanges')}
+        </button>
+        <button
+          type="submit"
+          name="verdict"
+          value="REJECT"
+          style={buttonStyle('ghost')}
+          data-testid={`reject-${itemId}`}
+        >
+          {t('approvals.reject')}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -291,6 +422,11 @@ function ApprovalSummary({
  * cover. It uses the same label typography, the same focus treatment and the
  * same spacing tokens as everything else — UI-FIDELITY-CONTRACT §6.2 rule 4
  * asks for a recorded reason when something new appears, and this is it.
+ *
+ * THE WHOLE ROW IS THE TARGET, and it is at least 24px tall: WCAG 2.2 AA 2.5.8
+ * sets a 24×24 minimum and a native checkbox renders at about 13×13. Growing
+ * the box alone would fix the number and leave a fiddly target; making the
+ * LABEL the target is what the criterion asks for.
  */
 function Checkbox({
   name,
@@ -304,15 +440,6 @@ function Checkbox({
   readonly testId: string;
 }) {
   return (
-    /*
-     * THE WHOLE ROW IS THE TARGET, and it is at least 24px tall.
-     *
-     * WCAG 2.2 AA 2.5.8 sets a 24×24 minimum, and a native checkbox renders at
-     * about 13×13 — axe caught exactly that here. Growing the box alone would
-     * have fixed the number and left a fiddly target; making the LABEL the
-     * target is what the success criterion is actually asking for, and a label
-     * wrapping its own input is already a click target in every browser.
-     */
     <label
       style={{
         display: 'flex',
@@ -363,6 +490,13 @@ const noteStyle = {
   ...typographyTokens.bodySm,
   color: colorTokens.textMuted,
   margin: 0,
+  overflowWrap: 'anywhere',
+} as const;
+
+const bodyStyle = {
+  ...typographyTokens.bodySm,
+  margin: 0,
+  whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere',
 } as const;
 

@@ -184,3 +184,15 @@ export function reviewCycleLimitReached(): AppError {
 export function noteTooLong(): AppError {
   return new AppError('VALIDATION_FAILED', 'That note is too long.');
 }
+
+/**
+ * The person a review was assigned to cannot decide it — not an active member,
+ * outside the brand, or without review authority for it.
+ *
+ * NOT_FOUND-SHAPED. Confirming that a given uuid is a member of this workspace,
+ * or is scoped to this brand, answers a question the requester has not been
+ * granted (CLAUDE.md §2.1).
+ */
+export function assigneeNotEligible(): AppError {
+  return new AppError('NOT_FOUND', 'That reviewer is not available for this content.');
+}

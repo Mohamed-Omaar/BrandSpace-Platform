@@ -32,6 +32,17 @@ import { resolveActivityScope, type ActivityScope } from './scope';
  *      predicate IN THE QUERY, not a filter applied to a workspace-wide result
  *      — a count or a page boundary computed over rows they may not see is
  *      itself a disclosure.
+ *
+ * A CALLER'S FILTER CAN ONLY NARROW, NEVER REPLACE. This is the part that was
+ * wrong, and it was wrong in the most dangerous possible way: the first version
+ * spread `filter.brandId` and `filter.actorId` into the same object literal as
+ * the authorization predicate, AFTER it. In JavaScript the later key wins, so
+ * `?brandId=<another brand>` overwrote a brand-graded reader's own brand
+ * predicate and `?actorId=<a colleague>` overwrote an own-graded reader's
+ * `actorId = me` — turning the query string into a privilege escalation. Every
+ * predicate is now composed with AND, so a filter can only ever intersect what
+ * authorization already allows, and a filter naming something outside the scope
+ * returns nothing rather than reaching past it.
  */
 
 /** One row as the customer screen sees it. Deliberately narrow. */
@@ -106,34 +117,15 @@ export class ActivityLogService {
     const take = Math.min(Math.max(input.take ?? PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const filter = input.filter ?? {};
 
-    const scopeWhere =
-      scope.kind === 'brand'
-        ? // An empty brand scope must match NOTHING. Omitting the clause would
-          // widen a brand-graded reader to the whole workspace, which is the
-          // most expensive possible way to get this wrong.
-          { brandId: { in: [...scope.brandIds] } }
-        : scope.kind === 'own'
-          ? { actorId: scope.userId }
-          : {};
-
-    const cursorWhere = parseCursor(input.cursor);
-
     const rows = await this.#db.auditEvent.findMany({
       where: {
         workspaceId: this.#workspaceId,
-        ...scopeWhere,
-        ...(filter.brandId ? { brandId: filter.brandId } : {}),
-        ...(filter.action ? { action: filter.action } : {}),
-        ...(filter.actorId ? { actorId: filter.actorId } : {}),
-        ...(filter.since || filter.until
-          ? {
-              occurredAt: {
-                ...(filter.since ? { gte: filter.since } : {}),
-                ...(filter.until ? { lte: filter.until } : {}),
-              },
-            }
-          : {}),
-        ...cursorWhere,
+        /*
+         * AND, NOT SPREAD. Authorization and the caller's filter are separate
+         * clauses that must BOTH hold; spreading them into one object let the
+         * later key silently replace the earlier one. See the note above.
+         */
+        AND: [scopeWhere(scope), filterWhere(filter), parseCursor(input.cursor)],
       },
       orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
@@ -187,14 +179,10 @@ export class ActivityLogService {
     });
     if (scope.kind === 'none') return [];
     const rows = await this.#db.auditEvent.findMany({
-      where: {
-        workspaceId: this.#workspaceId,
-        ...(scope.kind === 'brand'
-          ? { brandId: { in: [...scope.brandIds] } }
-          : scope.kind === 'own'
-            ? { actorId: scope.userId }
-            : {}),
-      },
+      // The SAME scope predicate the page uses. A filter's options must not be
+      // drawn from a wider set than the rows the reader may actually see, or
+      // the dropdown becomes a way to enumerate what happened elsewhere.
+      where: { workspaceId: this.#workspaceId, AND: [scopeWhere(scope)] },
       distinct: ['action'],
       select: { action: true },
       orderBy: { action: 'asc' },
@@ -217,5 +205,39 @@ function parseCursor(cursor: string | null | undefined): Record<string, unknown>
   if (Number.isNaN(at.getTime())) return {};
   return {
     OR: [{ occurredAt: { lt: at } }, { occurredAt: at, id: { lt: id } }],
+  };
+}
+
+/**
+ * The AUTHORIZATION predicate. Nothing a caller sends can relax it.
+ *
+ * `brandIds: null` is an UNRESTRICTED membership (the platform rule — see
+ * `scope.ts`), so it contributes no brand clause, exactly as
+ * `brandScopeFilter()` does for every other list in the product. A restricted
+ * membership contributes `brandId IN (...)`, and a membership restricted to an
+ * empty set cannot occur — `resolveActivityScope` maps that to `null`.
+ */
+function scopeWhere(scope: ActivityScope): Record<string, unknown> {
+  if (scope.kind === 'brand') {
+    return scope.brandIds === null ? {} : { brandId: { in: [...scope.brandIds] } };
+  }
+  if (scope.kind === 'own') return { actorId: scope.userId };
+  return {};
+}
+
+/** The caller's filter. Only ever narrowing, because it is ANDed with the above. */
+function filterWhere(filter: ActivityFilter): Record<string, unknown> {
+  return {
+    ...(filter.brandId ? { brandId: filter.brandId } : {}),
+    ...(filter.action ? { action: filter.action } : {}),
+    ...(filter.actorId ? { actorId: filter.actorId } : {}),
+    ...(filter.since || filter.until
+      ? {
+          occurredAt: {
+            ...(filter.since ? { gte: filter.since } : {}),
+            ...(filter.until ? { lte: filter.until } : {}),
+          },
+        }
+      : {}),
   };
 }

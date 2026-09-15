@@ -1502,3 +1502,113 @@ the same outcome as an id that never existed.
 | Multi-step approval chains, role assignment, due dates | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten            |
 | Threaded comments with mentions and anchors            | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own. The approval's request and decision notes carry the review's context |
 | Weakening the audit trail for the UI                   | The screen was shaped to the append-only record, not the reverse                                                                                |
+
+---
+
+## 26. Corrective pass on Phase 5B-3 — what the green suites did not catch
+
+A code-level review found seven gaps that every check in §25 passed over. They
+are recorded here rather than quietly fixed, because the interesting part is not
+the bugs but **why the tests agreed with them**.
+
+### 26.1 The Activity Log's filter was a privilege escalation
+
+`page()` spread the caller's filter into the SAME object literal as the
+authorization predicate, **after** it. In JavaScript the later key wins, so
+`?brandId=<another brand>` replaced a brand-graded reader's brand clause and
+`?actorId=<a colleague>` replaced an own-graded reader's `actorId = me`. The
+query string was a way past the grade.
+
+Every predicate is now composed with `AND`, so a filter can only ever INTERSECT
+what authorization allows; naming something outside the scope returns nothing
+rather than reaching past it. `tests/isolation/activity-log-scope.test.ts`
+asserts both escalations against real rows — and both of those tests FAIL
+against the previous composition, which is how the fix is known to be real.
+
+### 26.2 The BrandScope rule was inverted
+
+`brandInScope()` and `brandScopeFilter()` have meant the same thing since
+Phase 2B: **an empty membership scope is UNRESTRICTED.** The Activity Log and
+the approvals queue both read an empty list as "no brands", which failed closed
+but wrongly — an unrestricted Marketing Manager would have seen an empty log —
+and pushed two dashboard pages into expanding an empty scope into "every brand
+id" before calling them. That workaround was the same rule implemented a third
+time, in a page.
+
+`brandIdScopeFilter()` in `@brandspace/shared` is now the single helper for
+brand-scoped CHILD rows, beside `brandScopeFilter()` for the brand table itself.
+One rule, one answer, asserted against `brandInScope()` in a unit test so the
+two cannot drift.
+
+### 26.3 D-121 was unreachable
+
+The per-brand Viewer grant existed, was unit-tested, and could not be used: the
+`/approvals` route and the decision action both required `content.read`, and
+`client_viewer` holds `workspace.read` and nothing else. A workspace could
+switch the grant on and the person it was switched on for would be refused.
+
+Fixed **without widening the role**, which is the whole point of D-121:
+
+|                                   |                                                                                                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The route and the decision action | Authorize on MEMBERSHIP; the authority that decides is `mayApproveForBrand` inside the service, reading that brand's policy                                |
+| What the Viewer may read          | `ContentApprovalService.reviewSubject()` — the title, the brand, the captions under review and the requester's note, authorized per approval. Nothing else |
+| What they still may not           | The content library, the composer, Brand Brain, assets, "what you sent", the policy editor — each withheld by a server check, not by a missing link        |
+| Proof                             | `tests/e2e/approvals-viewer.spec.ts`: default denied · enabled for Brand A · Brand B denied while in review at the same moment · the library still 404s    |
+
+`client_viewer` remains exactly `['workspace.read']`, pinned by a unit test.
+
+### 26.4 Notifications addressed people who should not have been told
+
+Recipients were "every member whose role holds `content.approve`" — which
+ignored membership status and BrandScope entirely. A member restricted to Brand
+A was told the TITLE of Brand B's content; a suspended member kept being told;
+and a Viewer holding a D-121 grant was told nothing, because the static
+permission is not how that grant works.
+
+`ContentApprovalService.eligibleReviewers()` is now the one answer to "who may
+review this", used both to validate an assignment and to address the
+notification, and it checks all three conditions. A notification is a
+disclosure: its title says content exists, in that brand, awaiting review.
+
+### 26.5 The calendar and the approval could diverge
+
+With the gate OFF, an `IN_REVIEW` item could be scheduled — and the reviewer's
+verdict then moved it **out from under a live slot**. `transition()` refuses to
+move a scheduled item precisely so that cannot happen, and this path went around
+it. `IN_REVIEW` is no longer schedulable at all: with the gate off a DRAFT may
+still be planned, with the gate on only `APPROVED` may.
+
+### 26.6 Two verdicts could both win
+
+`decide()` read the row by id, checked `status === 'PENDING'` and updated by id.
+Two reviewers pressing at once both read PENDING, both passed the guard, and
+both wrote — the second silently overwriting the first, one verdict vanishing,
+and two audit events each claiming to have decided the same review.
+
+Now `SELECT … FOR UPDATE` before the read, plus a conditional `updateMany` on
+`status = 'PENDING'`, inside the transaction `withWorkspace` already opens — so
+the approval write, the item write, the audit event and the notification remain
+one unit. `tests/isolation/approvals-concurrency.test.ts` races real
+transactions; all three of its assertions fail against the previous code.
+
+### 26.7 The grants did not match their own comment
+
+`20260915180000`'s §9 said `notification` was "the only one of the three the
+application may DELETE" and then granted DELETE on all three, with UPDATE
+unrestricted. `20260915210000_phase_5b_3_approval_integrity` revokes DELETE on
+both approval tables from the application role and adds `approval_write_once`,
+a trigger making a terminal cycle immutable and a cycle's identity — subject,
+requester, round, policy snapshot — immutable throughout.
+
+**Test fixtures were refactored, not the grants.** Cleanup runs as the PLATFORM
+role, which is what performs tenant offboarding and the retention purge in
+production. Widening a production grant to make a test convenient would have
+handed every workspace admin the power to erase an approval record.
+
+### 26.8 What this pass did NOT do
+
+No External Guest Portal, no Phase 6 publishing, no Phase 7 analytics. The
+future extensibility that was already there — `ApprovalSubjectType`'s unreachable
+`CAMPAIGN` and `ASSET`, `NotificationChannel`'s undeliverable channels — is
+preserved exactly as it was, still unreachable and still constrained.

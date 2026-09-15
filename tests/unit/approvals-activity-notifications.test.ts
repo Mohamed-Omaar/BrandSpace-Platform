@@ -3,7 +3,7 @@ import { resolveActivityScope } from '@brandspace/activity';
 import { mayApproveForBrand } from '@brandspace/content';
 import { NOTIFICATION_TEMPLATE_KEYS, NOTIFICATION_TEMPLATES } from '@brandspace/notifications';
 import { CONFIG_DOMAINS, defaultPayload } from '@brandspace/config';
-import { ROLE_DEFINITIONS, WORKSPACE_PERMISSIONS } from '@brandspace/shared';
+import { ROLE_DEFINITIONS, WORKSPACE_PERMISSIONS, brandInScope } from '@brandspace/shared';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
 /**
@@ -74,11 +74,19 @@ describe('the activity-log scope resolver (docs/SECURITY.md §4.3)', () => {
     ).toBe('brand');
   });
 
-  it('a brand-graded reader with an EMPTY scope matches nothing, not everything', () => {
+  it('an EMPTY brandScope is UNRESTRICTED — the platform rule, not a local one', () => {
     /*
-     * The most expensive possible way to get this wrong. An empty `in ([])`
-     * predicate matches no rows; omitting the clause instead would silently
-     * widen a brand-graded reader to the whole workspace.
+     * THIS TEST PREVIOUSLY ASSERTED THE OPPOSITE, and was wrong.
+     *
+     * `brandInScope()` and `brandScopeFilter()` have meant the same thing since
+     * Phase 2B: a membership listing no brands is scoped to ALL of the
+     * workspace's brands, and a membership listing brands is scoped to those.
+     * Reading an empty list as "no brands" failed closed — but wrongly, and out
+     * of step with every other reader of the same field, so an unrestricted
+     * Marketing Manager or Analyst would have seen an empty activity log.
+     *
+     * `brandIds: null` is that case, stated in the type so a consumer cannot
+     * quietly treat it as an empty `IN ()`.
      */
     const scope = resolveActivityScope({
       userId: 'u1',
@@ -86,7 +94,28 @@ describe('the activity-log scope resolver (docs/SECURITY.md §4.3)', () => {
       permissionKeys: ['audit.read'],
     });
     expect(scope.kind).toBe('brand');
-    if (scope.kind === 'brand') expect(scope.brandIds).toEqual([]);
+    if (scope.kind === 'brand') expect(scope.brandIds).toBeNull();
+  });
+
+  it('a RESTRICTED scope carries its brands, so the rule is not "always unrestricted"', () => {
+    const scope = resolveActivityScope({
+      userId: 'u1',
+      brandScope: ['b1'],
+      permissionKeys: ['audit.read'],
+    });
+    expect(scope.kind).toBe('brand');
+    if (scope.kind === 'brand') expect(scope.brandIds).toEqual(['b1']);
+  });
+
+  it('agrees with `brandInScope()` about what an empty scope means', () => {
+    // The two must not drift: one rule, asserted against the other.
+    expect(brandInScope([], 'any-brand')).toBe(true);
+    const scope = resolveActivityScope({
+      userId: 'u1',
+      brandScope: [],
+      permissionKeys: ['audit.read'],
+    });
+    expect(scope.kind === 'brand' && scope.brandIds === null).toBe(true);
   });
 });
 

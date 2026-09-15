@@ -63,14 +63,21 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
   try {
     if (!verdict) throw new Error('unsupported verdict');
     /*
-     * `content.read` HERE, NOT `content.approve`. D-121 lets a BRAND grant
-     * approval to `client_viewer`, which holds neither — so gating the endpoint
-     * on the permission would make the brand setting unreachable. The authority
-     * check that matters is `mayApproveForBrand` inside the service, which reads
-     * the brand's own policy. This one only keeps the endpoint off the open
-     * internet.
+     * MEMBERSHIP ONLY AT THE DOOR, and the real check inside the service.
+     *
+     * This endpoint used to require `content.read`, which made D-121
+     * unreachable: the per-brand Viewer grant exists precisely for a member who
+     * holds `workspace.read` and nothing else, so requiring any content
+     * permission here meant the brand setting could be switched on and still
+     * refuse the person it was switched on for.
+     *
+     * `requireWorkspace` without a key still proves an authenticated session
+     * and an ACTIVE membership of this workspace — the endpoint is not open. The
+     * authority that decides the request is `mayApproveForBrand` inside
+     * `ContentApprovalService.decide()`, which reads THIS brand's policy and the
+     * cycle's own snapshot, re-checks the brand scope, and refuses anybody else.
      */
-    const session = await requireWorkspace(locale, 'content.read');
+    const session = await requireWorkspace(locale);
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).decide({ approvalId, verdict, actor: actorOf(session), note }),
     );
@@ -91,7 +98,9 @@ export async function withdrawApprovalAction(formData: FormData): Promise<void> 
 
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.read');
+    // Membership only, as above: the service requires the caller to be the
+    // requester or somebody who could have decided it.
+    const session = await requireWorkspace(locale);
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: actorOf(session) }),
     );

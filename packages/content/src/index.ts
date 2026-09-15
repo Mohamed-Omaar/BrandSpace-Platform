@@ -38,6 +38,7 @@ export type {
   ApprovalVerdict,
   ApprovalWithItem,
   ResolvedApprovalPolicy,
+  ReviewSubject,
 } from './approvals';
 
 export {

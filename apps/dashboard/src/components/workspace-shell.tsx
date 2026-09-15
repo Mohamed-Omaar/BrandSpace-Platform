@@ -80,18 +80,24 @@ const NAV: readonly {
     icon: <ImageIcon size={20} />,
   },
   /*
-   * Phase 5B-3. `/approvals` is gated on `content.read` rather than on
-   * `content.approve`: a member who SUBMITS content needs the screen to follow
-   * what became of it, and the decision controls inside it are gated separately.
-   * `/activity` takes the widest of the three activity grades — the page itself
-   * re-resolves the reader's scope and renders an explicit refusal for a role
-   * that has none, which is a better answer than a 404 for a menu item the
-   * product does have.
+   * Phase 5B-3. `/approvals` is gated on MEMBERSHIP, not on `content.read`, and
+   * that is what makes D-121 reachable.
+   *
+   * The per-brand Viewer grant exists for a member holding `workspace.read` and
+   * nothing else. Gating this entry on a content permission meant a workspace
+   * could switch the grant on and the person it was switched on for would never
+   * see the screen — the feature was unreachable except by typing the URL. The
+   * PAGE resolves what the reader may actually do and renders an explicit
+   * refusal for a member who reviews nothing, which is a better answer than a
+   * 404 for a menu item the product does have. Nothing tenant-specific is
+   * disclosed by the entry itself.
+   *
+   * `/activity` takes the same approach for the same reason.
    */
   {
     href: '/approvals',
     key: 'nav.approvals',
-    permission: 'content.read',
+    permission: null,
     icon: <CheckIcon size={20} />,
   },
   {

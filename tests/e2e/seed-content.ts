@@ -47,6 +47,19 @@ const TITLE = 'Seasonal note';
 const APPROVAL_IDEMPOTENCY_KEY = 'e2e-approvals-fixture';
 const APPROVAL_TITLE = 'Launch announcement';
 
+/*
+ * A SECOND BRAND, so "another brand" is a real place in the end-to-end suite.
+ *
+ * D-121 grants Viewer approval PER BRAND, and a test that cannot show the
+ * Viewer being admitted to one brand while being refused another is not testing
+ * the grant — it is testing a boolean. The second brand carries its own draft so
+ * both can be in review at once.
+ */
+const SECOND_BRAND_SLUG = 'e2e-approvals-brand-two';
+const SECOND_BRAND_NAME = 'E2E Second Brand';
+const SECOND_IDEMPOTENCY_KEY = 'e2e-approvals-second-brand';
+const SECOND_TITLE = 'Second brand note';
+
 function assertNotProduction(): void {
   if ((process.env['APP_ENV'] ?? 'development') === 'production') {
     throw new Error('This seed refuses to run against a production deployment.');
@@ -241,7 +254,17 @@ async function main(): Promise<void> {
         });
 
         if (existing) {
-          await db.approval.deleteMany({ where: { contentItemId: existing.id } });
+          /*
+           * THE APPROVAL HISTORY IS CLEARED AS THE PLATFORM ROLE, not here.
+           *
+           * `20260915210000_phase_5b_3_approval_integrity` revoked DELETE on
+           * `approval` from the application role: an approval is the record
+           * that somebody reviewed something, and the application has no
+           * business erasing one. Tenant offboarding and the retention purge
+           * run as the platform role, and so does this reset — rather than the
+           * production grant being widened to make a fixture convenient.
+           */
+          await platform.approval.deleteMany({ where: { contentItemId: existing.id } });
           await db.calendarSlot.updateMany({
             where: { contentItemId: existing.id, status: { not: 'CANCELLED' } },
             data: { status: 'CANCELLED', cancelledAt: new Date() },
@@ -251,7 +274,7 @@ async function main(): Promise<void> {
             data: { status: 'DRAFT' },
           });
         }
-        await db.approvalPolicy.deleteMany({ where: { brandId: brand.id } });
+        await platform.approvalPolicy.deleteMany({ where: { brandId: brand.id } });
 
         const item =
           existing ??
@@ -284,6 +307,66 @@ async function main(): Promise<void> {
             },
           });
         }
+
+        // The second brand, and a draft in it. See the note by its constants.
+        const secondBrand =
+          (await db.brand.findFirst({ where: { slug: SECOND_BRAND_SLUG } })) ??
+          (await db.brand.create({
+            data: {
+              workspaceId,
+              slug: SECOND_BRAND_SLUG,
+              name: SECOND_BRAND_NAME,
+              defaultLocale: 'EN',
+              status: 'ACTIVE',
+            },
+          }));
+        await platform.approvalPolicy.deleteMany({ where: { brandId: secondBrand.id } });
+
+        const secondExisting = await db.contentItem.findFirst({
+          where: { idempotencyKey: SECOND_IDEMPOTENCY_KEY },
+          include: { variants: true },
+        });
+        if (secondExisting) {
+          await platform.approval.deleteMany({ where: { contentItemId: secondExisting.id } });
+          await db.calendarSlot.updateMany({
+            where: { contentItemId: secondExisting.id, status: { not: 'CANCELLED' } },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          });
+          await db.contentItem.update({
+            where: { id: secondExisting.id },
+            data: { status: 'DRAFT' },
+          });
+        }
+        const secondItem =
+          secondExisting ??
+          (await db.contentItem.create({
+            data: {
+              workspaceId,
+              brandId: secondBrand.id,
+              title: SECOND_TITLE,
+              contentType: 'POST',
+              primaryLocale: 'EN',
+              status: 'DRAFT',
+              origin: 'HUMAN',
+              idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+            },
+          }));
+        if (!secondExisting || secondExisting.variants.length === 0) {
+          await db.contentVariant.create({
+            data: {
+              workspaceId,
+              brandId: secondBrand.id,
+              contentItemId: secondItem.id,
+              platformKey: 'instagram',
+              locale: 'EN',
+              body: 'A note belonging to the second brand, for the D-121 scope fixture.',
+              hashtags: ['second'],
+              characterCount: 65,
+              validationState: 'VALID',
+              origin: 'HUMAN',
+            },
+          });
+        }
       },
       { prisma },
     );
@@ -292,6 +375,8 @@ async function main(): Promise<void> {
     console.log('  One DRAFT item with one caption. Nothing is scheduled and nothing publishes.');
     console.log(`✔ Reviewable draft reset: ${APPROVAL_TITLE}`);
     console.log('  One DRAFT item, no review history, and the brand back on its default policy.');
+    console.log(`✔ Second brand and its draft reset: ${SECOND_TITLE}`);
+    console.log('  So the D-121 per-brand grant can be shown admitting one brand and not another.');
   } finally {
     await prisma.$disconnect();
     await platform.$disconnect();

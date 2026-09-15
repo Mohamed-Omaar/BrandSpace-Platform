@@ -25,10 +25,13 @@ import { inWorkspace } from './customer-context';
 /**
  * Who hears about a review.
  *
- * THE RECIPIENT LIST IS COMPUTED SERVER-SIDE FROM MEMBERSHIPS AND PERMISSIONS,
- * never passed in. A caller that could name the recipients could address a
- * notification to somebody who may not see the thing it points at — and a
- * notification is a disclosure: its title tells you content exists.
+ * THE RECIPIENT LIST IS RESOLVED BY THE SERVICE, and this adapter only
+ * delivers. It used to build the list here — every member holding
+ * `content.approve` — which ignored membership status and BrandScope, so a
+ * member restricted to Brand A learned the title of Brand B's content and a
+ * suspended member kept being told. `ContentApprovalService.eligibleReviewers`
+ * is now the one answer to "who may review this", used both to validate an
+ * assignment and to address the notification, so the two cannot disagree.
  *
  * A NOTIFICATION IS A POINTER, NOT A COPY. It carries the item's title and the
  * link; following the link runs the ordinary permission checks. Copying the
@@ -40,39 +43,16 @@ export function approvalNotifier(input: {
 }): ApprovalNotifier {
   const notifications = new NotificationService({ db: input.db, workspaceId: input.workspaceId });
 
-  /** Members who may decide a review, minus the person who just acted. */
-  const reviewers = async (excludeUserId: string): Promise<string[]> => {
-    const rows = await input.db.membership.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        status: 'ACTIVE',
-        userId: { not: excludeUserId },
-        // The permission, resolved through the ROLE the membership actually
-        // holds — the same join `CustomerSessionService` uses to build a
-        // session's keys. Listing role keys here instead would be a second
-        // copy of the RBAC model, drifting from the first.
-        role: { permissions: { some: { permission: { key: 'content.approve' } } } },
-      },
-      select: { userId: true },
-    });
-    return rows.map((row) => row.userId);
-  };
-
   return {
     async approvalRequested(event) {
-      /*
-       * An ASSIGNED review goes to that person alone; an unassigned one goes to
-       * everyone who could pick it up. Notifying the whole pool for an assigned
-       * request would make the assignment meaningless and the inbox noise.
-       */
-      const userIds = event.assignedToUserId
-        ? [event.assignedToUserId]
-        : await reviewers(event.requestedByUserId);
       await notifications.create({
-        userIds,
+        userIds: event.recipientUserIds,
         templateKey: 'approval.requested',
         payload: { itemTitle: event.itemTitle },
-        linkPath: `/approvals?item=${event.itemId}`,
+        // The REVIEW context, not the content library: a Viewer approving under
+        // the D-121 per-brand grant holds no `content.read` and must not be
+        // sent somewhere they will be refused (finding 2).
+        linkPath: `/approvals?review=${event.approvalId}`,
         brandId: event.brandId,
         resourceType: 'Approval',
         resourceId: event.approvalId,

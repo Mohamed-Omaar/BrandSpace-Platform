@@ -194,11 +194,82 @@ describe('Approval is tenant-owned', () => {
     expect(result.count).toBe(0);
   });
 
-  it("A cannot delete B's review", async () => {
-    const result = await inA((db) =>
-      db.approval.deleteMany({ where: { id: fixtures.b.approvalId } }),
+  it("the application role cannot DELETE an approval AT ALL — not B's, and not its own", async () => {
+    /*
+     * `20260915210000_phase_5b_3_approval_integrity` revoked DELETE from
+     * `brandspace_app`. An approval is the record that somebody reviewed
+     * something; erasing one through any application path removes the evidence
+     * that the review happened, which is the property the module exists to
+     * provide. So this is stronger than the cross-tenant assertion it replaces:
+     * the privilege is gone rather than merely filtered.
+     */
+    await expect(
+      inA((db) => db.approval.deleteMany({ where: { id: fixtures.b.approvalId } })),
+    ).rejects.toThrow();
+    await expect(
+      inA((db) => db.approval.deleteMany({ where: { id: fixtures.a.approvalId } })),
+    ).rejects.toThrow();
+  });
+
+  it('a DECIDED approval cannot be reopened or rewritten through raw app-role SQL', async () => {
+    /*
+     * The fixture's approval is APPROVED. Moving it back to PENDING would let a
+     * decided cycle be re-decided, and the history would describe a review that
+     * did not happen. The trigger refuses it however the write arrives.
+     */
+    await expect(
+      inA((db) =>
+        db.approval.updateMany({
+          where: { id: fixtures.a.approvalId },
+          data: { status: 'PENDING' },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      inA((db) =>
+        db.approval.updateMany({
+          where: { id: fixtures.a.approvalId },
+          data: { decisionNote: 'rewritten after the fact' },
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("a PENDING approval's identity is immutable — subject, requester and snapshot", async () => {
+    const pending = await inA((db) =>
+      db.approval.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          contentItemId: fixtures.a.contentItemId,
+          requestedByUserId: fixtures.a.userId,
+          status: 'PENDING',
+          policySnapshot: { allowSelfApproval: false },
+        },
+      }),
     );
-    expect(result.count).toBe(0);
+
+    // The spine cannot move, even while the cycle is open.
+    for (const data of [
+      { requestedByUserId: fixtures.b.userId },
+      { cycle: 99 },
+      { policySnapshot: { allowSelfApproval: true } },
+    ]) {
+      await expect(
+        inA((db) => db.approval.updateMany({ where: { id: pending.id }, data })),
+      ).rejects.toThrow();
+    }
+
+    // But the legitimate PENDING → terminal transition still works: that is the
+    // workflow, and an integrity rule that blocked it would block the product.
+    const decided = await inA((db) =>
+      db.approval.updateMany({
+        where: { id: pending.id, status: 'PENDING' },
+        data: { status: 'APPROVED', decidedByUserId: fixtures.a.userId, decidedAt: new Date() },
+      }),
+    );
+    expect(decided.count).toBe(1);
   });
 });
 
@@ -230,6 +301,17 @@ describe('ApprovalPolicy is tenant-owned', () => {
       db.approvalPolicy.count({ where: { brandId: fixtures.b.brandId } }),
     );
     expect(count).toBe(0);
+  });
+
+  it('the application role cannot DELETE a policy — reset is a NULL override', async () => {
+    /*
+     * A NULL column already means "no opinion", which is what an absent row
+     * means, so DELETE buys nothing — and `updatedByUserId` records who last
+     * changed a brand's approval rules, which is worth keeping.
+     */
+    await expect(
+      inA((db) => db.approvalPolicy.deleteMany({ where: { id: fixtures.a.approvalPolicyId } })),
+    ).rejects.toThrow();
   });
 
   it("A cannot RELAX B's policy", async () => {

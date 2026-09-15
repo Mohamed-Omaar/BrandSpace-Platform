@@ -11,7 +11,12 @@ import {
   type ScheduleQuota,
 } from '@brandspace/content';
 import { NotificationService, type NotificationView } from '@brandspace/notifications';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  platformRoleClient,
+  type IsolationFixtures,
+} from './fixtures';
 
 /**
  * The Approvals workflow against a real PostgreSQL — Phase 5B-3, and the
@@ -67,6 +72,18 @@ const CONTENT_POLICY: ContentPolicy = {
 
 let fixtures: IsolationFixtures;
 let app: PrismaClient;
+/**
+ * CLEANUP RUNS AS THE PLATFORM ROLE, not as the application role.
+ *
+ * `20260915210000_phase_5b_3_approval_integrity` revoked DELETE on `approval`
+ * from `brandspace_app` and made a decided cycle immutable: an approval is the
+ * record that somebody reviewed something, and the application has no business
+ * erasing or rewriting one. Tenant offboarding and the retention purge run as
+ * the PLATFORM role, so that is what a test fixture uses to reset state —
+ * rather than the production grant being widened to make cleanup convenient,
+ * which would have quietly handed every workspace admin the same power.
+ */
+let platform: PrismaClient;
 
 /** The author. Holds `content.submit`, and deliberately not `content.approve`. */
 const author = (): ApprovalActor => ({
@@ -95,11 +112,13 @@ const bystander = (): ApprovalActor => ({
 
 beforeAll(async () => {
   app = appRoleClient();
+  platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
 }, 60_000);
 
 afterAll(async () => {
   await app?.$disconnect();
+  await platform?.$disconnect();
 });
 
 /**
@@ -108,12 +127,11 @@ afterAll(async () => {
  * TENANCY suite has something to measure; this suite owns its own state.
  */
 beforeEach(async () => {
+  // The rows the APPLICATION may still remove, as the application.
   await withWorkspace(
     fixtures.a.workspaceId,
     async (db) => {
       await db.calendarSlot.deleteMany({});
-      await db.approval.deleteMany({});
-      await db.approvalPolicy.deleteMany({});
       await db.notification.deleteMany({});
       await db.contentItem.updateMany({
         data: { status: 'DRAFT', createdByUserId: fixtures.a.userId },
@@ -121,6 +139,9 @@ beforeEach(async () => {
     },
     { prisma: app },
   );
+  // And the approval history, as the platform — see the note on `platform`.
+  await platform.approval.deleteMany({ where: { workspaceId: fixtures.a.workspaceId } });
+  await platform.approvalPolicy.deleteMany({ where: { workspaceId: fixtures.a.workspaceId } });
 });
 
 function inA<T>(
@@ -458,7 +479,17 @@ describe('D-121 — the per-brand Viewer grant (U-06)', () => {
     ).toBe(false);
   });
 
-  it('end to end: the brand switch is what admits the Viewer', async () => {
+  it('end to end: the brand switch admits the Viewer, from the NEXT cycle', async () => {
+    /*
+     * D-126 CHANGED WHEN THE SWITCH TAKES EFFECT, and this test with it.
+     *
+     * It used to flip the policy and then decide the review that was ALREADY
+     * open — which is exactly the retroactive behaviour the corrective pass
+     * removed: `policySnapshot` records the rules a requester submitted under,
+     * and re-reading the current policy at decision time made that record a
+     * decoration. A cycle keeps the answer it was opened with; a NEW cycle
+     * carries the new policy.
+     */
     const viewer: ApprovalActor = {
       userId: '77777777-6666-4555-8444-333333333333',
       roleKey: 'client_viewer',
@@ -482,8 +513,20 @@ describe('D-121 — the per-brand Viewer grant (U-06)', () => {
         patch: { clientApprovalEnabled: true },
       }),
     );
+
+    // The open cycle is unmoved by the flip — that is the point.
+    await expect(
+      inA(({ approvals }) =>
+        approvals.decide({ approvalId: first.id, verdict: 'APPROVE', actor: viewer }),
+      ),
+    ).rejects.toThrow();
+
+    await inA(({ approvals }) => approvals.cancel({ approvalId: first.id, actor: author() }));
+    const second = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
     const decided = await inA(({ approvals }) =>
-      approvals.decide({ approvalId: first.id, verdict: 'APPROVE', actor: viewer }),
+      approvals.decide({ approvalId: second.id, verdict: 'APPROVE', actor: viewer }),
     );
     expect(decided.status).toBe('APPROVED');
   });

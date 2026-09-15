@@ -246,7 +246,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|approvals-viewer)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -256,7 +256,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|approvals-viewer)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -391,7 +391,7 @@ export default defineConfig({
        * which project happened to run.
        */
       name: 'approvals',
-      testMatch: /approvals\.spec\.ts/,
+      testMatch: /approvals(-viewer)?\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

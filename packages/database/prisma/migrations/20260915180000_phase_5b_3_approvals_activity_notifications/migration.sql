@@ -288,6 +288,11 @@ CREATE POLICY platform_access ON "notification"
 -- what survives, and it is untouched by this migration.
 -- ---------------------------------------------------------------------------
 
+-- NOTE: the two approval grants below are NARROWED by
+-- `20260915210000_phase_5b_3_approval_integrity`, which revokes DELETE from the
+-- application role and adds a write-once trigger. They are left as written here
+-- because a migration that has run is history, not a draft: the correction is a
+-- later migration, which is how the change stays legible.
 GRANT SELECT, INSERT, UPDATE, DELETE ON "approval"        TO brandspace_app, brandspace_platform;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "approval_policy" TO brandspace_app, brandspace_platform;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "notification"    TO brandspace_app, brandspace_platform;
