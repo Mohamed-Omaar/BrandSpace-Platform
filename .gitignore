@@ -39,3 +39,12 @@ packages/database/generated/
 # Redis snapshots. A runtime artifact of a local `redis-server`, never project
 # content — and a data dump has no business in history (CLAUDE.md §2.6).
 *.rdb
+
+# Probe files written INTO package sources by tests/unit/module-boundaries.test.ts
+# and its pool equivalent, then deleted. They exist only while the suite runs,
+# and a `git status` during a run would otherwise offer them for commit.
+**/src/__boundary_probe.ts
+**/src/__pool_probe.ts
+# The isolation gate's own self-test backs these up before editing them.
+**/.schema.gate-test.bak
+**/.tenant-models.gate-test.bak

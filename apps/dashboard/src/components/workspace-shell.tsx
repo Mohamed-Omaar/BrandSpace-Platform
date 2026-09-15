@@ -5,9 +5,12 @@ import {
   ProfileCard,
   TopbarActions,
   menuItemStyle,
+  AlertIcon,
+  CheckIcon,
   CreditIcon,
   HomeIcon,
   CalendarIcon,
+  ListIcon,
   ImageIcon,
   PencilIcon,
   LanguageSwitcher,
@@ -75,6 +78,40 @@ const NAV: readonly {
     key: 'nav.assets',
     permission: 'assets.read',
     icon: <ImageIcon size={20} />,
+  },
+  /*
+   * Phase 5B-3. `/approvals` is gated on `content.read`, matching the route.
+   *
+   * This was briefly `null` — visible to every member — so that D-121's
+   * per-brand Viewer grant was reachable by somebody holding `workspace.read`
+   * and nothing else. D-62 supersedes D-121 and makes the Viewer strictly
+   * read-only, so the entry goes back to the permission the page requires:
+   * offering a link that answers 404 is the dead link §20 forbids.
+   *
+   * THE HIDDEN LINK IS TIDINESS, NOT SECURITY. `/approvals` and every action
+   * behind it refuse independently; nothing here is load-bearing.
+   *
+   * `/activity` is deliberately NOT changed: the Activity Log grades what a
+   * reader may see rather than refusing them, so its screen has an honest
+   * answer for every member.
+   */
+  {
+    href: '/approvals',
+    key: 'nav.approvals',
+    permission: 'content.read',
+    icon: <CheckIcon size={20} />,
+  },
+  {
+    href: '/activity',
+    key: 'nav.activity',
+    permission: null,
+    icon: <ListIcon size={20} />,
+  },
+  {
+    href: '/notifications',
+    key: 'nav.notifications',
+    permission: null,
+    icon: <AlertIcon size={20} />,
   },
   { href: '/members', key: 'nav.members', permission: 'member.read', icon: <TeamIcon size={20} /> },
   { href: '/permissions', key: 'perms.title', permission: null, icon: <ShieldIcon size={20} /> },

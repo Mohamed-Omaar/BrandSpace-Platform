@@ -70,6 +70,20 @@ export interface CalendarOptions {
   readonly timezone: string;
   readonly quota: ScheduleQuota;
   readonly clock?: Clock;
+  /**
+   * Phase 5B-3. Supplies the per-brand approval policy so AC-14.6's gate reads
+   * what the customer configured rather than one workspace-wide default.
+   *
+   * OPTIONAL, and the fallback is the activated `content.calendar` value, so a
+   * caller that has not wired Approvals behaves exactly as 5B-2 did rather than
+   * failing or — far worse — silently letting unapproved content through.
+   */
+  readonly approvalGate?: ApprovalGate;
+}
+
+/** The single question the calendar asks the Approvals module. */
+export interface ApprovalGate {
+  policyForBrand(brandId: string): Promise<{ requireApprovalBeforeScheduling: boolean }>;
 }
 
 export interface ScheduleInput {
@@ -86,13 +100,29 @@ export interface CalendarSlotView {
   readonly variants: readonly ContentVariant[];
 }
 
-/** States a content item may be scheduled FROM. */
-const SCHEDULABLE_FROM: readonly ContentItem['status'][] = [
-  'DRAFT',
-  'IN_REVIEW',
-  'APPROVED',
-  'SCHEDULED',
-];
+/**
+ * States a content item may be scheduled FROM.
+ *
+ * `IN_REVIEW` IS NOT ON THIS LIST, and removing it closes a real divergence
+ * between the two modules rather than tightening a rule.
+ *
+ * WHAT WENT WRONG WHILE IT WAS: with the approval gate OFF, an item submitted
+ * for review could also be scheduled — `schedule()` moved it to `SCHEDULED`
+ * while its PENDING approval was still open. The reviewer's verdict then moved
+ * it again, out from under a live calendar slot: an approval sent it to
+ * `APPROVED` and a rejection to `DRAFT`, in both cases leaving a slot pointing
+ * at content the item no longer claims to be scheduled. `transition()` refuses
+ * to move a scheduled item precisely so that cannot happen, and this path went
+ * around it.
+ *
+ * THE INVARIANT IS THE SIMPLE ONE: an item in review is not schedulable. With
+ * the gate OFF a DRAFT may still be planned directly, which is the whole point
+ * of the gate being optional; with the gate ON only `APPROVED` may.
+ *
+ * `CHANGES_REQUESTED` is likewise absent: a reviewer has actively said the
+ * content is not ready, and planning it anyway would make the verdict advisory.
+ */
+const SCHEDULABLE_FROM: readonly ContentItem['status'][] = ['DRAFT', 'APPROVED', 'SCHEDULED'];
 
 export class ContentCalendarService {
   readonly #db: TenantScopedClient;
@@ -101,6 +131,7 @@ export class ContentCalendarService {
   readonly #timezone: string;
   readonly #quota: ScheduleQuota;
   readonly #clock: Clock;
+  readonly #approvalGate: ApprovalGate | undefined;
 
   constructor(options: CalendarOptions) {
     this.#db = options.db;
@@ -109,6 +140,23 @@ export class ContentCalendarService {
     this.#timezone = options.timezone;
     this.#quota = options.quota;
     this.#clock = options.clock ?? systemClock;
+    this.#approvalGate = options.approvalGate;
+  }
+
+  /**
+   * AC-14.6 — is approval required before THIS brand's content may be planned?
+   *
+   * PER BRAND FIRST, the activated default second (Phase 5B-3). D-120 shipped
+   * this as one workspace-wide switch that was off because nothing could grant
+   * approval; now that the workflow exists, ROADMAP scope item 6's "policy per
+   * brand" is what a customer actually configures. The old configuration value
+   * remains the default for a brand that has not chosen.
+   */
+  async #approvalRequired(brandId: string): Promise<boolean> {
+    if (this.#approvalGate) {
+      return (await this.#approvalGate.policyForBrand(brandId)).requireApprovalBeforeScheduling;
+    }
+    return this.#policy.calendar.requireApprovalBeforeScheduling;
   }
 
   /** The zone every wall-clock on this calendar is expressed in. */
@@ -120,9 +168,9 @@ export class ContentCalendarService {
   async schedule(input: ScheduleInput): Promise<CalendarSlotView> {
     const item = await this.#requireItem(input.contentItemId, input.actorBrandScope);
 
-    // AC-14.6. The gate, read from the activated policy rather than written
-    // here: the owner turns it on when the Approvals workflow ships (5B-3).
-    if (this.#policy.calendar.requireApprovalBeforeScheduling && item.status !== 'APPROVED') {
+    // AC-14.6. The gate, read from the brand's own policy (5B-3). With the
+    // workflow behind it, `APPROVED` now means a named reviewer said so.
+    if ((await this.#approvalRequired(item.brandId)) && item.status !== 'APPROVED') {
       throw approvalRequiredBeforeScheduling();
     }
     if (!SCHEDULABLE_FROM.includes(item.status)) throw transitionNotAllowed();

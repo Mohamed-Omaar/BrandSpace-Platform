@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {
+    "@brandspace/activity": "workspace:*",
     "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/assets": "workspace:*",
     "@brandspace/auth": "workspace:*",
@@ -16,6 +17,7 @@
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/jobs": "workspace:*",
+    "@brandspace/notifications": "workspace:*",
     "@brandspace/observability": "workspace:*",
     "@brandspace/providers": "workspace:*",
     "@brandspace/secrets": "workspace:*",

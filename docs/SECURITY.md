@@ -220,35 +220,35 @@ All four must pass. A permission the plan does not include is denied even for a 
 
 Legend: ✅ full · 🟡 limited/conditional · ➖ none
 
-| Capability                            | Owner | Admin              | Mktg Mgr           | Content Creator | Copywriter     | Designer         | Approver        | Analyst         | Viewer (read-only)          |
-| ------------------------------------- | ----- | ------------------ | ------------------ | --------------- | -------------- | ---------------- | --------------- | --------------- | --------------------------- |
-| View workspace                        | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ✅              | ✅              | 🟡 assigned brands          |
-| Manage workspace settings             | ✅    | ✅                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Transfer ownership / delete workspace | ✅    | ➖                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Invite / remove members               | ✅    | ✅                 | 🟡 non-admin roles | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Assign roles                          | ✅    | 🟡 below own level | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Create / archive brands               | ✅    | ✅                 | 🟡 create only     | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Edit Brand Center / Brand Brain       | ✅    | ✅                 | ✅                 | 🟡 suggest      | 🟡 suggest     | 🟡 visual only   | ➖              | ➖              | ➖                          |
-| Generate AI strategy                  | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Create / edit campaigns               | ✅    | ✅                 | ✅                 | 🟡 own          | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Create content drafts                 | ✅    | ✅                 | ✅                 | ✅              | ✅ text only   | 🟡 visual only   | ➖              | ➖              | ➖                          |
-| Generate AI content                   | ✅    | ✅                 | ✅                 | ✅              | ✅             | 🟡 creative only | ➖              | ➖              | ➖                          |
-| Generate AI creative                  | ✅    | ✅                 | ✅                 | ✅              | ➖             | ✅               | ➖              | ➖              | ➖                          |
-| Upload / manage assets                | ✅    | ✅                 | ✅                 | ✅              | 🟡 own         | ✅               | ➖              | ➖              | ➖                          |
-| Submit for approval                   | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ➖              | ➖              | ➖                          |
-| Approve / reject                      | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ✅              | ➖              | 🟡 optional client approval |
-| Comment                               | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ✅              | ✅              | ✅                          |
-| Schedule to calendar                  | ✅    | ✅                 | ✅                 | 🟡 own approved | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Publish now / external publish        | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Connect / disconnect social accounts  | ✅    | ✅                 | 🟡 connect only    | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| View analytics                        | ✅    | ✅                 | ✅                 | ✅              | 🟡 own content | 🟡 own content   | ✅              | ✅              | 🟡 assigned brands          |
-| Export analytics / data               | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ✅              | 🟡 if enabled               |
-| Use AI Copilot                        | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | 🟡 read/explain | 🟡 read/explain | ➖                          |
-| Create automations                    | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| View billing & invoices               | ✅    | 🟡 view only       | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| Change plan / payment method          | ✅    | ➖                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                          |
-| View AI credit balance                | ✅    | ✅                 | ✅                 | 🟡 own usage    | 🟡 own usage   | 🟡 own usage     | ➖              | 🟡 aggregate    | ➖                          |
-| View activity log                     | ✅    | ✅                 | 🟡 brand-scoped    | 🟡 own          | 🟡 own         | 🟡 own           | 🟡 own          | 🟡 brand-scoped | ➖                          |
+| Capability                            | Owner | Admin              | Mktg Mgr           | Content Creator | Copywriter     | Designer         | Approver        | Analyst         | Viewer (read-only) |
+| ------------------------------------- | ----- | ------------------ | ------------------ | --------------- | -------------- | ---------------- | --------------- | --------------- | ------------------ |
+| View workspace                        | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ✅              | ✅              | 🟡 assigned brands |
+| Manage workspace settings             | ✅    | ✅                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Transfer ownership / delete workspace | ✅    | ➖                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Invite / remove members               | ✅    | ✅                 | 🟡 non-admin roles | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Assign roles                          | ✅    | 🟡 below own level | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Create / archive brands               | ✅    | ✅                 | 🟡 create only     | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Edit Brand Center / Brand Brain       | ✅    | ✅                 | ✅                 | 🟡 suggest      | 🟡 suggest     | 🟡 visual only   | ➖              | ➖              | ➖                 |
+| Generate AI strategy                  | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Create / edit campaigns               | ✅    | ✅                 | ✅                 | 🟡 own          | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Create content drafts                 | ✅    | ✅                 | ✅                 | ✅              | ✅ text only   | 🟡 visual only   | ➖              | ➖              | ➖                 |
+| Generate AI content                   | ✅    | ✅                 | ✅                 | ✅              | ✅             | 🟡 creative only | ➖              | ➖              | ➖                 |
+| Generate AI creative                  | ✅    | ✅                 | ✅                 | ✅              | ➖             | ✅               | ➖              | ➖              | ➖                 |
+| Upload / manage assets                | ✅    | ✅                 | ✅                 | ✅              | 🟡 own         | ✅               | ➖              | ➖              | ➖                 |
+| Submit for approval                   | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ➖              | ➖              | ➖                 |
+| Approve / reject                      | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ✅              | ➖              | ➖                 |
+| Comment                               | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | ✅              | ✅              | ✅                 |
+| Schedule to calendar                  | ✅    | ✅                 | ✅                 | 🟡 own approved | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Publish now / external publish        | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Connect / disconnect social accounts  | ✅    | ✅                 | 🟡 connect only    | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| View analytics                        | ✅    | ✅                 | ✅                 | ✅              | 🟡 own content | 🟡 own content   | ✅              | ✅              | 🟡 assigned brands |
+| Export analytics / data               | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ✅              | 🟡 if enabled      |
+| Use AI Copilot                        | ✅    | ✅                 | ✅                 | ✅              | ✅             | ✅               | 🟡 read/explain | 🟡 read/explain | ➖                 |
+| Create automations                    | ✅    | ✅                 | ✅                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| View billing & invoices               | ✅    | 🟡 view only       | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| Change plan / payment method          | ✅    | ➖                 | ➖                 | ➖              | ➖             | ➖               | ➖              | ➖              | ➖                 |
+| View AI credit balance                | ✅    | ✅                 | ✅                 | 🟡 own usage    | 🟡 own usage   | 🟡 own usage     | ➖              | 🟡 aggregate    | ➖                 |
+| View activity log                     | ✅    | ✅                 | 🟡 brand-scoped    | 🟡 own          | 🟡 own         | 🟡 own           | 🟡 own          | 🟡 brand-scoped | ➖                 |
 
 > **Naming note.** The rightmost role is stored as the RBAC key `client_viewer` and is displayed as
 > **Viewer (read-only)** (D-58). The key and its single `workspace.read` grant are unchanged; only the
@@ -1400,3 +1400,306 @@ somebody adds an import. Real publishing is Phase 6.
 times, the zone and a channel COUNT — and never a caption or a title. A scheduled launch caption is
 the most commercially sensitive string the product holds, and an audit record is read by more people
 than the draft is. The test asserts the absence, not just the presence.
+
+---
+
+## 25. Implementation Status — Phase 5B-3 (Approvals, Activity Log, Notifications)
+
+The governance half of the customer journey. What was built, and the properties a reviewer should be
+able to check rather than take on trust.
+
+### 25.1 Tenant isolation
+
+Three new tenant-owned tables — `approval`, `approval_policy`, `notification` — each with RLS
+**enabled and forced**, a `tenant_isolation` policy for the application role and a `platform_access`
+policy for the platform role, exactly as every table since the Phase 1 migration.
+
+**Every foreign key to a tenant-owned parent is COMPOSITE on `workspaceId`** (D-112).
+`approval_item_fkey` on `(workspaceId, contentItemId)` is the fourth key written under that rule
+after F-80, F-83 and the calendar's, and it is the same shape those findings were about: PostgreSQL
+evaluates referential integrity as the table OWNER with RLS BYPASSED, so a plain `contentItemId`
+would have resolved another workspace's draft, accepted the row, and — by the difference between
+"inserted" and "violates foreign key" — answered _does that draft exist?_
+
+`tests/isolation/phase5b3-approvals-tenancy.test.ts` asserts the refusal **from inside the
+attacker's own workspace context**, which is the case RLS does not cover, and asserts that a real
+foreign id and a fabricated one fail identically down to the error code and the constraint name.
+
+**What is asserted beyond the row's existence**, because these tables hold more than rows:
+
+| Property                                        | Why it is asserted separately                                                                                                                                                     |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The verdict, the decider and the timestamp      | "Who in this company signs off on what, and how quickly" is an organisational chart drawn from another tenant's workflow                                                          |
+| The request and decision NOTES                  | A review note is candid by design — it is where somebody writes why a colleague's work is not ready                                                                               |
+| `allowSelfApproval` and `clientApprovalEnabled` | Reading another tenant's approval policy is a map of where their controls are weakest, which is worth more than any single row                                                    |
+| The notification `payload`                      | It carries the customer's own content title                                                                                                                                       |
+| The idempotency key namespace                   | The unique index is `(workspaceId, idempotencyKey)`, not the key alone: one tenant choosing a guessable key must not be able to BLOCK another tenant's notification from existing |
+
+### 25.2 Authorization
+
+**Every transition is enforced in the service, never by the screen.** Each server action names the
+permission it needs and `requireWorkspace` refuses without it; the service then re-reads the subject,
+re-checks the brand scope and re-resolves the authority from the brand's own policy. A hidden button
+is a courtesy — a server action is a public HTTP endpoint.
+
+**D-122 — self-approval is denied by default.** Both the author and the requester are barred, because
+an author who asks a colleague to submit on their behalf would otherwise approve their own words. The
+policy in force is SNAPSHOTTED onto the approval, so relaxing the rule later does not rewrite what an
+earlier decision meant.
+
+**D-62 — Viewer (read-only) is READ-ONLY, and nothing can lift it.** D-121 briefly made
+"Approve / reject" for Viewer a per-brand grant; **D-62 supersedes it for the MVP** and the matrix row
+above is `➖` again. `client_viewer` holds exactly `['workspace.read']`, and `mayApproveForBrand` takes
+**only** a permission list — it accepts neither a role key nor a brand policy, so there is no channel
+through which a customer's configuration could lift anyone. `/approvals` and every action behind it
+require `content.read`; the navigation omits the entry, but the ROUTE's refusal is the control.
+`approval_policy."clientApprovalEnabled"` survives as reserved structure, pinned to false by
+`approval_policy_client_approval_withdrawn`, for a future **External Review / Guest Approval**
+capability that will be its own narrow actor rather than a repurposed customer role.
+
+**The escalation that is deliberately prevented.** `approvals.policy.manage` can turn self-approval
+on, so it is held only by the Workspace Owner and Workspace Admin — and NOT by the Marketing Manager,
+who can approve. A role able to both approve and change the approval policy could grant itself the
+right to approve its own work. A unit test asserts the two sets do not overlap in that direction.
+
+**Denied attempts are audited (AC-15.6), on a separate connection.** A refusal throws, which rolls
+back the transaction it was raised in — so an audit row written just before the throw would roll back
+with it. `ApprovalOptions.denialSink` writes the denial on its own connection, which commits whatever
+happens to the one that refused. `packages/auth`'s workspace-access denial has always done the same.
+
+### 25.3 The audit trail is unchanged, and the Activity Log reads it
+
+The Activity Log adds **no table and no writer** (D-124). `audit_event` keeps its append-only
+guarantee — UPDATE and DELETE revoked from both roles, plus a trigger — and the isolation suite
+re-asserts both (AC-15.7). The customer screen returns actor, action, resource and outcome, and
+**never the `before`/`after` diffs**: those are written redacted, but "redacted" is a property of
+every past and future writer having got it right, and a customer screen should not depend on that.
+
+**The reader's grade is a QUERY PREDICATE, not a filter** (AC-15.3). A reader graded "own" gets
+`actorId = me` inside the SQL; a page boundary or a count computed over rows they may not see would
+itself be a disclosure. A brand-graded reader with an empty scope matches **nothing**, not
+everything — omitting the clause would silently widen them to the whole workspace, and a unit test
+pins that behaviour.
+
+`audit.read` is GRADED rather than replaced (D-125): `audit.read_workspace` above it,
+`audit.read_own` below, matching `docs/SECURITY.md` §4.3's four grades, resolved from permissions
+and never from the role key.
+
+### 25.4 Notifications
+
+Written from **domain events**, never from a UI handler: the service that changed the state calls the
+notification service, so a notification cannot exist for something that did not happen. Recipients
+are computed **server-side** from memberships and permissions — a caller that could name them could
+address a notification to somebody who may not see the thing it points at, and a notification's title
+is itself a disclosure that content exists.
+
+A notification is a **pointer, not a copy**: it carries a title and a link, and following the link
+runs the ordinary permission checks. Read state is server-enforced — `markRead` puts the reader's own
+`userId` in the `where` clause, so another member's id matches no row and changes nothing, which is
+the same outcome as an id that never existed.
+
+**In-app only (D-123)**, enforced by a CHECK constraint rather than by convention.
+
+### 25.5 What this phase deliberately did NOT do
+
+| Not done                                               | Why                                                                                                                                             |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 8 launch hardening (D-123)                                                         |
+| Multi-step approval chains, role assignment, due dates | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten            |
+| Threaded comments with mentions and anchors            | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own. The approval's request and decision notes carry the review's context |
+| Weakening the audit trail for the UI                   | The screen was shaped to the append-only record, not the reverse                                                                                |
+
+---
+
+## 26. Corrective pass on Phase 5B-3 — what the green suites did not catch
+
+A code-level review found seven gaps that every check in §25 passed over. They
+are recorded here rather than quietly fixed, because the interesting part is not
+the bugs but **why the tests agreed with them**.
+
+### 26.1 The Activity Log's filter was a privilege escalation
+
+`page()` spread the caller's filter into the SAME object literal as the
+authorization predicate, **after** it. In JavaScript the later key wins, so
+`?brandId=<another brand>` replaced a brand-graded reader's brand clause and
+`?actorId=<a colleague>` replaced an own-graded reader's `actorId = me`. The
+query string was a way past the grade.
+
+Every predicate is now composed with `AND`, so a filter can only ever INTERSECT
+what authorization allows; naming something outside the scope returns nothing
+rather than reaching past it. `tests/isolation/activity-log-scope.test.ts`
+asserts both escalations against real rows — and both of those tests FAIL
+against the previous composition, which is how the fix is known to be real.
+
+### 26.2 The BrandScope rule was inverted
+
+`brandInScope()` and `brandScopeFilter()` have meant the same thing since
+Phase 2B: **an empty membership scope is UNRESTRICTED.** The Activity Log and
+the approvals queue both read an empty list as "no brands", which failed closed
+but wrongly — an unrestricted Marketing Manager would have seen an empty log —
+and pushed two dashboard pages into expanding an empty scope into "every brand
+id" before calling them. That workaround was the same rule implemented a third
+time, in a page.
+
+`brandIdScopeFilter()` in `@brandspace/shared` is now the single helper for
+brand-scoped CHILD rows, beside `brandScopeFilter()` for the brand table itself.
+One rule, one answer, asserted against `brandInScope()` in a unit test so the
+two cannot drift.
+
+### 26.3 D-121 was unreachable — and has since been withdrawn entirely
+
+The per-brand Viewer grant existed, was unit-tested, and could not be used: the
+`/approvals` route and the decision action both required `content.read`, and
+`client_viewer` holds `workspace.read` and nothing else. A workspace could
+switch the grant on and the person it was switched on for would be refused.
+
+The corrective pass made it reachable by authorizing those surfaces on
+MEMBERSHIP instead. **That is no longer the state of the code.** A subsequent
+product-architecture review found D-121 in conflict with **D-62**, and D-62 is
+authoritative for the MVP: the platform has no Client Portal, no client
+hand-off workflow, no agency-client approval workflow and no external reviewer
+surface, so there was no product for the grant to belong to. Making an
+unreachable feature reachable was the wrong repair; the right one was to
+withdraw it. See **§26.9**.
+
+### 26.4 Notifications addressed people who should not have been told
+
+Recipients were "every member whose role holds `content.approve`" — which
+ignored membership status and BrandScope entirely. A member restricted to Brand
+A was told the TITLE of Brand B's content; a suspended member kept being told;
+and — under the since-superseded D-121 — a Viewer the brand had admitted was
+told nothing. Under D-62 the Viewer is not a reviewer at all, so the correct
+answer there is now "never a recipient", which is what the suite asserts.
+
+`ContentApprovalService.eligibleReviewers()` is now the one answer to "who may
+review this", used both to validate an assignment and to address the
+notification, and it checks all three conditions. A notification is a
+disclosure: its title says content exists, in that brand, awaiting review.
+
+### 26.5 The calendar and the approval could diverge
+
+With the gate OFF, an `IN_REVIEW` item could be scheduled — and the reviewer's
+verdict then moved it **out from under a live slot**. `transition()` refuses to
+move a scheduled item precisely so that cannot happen, and this path went around
+it. `IN_REVIEW` is no longer schedulable at all: with the gate off a DRAFT may
+still be planned, with the gate on only `APPROVED` may.
+
+### 26.6 Two verdicts could both win
+
+`decide()` read the row by id, checked `status === 'PENDING'` and updated by id.
+Two reviewers pressing at once both read PENDING, both passed the guard, and
+both wrote — the second silently overwriting the first, one verdict vanishing,
+and two audit events each claiming to have decided the same review.
+
+Now `SELECT … FOR UPDATE` before the read, plus a conditional `updateMany` on
+`status = 'PENDING'`, inside the transaction `withWorkspace` already opens — so
+the approval write, the item write, the audit event and the notification remain
+one unit. `tests/isolation/approvals-concurrency.test.ts` races real
+transactions; all three of its assertions fail against the previous code.
+
+### 26.7 The grants did not match their own comment
+
+`20260915180000`'s §9 said `notification` was "the only one of the three the
+application may DELETE" and then granted DELETE on all three, with UPDATE
+unrestricted. `20260915210000_phase_5b_3_approval_integrity` revokes DELETE on
+both approval tables from the application role and adds `approval_write_once`,
+a trigger making a terminal cycle immutable and a cycle's identity — subject,
+requester, round, policy snapshot — immutable throughout.
+
+**Test fixtures were refactored, not the grants.** Cleanup runs as the PLATFORM
+role, which is what performs tenant offboarding and the retention purge in
+production. Widening a production grant to make a test convenient would have
+handed every workspace admin the power to erase an approval record.
+
+### 26.7b The screen offered verdicts the server would refuse
+
+Closing 26.6 and D-126 server-side exposed a second divergence one layer up.
+`decide()` judged a cycle by its `policySnapshot`; the approvals screen computed
+its buttons from the brand's **live** policy. So a workspace that flipped
+`allowSelfApproval` on while a review was open was shown an Approve button for
+that cycle, and pressing it earned a refusal. `reviewSubject().mayDecide` had
+the same shape from a different direction, answering from the permission and
+status alone — so it offered the verdict to the person who submitted the cycle,
+and to a reviewer when the review was assigned to somebody else.
+
+**This was never an authorization hole.** Every one of those presses was
+correctly refused by the server, which is the only authority; UI hiding is not
+and never was how any of these rules are enforced. It was a correctness and
+honesty defect: a control that refuses the person who uses it reads as a bug,
+and teaches the rule by denial.
+
+`policyFromSnapshot` is now exported from `@brandspace/content` and both
+surfaces resolve through it, so there is one implementation of "what does this
+cycle permit" rather than three. `reviewSubject().mayDecide` applies all four
+conditions `decide()` enforces — PENDING, effective policy, assignment, and the
+D-122 self rule. Recorded as **D-129**.
+
+Two service-level tests pin it, and both were confirmed to fail against the
+previous code before the fix was kept:
+`content-approvals.test.ts` › _reviewSubject().mayDecide AGREES with decide():
+self, under the snapshot_, and `approval-recipients.test.ts` › _and
+reviewSubject().mayDecide SAYS SO, rather than offering a button that refuses_.
+The end-to-end journey asserts the queue itself: after the flip, the open cycle
+still renders `self-blocked-` and offers no `approve-` control, and only the
+resubmitted cycle may be approved.
+
+**One related inconsistency, fixed in passing.** `markNotificationReadAction`
+was the only action in the module that redirected to the bare path, so a
+successful mark-read produced no confirmation banner and was indistinguishable
+from having done nothing. It now answers `ok=SAVED`, matching
+`markAllNotificationsReadAction`.
+
+### 26.8 What this pass did NOT do
+
+No External Guest Portal, no Phase 6 publishing, no Phase 7 analytics. The
+future extensibility that was already there — `ApprovalSubjectType`'s unreachable
+`CAMPAIGN` and `ASSET`, `NotificationChannel`'s undeliverable channels — is
+preserved exactly as it was, still unreachable and still constrained.
+
+### 26.9 D-121 withdrawn: Viewer is strictly read-only (D-62)
+
+A product-architecture review after the corrective pass found D-121 in conflict
+with **D-62**, and D-62 is authoritative for the MVP. The platform has no Client
+Portal, no client hand-off workflow, no agency-client approval workflow and no
+external reviewer product surface — so a per-brand switch admitting the
+read-only Viewer as a reviewer was a capability with nowhere to live, granted to
+a role whose entire definition is "cannot change anything".
+
+**Withdrawn at every layer, not disabled at one.** A single flag left off is a
+setting; the point here is that there is no setting.
+
+| Layer             | State                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The rule          | `mayApproveForBrand({ permissionKeys })` — the `roleKey` and `policy` parameters are **removed**, so no role key or brand setting can reach it at all |
+| The role          | `client_viewer` is exactly `['workspace.read']`, pinned by a unit test that asserts the whole list rather than the absence of one key                 |
+| The route         | `/approvals` requires `content.read` again; a Viewer gets NOT_FOUND, in both locales, with or without a `?review=` id                                 |
+| The actions       | `decideApprovalAction` and `withdrawApprovalAction` require `content.read`; `setPolicyForBrand`'s patch type **excludes** `clientApprovalEnabled`     |
+| The narrow read   | `reviewSubject()` no longer admits a caller without `content.read` — that bypass existed only to let a D-121 Viewer read what they were judging       |
+| The configuration | `clientApprovalEnabled: z.literal(false)` — a configuration version that tries to activate it is REFUSED at validation, not activated and ignored     |
+| The database      | `approval_policy_client_approval_withdrawn` CHECK pins the column to FALSE or NULL; existing `true` rows are normalized by the migration              |
+| The navigation    | The Approvals entry is gated on `content.read` — tidiness, since the route refuses independently                                                      |
+
+**History is not rewritten.** `approval."policySnapshot"` keeps whatever it
+recorded, including a historical `clientApprovalEnabled: true`. An approval is
+the record of a review that happened under the rules then in force, and
+`approval_is_write_once` forbids editing it in any case. Nothing reads a
+snapshot for authority, so a historical `true` grants nothing —
+`tests/isolation/approvals-concurrency.test.ts` asserts both halves: a Viewer is
+refused, and the snapshot cannot be edited to say otherwise.
+
+**The idea is deferred, not deleted.** A future **External Review / Guest
+Approval** capability is expected, and the structure that would serve it is kept
+deliberately: approval cycles and rounds, assignment, policy snapshots,
+immutable decision history, `ApprovalSubjectType`'s unreachable members, request
+and decision notes, and the notification architecture. What is NOT kept is the
+idea that `client_viewer` is the actor for it. That capability gets its own
+narrow actor, and nothing in this release anticipates its shape beyond leaving
+the column in place.
+
+**Proved by** `tests/e2e/viewer-read-only.spec.ts` (routes and actions refuse
+over HTTP, both locales), `tests/isolation/content-approvals.test.ts` §_D-62 —
+the Viewer is strictly read-only, end to end_ (decide, withdraw, reviewSubject
+and assignment all refused), `tests/isolation/approval-recipients.test.ts` (never
+a recipient), and `tests/unit/approvals-activity-notifications.test.ts` (the
+role's exact permission list, and the configuration refusing to activate the
+reserved field).

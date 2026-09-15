@@ -109,6 +109,13 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'content.submit',
       'content.archive',
       'content.schedule',
+      // Phase 5B-3. docs/SECURITY.md §4.3 gives this role "Approve / reject"
+      // outright. Its activity view stays BRAND-SCOPED, which is what the
+      // `audit.read` it already holds means — no new key needed.
+      // `approvals.policy.manage` is deliberately NOT here: that switch can
+      // enable self-approval, so a role that can approve must not also be able
+      // to grant itself the right to approve its own work.
+      'content.approve',
     ],
   },
   {
@@ -144,6 +151,9 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'content.edit',
       'content.submit',
       'content.schedule',
+      // Phase 5B-3. §4.3 gives the creator roles "View activity log" for their
+      // OWN actions only — enough to see what became of what they submitted.
+      'audit.read_own',
     ],
   },
   {
@@ -175,6 +185,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'content.create',
       'content.edit',
       'content.submit',
+      // Phase 5B-3, own actions only (§4.3).
+      'audit.read_own',
     ],
   },
   {
@@ -200,6 +212,11 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'assets.version',
       'assets.archive',
       'assets.restore',
+      // Phase 5B-3. §4.3 gives this role "Submit for approval" and "View
+      // activity log" for its own actions. It submits visual work like anyone
+      // else; it does not judge it.
+      'content.submit',
+      'audit.read_own',
     ],
   },
   {
@@ -225,8 +242,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // Phase 5B-2. Reviews content, so it READS drafts. It does not
       // generate — that spends credits — and it does not edit: an approver
       // who rewrites the thing they are approving is not approving it.
-      // The approve/reject ACTION itself belongs to Approvals (scope item 6).
       'content.read',
+      // Phase 5B-3 — scope item 6, and the authority this role was named for.
+      // `approve` WITHOUT `edit`, and without `submit`: judging a proposal and
+      // authoring one are different acts, and keeping them apart is what makes
+      // the approval record evidence rather than a formality.
+      'content.approve',
+      // §4.3 grades this role's activity view as OWN — the decisions it made.
+      'audit.read_own',
     ],
   },
   {
@@ -250,6 +273,9 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'assets.read',
       // Phase 5B-2. READ-ONLY, symmetrically with the library above.
       'content.read',
+      // NOTE: the Analyst's activity view is BRAND-SCOPED, which is what the
+      // `audit.read` above already means (Phase 5B-3). No new key is needed,
+      // and adding one would have widened a strictly read-only role.
     ],
   },
   {

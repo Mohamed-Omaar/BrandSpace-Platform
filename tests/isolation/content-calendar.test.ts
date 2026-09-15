@@ -57,6 +57,13 @@ const CONTENT_POLICY: ContentPolicy = {
     maxSlotsPerDay: 25,
     requireApprovalBeforeScheduling: false,
   },
+  approvals: {
+    requireApprovalBeforeScheduling: false,
+    allowSelfApproval: false,
+    clientApprovalEnabled: false,
+    maxNoteLength: 1_000,
+    maxCyclesPerItem: 25,
+  },
 };
 
 const ZONE = 'Asia/Riyadh';

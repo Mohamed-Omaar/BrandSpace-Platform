@@ -454,8 +454,8 @@ notifications (item 8) remain outstanding**, so Phase 5 is still not complete an
 above are still not claimed.
 
 The approved Phase 5B breakdown is: **5B-1** Asset Library ✅ · **5B-2** Content Studio + Content
-Calendar ✅ · **5B-3** Approvals + Command Center + Activity Log + Notifications · then the final UI
-polish and audit.
+Calendar ✅ · **5B-3** Approvals + Command Center + Activity Log + Notifications ✅ · then the final
+UI polish and audit.
 
 **The AI Content Studio:**
 
@@ -640,3 +640,54 @@ Present in **every** phase, not deferred:
 | Security                | Dependency, secret, and static scanning on every CI run       |
 | Performance             | Budgets enforced per route                                    |
 | Observability           | Traces and metrics for every new subsystem                    |
+
+---
+
+### Delivered in Phase 5B-3 — Approvals, Command Center, Activity Log, Notifications
+
+Scope items **6, 7 and 8** are built, and with them the Command Center's four placeholder panels
+become real figures. **Publishing (the rest of item 5) remains outstanding**, so Phase 5 is still not
+complete and the exit criteria above are still not claimed.
+
+Phase 5B: **5B-1** Asset Library ✅ · **5B-2** Content Studio + Content Calendar ✅ · **5B-3**
+Approvals + Command Center + Activity Log + Notifications ✅ · then the final UI polish and audit.
+
+**Approvals** (docs/PRODUCT.md §5 module 14, ROADMAP scope item 6):
+
+| Delivered                                                  | What it is                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **One lifecycle, not two**                                 | `content_item.status` remains the source of truth. An `approval` row records a review CYCLE and every verdict moves the item's own status in the same transaction — and `transition()` no longer accepts `IN_REVIEW` at all, so there is one way into review and one way out                                                                                     |
+| **`approval` + `approval_policy`**                         | Two tenant-owned tables (`docs/DATABASE.md` §4.8b), RLS enabled and forced, `approval_item_fkey` the fourth composite key written under D-112                                                                                                                                                                                                                    |
+| **Submit · approve · request changes · reject · withdraw** | Both refusals return the item to an EDITABLE state, because content that has been turned down and cannot be worked on is content the workflow has trapped. The difference between "fix these points" and "no, not this" lives in the record                                                                                                                      |
+| **Policy per brand**                                       | `requireApprovalBeforeScheduling` and `allowSelfApproval`, each NULLABLE so an unset brand follows the activated default and a changed default still reaches it                                                                                                                                                                                                  |
+| **D-122 — self-approval denied by default**                | The author AND the requester are barred, unless the brand deliberately allows it. The policy in force is snapshotted onto the approval, so relaxing it later does not rewrite what an earlier decision meant                                                                                                                                                     |
+| **D-130 — Viewer stays READ-ONLY (D-62)**                  | D-121 would have made §4.3's "optional client approval" real per brand; it was withdrawn before merge as contrary to D-62, which excludes client portals and hand-off workflows from the MVP. `client_viewer` is exactly `['workspace.read']` and `mayApproveForBrand` takes only a permission list. Deferred to a future External Review / Guest Approval actor |
+| **An edit revokes an approval**                            | Approving is a judgement about particular words. Editing an APPROVED item returns it to DRAFT and says so in the audit trail, because otherwise the record claims a review of text nobody read                                                                                                                                                                   |
+| **AC-14.6 closed (D-120)**                                 | The calendar reads the BRAND's gate rather than one workspace-wide default, and `APPROVED` now means a named person said so. The isolation suite schedules an item that reached that state through the workflow — which in 5B-2 could only be written by setting the column directly                                                                             |
+
+**Command Center** (module 1, scope item 7). `/[locale]/overview` already carried the demo's
+`overview()` composition with four panels that stated what they could not yet measure. Three of them
+now carry real figures — upcoming slots, recent activity, notifications — beside a new "Needs your
+approval" panel, and every one reads through the module that OWNS the data rather than counting rows
+itself. **The published/engagement card still states its reason**: publishing is Phase 6 and
+analytics Phase 7, and a zero there would read as "you published nothing".
+
+**Activity Log** (module 17, AC-15.2, AC-15.3). A read model over `audit_event` that adds **no table
+and no writer** (D-124). Graded four ways from `audit.read` (D-125), scoped at the QUERY, keyset
+paged, filterable by action through a GET form that works without scripting. It renders actor,
+action, resource and outcome and never the `before`/`after` diffs.
+
+**Notifications** (module 16). One tenant-owned table, written from domain events rather than from UI
+code, idempotent per recipient per event, with server-enforced read state. **In-app only (D-123)** —
+no mail transport exists in this platform, and a CHECK constraint pins every row to `IN_APP`.
+
+**Deliberately not built, each for a stated reason:**
+
+| Not built                                                  | Why                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Email, SMS, push and Slack delivery**                    | ROADMAP scope item 8 says "in-app + email", but no mail transport exists anywhere in the platform. A `channel` accepting `EMAIL` would be a row claiming a delivery that never happened. Phase 8 launch hardening (D-123)                               |
+| **Threaded comments, mentions, anchored review notes**     | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own — threads, `@mentions`, a position in the text, resolution. The approval's request and decision notes carry the review's context; the rest belongs with the surface it is for |
+| **Multi-step approval chains, role assignment, due dates** | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten — the rule §4.4b applied to `campaignId`                                                                           |
+| **Notification channel preferences**                       | A preferences screen for channels the product cannot deliver on would be a promise it does not keep. It arrives with the transports                                                                                                                     |
+| **Automations**                                            | Module 15, and Phase 7. "On approval, schedule to the best slot" is exactly the rule an automation engine runs, and approving is the event it would run on — but the engine is not this milestone                                                       |
+| **The Command Center's Copilot panel**                     | The AI Copilot is Phase 7, unchanged from 5B-2's reasoning: shipping the markup with nothing behind it would be a screen that lies about what the product does                                                                                          |

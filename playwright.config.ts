@@ -246,7 +246,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -256,7 +256,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -365,6 +365,33 @@ export default defineConfig({
        */
       name: 'content-calendar',
       testMatch: /content-calendar\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * Approvals gets its own SERIAL project, for the reason the calendar and
+       * the Studio already have one — and one more besides.
+       *
+       * THE SUITE DRIVES A WORKFLOW, NOT A LAYOUT. Its journey submits the
+       * shared fixture draft for review, meets the self-approval refusal,
+       * changes the brand policy and approves; every step is the precondition of
+       * the next. Run in the two VIEWPORT projects it would run twice at once
+       * against one database, and the second browser would find the draft
+       * already `IN_REVIEW` with no submit button to press — which is exactly
+       * what happened before this project existed.
+       *
+       * The responsive and accessibility assertions do not need the viewport
+       * projects either: the suite sets its own phone viewport for the one test
+       * that measures overflow, which is more honest than inferring layout from
+       * which project happened to run.
+       */
+      name: 'approvals',
+      testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

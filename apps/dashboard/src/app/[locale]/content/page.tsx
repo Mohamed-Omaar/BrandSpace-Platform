@@ -23,7 +23,13 @@ export const dynamic = 'force-dynamic';
  * workspace, and an empty library reads zero rather than borrowing an
  * encouraging number.
  */
-const STATUSES = ['DRAFT', 'IN_REVIEW', 'ARCHIVED'] as const;
+/*
+ * PHASE 5B-3 ADDED THE TWO STATES A REVIEW PRODUCES. Without them an approved
+ * item and one a reviewer sent back were counted by no tab and shown under no
+ * filter — reachable only through a link somebody still had. The library is the
+ * screen that is supposed to answer "where is my content?".
+ */
+const STATUSES = ['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'ARCHIVED'] as const;
 type LibraryStatus = (typeof STATUSES)[number];
 
 export default async function ContentPage({
@@ -101,6 +107,8 @@ export default async function ContentPage({
         all: STATUSES.reduce((sum, key) => sum + (byStatus[key] ?? 0), 0),
         DRAFT: byStatus.DRAFT ?? 0,
         IN_REVIEW: byStatus.IN_REVIEW ?? 0,
+        CHANGES_REQUESTED: byStatus.CHANGES_REQUESTED ?? 0,
+        APPROVED: byStatus.APPROVED ?? 0,
         ARCHIVED: byStatus.ARCHIVED ?? 0,
       },
     };
@@ -167,8 +175,12 @@ const LIBRARY_KEYS = [
   'content.emptyBody',
   'content.emptyFilteredTitle',
   'content.emptyFilteredBody',
+  'content.tab.changesRequested',
+  'content.tab.approved',
   'content.status.DRAFT',
   'content.status.IN_REVIEW',
+  'content.status.CHANGES_REQUESTED',
+  'content.status.APPROVED',
   'content.status.ARCHIVED',
   'content.variantCount',
   'content.variantCountPlural',

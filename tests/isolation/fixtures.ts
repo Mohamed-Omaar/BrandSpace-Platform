@@ -67,6 +67,12 @@ export interface TenantFixture {
   readonly contentIdempotencyKey: string;
   /** Phase 5B-2 — the Content Calendar. A live slot for the draft above. */
   readonly calendarSlotId: string;
+  // --- Phase 5B-3 (Approvals, Activity Log, Notifications) ---
+  /** A DECIDED review cycle over the draft above, so it carries a verdict. */
+  readonly approvalId: string;
+  readonly approvalPolicyId: string;
+  readonly notificationId: string;
+  readonly notificationIdempotencyKey: string;
 }
 
 export interface IsolationFixtures {
@@ -951,6 +957,66 @@ async function createTenant(
         },
       });
 
+      /*
+       * PHASE 5B-3 — a DECIDED approval, a brand policy that departs from every
+       * default, and an UNREAD notification.
+       *
+       * Decided rather than pending on purpose: a decided row carries a
+       * `decidedByUserId`, a `decidedAt` and a `policySnapshot`, so the
+       * isolation suite can assert that a verdict and the identity of the person
+       * who gave it are as invisible across the boundary as the row itself.
+       */
+      const approval = await db.approval.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          subjectType: 'CONTENT_ITEM',
+          contentItemId: contentItem.id,
+          requestedByUserId: user.id,
+          status: 'APPROVED',
+          requestNote: `fixture-request-note-${slug}`,
+          decisionNote: `fixture-decision-note-${slug}`,
+          decidedByUserId: user.id,
+          decidedAt: new Date('2026-02-01T10:00:00.000Z'),
+          policySnapshot: {
+            requireApprovalBeforeScheduling: true,
+            allowSelfApproval: true,
+            clientApprovalEnabled: false,
+          },
+          cycle: 1,
+        },
+      });
+
+      const approvalPolicy = await db.approvalPolicy.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          requireApprovalBeforeScheduling: true,
+          allowSelfApproval: true,
+          // NOT `clientApprovalEnabled: true` any more: D-62 withdrew the D-121
+          // Viewer grant and `approval_policy_client_approval_withdrawn` now
+          // refuses the row outright. The fixture varies the columns that still
+          // mean something.
+          updatedByUserId: user.id,
+        },
+      });
+
+      const notificationKey = `fixture-notification-${slug}`;
+      const notification = await db.notification.create({
+        data: {
+          workspaceId: id,
+          userId: user.id,
+          templateKey: 'approval.requested',
+          payload: { itemTitle: `fixture-item-title-${slug}` },
+          channel: 'IN_APP',
+          linkPath: `/approvals?item=${contentItem.id}`,
+          brandId: brand.id,
+          resourceType: 'Approval',
+          resourceId: approval.id,
+          idempotencyKey: notificationKey,
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -1003,6 +1069,10 @@ async function createTenant(
         contentVariantId: contentVariant.id,
         contentIdempotencyKey: `fixture-content-${slug}`,
         calendarSlotId: calendarSlot.id,
+        approvalId: approval.id,
+        approvalPolicyId: approvalPolicy.id,
+        notificationId: notification.id,
+        notificationIdempotencyKey: notificationKey,
       };
     },
     { prisma, bootstrap: true },

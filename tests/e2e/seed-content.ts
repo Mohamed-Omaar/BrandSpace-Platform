@@ -35,6 +35,31 @@ loadE2eEnv();
 const IDEMPOTENCY_KEY = 'e2e-calendar-fixture';
 const TITLE = 'Seasonal note';
 
+/*
+ * PHASE 5B-3 — A SECOND DRAFT, FOR APPROVALS ALONE.
+ *
+ * The calendar suite schedules the draft above, moves it and cancels it; the
+ * approvals suite submits ITS draft for review, is refused a self-approval,
+ * changes the brand policy and approves. Sharing one fixture between them makes
+ * each suite's starting state depend on whether the other ran first, which is
+ * the kind of coupling that produces a failure pointing nowhere near its cause.
+ */
+const APPROVAL_IDEMPOTENCY_KEY = 'e2e-approvals-fixture';
+const APPROVAL_TITLE = 'Launch announcement';
+
+/*
+ * A SECOND BRAND, so "another brand" is a real place in the end-to-end suite.
+ *
+ * Brand scope is only meaningfully tested against a second brand that actually
+ * exists: a queue, a policy or a notification restricted to one brand proves
+ * nothing where there is only one. It carries its own draft so both can be in
+ * review at once.
+ */
+const SECOND_BRAND_SLUG = 'e2e-approvals-brand-two';
+const SECOND_BRAND_NAME = 'E2E Second Brand';
+const SECOND_IDEMPOTENCY_KEY = 'e2e-approvals-second-brand';
+const SECOND_TITLE = 'Second brand note';
+
 function assertNotProduction(): void {
   if ((process.env['APP_ENV'] ?? 'development') === 'production') {
     throw new Error('This seed refuses to run against a production deployment.');
@@ -200,8 +225,158 @@ async function main(): Promise<void> {
       { prisma },
     );
 
+    /*
+     * THE APPROVALS FIXTURE, reset to a clean DRAFT with no review history.
+     *
+     * The suite asserts cycle numbers and the self-approval refusal, so a
+     * previous run's cycles would make the first assertion wrong on the second
+     * run. Approvals ARE deleted rather than cancelled — unlike the calendar
+     * slot above — because a cancelled cycle still counts towards the ceiling
+     * and still shows in the history the suite reads. The AUDIT trail of those
+     * reviews survives regardless: `audit_event` is append-only and nothing
+     * here touches it.
+     *
+     * The brand's policy row is removed too, so the suite starts from the
+     * activated defaults rather than from whatever it last switched on.
+     */
+    await withWorkspace(
+      workspaceId,
+      async (db) => {
+        const brand = await db.brand.findFirstOrThrow({
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+
+        const existing = await db.contentItem.findFirst({
+          where: { idempotencyKey: APPROVAL_IDEMPOTENCY_KEY },
+          include: { variants: true },
+        });
+
+        if (existing) {
+          /*
+           * THE APPROVAL HISTORY IS CLEARED AS THE PLATFORM ROLE, not here.
+           *
+           * `20260915210000_phase_5b_3_approval_integrity` revoked DELETE on
+           * `approval` from the application role: an approval is the record
+           * that somebody reviewed something, and the application has no
+           * business erasing one. Tenant offboarding and the retention purge
+           * run as the platform role, and so does this reset — rather than the
+           * production grant being widened to make a fixture convenient.
+           */
+          await platform.approval.deleteMany({ where: { contentItemId: existing.id } });
+          await db.calendarSlot.updateMany({
+            where: { contentItemId: existing.id, status: { not: 'CANCELLED' } },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          });
+          await db.contentItem.update({
+            where: { id: existing.id },
+            data: { status: 'DRAFT' },
+          });
+        }
+        await platform.approvalPolicy.deleteMany({ where: { brandId: brand.id } });
+
+        const item =
+          existing ??
+          (await db.contentItem.create({
+            data: {
+              workspaceId,
+              brandId: brand.id,
+              title: APPROVAL_TITLE,
+              contentType: 'POST',
+              primaryLocale: 'EN',
+              status: 'DRAFT',
+              origin: 'HUMAN',
+              idempotencyKey: APPROVAL_IDEMPOTENCY_KEY,
+            },
+          }));
+
+        if (!existing || existing.variants.length === 0) {
+          await db.contentVariant.create({
+            data: {
+              workspaceId,
+              brandId: brand.id,
+              contentItemId: item.id,
+              platformKey: 'instagram',
+              locale: 'EN',
+              body: 'A short announcement, written for the approvals end-to-end fixture.',
+              hashtags: ['launch'],
+              characterCount: 66,
+              validationState: 'VALID',
+              origin: 'HUMAN',
+            },
+          });
+        }
+
+        // The second brand, and a draft in it. See the note by its constants.
+        const secondBrand =
+          (await db.brand.findFirst({ where: { slug: SECOND_BRAND_SLUG } })) ??
+          (await db.brand.create({
+            data: {
+              workspaceId,
+              slug: SECOND_BRAND_SLUG,
+              name: SECOND_BRAND_NAME,
+              defaultLocale: 'EN',
+              status: 'ACTIVE',
+            },
+          }));
+        await platform.approvalPolicy.deleteMany({ where: { brandId: secondBrand.id } });
+
+        const secondExisting = await db.contentItem.findFirst({
+          where: { idempotencyKey: SECOND_IDEMPOTENCY_KEY },
+          include: { variants: true },
+        });
+        if (secondExisting) {
+          await platform.approval.deleteMany({ where: { contentItemId: secondExisting.id } });
+          await db.calendarSlot.updateMany({
+            where: { contentItemId: secondExisting.id, status: { not: 'CANCELLED' } },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          });
+          await db.contentItem.update({
+            where: { id: secondExisting.id },
+            data: { status: 'DRAFT' },
+          });
+        }
+        const secondItem =
+          secondExisting ??
+          (await db.contentItem.create({
+            data: {
+              workspaceId,
+              brandId: secondBrand.id,
+              title: SECOND_TITLE,
+              contentType: 'POST',
+              primaryLocale: 'EN',
+              status: 'DRAFT',
+              origin: 'HUMAN',
+              idempotencyKey: SECOND_IDEMPOTENCY_KEY,
+            },
+          }));
+        if (!secondExisting || secondExisting.variants.length === 0) {
+          await db.contentVariant.create({
+            data: {
+              workspaceId,
+              brandId: secondBrand.id,
+              contentItemId: secondItem.id,
+              platformKey: 'instagram',
+              locale: 'EN',
+              body: 'A note belonging to the second brand, for the brand-scope fixture.',
+              hashtags: ['second'],
+              characterCount: 65,
+              validationState: 'VALID',
+              origin: 'HUMAN',
+            },
+          });
+        }
+      },
+      { prisma },
+    );
+
     console.log(`\n✔ Schedulable draft ${'replayed' in result ? 'reset' : 'created'}: ${TITLE}`);
     console.log('  One DRAFT item with one caption. Nothing is scheduled and nothing publishes.');
+    console.log(`✔ Reviewable draft reset: ${APPROVAL_TITLE}`);
+    console.log('  One DRAFT item, no review history, and the brand back on its default policy.');
+    console.log(`✔ Second brand and its draft reset: ${SECOND_TITLE}`);
+    console.log('  So brand scope can be shown admitting one brand and not another.');
   } finally {
     await prisma.$disconnect();
     await platform.$disconnect();

@@ -54,6 +54,14 @@ export const contentPolicySchema = z.object({
     maxSlotsPerDay: z.number().int().min(1),
     requireApprovalBeforeScheduling: z.boolean(),
   }),
+  approvals: z.object({
+    requireApprovalBeforeScheduling: z.boolean(),
+    allowSelfApproval: z.boolean(),
+    /** Reserved and inert — D-62 supersedes D-121. See `ResolvedApprovalPolicy`. */
+    clientApprovalEnabled: z.literal(false),
+    maxNoteLength: z.number().int().min(1),
+    maxCyclesPerItem: z.number().int().min(1),
+  }),
 });
 
 export type ContentDialect = z.infer<typeof dialectSchema>;

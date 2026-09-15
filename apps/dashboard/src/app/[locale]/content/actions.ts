@@ -57,6 +57,23 @@ function actorOf(session: WorkspaceSession) {
   };
 }
 
+/**
+ * The approvals actor, built from the SESSION and nothing else.
+ *
+ * The permission keys travel with it because the service decides authority
+ * from them, never from the form. The role key travels too: it no longer
+ * affects approval authority (D-62 removed that channel), but the actor is the
+ * session's identity and the audit trail records who acted as what.
+ */
+function approvalActorOf(session: WorkspaceSession) {
+  return {
+    userId: session.customer.userId,
+    roleKey: session.workspace.roleKey,
+    permissionKeys: session.workspace.permissionKeys,
+    brandScope: session.workspace.brandScope,
+  };
+}
+
 /** Save a person's own edit to a caption. No gateway, no credits. */
 export async function saveVariantAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
@@ -88,7 +105,13 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
 }
 
 /**
- * DRAFT → IN_REVIEW → ARCHIVED, and back. Nothing further.
+ * The direct moves: archive, and restore a draft.
+ *
+ * `IN_REVIEW` IS NO LONGER REACHABLE HERE (Phase 5B-3). Submitting for review
+ * opens an `approval` row — a requester, a policy snapshot, a cycle — and a
+ * status change with none of that behind it was an item in a queue nobody could
+ * decide. `submitForReviewAction` below is the only way in, and
+ * `cancelReviewAction` the only way back out.
  *
  * SCHEDULED and PUBLISHED belong to the Social Calendar and the publishing
  * pipeline; the service refuses them, and this action has no way to name one.
@@ -97,12 +120,12 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const itemId = String(formData.get('itemId') ?? '');
   const raw = String(formData.get('to') ?? '');
-  const to = raw === 'IN_REVIEW' || raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
+  const to = raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
 
   let destination: string;
   try {
     if (!to) throw new Error('unsupported transition');
-    const permission = to === 'ARCHIVED' ? 'content.archive' : 'content.submit';
+    const permission = to === 'ARCHIVED' ? 'content.archive' : 'content.edit';
     const session = await requireWorkspace(locale, permission);
 
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
@@ -116,6 +139,64 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
     destination = failure(locale, error, 'transitionItem', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * Phase 5B-3 — send content for review.
+ *
+ * The permission is checked TWICE, as everywhere in this file: once by
+ * `requireWorkspace` before the work starts, and once by the service, which
+ * re-reads the item and its brand scope. A server action is a public HTTP
+ * endpoint, and the hidden button is a courtesy.
+ */
+export async function submitForReviewAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  const note = String(formData.get('note') ?? '');
+  const assignedTo = String(formData.get('assignedToUserId') ?? '');
+
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.submit');
+    await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
+      (await approvals()).submit({
+        itemId,
+        actor: approvalActorOf(session),
+        assignedToUserId: assignedTo.length > 0 ? assignedTo : null,
+        note,
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/approvals`);
+  redirect(destination);
+}
+
+/** Withdraw an open review, returning the item to a draft. */
+export async function cancelReviewAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  const approvalId = String(formData.get('approvalId') ?? '');
+
+  let destination: string;
+  try {
+    // `content.submit` is what it takes to OPEN a review, so it is what it takes
+    // to withdraw one. The service additionally requires the caller to be the
+    // requester or somebody who could have decided it.
+    const session = await requireWorkspace(locale, 'content.submit');
+    await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
+      (await approvals()).cancel({ approvalId, actor: approvalActorOf(session) }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'cancelReview', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/approvals`);
   redirect(destination);
 }
 

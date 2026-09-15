@@ -32,6 +32,13 @@ export type {
   ContentVariant,
   // Phase 5B-2 — Content Calendar.
   CalendarSlot,
+  // Phase 5B-3 — Approvals, Activity Log, Notifications. `AuditEvent` comes
+  // through for the Activity Log, which is a READ MODEL over it: the customer
+  // screen needs the row's shape, and nothing here grants a way to write one.
+  Approval,
+  ApprovalPolicy,
+  AuditEvent,
+  Notification,
 } from '@prisma/client';
 
 export type {
@@ -51,6 +58,12 @@ export type {
   BrandSourceStatus,
   BrandStatus,
   CalendarSlotStatus,
+  ApprovalStatus,
+  ApprovalSubjectType,
+  ActorType,
+  AuditOutcome,
+  AuditSeverity,
+  NotificationChannel,
   ContentOrigin,
   ContentStatus,
   ContentType,

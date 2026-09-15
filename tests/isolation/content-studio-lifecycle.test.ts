@@ -92,6 +92,13 @@ const CONTENT_POLICY: ContentPolicy = {
     maxSlotsPerDay: 25,
     requireApprovalBeforeScheduling: false,
   },
+  approvals: {
+    requireApprovalBeforeScheduling: false,
+    allowSelfApproval: false,
+    clientApprovalEnabled: false,
+    maxNoteLength: 1_000,
+    maxCyclesPerItem: 25,
+  },
 };
 
 const NO_LIMITS = {
@@ -799,28 +806,54 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
 });
 
 describe('the lifecycle this phase owns, and the transitions it refuses', () => {
-  it('moves DRAFT → IN_REVIEW → DRAFT → ARCHIVED', async () => {
+  it('moves DRAFT → ARCHIVED → DRAFT', async () => {
     nextOutput = reply([{ platformKey: 'instagram', body: 'Lifecycle.' }]);
     const generated = await inA((studio) =>
       studio.generate({ ...baseInput(), idempotencyKey: key() }),
     );
     const itemId = generated.item.id;
-    const move = (to: 'IN_REVIEW' | 'DRAFT' | 'ARCHIVED') =>
+    const move = (to: 'DRAFT' | 'ARCHIVED') =>
       inA((studio) =>
         studio.transition({ itemId, to, actorUserId: fixtures.a.userId, actorBrandScope: [] }),
       );
 
-    expect((await move('IN_REVIEW')).status).toBe('IN_REVIEW');
-    expect((await move('DRAFT')).status).toBe('DRAFT');
     expect((await move('ARCHIVED')).status).toBe('ARCHIVED');
+    expect((await move('DRAFT')).status).toBe('DRAFT');
   });
 
-  it('refuses to schedule or approve — those belong to later scope items', async () => {
+  it('REFUSES a direct move into IN_REVIEW — review is opened by Approvals', async () => {
+    /*
+     * PHASE 5B-3's CENTRAL INTEGRITY CHANGE, asserted rather than described.
+     *
+     * A direct DRAFT → IN_REVIEW move produced an item sitting in a queue with
+     * NO `approval` row behind it: no requester, no policy snapshot, no cycle,
+     * nothing for a reviewer to decide and nothing for the history to show. The
+     * library refuses it now, so there is ONE way into review and one lifecycle.
+     */
+    nextOutput = reply([{ platformKey: 'instagram', body: 'No back door.' }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+
+    await expect(
+      inA((studio) =>
+        studio.transition({
+          itemId: generated.item.id,
+          to: 'IN_REVIEW' as never,
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+        }),
+      ),
+    ).rejects.toThrow();
+
+    expect((await inA((studio) => studio.getItem(generated.item.id))).status).toBe('DRAFT');
+  });
+
+  it('refuses to schedule — publishing belongs to a later phase', async () => {
     /*
      * PHASE DISCIPLINE, ENFORCED RATHER THAN DOCUMENTED. Scheduling is the
-     * Social Calendar's (scope item 5) and approval is Approvals' (item 6). A
-     * phase that quietly implemented either would hand those phases behaviour
-     * they never designed, and a customer a state nothing can move them out of.
+     * calendar's edge in both directions, and a second writer into `SCHEDULED`
+     * would let an item be archived out from under a live plan.
      */
     nextOutput = reply([{ platformKey: 'instagram', body: 'Not schedulable yet.' }]);
     const generated = await inA((studio) =>

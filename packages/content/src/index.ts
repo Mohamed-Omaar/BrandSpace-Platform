@@ -20,7 +20,27 @@ export { ContentLibraryService } from './library';
 export type { ContentLibraryOptions } from './library';
 
 export { ContentCalendarService } from './calendar';
-export type { CalendarOptions, CalendarSlotView, ScheduleInput, ScheduleQuota } from './calendar';
+export type {
+  ApprovalGate,
+  CalendarOptions,
+  CalendarSlotView,
+  ScheduleInput,
+  ScheduleQuota,
+} from './calendar';
+
+/* Phase 5B-3 — Approvals (docs/PRODUCT.md §5 module 14). */
+export { ContentApprovalService, mayApproveForBrand, policyFromSnapshot } from './approvals';
+export type {
+  ApprovalActor,
+  ApprovalNotifier,
+  DenialSink,
+  ApprovalOptions,
+  ApprovalVerdict,
+  ApprovalWithItem,
+  ResolvedApprovalPolicy,
+  EffectiveApprovalPolicy,
+  ReviewSubject,
+} from './approvals';
 
 export {
   LOCAL_TIME_PATTERN,
