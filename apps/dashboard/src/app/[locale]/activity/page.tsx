@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import {
   Card,
+  CONTROL_CLASS,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
   buttonStyle,
   colorTokens,
+  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
@@ -148,11 +150,21 @@ export default async function ActivityPage({
                 <label htmlFor="activity-action" style={labelStyle}>
                   {t('activity.filterAction')}
                 </label>
+                {/*
+                  THE DESIGN SYSTEM'S OWN CONTROL, not a locally styled one.
+                  `.bs-control` carries the fill, the radius and — the part that
+                  matters — the visible focus treatment every other field in the
+                  product has. A select styled by hand here would look almost
+                  right and focus differently, which is exactly the drift
+                  `tests/unit/design-system.test.ts` exists to catch. It caught
+                  this one.
+                */}
                 <select
                   id="activity-action"
                   name="action"
                   defaultValue={action ?? ''}
-                  style={selectStyle}
+                  className={CONTROL_CLASS}
+                  style={{ ...inputStyle(), inlineSize: 'auto', maxInlineSize: '100%' }}
                   data-testid="activity-filter"
                 >
                   <option value="">{t('activity.filterAll')}</option>
@@ -260,14 +272,4 @@ const filterFormStyle = {
   alignItems: 'center',
   flexWrap: 'wrap',
   marginBlockEnd: spacingTokens.md,
-} as const;
-
-const selectStyle = {
-  ...typographyTokens.bodySm,
-  padding: spacingTokens['3xs'],
-  borderRadius: '8px',
-  border: `1px solid ${colorTokens.border}`,
-  background: colorTokens.surface,
-  color: colorTokens.textPrimary,
-  maxInlineSize: '100%',
 } as const;
