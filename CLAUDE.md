@@ -14,8 +14,13 @@
 ## 1. What BrandSpace Is
 
 BrandSpace is a **bilingual (Arabic RTL / English LTR), multi-tenant SaaS platform** that acts as an
-AI-powered brand and social media operating system for entrepreneurs, startups, SMBs, marketing teams,
-creators, agencies, and enterprise teams.
+AI-powered brand and social media operating system for businesses, founders, in-house brand and
+marketing teams, creators, and multi-brand companies.
+
+**It is NOT an agency operating system (D-62).** The MVP has no Agency plan, no Client Portal, no
+client hand-off workflow and no white-labelling; `client_viewer` is a strictly read-only role
+(D-130). Agency capability is possible future expansion and is documented as future in
+`docs/ROADMAP.md`, never as something this product ships.
 
 It has **three architecturally separated interfaces**:
 

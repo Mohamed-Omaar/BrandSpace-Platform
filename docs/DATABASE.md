@@ -1283,3 +1283,44 @@ the row id and insert without `RETURNING`.
 Milli-credits are stored; whole credits are displayed (D-14). `balanceMilliCredits` is a materialised
 projection of the ledger, updated only inside the same transaction as its `CreditTransaction` row.
 `CreditService.reconcile()` replays the ledger and reports the drift, which must be zero.
+
+## 16. Workspace-scoped foreign keys, as built (D-112 / D-131)
+
+Every foreign key from a tenant-owned child to a tenant-owned parent is
+composite on `workspaceId` against a `(workspaceId, id)` unique on the parent.
+PostgreSQL evaluates referential integrity as the table owner with RLS
+bypassed, so a plain single-column key resolves another tenant's row perfectly
+well and the difference between "inserted" and "violates foreign key" answers
+_does that id exist?_
+
+The rule reached Brand Brain in `20260914200000` (F-80/F-83) and the rest of the
+platform in `20260915234500`:
+
+| Child                | Column(s)                       | Parent            | Constraint                       |
+| -------------------- | ------------------------------- | ----------------- | -------------------------------- |
+| `credit_transaction` | `workspaceId, walletId`         | `credit_wallet`   | `credit_transaction_wallet_fkey` |
+| `credit_grant`       | `workspaceId, walletId`         | `credit_wallet`   | `credit_grant_wallet_fkey`       |
+| `credit_reservation` | `workspaceId, walletId`         | `credit_wallet`   | `credit_reservation_wallet_fkey` |
+| `ai_usage_ledger`    | `workspaceId, aiRequestId`      | `ai_request`      | `ai_usage_ledger_request_fkey`   |
+| `ai_usage_ledger`    | `workspaceId, correctsLedgerId` | `ai_usage_ledger` | `ai_usage_ledger_corrects_fkey`  |
+
+`ON UPDATE NO ACTION` throughout: a `workspaceId` is never rewritten, and a key
+that silently followed one would be a cross-tenant move rather than an update.
+The delete actions are unchanged from the plain keys they replaced.
+
+### 16.1 `role` — the exception, and why it needs a trigger
+
+`role."workspaceId"` is **nullable**: a system role is shared by every workspace
+(`NULL`), a custom role belongs to exactly one. A child whose `workspaceId` is
+NOT NULL can never match a parent row whose `workspaceId` IS NULL, so the
+composite key above is impossible by construction here, not merely missing.
+
+`membership` and `invitation` are guarded instead by
+`app.role_reference_is_workspace_scoped()`
+(`20260915235000_d112_role_reference_is_workspace_scoped`), which refuses a
+`roleId` that is neither a system role nor a role of the row's own workspace. It
+reads `role` as the invoker, so in a tenant context `role`'s own RLS policy —
+`"workspaceId" IS NULL OR "workspaceId" = app.current_workspace_id()` — is
+already the rule, and "not found" is the tenancy check. `role_permission` has no
+tenant key of its own and inherits the role's, so it raises no cross-tenant
+question.

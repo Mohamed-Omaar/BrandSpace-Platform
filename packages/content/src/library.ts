@@ -5,7 +5,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope } from '@brandspace/shared';
+import { assertBrandInScope, brandIdScopeFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
 import { validateVariant } from './validation';
@@ -57,6 +57,18 @@ export class ContentLibraryService {
 
   async listItems(input: {
     brandId?: string | undefined;
+    /**
+     * The caller's membership BrandScope. Empty or absent is UNRESTRICTED —
+     * the platform rule `brandInScope()` has carried since Phase 2B.
+     *
+     * APPLIED IN THE QUERY, AND THAT MATTERS HERE MORE THAN ANYWHERE. `limit`
+     * is applied by the database, so a caller that filtered by brand AFTER
+     * this returned would be filtering a page that had already been truncated:
+     * a member scoped to one brand, in a workspace whose most recent 200
+     * drafts belong to another, would be shown nothing at all and told it was
+     * empty. The calendar's draft picker did exactly that.
+     */
+    brandScope?: readonly string[] | null | undefined;
     status?: ContentItem['status'] | undefined;
     search?: string | undefined;
     limit?: number | undefined;
@@ -65,6 +77,7 @@ export class ContentLibraryService {
       where: {
         deletedAt: null,
         ...(input.brandId ? { brandId: input.brandId } : {}),
+        ...brandIdScopeFilter(input.brandScope),
         ...(input.status ? { status: input.status } : {}),
         /*
          * Search is over the TITLE only, and deliberately.

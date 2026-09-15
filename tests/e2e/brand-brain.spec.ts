@@ -99,20 +99,46 @@ test.describe('Brand Brain screen', () => {
     await expect(page.getByTestId('completion-card')).toBeVisible();
 
     /*
-     * THE NUMBER IS COMPUTED, NOT THE DEMO'S.
+     * THE NUMBERS ARE COMPUTED, NOT THE DEMO'S — PROVED BY MAKING THEM MOVE.
      *
-     * A fresh workspace has no approved knowledge, so completion must read a
-     * low honest figure — and in particular must NOT read 82%, which is the
-     * value the approved visual reference hard-codes. This assertion exists
-     * specifically to fail if the demo number is ever copied in.
+     * This used to assert that the three figures differed from the values the
+     * approved visual reference hard-codes: `82%`, `128` items and `4` sources.
+     * The intent was right and the assertion was wrong, and it failed on a
+     * developer's accumulated local database while passing on CI.
+     *
+     * THE ROOT CAUSE, since it is worth recording rather than muting: this
+     * suite adds knowledge through the real UI and nothing removes it between
+     * runs, so the workspace's item count grows monotonically across local
+     * runs. `not.toHaveText('4')` is therefore a coincidence waiting to
+     * happen — the honest live count passes through 4 on its way up, and a
+     * correct page then failed the test. The assertion conflated "do not
+     * hard-code the demo constant" with "the live value must differ from it",
+     * and only the first is true.
+     *
+     * WHAT REPLACES IT IS STRICTLY STRONGER. A hard-coded number cannot
+     * change: adding one knowledge item through the UI must move the item
+     * count by exactly one. That catches the demo constant being pasted in —
+     * which is what the old assertion was for — and it is immune to whatever
+     * the database already holds, because it measures a DIFFERENCE.
      */
     const percent = await page.getByTestId('completion-percent').innerText();
     expect(percent).toMatch(/^\d{1,3}%$/);
-    expect(percent).not.toBe('82%');
 
-    // The other two demo numbers, likewise.
-    await expect(page.getByTestId('metric-items')).not.toHaveText('128');
-    await expect(page.getByTestId('metric-sources')).not.toHaveText('4');
+    const itemsBefore = Number(await page.getByTestId('metric-items').innerText());
+    expect(Number.isFinite(itemsBefore), 'the item metric must render a number').toBe(true);
+
+    await addKnowledge(
+      page,
+      'IDENTITY',
+      `live-metric-${Date.now()}`,
+      'A fact added so the metric has to move.',
+    );
+
+    await expect
+      .poll(async () => Number(await page.getByTestId('metric-items').innerText()), {
+        timeout: 15_000,
+      })
+      .toBe(itemsBefore + 1);
 
     // Ten areas, every one rendered whatever the database holds.
     await expect(page.getByTestId('area-grid').locator('button')).toHaveCount(10);

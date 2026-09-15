@@ -1703,3 +1703,110 @@ and assignment all refused), `tests/isolation/approval-recipients.test.ts` (neve
 a recipient), and `tests/unit/approvals-activity-notifications.test.ts` (the
 role's exact permission list, and the configuration refusing to activate the
 reserved field).
+
+## 27. Cross-phase technical audit — Phase 0 through Phase 5B-3
+
+The audit before Social Publishing begins. It looked across phase boundaries
+rather than inside one milestone, which is where the findings were: each was
+correct when it was written, and became wrong when a later decision made the
+rule broader than the code that implemented it.
+
+### 27.1 D-112 had never left Brand Brain
+
+D-112 made the composite workspace-scoped foreign key a **platform-wide** rule,
+but it was written while fixing F-80/F-83 and applied to those eight keys only.
+Parsing every `@relation` in the schema found five older relationships still
+referencing a tenant-owned parent by id alone:
+
+| Relationship                                          | Phase | Demonstrated                         |
+| ----------------------------------------------------- | ----- | ------------------------------------ |
+| `credit_transaction."walletId"` → `credit_wallet(id)` | 3     | **ACCEPTED** a cross-workspace write |
+| `credit_grant."walletId"` → `credit_wallet(id)`       | 3     | same shape                           |
+| `credit_reservation."walletId"` → `credit_wallet(id)` | 3     | same shape                           |
+| `ai_usage_ledger."aiRequestId"` → `ai_request(id)`    | 4     | **ACCEPTED** a cross-workspace write |
+| `ai_usage_ledger."correctsLedgerId"` → itself         | 4     | same shape, self-referential         |
+
+**Two were confirmed before the fix was written**, from inside workspace A
+against workspace B's rows. The credit keys are the worse pair: they attach a
+MONEY LEDGER row to another tenant's wallet. The application never does this —
+it resolves the wallet from the workspace in `#lockWallet` and never accepts a
+wallet id from input — and that is exactly why this survived four phases.
+CLAUDE.md §2.1 requires two independent layers; the second was open.
+
+All five are now composite on `workspaceId`
+(`20260915234500_d112_credit_and_ai_composite_foreign_keys`), written in the
+same shape as `20260914200000`: lift FORCE RLS so the pre-flight can see real
+rows, refuse with counts and never identifiers, add the referenced uniques,
+swap each key, restore FORCE and **assert** it.
+
+`tests/isolation/d112-credit-and-ai-composite-keys.test.ts` proves the
+relationships still work, that a foreign parent is refused, and — the assertion
+that makes the refusals sufficient — that **a real foreign id and a fabricated
+one fail identically**, down to SQLSTATE and constraint name. Restoring the
+plain key fails the suite.
+
+### 27.2 `role` is the documented exception, and has a trigger instead
+
+`role`'s tenant key is NULLABLE: a system role is shared by every workspace, a
+custom role belongs to one. A child whose `workspaceId` is NOT NULL can never
+match a parent whose `workspaceId` IS NULL, so a composite key is impossible by
+construction rather than merely absent.
+
+The gap was real: workspace B could write an `invitation` naming workspace A's
+custom role, and **permissions resolve straight through `membership.roleId`**.
+The application already refused it (`packages/auth/src/invitations.ts`), so this
+was a defence-in-depth gap rather than a reachable exploit — the same shape as
+the credit keys, one layer up.
+
+`app.role_reference_is_workspace_scoped()` now guards `membership` and
+`invitation`. It reads `role` as the **invoker**, deliberately: in a tenant
+context `role`'s own RLS policy is already exactly this rule, so another
+workspace's role is simply invisible and "not found" IS the tenancy check; in a
+platform context every role is visible and the explicit comparison refuses a
+cross-wired write. A system role is visible under both policies, so workspace
+provisioning — the flow most at risk from a trigger here — is untouched, and
+the 176 auth and tenancy assertions confirm it.
+
+### 27.3 BrandScope was applied after retrieval on the calendar
+
+Recorded as **D-132**. The calendar page fetched the workspace's whole month and
+dropped out-of-scope brands in JavaScript. Nothing leaked across tenants — RLS
+held — but `listItems` applies `limit` in the database, so filtering afterwards
+filtered an already-truncated page: **a member scoped to one brand, in a
+workspace whose newest drafts belong to another, was shown nothing to schedule
+and told it was empty.** That is a customer-visible bug, not an architectural
+preference. Both services now take `brandScope` and apply it in the `where`.
+`tests/isolation/brand-scope-query-pushdown.test.ts` pins it, including the
+truncation case that reproduces the original defect.
+
+### 27.4 What was audited and found correct
+
+Recorded because a clean result is a result:
+
+- **Server authorization.** Every customer-facing mutation resolves its
+  workspace, role, permissions and BrandScope from the SESSION, never the form.
+  Every dashboard action names a permission except the two notification actions,
+  which are membership-only by design and scoped to the reader's own id. The API
+  enforces a route/permission contract **at registration**, so a non-public
+  route that declares no permission fails to start.
+- **`client_viewer`** is exactly `['workspace.read']`, and `mayApproveForBrand`
+  accepts neither a role key nor a policy (D-130). No Client Portal, client
+  hand-off or Viewer-approval behaviour is reachable.
+- **Localization.** 577/577 dashboard and 151/151 admin keys exist in both
+  locales, and **every Arabic value contains Arabic characters** — there are no
+  untranslated placeholders hiding behind a present key.
+- **Append-only ledgers.** `credit_transaction` and `ai_usage_ledger` refuse
+  DELETE even to the table owner; this was met head-on while clearing probe rows
+  and is working as designed.
+
+### 27.5 Deferred, with reasons
+
+- **Calendar drag-to-reschedule** stays deferred. Moving a slot is implemented
+  and fully keyboard-operable; native drag has no accessible equivalent this
+  module has built, and shipping the mouse half alone would exclude exactly the
+  people WCAG 2.2 AA is for. Adding it in an audit milestone would be the
+  feature expansion this milestone is not.
+- **`RolePermission`** carries no tenant key of its own and inherits the role's,
+  so it raises no cross-tenant question and was deliberately left alone.
+- **Phase 8 retention** remains the recorded launch dependency (D-116, D-117).
+  This milestone did not build a retention engine.
