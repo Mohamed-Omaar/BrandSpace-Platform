@@ -1606,6 +1606,44 @@ role, which is what performs tenant offboarding and the retention purge in
 production. Widening a production grant to make a test convenient would have
 handed every workspace admin the power to erase an approval record.
 
+### 26.7b The screen offered verdicts the server would refuse
+
+Closing 26.6 and D-126 server-side exposed a second divergence one layer up.
+`decide()` judged a cycle by its `policySnapshot`; the approvals screen computed
+its buttons from the brand's **live** policy. So a workspace that flipped
+`allowSelfApproval` on while a review was open was shown an Approve button for
+that cycle, and pressing it earned a refusal. `reviewSubject().mayDecide` had
+the same shape from a different direction, answering from the permission and
+status alone — so it offered the verdict to the person who submitted the cycle,
+and to a reviewer when the review was assigned to somebody else.
+
+**This was never an authorization hole.** Every one of those presses was
+correctly refused by the server, which is the only authority; UI hiding is not
+and never was how any of these rules are enforced. It was a correctness and
+honesty defect: a control that refuses the person who uses it reads as a bug,
+and teaches the rule by denial.
+
+`policyFromSnapshot` is now exported from `@brandspace/content` and both
+surfaces resolve through it, so there is one implementation of "what does this
+cycle permit" rather than three. `reviewSubject().mayDecide` applies all four
+conditions `decide()` enforces — PENDING, effective policy, assignment, and the
+D-122 self rule. Recorded as **D-129**.
+
+Two service-level tests pin it, and both were confirmed to fail against the
+previous code before the fix was kept:
+`content-approvals.test.ts` › _reviewSubject().mayDecide AGREES with decide():
+self, under the snapshot_, and `approval-recipients.test.ts` › _and
+reviewSubject().mayDecide SAYS SO, rather than offering a button that refuses_.
+The end-to-end journey asserts the queue itself: after the flip, the open cycle
+still renders `self-blocked-` and offers no `approve-` control, and only the
+resubmitted cycle may be approved.
+
+**One related inconsistency, fixed in passing.** `markNotificationReadAction`
+was the only action in the module that redirected to the bare path, so a
+successful mark-read produced no confirmation banner and was indistinguishable
+from having done nothing. It now answers `ok=SAVED`, matching
+`markAllNotificationsReadAction`.
+
 ### 26.8 What this pass did NOT do
 
 No External Guest Portal, no Phase 6 publishing, no Phase 7 analytics. The

@@ -92,7 +92,7 @@ async function openReviewableDraft(page: Page, locale = 'en'): Promise<void> {
 }
 
 test.describe('the approval workflow', () => {
-  test('submit → refused self-approval → policy change → approved', async ({ page }) => {
+  test('submit → refused self-approval → policy change → resubmit → approved', async ({ page }) => {
     /*
      * ONE JOURNEY RATHER THAN FOUR TESTS, deliberately. Each step is the
      * precondition of the next, and splitting them would mean re-establishing
@@ -138,7 +138,31 @@ test.describe('the approval workflow', () => {
     await submitAndSettle(page, '[data-testid^="policy-save-"]', /ok=SAVED|error=/);
     expect(page.url()).toMatch(/ok=SAVED/);
 
-    // 4. Now the verdict is offered, and taking it approves the content.
+    /*
+     * 4. THE OPEN CYCLE IS UNMOVED BY THE FLIP — D-126, and the point of the
+     *    snapshot. A cycle is judged by the policy it was opened under, so
+     *    relaxing the rule now does not retroactively permit the review that is
+     *    already in flight. The reader is still told why.
+     */
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    await expect(page.locator('[data-testid^="self-blocked-"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('[data-testid^="approve-"]')).toHaveCount(0);
+
+    // 5. Withdrawing and resubmitting opens a NEW cycle, which carries the new
+    //    policy — and that one may be self-approved.
+    await submitAndSettle(page, '[data-testid^="withdraw-"]', /ok=SAVED|error=/);
+    expect(page.url()).toMatch(/ok=SAVED/);
+
+    await openReviewableDraft(page);
+    await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
+    await clickUntil(page, '[data-testid="submit-for-review"]', async () => {
+      await expect.poll(() => page.url(), { timeout: 3_000 }).toMatch(/ok=SUBMITTED|error=/);
+    });
+    expect(page.url()).toMatch(/ok=SUBMITTED/);
+
+    // 6. Now the verdict is offered, and taking it approves the content.
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
     await expect(page.locator('[data-testid^="approve-"]').first()).toBeVisible({
       timeout: 15_000,
@@ -146,11 +170,18 @@ test.describe('the approval workflow', () => {
     await submitAndSettle(page, '[data-testid^="approve-"]', /ok=SAVED|error=/);
     expect(page.url()).toMatch(/ok=SAVED/);
 
-    // 5. The item carries the verdict, and the queue is empty again.
+    // 7. The item carries the verdict.
     await openReviewableDraft(page);
     await expect(page.getByTestId('composer-status')).toContainText(/Approved/i, {
       timeout: 15_000,
     });
+
+    // Leave the brand as the seed left it: the next suite's assumptions are
+    // not this suite's to change.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    await expect(page.getByTestId('approvals-policy')).toBeVisible({ timeout: 15_000 });
+    await page.locator('[data-testid^="policy-self-"]').first().uncheck();
+    await submitAndSettle(page, '[data-testid^="policy-save-"]', /ok=SAVED|error=/);
   });
 
   test('the queue is a real list, and the screen refuses cleanly without the permission', async ({
@@ -213,18 +244,23 @@ test.describe('notifications', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
     await expect(page.getByTestId('notifications')).toBeVisible({ timeout: 15_000 });
 
-    const markRead = page.locator('[data-testid^="mark-read-"]').first();
-    if (await markRead.isVisible().catch(() => false)) {
-      const row = page.locator('[data-read="false"]').first();
-      const id = await row.getAttribute('data-testid');
-      await submitAndSettle(page, '[data-testid^="mark-read-"]', /notifications/);
-      await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
-      if (id) {
-        await expect(
-          page.getByTestId(id.replace('notification-', 'notification-')),
-        ).toHaveAttribute('data-read', 'true');
-      }
-    }
+    /*
+     * WHETHER THIS MEMBER HAS ANYTHING UNREAD depends on what the rest of the
+     * suite has done, so the assertion is conditional on there being a row to
+     * change. What is NOT conditional is what happens when there is one.
+     */
+    const row = page.locator('[data-read="false"]').first();
+    if (!(await row.isVisible().catch(() => false))) return;
+
+    const id = await row.getAttribute('data-testid');
+    expect(id, 'an unread row should carry its test id').toBeTruthy();
+
+    await submitAndSettle(page, '[data-testid^="mark-read-"]', /ok=SAVED/);
+
+    // The read state is the SERVER's, not the rendered page's: reload and read
+    // it back rather than trusting the response that performed the write.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
+    await expect(page.getByTestId(id as string)).toHaveAttribute('data-read', 'true');
   });
 });
 

@@ -29,7 +29,7 @@ export type {
 } from './calendar';
 
 /* Phase 5B-3 — Approvals (docs/PRODUCT.md §5 module 14). */
-export { ContentApprovalService, mayApproveForBrand } from './approvals';
+export { ContentApprovalService, mayApproveForBrand, policyFromSnapshot } from './approvals';
 export type {
   ApprovalActor,
   ApprovalNotifier,

@@ -394,6 +394,42 @@ describe('an assignment is ENFORCED on the verdict, not merely recorded', () => 
     expect(decided.decidedByUserId).toBe(approverBothBrands);
   });
 
+  it('and reviewSubject().mayDecide SAYS SO, rather than offering a button that refuses', async () => {
+    /*
+     * The screen reads `mayDecide` off the review subject. It answered from the
+     * permission and the status alone, so a non-assignee was offered the
+     * Approve button on a review the verdict would then refuse — the same
+     * half-behaviour one layer up. The card and the verdict share the rule.
+     */
+    const approval = await run((s) =>
+      s.submit({
+        itemId: fixtures.a.contentItemId,
+        actor: author(),
+        assignedToUserId: approverBothBrands,
+      }),
+    );
+
+    const otherApprover: ApprovalActor = {
+      userId: approverBrandTwoOnly,
+      roleKey: 'approver',
+      permissionKeys: ['content.read', 'content.approve'],
+      brandScope: [],
+    };
+    const withheld = await run((s) =>
+      s.reviewSubject({ approvalId: approval.id, actor: otherApprover }),
+    );
+    expect(withheld.mayDecide).toBe(false);
+
+    const assignee: ApprovalActor = {
+      userId: approverBothBrands,
+      roleKey: 'approver',
+      permissionKeys: ['content.read', 'content.approve'],
+      brandScope: [],
+    };
+    const offered = await run((s) => s.reviewSubject({ approvalId: approval.id, actor: assignee }));
+    expect(offered.mayDecide).toBe(true);
+  });
+
   it('an UNASSIGNED review may be decided by any eligible reviewer', async () => {
     const approval = await run((s) =>
       s.submit({ itemId: fixtures.a.contentItemId, actor: author() }),

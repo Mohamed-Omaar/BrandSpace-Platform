@@ -46,7 +46,14 @@ export async function markNotificationReadAction(formData: FormData): Promise<vo
         userId: session.customer.userId,
       }),
     );
-    destination = notificationsUrl(locale);
+    /*
+     * SIGNAL THE OUTCOME, like every sibling action. This one alone redirected
+     * to the bare path, so a successful mark-read was indistinguishable from
+     * having done nothing: no confirmation banner for the reader, and nothing
+     * for a caller to wait on. `markAllNotificationsReadAction` two functions
+     * below already answered `ok=SAVED`; this now matches it.
+     */
+    destination = notificationsUrl(locale, { ok: 'SAVED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'markNotificationRead');
   }

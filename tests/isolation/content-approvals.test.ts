@@ -211,6 +211,53 @@ describe('submitting for review', () => {
     expect(reread.policySnapshot).toMatchObject({ allowSelfApproval: false });
   });
 
+  /*
+   * THE SCREEN AND THE SERVER MUST REACH THE SAME VERDICT.
+   *
+   * `decide()` was corrected to judge a cycle by its snapshot (D-126), but
+   * `reviewSubject()` still answered `mayDecide: true` from the permission and
+   * the status alone — so the review card offered an Approve button to the very
+   * person the snapshot barred, and pressing it earned a refusal. A screen that
+   * offers a verdict the server rejects teaches the rule by denial.
+   */
+  it('reviewSubject().mayDecide AGREES with decide(): self, under the snapshot', async () => {
+    // One person who may both send and judge — the case D-122 is about.
+    const selfApprover = (): ApprovalActor => ({
+      userId: fixtures.a.userId,
+      roleKey: 'approver',
+      permissionKeys: ['content.read', 'content.submit', 'content.approve'],
+      brandScope: [],
+    });
+
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: selfApprover() }),
+    );
+    expect(approval.policySnapshot).toMatchObject({ allowSelfApproval: false });
+
+    // The brand relaxes the rule AFTER the cycle is already open.
+    await inA(({ approvals }) =>
+      approvals.setPolicyForBrand({
+        brandId: fixtures.a.brandId,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        patch: { allowSelfApproval: true },
+      }),
+    );
+
+    // The card withholds the verdict...
+    const subject = await inA(({ approvals }) =>
+      approvals.reviewSubject({ approvalId: approval.id, actor: selfApprover() }),
+    );
+    expect(subject.mayDecide).toBe(false);
+
+    // ...and the server would have refused it, which is why.
+    await expect(
+      inA(({ approvals }) =>
+        approvals.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: selfApprover() }),
+      ),
+    ).rejects.toThrow();
+  });
+
   it('refuses a SECOND open review for the same item', async () => {
     await inA(({ approvals }) => approvals.submit({ itemId: itemId(), actor: author() }));
     await expect(

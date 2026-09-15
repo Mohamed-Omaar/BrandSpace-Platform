@@ -85,8 +85,15 @@ export interface ResolvedApprovalPolicy {
  * An unreadable or absent snapshot falls back to the current policy — a cycle
  * predating this column, or one whose JSON a future migration reshapes, must
  * still be decidable rather than permanently stuck.
+ *
+ * EXPORTED because the screen must reach the same verdict as the server. The
+ * approvals page was computing its buttons from the brand's LIVE policy while
+ * `decide()` judged the cycle by its snapshot, so flipping `allowSelfApproval`
+ * on offered an Approve button for an already-open cycle that the server would
+ * then refuse. A screen that offers a verdict the server rejects is worse than
+ * one that withholds it: the reader learns the rule only by being denied.
  */
-function policyFromSnapshot(
+export function policyFromSnapshot(
   snapshot: unknown,
   current: ResolvedApprovalPolicy,
 ): ResolvedApprovalPolicy {
@@ -786,6 +793,7 @@ export class ContentApprovalService {
         brandId: true,
         status: true,
         deletedAt: true,
+        createdByUserId: true,
         brand: { select: { name: true } },
         variants: {
           orderBy: { platformKey: 'asc' },
@@ -807,7 +815,22 @@ export class ContentApprovalService {
       requestNote: approval.requestNote,
       requestedByUserId: approval.requestedByUserId,
       assignedToUserId: approval.assignedToUserId,
-      mayDecide: mayReview && approval.status === 'PENDING',
+      /*
+       * THE SAME FOUR CONDITIONS `decide()` ENFORCES, not just the first two.
+       * `mayReview && PENDING` offered the review card's Approve button to the
+       * person who submitted the cycle, and to a reader when the review was
+       * assigned to somebody else — in both cases the server then refused. The
+       * card must promise only what the verdict will honour.
+       */
+      mayDecide:
+        mayReview &&
+        approval.status === 'PENDING' &&
+        !(approval.assignedToUserId && approval.assignedToUserId !== input.actor.userId) &&
+        !(
+          (approval.requestedByUserId === input.actor.userId ||
+            item.createdByUserId === input.actor.userId) &&
+          !policy.allowSelfApproval
+        ),
       variants: item.variants.map((v) => ({
         id: v.id,
         platformKey: v.platformKey,

@@ -100,15 +100,7 @@ test.describe('D-121 — Viewer approval, per brand', () => {
   test('default denied → enabled for Brand A → still denied for Brand B', async ({ page }) => {
     const { customer } = credentials();
 
-    // ---- The owner puts BOTH brands' drafts into review -------------------
-    await signIn(page, customer.email, customer.password);
-    await submitForReview(page, 'Launch announcement');
-    await submitForReview(page, 'Second brand note');
-
-    // The grant starts OFF for both brands — the seed resets the policy rows.
-    await signOut(page);
-
-    // ---- 1. DEFAULT DENIED ------------------------------------------------
+    // ---- 1. DEFAULT DENIED, before anything is even submitted -------------
     await signIn(page, customer.viewerEmail, customer.viewerPassword);
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
     await expect(page.getByTestId('approvals-queue')).toBeVisible({ timeout: 15_000 });
@@ -120,15 +112,29 @@ test.describe('D-121 — Viewer approval, per brand', () => {
     await expect(page.getByTestId('approvals-policy')).toHaveCount(0);
     await signOut(page);
 
-    // ---- 2. ENABLED FOR BRAND A ------------------------------------------
+    /*
+     * ---- 2. THE GRANT IS SWITCHED ON FOR BRAND A, THEN the drafts are
+     *         submitted — in that order, because of D-126.
+     *
+     * A cycle is judged by the policy it was opened under, so a grant switched
+     * on AFTER a review is already open does not reach that review. Enabling
+     * first is what a workspace would actually do, and it is what makes this
+     * test about the grant rather than about the snapshot.
+     */
     await signIn(page, customer.email, customer.password);
-    await setViewerApproval(page, 'E2E Content Fixture', true);
+    // THIS SUITE'S OWN BRAND AND DRAFT. `approvals.spec.ts` runs in the same
+    // project and, being a separate file, may run at the same moment; the
+    // policy editor saves the whole form, so sharing a brand meant each suite
+    // silently rewrote the other's rules mid-journey.
+    await setViewerApproval(page, 'E2E Viewer Brand', true);
+    await submitForReview(page, 'Viewer review fixture');
+    await submitForReview(page, 'Second brand note');
     await signOut(page);
 
     await signIn(page, customer.viewerEmail, customer.viewerPassword);
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
     await expect(page.getByTestId('approvals-queue-list')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('approvals-queue-list')).toContainText('Launch announcement');
+    await expect(page.getByTestId('approvals-queue-list')).toContainText('Viewer review fixture');
 
     // ---- 3. BRAND B IS NOT THERE -----------------------------------------
     /*
@@ -161,7 +167,7 @@ test.describe('D-121 — Viewer approval, per brand', () => {
 
     // ---- The owner sees the verdict, and puts the grant back --------------
     await signIn(page, customer.email, customer.password);
-    await setViewerApproval(page, 'E2E Content Fixture', false);
+    await setViewerApproval(page, 'E2E Viewer Brand', false);
   });
 
   test('a Viewer is refused the content library even while reviewing', async ({ page }) => {

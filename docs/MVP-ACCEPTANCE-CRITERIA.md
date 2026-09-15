@@ -419,6 +419,21 @@ and server-enforced rather than recorded and ignored, and **D-128** revokes
 DELETE on the approval tables from the application role and makes a terminal
 cycle immutable (`tests/isolation/phase5b3-approvals-tenancy.test.ts`).
 
+**An eighth finding, which fixing the seventh exposed** (`docs/SECURITY.md`
+§26.7b, **D-129**). Enforcing the snapshot in `decide()` left the approvals
+screen computing its buttons from the brand's LIVE policy, and
+`reviewSubject().mayDecide` answering from the permission and status alone — so
+both offered verdicts the server then refused. Not an authorization hole: every
+such press was correctly denied, and no rule here is enforced by hiding a
+control. It was a correctness defect, and it is now closed at both surfaces
+through the single exported `policyFromSnapshot`. Proved by
+`content-approvals.test.ts` › _reviewSubject().mayDecide AGREES with decide():
+self, under the snapshot_, `approval-recipients.test.ts` › _and
+reviewSubject().mayDecide SAYS SO, rather than offering a button that refuses_
+— both confirmed failing against the previous code — and by the end-to-end
+journey, which now asserts that the open cycle is unmoved by the flip and only
+the resubmitted cycle may be approved.
+
 **Two deviations, both recorded.** Notifications are **in-app only** where ROADMAP scope item 8 says
 "in-app + email": no mail transport exists in the platform, and D-123 records email as Phase 8
 launch hardening. `docs/DATABASE.md` §4.8's **`Comment`** is not built — threads, mentions and

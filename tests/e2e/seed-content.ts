@@ -55,6 +55,29 @@ const APPROVAL_TITLE = 'Launch announcement';
  * the grant — it is testing a boolean. The second brand carries its own draft so
  * both can be in review at once.
  */
+/*
+ * A BRAND AND A DRAFT FOR THE D-121 VIEWER SUITE ALONE.
+ *
+ * `approvals-viewer.spec.ts` and `approvals.spec.ts` are two FILES in one
+ * project, and `fullyParallel: false` orders the tests inside a file — it does
+ * not stop the two files running at the same time in different workers. So
+ * anything they share is raced, and they shared two things:
+ *
+ *   1. THE DRAFT. Both ran one all the way to APPROVED, so whichever went
+ *      second failed on its Draft precondition.
+ *   2. THE BRAND'S POLICY ROW. The policy editor saves the whole form, so the
+ *      Viewer suite putting `clientApprovalEnabled` back at the end also wrote
+ *      `allowSelfApproval: false` — silently undoing the flip the approvals
+ *      journey had just made, mid-journey.
+ *
+ * Sharing was the bug, not the ordering. The Viewer suite gets its own brand
+ * and its own draft; nothing it writes is read by anything else.
+ */
+const VIEWER_BRAND_SLUG = 'e2e-approvals-viewer-brand';
+const VIEWER_BRAND_NAME = 'E2E Viewer Brand';
+const VIEWER_IDEMPOTENCY_KEY = 'e2e-approvals-viewer-fixture';
+const VIEWER_TITLE = 'Viewer review fixture';
+
 const SECOND_BRAND_SLUG = 'e2e-approvals-brand-two';
 const SECOND_BRAND_NAME = 'E2E Second Brand';
 const SECOND_IDEMPOTENCY_KEY = 'e2e-approvals-second-brand';
@@ -308,6 +331,78 @@ async function main(): Promise<void> {
           });
         }
 
+        // The D-121 Viewer suite's own brand and draft. See its constants.
+        const viewerBrand =
+          (await db.brand.findFirst({ where: { slug: VIEWER_BRAND_SLUG } })) ??
+          (await db.brand.create({
+            data: {
+              workspaceId,
+              slug: VIEWER_BRAND_SLUG,
+              name: VIEWER_BRAND_NAME,
+              defaultLocale: 'EN',
+              status: 'ACTIVE',
+            },
+          }));
+        await platform.approvalPolicy.deleteMany({ where: { brandId: viewerBrand.id } });
+
+        const viewerExisting = await db.contentItem.findFirst({
+          where: { idempotencyKey: VIEWER_IDEMPOTENCY_KEY },
+          include: { variants: true },
+        });
+        if (viewerExisting) {
+          await platform.approval.deleteMany({ where: { contentItemId: viewerExisting.id } });
+          await db.calendarSlot.updateMany({
+            where: { contentItemId: viewerExisting.id, status: { not: 'CANCELLED' } },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          });
+          /*
+           * THE BRAND IS PART OF THE RESET, not just the status. This draft was
+           * introduced in the shared brand and then moved to its own; a reset
+           * that only rewound the status left the item where the previous seed
+           * had put it, so the suite enabled the grant on one brand and
+           * submitted content belonging to another — and the Viewer's queue was
+           * correctly, confusingly empty.
+           */
+          await db.contentVariant.updateMany({
+            where: { contentItemId: viewerExisting.id },
+            data: { brandId: viewerBrand.id },
+          });
+          await db.contentItem.update({
+            where: { id: viewerExisting.id },
+            data: { status: 'DRAFT', brandId: viewerBrand.id },
+          });
+        }
+        const viewerItem =
+          viewerExisting ??
+          (await db.contentItem.create({
+            data: {
+              workspaceId,
+              brandId: viewerBrand.id,
+              title: VIEWER_TITLE,
+              contentType: 'POST',
+              primaryLocale: 'EN',
+              status: 'DRAFT',
+              origin: 'HUMAN',
+              idempotencyKey: VIEWER_IDEMPOTENCY_KEY,
+            },
+          }));
+        if (!viewerExisting || viewerExisting.variants.length === 0) {
+          await db.contentVariant.create({
+            data: {
+              workspaceId,
+              brandId: viewerBrand.id,
+              contentItemId: viewerItem.id,
+              platformKey: 'instagram',
+              locale: 'EN',
+              body: 'A short announcement, written for the D-121 Viewer end-to-end fixture.',
+              hashtags: ['viewer'],
+              characterCount: 69,
+              validationState: 'VALID',
+              origin: 'HUMAN',
+            },
+          });
+        }
+
         // The second brand, and a draft in it. See the note by its constants.
         const secondBrand =
           (await db.brand.findFirst({ where: { slug: SECOND_BRAND_SLUG } })) ??
@@ -377,6 +472,8 @@ async function main(): Promise<void> {
     console.log('  One DRAFT item, no review history, and the brand back on its default policy.');
     console.log(`✔ Second brand and its draft reset: ${SECOND_TITLE}`);
     console.log('  So the D-121 per-brand grant can be shown admitting one brand and not another.');
+    console.log(`✔ Viewer brand and its draft reset: ${VIEWER_TITLE}`);
+    console.log('  The D-121 suite owns this brand outright, so nothing it writes races another.');
   } finally {
     await prisma.$disconnect();
     await platform.$disconnect();

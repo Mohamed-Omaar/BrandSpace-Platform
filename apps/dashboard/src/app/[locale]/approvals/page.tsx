@@ -1,4 +1,8 @@
-import { mayApproveForBrand, type ResolvedApprovalPolicy } from '@brandspace/content';
+import {
+  mayApproveForBrand,
+  policyFromSnapshot,
+  type ResolvedApprovalPolicy,
+} from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -201,7 +205,18 @@ export default async function ApprovalsPage({
     userId === customer.userId ? t('activity.you') : (memberNames.get(userId) ?? '—');
 
   const queueRows: ApprovalRow[] = queue.map((row) => {
-    const policy = policyByBrand.get(row.brandId);
+    /*
+     * D-126: JUDGE THE ROW BY THE POLICY ITS CYCLE WAS OPENED UNDER, which is
+     * what `decide()` will judge it by. Reading the brand's live policy here
+     * made the screen disagree with the server the moment a policy changed
+     * while a review was open: flipping `allowSelfApproval` on rendered an
+     * Approve button for a cycle snapshotted under the stricter rule, and
+     * pressing it earned a refusal. The screen resolves the same effective
+     * policy the verdict will, so what it offers is what the server honours.
+     */
+    const current = policyByBrand.get(row.brandId);
+    const policy =
+      current === undefined ? undefined : policyFromSnapshot(row.policySnapshot, current);
     const mayApprove =
       policy !== undefined &&
       mayApproveForBrand({
