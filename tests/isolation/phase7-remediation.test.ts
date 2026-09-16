@@ -1025,53 +1025,9 @@ describe('P7-R6: the shared scheduling quota is real, not a no-op', () => {
       environment: 'DEVELOPMENT',
     });
 
-  it('CONSUMING WRITES TO THE USAGE LEDGER — the no-op counted nothing', async () => {
-    /*
-     * THE DISCRIMINATOR. The worker's adapter returned `true` from `consume()`
-     * and did nothing else, so every automation-placed slot was invisible to the
-     * plan's monthly counter: a rule was a way to schedule past the ceiling and
-     * leave no trace of having done so.
-     *
-     * Whether this particular workspace HAS a ceiling is beside the point — what
-     * the real adapter must do, and the no-op could not, is COUNT.
-     */
-    const key = `quota-probe-${randomUUID()}`;
-    const events = await inA(async (db) => {
-      await quotaFor(db).consume(key);
-      return db.usageEvent.count({
-        where: { workspaceId: fixtures.a.workspaceId, idempotencyKey: key },
-      });
-    });
-    expect(events).toBe(1);
-  });
-
-  it('it is IDEMPOTENT on the key, so a retried run does not double-count', async () => {
-    const key = `quota-idempotent-${randomUUID()}`;
-    const events = await inA(async (db) => {
-      const quota = quotaFor(db);
-      await quota.consume(key);
-      await quota.consume(key);
-      return db.usageEvent.count({
-        where: { workspaceId: fixtures.a.workspaceId, idempotencyKey: key },
-      });
-    });
-    expect(events).toBe(1);
-  });
-
-  it('IT REFUSES AT THE CEILING, which the no-op could never do', async () => {
-    /*
-     * A platform override sets this workspace's ceiling to ONE. The override
-     * path is the one D-10 precedence already resolves; nothing here invents a
-     * limit in source (CLAUDE.md §2.2) — the number is fixture data.
-     */
-    /*
-     * THE CEILING IS "WHAT IS ALREADY USED, PLUS ONE", read from the counter
-     * rather than assumed to be zero. Earlier tests in this file consume from
-     * the same monthly window, and a hard-coded 1 would make this assertion
-     * depend on the order the suite happens to run in — which is how a test
-     * becomes a flake that everybody learns to re-run.
-     */
-    const used = await inA(async (db) => {
+  /** What this workspace has already consumed in the CURRENT monthly window. */
+  const usedThisMonth = () =>
+    inA(async (db) => {
       const counter = await db.usageCounter.findFirst({
         where: {
           workspaceId: fixtures.a.workspaceId,
@@ -1084,21 +1040,100 @@ describe('P7-R6: the shared scheduling quota is real, not a no-op', () => {
       return counter?.usedValue ?? 0;
     });
 
-    const override = await inA(async (db) =>
+  /**
+   * GIVE THE WORKSPACE A CEILING, AND BUILD IT HERE — F-23.
+   *
+   * The fixture workspace carries NO PLAN, so `limit.scheduled_posts` resolves
+   * through D-10 precedence to "feature disabled", which `EntitlementService`
+   * reports as a ceiling of ZERO. That is the correct fail-closed answer and it
+   * is not what these tests are about: on a database that some earlier run had
+   * left with a plan assigned they passed, and on a FRESH one — which is what CI
+   * builds every time — every `consume()` was refused before it could write a
+   * thing, and the ledger assertion failed for a reason that had nothing to do
+   * with the defect under test.
+   *
+   * So the ceiling is fixture data the test CREATES, through the platform
+   * override path D-10 already resolves. Nothing here invents a limit in source
+   * (CLAUDE.md §2.2), and nothing assumes one it did not put there.
+   *
+   * `headroom` is counted FROM WHAT IS ALREADY USED, because the tests in this
+   * block share one monthly window and a hard-coded number would make each of
+   * them depend on the order the others happened to run in.
+   */
+  async function withCeiling<T>(headroom: number, fn: (ceiling: number) => Promise<T>): Promise<T> {
+    const ceiling = (await usedThisMonth()) + headroom;
+    const override = await inA((db) =>
       db.workspaceOverride.create({
         data: {
           workspaceId: fixtures.a.workspaceId,
           featureKey: 'limit.scheduled_posts',
           enabled: true,
-          limitValue: used + 1,
+          limitValue: ceiling,
           reason: 'phase 7 remediation regression fixture',
           grantedByPlatformUserId: fixtures.platformUserId,
           status: 'ACTIVE',
         },
       }),
     );
-
     try {
+      return await fn(ceiling);
+    } finally {
+      await inA((db) => db.workspaceOverride.delete({ where: { id: override.id } }));
+    }
+  }
+
+  it('CONSUMING WRITES TO THE USAGE LEDGER — the no-op counted nothing', async () => {
+    /*
+     * THE DISCRIMINATOR. The worker's adapter returned `true` from `consume()`
+     * and did nothing else, so every automation-placed slot was invisible to the
+     * plan's monthly counter: a rule was a way to schedule past the ceiling and
+     * leave no trace of having done so.
+     *
+     * What the real adapter must do, and the no-op could not, is COUNT.
+     */
+    const key = `quota-probe-${randomUUID()}`;
+    const { taken, events } = await withCeiling(1, () =>
+      inA(async (db) => {
+        const taken = await quotaFor(db).consume(key);
+        return {
+          taken,
+          events: await db.usageEvent.count({
+            where: { workspaceId: fixtures.a.workspaceId, idempotencyKey: key },
+          }),
+        };
+      }),
+    );
+    expect(taken).toBe(true);
+    expect(events).toBe(1);
+  });
+
+  it('it is IDEMPOTENT on the key, so a retried run does not double-count', async () => {
+    /*
+     * HEADROOM FOR TWO, DELIBERATELY. With room for only one, a broken
+     * idempotency would surface as a quota refusal — the right failure for the
+     * wrong reason. With room for two, the second `consume()` is free to double
+     * count, and the assertion catches it doing so.
+     */
+    const key = `quota-idempotent-${randomUUID()}`;
+    const { taken, events } = await withCeiling(2, () =>
+      inA(async (db) => {
+        const quota = quotaFor(db);
+        const first = await quota.consume(key);
+        const second = await quota.consume(key);
+        return {
+          taken: first && second,
+          events: await db.usageEvent.count({
+            where: { workspaceId: fixtures.a.workspaceId, idempotencyKey: key },
+          }),
+        };
+      }),
+    );
+    expect(taken).toBe(true);
+    expect(events).toBe(1);
+  });
+
+  it('IT REFUSES AT THE CEILING, which the no-op could never do', async () => {
+    await withCeiling(1, async (ceiling) => {
       const outcome = await inA(async (db) => {
         const quota = quotaFor(db);
         return {
@@ -1108,13 +1143,11 @@ describe('P7-R6: the shared scheduling quota is real, not a no-op', () => {
         };
       });
 
-      expect(outcome.limit).toBe(used + 1);
+      expect(outcome.limit).toBe(ceiling);
       // The no-op returned `true` for both, for ever.
       expect(outcome.first).toBe(true);
       expect(outcome.second).toBe(false);
-    } finally {
-      await inA((db) => db.workspaceOverride.delete({ where: { id: override.id } }));
-    }
+    });
   });
 });
 
