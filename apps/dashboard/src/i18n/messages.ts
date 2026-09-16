@@ -882,6 +882,7 @@ export const messages = {
     'automations.disabled': 'متوقفة',
     'automations.enable': 'تفعيل',
     'automations.disable': 'إيقاف',
+    'automations.confirmRun': 'تأكيد النشر',
     'automations.delete': 'حذف',
     'automations.confirmAction': 'تأكيد التنفيذ',
     'automations.externalNotice':
@@ -890,7 +891,6 @@ export const messages = {
     'automations.trigger.CONTENT_SCHEDULED': 'عند جدولة محتوى',
     'automations.trigger.POST_PUBLISHED': 'عند نشر منشور',
     'automations.trigger.ANALYTICS_REFRESHED': 'عند تحديث التحليلات',
-    'automations.trigger.ANOMALY_DETECTED': 'عند رصد تغيّر غير معتاد',
     'automations.trigger.METRIC_THRESHOLD_CROSSED': 'عند تجاوز حد لمؤشر',
     'automations.trigger.SCHEDULED_TIME': 'في وقت محدد',
     'automations.action.NOTIFY': 'إرسال إشعار داخلي',
@@ -1829,6 +1829,7 @@ export const messages = {
     'automations.disabled': 'Disabled',
     'automations.enable': 'Enable',
     'automations.disable': 'Disable',
+    'automations.confirmRun': 'Confirm publish',
     'automations.delete': 'Delete',
     'automations.confirmAction': 'Confirm and run',
     'automations.externalNotice':
@@ -1837,7 +1838,6 @@ export const messages = {
     'automations.trigger.CONTENT_SCHEDULED': 'When content is scheduled',
     'automations.trigger.POST_PUBLISHED': 'When a post is published',
     'automations.trigger.ANALYTICS_REFRESHED': 'When analytics refresh',
-    'automations.trigger.ANOMALY_DETECTED': 'When an unusual change is detected',
     'automations.trigger.METRIC_THRESHOLD_CROSSED': 'When a metric crosses a threshold',
     'automations.trigger.SCHEDULED_TIME': 'At a scheduled time',
     'automations.action.NOTIFY': 'Send an in-app notification',

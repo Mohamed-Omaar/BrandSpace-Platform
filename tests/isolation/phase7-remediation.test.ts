@@ -523,8 +523,18 @@ describe('P7-R2: a replay lookup is bound to the caller, the session and the bra
         steps: [],
         summary: { ar: 'ملخص', en: 'Summary' },
         estimatedCreditsMilli: 0n,
-        // THE SAME KEY. It used to be the whole predicate beside the workspace.
-        idempotencyKey: `${key}-theirs`,
+        /*
+         * THE SAME KEY — THE SAME LITERAL, not a derived one.
+         *
+         * It said "THE SAME KEY" and passed `${key}-theirs`, so it proved only
+         * that two different keys produce two different plans, which nothing has
+         * ever disputed. The round-2 review caught it. With the same literal it
+         * exercises both halves at once: the lookup must not hand this member the
+         * other member's plan, AND the database must let this member's own plan
+         * be written — which the old `(workspaceId, idempotencyKey)` index would
+         * have refused with a unique violation.
+         */
+        idempotencyKey: key,
         expiresAt: null,
       }),
     );
@@ -532,6 +542,9 @@ describe('P7-R2: a replay lookup is bound to the caller, the session and the bra
     expect(second.plan.id).not.toBe(first.plan.id);
     expect(second.plan.userId).toBe(otherUserId);
     expect(first.plan.userId).toBe(fixtures.a.userId);
+    // Both rows exist, both carry the key, and neither is the other's.
+    expect(second.plan.idempotencyKey).toBe(key);
+    expect(first.plan.idempotencyKey).toBe(key);
   });
 
   it('a replay for the SAME person, session and brand still replays', async () => {

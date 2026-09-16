@@ -16,7 +16,12 @@ import { inWorkspace, requireWorkspace } from '../../../server/customer-context'
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { createAutomationAction, deleteAutomationAction, toggleAutomationAction } from './actions';
+import {
+  confirmAutomationRunAction,
+  createAutomationAction,
+  deleteAutomationAction,
+  toggleAutomationAction,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -270,6 +275,27 @@ export default async function AutomationsPage({
                       label={t(`automations.status.${run.status}` as MessageKey)}
                     />
                     <span>{stamp.format(run.startedAt)}</span>
+                    {/*
+                      THE BUTTON A PROPOSED EXTERNAL ACTION WAITS FOR.
+                      Without it the run sat at AWAITING_CONFIRMATION for ever:
+                      the engine minted a credential the worker dropped, and
+                      nothing on any screen called the confirm action at all.
+                      It posts the RUN's id and nothing else — the credential is
+                      fetched server-side and never reaches this page.
+                    */}
+                    {run.status === 'AWAITING_CONFIRMATION' ? (
+                      <form action={confirmAutomationRunAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="runId" value={run.id} />
+                        <button
+                          type="submit"
+                          style={buttonStyle('primary', 'sm')}
+                          data-testid="automation-confirm"
+                        >
+                          {t('automations.confirmRun')}
+                        </button>
+                      </form>
+                    ) : null}
                   </span>
                 </li>
               ))}

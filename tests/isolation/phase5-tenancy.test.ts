@@ -466,8 +466,14 @@ describe('BrandBrainConversation and BrandBrainMessage are tenant-owned', () => 
     const row = await inA((db) =>
       db.brandBrainMessage.findUnique({
         where: {
-          workspaceId_idempotencyKey: {
+          // The compound key is conversation-scoped since the round-2
+          // remediation, and A supplies every part of B's: the workspace, the
+          // conversation and the key. RLS refuses it on the workspace predicate,
+          // which is the property under test and is unaffected by the shape of
+          // the index.
+          workspaceId_conversationId_idempotencyKey: {
             workspaceId: fixtures.b.workspaceId,
+            conversationId: fixtures.b.conversationId,
             idempotencyKey: fixtures.b.messageIdempotencyKey,
           },
         },

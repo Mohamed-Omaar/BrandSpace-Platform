@@ -1557,3 +1557,38 @@ it came from: deleting the strategy must not delete the month's work.
 
 No RLS change: `insight` already carries the tenant policy, and a new column on an existing table inherits
 it.
+
+### 18.5 Phase 7 remediation round 2 — `automation_event`, and five narrowed idempotency keys
+
+**`automation_event` is the automation outbox.** One row per domain event worth
+evaluating rules against, written inside the transaction that caused it — so an
+event commits with the approval, the scheduling or the publish, or not at all. No
+domain package imports the queue; the reconciliation sweep dispatches what is
+waiting, and `deliveredAt` is the only field that retires a row.
+
+Three CHECK constraints carry rules that would otherwise be conventions:
+
+| Constraint                                     | What it refuses                                                                                                                                                                                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_event_ref_matches_trigger`         | A producer naming the wrong kind of row for its trigger — a `POST_PUBLISHED` event carrying a `ContentItem` reference would aim three content-shaped actions at a publish job's id.                                                 |
+| `automation_event_occurrence_is_timed`         | An occurrence on anything but `SCHEDULED_TIME`. The occurrence IS a timed run's bucket, and one on an event identified by its reference would silently re-bucket it.                                                                |
+| `automation_event_rule_addressed_when_derived` | A schedule or a threshold event that names no rule. Both are computed FROM one rule's configuration, and delivering one to a rule that configured a different hour or number fires a rule whose own settings say it should not run. |
+
+It carries `ENABLE + FORCE` row-level security, a `tenant_isolation` policy naming
+only `brandspace_app`, and a composite `(workspaceId, brandId)` foreign key to
+`brand` (D-112), like every other tenant-owned table.
+
+**Five idempotency uniques were narrowed to match their services' replay identity**
+(D-170), because round 1 narrowed the lookups and left the constraints saying
+something wider:
+
+| Table                 | Unique index                                                      |
+| --------------------- | ----------------------------------------------------------------- |
+| `copilot_action_plan` | `(workspaceId, sessionId, idempotencyKey)`                        |
+| `content_item`        | `(workspaceId, brandId, createdByUserId, idempotencyKey)`         |
+| `campaign`            | `(workspaceId, brandId, createdByUserId, idempotencyKey)`         |
+| `insight`             | `(workspaceId, brandId, type, generatedByUserId, idempotencyKey)` |
+| `brand_brain_message` | `(workspaceId, conversationId, idempotencyKey)`                   |
+
+The two F-84 upload paths are deliberately untouched: their lookups have not been
+narrowed, so their constraints and their services still agree.

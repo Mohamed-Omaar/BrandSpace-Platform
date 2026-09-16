@@ -225,22 +225,42 @@ describe('an action that needs a content item may only be paired with a trigger 
     }
   });
 
-  it('the four triggers whose reference is NOT a content item are named explicitly', () => {
+  it('the three triggers whose reference is NOT a content item are named explicitly', () => {
     const unreachable = AUTOMATION_TRIGGERS.filter((t) => t.contentItemVia === null).map(
       (t) => t.type,
     );
     expect(unreachable).toEqual([
       'ANALYTICS_REFRESHED',
-      'ANOMALY_DETECTED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
-    // Their reference types are what made the old code dangerous: an Insight id
-    // or a MetricObservation id passed to `placeOnCalendar` as a content item.
-    expect(findTrigger('ANOMALY_DETECTED')?.refType).toBe('Insight');
+    // Their reference types are what made the old code dangerous: a
+    // MetricObservation id passed to `placeOnCalendar` as a content item.
     expect(findTrigger('METRIC_THRESHOLD_CROSSED')?.refType).toBe('MetricObservation');
     expect(findTrigger('ANALYTICS_REFRESHED')?.refType).toBe('AnalyticsIngestionRun');
     expect(findTrigger('SCHEDULED_TIME')?.refType).toBeNull();
+  });
+
+  it('ANOMALY_DETECTED IS NO LONGER AUTHORABLE, because nothing could ever fire it', () => {
+    /*
+     * THE TRIGGER WAS A PROMISE THE PRODUCT COULD NOT KEEP (A1).
+     *
+     * It declared an `Insight` reference, and nothing in the platform creates an
+     * Insight of type ANOMALY: `detectAnomalies` is arithmetic that the strategy
+     * and learning paths call in process and never persist a finding from. A
+     * customer could author the rule, enable it and watch it never run.
+     *
+     * REMOVED FROM THE REGISTRY, NOT FROM THE DATABASE ENUM — so a row that
+     * already names it keeps its meaning and its history, while every code path
+     * that decides what may be authored or resolved fails closed on it.
+     */
+    expect(findTrigger('ANOMALY_DETECTED')).toBeUndefined();
+    expect(AUTOMATION_TRIGGERS.map((t) => t.type)).not.toContain('ANOMALY_DETECTED');
+    // FAILING CLOSED IS THE POINT: an unknown trigger supports no action at all,
+    // so a stored rule naming it does nothing rather than acting on a stray id.
+    for (const action of AUTOMATION_ACTIONS) {
+      expect(actionSupportsTrigger(action.type, 'ANOMALY_DETECTED')).toBe(false);
+    }
   });
 
   it('NOTIFY is reachable from everything, because it points at whatever fired', () => {

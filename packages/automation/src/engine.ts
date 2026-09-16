@@ -110,9 +110,29 @@ export interface AutomationActor {
 export interface TriggerEvent {
   readonly type: AutomationTrigger;
   readonly brandId: string;
-  /** The row that fired it: a content item, a publish job, an insight. */
+  /** The row that fired it: a content item, a calendar slot, a publish job. */
   readonly refType: string | null;
   readonly refId: string | null;
+  /**
+   * ADDRESSED TO ONE RULE, for the triggers whose identity is READ OFF A RULE.
+   *
+   * A domain event belongs to the brand and every listening rule should see it,
+   * so this is null there. A schedule and a threshold are different in kind:
+   * both are computed from one rule's own configuration, and delivering rule A's
+   * nine-o'clock occurrence to rule B — which asked for five — would fire a rule
+   * at an hour its owner never chose.
+   */
+  readonly ruleId?: string | null;
+  /**
+   * The occurrence a timed event was created FOR (`YYYY-MM-DDTHH`, workspace
+   * local).
+   *
+   * CARRIED, NOT RECOMPUTED, and that is the whole of P7-R5 applied to the
+   * producer side. Recomputing the bucket from `now` at delivery means a message
+   * that sat in the queue past the hour boundary lands in a DIFFERENT bucket
+   * from the one it was created for, and the same occurrence runs twice.
+   */
+  readonly occurrence?: string | null;
   /** The facts a condition may read. Gathered by the caller, never queried here. */
   readonly facts: Readonly<Record<string, unknown>>;
 }
@@ -492,6 +512,9 @@ export class AutomationEngine {
         triggerType: input.event.type,
         enabled: true,
         deletedAt: null,
+        // A RULE-DERIVED EVENT GOES TO ITS OWN RULE AND NO OTHER. See
+        // `TriggerEvent.ruleId`.
+        ...(input.event.ruleId ? { id: input.event.ruleId } : {}),
       },
     });
 
@@ -521,12 +544,24 @@ export class AutomationEngine {
       ruleId: rule.id,
       triggerType: event.type,
       refId: event.refId,
-      // ONLY A TIMED RULE CARRIES A CLOCK. See `runBucketFor`.
-      bucket: runBucketFor({
-        triggerType: event.type,
-        localDate: await this.#localDateFor(now),
-        hourLocal: Number(triggerConfig['hourLocal'] ?? 0),
-      }),
+      /*
+       * ONLY A TIMED RULE CARRIES A CLOCK (see `runBucketFor`) — AND IT PREFERS
+       * THE OCCURRENCE THE EVENT WAS CREATED FOR.
+       *
+       * The fallback below re-derives the bucket from `now`, which is right for
+       * a caller that has just observed the occurrence itself and wrong for a
+       * message that has been sitting in a queue: a delivery that slips past the
+       * hour boundary would re-derive the NEXT bucket and run the same schedule
+       * a second time. The producer knows which occurrence it created the event
+       * for, so when it says so, that is the answer.
+       */
+      bucket:
+        event.occurrence ??
+        runBucketFor({
+          triggerType: event.type,
+          localDate: await this.#localDateFor(now),
+          hourLocal: Number(triggerConfig['hourLocal'] ?? 0),
+        }),
     });
 
     /*
@@ -718,6 +753,100 @@ export class AutomationEngine {
    * agreeing to publish must be someone who may publish — otherwise a rule
    * written by an admin would let anyone with a link authorize an external action.
    */
+  /**
+   * ISSUE A CONFIRMATION CREDENTIAL TO A PERMITTED HUMAN, ON DEMAND.
+   *
+   * THE DEFECT THIS CLOSES, FOUND SWEEPING FOR R2-B's CLASS. A run that proposes
+   * an external action mints a single-use token, stores its HASH, notifies the
+   * people who could act on it — and returns the raw token to its caller, which
+   * is the WORKER. The worker logs statuses and drops it. The notification
+   * deliberately carries no payload, because a notification is a pointer and a
+   * live publish credential does not belong in one.
+   *
+   * So the token existed for a few microseconds inside a background process and
+   * then ceased to exist anywhere. NOBODY COULD EVER CONFIRM AN AUTOMATION'S
+   * EXTERNAL ACTION. `PROPOSE_PUBLISH` was authorable, storable, listable — and
+   * unreachable, which is the same shape as a trigger with no producer.
+   *
+   * THE FIX IS NOT TO CARRY THE TOKEN ANYWHERE. It is to mint a fresh one when
+   * an authorized person actually asks, which is strictly safer than delivering
+   * the original: the credential exists only between this call and the confirm
+   * that follows it, and it is bound to a person who holds the action's
+   * permission and the brand AT THAT MOMENT rather than to whoever happened to
+   * read a notification.
+   *
+   * EVERY GUARD `confirmRun` APPLIES, APPLIED HERE TOO — the action's own
+   * permission against the CONFIRMER, the brand against their live scope — so
+   * this is not a side door around the confirmation, it is the front door to it.
+   *
+   * THE ROTATION IS A COMPARE-AND-SWAP on the digest in flight, so two people
+   * asking at once leave exactly one live credential rather than two.
+   */
+  async reissueRunConfirmation(input: {
+    runId: string;
+    actor: AutomationActor;
+  }): Promise<{ run: AutomationRun; token: string }> {
+    const run = await this.#db.automationRun.findFirst({
+      where: { id: input.runId, workspaceId: this.#workspaceId },
+    });
+    if (!run) throw automationConfirmationRejected();
+
+    const rule = await this.#db.automationRule.findFirst({
+      where: { id: run.ruleId, workspaceId: this.#workspaceId },
+    });
+    if (!rule) throw automationConfirmationRejected();
+
+    const action = findAction(rule.actionType);
+    if (!action) throw automationConfirmationRejected();
+    if (!input.actor.permissionKeys.includes(action.permission)) {
+      await this.#auditRefusal({
+        runId: run.id,
+        brandId: run.brandId,
+        actorUserId: input.actor.userId,
+        reason: 'confirmer_lacks_permission',
+      });
+      throw automationConfirmationRejected();
+    }
+    if (!brandInScope(input.actor.brandScope, run.brandId)) throw automationConfirmationRejected();
+
+    const now = this.#clock.now();
+    const token = randomUUID() + randomUUID();
+    const expiresAt = new Date(
+      now.getTime() + this.#policy.execution.confirmationTtlSeconds * 1_000,
+    );
+
+    const rotated = await this.#db.automationRun.updateMany({
+      where: {
+        id: run.id,
+        workspaceId: this.#workspaceId,
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        // THE RUN MUST STILL BE THE ONE THIS CALLER READ. A run confirmed,
+        // cancelled or re-issued in between affects zero rows here.
+        confirmationTokenHash: run.confirmationTokenHash,
+        confirmationExpiresAt: { gt: now },
+      },
+      data: { confirmationTokenHash: hashToken(token), confirmationExpiresAt: expiresAt },
+    });
+    if (rotated.count === 0) throw automationConfirmationRejected();
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.confirmation_issued',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'AutomationRun',
+      resourceId: run.id,
+      brandId: run.brandId,
+      traceId: run.correlationId,
+      severity: 'NOTICE',
+      // THE FACT, NEVER THE SECRET.
+      after: { ruleId: rule.id, actionType: rule.actionType },
+    });
+
+    const updated = await this.#db.automationRun.findFirstOrThrow({ where: { id: run.id } });
+    return { run: updated, token };
+  }
+
   async confirmRun(input: {
     runId: string;
     token: string;

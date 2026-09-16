@@ -5,13 +5,31 @@ import {
 } from '@brandspace/assets';
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
-import { pruneAnalytics, resolveAnalyticsPolicy } from '@brandspace/analytics';
+import {
+  AnalyticsQueryService,
+  TenantAnalyticsPolicySource,
+  createAnalyticsRegistry,
+  pruneAnalytics,
+  resolveAnalyticsPolicy,
+} from '@brandspace/analytics';
 import { pruneCopilot, resolveCopilotPolicy } from '@brandspace/copilot';
 import { ConfigurationService, type Environment } from '@brandspace/config';
-import { getPrisma, withWorkspace, type PrismaClient } from '@brandspace/database';
+import {
+  getPrisma,
+  recordRuleAutomationEvent,
+  withWorkspace,
+  type PrismaClient,
+} from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
+  localMomentFor,
+  metricThresholdConfigSchema,
+  thresholdCrossed,
+  timedRuleIsDue,
+} from '@brandspace/automation';
+import {
   BACKFILL_ANALYTICS,
+  EVALUATE_AUTOMATION,
   INGEST_ANALYTICS,
   INGEST_SOURCE_DOCUMENT,
   PROCESS_ASSET,
@@ -19,6 +37,7 @@ import {
   VERIFY_SOCIAL_POST,
   enqueue,
   type BackfillAnalyticsPayload,
+  type EvaluateAutomationPayload,
   type IngestAnalyticsPayload,
   type IngestSourceDocumentPayload,
   type ProcessAssetPayload,
@@ -65,6 +84,20 @@ import { createLogger, internalErrorFields, systemClock, type Clock } from '@bra
 
 const log = createLogger({ context: { component: 'api.scheduler' } });
 
+/**
+ * How long a dispatched-but-undelivered automation event waits before it is sent
+ * again.
+ *
+ * NOT CONFIGURATION, and the distinction matters (CLAUDE.md §2.2): this is not a
+ * product behaviour an owner tunes, it is the width of the window in which a
+ * queue message is still plausibly in flight. Too short and every slow worker
+ * gets a duplicate; too long and a lost message sits unnoticed. Two minutes is
+ * comfortably longer than any delivery and comfortably shorter than a customer
+ * noticing, and a duplicate delivery is free — the engine's run key collides and
+ * the second one does nothing.
+ */
+const AUTOMATION_REDISPATCH_SECONDS = 120;
+
 export interface MaintenanceResult {
   readonly ingestionDispatched: number;
   readonly chatContentPurged: number;
@@ -82,6 +115,9 @@ export interface MaintenanceResult {
   readonly analyticsCursorsDispatched: number;
   readonly analyticsBackfillsDispatched: number;
   readonly analyticsRowsPruned: number;
+  /** Phase 7 remediation — the automation outbox (A1). */
+  readonly automationEventsProduced: number;
+  readonly automationEventsDispatched: number;
 }
 
 export interface SchedulerOptions {
@@ -595,6 +631,267 @@ export class MaintenanceScheduler {
     };
   }
 
+  /**
+   * Phase 7 remediation — PRODUCE the rule-derived automation events, then
+   * DISPATCH everything the outbox is holding (A1).
+   *
+   * THIS METHOD IS THE ANSWER TO "WHO FIRES AN AUTOMATION?", and until it existed
+   * the answer was nobody. The worker held a complete `automation.evaluate`
+   * consumer, the engine knew how to de-duplicate a delivery, the dashboard let a
+   * customer author a rule — and no code path in the platform ever enqueued one.
+   *
+   * IT HAS TWO HALVES, AND THEY ARE DIFFERENT KINDS OF WORK.
+   *
+   *   PRODUCING is only for the two triggers whose identity is read off a RULE
+   *   rather than off a row: a schedule and a threshold. Nothing happens in the
+   *   product when nine o'clock arrives, so somebody has to look at the clock;
+   *   nothing happens when a number crosses a line, so somebody has to compare
+   *   it. The four domain triggers need none of this — their producers are in
+   *   the domain services, writing a row inside the transaction that caused it.
+   *
+   *   DISPATCHING is for every event, whoever wrote it, and it is the
+   *   reconciliation docs/ARCHITECTURE.md §9 describes: the durable row is the
+   *   truth, the queue message is an optimisation, and a message that is never
+   *   delivered is re-sent on the next pass. A lost Redis therefore costs
+   *   punctuality and not correctness — which is the property the whole outbox
+   *   exists to buy.
+   *
+   * THE ENUMERATION IS CROSS-TENANT AND THE WORK IS NOT, exactly as the
+   * publishing and analytics sweeps are (F-07). Which rules are due needs the
+   * platform identity; every row this method READS OR WRITES inside a workspace
+   * is written through `withWorkspace`, under that tenant's own RLS context.
+   *
+   * ON BRANDSCOPE. There is no caller here, and no member's scope to carry: the
+   * sweep is the clock, and a rule's brand is fixed on the rule. That is not the
+   * "empty scope as a convenient bypass" this platform refuses — nothing here
+   * ACTS. Producing an event authorizes nothing; the engine re-resolves the
+   * rule creator's live permissions and BrandScope before any action runs, and
+   * an external one still stops for a human.
+   */
+  async sweepAutomations(batch: number): Promise<{ produced: number; dispatched: number }> {
+    const produced =
+      (await this.#produceTimedEvents(batch)) + (await this.#produceThresholdEvents(batch));
+    const dispatched = await this.#dispatchAutomationEvents(batch);
+    return { produced, dispatched };
+  }
+
+  /**
+   * Write one event per timed rule that is due in its workspace's own hour.
+   *
+   * THE ZONE IS THE WORKSPACE'S, ALWAYS. A rule that says 09:00 means 09:00
+   * where the customer is, and `localMomentFor` asks `Intl` rather than doing
+   * offset arithmetic — which is wrong twice a year in every zone that observes
+   * daylight saving, on exactly the mornings a customer would notice.
+   *
+   * THE OCCURRENCE KEY IS WHAT MAKES A MINUTELY SWEEP SAFE. Sixty passes inside
+   * the nine-o'clock hour derive the same `2026-09-17T09`, and
+   * `@@unique([workspaceId, dedupeKey])` turns fifty-nine of them into nothing.
+   */
+  async #produceTimedEvents(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    const rules = await platform.automationRule.findMany({
+      where: { triggerType: 'SCHEDULED_TIME', enabled: true, deletedAt: null },
+      select: { id: true, workspaceId: true, brandId: true, triggerConfig: true },
+      take: batch,
+    });
+    if (rules.length === 0) return 0;
+
+    const zones = await this.#timezonesFor(
+      platform,
+      rules.map((rule) => rule.workspaceId),
+    );
+
+    let produced = 0;
+    for (const rule of rules) {
+      const moment = localMomentFor(now, zones.get(rule.workspaceId) ?? 'UTC');
+      const due = timedRuleIsDue({ config: rule.triggerConfig, moment });
+      if (!due.due) continue;
+      const written = await withWorkspace(
+        rule.workspaceId,
+        (db) =>
+          recordRuleAutomationEvent(db, rule.workspaceId, {
+            triggerType: 'SCHEDULED_TIME',
+            brandId: rule.brandId,
+            ruleId: rule.id,
+            occurrence: due.occurrence,
+          }),
+        { prisma: getPrisma() },
+      );
+      if (written) produced += 1;
+    }
+    return produced;
+  }
+
+  /**
+   * Write one event per threshold rule whose metric has just CROSSED its line.
+   *
+   * CROSSED, NOT "IS PAST". The window that ends now must be on the far side and
+   * the window that ended one period earlier must not have been. A rule that
+   * fired while the number merely STAYED above would fire on every pass, for as
+   * long as the number stayed there, which for a growing brand is for ever — and
+   * a rule that notifies you every minute is a rule you switch off.
+   *
+   * THE WINDOW VALUE COMES FROM `AnalyticsQueryService`, and that is deliberate
+   * rather than convenient: it is the one place that knows a level metric's
+   * window value is its LATEST reading per subject and an additive one's is a
+   * sum (P7-R7). Computing it again here would be a second answer to a question
+   * that already has one, and the two would drift.
+   */
+  async #produceThresholdEvents(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    const rules = await platform.automationRule.findMany({
+      where: { triggerType: 'METRIC_THRESHOLD_CROSSED', enabled: true, deletedAt: null },
+      select: { id: true, workspaceId: true, brandId: true, triggerConfig: true },
+      take: batch,
+    });
+    if (rules.length === 0) return 0;
+
+    let produced = 0;
+    for (const rule of rules) {
+      const config = metricThresholdConfigSchema.safeParse(rule.triggerConfig ?? {});
+      if (!config.success) continue;
+      const { metricKey, direction, threshold, windowDays } = config.data;
+
+      const windowMs = windowDays * 86_400_000;
+      const period = { start: new Date(now.getTime() - windowMs), end: now };
+      const comparison = {
+        start: new Date(period.start.getTime() - windowMs),
+        end: period.start,
+      };
+
+      const written = await withWorkspace(
+        rule.workspaceId,
+        async (db) => {
+          const policy = await new TenantAnalyticsPolicySource(db, this.#environment).load();
+          const queries = new AnalyticsQueryService({
+            db,
+            workspaceId: rule.workspaceId,
+            policy,
+            registry: createAnalyticsRegistry({ environment: this.#environment }),
+          });
+          const summary = await queries.summary({
+            scope: { brandId: rule.brandId },
+            period,
+            comparison,
+            // THE RULE'S OWN BRAND PINS THE QUERY. There is no member here whose
+            // scope could narrow it further, and nothing is acted on: see the
+            // BrandScope note on `sweepAutomations`.
+            brandScope: [],
+            metricKeys: [metricKey],
+          });
+          const metric = summary.metrics.find((row) => row.metricKey === metricKey);
+          if (!metric) return false;
+          if (
+            !thresholdCrossed({
+              direction,
+              threshold,
+              current: metric.value,
+              previous: metric.previousValue,
+            })
+          ) {
+            return false;
+          }
+
+          /*
+           * THE REFERENCE IS THE READING THAT CROSSED, which is what the trigger
+           * registry declares (`refType: 'MetricObservation'`) and what makes the
+           * event's identity a ROW rather than a moment: the same crossing seen
+           * again on the next pass derives the same key and writes nothing, and a
+           * genuinely newer reading is a genuinely new event.
+           */
+          const observation = await db.metricObservation.findFirst({
+            where: {
+              workspaceId: rule.workspaceId,
+              brandId: rule.brandId,
+              metricKey,
+              periodStart: { gte: period.start, lt: period.end },
+            },
+            orderBy: { periodStart: 'desc' },
+            select: { id: true },
+          });
+          if (!observation) return false;
+
+          return recordRuleAutomationEvent(db, rule.workspaceId, {
+            triggerType: 'METRIC_THRESHOLD_CROSSED',
+            brandId: rule.brandId,
+            ruleId: rule.id,
+            refId: observation.id,
+          });
+        },
+        { prisma: getPrisma() },
+      );
+      if (written) produced += 1;
+    }
+    return produced;
+  }
+
+  /**
+   * Hand every undelivered event to the worker.
+   *
+   * `deliveredAt` IS THE ONLY FIELD THAT RETIRES A ROW, and `dispatchedAt` is
+   * advisory. A dispatch that was accepted and then lost — Redis restarted, the
+   * worker died between the two — leaves a row that LOOKS dispatched and was
+   * never delivered, so a row whose dispatch is older than the re-dispatch floor
+   * is sent again. A duplicate delivery is free: the engine's run key collides
+   * and the second delivery does nothing (P7-R5).
+   *
+   * THE EVENT ID IS THE QUEUE JOB ID, so a sweep racing a successful dispatch
+   * adds nothing rather than queuing the same event twice inside one minute.
+   */
+  async #dispatchAutomationEvents(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+    const redispatchFloor = new Date(now.getTime() - AUTOMATION_REDISPATCH_SECONDS * 1_000);
+
+    const waiting = await platform.automationEvent.findMany({
+      where: {
+        deliveredAt: null,
+        OR: [{ dispatchedAt: null }, { dispatchedAt: { lt: redispatchFloor } }],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: batch,
+    });
+
+    let dispatched = 0;
+    for (const event of waiting) {
+      const result = await enqueue('analytics-ingest', EVALUATE_AUTOMATION, {
+        kind: EVALUATE_AUTOMATION,
+        workspaceId: event.workspaceId,
+        idempotencyKey: `automation-event-${event.id}`,
+        eventId: event.id,
+        brandId: event.brandId,
+        triggerType: event.triggerType,
+        refType: event.refType,
+        refId: event.refId,
+        ruleId: event.ruleId,
+        occurrence: event.occurrence,
+      } satisfies EvaluateAutomationPayload);
+      if (!result.dispatched) continue;
+      await platform.automationEvent.update({
+        where: { id: event.id },
+        data: { dispatchedAt: now, attempts: { increment: 1 } },
+      });
+      dispatched += 1;
+    }
+    return dispatched;
+  }
+
+  /** Every workspace's zone, in one query rather than one per rule. */
+  async #timezonesFor(
+    platform: PrismaClient,
+    workspaceIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    const rows = await platform.workspace.findMany({
+      where: { id: { in: [...new Set(workspaceIds)] } },
+      select: { id: true, timezone: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.timezone ?? 'UTC']));
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
@@ -607,6 +904,7 @@ export class MaintenanceScheduler {
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
+    const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -620,6 +918,8 @@ export class MaintenanceScheduler {
       analyticsCursorsDispatched: analytics.dispatched,
       analyticsBackfillsDispatched: analytics.backfills,
       analyticsRowsPruned,
+      automationEventsProduced: automations.produced,
+      automationEventsDispatched: automations.dispatched,
     };
   }
 
@@ -700,6 +1000,18 @@ export class MaintenanceScheduler {
     every(cadence.retentionPurgeSeconds, 'analytics-retention', () =>
       this.pruneAnalyticsRetention(cadence.retentionPurgeBatch),
     );
+    /*
+     * THE AUTOMATION SWEEP (A1) — the timer the whole feature was missing.
+     *
+     * IT RIDES THE RECONCILE CADENCE, which is a MINUTE, and that is what makes
+     * an hourly schedule land on its hour: a rule set for 09:00 is noticed at
+     * some point inside the 09:00 hour, and the occurrence key makes every
+     * further look inside that hour a no-op rather than a second run.
+     */
+    every(cadence.ingestionReconcileSeconds, 'automation-sweep', async () => {
+      const swept = await this.sweepAutomations(cadence.ingestionReconcileBatch);
+      return swept.produced + swept.dispatched;
+    });
 
     log.info('maintenance scheduler started', {
       ingestionReconcileSeconds: cadence.ingestionReconcileSeconds,

@@ -2339,3 +2339,80 @@ Both now take an `InsightDenialSink`, wired exactly as the Copilot and automatio
 subject's most recent reading summed across subjects — applied identically to the summary, the platform
 comparison and the series, so the three cannot disagree about what "followers" means. An account that
 loses followers no longer reports its peak for ever.
+
+## 31. Phase 7 remediation, round 2 — what a second review found after the first was green
+
+The first remediation closed ten findings and CI went green on every one. A second
+independent review then found four more, and two of them **existed because of the
+first**. That is the most useful thing in this section: a fix has consequences, and
+the consequences are not covered by the tests that proved the fix.
+
+### 31.1 A constraint that outlived its lookup
+
+Round 1 narrowed five replay lookups from "workspace + key" to "workspace + key +
+caller + brand + session". The DATABASE still said "one key per workspace". The
+leak was closed and a liveness bug took its place: a second member choosing the
+same key was correctly refused the first member's row, fell through to creation,
+and had their own legitimate insert killed by a unique violation on a key they had
+every right to choose.
+
+**The rule is D-170:** a unique constraint is exactly the identity its service
+replays on, and no wider. The authorization predicate — the live BrandScope — is
+deliberately not in the index, because a constraint enforces identity and
+authorization is not part of a row's identity.
+
+### 31.2 A credential that existed nowhere
+
+Two instances, one door apart, and both came from applying "a raw token is never
+persisted" to a moment where the customer needed one.
+
+**The Copilot's plan (D-171).** A turn succeeded, wrote an AWAITING_CONFIRMATION
+plan, returned the one token — and the HTTP response was lost. The retry replayed
+the plan and returned `confirmationToken: null`. The plan was real, it was theirs,
+and nothing in the world could confirm it.
+
+**The automation's run (D-175, F-86).** A run proposing an external action minted a
+token, stored its hash, notified the people who could act, and returned the raw
+value to the WORKER, which logs a status and drops it. The notification carries no
+payload by design. `PROPOSE_PUBLISH` was unconfirmable by anybody.
+
+Both are fixed the same way, and the shape is worth stating once: **rotate, do not
+retrieve.** A fresh token is issued, the stored digest is replaced under a
+COMPARE-AND-SWAP on the digest the caller just read, and the previous token dies.
+Two concurrent askers race, one wins, the loser is handed nothing — so at every
+instant at most one credential can confirm the thing. The raw value is still never
+stored, and for the automation it is now bound to somebody who holds the action's
+permission and the brand AT THE MOMENT THEY ASK rather than to whoever read a
+notification.
+
+### 31.3 Scope is necessary and not sufficient
+
+A Copilot session is admitted against one brand. Every step was then checked only
+for "is this brand somewhere in the caller's BrandScope?" — and for the ordinary
+customer with two brands, the answer for the OTHER brand is yes.
+
+This is not a tenancy leak: the caller genuinely holds both. It is worse in a
+quieter way. The assistant acts on Brand B while the screen, the conversation
+history and the audit trail all say Brand A, and **nobody reviews an action that
+looks authorized.**
+
+**D-172:** a brand-scoped step must name EXACTLY the session's brand, checked at
+plan construction before any preview query runs and again at execution against the
+plan's own brand. A session bound to no brand fails closed.
+
+### 31.4 A feature that existed in the UI and not in the product
+
+The automation worker held a complete consumer and nothing in the platform ever
+enqueued to it. `ANOMALY_DETECTED` referenced an `Insight` type nothing creates.
+An external action had no confirm control on any screen.
+
+None of these is a vulnerability and all of them are the same failure: a surface a
+customer can configure, enable and trust, behind which nothing runs. A rule that is
+silent teaches a customer that the feature does not work, and they are right.
+
+**D-173 and D-174:** every authorable trigger has a producer or is removed from the
+registry; a domain event is a row written in the domain's own transaction and the
+sweep dispatches it, so a lost queue costs punctuality and not correctness. The
+producer's pairing of trigger to reference is a CHECK constraint, not a convention,
+because a producer that names the wrong kind of row aims a content operation at an
+id that is not a content item's.

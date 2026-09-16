@@ -468,6 +468,7 @@ model Workspace {
   copilotToolCalls          CopilotToolCall[]
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
+  automationEvents            AutomationEvent[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1732,6 +1733,7 @@ model Brand {
   copilotActionPlans        CopilotActionPlan[]
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
+  automationEvents            AutomationEvent[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -2211,7 +2213,7 @@ model BrandBrainMessage {
   /// conversation its author could not read.
   conversation BrandBrainConversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_brain_message_conversation_fkey")
 
-  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, conversationId, idempotencyKey])
   @@index([conversationId, createdAt])
   @@index([expiresAt])
   @@map("brand_brain_message")
@@ -2784,7 +2786,7 @@ model ContentItem {
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
   /// A replayed generation returns the first draft rather than making a second.
-  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, brandId, createdByUserId, idempotencyKey])
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, updatedAt(sort: Desc)])
   @@index([expiresAt])
@@ -4141,7 +4143,7 @@ model Campaign {
   evidence     InsightEvidence[]
 
   @@unique([workspaceId, id], name: "campaign_workspace_scope")
-  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, brandId, createdByUserId, idempotencyKey])
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, startDate, endDate])
   @@map("campaign")
@@ -4239,7 +4241,7 @@ model Insight {
   learningCandidates BrandKnowledgeCandidate[]
 
   @@unique([workspaceId, id], name: "insight_workspace_scope")
-  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, brandId, type, generatedByUserId, idempotencyKey])
   @@index([workspaceId, brandId, type, createdAt(sort: Desc)])
   @@index([workspaceId, brandId, status, createdAt(sort: Desc)])
   @@index([workspaceId, campaignId])
@@ -4507,7 +4509,7 @@ model CopilotActionPlan {
   messages  CopilotMessage[]
 
   @@unique([workspaceId, id], name: "copilot_action_plan_workspace_scope")
-  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, sessionId, idempotencyKey])
   @@unique([workspaceId, sessionId, planVersion])
   @@index([workspaceId, sessionId, createdAt(sort: Desc)])
   @@index([workspaceId, status])
@@ -4652,7 +4654,8 @@ model AutomationRule {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "automation_rule_brand_fkey")
 
-  runs AutomationRun[]
+  runs   AutomationRun[]
+  events AutomationEvent[]
 
   @@unique([workspaceId, id], name: "automation_rule_workspace_scope")
   @@unique([workspaceId, brandId, name])
@@ -4730,4 +4733,94 @@ model AutomationRun {
   @@index([workspaceId, brandId, status])
   @@index([startedAt])
   @@map("automation_run")
+}
+
+/// TENANT-OWNED. THE AUTOMATION OUTBOX — one row per domain event worth
+/// evaluating rules against.
+///
+/// WHY AN OUTBOX AND NOT A DIRECT ENQUEUE (A1). Before this existed, the worker
+/// held a complete `automation.evaluate` consumer and NOTHING IN THE PLATFORM
+/// EVER ENQUEUED ONE. A customer could author a rule on `CONTENT_APPROVED` and
+/// it would never fire, with nothing anywhere saying so — a feature that exists
+/// in the UI and not in the product.
+///
+/// The obvious repair is to call `enqueue` at each domain site, and it is the
+/// wrong one twice over. It puts a Redis round trip on the request path of an
+/// approval, and when that round trip fails the choice is between failing the
+/// approval and losing the event silently. Neither is acceptable.
+///
+/// SO THE EVENT IS A ROW, WRITTEN IN THE DOMAIN'S OWN TRANSACTION. It commits
+/// with the approval or not at all, which is the only way an event is neither
+/// lost nor invented. Dispatch is the SWEEP's job (docs/ARCHITECTURE.md §9:
+/// "delayed jobs are an optimization; a reconciliation sweeper every minute
+/// finds work that is due and unclaimed, so a lost Redis state degrades
+/// punctuality, not correctness"). No domain package imports the queue.
+///
+/// `dedupeKey` IS THE IDENTITY OF THE DOMAIN EVENT, not of the attempt: the
+/// approval of item X is one event however many times the sweep looks at it, and
+/// `@@unique([workspaceId, dedupeKey])` is what makes the timed producers — which
+/// re-derive the same occurrence every minute — write exactly one row per
+/// occurrence rather than sixty.
+model AutomationEvent {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  /// NON-NULL, because `AutomationEngine.deliver` selects rules BY BRAND. An
+  /// event with no brand could match no rule, so it would be a row that exists
+  /// only to be swept for ever.
+  brandId     String @db.Uuid
+
+  triggerType AutomationTrigger
+
+  /// What fired it, exactly as the trigger registry declares it. A producer that
+  /// writes the wrong pair aims a content action at an id that is not a content
+  /// item's, which is why `automation_event_ref_matches_trigger` is a CHECK and
+  /// not a convention.
+  refType String?
+  refId   String? @db.Uuid
+
+  /// WHICH RULE THIS EVENT IS ADDRESSED TO, for the two triggers whose identity
+  /// lives on the rule rather than on a domain row.
+  ///
+  /// A domain event — an approval, a publish — belongs to the BRAND and every
+  /// rule listening for it should see it, so `ruleId` is NULL there. A timed
+  /// occurrence and a threshold crossing are different: both are computed FROM a
+  /// rule's own configuration, so an event derived from rule A must not be
+  /// delivered to rule B, whose schedule or threshold says something else
+  /// entirely. `AutomationEngine.deliver` narrows to this rule when it is set.
+  ruleId String? @db.Uuid
+
+  /// The occurrence a timed rule fired FOR, in the workspace's own zone
+  /// (`YYYY-MM-DDTHH`). It is the run's bucket (P7-R5): carried rather than
+  /// recomputed, so a delivery that slips across the hour boundary still
+  /// converges on the occurrence it was created for instead of becoming a second
+  /// run of the same schedule.
+  occurrence String?
+
+  /// The identity of the EVENT. Derived by the producer, never client-supplied.
+  dedupeKey String
+
+  /// When a queue message was accepted for this row. Advisory: a dispatch that
+  /// was accepted and then lost is re-dispatched by the sweep after
+  /// `dispatchRetryAfter`, because only `deliveredAt` proves the work happened.
+  dispatchedAt DateTime? @db.Timestamptz(6)
+  /// When the worker finished delivering it to every listening rule. THE ONLY
+  /// FIELD THAT RETIRES A ROW.
+  deliveredAt  DateTime? @db.Timestamptz(6)
+  /// How many times it has been dispatched, so a poison event is visible rather
+  /// than merely quiet.
+  attempts     Int       @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand           @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "automation_event_brand_fkey")
+  rule      AutomationRule? @relation(fields: [workspaceId, ruleId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "automation_event_rule_fkey")
+
+  @@unique([workspaceId, id], name: "automation_event_workspace_scope")
+  @@unique([workspaceId, dedupeKey])
+  /// THE SWEEP'S INDEX. Undelivered rows, oldest first, across every tenant.
+  @@index([deliveredAt, createdAt])
+  @@index([workspaceId, brandId, triggerType])
+  @@map("automation_event")
 }

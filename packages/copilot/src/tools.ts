@@ -324,9 +324,36 @@ export function requiresConfirmation(actionClass: CopilotActionClass): boolean {
  * action somebody cannot take is the dead button §20 forbids, and hiding it
  * keeps the model from proposing plans that can only fail.
  */
-export function availableTools(permissionKeys: readonly string[]): readonly ToolDefinition[] {
+export function availableTools(
+  permissionKeys: readonly string[],
+  options: {
+    /**
+     * Is this conversation bound to a brand? A session that is not cannot offer
+     * a tool that names one (A2) — there is no brand for the step to name, and
+     * letting the model choose one out of the caller's BrandScope is exactly the
+     * "the assistant acted on the wrong brand" failure. Defaults to TRUE so the
+     * permission-only callers that predate brand binding keep their meaning.
+     */
+    readonly brandBound?: boolean;
+  } = {},
+): readonly ToolDefinition[] {
   const held = new Set(permissionKeys);
-  return COPILOT_TOOLS.filter((tool) => held.has(tool.permission));
+  const brandBound = options.brandBound ?? true;
+  /*
+   * WIDENED TO `ToolDefinition[]` ON PURPOSE. Every tool in the registry today
+   * declares `brandScope: 'required'`, so the literal type of the array narrows
+   * to that one member and TypeScript calls the comparison below unreachable.
+   * It is not unreachable; it is a rule about a registry that will gain a
+   * workspace-level tool, and the day it does this filter must already be right.
+   *
+   * IT ALSO MEANS AN UNBOUND SESSION CURRENTLY HAS NO TOOLS AT ALL, and that is
+   * the intended, stated contract rather than an accident: a general
+   * conversation can ask and answer, and it cannot act on anything until it is
+   * admitted to a brand.
+   */
+  return (COPILOT_TOOLS as readonly ToolDefinition[]).filter(
+    (tool) => held.has(tool.permission) && (brandBound || tool.brandScope !== 'required'),
+  );
 }
 
 /**

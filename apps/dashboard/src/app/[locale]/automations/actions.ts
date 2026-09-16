@@ -127,9 +127,20 @@ export async function deleteAutomationAction(formData: FormData): Promise<void> 
 /**
  * Confirm an automation's proposed external action.
  *
- * THE TOKEN ARRIVES FROM THE RUN'S NOTIFICATION LINK and is posted here, never
- * put in a URL: it is a live authorization to publish, and a query string lands
- * in the browser history and in an access log.
+ * THE TOKEN IS FETCHED HERE, SERVER-SIDE, AND NEVER REACHES THE BROWSER.
+ *
+ * It used to be read off the submitted form, under a comment saying it "arrives
+ * from the run's notification link". It did not, and it could not: the token is
+ * minted in the worker, stored only as a hash, and the notification carries no
+ * payload by design. Nothing anywhere held the raw value, so this action posted
+ * an empty string and every confirmation was refused — and there was no button
+ * that called it either.
+ *
+ * TWO CALLS, ONE PERSON, CHECKED TWICE. The first asks the API to issue a
+ * credential for this run; the second spends it. Both carry this person's own
+ * session, and the engine re-checks `publishing.manage` and the run's brand
+ * against their LIVE membership on each — so the round trip is not ceremony, it
+ * is the confirmation boundary being crossed by somebody who may cross it.
  *
  * `publishing.manage` IS CHECKED HERE AND AGAIN IN THE ENGINE, against the
  * CONFIRMER rather than the rule's creator — otherwise a rule written by an admin
@@ -138,10 +149,17 @@ export async function deleteAutomationAction(formData: FormData): Promise<void> 
 export async function confirmAutomationRunAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   await requireWorkspace(locale, 'publishing.manage');
+  const runId = String(formData.get('runId') ?? '');
+
+  const issued = await callPhase7Api('/v1/automations/confirmation-token', { runId });
+  if (!issued.ok) {
+    const payload = issued.payload as { error?: { code?: string } };
+    redirect(`/${locale}/automations?error=${payload.error?.code ?? 'INTERNAL'}`);
+  }
 
   const response = await callPhase7Api('/v1/automations/confirm', {
-    runId: String(formData.get('runId') ?? ''),
-    token: String(formData.get('token') ?? ''),
+    runId,
+    token: (issued.payload as { token?: string }).token ?? '',
   });
   if (!response.ok) {
     const payload = response.payload as { error?: { code?: string } };

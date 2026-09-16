@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   Prisma,
+  recordAutomationEvent,
   writeAuditEvent,
   type AnalyticsIngestionCursor,
   type MetricGranularity,
@@ -605,7 +606,7 @@ export class AnalyticsIngestionService {
     },
   ): Promise<void> {
     const finishedAt = this.#clock.now();
-    await this.#db.analyticsIngestionRun.update({
+    const finished = await this.#db.analyticsIngestionRun.update({
       where: { id: runId },
       data: {
         status: input.status,
@@ -625,6 +626,32 @@ export class AnalyticsIngestionService {
         observationsUnchanged: input.observationsUnchanged ?? 0,
       },
     });
+
+    /*
+     * THE AUTOMATION EVENT (A1). `ANALYTICS_REFRESHED` had no producer.
+     *
+     * "REFRESHED" MEANS NEW DATA LANDED, and that is a deliberate reading rather
+     * than a loose one. A cursor is polled on a cadence, and most polls answer
+     * "nothing has changed since last time" — firing every listening rule on
+     * each of those would make the trigger a metronome, and a customer whose
+     * rule notified them hourly about no new numbers would turn it off within a
+     * day and never trust another one.
+     *
+     * A FAILED or RATE-LIMITED run is not a refresh either: nothing was read, so
+     * there is nothing to react to. `PARTIAL` counts, because the observations it
+     * did write are real.
+     */
+    const refreshed =
+      (input.status === 'SUCCEEDED' || input.status === 'PARTIAL') &&
+      (input.observationsWritten ?? 0) > 0;
+    if (refreshed) {
+      await recordAutomationEvent(
+        this.#db,
+        this.#workspaceId,
+        { triggerType: 'ANALYTICS_REFRESHED', refType: 'AnalyticsIngestionRun' },
+        { brandId: finished.brandId, refId: finished.id },
+      );
+    }
   }
 
   /**

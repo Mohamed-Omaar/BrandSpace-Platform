@@ -171,7 +171,83 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
   };
 }
 
+const confirmationTokenSchema = z.object({ runId: z.string().uuid() });
+
 export function registerAutomationRoutes(app: FastifyInstance): void {
+  /**
+   * ISSUE A CONFIRMATION CREDENTIAL FOR A PROPOSED EXTERNAL ACTION.
+   *
+   * WHY THIS ROUTE HAS TO EXIST. The run's token is minted in the WORKER, stored
+   * as a hash, and returned to a background process that logs a status and drops
+   * it. The notification that tells a person to come and look deliberately
+   * carries no payload, because a live publish credential does not belong in a
+   * notification row. So the credential existed nowhere, and `PROPOSE_PUBLISH`
+   * was an action nobody in the world could confirm.
+   *
+   * IT IS NOT A WAY AROUND THE CONFIRMATION, it is the way TO it. The engine
+   * applies the same two checks `confirmRun` does — the action's own permission
+   * against THIS caller, and the run's brand against THIS caller's live scope —
+   * and rotates the stored digest under a compare-and-swap, so asking twice
+   * leaves one live credential rather than two.
+   *
+   * THE RAW TOKEN IS STILL NEVER STORED. It is returned once, to a person who
+   * has just been authorized, and it expires on the policy's own window.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/automations/confirmation-token',
+    {
+      scope: 'workspace',
+      permission: CONFIRM_PERMISSION,
+      rateLimit: 'workspace.write',
+      idempotent: false,
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, CONFIRM_PERMISSION);
+      if (!caller) return;
+      const parsed = confirmationTokenSchema.safeParse(req.body);
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+
+      try {
+        const issued = await withWorkspace(
+          caller.workspaceId,
+          async (db) => {
+            const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
+            const engine = new AutomationEngine({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              // NO PUBLISH PORT. This route issues a credential and performs no
+              // action, so it has no business holding the thing that acts.
+              ports: {},
+              denialSink: automationDenialSink(caller.workspaceId),
+            });
+            return engine.reissueRunConfirmation({
+              runId: parsed.data.runId,
+              actor: {
+                userId: caller.userId,
+                roleKey: caller.roleKey,
+                permissionKeys: caller.permissionKeys,
+                brandScope: caller.brandScope,
+              },
+            });
+          },
+          { prisma: getPrisma() },
+        );
+
+        return reply.send({
+          runId: issued.run.id,
+          // RETURNED EXACTLY ONCE. Only its hash is stored.
+          token: issued.token,
+          expiresAt: issued.run.confirmationExpiresAt?.toISOString() ?? null,
+        });
+      } catch (error: unknown) {
+        return fail(reply, 'automation confirmation token', error);
+      }
+    },
+  );
+
   route(
     app,
     'POST',

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  recordAutomationEvent,
   writeAuditEvent,
   type PublishFailureClass,
   type PublishJob,
@@ -670,6 +671,24 @@ export class PublishPipelineService {
       // The external id and the provider. NOT the caption, and NOT the token.
       after: { provider: job.provider, externalPostId },
     });
+    /*
+     * THE AUTOMATION EVENT (A1). `POST_PUBLISHED` had no producer.
+     *
+     * HERE, AND NOT AT THE CALL SITES. `#succeed` is reached three ways — a
+     * clean send, a retry that worked, and an INDETERMINATE outcome the adapter
+     * later verified as live — and every one of them is the post going out. A
+     * producer at the first call site only would have made "it published on the
+     * second attempt" a silent non-event for every rule listening.
+     *
+     * THE KEY IS THE JOB'S ID, so all three paths converge on ONE event even if
+     * verification and the original attempt both arrive at this line.
+     */
+    await recordAutomationEvent(
+      this.#db,
+      this.#workspaceId,
+      { triggerType: 'POST_PUBLISHED', refType: 'PublishJob' },
+      { brandId: job.brandId, refId: job.id },
+    );
     await this.#notifier?.published({
       jobId: job.id,
       contentItemId: job.contentItemId,

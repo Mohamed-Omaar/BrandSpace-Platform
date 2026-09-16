@@ -235,7 +235,7 @@ export class CopilotOrchestrator {
       planKey: input.planKey,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, []),
+        prompt: this.#prompt(input.request, input.authorization, [], brandId !== null),
         untrustedContext: context ? [context] : [],
       },
     });
@@ -344,7 +344,7 @@ export class CopilotOrchestrator {
       idempotencyKey: `copilot:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, history),
+        prompt: this.#prompt(input.request, input.authorization, history, brandId !== null),
         untrustedContext: context ? [context] : [],
       },
     });
@@ -377,7 +377,19 @@ export class CopilotOrchestrator {
      * membership. This pass exists so the customer is shown a plan that can
      * actually run — and so a tool key the model invented is recorded as such.
      */
-    const allowed = new Set(availableTools(input.authorization.permissionKeys).map((t) => t.key));
+    /*
+     * AND A GENERAL SESSION IS OFFERED NO BRAND-SCOPED TOOL AT ALL (A2). The
+     * filter is the courteous half of the rule — the model is never shown a tool
+     * it cannot use here, so it proposes something it can — and
+     * `stepBrandPermitted` in `CopilotPlanService` is the half that enforces it.
+     * A brand tool proposed anyway lands in `rejectedToolKeys` below and is
+     * audited with every other tool a model reached for and may not have.
+     */
+    const allowed = new Set(
+      availableTools(input.authorization.permissionKeys, { brandBound: brandId !== null }).map(
+        (t) => t.key,
+      ),
+    );
     const steps: ProposedStep[] = [];
     const rejectedToolKeys: string[] = [];
 
@@ -492,8 +504,9 @@ export class CopilotOrchestrator {
     request: string,
     authorization: LiveAuthorization,
     history: readonly { role: string; body: string }[],
+    brandBound: boolean,
   ): string {
-    const tools = availableTools(authorization.permissionKeys);
+    const tools = availableTools(authorization.permissionKeys, { brandBound });
 
     return [
       SYSTEM_INSTRUCTION,

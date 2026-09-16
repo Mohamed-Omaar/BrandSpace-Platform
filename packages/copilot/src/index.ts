@@ -24,6 +24,7 @@ export {
 export type { CopilotToolKey, ToolDefinition, ToolPreviewLine } from './tools';
 
 export { holds, resolveLiveAuthorization } from './authorization';
+export { stepBrandPermitted } from './brand-binding';
 export type { LiveAuthorization } from './authorization';
 
 export {

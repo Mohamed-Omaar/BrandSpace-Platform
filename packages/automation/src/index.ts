@@ -31,6 +31,15 @@ export type {
 } from './registry';
 
 export { AutomationEngine, runBucketFor, runIdempotencyKeyFor } from './engine';
+export {
+  localMomentFor,
+  metricThresholdConfigSchema,
+  occurrenceKey,
+  scheduledTimeConfigSchema,
+  thresholdCrossed,
+  timedRuleIsDue,
+} from './schedule';
+export type { LocalMoment } from './schedule';
 export type {
   AutomationActor,
   AutomationDenialSink,

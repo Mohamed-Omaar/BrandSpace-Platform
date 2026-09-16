@@ -7,13 +7,7 @@ import {
   type CopilotToolCall,
   type TenantScopedClient,
 } from '@brandspace/database';
-import {
-  AppError,
-  brandInScope,
-  nullableBrandIdScopeFilter,
-  systemClock,
-  type Clock,
-} from '@brandspace/shared';
+import { AppError, nullableBrandIdScopeFilter, systemClock, type Clock } from '@brandspace/shared';
 import {
   confirmationRejected,
   copilotPlanNotFound,
@@ -25,6 +19,7 @@ import {
   unknownTool,
 } from './errors';
 import { resolveLiveAuthorization, holds, type LiveAuthorization } from './authorization';
+import { stepBrandPermitted } from './brand-binding';
 import {
   issueConfirmationToken,
   hashConfirmationToken,
@@ -241,6 +236,17 @@ export class CopilotPlanService {
        * A MISS FALLS THROUGH TO CREATION rather than erroring, which is the same
        * behaviour a genuinely new key gets — and creation is authorized on its
        * own terms below.
+       *
+       * AND THE DATABASE NOW AGREES WITH THIS LOOKUP (R2-A). The unique index
+       * used to be `(workspaceId, idempotencyKey)` — the very scope this WHERE
+       * had just stopped trusting. So the narrowing fixed the leak and left a
+       * liveness bug behind it: a second member of the workspace who reached for
+       * the same key was correctly NOT given the first member's plan, fell
+       * through to creation, and had their own perfectly legitimate plan killed
+       * by a unique violation on a key they had every right to choose. The index
+       * is `(workspaceId, sessionId, idempotencyKey)` now — the same shape
+       * `copilot_message` already used, and the identity this lookup actually
+       * matches on, since a session pins both the person and the brand.
        */
       const existing = await this.#db.copilotActionPlan.findFirst({
         where: {
@@ -255,12 +261,11 @@ export class CopilotPlanService {
         },
       });
       if (existing) {
+        const rotated = await this.#reissueConfirmation(existing);
         return {
-          plan: existing,
-          steps: (existing.steps as unknown as StoredStep[]) ?? [],
-          // The token is not re-issued: it was returned once, and re-issuing on
-          // a replay would turn a retry into a second live credential.
-          confirmationToken: null,
+          plan: rotated.plan,
+          steps: (rotated.plan.steps as unknown as StoredStep[]) ?? [],
+          confirmationToken: rotated.token,
         };
       }
     }
@@ -291,10 +296,28 @@ export class CopilotPlanService {
       if (!holds(input.authorization, tool.permission)) throw copilotPlanNotFound();
       if (tool.brandScope === 'required') {
         const brandId = String(parsed['brandId'] ?? '');
-        // A 404-shaped refusal, exactly as `assertBrandInScope` produces: an
-        // out-of-scope brand and a fabricated one must be indistinguishable, and
-        // a model can be talked into naming either.
-        if (!brandInScope(input.authorization.brandScope, brandId)) throw copilotPlanNotFound();
+        /*
+         * THE SESSION'S BRAND, NOT MERELY ONE OF THE CALLER'S (A2).
+         *
+         * A 404-shaped refusal, exactly as `assertBrandInScope` produces: an
+         * out-of-scope brand, another of the caller's OWN brands and a
+         * fabricated one must all be indistinguishable here, and a model can be
+         * talked into naming any of the three.
+         *
+         * AND IT IS REFUSED BEFORE THE PREVIEW BELOW RUNS. `buildPreview` reads
+         * the named rows; running it first would answer "does this campaign
+         * exist?" for a brand this conversation is not about, and would do it
+         * before anything had decided the step was permitted at all.
+         */
+        if (
+          !stepBrandPermitted({
+            sessionBrandId: input.brandId,
+            stepBrandId: brandId,
+            brandScope: input.authorization.brandScope,
+          })
+        ) {
+          throw copilotPlanNotFound();
+        }
       }
 
       const ordinal = index + 1;
@@ -406,6 +429,97 @@ export class CopilotPlanService {
    * refusal: telling a caller which half they got right is exactly the feedback
    * an attacker needs and exactly the feedback a legitimate user does not.
    */
+  /**
+   * A LOST RESPONSE MUST NOT COST THE CUSTOMER THEIR PLAN (R2-B).
+   *
+   * THE SHAPE OF THE BUG. `/v1/copilot/turn` succeeds, writes an
+   * AWAITING_CONFIRMATION plan and returns the one and only confirmation token
+   * — and the response never arrives. The client retries with the same
+   * idempotency key, which is precisely what an idempotency key is for, and the
+   * replay branch handed back the plan with `confirmationToken: null`. The plan
+   * was real, it was the customer's, it was waiting for them, and there was no
+   * longer any credential in the world that could confirm it. It sat there until
+   * it expired.
+   *
+   * WHY NOT SIMPLY STORE THE TOKEN. Because the rule that makes the confirmation
+   * worth anything is that a database read cannot be replayed as a confirmation
+   * (D-141). Only the digest is written down, and that does not change here.
+   *
+   * SO THE RETRY GETS A NEW TOKEN, AND THE OLD ONE DIES. One conditional UPDATE
+   * does both: the new digest and a fresh window are written only if the row is
+   * still awaiting confirmation, still unconfirmed, still unexpired AND still
+   * carrying the EXACT digest this caller just read. That last predicate is what
+   * makes concurrent retries safe — two of them race, one wins, and the loser
+   * finds the digest already moved and is handed NO token rather than a second
+   * live one. At every instant at most one credential can confirm this plan.
+   *
+   * WHAT IS NEVER REISSUED: a plan that is CONFIRMED, EXECUTING, COMPLETED,
+   * FAILED or CANCELLED, and a plan whose window has already closed. A retry of
+   * any of those returns the plan and no token, because reissuing there would
+   * resurrect a decision the customer or the clock has already made.
+   *
+   * THE PLAN HASH IS UNTOUCHED, so the confirmation stays bound to the steps the
+   * customer was shown, and `confirm` still demands it.
+   */
+  async #reissueConfirmation(
+    plan: CopilotActionPlan,
+  ): Promise<{ plan: CopilotActionPlan; token: string | null }> {
+    const now = this.#clock.now();
+    if (
+      !plan.requiresConfirmation ||
+      plan.status !== 'AWAITING_CONFIRMATION' ||
+      plan.confirmedAt !== null ||
+      plan.confirmationTokenHash === null ||
+      plan.confirmationExpiresAt === null ||
+      plan.confirmationExpiresAt.getTime() <= now.getTime()
+    ) {
+      return { plan, token: null };
+    }
+
+    const replacement = issueConfirmationToken();
+    const expiresAt = new Date(now.getTime() + this.#policy.plans.confirmationTtlSeconds * 1_000);
+
+    const affected = await this.#db.copilotActionPlan.updateMany({
+      where: {
+        id: plan.id,
+        workspaceId: this.#workspaceId,
+        userId: plan.userId,
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        // THE COMPARE-AND-SWAP. Whoever still sees the digest they read is the
+        // one allowed to replace it.
+        confirmationTokenHash: plan.confirmationTokenHash,
+        confirmationExpiresAt: { gt: now },
+      },
+      data: {
+        confirmationTokenHash: replacement.hash,
+        confirmationExpiresAt: expiresAt,
+      },
+    });
+
+    if (affected.count === 0) {
+      // A concurrent retry rotated it first. The plan is returned as it now
+      // stands, and this caller gets no credential — the other one holds it.
+      const current = await this.#requirePlan(plan.id, plan.userId);
+      return { plan: current, token: null };
+    }
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'copilot.confirmation_reissued',
+      actorType: 'USER',
+      actorId: plan.userId,
+      resourceType: 'CopilotActionPlan',
+      resourceId: plan.id,
+      ...(plan.brandId ? { brandId: plan.brandId } : {}),
+      traceId: plan.correlationId,
+      // THE FACT, NOT THE SECRET. That a token was replaced is the auditable
+      // event; neither the old nor the new one appears anywhere.
+      after: { planHash: plan.planHash, reason: 'idempotent_retry' },
+    });
+
+    return { plan: await this.#requirePlan(plan.id, plan.userId), token: replacement.token };
+  }
+
   async confirm(input: {
     planId: string;
     /** The hash the customer was SHOWN. A stale one no longer matches. */
@@ -590,10 +704,28 @@ export class CopilotPlanService {
         continue;
       }
 
-      // (2) THE BRAND SCOPE, AGAINST THE LIVE MEMBERSHIP.
+      /*
+       * (2) THE BRAND: THE PLAN'S OWN, AND STILL INSIDE THE LIVE MEMBERSHIP.
+       *
+       * ASKED AGAIN HERE, and not because the build-time check is unreliable. It
+       * is asked again for the same reason the permission is: the two checks
+       * answer the question at two different moments, and the only one that can
+       * govern what actually happens is the one nearest the action. A plan built
+       * before an administrator narrowed this person's BrandScope is refused
+       * here, by `stepBrandPermitted`'s scope half; a step whose stored
+       * arguments name a brand other than the plan's — which nothing can produce
+       * today and which a future writer of these rows could — is refused by its
+       * equality half.
+       */
       if (tool.brandScope === 'required') {
         const brandId = String(step.arguments['brandId'] ?? '');
-        if (!brandInScope(authorization.brandScope, brandId)) {
+        if (
+          !stepBrandPermitted({
+            sessionBrandId: plan.brandId,
+            stepBrandId: brandId,
+            brandScope: authorization.brandScope,
+          })
+        ) {
           failed = true;
           toolCalls.push(
             await this.#recordCall(plan, step, {

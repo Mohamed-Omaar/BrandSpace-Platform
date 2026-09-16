@@ -285,6 +285,15 @@ export default tseslint.config(
       '**/.next/**',
       '**/coverage/**',
       '**/generated/**',
+      /*
+       * PLAYWRIGHT'S OWN OUTPUT. Both are gitignored and neither is source: the
+       * report bundles minified vendor JavaScript, which ESLint dutifully reports
+       * as hundreds of `no-undef` and `eqeqeq` errors the moment anybody runs the
+       * E2E suite before `pnpm verify`. Since `verify:all` runs verify and then
+       * the suite, a SECOND run of it failed on the first run's artefacts.
+       */
+      '**/playwright-report/**',
+      '**/test-results/**',
       '**/*.d.ts',
       'packages/database/prisma/migrations/**',
       // The owner-approved visual reference, vendored VERBATIM. It is evidence

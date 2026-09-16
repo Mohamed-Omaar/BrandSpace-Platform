@@ -80,8 +80,13 @@ describe('ContentItem is tenant-owned', () => {
     const row = await inA((db) =>
       db.contentItem.findUnique({
         where: {
-          workspaceId_idempotencyKey: {
+          // Every part of B's compound key, which is brand- and author-scoped
+          // since the round-2 remediation. A knowing all four values is the
+          // strongest form of this test, and RLS still answers null.
+          workspaceId_brandId_createdByUserId_idempotencyKey: {
             workspaceId: fixtures.b.workspaceId,
+            brandId: fixtures.b.brandId,
+            createdByUserId: fixtures.b.userId,
             idempotencyKey: fixtures.b.contentIdempotencyKey,
           },
         },

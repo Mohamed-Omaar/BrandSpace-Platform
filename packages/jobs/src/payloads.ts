@@ -158,10 +158,29 @@ export interface BackfillAnalyticsPayload extends TenantJobPayload {
  */
 export interface EvaluateAutomationPayload extends TenantJobPayload {
   readonly kind: 'automation.evaluate';
+  /** The outbox row this message carries, and the row the worker retires. */
+  readonly eventId: string;
   readonly brandId: string;
   readonly triggerType: string;
   readonly refType: string | null;
   readonly refId: string | null;
+  /**
+   * ADDRESSED TO ONE RULE, for a schedule or a threshold — both of which are
+   * computed FROM a rule's own configuration and must not be delivered to a rule
+   * that configured something else. Null for a domain event, which belongs to
+   * the brand and goes to every rule listening for it.
+   */
+  readonly ruleId: string | null;
+  /**
+   * The occurrence a timed event was created FOR. Carried, not recomputed: a
+   * message that sits in the queue past the hour boundary must still belong to
+   * the occurrence it was created for, or the same schedule runs twice (P7-R5).
+   *
+   * This is the event's IDENTITY, not a condition fact — the rule against
+   * carrying facts in a payload is about values that can go stale between write
+   * and read, and "which occurrence this is" cannot.
+   */
+  readonly occurrence: string | null;
 }
 
 /** Everything the `analytics-ingest` queue carries. */

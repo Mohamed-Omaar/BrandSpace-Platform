@@ -15,7 +15,7 @@ import {
 import { createScheduleQuota } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
-import { createLogger } from '@brandspace/shared';
+import { createLogger, systemClock } from '@brandspace/shared';
 
 /**
  * Evaluate the automation rules listening for one event.
@@ -209,9 +209,34 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
       brandId: payload.brandId,
       refType: payload.refType,
       refId: payload.refId,
+      ruleId: payload.ruleId,
+      occurrence: payload.occurrence,
       facts,
     };
-    return engine.deliver({ event, resolveActor: actorResolver(db, payload.workspaceId) });
+    const delivered = await engine.deliver({
+      event,
+      resolveActor: actorResolver(db, payload.workspaceId),
+    });
+
+    /*
+     * RETIRE THE OUTBOX ROW, AND ONLY AFTER THE DELIVERY (A1).
+     *
+     * `deliveredAt` is the single field that takes an event out of the sweep's
+     * sight, and it is written here — inside the same tenant transaction that
+     * just created the runs — so a worker that dies half way through leaves the
+     * row exactly as it found it and the sweep hands it to somebody else. The
+     * second delivery is free: the engine's run key collides and produces no
+     * second action (P7-R5).
+     *
+     * CONDITIONAL ON IT STILL BEING NULL, so two workers racing the same event
+     * cannot both claim to be the one that finished it.
+     */
+    await db.automationEvent.updateMany({
+      where: { id: payload.eventId, workspaceId: payload.workspaceId, deliveredAt: null },
+      data: { deliveredAt: systemClock.now() },
+    });
+
+    return delivered;
   });
 
   log.info('automation event delivered', {
@@ -258,6 +283,65 @@ async function gatherFacts(
       facts['content.pillar'] = item.pillar;
       facts['content.platformCount'] = item._count.variants;
       facts['content.hasCampaign'] = item.campaignId !== null;
+    }
+  }
+
+  /*
+   * A SLOT REACHES ITS CONTENT ITEM, and the facts are the ITEM's.
+   *
+   * `CONTENT_SCHEDULED` references a CalendarSlot, which the registry already
+   * says reaches a content item `via: 'calendarSlot'`. Without this branch every
+   * `content.*` condition on a scheduling rule read `undefined` and compared
+   * false — so a rule with any condition at all could never fire, and one with
+   * none fired on everything. A condition that can only ever be false is worse
+   * than a missing feature: it looks configured.
+   */
+  if (payload.refType === 'CalendarSlot' && payload.refId) {
+    const slot = await db.calendarSlot.findFirst({
+      where: { id: payload.refId, workspaceId: payload.workspaceId },
+      select: { contentItemId: true },
+    });
+    if (slot) {
+      const item = await db.contentItem.findFirst({
+        where: { id: slot.contentItemId, workspaceId: payload.workspaceId },
+        select: {
+          status: true,
+          pillar: true,
+          campaignId: true,
+          _count: { select: { variants: true } },
+        },
+      });
+      if (item) {
+        facts['content.status'] = item.status;
+        facts['content.pillar'] = item.pillar;
+        facts['content.platformCount'] = item._count.variants;
+        facts['content.hasCampaign'] = item.campaignId !== null;
+      }
+    }
+  }
+
+  /*
+   * THE METRIC FACTS, FOR A THRESHOLD CROSSING.
+   *
+   * `CONDITION_FIELDS` has declared `metric.key`, `metric.value` and
+   * `metric.changeMilli` since the registry was written, and nothing ever put
+   * one there. Same shape as the calendar gap above: three fields a customer
+   * could pick in the UI, all of which compared false for ever.
+   *
+   * READ FROM THE OBSERVATION, HERE, rather than carried in the message — the
+   * reading is what the event points AT, and the rule against stale facts in a
+   * payload is exactly why.
+   */
+  if (payload.refType === 'MetricObservation' && payload.refId) {
+    const observation = await db.metricObservation.findFirst({
+      where: { id: payload.refId, workspaceId: payload.workspaceId },
+      select: { metricKey: true, value: true },
+    });
+    if (observation) {
+      facts['metric.key'] = observation.metricKey;
+      // A `bigint` never reaches a condition: every declared operator compares
+      // numbers, and a mixed comparison is FALSE rather than surprising.
+      facts['metric.value'] = Number(observation.value);
     }
   }
 

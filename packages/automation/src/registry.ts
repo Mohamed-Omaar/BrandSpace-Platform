@@ -32,7 +32,29 @@ import type {
  * rather than being the whole surface of every package this one imports.
  */
 
-/** Which triggers a rule may fire on, and what each one carries. */
+/**
+ * WHY `ANOMALY_DETECTED` IS NOT IN THIS LIST (A1).
+ *
+ * It was, and it could never have fired. The trigger declared an `Insight` as
+ * its reference, and NOTHING IN THE PLATFORM EVER CREATES AN INSIGHT OF TYPE
+ * `ANOMALY`: `detectAnomalies` is pure arithmetic that `StrategyService` and the
+ * learning write-back call in-process and never persist a finding from. So the
+ * product offered a customer a rule, let them name an action for it, stored it,
+ * listed it — and there was no code path in the system that could ever deliver
+ * it an event.
+ *
+ * A DEAD TRIGGER IS WORSE THAN A MISSING ONE. A missing feature is visibly
+ * missing; a rule that is configured, enabled and silent teaches a customer that
+ * automations do not work, and they are right. It is removed from the AUTHORABLE
+ * registry rather than from the database enum: `findTrigger` now returns
+ * undefined for it, so `createRule` refuses it and `actionSupportsTrigger` fails
+ * closed, while any row that already names it keeps its meaning and its history.
+ *
+ * It comes back when an anomaly is a ROW somebody can point at — an `Insight`
+ * with its baseline, window and deviation persisted — and not before.
+ *
+ * Which triggers a rule may fire on, and what each one carries.
+ */
 export interface TriggerDefinition {
   readonly type: AutomationTrigger;
   readonly config: z.ZodTypeAny;
@@ -43,11 +65,10 @@ export interface TriggerDefinition {
    *
    * Three actions operate on a content item and used to take `event.refId` and
    * pass it straight through as one. That is only true for `CONTENT_APPROVED`.
-   * For `ANOMALY_DETECTED` the reference is an Insight, for
-   * `METRIC_THRESHOLD_CROSSED` a MetricObservation, for `ANALYTICS_REFRESHED` an
-   * ingestion run and for `SCHEDULED_TIME` nothing at all — so a rule pairing one
-   * of those with "place it on the calendar" was aiming a content operation at an
-   * id that is not a content item's.
+   * For `METRIC_THRESHOLD_CROSSED` the reference is a MetricObservation, for
+   * `ANALYTICS_REFRESHED` an ingestion run and for `SCHEDULED_TIME` nothing at
+   * all — so a rule pairing one of those with "place it on the calendar" was
+   * aiming a content operation at an id that is not a content item's.
    *
    * `null` MEANS THE PAIRING IS NOT AUTHORABLE, and `createRule` refuses it. The
    * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
@@ -100,19 +121,6 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: false,
     messageKey: 'analyticsRefreshed',
-  },
-  {
-    type: 'ANOMALY_DETECTED',
-    config: z
-      .object({
-        /** Restrict to one metric, or leave empty for any. */
-        metricKey: z.string().max(60).optional(),
-      })
-      .default({}),
-    refType: 'Insight',
-    contentItemVia: null,
-    timeBucketed: false,
-    messageKey: 'anomalyDetected',
   },
   {
     type: 'METRIC_THRESHOLD_CROSSED',

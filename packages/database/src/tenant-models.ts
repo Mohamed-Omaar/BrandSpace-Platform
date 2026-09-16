@@ -122,6 +122,7 @@ export const STRICT_TENANT_MODELS = [
   'CopilotToolCall',
   'AutomationRule',
   'AutomationRun',
+  'AutomationEvent',
 ] as const;
 
 /**
@@ -281,6 +282,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   CopilotToolCall: 'copilot_tool_call',
   AutomationRule: 'automation_rule',
   AutomationRun: 'automation_run',
+  AutomationEvent: 'automation_event',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

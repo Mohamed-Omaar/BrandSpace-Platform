@@ -42,6 +42,15 @@ const migrationsDir = path.join(databasePackage, 'prisma', 'migrations');
 const PHASE7_MIGRATION = '20260916210000_phase_7_analytics_copilot';
 /** The remediation migration that follows it. Applied in the SAME upgrade. */
 const PHASE7_REMEDIATION_MIGRATION = '20260916230000_phase_7_remediation_strategy_provenance';
+/**
+ * ROUND 2. The outbox, and the five narrowed idempotency uniques.
+ *
+ * IT DROPS INDEXES THAT ROWS ARE ALREADY USING, which is precisely why it belongs
+ * in the POPULATED upgrade rather than only in the fresh one: a `DROP INDEX` and
+ * `CREATE UNIQUE INDEX` pair is where an operator with real data finds out that
+ * the new, narrower key is not unique over what they already have.
+ */
+const PHASE7_ROUND2_MIGRATION = '20260917090000_phase_7_automation_outbox_and_idempotency_scope';
 
 /** The twelve tenant-owned tables it creates. */
 const NEW_TABLES = [
@@ -57,6 +66,8 @@ const NEW_TABLES = [
   'copilot_tool_call',
   'automation_rule',
   'automation_run',
+  // ROUND 2. The outbox the feature was missing (A1).
+  'automation_event',
 ] as const;
 
 /** The two whose rows are EVIDENCE, and which the tenant role may not delete. */
@@ -222,6 +233,7 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
      */
     applyMigration(migratorUrl, PHASE7_MIGRATION);
     applyMigration(migratorUrl, PHASE7_REMEDIATION_MIGRATION);
+    applyMigration(migratorUrl, PHASE7_ROUND2_MIGRATION);
 
     app = await connect(urlFor('app', database));
   }, 240_000);
@@ -245,7 +257,44 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     expect(await snapshot(platform)).toEqual(before);
   });
 
-  it('creates all twelve tenant-owned tables', async () => {
+  it('THE NARROWED IDEMPOTENCY UNIQUES HOLD OVER DATA THAT WAS ALREADY THERE', () => {
+    /*
+     * THE RISK A FRESH DATABASE CANNOT SHOW. Five `DROP INDEX` /
+     * `CREATE UNIQUE INDEX` pairs run against rows an operator already has. A
+     * narrower key is not automatically unique over existing data — it is only
+     * unique here because each new index is a SUPERSET of the columns the old
+     * one carried, so anything the old index permitted the new one permits too.
+     * Stating that as a test means a future narrowing that is NOT a superset
+     * fails on the upgrade rather than in somebody's production migration.
+     */
+    const expected: Record<string, readonly string[]> = {
+      copilot_action_plan: ['workspaceId', 'sessionId', 'idempotencyKey'],
+      content_item: ['workspaceId', 'brandId', 'createdByUserId', 'idempotencyKey'],
+      campaign: ['workspaceId', 'brandId', 'createdByUserId', 'idempotencyKey'],
+      insight: ['workspaceId', 'brandId', 'type', 'generatedByUserId', 'idempotencyKey'],
+      brand_brain_message: ['workspaceId', 'conversationId', 'idempotencyKey'],
+    };
+    return (async () => {
+      for (const [table, columns] of Object.entries(expected)) {
+        const { rows } = await migrator.query<{ indexdef: string }>(
+          `SELECT indexdef FROM pg_indexes WHERE tablename = $1 AND indexdef LIKE '%idempotencyKey%'`,
+          [table],
+        );
+        expect(rows, table).toHaveLength(1);
+        const definition = rows[0]?.indexdef ?? '';
+        expect(definition, table).toContain('UNIQUE');
+        // PostgreSQL quotes an identifier only when it has to, so `type` comes
+        // back bare while `brandId` comes back quoted. Comparing the column LIST
+        // rather than the rendered text is what makes this independent of that.
+        const listed = (definition.match(/\(([^)]*)\)\s*$/)?.[1] ?? '')
+          .split(',')
+          .map((column) => column.trim().replace(/^"|"$/g, ''));
+        expect(listed, table).toEqual([...columns]);
+      }
+    })();
+  });
+
+  it('creates all thirteen tenant-owned tables', async () => {
     const { rows } = await migrator.query<{ tablename: string }>(
       `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY($1)
         ORDER BY tablename`,
