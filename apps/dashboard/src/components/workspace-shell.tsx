@@ -14,6 +14,7 @@ import {
   ImageIcon,
   PencilIcon,
   LanguageSwitcher,
+  SendIcon,
   SettingsIcon,
   ShieldIcon,
   SparkIcon,
@@ -100,6 +101,20 @@ const NAV: readonly {
     key: 'nav.approvals',
     permission: 'content.read',
     icon: <CheckIcon size={20} />,
+  },
+  /*
+   * Phase 6. Gated on `integrations.read`, matching the route exactly: a
+   * Viewer (read-only) holds `workspace.read` and nothing else (D-62, D-130),
+   * so they never see the entry and would get a 404 if they typed the path.
+   * The hidden link is tidiness; the route's own refusal is the control.
+   */
+  {
+    href: '/integrations',
+    key: 'nav.integrations',
+    permission: 'integrations.read',
+    // `SendIcon` reused rather than a new glyph drawn: publishing IS sending,
+    // and §4.2 rule 4 puts reuse ahead of creation.
+    icon: <SendIcon size={20} />,
   },
   {
     href: '/activity',

@@ -22,8 +22,10 @@
     "@brandspace/providers": "workspace:*",
     "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "@brandspace/ui": "workspace:*",
+    "@brandspace/vault": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0"
   },

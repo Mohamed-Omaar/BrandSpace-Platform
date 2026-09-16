@@ -129,9 +129,15 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@brandspace/secrets':
+        specifier: workspace:*
+        version: link:../../packages/secrets
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/social-connectors':
+        specifier: workspace:*
+        version: link:../../packages/social-connectors
       '@brandspace/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -193,6 +199,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/social-connectors':
+        specifier: workspace:*
+        version: link:../../packages/social-connectors
       '@brandspace/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -258,15 +267,24 @@ importers:
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@brandspace/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@brandspace/social-connectors':
+        specifier: workspace:*
+        version: link:../../packages/social-connectors
       '@brandspace/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -585,6 +603,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/vault':
+        specifier: workspace:*
+        version: link:../vault
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -611,9 +632,18 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@brandspace/providers':
+        specifier: workspace:*
+        version: link:../providers
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/vault':
+        specifier: workspace:*
+        version: link:../vault
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -644,6 +674,16 @@ importers:
       react:
         specifier: 19.2.8
         version: 19.2.8
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/vault:
+    dependencies:
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -695,12 +735,18 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../packages/shared
+      '@brandspace/social-connectors':
+        specifier: workspace:*
+        version: link:../packages/social-connectors
       '@brandspace/storage':
         specifier: workspace:*
         version: link:../packages/storage
       '@brandspace/ui':
         specifier: workspace:*
         version: link:../packages/ui
+      '@brandspace/vault':
+        specifier: workspace:*
+        version: link:../packages/vault
       '@prisma/adapter-pg':
         specifier: ^7.10.0
         version: 7.10.0

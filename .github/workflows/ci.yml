@@ -217,6 +217,14 @@ jobs:
           CUSTOMER_SESSION_SECRET=ci-only-customer-session-secret-0000000000000
           PLATFORM_SESSION_SECRET=ci-only-platform-session-secret-1111111111111
           SECRET_VAULT_KEK=ci-only-vault-key-encryption-key-22222222222222
+          # Phase 6 — a SEPARATE key domain for customer social tokens (D-136).
+          # Throwaway credentials for an ephemeral CI container. No production
+          # secret is used in CI.
+          SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
+          PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          # Phase 6 — where the OAuth callback sends the browser back (D-141).
+          PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
+          BRANDSPACE_API_URL=http://127.0.0.1:3002
           ENVEOF
 
       - name: Generate Prisma client (offline; migrations below use .env.test)
@@ -319,6 +327,14 @@ jobs:
           CUSTOMER_SESSION_SECRET=ci-only-customer-session-secret-0000000000000
           PLATFORM_SESSION_SECRET=ci-only-platform-session-secret-1111111111111
           SECRET_VAULT_KEK=ci-only-vault-key-encryption-key-22222222222222
+          # Phase 6 — a SEPARATE key domain for customer social tokens (D-136).
+          # Throwaway credentials for an ephemeral CI container. No production
+          # secret is used in CI.
+          SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
+          PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          # Phase 6 — where the OAuth callback sends the browser back (D-141).
+          PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
+          BRANDSPACE_API_URL=http://127.0.0.1:3002
           ENVEOF
 
       - name: Generate Prisma client (offline)

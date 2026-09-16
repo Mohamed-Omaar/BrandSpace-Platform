@@ -3,13 +3,26 @@ import { createDecipheriv, createCipheriv, randomBytes, hkdfSync } from 'node:cr
 /**
  * Key-encryption-key (KEK) provider — the envelope-encryption seam.
  *
- * The Secret Service never touches a KEK directly. It asks a provider to WRAP a
- * freshly generated data key and to UNWRAP it again later. That is the whole
- * interface a cloud KMS needs, so moving to AWS KMS / GCP KMS / Vault is a new
+ * A caller never touches a KEK directly. It asks a provider to WRAP a freshly
+ * generated data key and to UNWRAP it again later. That is the whole interface a
+ * cloud KMS needs, so moving to AWS KMS / GCP KMS / Vault is a new
  * implementation of this file and nothing else.
  *
  * docs/SECURITY.md §5: "encrypted at rest with authenticated encryption through
  * a vault abstraction that can later be backed by a cloud KMS."
+ *
+ * WHY THIS LIVES IN ITS OWN PACKAGE (Phase 6, D-136). It used to sit inside
+ * `@brandspace/secrets`, which is correct for the PLATFORM Secret Service and
+ * wrong for everything else: F-07 forbids the customer dashboard and ordinary
+ * workers from importing that package at all, because it can decrypt platform
+ * provider credentials. The publish worker must decrypt a CUSTOMER's OAuth
+ * token, which is a different key domain with a different blast radius.
+ *
+ * So the PRIMITIVES moved here and the platform SERVICE stayed where it was.
+ * `@brandspace/secrets` re-exports these unchanged and its import restriction is
+ * untouched. Two implementations of envelope encryption would have been the
+ * alternative, and a second implementation of a cipher is a second place for it
+ * to be wrong.
  */
 
 export interface WrappedKey {
@@ -124,20 +137,56 @@ export class KmsKeyProvider implements KeyProvider {
 }
 
 /**
- * Build the provider for the current environment.
+ * Which environment variables a key domain reads.
  *
- * FAILS CLOSED: with no SECRET_VAULT_KEK there is no provider, so the Secret
- * Service refuses to start rather than storing anything unprotected.
+ * A DOMAIN IS A BLAST RADIUS, NOT A NAMESPACE. The platform Secret Service and
+ * the customer social-token vault deliberately read DIFFERENT keys, so holding
+ * one does not imply the ability to unwrap the other. The publish worker holds
+ * the social KEK and has database access; if both domains shared a KEK, that
+ * worker could unwrap every platform provider credential in the database — the
+ * exact reach F-07 exists to deny it.
  */
-export function createKeyProvider(env: NodeJS.ProcessEnv = process.env): KeyProvider {
-  const kmsKeyArn = env['SECRET_VAULT_KMS_KEY_ARN'];
+export interface KeyDomain {
+  /** Environment variable naming a managed KMS key. Preferred in production. */
+  readonly kmsVar: string;
+  /** Environment variable holding the development KEK. */
+  readonly kekVar: string;
+  /** Human-readable domain name, used only in error messages. */
+  readonly label: string;
+}
+
+/** The platform Secret Service: provider credentials, never customer data. */
+export const PLATFORM_SECRET_DOMAIN: KeyDomain = {
+  kmsVar: 'SECRET_VAULT_KMS_KEY_ARN',
+  kekVar: 'SECRET_VAULT_KEK',
+  label: 'Secret encryption',
+};
+
+/** Phase 6: customer social OAuth tokens, held per workspace under RLS. */
+export const SOCIAL_TOKEN_DOMAIN: KeyDomain = {
+  kmsVar: 'SOCIAL_TOKEN_VAULT_KMS_KEY_ARN',
+  kekVar: 'SOCIAL_TOKEN_VAULT_KEK',
+  label: 'Social token encryption',
+};
+
+/**
+ * Build the provider for the current environment and key domain.
+ *
+ * FAILS CLOSED: with no KEK there is no provider, so the caller refuses to start
+ * rather than storing anything unprotected.
+ */
+export function createKeyProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  domain: KeyDomain = PLATFORM_SECRET_DOMAIN,
+): KeyProvider {
+  const kmsKeyArn = env[domain.kmsVar];
   if (kmsKeyArn) return new KmsKeyProvider(kmsKeyArn);
 
-  const masterKey = env['SECRET_VAULT_KEK'];
+  const masterKey = env[domain.kekVar];
   if (!masterKey || masterKey.trim() === '') {
     throw new Error(
-      'Secret encryption is not configured: set SECRET_VAULT_KEK (development) or ' +
-        'SECRET_VAULT_KMS_KEY_ARN (production). Refusing to start rather than ' +
+      `${domain.label} is not configured: set ${domain.kekVar} (development) or ` +
+        `${domain.kmsVar} (production). Refusing to start rather than ` +
         'handling secrets without encryption. (The value is never shown.)',
     );
   }
@@ -145,7 +194,7 @@ export function createKeyProvider(env: NodeJS.ProcessEnv = process.env): KeyProv
   if (env['NODE_ENV'] === 'production') {
     throw new Error(
       'The local development key provider must not be used in production. ' +
-        'Configure SECRET_VAULT_KMS_KEY_ARN with a managed KMS key (docs/DECISIONS.md F-09).',
+        `Configure ${domain.kmsVar} with a managed KMS key (docs/DECISIONS.md F-09).`,
     );
   }
 

@@ -85,6 +85,20 @@ export const STRICT_TENANT_MODELS = [
   'Approval',
   'ApprovalPolicy',
   'Notification',
+
+  // --- Phase 6: Social Publishing ------------------------------------------
+  // A connection is a customer authorization to act on their own account; a
+  // credential is the encrypted token behind it; an OAuth state is a live
+  // authorization in flight. A publish job and its attempts are the record of
+  // what this workspace sent to a platform and what came back. Every one
+  // carries a non-null workspaceId, and every one is additionally brand-scoped
+  // with a NON-NULL brand (D-138) except the two that hang off a connection
+  // and inherit its brand through a composite key.
+  'SocialConnection',
+  'SocialCredential',
+  'SocialOAuthState',
+  'PublishJob',
+  'PublishAttempt',
 ] as const;
 
 /**
@@ -225,6 +239,12 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   Approval: 'approval',
   ApprovalPolicy: 'approval_policy',
   Notification: 'notification',
+  // Phase 6 — Social Publishing.
+  SocialConnection: 'social_connection',
+  SocialCredential: 'social_credential',
+  SocialOAuthState: 'social_oauth_state',
+  PublishJob: 'publish_job',
+  PublishAttempt: 'publish_attempt',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

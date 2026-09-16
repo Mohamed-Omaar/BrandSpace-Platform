@@ -687,3 +687,108 @@ which half is missing.
 
 Nothing. Two entries moved from "not met" to "met" (AC-01.5 and the §5/§6 provisioning criteria) because
 the behaviour now exists and is tested, not because the wording was softened.
+
+---
+
+## 23. Phase 6 Acceptance Criteria — Social Publishing
+
+These extend the MVP slice rather than restating it. Each is testable, and the `[ ]` column names the
+layer that settles it: `[U]` unit, `[ISO]` isolation against real PostgreSQL, `[E2E]` a real browser.
+
+### 23.1 Connections
+
+| ID       | Criterion                                                                                                                    | Layer |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ----- |
+| AC-18.1  | A customer connects an account by OAuth. **No screen anywhere requests a social password**                                   | [ISO] |
+| AC-18.2  | The authorization URL carries state and a PKCE S256 challenge, and **never the client secret**                               | [U]   |
+| AC-18.3  | The state is stored HASHED; the value that travelled through the browser is nowhere in the database                          | [ISO] |
+| AC-18.4  | The PKCE verifier is stored ENCRYPTED, bound by context to its workspace and state                                           | [ISO] |
+| AC-18.5  | A state may be consumed exactly once; two concurrent callbacks yield exactly one connection                                  | [ISO] |
+| AC-18.6  | A state belonging to another workspace cannot complete into this one, and is not consumed by the attempt                     | [ISO] |
+| AC-18.7  | A mismatched redirect URI is refused                                                                                         | [ISO] |
+| AC-18.8  | Expired, consumed, forged and foreign states are refused with an **identical** message                                       | [ISO] |
+| AC-18.9  | A partial scope grant yields `NEEDS_REAUTH`, not a connection that renders healthy                                           | [ISO] |
+| AC-18.10 | A brand outside the actor's BrandScope is refused as not-found, identically to one that never existed                        | [ISO] |
+| AC-18.11 | The connection ceiling is enforced BEFORE the customer is sent to a consent screen                                           | [ISO] |
+| AC-18.12 | Disconnecting revokes at the provider where reachable, clears the credential, and records whether the revocation landed      | [ISO] |
+| AC-18.13 | A refresh writes a NEW credential version and retires the old one; a connection with no refresh token becomes `NEEDS_REAUTH` | [ISO] |
+
+### 23.2 Tokens
+
+| ID       | Criterion                                                                                                       | Layer       |
+| -------- | --------------------------------------------------------------------------------------------------------------- | ----------- |
+| AC-18.14 | A token is never in an API response, an audit event, a notification, a log line or a rendered page              | [ISO] [E2E] |
+| AC-18.15 | Credentials are encrypted under a key domain SEPARATE from the platform secret vault; neither opens the other's | [U]         |
+| AC-18.16 | A credential row moved to another connection or another workspace **fails to decrypt**                          | [U]         |
+| AC-18.17 | With no social KEK configured, the vault refuses to start rather than storing anything unprotected              | [U]         |
+| AC-18.18 | A queue message carries identifiers only — never a token, a caption or an account name                          | [U]         |
+
+### 23.3 Publishing
+
+| ID       | Criterion                                                                                                            | Layer |
+| -------- | -------------------------------------------------------------------------------------------------------------------- | ----- |
+| AC-18.19 | The idempotency key is derived from `(workspace, slot, connection, variant)` with no clock and no randomness         | [U]   |
+| AC-18.20 | A second execution of a completed job **does not send again**, and adds no second attempt record                     | [ISO] |
+| AC-18.21 | Two jobs for the same triple cannot exist in one workspace; the same key in two workspaces can                       | [ISO] |
+| AC-18.22 | **Content in review never publishes**, even with the approval gate switched off                                      | [ISO] |
+| AC-18.23 | Approval withdrawn between scheduling and dispatch stops the post with `APPROVAL_REVOKED`                            | [ISO] |
+| AC-18.24 | A timeout whose post landed is recorded as PUBLISHED after verification — **never retried**                          | [ISO] |
+| AC-18.25 | Where a provider cannot be asked, an indeterminate attempt **stops** at `VERIFICATION_PENDING` and waits for a human | [ISO] |
+| AC-18.26 | A permanent failure is not retried; a rate limit is, honouring `Retry-After` with jitter                             | [ISO] |
+| AC-18.27 | `UNKNOWN` is neither retryable nor indeterminate                                                                     | [U]   |
+| AC-18.28 | A revoked authorization marks the CONNECTION, not only the job, and cannot be retried by hand                        | [ISO] |
+| AC-18.29 | A queued post can be cancelled; a published one cannot                                                               | [ISO] |
+| AC-18.30 | Cancel and retry apply BrandScope as a query predicate; an out-of-scope job is not-found and is not changed          | [ISO] |
+| AC-18.31 | Every attempt is recorded with a bounded, redacted summary and no provider prose                                     | [ISO] |
+| AC-18.32 | `publish_attempt` cannot be updated or deleted, even by its own tenant                                               | [ISO] |
+| AC-18.33 | The slot and the content item end in states derived from their jobs, never set independently                         | [ISO] |
+
+### 23.4 Providers
+
+| ID       | Criterion                                                                                    | Layer |
+| -------- | -------------------------------------------------------------------------------------------- | ----- |
+| AC-18.34 | Every provider has an adapter, and every adapter satisfies the same contract                 | [U]   |
+| AC-18.35 | Capabilities come from configuration; changing a ceiling changes behaviour with no code edit | [U]   |
+| AC-18.36 | A provider is DISABLED by default and cannot be reached until an owner enables it            | [U]   |
+| AC-18.37 | An unsupported action fails clearly as `UNSUPPORTED`, not as a content error                 | [U]   |
+| AC-18.38 | **A PRODUCTION environment resolves no mock adapter at all** and fails loudly                | [U]   |
+
+### 23.5 Tenancy, authorization and interface
+
+| ID       | Criterion                                                                                                          | Layer     |
+| -------- | ------------------------------------------------------------------------------------------------------------------ | --------- |
+| AC-18.39 | All five tables are `ENABLE + FORCE` RLS; cross-tenant read, list, count, write, update and delete are all refused | [ISO]     |
+| AC-18.40 | Every foreign key to a tenant-owned parent is composite; a foreign id is refused identically to an invented one    | [ISO]     |
+| AC-18.41 | `integrations.manage` is held by the Owner, the Admin and the Marketing Manager, and by nobody else                | [U]       |
+| AC-18.42 | **`client_viewer` holds no Phase 6 permission** and gets 404 on `/integrations` in both locales                    | [U] [E2E] |
+| AC-18.43 | No platform-realm role holds a workspace publishing key                                                            | [U]       |
+| AC-18.44 | The screen renders in Arabic and English, RTL and LTR, with no horizontal overflow at 390 px                       | [E2E]     |
+| AC-18.45 | The screen is clean under axe (WCAG 2.2 AA) in both locales, with one `h1` and full keyboard operation             | [E2E]     |
+| AC-18.46 | A failure is explained by OUR translated sentence; the stored machine code is never shown to a person              | [E2E]     |
+
+### 23.6 The second review pass (P6-R1 … P6-R5)
+
+| ID       | Criterion                                                                                                                                                                                 | Evidence    |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| AC-18.49 | A provider's redirect — a browser `GET` to `/v1/social/callback/{provider}` with `code` and `state` — completes the flow and answers `303` to the dashboard                               | [E2E]       |
+| AC-18.50 | The callback completes with NO session cookie present, from a context holding none                                                                                                        | [E2E]       |
+| AC-18.51 | A forged state, an absent state, an unknown provider and a provider-side denial all answer `303` to the same path; only `declined` is distinguished, and no `error_description` is echoed | [E2E]       |
+| AC-18.52 | A grant offering several targets creates NO connection and returns a selection secret                                                                                                     | [Isolation] |
+| AC-18.53 | The pending grant's token is encrypted at rest and its selection secret is stored hashed                                                                                                  | [Isolation] |
+| AC-18.54 | Choosing the SECOND offered target connects to that one; a target not on the list is refused identically to a forged secret                                                               | [Isolation] |
+| AC-18.55 | The choice is single-use, refused for another member, and refused outside the brand scope — all with one sentence                                                                         | [Isolation] |
+| AC-18.56 | The customer is shown the choice with no option pre-selected, and picking one connects that page                                                                                          | [E2E]       |
+| AC-18.57 | Refreshing a token outside the caller's brand scope is refused identically to a fabricated id, and rotates nothing                                                                        | [Isolation] |
+| AC-18.58 | `execute()` on a `VERIFICATION_PENDING` job invokes `publish()` zero times                                                                                                                | [Isolation] |
+| AC-18.59 | `retry()` refuses a `VERIFICATION_PENDING` job and every indeterminate failure class                                                                                                      | [Isolation] |
+| AC-18.60 | A `PUBLISHING` job past its claim lease is recovered, verified by provider lookup, and never resent                                                                                       | [Isolation] |
+| AC-18.61 | A provider without post lookup is never automatically resent, however long it has waited                                                                                                  | [Isolation] |
+| AC-18.62 | A duplicate queue delivery invokes `publish()` zero times in every non-`QUEUED` state                                                                                                     | [Isolation] |
+| AC-18.63 | Six concurrent materialisations of one slot produce one job, and none of them fails                                                                                                       | [Isolation] |
+
+### 23.7 Not claimed
+
+**AC-18.47 and AC-18.48 are deliberately absent.** There is no criterion asserting a successful publish to
+a real platform, and none asserting webhook signature verification: no real provider credential exists
+until app review completes (D-18, D-19, D-135), and nothing can send a webhook to verify (D-140). Writing
+an acceptance criterion that no test can settle would make this document less useful, not more complete.

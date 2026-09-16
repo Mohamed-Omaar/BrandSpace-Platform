@@ -1,7 +1,19 @@
+import crypto from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { asPlatform } from '@brandspace/database';
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
+import { SocialTokenVault } from '@brandspace/social-connectors';
+
+/**
+ * A FIXED, TEST-ONLY key-encryption key for the social token vault.
+ *
+ * Explicit rather than read from the environment, so the fixtures encrypt the
+ * same way on every machine and a missing variable is a clear failure rather
+ * than a suite that quietly stores something unprotected. It is visibly fake
+ * and protects nothing real.
+ */
+export const FIXTURE_SOCIAL_KEK = 'isolation-fixture-social-token-kek-000000';
 
 /**
  * Two workspaces with deliberately overlapping data shapes, so a test that passes
@@ -73,6 +85,18 @@ export interface TenantFixture {
   readonly approvalPolicyId: string;
   readonly notificationId: string;
   readonly notificationIdempotencyKey: string;
+  // --- Phase 6 (Social Publishing) ---
+  /** An ACTIVE connection for the brand above, with a live encrypted credential. */
+  readonly socialConnectionId: string;
+  readonly socialCredentialId: string;
+  readonly socialExternalAccountId: string;
+  /** An in-flight OAuth state, so the CSRF surface has a row to probe. */
+  readonly socialOAuthStateId: string;
+  readonly socialOAuthStateHash: string;
+  /** A QUEUED publish job over the draft above, and one recorded attempt. */
+  readonly publishJobId: string;
+  readonly publishIdempotencyKey: string;
+  readonly publishAttemptId: string;
 }
 
 export interface IsolationFixtures {
@@ -1017,6 +1041,125 @@ async function createTenant(
         },
       });
 
+      /*
+       * PHASE 6 — a CONNECTED ACCOUNT with a live credential, an OAuth state in
+       * flight, and a publish job with one attempt against it.
+       *
+       * THE CREDENTIAL IS REAL CIPHERTEXT, not a placeholder string. The point
+       * of the isolation suite is that the encrypted material is invisible
+       * across the tenant boundary, and a fixture that stored `'x'` would prove
+       * that about a literal rather than about a token.
+       */
+      const socialConnection = await db.socialConnection.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          provider: 'LINKEDIN',
+          externalAccountId: `fixture-account-${slug}`,
+          displayName: `Fixture Organization ${slug}`,
+          targetKind: 'organization',
+          status: 'ACTIVE',
+          grantedScopes: ['w_member_social'],
+          connectedByUserId: user.id,
+          connectedAt: new Date(),
+          tokenExpiresAt: new Date(Date.now() + 3_600_000),
+          lastSyncedAt: new Date(),
+          lastCheckedAt: new Date(),
+        },
+      });
+
+      const vault = new SocialTokenVault({
+        env: { SOCIAL_TOKEN_VAULT_KEK: FIXTURE_SOCIAL_KEK } as NodeJS.ProcessEnv,
+      });
+      const sealed = await vault.seal({
+        workspaceId: id,
+        socialConnectionId: socialConnection.id,
+        version: 1,
+        material: {
+          accessToken: `fixture-access-token-${slug}`,
+          refreshToken: `fixture-refresh-token-${slug}`,
+        },
+      });
+      const socialCredential = await db.socialCredential.create({
+        data: {
+          workspaceId: id,
+          socialConnectionId: socialConnection.id,
+          version: 1,
+          ciphertext: sealed.ciphertext,
+          iv: sealed.iv,
+          authTag: sealed.authTag,
+          wrappedDataKey: sealed.wrappedDataKey,
+          keyProvider: sealed.keyProvider,
+          keyId: sealed.keyId,
+          algorithm: sealed.algorithm,
+          encryptionContext: sealed.encryptionContext,
+          maskedHint: sealed.maskedHint,
+          fingerprint: sealed.fingerprint,
+          accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+          hasRefreshToken: true,
+        },
+      });
+
+      const stateHash = crypto.createHash('sha256').update(`fixture-state-${slug}`).digest('hex');
+      const verifierSealed = await vault.sealVerifier({
+        workspaceId: id,
+        stateHash,
+        verifier: `fixture-verifier-${slug}`,
+      });
+      const oauthState = await db.socialOAuthState.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          provider: 'LINKEDIN',
+          stateHash,
+          verifierCiphertext: verifierSealed.ciphertext,
+          verifierIv: verifierSealed.iv,
+          verifierAuthTag: verifierSealed.authTag,
+          verifierWrappedDataKey: verifierSealed.wrappedDataKey,
+          verifierKeyProvider: verifierSealed.keyProvider,
+          verifierKeyId: verifierSealed.keyId,
+          verifierEncryptionContext: verifierSealed.encryptionContext,
+          redirectUri: 'https://api.invalid/v1/social/callback/linkedin',
+          requestedScopes: ['w_member_social'],
+          startedByUserId: user.id,
+          expiresAt: new Date(Date.now() + 600_000),
+        },
+      });
+
+      const publishKey = `fixture-publish-${slug}`;
+      const publishJob = await db.publishJob.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          calendarSlotId: calendarSlot.id,
+          contentItemId: contentItem.id,
+          contentVariantId: contentVariant.id,
+          socialConnectionId: socialConnection.id,
+          provider: 'LINKEDIN',
+          status: 'QUEUED',
+          idempotencyKey: publishKey,
+          scheduledAtUtc: calendarSlot.scheduledAtUtc,
+          maxAttempts: 5,
+          nextAttemptAt: new Date(),
+          createdByUserId: user.id,
+        },
+      });
+
+      const publishAttempt = await db.publishAttempt.create({
+        data: {
+          workspaceId: id,
+          publishJobId: publishJob.id,
+          attemptNumber: 1,
+          outcome: 'RETRYABLE_FAILURE',
+          failureClass: 'PLATFORM_UNAVAILABLE',
+          providerStatusCode: 503,
+          providerErrorCode: 'FIXTURE_UNAVAILABLE',
+          safeSummary: 'The platform is temporarily unavailable.',
+          finishedAt: new Date(),
+          durationMs: 12,
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -1073,6 +1216,14 @@ async function createTenant(
         approvalPolicyId: approvalPolicy.id,
         notificationId: notification.id,
         notificationIdempotencyKey: notificationKey,
+        socialConnectionId: socialConnection.id,
+        socialCredentialId: socialCredential.id,
+        socialExternalAccountId: socialConnection.externalAccountId,
+        socialOAuthStateId: oauthState.id,
+        socialOAuthStateHash: stateHash,
+        publishJobId: publishJob.id,
+        publishIdempotencyKey: publishKey,
+        publishAttemptId: publishAttempt.id,
       };
     },
     { prisma, bootstrap: true },

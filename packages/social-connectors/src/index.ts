@@ -1,8 +1,91 @@
 /**
- * Per-platform social connector adapters — docs/SOCIAL-INTEGRATIONS.md.
+ * Per-platform social connectors and the publishing pipeline — Phase 6
+ * (docs/SOCIAL-INTEGRATIONS.md, docs/PRODUCT.md §5 modules 8 and 9).
  *
- * PHASE 6. Placeholder in Phase 1 to establish the module boundary only.
- * Owner action recorded in docs/DECISIONS.md: Meta and TikTok app review is a
- * multi-week lead-time item and should be started well before this phase.
+ * THE PUBLIC SURFACE. Nothing outside this package reaches into a module
+ * directly, and no provider SDK is imported anywhere in it: every external call
+ * goes through `SocialConnectorAdapter`, which is the only thing that knows a
+ * platform exists.
+ *
+ * NO TOKEN CROSSES THIS BOUNDARY. `ConnectionView` and `PublishJobView` are the
+ * shapes a screen receives, and neither has a field that could hold one.
  */
-export const SOCIAL_CONNECTORS_PACKAGE_PHASE = 6 as const;
+export type {
+  AdapterApplication,
+  AdapterCredentials,
+  AuthorizationRequest,
+  ConnectionHealth,
+  PublishFailure,
+  PublishOutcome,
+  PublishRequest,
+  PublishSuccess,
+  PublishTarget,
+  SocialConnectorAdapter,
+  TokenBundle,
+} from './adapter';
+
+export { MockSocialConnectorAdapter } from './mock-adapters';
+export { createConnectorRegistry } from './registry';
+export type { ConnectorRegistry, ConnectorRegistryOptions } from './registry';
+
+export {
+  capabilitiesFor,
+  parsePublishingPolicy,
+  PROVIDER_CONFIG_KEYS,
+  PUBLISHING_CONFIG_DOMAIN,
+  resolvePublishingPolicy,
+  SOCIAL_PROVIDERS,
+  TenantPublishingPolicySource,
+} from './policy';
+export type {
+  ProviderCapabilities,
+  ProviderConfigKey,
+  PublishingCatalogueReader,
+  PublishingPolicy,
+} from './policy';
+
+export { SocialTokenVault, socialEncryptionContext } from './token-vault';
+export type { SocialTokenVaultOptions, TokenMaterial } from './token-vault';
+
+export { SocialOAuthService } from './oauth';
+export type {
+  ApplicationResolver,
+  CompleteConnectionResult,
+  OAuthActor,
+  PendingSelectionView,
+  SocialOAuthOptions,
+  StartConnectionResult,
+} from './oauth';
+
+export { SocialConnectionService, toConnectionView } from './connections';
+export type { ConnectionServiceOptions, ConnectionView } from './connections';
+
+export {
+  PublishPipelineService,
+  providerForPlatformKey,
+  publishIdempotencyKey,
+} from './publishing';
+export type {
+  ExecuteResult,
+  MaterialiseResult,
+  PublishApprovalGate,
+  PublishNotifier,
+  PublishPipelineOptions,
+} from './publishing';
+
+export { PublishHistoryService, toPublishJobView } from './history';
+export type { PublishAttemptView, PublishHistoryOptions, PublishJobView } from './history';
+
+export {
+  connectionLimitReached,
+  connectionNotPublishable,
+  FAILURE_BEHAVIOUR,
+  oauthStateInvalid,
+  providerNotEnabled,
+  publishJobNotCancellable,
+  publishJobNotFound,
+  publishJobNotRetryable,
+  socialConnectionNotFound,
+  unsupportedByProvider,
+} from './errors';
+export type { FailureBehaviour } from './errors';

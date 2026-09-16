@@ -100,6 +100,18 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
   // has to state the floor it is enforcing. Restating any of it in the
   // dashboard would be a second setting.
   'content',
+  // Phase 6. The PUBLISHING policy the customer's own screens state and
+  // enforce: which platforms can be connected at all, what each one accepts
+  // (post kinds, character ceiling, media count, first comment, delete), the
+  // retry schedule the publishing history explains, and the lateness tolerance
+  // that decides whether a post goes out or waits. Capabilities are declared,
+  // never assumed equal (docs/SOCIAL-INTEGRATIONS.md §1.7), and the UI is
+  // generated from them — so an option a platform cannot do never appears
+  // rather than failing at publish time.
+  //
+  // NO CREDENTIAL IS PROJECTED. App ids and secret refs live in
+  // `integrations.social-apps`, which is deliberately NOT on this list.
+  'publishing',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

@@ -113,6 +113,25 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
     env['BRANDSPACE_API_URL'] = `http://127.0.0.1:${PORTS.api}`;
   }
 
+  if (app === 'api') {
+    /*
+     * Phase 6 — the OAuth callback is built from this at request time, so the
+     * end-to-end API must advertise the port the end-to-end API is actually on.
+     * Set HERE, from `PORTS`, rather than copied from the environment for the
+     * same reason `BRANDSPACE_API_URL` is: a value in `.env.test` names a
+     * developer's local port, not this suite's.
+     */
+    env['PUBLIC_API_BASE_URL'] = `http://127.0.0.1:${PORTS.api}`;
+    /*
+     * AND WHERE THE CALLBACK SENDS THE BROWSER BACK TO (P6-R1). The API has no
+     * UI: a completed OAuth redirect ends at the dashboard, and this is the only
+     * thing that tells the API where the dashboard is. Unset, the callback fails
+     * closed rather than guessing an origin — which would be an open redirect
+     * with extra steps.
+     */
+    env['PUBLIC_DASHBOARD_BASE_URL'] = `http://127.0.0.1:${PORTS.dashboard}`;
+  }
+
   if (app === 'worker') {
     /*
      * THE WORKER IS PART OF THE SUITE NOW, and that is the point.
@@ -129,15 +148,49 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
     app === 'admin'
       ? ['DATABASE_PLATFORM_URL', 'SECRET_VAULT_KEK', 'PLATFORM_SESSION_SECRET']
       : app === 'api'
-        ? // The API is the platform surface for customer-initiated AI: it
-          // resolves a CUSTOMER session on the tenant pool and runs the gateway
-          // on the platform one, so it needs both credentials.
-          ['DATABASE_PLATFORM_URL', 'CUSTOMER_SESSION_SECRET', 'SECRET_VAULT_KEK']
-        : ['CUSTOMER_SESSION_SECRET'];
+        ? // The API is the platform surface for customer-initiated AI and for
+          // the OAuth exchange: it resolves a CUSTOMER session on the tenant
+          // pool and runs the gateway and the social-app credential lookup on
+          // the platform one, so it needs both credentials.
+          //
+          // Phase 6 adds the SOCIAL token key and the public base URL the OAuth
+          // callback is built from — neither of which the dashboard or the
+          // worker gets from here, because each reads its own.
+          [
+            'DATABASE_PLATFORM_URL',
+            'CUSTOMER_SESSION_SECRET',
+            'SECRET_VAULT_KEK',
+            'SOCIAL_TOKEN_VAULT_KEK',
+          ]
+        : app === 'worker'
+          ? // Phase 6: the publish worker decrypts a CUSTOMER token and nothing
+            // else. It gets the SOCIAL key and NOT `SECRET_VAULT_KEK` — the
+            // separation D-136 exists for, enforced here as well as in code.
+            ['CUSTOMER_SESSION_SECRET', 'SOCIAL_TOKEN_VAULT_KEK']
+          : // THE DASHBOARD GETS NO KEY MATERIAL AT ALL, and that is deliberate
+            // rather than an omission: reading a connection never decrypts
+            // anything, and every path that does decrypt runs in apps/api or
+            // the worker. A key the process closest to a browser bundle does
+            // not hold is a key that cannot leak from it.
+            ['CUSTOMER_SESSION_SECRET'];
 
+  /*
+   * COPIED ONLY IF THIS FUNCTION HAS NOT ALREADY SET IT.
+   *
+   * The guard matters, and its absence cost a debugging session. `env` above
+   * sets `BRANDSPACE_API_URL` and `PUBLIC_API_BASE_URL` from `PORTS` — the
+   * ports THIS SUITE runs on. A plain copy afterwards let the same names in
+   * `.env.test`, which point at a developer's local ports, win: the dashboard
+   * proxied to a port with nothing on it, and the Brand Brain and Content
+   * Studio suites timed out with no clue as to why.
+   *
+   * It is the identical "later assignment wins" defect the cross-phase audit
+   * corrected twice in query builders (F-11, and §26.1 before it), showing up
+   * in a config file. One guard removes the whole class here.
+   */
   for (const key of keys) {
     const value = process.env[key];
-    if (value) env[key] = value;
+    if (value && !(key in env)) env[key] = value;
   }
   return env;
 }
@@ -246,7 +299,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -256,7 +309,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -392,6 +445,23 @@ export default defineConfig({
        */
       name: 'approvals',
       testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 6 — its own SERIAL project, for the same reason the approvals and
+       * calendar suites have one: it reads a seeded connection and a seeded
+       * publish job out of a SHARED workspace and asserts on what is rendered.
+       * Two browsers running it in parallel would each be asserting on rows the
+       * other had just changed.
+       */
+      name: 'social-publishing',
+      testMatch: /social-publishing\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

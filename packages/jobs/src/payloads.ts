@@ -64,3 +64,55 @@ export type MediaProcessingPayload = IngestSourceDocumentPayload | ProcessAssetP
 /** The job names BullMQ dispatches on, kept next to the payloads they belong to. */
 export const INGEST_SOURCE_DOCUMENT = 'brand-brain.ingest-source-document' as const;
 export const PROCESS_ASSET = 'assets.process-asset' as const;
+
+/**
+ * Publish one content variant to one connected account — Phase 6.
+ *
+ * THE PAYLOAD IS A POINTER, AND HERE THAT RULE IS LOAD-BEARING RATHER THAN
+ * MERELY TIDY. It names a `publish_job` row and a workspace. It does NOT carry
+ * the caption, the hashtags, the account name, or — above all — the OAuth
+ * token. Redis is not tenant-isolated, is not encrypted at rest the way the
+ * database is, and a queue message is visible to anyone who can read the
+ * instance; a token in one would be a customer's whole social account sitting
+ * outside every guarantee this platform makes about credentials.
+ *
+ * THE WORKER RESOLVES THE CREDENTIAL ITSELF, inside the workspace's own RLS
+ * context, from `social_credential`, and decrypts it with the social key domain
+ * (D-136). That is the only path, and it exists in one file.
+ *
+ * `idempotencyKey` IS CARRIED DELIBERATELY EVEN THOUGH THE ROW HOLDS IT. It is
+ * what BullMQ de-duplicates on, so a double dispatch collapses before a worker
+ * is ever woken — and it matches the row, so a message that somehow disagreed
+ * with the database is a message the processor refuses rather than acts on.
+ */
+export interface PublishSocialPostPayload extends TenantJobPayload {
+  readonly kind: 'social.publish-post';
+  readonly publishJobId: string;
+}
+
+/**
+ * Recover a job whose worker died between the claim and the answer (D-143).
+ *
+ * A SEPARATE KIND, NOT A FLAG ON THE ONE ABOVE, and the separation is the
+ * safety property. `social.publish-post` may send; `social.verify-post` may
+ * only ASK. A boolean on a single payload would put both behaviours behind one
+ * code path and one `if`, which is how an uncertain outcome gets re-sent by a
+ * mistake nobody notices — the exact defect this whole mechanism exists to
+ * prevent. Two kinds means the publishing path is unreachable from a
+ * verification message, by construction.
+ */
+export interface VerifySocialPostPayload extends TenantJobPayload {
+  readonly kind: 'social.verify-post';
+  readonly publishJobId: string;
+}
+
+/**
+ * Everything the `publish-jobs` queue carries.
+ *
+ * The discriminant is what makes adding a kind a compile error in the consumer
+ * rather than a silently dropped message.
+ */
+export type PublishJobsPayload = PublishSocialPostPayload | VerifySocialPostPayload;
+
+export const PUBLISH_SOCIAL_POST = 'social.publish-post' as const;
+export const VERIFY_SOCIAL_POST = 'social.verify-post' as const;

@@ -116,6 +116,13 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // enable self-approval, so a role that can approve must not also be able
       // to grant itself the right to approve its own work.
       'content.approve',
+      // Phase 6. This is the role that runs the brand's presence, so it holds
+      // the whole publishing surface — including connecting accounts, which is
+      // the job nobody else in the marketing team can do.
+      'integrations.read',
+      'integrations.manage',
+      'publishing.read',
+      'publishing.manage',
     ],
   },
   {
@@ -154,6 +161,13 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // Phase 5B-3. §4.3 gives the creator roles "View activity log" for their
       // OWN actions only — enough to see what became of what they submitted.
       'audit.read_own',
+      // Phase 6. Sees which accounts a post will go to and what became of it
+      // after it left — the other half of "what happened to what I scheduled".
+      // NOT `integrations.manage`: authorizing a new account on the customer's
+      // behalf is not a content decision. NOT `publishing.manage` either, for
+      // the same reason `content.archive` is withheld.
+      'integrations.read',
+      'publishing.read',
     ],
   },
   {
@@ -250,6 +264,9 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'content.approve',
       // §4.3 grades this role's activity view as OWN — the decisions it made.
       'audit.read_own',
+      // Phase 6. Seeing what became of something they approved is part of
+      // approving it. Read-only, like everything else this role holds.
+      'publishing.read',
     ],
   },
   {
@@ -276,6 +293,12 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // NOTE: the Analyst's activity view is BRAND-SCOPED, which is what the
       // `audit.read` above already means (Phase 5B-3). No new key is needed,
       // and adding one would have widened a strictly read-only role.
+      //
+      // Phase 6. READ-ONLY here too. An analyst needs to see what went out and
+      // what failed to interpret the numbers; `integrations.manage` and
+      // `publishing.manage` both cause external effects and are withheld.
+      'integrations.read',
+      'publishing.read',
     ],
   },
   {

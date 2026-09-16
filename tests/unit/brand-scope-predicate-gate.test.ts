@@ -51,10 +51,39 @@ function sourceFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
     if (entry === 'node_modules' || entry === 'dist') continue;
-    if (statSync(full).isDirectory()) sourceFiles(full, found);
+    let isDirectory: boolean;
+    try {
+      isDirectory = statSync(full).isDirectory();
+    } catch {
+      // Vanished between the listing and the stat. See `read()` below.
+      continue;
+    }
+    if (isDirectory) sourceFiles(full, found);
     else if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) found.push(full);
   }
   return found;
+}
+
+/**
+ * Read a file, tolerating one that is no longer there.
+ *
+ * A SOURCE SCANNER MUST NOT FAIL BECAUSE A FILE WAS REMOVED MID-SCAN, and in
+ * this repository that is not hypothetical: the module-boundary suite writes a
+ * probe file into `packages/` and deletes it again to prove its own rule
+ * catches a violation. Running alongside it, this gate listed the probe and
+ * then tried to read a path that had already gone — a failure that says nothing
+ * about the rule it is checking and everything about two tests sharing a
+ * directory.
+ *
+ * Skipping a vanished file cannot hide a violation: a file that does not exist
+ * contains no code.
+ */
+function read(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
 }
 
 describe('BrandScope is a query predicate everywhere (D-132)', () => {
@@ -64,8 +93,8 @@ describe('BrandScope is a query predicate everywhere (D-132)', () => {
     // A gate that silently matches nothing passes for ever. This asserts the
     // scan really does reach the code that uses these assertions.
     const users = files.filter((file) => {
-      const text = readFileSync(file, 'utf8');
-      return ASSERTIONS.some((name) => text.includes(`${name}(`));
+      const text = read(file);
+      return text !== null && ASSERTIONS.some((name) => text.includes(`${name}(`));
     });
     expect(users.length).toBeGreaterThan(4);
   });
@@ -74,7 +103,8 @@ describe('BrandScope is a query predicate everywhere (D-132)', () => {
     const offenders: string[] = [];
 
     for (const file of files) {
-      const text = readFileSync(file, 'utf8');
+      const text = read(file);
+      if (text === null) continue;
       for (const match of text.matchAll(ROW_DERIVED)) {
         const [whole, receiver, property] = match;
         if (receiver === undefined || property === undefined) continue;

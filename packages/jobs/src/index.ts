@@ -19,9 +19,14 @@ export {
 export {
   INGEST_SOURCE_DOCUMENT,
   PROCESS_ASSET,
+  PUBLISH_SOCIAL_POST,
+  VERIFY_SOCIAL_POST,
   type IngestSourceDocumentPayload,
   type MediaProcessingPayload,
   type ProcessAssetPayload,
+  type PublishJobsPayload,
+  type PublishSocialPostPayload,
+  type VerifySocialPostPayload,
 } from './payloads';
 export {
   closeQueues,

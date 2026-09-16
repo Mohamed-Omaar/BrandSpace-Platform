@@ -174,6 +174,37 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('approvals.policy.manage', 'workspace', "Change a brand's approval policy"),
   def('audit.read_own', 'workspace', 'View your own actions in the activity log'),
   def('audit.read_workspace', 'workspace', 'View all workspace activity'),
+
+  /*
+   * Phase 6 — Social Publishing (docs/PRODUCT.md §5 modules 8 and 9).
+   *
+   * FOUR KEYS, AND THE SPLIT IS THE POINT — the same reasoning the Asset
+   * Library and the Content Studio were separated by.
+   *
+   *   - `integrations.read` is seeing WHICH accounts are connected and whether
+   *     they are healthy. A reviewer and an analyst both need it; neither
+   *     should be able to change anything.
+   *   - `integrations.manage` is CONNECTING AND DISCONNECTING. It is the most
+   *     consequential key in this phase and arguably in the product: at the end
+   *     of it, BrandSpace can post to the world as this customer. It belongs
+   *     with the roles that already carry `workspace.manage`-grade trust, and
+   *     it is NOT bundled into publishing — a person who may schedule a post is
+   *     not thereby a person who may authorize a new account.
+   *   - `publishing.read` is the publishing history: what went out, what
+   *     failed, and why.
+   *   - `publishing.manage` is cancelling a queued post and retrying a failed
+   *     one. Both change what reaches the public, so neither rides on
+   *     `content.schedule`.
+   *
+   * NO NEW ROLE. These attach to the roles that already exist, and the
+   * read-only roles stay read-only: `analyst` and `client_viewer` get nothing
+   * that can cause an external effect, and `client_viewer` gets nothing at all
+   * (D-130).
+   */
+  def('integrations.read', 'workspace', 'View connected social accounts'),
+  def('integrations.manage', 'workspace', 'Connect and disconnect social accounts'),
+  def('publishing.read', 'workspace', 'View publishing history and status'),
+  def('publishing.manage', 'workspace', 'Cancel a queued post or retry a failed one'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */

@@ -266,6 +266,12 @@ describe('the notification catalogue is closed and fully translated', () => {
         'approval.changes_requested',
         'approval.rejected',
         'approval.requested',
+        // Phase 6 — Social Publishing. Three, not one per state: a queued post
+        // becoming a publishing post is not news, and notifying on every
+        // transition is how an inbox stops being read.
+        'publishing.connection_needs_reauth',
+        'publishing.failed',
+        'publishing.published',
       ].sort(),
     );
   });
