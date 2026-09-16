@@ -12,9 +12,12 @@
     "@brandspace/assets": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
     "@brandspace/config": "workspace:*",
+    "@brandspace/content": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/jobs": "workspace:*",
+    "@brandspace/notifications": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "bullmq": "5.81.4",
     "ioredis": "5.11.1"

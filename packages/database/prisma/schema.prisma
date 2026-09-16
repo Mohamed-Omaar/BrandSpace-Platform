@@ -448,6 +448,13 @@ model Workspace {
   /// addressed to a member OF this workspace, never to a user globally.
   notifications Notification[]
 
+  /// Phase 6 — Social Publishing.
+  socialConnections SocialConnection[]
+  socialCredentials SocialCredential[]
+  socialOAuthStates SocialOAuthState[]
+  publishJobs       PublishJob[]
+  publishAttempts   PublishAttempt[]
+
   @@index([status])
   @@index([ownerUserId])
   @@index([planKey])
@@ -1674,6 +1681,12 @@ model Brand {
   approvals        Approval[]
   approvalPolicies ApprovalPolicy[]
 
+  /// Phase 6 — Social Publishing. A connection belongs to exactly one brand
+  /// (D-138), so BrandScope is a predicate here as everywhere else.
+  socialConnections SocialConnection[]
+  socialOAuthStates SocialOAuthState[]
+  publishJobs       PublishJob[]
+
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
   @@unique([workspaceId, id], name: "brand_workspace_scope")
@@ -2595,6 +2608,15 @@ enum CalendarSlotStatus {
   PLANNED
   /// On the calendar and cleared. The content item is `SCHEDULED` in step.
   SCHEDULED
+  /// Phase 6. Jobs exist and are in flight. The item is `PUBLISHING` in step.
+  PUBLISHING
+  /// Phase 6. Every job for this slot succeeded.
+  PUBLISHED
+  /// Phase 6. Some jobs succeeded and some did not. The item is
+  /// `PARTIALLY_PUBLISHED` in step, and the per-target detail is on the jobs.
+  PARTIALLY_PUBLISHED
+  /// Phase 6. No job for this slot succeeded.
+  FAILED
   /// Taken off the calendar. Kept rather than deleted so the audit trail and
   /// the quota refund both have a row to point at.
   CANCELLED
@@ -2663,6 +2685,8 @@ model ContentItem {
   variants      ContentVariant[]
   calendarSlots CalendarSlot[]
   approvals     Approval[]
+  /// Phase 6 — one job per (slot, connection, variant).
+  publishJobs   PublishJob[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -2739,6 +2763,13 @@ model ContentVariant {
   /// exists. F-80 and F-83 are what this line prevents recurring.
   item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_variant_item_fkey")
 
+  publishJobs PublishJob[]
+
+  /// Phase 6 (D-112). The composite target `publish_job.contentVariantId`
+  /// points at. Added rather than assumed: a plain key to a tenant-owned parent
+  /// is a cross-workspace existence oracle, and this is the parent side of the
+  /// pair that makes the child's key provable.
+  @@unique([workspaceId, id], name: "content_variant_workspace_scope")
   /// docs/DATABASE.md §4.5: one variant per platform per locale.
   @@unique([contentItemId, platformKey, locale])
   @@index([workspaceId, contentItemId])
@@ -2813,6 +2844,10 @@ model CalendarSlot {
   /// F-80 and F-83 are what this line prevents recurring.
   item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "calendar_slot_item_fkey")
 
+  publishJobs PublishJob[]
+
+  /// Phase 6 (D-112) — the parent side of `publish_job.calendarSlotId`.
+  @@unique([workspaceId, id], name: "calendar_slot_workspace_scope")
   /// ONE LIVE SLOT PER ITEM. A partial index, so a cancelled slot does not
   /// block rescheduling the same content — the same shape D-100 settled for the
   /// asset checksum, and it lives in the migration because Prisma cannot model
@@ -3023,4 +3058,365 @@ model Notification {
   @@index([workspaceId, userId, readAt, createdAt(sort: Desc)])
   @@index([workspaceId, userId, createdAt(sort: Desc)])
   @@map("notification")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Social Publishing (docs/SOCIAL-INTEGRATIONS.md, docs/PRODUCT.md §5
+// modules 8 and 9).
+//
+// FIVE TENANT-OWNED TABLES, AND THE SPLIT BETWEEN THE FIRST TWO IS THE POINT.
+// `social_connection` is the row every screen, every list and every log line
+// reads; `social_credential` holds the encrypted token material and is read by
+// exactly one code path. Keeping them in one table would mean every
+// `SELECT *` on a connection carried a customer's access token through the
+// application — and `SELECT *` is what an ORM emits by default.
+// ---------------------------------------------------------------------------
+
+/// The platforms this phase connects to. LinkedIn and X are single-target;
+/// Facebook and Instagram are reached through the same Meta login but publish
+/// to different objects, so they are separate providers rather than one with a
+/// mode flag — a mode flag is how two platforms end up sharing a bug.
+enum SocialProvider {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  LINKEDIN
+  X
+}
+
+enum SocialConnectionStatus {
+  /// OAuth started, callback not yet completed. Never publishable.
+  PENDING
+  /// Usable: token valid, required scopes present.
+  ACTIVE
+  /// The token or its scopes failed. The customer must reconnect; queued work
+  /// is held rather than failed, until its deadline.
+  NEEDS_REAUTH
+  /// The customer disconnected, or the provider revoked us.
+  REVOKED
+  /// Disabled by the platform (support, abuse, plan change).
+  DISABLED
+}
+
+/// The publish job's lifecycle. `VERIFICATION_PENDING` is the state that
+/// prevents duplicate posts: an uncertain outcome — a timeout after the request
+/// left — is never blindly retried, it is CHECKED
+/// (docs/SOCIAL-INTEGRATIONS.md §7.2).
+enum PublishJobStatus {
+  PENDING
+  QUEUED
+  PUBLISHING
+  VERIFICATION_PENDING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+/// The error taxonomy from docs/SOCIAL-INTEGRATIONS.md §2.1, plus the three
+/// classes that come from our own pre-flight rather than from a provider.
+/// Retry behaviour, customer messaging and re-auth prompts all derive from this
+/// value, so it is stored rather than re-derived from a message string.
+enum PublishFailureClass {
+  AUTH_EXPIRED
+  AUTH_REVOKED
+  INSUFFICIENT_SCOPE
+  RATE_LIMITED
+  CONTENT_REJECTED
+  MEDIA_INVALID
+  DUPLICATE_CONTENT
+  TARGET_UNAVAILABLE
+  PLATFORM_UNAVAILABLE
+  TIMEOUT
+  /// Ours: approval was withdrawn between scheduling and dispatch.
+  APPROVAL_REVOKED
+  /// Ours: the connection is no longer usable.
+  NOT_CONNECTED
+  /// Ours: the provider does not support what was asked of it.
+  UNSUPPORTED
+  UNKNOWN
+}
+
+enum PublishAttemptOutcome {
+  SUCCEEDED
+  RETRYABLE_FAILURE
+  PERMANENT_FAILURE
+  /// The request left and the answer did not come back. Resolved by asking the
+  /// provider what happened, never by sending again.
+  INDETERMINATE
+}
+
+/// A customer's authorization to publish to one external account.
+///
+/// BRAND-SCOPED AND NOT NULLABLE (D-138). Every other brand-scoped table in
+/// this schema allows a NULL brand to mean "the workspace's own"; a social
+/// connection does not, because BrandScope has to be expressible as a query
+/// predicate (D-132/D-134) and "visible to everyone" is exactly the hole a
+/// brand-restricted member would publish through.
+model SocialConnection {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  provider SocialProvider
+
+  /// The provider's own id for the page / channel / profile. Not a secret — it
+  /// is public on every platform here — but still tenant data, so it is never
+  /// matched across workspaces.
+  externalAccountId String
+  /// What the customer sees: the page or profile name, as the provider gave it.
+  displayName       String
+  /// Provider-supplied avatar URL, or null. Rendered through the same image
+  /// policy as any other remote URL.
+  avatarUrl         String?
+  /// e.g. "page", "business_account", "organization", "profile". Declared by
+  /// the adapter, so the UI can say what KIND of thing is connected.
+  targetKind        String
+
+  status SocialConnectionStatus @default(PENDING)
+
+  /// Scopes the provider actually granted — not the ones we asked for. A
+  /// missing scope disables the capabilities that need it rather than the
+  /// whole connection (docs/SOCIAL-INTEGRATIONS.md §5).
+  grantedScopes String[] @default([])
+
+  connectedByUserId String?   @db.Uuid
+  connectedAt       DateTime? @db.Timestamptz(6)
+
+  /// When the access token stops working. Mirrored from the credential so the
+  /// UI can warn without the token table being read at all.
+  tokenExpiresAt    DateTime? @db.Timestamptz(6)
+  lastRefreshedAt   DateTime? @db.Timestamptz(6)
+
+  /// Connection health. `lastSyncedAt` is the last time we successfully talked
+  /// to the provider about this account for any reason.
+  lastCheckedAt           DateTime?            @db.Timestamptz(6)
+  lastSyncedAt            DateTime?            @db.Timestamptz(6)
+  consecutiveFailureCount Int                  @default(0)
+  lastFailureClass        PublishFailureClass?
+
+  revokedAt      DateTime? @db.Timestamptz(6)
+  disconnectedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "social_connection_brand_fkey")
+
+  credentials SocialCredential[]
+  publishJobs PublishJob[]
+
+  /// The composite target its children point at (D-112).
+  @@unique([workspaceId, id], name: "social_connection_workspace_scope")
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, provider, status])
+  @@index([status, tokenExpiresAt])
+  @@map("social_connection")
+}
+
+/// The encrypted OAuth material for one connection.
+///
+/// A SEPARATE TABLE ON PURPOSE. Nothing that renders a connection ever selects
+/// from here, so a token cannot reach a screen, a log or an error by being a
+/// column on a row somebody already had. Exactly one code path reads it, and it
+/// runs on the worker or the API — never in a React tree.
+///
+/// APPEND-ONLY BY CONVENTION AND VERSIONED: a refresh writes a NEW row and
+/// retires the previous one, so a rotation that half-fails leaves the old token
+/// usable rather than leaving the connection with nothing.
+model SocialCredential {
+  id                 String @id @default(uuid()) @db.Uuid
+  workspaceId        String @db.Uuid
+  socialConnectionId String @db.Uuid
+
+  /// Monotonic per connection. The live credential is the highest version with
+  /// `retiredAt IS NULL`.
+  version Int
+
+  /// Envelope encryption, identical in shape to `secret_version` but in the
+  /// SOCIAL key domain (D-136) — a worker holding this KEK cannot unwrap a
+  /// platform provider credential.
+  ciphertext        String
+  iv                String
+  authTag           String
+  wrappedDataKey    String
+  keyProvider       String
+  keyId             String
+  algorithm         String @default("AES-256-GCM")
+  encryptionContext String
+
+  /// Audit-safe only. Never the token: at most its last four characters, and
+  /// nothing at all for a short value.
+  maskedHint  String
+  /// Keyed, non-reversible. Lets "is this the same token?" be answered without
+  /// decrypting either side.
+  fingerprint String
+
+  accessTokenExpiresAt DateTime? @db.Timestamptz(6)
+  /// Whether a refresh token was issued at all. A BOOLEAN, never the token.
+  hasRefreshToken      Boolean   @default(false)
+
+  retiredAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection SocialConnection @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "social_credential_connection_fkey")
+
+  @@unique([workspaceId, socialConnectionId, version])
+  @@index([workspaceId, socialConnectionId, retiredAt])
+  @@map("social_credential")
+}
+
+/// One in-flight OAuth authorization.
+///
+/// THE STATE PARAMETER IS THE CSRF DEFENCE AND IT IS STORED HASHED. The value
+/// that travels through the browser is never written down, so a database read
+/// cannot be replayed as a callback. Single-use is enforced by a conditional
+/// UPDATE on `consumedAt`, not by a read-then-write.
+model SocialOAuthState {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  provider SocialProvider
+
+  /// SHA-256 of the opaque state token. Unique platform-wide, so two workspaces
+  /// cannot collide and a replay across tenants cannot match either.
+  stateHash String @unique
+
+  /// PKCE verifier, ENCRYPTED. It is a secret for the lifetime of the flow: an
+  /// attacker holding the code and the verifier can complete the exchange.
+  verifierCiphertext        String
+  verifierIv                String
+  verifierAuthTag           String
+  verifierWrappedDataKey    String
+  verifierKeyProvider       String
+  verifierKeyId             String
+  verifierEncryptionContext String
+
+  /// Recorded so the callback can verify the redirect URI matched EXACTLY what
+  /// was sent, rather than trusting the one in the request.
+  redirectUri    String
+  requestedScopes String[] @default([])
+
+  startedByUserId String   @db.Uuid
+  expiresAt       DateTime @db.Timestamptz(6)
+  consumedAt      DateTime? @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "social_oauth_state_brand_fkey")
+
+  @@index([workspaceId, expiresAt])
+  @@index([expiresAt])
+  @@map("social_oauth_state")
+}
+
+/// One content variant, going to one connection, for one calendar slot.
+///
+/// THE UNIT OF PUBLISHING IS THE TRIPLE, not the slot. A slot planned for two
+/// platforms is two jobs, so one platform rejecting a caption does not fail the
+/// other, and a retry retries only what failed.
+model PublishJob {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  calendarSlotId     String @db.Uuid
+  contentItemId      String @db.Uuid
+  contentVariantId   String @db.Uuid
+  socialConnectionId String @db.Uuid
+
+  provider SocialProvider
+
+  status PublishJobStatus @default(PENDING)
+
+  /// hash(workspace, slot, connection, variant). UNIQUE per workspace, so a
+  /// re-dispatch — a sweeper racing a producer, a retry after a lost
+  /// acknowledgement — finds the existing job rather than creating a second.
+  idempotencyKey String
+
+  /// When this was meant to go out, copied from the slot so a rescheduled slot
+  /// does not silently re-time a job already in flight.
+  scheduledAtUtc DateTime @db.Timestamptz(6)
+
+  attemptCount Int       @default(0)
+  maxAttempts  Int
+  nextAttemptAt DateTime? @db.Timestamptz(6)
+
+  /// Set by the conditional claim. Two workers cannot both hold a job.
+  claimedAt   DateTime? @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+
+  failureClass PublishFailureClass?
+  /// A stable machine code the UI maps to a localized sentence. NEVER a raw
+  /// provider message, which can echo request content.
+  failureCode  String?
+
+  /// What the provider called the post, and where a human can see it.
+  externalPostId  String?
+  externalPostUrl String?
+  publishedAt     DateTime? @db.Timestamptz(6)
+
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand      Brand            @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "publish_job_brand_fkey")
+  slot       CalendarSlot     @relation(fields: [workspaceId, calendarSlotId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "publish_job_slot_fkey")
+  item       ContentItem      @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "publish_job_item_fkey")
+  variant    ContentVariant   @relation(fields: [workspaceId, contentVariantId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "publish_job_variant_fkey")
+  connection SocialConnection @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "publish_job_connection_fkey")
+
+  attempts PublishAttempt[]
+
+  @@unique([workspaceId, id], name: "publish_job_workspace_scope")
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, calendarSlotId])
+  @@index([workspaceId, contentItemId])
+  @@index([status, nextAttemptAt])
+  @@index([status, scheduledAtUtc])
+  @@map("publish_job")
+}
+
+/// The evidence trail for one attempt at one job.
+///
+/// APPEND-ONLY, enforced by a trigger. This is what support and a platform
+/// dispute both read, and a record that can be edited afterwards is not
+/// evidence. The stored summary is REDACTED — a status code, a provider error
+/// code and a bounded safe message — never the raw body, which routinely echoes
+/// the caption that was rejected.
+model PublishAttempt {
+  id           String @id @default(uuid()) @db.Uuid
+  workspaceId  String @db.Uuid
+  publishJobId String @db.Uuid
+
+  attemptNumber Int
+
+  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+  durationMs Int?
+
+  outcome      PublishAttemptOutcome
+  failureClass PublishFailureClass?
+
+  /// The provider's HTTP status, and its own error code where it gives one.
+  providerStatusCode Int?
+  providerErrorCode  String?
+  /// A short, redacted description. Bounded by a CHECK so a raw body cannot be
+  /// dropped in here by a future call site.
+  safeSummary        String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  job       PublishJob @relation(fields: [workspaceId, publishJobId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "publish_attempt_job_fkey")
+
+  @@unique([workspaceId, publishJobId, attemptNumber])
+  @@index([workspaceId, publishJobId, attemptNumber])
+  @@map("publish_attempt")
 }

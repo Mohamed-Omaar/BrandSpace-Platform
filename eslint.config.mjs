@@ -12,7 +12,12 @@ const ALLOWED_IMPORTS = {
   shared: [],
   database: ['shared'],
   observability: ['shared'],
-  secrets: ['shared', 'database'],
+  // The envelope-encryption primitives and the KEK seam, and NOTHING else —
+  // no table, no service, no policy (D-136). Both the platform Secret Service
+  // and the tenant social-token vault build on it, which is only safe because
+  // it holds no privileged data path of its own.
+  vault: ['shared'],
+  secrets: ['shared', 'database', 'vault'],
   config: ['shared', 'database'],
   // auth needs secrets to resolve the TOTP seed at MFA verification.
   auth: ['shared', 'database', 'secrets'],
@@ -36,7 +41,26 @@ const ALLOWED_IMPORTS = {
   // uses. NOT `ai-gateway`: nothing in this phase generates anything, and an
   // import nobody needs is a dependency somebody later uses.
   assets: ['shared', 'database', 'config', 'entitlements', 'storage'],
-  'social-connectors': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  // Phase 6 — Social Publishing. It reaches the vault for CUSTOMER OAuth
+  // tokens, which are their own key domain (D-136), and `jobs` to dispatch
+  // publish work.
+  //
+  // NOT `secrets`: a customer token is TENANT data and must never travel the
+  // platform credential path (F-07).
+  //
+  // NOT the content package either. The publish pipeline needs one answer from
+  // Approvals — "is this item cleared to go?" — and takes it through a narrow
+  // interface the caller injects, exactly as the calendar takes `ApprovalGate`.
+  // A package dependency would have bought the same answer and a cycle risk.
+  'social-connectors': [
+    'shared',
+    'database',
+    'config',
+    'entitlements',
+    'providers',
+    'vault',
+    'jobs',
+  ],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
 };
 

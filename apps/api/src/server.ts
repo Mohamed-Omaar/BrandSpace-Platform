@@ -3,6 +3,7 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { registerBrandBrainRoutes } from './routes/brand-brain';
 import { registerContentRoutes } from './routes/content';
 import { registerHealthRoutes } from './routes/health';
+import { registerSocialRoutes } from './routes/social';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
 
@@ -33,6 +34,7 @@ export async function buildServer() {
   // of tenant-facing apps. See routes/brand-brain.ts for the full reasoning.
   registerBrandBrainRoutes(app);
   registerContentRoutes(app);
+  registerSocialRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

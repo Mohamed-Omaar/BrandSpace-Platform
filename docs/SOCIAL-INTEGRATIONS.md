@@ -416,3 +416,113 @@ Notifications for publish success and failure are configurable, bilingual templa
 
 **No real social credentials are used before Phase 6.** Development and the first vertical slice use mock
 connectors exclusively.
+
+---
+
+## 14. As built — Phase 6
+
+This section records what Phase 6 actually shipped, where it departs from the design above, and what it
+deliberately did not do. The sections before it are the DESIGN; this one is the CODE.
+
+### 14.1 What is real and what is a mock
+
+**Every security property is real. Every provider is a mock.**
+
+That split is not a shortcut, it is the only honest way to build this milestone before app review
+completes (D-18, D-19). So:
+
+- The OAuth state, the PKCE verifier, the token encryption, the RLS policies, the composite foreign keys,
+  the idempotency key, the conditional claim, the approval gate and the retry classification are all
+  **real**, and are proven against real PostgreSQL through the unprivileged application role.
+- The five adapters are **deterministic mocks**. They model rejection, rate limiting, expiry, revocation
+  and — most importantly — a timeout whose outcome is unknown, because those are the paths the pipeline's
+  correctness rests on. A mock that only succeeded would test the one case that was never in doubt.
+- `createConnectorRegistry` **refuses to return a mock in a PRODUCTION environment**. A deployment with no
+  real connector fails loudly rather than accepting publish jobs, marking them `PUBLISHED`, and storing an
+  external id that points at nothing.
+
+### 14.2 The provider set
+
+Facebook, Instagram, TikTok, LinkedIn and X. **YouTube is not in this phase (D-139)**: it is the only
+platform in the design whose publishing model is a resumable video upload with quota units rather than
+request counts, and the milestone's brief named four. It remains in §3 as a designed platform.
+
+### 14.3 The data model
+
+Five tenant-owned tables, all `ENABLE + FORCE` RLS, all composite-keyed to their tenant-owned parents
+(D-112):
+
+| Table                | What it holds                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `social_connection`  | The customer's authorization to post to one external account. Brand-scoped, NOT NULL                 |
+| `social_credential`  | The encrypted OAuth material. A **separate table**, so a screen cannot leak a token it never loaded  |
+| `social_oauth_state` | One authorization in flight. State stored **hashed**, PKCE verifier **encrypted**                    |
+| `publish_job`        | One variant, one connection, one slot. Unique on a derived idempotency key per workspace             |
+| `publish_attempt`    | The evidence trail. **Immutable** by trigger; **not tenant-deletable** by privilege (DATABASE §17.3) |
+
+**Why the credential is a separate table.** Every screen, every list and every log line reads a
+connection; exactly one code path reads a token. In one table, `SELECT *` — which is what an ORM emits by
+default — would carry a customer's access token through the application on every render.
+
+**Why the connection's brand is NOT NULL (D-138).** Every other brand-scoped table here allows a null
+brand to mean "belongs to the workspace". That is right for a shared logo pack and wrong for a publishing
+credential: BrandScope has to be a query predicate (D-132/D-134), and "visible to every brand" is exactly
+the hole a brand-restricted member would publish through.
+
+### 14.4 Where each operation runs, and why
+
+| Operation                                           | Runs in              | Because                                                                                                                              |
+| --------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Start authorization, exchange code, refresh, revoke | `apps/api`           | Needs the platform app's client secret, which resolves through the Secret Service. F-07 keeps that path out of tenant-facing apps    |
+| Materialise due slots into jobs, dispatch           | `apps/api` scheduler | The enumeration "which workspaces have work due" is cross-tenant; every write happens inside that tenant's own context               |
+| Publish                                             | `apps/worker`        | An external call is unbounded work against somebody else's infrastructure. On a request path that is a held connection and a spinner |
+| List connections, read history, cancel, retry       | `apps/dashboard`     | Tenant tables under RLS only. No platform credential is in play                                                                      |
+
+The dashboard's `SocialConnectionService` is constructed **without** an `ApplicationResolver`, so it has no
+path to a platform credential — the boundary is expressed in the type rather than in a comment.
+
+### 14.5 The token key domain (D-136)
+
+Customer tokens are encrypted with the same envelope primitives `secret_version` uses, out of the new
+`@brandspace/vault` package, but under a **different key-encryption key**: `SOCIAL_TOKEN_VAULT_KEK`.
+
+That separation is the point. The publish worker holds the social KEK and has database access; if the two
+domains shared a key, that worker could unwrap every platform provider credential in the database — the
+exact reach F-07 exists to deny it. The encryption context additionally binds each ciphertext to one
+workspace, one connection and one version, so a credential row copied elsewhere fails to decrypt rather
+than returning somebody else's token.
+
+### 14.6 Duplicate prevention, stated plainly
+
+This is the property the milestone exists to guarantee, so it is worth stating in one place:
+
+1. The idempotency key is **derived** from `(workspace, slot, connection, variant)` — no clock, no
+   counter, no random component — and is unique per workspace. Every path that could create the job
+   computes the same key and collides.
+2. A job is claimed with a **conditional UPDATE**. Two workers cannot both hold it.
+3. The job is moved to `PUBLISHING` **before** the external call, so a process that dies mid-flight leaves
+   a row that says "we may have sent this".
+4. An **uncertain outcome is never resent**. A timeout goes to `VERIFICATION_PENDING` and the adapter is
+   asked whether the post landed. Where a provider cannot be asked
+   (`capabilities.supportsPostLookup: false`), the job **stops** and waits for a human — a duplicate post
+   is worse than a missing one.
+5. `UNKNOWN` is neither retryable nor indeterminate. An unclassified failure we resend is how a caption
+   goes out twice.
+
+### 14.7 The approval gate, checked twice
+
+Once when a due slot is materialised into jobs, and again inside the job immediately before the external
+call. Not because the first check is unreliable, but because approval can be **withdrawn in between** —
+and the check that matters is the last one. Content in `IN_REVIEW` or `CHANGES_REQUESTED` never publishes,
+checked against the item's own state rather than inferred from the slot's.
+
+### 14.8 Not in this phase
+
+- **Inbound webhooks** (§10). They need a verified platform app to send them; signature verification
+  written against no signer would be untested code that looks tested.
+- **Dead-letter queue and Control Center replay.** The customer-facing half — a `FAILED` job with its
+  class and a manual retry where the class allows one — is here. The operator half is deferred with the
+  webhooks it would sit beside.
+- **Analytics ingestion** (§9). Phase 7.
+- **`deletePost`.** Declared in the adapter contract as optional and implemented by nobody, because no
+  product surface asks for it yet. A capability with no caller is a capability nobody has thought about.

@@ -11,10 +11,19 @@ import { getPlatformClient } from '@brandspace/database/platform';
 import {
   INGEST_SOURCE_DOCUMENT,
   PROCESS_ASSET,
+  PUBLISH_SOCIAL_POST,
   enqueue,
   type IngestSourceDocumentPayload,
   type ProcessAssetPayload,
+  type PublishSocialPostPayload,
 } from '@brandspace/jobs';
+import {
+  createConnectorRegistry,
+  PublishPipelineService,
+  resolvePublishingPolicy,
+  SocialTokenVault,
+} from '@brandspace/social-connectors';
+import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
 import { UsageService } from '@brandspace/entitlements';
 import { createObjectStore } from '@brandspace/storage';
 import { createLogger, internalErrorFields, systemClock, type Clock } from '@brandspace/shared';
@@ -56,6 +65,9 @@ export interface MaintenanceResult {
   readonly assetJobsDispatched: number;
   readonly uploadSessionsExpired: number;
   readonly deletedAssetsPurged: number;
+  /** Phase 6 — the publishing sweep. */
+  readonly publishJobsCreated: number;
+  readonly publishJobsDispatched: number;
 }
 
 export interface SchedulerOptions {
@@ -282,6 +294,118 @@ export class MaintenanceScheduler {
     return { sessions, purged };
   }
 
+  /**
+   * Phase 6 — turn due calendar slots into publish jobs, and dispatch them.
+   *
+   * WHY A SWEEP AND NOT ONLY A DELAYED JOB. docs/SOCIAL-INTEGRATIONS.md §8:
+   * "the delayed job is an optimization; a reconciliation sweeper runs every
+   * minute for slots that are due and unclaimed, so a Redis failure costs
+   * punctuality, not correctness." Without it, "Redis restarted on Tuesday"
+   * means "these customers' posts never went out", with nothing anywhere saying
+   * so.
+   *
+   * THE ENUMERATION IS CROSS-TENANT AND THE WORK IS NOT. Which workspaces have
+   * something due needs the platform identity; everything that reads or writes
+   * a tenant row happens inside that tenant's own `withWorkspace` context, so a
+   * maintenance pass has no wider reach than the tenant itself
+   * (F-07, docs/SECURITY.md §2.1 layer 8).
+   *
+   * BOTH HALVES ARE IDEMPOTENT. Materialising a slot twice finds the same
+   * derived idempotency keys and creates nothing; dispatching a job twice is a
+   * BullMQ job id collision. A pass that runs while the previous one is still
+   * finishing is therefore safe rather than merely unlikely.
+   */
+  async sweepPublishing(batch: number): Promise<{ created: number; dispatched: number }> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    /*
+     * DUE SLOTS FIRST. A slot is due when it is SCHEDULED and its instant has
+     * passed. PUBLISHING slots are already materialised; their jobs are found
+     * by the second query below.
+     */
+    const dueSlots = await platform.calendarSlot.findMany({
+      where: { status: 'SCHEDULED', scheduledAtUtc: { lte: now } },
+      select: { id: true, workspaceId: true },
+      orderBy: { scheduledAtUtc: 'asc' },
+      take: batch,
+    });
+
+    const tenantPrisma = getPrisma();
+    const environment = this.#environment;
+    let created = 0;
+
+    const byWorkspace = new Map<string, string[]>();
+    for (const slot of dueSlots) {
+      byWorkspace.set(slot.workspaceId, [...(byWorkspace.get(slot.workspaceId) ?? []), slot.id]);
+    }
+
+    for (const [workspaceId, slotIds] of byWorkspace) {
+      created += await withWorkspace(
+        workspaceId,
+        async (db) => {
+          const policy = await resolvePublishingPolicy(
+            new ConfigurationService({ prisma: platform }),
+            environment,
+          );
+          const contentPolicy = await new TenantContentPolicySource(db, environment).load();
+          const pipeline = new PublishPipelineService({
+            db,
+            workspaceId,
+            policy,
+            registry: createConnectorRegistry({ policy, environment }),
+            vault: new SocialTokenVault(),
+            // THE APPROVAL GATE, consulted before a job exists at all. The
+            // second consultation happens in the worker, immediately before the
+            // external call (docs/SOCIAL-INTEGRATIONS.md §6.2).
+            approvals: new ContentApprovalService({
+              db,
+              workspaceId,
+              policy: contentPolicy,
+            }),
+            clock: this.#clock,
+          });
+          let made = 0;
+          for (const slotId of slotIds) {
+            const result = await pipeline.materialiseSlot(slotId);
+            made += result.created;
+          }
+          return made;
+        },
+        { prisma: tenantPrisma },
+      );
+    }
+
+    /*
+     * THEN DISPATCH WHATEVER IS WAITING — including jobs a previous pass
+     * created, jobs whose backoff has elapsed, and jobs whose queue message was
+     * lost. `nextAttemptAt` is the single condition, so the retry schedule the
+     * pipeline wrote is the schedule this honours.
+     */
+    const waiting = await platform.publishJob.findMany({
+      where: { status: 'QUEUED', nextAttemptAt: { lte: now } },
+      select: { id: true, workspaceId: true, idempotencyKey: true },
+      orderBy: { nextAttemptAt: 'asc' },
+      take: batch,
+    });
+
+    let dispatched = 0;
+    for (const job of waiting) {
+      const result = await enqueue('publish-jobs', PUBLISH_SOCIAL_POST, {
+        kind: PUBLISH_SOCIAL_POST,
+        workspaceId: job.workspaceId,
+        // THE JOB'S OWN DERIVED KEY. BullMQ refuses a duplicate job id, so a
+        // sweep racing a successful dispatch adds nothing rather than queuing a
+        // second attempt at the same post.
+        idempotencyKey: job.idempotencyKey,
+        publishJobId: job.id,
+      } satisfies PublishSocialPostPayload);
+      if (result.dispatched) dispatched += 1;
+    }
+
+    return { created, dispatched };
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
@@ -291,6 +415,7 @@ export class MaintenanceScheduler {
     );
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
     const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
+    const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -298,6 +423,8 @@ export class MaintenanceScheduler {
       assetJobsDispatched,
       uploadSessionsExpired: assets.sessions,
       deletedAssetsPurged: assets.purged,
+      publishJobsCreated: publishing.created,
+      publishJobsDispatched: publishing.dispatched,
     };
   }
 

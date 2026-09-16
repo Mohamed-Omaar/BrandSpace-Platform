@@ -1339,3 +1339,71 @@ are what refuse a cross-wired write.
 
 `role_permission` has no tenant key of its own and inherits the role's, so it
 raises no cross-tenant question.
+
+---
+
+## 17. Phase 6 — Social Publishing
+
+Five tenant-owned tables. Every one carries a non-null `workspaceId`, has `ENABLE + FORCE` row-level
+security with a `tenant_isolation` policy, and reaches every tenant-owned parent through a COMPOSITE key
+on `(workspaceId, <parent id>)` — D-112, with no exceptions in this phase.
+
+| Table                | Tenant key | Brand            | Notes                                                                                                                               |
+| -------------------- | ---------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `social_connection`  | NOT NULL   | NOT NULL (D-138) | One live connection per (brand, provider, external account), as a PARTIAL unique index so a revoked one does not block reconnection |
+| `social_credential`  | NOT NULL   | via connection   | Envelope-encrypted token material. At most one live version per connection                                                          |
+| `social_oauth_state` | NOT NULL   | NOT NULL         | `stateHash` unique PLATFORM-wide; the verifier is encrypted                                                                         |
+| `publish_job`        | NOT NULL   | NOT NULL         | `(workspaceId, idempotencyKey)` unique. `RESTRICT` on the connection, deliberately                                                  |
+| `publish_attempt`    | NOT NULL   | via job          | **Immutable** by trigger (every role, including the owner) and **not tenant-deletable** by privilege — see §17.3                    |
+
+### 17.1 The constraints that carry a rule
+
+Several CHECK constraints here encode an invariant rather than a format, and each is worth naming because
+a reader should not have to infer why it exists:
+
+- `publish_job_published_has_post` — a `PUBLISHED` job has an external post id and a timestamp, and a job
+  with them is `PUBLISHED`. **The whole duplicate-prevention design rests on this**: if a job could be
+  `PUBLISHED` with no external id, "did this already go out?" would have no answer, and the only safe
+  behaviour left would be to never retry anything.
+- `publish_job_failed_has_class` — a failure with no class cannot be retried correctly, explained to the
+  customer, or counted.
+- `social_credential_hint_is_masked` — `maskedHint` is at most eight characters. A future call site that
+  passed the token itself into that column would be storing a credential where every audit view reads.
+- `publish_attempt_summary_bounded` — 500 characters. A provider's raw body routinely echoes the caption
+  it rejected, and a column with no ceiling is where somebody eventually drops it.
+- `social_connection_one_live_per_account` and `social_credential_one_live_per_connection` — both PARTIAL,
+  so the states that must not collide cannot, while a revoked connection or a retired credential does not
+  block the reconnection that follows it.
+
+### 17.2 `calendar_slot` gained its publishing states
+
+Phase 5B-2 deliberately stopped at `PLANNED` / `SCHEDULED` / `CANCELLED`, on the grounds that "a state no
+code can enter is a state whose meaning nobody has settled". This phase settles them: `PUBLISHING`,
+`PUBLISHED`, `PARTIALLY_PUBLISHED` and `FAILED` are added, matched one-to-one with the `ContentStatus`
+values that already existed, so a slot and its item can never describe the same situation differently.
+The values are ADDED, so every existing row keeps its status and every existing query keeps its meaning.
+
+### 17.3 Immutability is a trigger; non-deletability is a privilege
+
+`publish_attempt` is the evidence a support case and a platform dispute both rest on, so it may not be
+rewritten. That is a trigger, and it fires for every role including the table owner.
+
+**Deletion is a different question, and a trigger is the wrong instrument for it.** A `BEFORE DELETE`
+trigger fires for a CASCADED delete too, and PostgreSQL gives a row trigger no way to tell one from a
+direct statement. The first draft of this migration used one, and the result was that deleting a calendar
+slot — or a content item, a brand, or a workspace, all of which cascade down to this table — failed the
+moment a single attempt existed. The Phase 5B-2 and 5B-3 suites went red against a table they know nothing
+about, which is what a cross-phase regression looks like from the inside.
+
+So `DELETE` is **revoked from `brandspace_app`** instead, and the migration asserts the revoke survived the
+`GRANT` four lines above it. A cascade is performed as the table owner and is unaffected; a `DELETE`
+issued by the tenant is refused outright.
+
+The guarantee that results is precise, and is worth stating precisely rather than as "append-only":
+
+- An attempt **cannot be edited** after it is written.
+- An attempt **cannot be removed from a sequence** to make a history read differently.
+- An attempt **goes with the job it belongs to** when that job is deleted — evidence about a thing that no
+  longer exists has no subject.
+- The **platform identity keeps `DELETE`**, because erasure on request is a platform operation and must
+  remain possible.

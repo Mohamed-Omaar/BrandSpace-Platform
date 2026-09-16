@@ -13,10 +13,13 @@
     "build": "tsc --emitDeclarationOnly --declarationDir dist"
   },
   "dependencies": {
-    "@brandspace/shared": "workspace:*",
-    "@brandspace/database": "workspace:*",
     "@brandspace/config": "workspace:*",
-    "@brandspace/entitlements": "workspace:*"
+    "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/jobs": "workspace:*",
+    "@brandspace/providers": "workspace:*",
+    "@brandspace/shared": "workspace:*",
+    "@brandspace/vault": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

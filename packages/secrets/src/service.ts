@@ -6,8 +6,15 @@
 // crossing that boundary.
 import type { Prisma, PrismaClient } from '@brandspace/database';
 import { AppError, systemClock, type Clock } from '@brandspace/shared';
-import { buildEncryptionContext, decryptSecret, encryptSecret, fingerprintValue } from './crypto';
-import { createKeyProvider, type KeyProvider } from './key-provider';
+import {
+  buildEncryptionContext,
+  createKeyProvider,
+  decryptSecret,
+  encryptSecret,
+  fingerprintValue,
+  PLATFORM_SECRET_DOMAIN,
+  type KeyProvider,
+} from '@brandspace/vault';
 import { isSecretCategory, type SecretCategory } from './categories';
 
 /**
@@ -143,7 +150,8 @@ export class SecretService {
     this.#clock = options.clock ?? systemClock;
     // Fails closed when encryption is unconfigured — the service cannot be
     // constructed at all, rather than degrading to plaintext.
-    this.#keyProvider = options.keyProvider ?? createKeyProvider(options.env);
+    this.#keyProvider =
+      options.keyProvider ?? createKeyProvider(options.env, PLATFORM_SECRET_DOMAIN);
   }
 
   /** Create a secret and its first version, in one transaction. */

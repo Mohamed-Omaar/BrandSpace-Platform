@@ -22,6 +22,25 @@ export const NOTIFICATION_TEMPLATES = {
   'approval.changes_requested': { severity: 'warning' },
   /** A reviewer turned it down. Goes to whoever asked. */
   'approval.rejected': { severity: 'warning' },
+
+  /*
+   * Phase 6 — Social Publishing.
+   *
+   * THREE TEMPLATES, NOT ONE PER STATE. A queued post becoming a publishing
+   * post is not news; a post that went out, a post that did not, and an account
+   * that has stopped working are. Notifying on every transition is how an inbox
+   * becomes something people stop reading, and an unread inbox is worse than no
+   * inbox for exactly the message that matters.
+   */
+  /** It went out. Goes to whoever scheduled it. */
+  'publishing.published': { severity: 'success' },
+  /** It did not, and will not without a person. Goes to whoever scheduled it. */
+  'publishing.failed': { severity: 'warning' },
+  /**
+   * A connected account stopped working. Goes to the members who can fix it,
+   * because everyone else can only worry about it.
+   */
+  'publishing.connection_needs_reauth': { severity: 'warning' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
@@ -42,4 +61,16 @@ export interface NotificationPayload {
   itemTitle?: string;
   brandName?: string;
   actorName?: string;
+  /*
+   * Phase 6. The PLATFORM and the ACCOUNT NAME — both public on the platform in
+   * question, and both needed for the message to mean anything: "a post
+   * failed" is not actionable, "your LinkedIn post to Acme Ltd failed" is.
+   *
+   * STILL NO BODY, NO CAPTION, NO PROVIDER TEXT AND NO TOKEN. The failure is
+   * carried as a stable CLASS the reader's own dashboard translates, never as
+   * the provider's sentence, which routinely echoes the content it rejected.
+   */
+  providerKey?: string;
+  accountName?: string;
+  failureClass?: string;
 }

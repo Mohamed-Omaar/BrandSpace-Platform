@@ -39,6 +39,15 @@ export type {
   ApprovalPolicy,
   AuditEvent,
   Notification,
+  // Phase 6 — Social Publishing. `SocialCredential` comes through because the
+  // one code path allowed to decrypt a token needs the row's shape; the type
+  // grants nothing, and the RLS policy plus the package boundary are what keep
+  // that path to one place.
+  SocialConnection,
+  SocialCredential,
+  SocialOAuthState,
+  PublishJob,
+  PublishAttempt,
 } from '@prisma/client';
 
 export type {
@@ -69,4 +78,10 @@ export type {
   ContentType,
   ContentValidationState,
   Locale,
+  // Phase 6 — Social Publishing.
+  SocialProvider,
+  SocialConnectionStatus,
+  PublishJobStatus,
+  PublishFailureClass,
+  PublishAttemptOutcome,
 } from '@prisma/client';

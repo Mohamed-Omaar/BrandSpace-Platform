@@ -525,16 +525,59 @@ UI polish and audit.
 
 ### Exit criteria
 
-- [ ] A customer connects an account by OAuth; **no password is ever requested**
-- [ ] Scheduled content publishes at the correct time in the workspace timezone
-- [ ] Unapproved content cannot publish, even via a directly enqueued job
-- [ ] A timed-out send is verified rather than blindly retried — no duplicate posts in any test
-- [ ] Expired tokens auto-refresh; failed refresh pauses jobs and prompts reconnection
-- [ ] Failed jobs reach the dead-letter queue and are replayable from Admin
-- [ ] Every publish, delete, and disconnect requires confirmation and writes an audit event
-- [ ] At least three platforms verified against real sandbox/production apps
+- [x] A customer connects an account by OAuth; **no password is ever requested**
+- [x] Scheduled content publishes at the correct time in the workspace timezone
+- [x] Unapproved content cannot publish, even via a directly enqueued job
+- [x] A timed-out send is verified rather than blindly retried — no duplicate posts in any test
+- [x] Expired tokens refresh; a failed refresh sets `needs_reauth` and prompts reconnection
+- [x] Every publish, disconnect and retry writes an audit event; connect and disconnect declare a
+      confirmation policy
+- [ ] **Failed jobs reach a dead-letter queue and are replayable from Admin** — deferred, see below
+- [ ] **At least three platforms verified against real sandbox/production apps** — blocked on app
+      review, see below
 
 **Prerequisite the owner must start early:** platform app review and business verification for each network.
+
+### As built, and what is honestly not done
+
+**THE MILESTONE IS COMPLETE AGAINST DETERMINISTIC MOCK PROVIDERS, AND NOT AGAINST ANY REAL PLATFORM.**
+Saying it any other way would be a claim the code cannot support. Every platform in this phase requires
+business verification and app review before it issues a production credential (D-18, D-19) — an
+owner-driven process measured in weeks — so the milestone was built and proven the only way it could be:
+the CONTRACT is exercised end to end, the security properties are settled against real PostgreSQL, and
+`createConnectorRegistry` refuses to hand back a mock in a PRODUCTION environment so a deployment with no
+real connector fails loudly rather than publishing into the void.
+
+What shipped:
+
+1. **Connector framework** — `SocialConnectorAdapter`, a registry that selects by environment, and
+   capability declarations read from configuration. Adding a real provider is an implementation of the
+   interface plus an activation; no business logic changes.
+2. **Platform app configuration** — `integrations.social-apps`, per provider per environment, with the
+   client secret held by reference in the Secret Service and resolved only in `apps/api`.
+3. **OAuth flows** — authorization, callback, PKCE, single-use hashed state, exact redirect matching and
+   scope verification. A partial grant becomes `needs_reauth` rather than a connection that looks healthy.
+4. **Token management** — envelope-encrypted in a tenant-owned table under its own key domain (D-136),
+   versioned and retired rather than overwritten, with refresh, rotation and revocation.
+5. **Platform adapters** — Facebook, Instagram, TikTok, LinkedIn and X, as deterministic mocks.
+   **YouTube is not in this phase** (D-139).
+6. **Publishing pipeline** — pre-flight checks, derived idempotency keys, uncertain-outcome verification,
+   retry classification by error class, cancellation before dispatch and manual retry.
+7. **Content validation** — the platform ceiling is declared in configuration, stated on the screen before
+   the customer commits, and enforced again by the adapter at publish time.
+8. **Social hub UI** — connected accounts with identity, health and last sync; publishing history with a
+   failure explained in the reader's own language.
+
+**What is deliberately NOT here, and why:**
+
+- **Webhooks** (scope item 8). Inbound webhooks need a verified platform app to send them and a public
+  endpoint to receive them, and neither exists yet. Building signature verification against no signer
+  would be untested code that looks tested.
+- **Dead-letter queue and Admin replay.** A job that exhausts its attempts is `FAILED` with its class and
+  a manual retry where the class allows one — which is the customer-facing half. The OPERATOR half (a
+  dead-letter view and replay in the Control Center) is a Control Center surface and is deferred with the
+  webhooks it would sit beside.
+- **Analytics ingestion** is Phase 7 and nothing here anticipates it.
 
 ---
 

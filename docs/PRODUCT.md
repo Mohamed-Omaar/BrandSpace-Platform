@@ -208,6 +208,19 @@ link handling). Supports rewrite, shorten, expand, change tone, translate ar↔e
 **Social Media Hub** — customers connect their own accounts via OAuth only. **BrandSpace never asks for a
 social account password.** Shows scopes granted, token expiry, health, and per-platform publishing capability.
 
+_As built in Phase 6, at `/[locale]/integrations`:_ connected accounts with the provider, the account or
+page identity, the kind of thing connected, connection health, when access expires and the last successful
+sync; connect, reconnect and disconnect; and the publishing history beside them — what went out, what
+failed, and why, in the reader's own language rather than the provider's. Each platform's declared
+capabilities are stated BEFORE the customer commits, because telling somebody a ceiling after they have
+written three thousand characters is telling them too late.
+
+**The provider set is Facebook, Instagram, TikTok, LinkedIn and X** (D-139). **The adapters are
+deterministic mocks until platform app review completes** (D-135) — every security property is real and
+tested, and a production environment refuses to resolve a mock rather than publishing into the void.
+There is no Client Portal, no client hand-off and no external-reviewer surface here or anywhere (D-62,
+D-130); a Viewer (read-only) cannot see this module at all.
+
 **AI Copilot** — see `docs/AI-GATEWAY.md` §Copilot. It is permission-aware and action-capable but never
 performs an external or destructive action without preview and confirmation.
 

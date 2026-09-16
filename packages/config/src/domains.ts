@@ -1233,6 +1233,113 @@ const socialAppsSchema = z.object({
     .default([]),
 });
 
+/**
+ * Phase 6 — the PUBLISHING policy, and the half of it a customer may see.
+ *
+ * WHAT A PLATFORM CAN DO IS CONFIGURATION, NOT CODE (CLAUDE.md §2.2). Post
+ * kinds, character ceilings, media counts, whether a first comment exists,
+ * whether a post can be deleted — every one of these changes when a platform
+ * changes its API, and every one of them is something the customer's own screen
+ * has to state BEFORE they build something the platform will reject.
+ *
+ * CAPABILITIES ARE DECLARED, NEVER ASSUMED EQUAL. That is the rule
+ * docs/SOCIAL-INTEGRATIONS.md §1.7 sets, and this schema is where it lives: the
+ * UI is generated from these declarations, so an option a platform does not
+ * support never appears rather than failing at publish time.
+ *
+ * NO CREDENTIAL IS IN HERE. App ids, client-secret refs and webhook-secret refs
+ * stay in `integrations.social-apps`, which is not projected to tenants. What a
+ * platform can do is public; what our app may do it with is not.
+ */
+const publishingCapabilitySchema = z.object({
+  /** Whether this provider may be connected at all right now. */
+  enabled: z.boolean().default(false),
+  /** Post shapes the platform accepts. The composer offers exactly these. */
+  postKinds: z
+    .array(z.enum(['text', 'image', 'carousel', 'video', 'reel', 'story', 'article', 'thread']))
+    .default(['text']),
+  maxBodyCharacters: z.number().int().positive().max(100_000).default(2_200),
+  maxHashtags: z.number().int().min(0).max(100).default(30),
+  maxMediaItems: z.number().int().min(0).max(50).default(10),
+  supportsFirstComment: z.boolean().default(false),
+  supportsDelete: z.boolean().default(false),
+  /**
+   * Whether the platform will schedule the post itself. FALSE everywhere in
+   * this phase: BrandSpace holds the schedule, so a customer sees one calendar
+   * rather than one per platform.
+   */
+  supportsNativeScheduling: z.boolean().default(false),
+  /**
+   * Whether the adapter can ask "did this post land?" after an uncertain
+   * outcome. Where this is false, an indeterminate attempt is NEVER retried —
+   * a duplicate post is worse than a missing one (docs/SOCIAL-INTEGRATIONS.md
+   * §7.2).
+   */
+  supportsPostLookup: z.boolean().default(false),
+  /** OAuth scopes requested at connection time. */
+  scopes: z.array(z.string()).default([]),
+  /** What kind of thing gets connected: page, profile, channel, organization. */
+  targetKind: z.string().min(1).default('profile'),
+});
+
+const publishingSchema = z.object({
+  providers: z
+    .object({
+      facebook: publishingCapabilitySchema.default({}),
+      instagram: publishingCapabilitySchema.default({}),
+      tiktok: publishingCapabilitySchema.default({}),
+      linkedin: publishingCapabilitySchema.default({}),
+      x: publishingCapabilitySchema.default({}),
+    })
+    .default({}),
+
+  oauth: z
+    .object({
+      /**
+       * How long an authorization may stay in flight. Short on purpose: the
+       * state row is a live CSRF token, and a long window is a long replay
+       * window.
+       */
+      stateTtlSeconds: z.number().int().positive().max(3_600).default(600),
+      /**
+       * Connections a single workspace may hold. A ceiling rather than a plan
+       * limit: the plan limit lives in `plans` and is enforced separately.
+       */
+      maxConnectionsPerWorkspace: z.number().int().positive().max(200).default(25),
+    })
+    .default({}),
+
+  retry: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).default(5),
+      initialBackoffSeconds: z.number().int().positive().max(3_600).default(30),
+      backoffMultiplier: z.number().min(1).max(10).default(2),
+      maxBackoffSeconds: z.number().int().positive().max(86_400).default(1_800),
+      /** Jitter spreads a thundering herd after a platform outage. */
+      jitterRatio: z.number().min(0).max(1).default(0.2),
+    })
+    .default({}),
+
+  dispatch: z
+    .object({
+      /**
+       * How late a post may go out before we stop and ask. Beyond this the job
+       * is held rather than published: a time-sensitive message posted six
+       * hours late is worse than one not posted at all
+       * (docs/SOCIAL-INTEGRATIONS.md §8).
+       */
+      latenessToleranceMinutes: z.number().int().positive().max(1_440).default(120),
+      /** Slots a single reconciliation pass may claim. */
+      sweepBatchSize: z.number().int().positive().max(500).default(50),
+      /**
+       * How long before expiry a token is refreshed. 0.75 of its lifetime, the
+       * proactive refresh docs/SOCIAL-INTEGRATIONS.md §5 describes.
+       */
+      tokenRefreshAtLifetimeRatio: z.number().min(0.1).max(0.95).default(0.75),
+    })
+    .default({}),
+});
+
 // --- Messaging, website, operations ----------------------------------------
 const templatesSchema = z.object({
   templates: z
@@ -1348,6 +1455,7 @@ export const CONFIG_DOMAINS = {
   'integrations.payment': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.observability': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.social-apps': { schema: socialAppsSchema, schemaVersion: 1 },
+  publishing: { schema: publishingSchema, schemaVersion: 1 },
   templates: { schema: templatesSchema, schemaVersion: 1 },
   website: { schema: websiteSchema, schemaVersion: 1 },
   operations: { schema: operationsSchema, schemaVersion: 1 },

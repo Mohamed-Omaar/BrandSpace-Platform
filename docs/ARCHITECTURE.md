@@ -302,21 +302,29 @@ packages/secrets · packages/observability · packages/providers   (added in Pha
 
 ### 4.1 Dependency rules (lint-enforced)
 
-| Package             | May import                                     | Must never import                                               |
-| ------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| `shared`            | —                                              | anything                                                        |
-| `database`          | `shared`                                       | any domain package                                              |
-| `observability`     | `shared`                                       | everything else, including `database`                           |
-| `secrets`           | `shared`, `database`                           | `config` and every domain package                               |
-| `config`            | `shared`, `database`                           | `secrets`, `auth`, `billing`, `ai-gateway`, `social-connectors` |
-| `auth`              | `shared`, `database`, `secrets`                | domain packages                                                 |
-| `providers`         | `shared`, `config`                             | `database`, `secrets`, domain packages                          |
-| `entitlements`      | `shared`, `database`, `config`                 | `ai-gateway`, `billing`, `social-connectors`                    |
-| `ai-gateway`        | `shared`, `database`, `config`, `entitlements` | `social-connectors`, `billing`                                  |
-| `social-connectors` | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `billing`                                         |
-| `billing`           | `shared`, `database`, `config`, `entitlements` | `ai-gateway`, `social-connectors`                               |
-| `ui`                | `shared`                                       | everything else                                                 |
-| apps                | any package                                    | another app                                                     |
+> **Phase 6 added `packages/vault` (D-136).** It holds the envelope-encryption primitives and the KEK seam
+> and nothing else — no table, no service, no policy — which is the only reason both the platform Secret
+> Service and the tenant social-token vault can safely depend on it. `@brandspace/secrets` re-exports them
+> unchanged, so its F-07 import restriction still means exactly what it meant: the customer dashboard and
+> ordinary workers may not import the package that can decrypt PLATFORM credentials. They may import the
+> CIPHER, which decrypts nothing on its own.
+
+| Package             | May import                                                                   | Must never import                                               |
+| ------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `shared`            | —                                                                            | anything                                                        |
+| `database`          | `shared`                                                                     | any domain package                                              |
+| `observability`     | `shared`                                                                     | everything else, including `database`                           |
+| `vault`             | `shared`                                                                     | `database`, `config` and every domain package                   |
+| `secrets`           | `shared`, `database`, `vault`                                                | `config` and every domain package                               |
+| `config`            | `shared`, `database`                                                         | `secrets`, `auth`, `billing`, `ai-gateway`, `social-connectors` |
+| `auth`              | `shared`, `database`, `secrets`                                              | domain packages                                                 |
+| `providers`         | `shared`, `config`                                                           | `database`, `secrets`, domain packages                          |
+| `entitlements`      | `shared`, `database`, `config`                                               | `ai-gateway`, `billing`, `social-connectors`                    |
+| `ai-gateway`        | `shared`, `database`, `config`, `entitlements`                               | `social-connectors`, `billing`                                  |
+| `social-connectors` | `shared`, `database`, `config`, `entitlements`, `providers`, `vault`, `jobs` | `ai-gateway`, `billing`, **`secrets`**                          |
+| `billing`           | `shared`, `database`, `config`, `entitlements`                               | `ai-gateway`, `social-connectors`                               |
+| `ui`                | `shared`                                                                     | everything else                                                 |
+| apps                | any package                                                                  | another app                                                     |
 
 **No package imports an app. No package reads another package's tables directly** — cross-module access goes
 through the owning package's exported service functions or through queue events.
@@ -754,3 +762,46 @@ leaked the vendor list to every tenant would trade a real disclosure for conveni
 
 The dashboard still owns every NON-AI Brand Brain operation directly — knowledge, review, ingestion —
 because those touch only tenant tables under RLS.
+
+---
+
+## Phase 6 as built — Social Publishing
+
+### Where each operation runs, and why it runs there
+
+The seam this phase crosses is the same one the Brand Brain chat and the Content Studio crossed before it,
+and for the same reason: some operations need the PLATFORM identity and F-07 keeps that out of the
+applications closest to a browser bundle.
+
+| Operation                                           | Application            | Identity                                             | Why there                                                                                                                             |
+| --------------------------------------------------- | ---------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Start authorization, exchange code, refresh, revoke | `apps/api`             | Platform + tenant                                    | Needs the platform app's own client secret, resolved through the Secret Service                                                       |
+| Materialise due slots, dispatch publish jobs        | `apps/api` (scheduler) | Platform for the enumeration, tenant for every write | "Which workspaces have work due" is a cross-tenant question; nothing that writes a tenant row has a wider reach than the tenant       |
+| Publish to a platform                               | `apps/worker`          | Tenant only                                          | An external call is unbounded work against somebody else's infrastructure — on a request path that is a held connection and a spinner |
+| List connections, read history, cancel, retry       | `apps/dashboard`       | Tenant only                                          | Tenant tables under RLS; no platform credential is in play                                                                            |
+
+**The boundary is expressed in the type.** The dashboard builds its `SocialConnectionService` without an
+`ApplicationResolver`, so it has no path to a platform credential even by mistake; the worker builds its
+`PublishPipelineService` without one for the same reason. Disconnection therefore lives on the API,
+because revoking at the provider needs that secret — and a disconnect that only stops US from using a
+grant, while leaving the customer's account authorized to an application they believe they removed, is not
+a disconnect.
+
+### The publish queue is a separate worker
+
+`publish-jobs` gets its own BullMQ worker rather than sharing `media-processing`. The two are different
+kinds of work: one is CPU and disk bounded by our own timeouts, the other is network bounded by somebody
+else's platform, where a single rate-limited account can hold a slot for minutes. Sharing one worker would
+let a throttled Instagram account starve every asset upload in the workspace.
+
+**BullMQ's own retry is deliberately not used for the domain** (`attempts: 1` on the message). Whether a
+failure may be retried at all depends on its class, the backoff comes from configuration, and an uncertain
+outcome must be VERIFIED rather than resent — a queue-level retry would resend blindly, which is exactly
+the duplicate post the design exists to prevent. The database row carries `nextAttemptAt`, and the API's
+sweep re-dispatches when it is due.
+
+### The sweep is what makes Redis an optimization
+
+A delayed job is faster; the reconciliation sweep is what makes a Redis failure cost punctuality rather
+than correctness. Both halves are idempotent: materialising a slot twice derives the same keys and creates
+nothing, and dispatching twice is a BullMQ job-id collision.

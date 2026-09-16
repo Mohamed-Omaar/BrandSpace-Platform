@@ -77,6 +77,31 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     }
   });
 
+  test('PHASE 6: connected accounts and publishing are closed to a Viewer', async ({ page }) => {
+    /*
+     * D-62 and D-130 in their Phase 6 form. A Viewer holds `workspace.read` and
+     * nothing else, so they may not connect an account, may not publish, may
+     * not cancel or retry — and may not even SEE which external accounts a
+     * brand controls, which is business information the narrowest role has no
+     * need for.
+     *
+     * The route requires `integrations.read`, so this is a real refusal rather
+     * than a hidden link.
+     */
+    await signInAsViewer(page);
+
+    for (const path of ['en/integrations', 'ar/integrations']) {
+      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
+      expect(response?.status(), `/${path} must not be readable by a Viewer`).toBe(404);
+    }
+  });
+
+  test('the navigation does not offer connected accounts either', async ({ page }) => {
+    await signInAsViewer(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    await expect(page.locator('a[href$="/en/integrations"]')).toHaveCount(0);
+  });
+
   test('the navigation does not offer Approvals — but the refusal is the control', async ({
     page,
   }) => {

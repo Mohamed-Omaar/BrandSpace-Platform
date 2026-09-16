@@ -1979,3 +1979,99 @@ PostgreSQL stores them positionally — and demands a literal
 it fail with
 `content_item.… -> brand (workspaceId->id,brandId->workspaceId)`, which the
 name-only form reported as clean.
+
+---
+
+## 28. Phase 6 — Social Publishing
+
+The most valuable secret this platform stores arrives in this phase. A social access token is better than
+a password: it works without MFA, it survives a password change, and whoever holds it can publish to the
+world as that brand. A leak here is not an information disclosure, it is an account takeover — so this
+section states what protects it and what would notice if that stopped being true.
+
+### 28.1 The token never travels, and never renders
+
+Four structural decisions, each removing a way a token could escape rather than adding a rule about it:
+
+1. **A SEPARATE TABLE.** `social_credential` holds the encrypted material; `social_connection` holds
+   everything a screen reads. Nothing that renders a connection selects from the credential table, so a
+   token cannot reach a screen by being a column on a row somebody already had — and `SELECT *` is what
+   an ORM emits by default.
+2. **A SEPARATE KEY DOMAIN (D-136).** Customer tokens are wrapped under `SOCIAL_TOKEN_VAULT_KEK`, not
+   `SECRET_VAULT_KEK`. The publish worker holds the social key and has database access; a shared key
+   would let it unwrap every platform provider credential in the database — the exact reach F-07 denies
+   it.
+3. **THE QUEUE CARRIES A POINTER.** A publish job message names a `publish_job` row and a workspace.
+   Redis is not tenant-isolated and is not encrypted at rest the way the database is; a token in a queue
+   message would be a customer's whole social account sitting outside every guarantee made about
+   credentials. The worker resolves and decrypts inside that workspace's own RLS context.
+4. **THE VIEW TYPES HAVE NO FIELD FOR ONE.** `ConnectionView` and `PublishJobView` are what a screen
+   receives, and neither has a key that could hold a credential.
+
+`tests/isolation/phase6-token-never-leaks.test.ts` searches for the token's actual VALUE in every audit
+event, every rendered view and every service response the phase produces — rather than checking that
+particular fields were omitted, which passes on the day a new field is added.
+
+### 28.2 The OAuth flow
+
+| Control                                                        | What it stops                                                                                                                                                                                                 |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opaque single-use `state`, stored HASHED                       | An attacker making a victim's browser connect the ATTACKER's account, so every post the victim schedules goes to the attacker's page. Storing the hash means a leaked backup cannot be replayed as a callback |
+| Consumed by a CONDITIONAL UPDATE                               | Two concurrent callbacks both winning. A read-then-write leaves a window; `updateMany` with `consumedAt: null` in the predicate does not                                                                      |
+| `workspaceId` in the claim predicate AND in the RLS policy     | A state belonging to another workspace completing into this one                                                                                                                                               |
+| PKCE (S256), verifier stored ENCRYPTED                         | An intercepted redirect being enough to complete the exchange                                                                                                                                                 |
+| Exact redirect-URI matching, against the URI recorded at START | A callback aimed at a different URI completing anyway                                                                                                                                                         |
+| Scope verification after the callback                          | A partial grant rendering as a healthy connection and failing at publish time. It becomes `NEEDS_REAUTH`                                                                                                      |
+| TTL from configuration, short by default                       | A long replay window on a live CSRF token                                                                                                                                                                     |
+
+**Every refusal is the same sentence.** Expired, consumed, forged and foreign all produce one message, and
+that is asserted rather than assumed: distinguishing them would tell an attacker which guess was closest.
+
+### 28.3 Tenancy
+
+All five tables are `ENABLE + FORCE` RLS with a `tenant_isolation` policy, and every foreign key to a
+tenant-owned parent is COMPOSITE on `(workspaceId, <parent id>)` — nine of them, no exceptions (D-112).
+`tests/isolation/phase6-social-isolation.test.ts` proves a foreign parent id is refused IDENTICALLY to an
+invented one on all four of `publish_job`'s tenant-owned parents, so "accepted" versus "violates foreign
+key" cannot answer whether an id exists in another workspace.
+
+`publish_attempt` is **append-only**, enforced by a trigger that refuses UPDATE and DELETE to every role
+including the table owner — the same treatment `credit_transaction` and `ai_usage_ledger` already get.
+It is the evidence a support case and a platform dispute both rest on, and a record that can be edited
+afterwards is not evidence.
+
+### 28.4 Authorization
+
+Four permission keys, split by how much trust each is. `integrations.manage` is the most consequential key
+in the product: at the end of exercising it, BrandSpace can post to the world as the customer. It is held
+by the Owner, the Admin and the Marketing Manager, and by nobody else — asserted as a CLOSED LIST in
+`tests/unit/phase6-rbac-boundaries.test.ts`, because `workspace_admin` is defined as "everything except
+three keys" and a blanket grant silently inherits every future permission.
+
+**`client_viewer` gets nothing** (D-62, D-130) — not even `integrations.read`. The connected-accounts page
+states which external accounts a brand controls, which is business information the narrowest role has no
+need for, and the route requires the permission so the refusal is real rather than a hidden link.
+
+BrandScope is a query PREDICATE on every read and every mutation in this phase (D-132/D-134). No method
+reads a row and then checks its brand.
+
+### 28.5 What a customer is told when something fails
+
+The stored failure is a CLASS and a stable code, both ours. A provider's own message is never stored and
+never rendered: it routinely echoes the caption that was rejected, which would put customer content into
+a notification, a log line and an error page at once. The dashboard resolves the class into a sentence in
+the reader's own locale, so the same failure reads correctly in Arabic and English.
+
+`publish_attempt.safeSummary` is bounded at 500 characters by a CHECK as well as by the writer — two
+guards, because that column is the one place a raw provider body would otherwise land.
+
+### 28.6 What this phase does NOT protect, stated plainly
+
+- **No real provider has been contacted.** The adapters are deterministic mocks (D-135). The security
+  properties above are real and tested; the claim that they hold against Meta's actual API is one this
+  codebase cannot yet make, and app review is the gate.
+- **No webhook verification exists** (D-140). Nothing here validates an inbound signature, because
+  nothing can send one yet.
+- **The local key provider is still the only implemented one.** `KmsKeyProvider` throws, for both key
+  domains, and `createKeyProvider` refuses to build a local provider when `NODE_ENV=production` — so
+  production without a KMS is a startup failure rather than a silent downgrade (F-09).

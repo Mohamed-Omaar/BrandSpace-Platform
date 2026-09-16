@@ -22,6 +22,7 @@
     "@brandspace/notifications": "workspace:*",
     "@brandspace/observability": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "@brandspace/ui": "workspace:*",
     "next": "16.3.4",

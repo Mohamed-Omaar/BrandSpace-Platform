@@ -6,10 +6,12 @@ import {
   QUEUE_NAMES,
   queueUrl,
   type MediaProcessingPayload,
+  type PublishJobsPayload,
 } from '@brandspace/jobs';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { processAssetJob } from './processors/assets';
 import { processIngestionJob } from './processors/ingestion';
+import { processPublishJob } from './processors/publishing';
 
 /**
  * Worker entrypoint.
@@ -115,11 +117,76 @@ async function main(): Promise<void> {
     log.info('job completed', { queue: 'media-processing', jobId: job.id });
   });
 
+  /*
+   * PHASE 6 — THE PUBLISH QUEUE, AND WHY IT IS A SEPARATE WORKER.
+   *
+   * `media-processing` is CPU and disk work bounded by our own timeouts;
+   * publishing is network work bounded by somebody else's platform, where a
+   * single rate-limited account can hold a slot for minutes. Sharing one worker
+   * would let a throttled Instagram account starve every asset upload in the
+   * workspace. Two workers, two concurrency budgets, two lock durations.
+   *
+   * BULLMQ'S OWN RETRY IS DELIBERATELY NOT USED FOR THE DOMAIN. `attempts: 1`
+   * on the message, because the RETRY DECISION belongs to the pipeline: whether
+   * a failure may be retried at all depends on its class, the backoff depends
+   * on configuration, and an uncertain outcome must be VERIFIED rather than
+   * resent. A queue-level retry would resend blindly, which is exactly the
+   * duplicate post the whole design exists to prevent. The database row carries
+   * `nextAttemptAt`, and the API's sweep re-dispatches when it is due.
+   */
+  const publishDefinition = QUEUE_DEFINITIONS['publish-jobs'];
+  const publishWorker = new Worker(
+    'publish-jobs',
+    async (job: Job): Promise<void> => {
+      const payload = job.data as PublishJobsPayload;
+      switch (payload.kind) {
+        case 'social.publish-post':
+          await processPublishJob(payload);
+          return;
+        default: {
+          /*
+           * EXHAUSTIVENESS ON THE DISCRIMINANT, not on the payload. The union
+           * has one member today, and TypeScript narrows a single interface's
+           * literal field to `never` here while it will not narrow the
+           * interface itself — so this is the form that both compiles now and
+           * becomes a compile error the day a second kind is added and left
+           * unhandled.
+           */
+          const unroutable: never = payload.kind;
+          throw new Error(`Unroutable publish job: ${JSON.stringify(unroutable)}`);
+        }
+      }
+    },
+    {
+      connection: connection(),
+      concurrency: publishDefinition.concurrency,
+      // A publish that has run this long is stuck, not slow: every adapter call
+      // is bounded well inside it.
+      lockDuration: 2 * 60_000,
+    },
+  );
+
+  publishWorker.on('failed', (job, error) => {
+    log.error('job failed', {
+      queue: 'publish-jobs',
+      jobId: job?.id,
+      attempts: job?.attemptsMade,
+      ...internalErrorFields(error),
+    });
+  });
+
+  publishWorker.on('completed', (job) => {
+    log.info('job completed', { queue: 'publish-jobs', jobId: job.id });
+  });
+
   const shutdown = async (signal: string): Promise<void> => {
     // GRACEFUL, so a document mid-parse finishes rather than being abandoned
     // half-written. BullMQ waits for active jobs before resolving.
     log.info('worker stopping', { signal });
-    await worker.close();
+    // BOTH WORKERS, and a publish mid-flight matters more than a parse: the
+    // request may already be at the platform, so abandoning it is how a job
+    // that succeeded gets recorded as one that never ran.
+    await Promise.all([worker.close(), publishWorker.close()]);
     process.exit(0);
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
