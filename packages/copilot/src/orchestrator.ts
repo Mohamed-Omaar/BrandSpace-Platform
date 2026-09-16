@@ -8,7 +8,13 @@ import {
 } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
 import { BrandBrainRetriever } from '@brandspace/brand-brain';
-import { fenceUntrusted, systemClock, type Clock } from '@brandspace/shared';
+import {
+  brandQueryFilter,
+  fenceUntrusted,
+  nullableBrandIdScopeFilter,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import { copilotGenerationFailed, copilotSessionNotFound, requestTooLong } from './errors';
 import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
@@ -91,7 +97,17 @@ export interface OrchestratorOptions {
 
 export interface TurnInput {
   readonly sessionId: string;
-  readonly brandId: string | null;
+  /*
+   * THERE IS NO `brandId` HERE, AND ITS ABSENCE IS THE CONTROL (P7-R1).
+   *
+   * It used to be a caller-supplied field sitting beside `sessionId`, which
+   * meant a member could open a session for the brand they are allowed and then
+   * name a different brand on the turn — the grounding context, and everything
+   * the model then saw, came from the SECOND value while the admission had been
+   * done (or not done) on the first. Two independent brand inputs for one
+   * conversation is one too many. The brand a turn runs against is the brand its
+   * SESSION owns, read from the session row that BrandScope just admitted.
+   */
   readonly request: string;
   readonly authorization: LiveAuthorization;
   readonly planKey: string | null;
@@ -102,6 +118,8 @@ export interface TurnInput {
 }
 
 export interface TurnResult {
+  /** The session's OWN brand — never a value the caller supplied. */
+  readonly brandId: string | null;
   readonly summary: { ar: string; en: string };
   readonly steps: readonly ProposedStep[];
   /** Tool keys the model asked for that it may not use, or that do not exist. */
@@ -129,19 +147,42 @@ export class CopilotOrchestrator {
     this.#clock = options.clock ?? systemClock;
   }
 
-  /** Start or resume a conversation. A session belongs to ONE person. */
+  /**
+   * Start a conversation. A session belongs to ONE person AND to ONE brand.
+   *
+   * THE BRAND IS ADMITTED BEFORE THE ROW EXISTS (P7-R1). The route used to take
+   * `brandId` from the request body and hand it straight to `create()`: nothing
+   * asked whether the brand was real, whether it belonged to this workspace, or
+   * whether this member was allowed to act on it. A member restricted to Brand A
+   * could open a session naming Brand B and every turn afterwards would ground
+   * itself in Brand B's knowledge — because the session row said so, and nothing
+   * had ever checked the row.
+   *
+   * THE CHECK IS A QUERY, NOT AN ASSERTION AFTER A READ (D-132). One
+   * `findFirst` asks "a brand with this id, in this workspace, within this
+   * member's scope" and an empty answer is the refusal. The two failure modes —
+   * a brand that does not exist and a brand this member may not touch — produce
+   * the same empty result and therefore the same 404, so a restricted member
+   * cannot enumerate their colleagues' brands by watching which ids error
+   * differently (CLAUDE.md §2.1).
+   *
+   * THE REFUSAL IS `copilotSessionNotFound()`, the same error a missing session
+   * raises, for the same reason.
+   */
   async openSession(input: {
-    userId: string;
+    authorization: LiveAuthorization;
     brandId: string | null;
     surface: string;
     locale: Locale;
     expiresAt: Date | null;
   }): Promise<CopilotSession> {
+    const brandId = await this.#admitBrand(input.brandId, input.authorization);
+
     return this.#db.copilotSession.create({
       data: {
         workspaceId: this.#workspaceId,
-        userId: input.userId,
-        brandId: input.brandId,
+        userId: input.authorization.userId,
+        brandId,
         surface: input.surface,
         locale: input.locale,
         expiresAt: input.expiresAt,
@@ -149,14 +190,45 @@ export class CopilotOrchestrator {
     });
   }
 
-  /** What would this turn cost? Quoted through the gateway's own resolution. */
+  /**
+   * ADMISSION: the brand, or a 404 — and NOTHING happens before it returns.
+   *
+   * No retrieval, no gateway call, no reservation, no row. The one place the
+   * question is asked, so a fifth caller cannot answer it a fourth way.
+   */
+  async #admitBrand(
+    brandId: string | null,
+    authorization: LiveAuthorization,
+  ): Promise<string | null> {
+    if (!brandId) return null;
+    const brand = await this.#db.brand.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        // An `AND`, never two spreads that both set `id`: see `brandQueryFilter`.
+        ...brandQueryFilter({ brandId, brandScope: authorization.brandScope }),
+      },
+      select: { id: true },
+    });
+    if (!brand) throw copilotSessionNotFound();
+    return brand.id;
+  }
+
+  /**
+   * What would this turn cost? Quoted through the gateway's own resolution.
+   *
+   * IT ADMITS THE BRAND FIRST, exactly as `openSession` does. A quote retrieves
+   * brand context to price it, and retrieval against a brand the caller may not
+   * see is a read they may not make — a cheaper one than a turn, and no more
+   * theirs to make.
+   */
   async quote(input: {
     request: string;
     brandId: string | null;
     authorization: LiveAuthorization;
     planKey: string | null;
   }): Promise<AiQuote> {
-    const context = await this.#context(input.brandId, input.request);
+    const brandId = await this.#admitBrand(input.brandId, input.authorization);
+    const context = await this.#context(brandId, input.request);
     return this.#gateway.quote({
       workspaceId: this.#workspaceId,
       taskKey: 'copilot.chat',
@@ -185,33 +257,84 @@ export class CopilotOrchestrator {
       throw requestTooLong(this.#policy.conversation.maxRequestChars);
     }
 
+    /*
+     * THE SESSION LOOKUP IS THE ADMISSION (P7-R1). Three predicates, all in the
+     * WHERE, all live:
+     *
+     *   - the workspace, which RLS enforces underneath this anyway;
+     *   - the USER, so another member cannot post into somebody's conversation
+     *     and cannot learn that it exists;
+     *   - the BRAND SCOPE the caller holds RIGHT NOW.
+     *
+     * The third is the new one and it is the one that matters. A session opened
+     * yesterday for Brand A, by a member whose scope was narrowed to Brand B
+     * this morning, is simply not found — the narrowing takes effect on the next
+     * turn, with no separate revocation step and nothing to remember to run. A
+     * general session carries no brand and stays reachable, which is why this is
+     * `nullableBrandIdScopeFilter` and not `brandIdScopeFilter`: the latter
+     * would make every brand-less conversation vanish for a restricted member.
+     */
     const session = await this.#db.copilotSession.findFirst({
       where: {
         id: input.sessionId,
         workspaceId: this.#workspaceId,
-        // A session belongs to one person; another member cannot post into it,
-        // and cannot learn that it exists.
         userId: input.authorization.userId,
+        ...nullableBrandIdScopeFilter(input.authorization.brandScope),
       },
     });
     if (!session) throw copilotSessionNotFound();
 
-    const correlationId = randomUUID();
+    /*
+     * THE BRAND IS THE SESSION'S, and it has just been admitted by the query
+     * above. Nothing the caller sent decides what this turn is grounded in.
+     */
+    const brandId = session.brandId;
 
-    await this.#db.copilotMessage.create({
-      data: {
-        workspaceId: this.#workspaceId,
-        sessionId: session.id,
-        role: 'USER',
-        body: input.request,
-        idempotencyKey: input.idempotencyKey,
-        correlationId,
-        expiresAt: input.expiresAt,
-      },
+    /*
+     * RETRY SAFETY, AND IT STARTS BEFORE THE FIRST WRITE (P7-R2).
+     *
+     * The turn used to `create()` the USER message unconditionally, so a client
+     * that retried after a timeout wrote the customer's message a second time —
+     * or, once the unique index existed, failed the whole retry on a constraint
+     * the retry was supposed to be protected by. `ON CONFLICT DO NOTHING`
+     * (D-144) makes the first write the only write, and the row that survives
+     * carries the `correlationId` every later record in this turn joins on, so a
+     * retry rejoins the ORIGINAL turn rather than starting a parallel one.
+     *
+     * THE KEY IS SCOPED TO THE SESSION by the unique index itself
+     * (`workspaceId, sessionId, idempotencyKey`) — a key is a de-duplication
+     * token, never a credential, and it can only ever reach the one conversation
+     * the caller has already been admitted to.
+     */
+    await this.#db.copilotMessage.createMany({
+      data: [
+        {
+          workspaceId: this.#workspaceId,
+          sessionId: session.id,
+          role: 'USER',
+          body: input.request,
+          idempotencyKey: input.idempotencyKey,
+          correlationId: randomUUID(),
+          expiresAt: input.expiresAt,
+        },
+      ],
+      skipDuplicates: true,
     });
 
+    const userMessage = await this.#db.copilotMessage.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        sessionId: session.id,
+        idempotencyKey: input.idempotencyKey,
+        role: 'USER',
+      },
+      select: { correlationId: true },
+    });
+    /* c8 ignore next -- the row was just written or already existed. */
+    const correlationId = userMessage?.correlationId ?? randomUUID();
+
     const history = await this.#history(session.id);
-    const context = await this.#context(input.brandId, input.request);
+    const context = await this.#context(brandId, input.request);
 
     const result: AiGatewayResult = await this.#gateway.execute({
       workspaceId: this.#workspaceId,
@@ -285,24 +408,34 @@ export class CopilotOrchestrator {
       });
     }
 
-    await this.#db.copilotMessage.create({
-      data: {
-        workspaceId: this.#workspaceId,
-        sessionId: session.id,
-        role: 'ASSISTANT',
-        /*
-         * THE CUSTOMER-FACING SUMMARY, AND NOTHING ELSE.
-         *
-         * Not the model's raw response, not its reasoning, not the tool
-         * arguments. "Do not persist hidden chain-of-thought" is the rule, and the
-         * way it is kept is that only the two sentences a person actually reads
-         * are written down.
-         */
-        body: `${parsed.summary.en}\n${parsed.summary.ar}`,
-        aiRequestId: result.requestId,
-        correlationId,
-        expiresAt: input.expiresAt,
-      },
+    await this.#db.copilotMessage.createMany({
+      data: [
+        {
+          workspaceId: this.#workspaceId,
+          sessionId: session.id,
+          role: 'ASSISTANT',
+          /*
+           * THE CUSTOMER-FACING SUMMARY, AND NOTHING ELSE.
+           *
+           * Not the model's raw response, not its reasoning, not the tool
+           * arguments. "Do not persist hidden chain-of-thought" is the rule, and
+           * the way it is kept is that only the two sentences a person actually
+           * reads are written down.
+           */
+          body: `${parsed.summary.en}\n${parsed.summary.ar}`,
+          aiRequestId: result.requestId,
+          /*
+           * ITS OWN KEY, DERIVED FROM THE TURN'S. The unique index is per
+           * session, so a retry that reaches this line after the gateway
+           * replayed writes nothing rather than adding a second copy of the same
+           * answer to the conversation.
+           */
+          idempotencyKey: `${input.idempotencyKey}:assistant`,
+          correlationId,
+          expiresAt: input.expiresAt,
+        },
+      ],
+      skipDuplicates: true,
     });
 
     await this.#db.copilotSession.update({
@@ -311,6 +444,7 @@ export class CopilotOrchestrator {
     });
 
     return {
+      brandId,
       summary: parsed.summary,
       steps,
       rejectedToolKeys,

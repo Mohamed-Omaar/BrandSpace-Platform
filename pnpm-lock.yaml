@@ -297,6 +297,9 @@ importers:
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../../packages/entitlements
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs

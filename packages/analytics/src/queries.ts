@@ -1,3 +1,4 @@
+import type { Prisma } from '@brandspace/database';
 import type {
   AnalyticsFreshness,
   MetricGranularity,
@@ -17,6 +18,7 @@ import {
   DERIVED_METRICS,
   findMetric,
   isAdditive,
+  isLevelMetric,
   providerSupportsMetric,
 } from './metrics';
 import { freshnessFor, type AnalyticsPolicy } from './policy';
@@ -337,14 +339,28 @@ export class AnalyticsQueryService {
         granularity,
       },
       _sum: { value: true },
-      _max: { value: true },
       orderBy: { periodStart: 'asc' },
     });
 
-    const additive = isAdditive(input.metricKey);
+    /*
+     * A SERIES BUCKET IS ALREADY "LATEST", SO IT IS A SUM — AND NEVER A MAX
+     * (P7-R7).
+     *
+     * `observationKey` is unique per (subject, metric, granularity, periodStart),
+     * so within ONE bucket each subject contributes exactly one reading: the
+     * reading FOR that bucket. Combining them across subjects is the declared
+     * rule for both kinds of metric — add the accounts' impressions, add the
+     * accounts' follower counts — so one `_sum` is correct for both, and the
+     * `_max` that used to serve the level case was simply the wrong number
+     * (the largest ACCOUNT, not the brand's total).
+     *
+     * The "latest" part of a level's semantics belongs to the WINDOW, where
+     * `#latestPerSubject` applies it; a time series is asking a different
+     * question and must not answer it by flattening the window.
+     */
     const points = rows.map((row) => ({
       periodStart: row.periodStart,
-      value: additive ? (row._sum.value ?? null) : (row._max.value ?? null),
+      value: row._sum.value ?? null,
     }));
 
     return {
@@ -453,20 +469,40 @@ export class AnalyticsQueryService {
     const definition = findMetric(input.metricKey);
     if (!definition || definition.derivedFrom) return [];
 
+    const where = {
+      ...this.#where(input.scope, input.brandScope, input.period),
+      metricKey: input.metricKey,
+    };
+
+    /*
+     * THE SAME RESOLUTION AS THE SUMMARY (P7-R7), so a platform comparison and
+     * the headline figure above it cannot disagree about what "followers" means.
+     */
+    if (isLevelMetric(input.metricKey)) {
+      /*
+       * AT THE SAME GRANULARITY THE SUMMARY USES. `byProvider` takes none, and
+       * `DAY` is the grain every level metric is ingested at; asking for "the
+       * latest daily reading per account" is the same question the tile above
+       * this comparison answers.
+       */
+      const latest = await this.#latestPerSubject(where, input.metricKey, 'DAY');
+      if (!latest) return [];
+      return [...latest.byProvider.entries()].map(([provider, value]) => ({
+        provider,
+        value,
+        unit: definition.unit,
+      }));
+    }
+
     const rows = await this.#db.metricObservation.groupBy({
       by: ['provider'],
-      where: {
-        ...this.#where(input.scope, input.brandScope, input.period),
-        metricKey: input.metricKey,
-      },
+      where,
       _sum: { value: true },
-      _max: { value: true },
     });
 
-    const additive = isAdditive(input.metricKey);
     return rows.map((row) => ({
       provider: row.provider,
-      value: additive ? (row._sum.value ?? null) : (row._max.value ?? null),
+      value: row._sum.value ?? null,
       unit: definition.unit,
     }));
   }
@@ -478,30 +514,118 @@ export class AnalyticsQueryService {
     period: AnalyticsPeriod,
     granularity: MetricGranularity,
   ): Promise<Map<string, AggregateRow>> {
+    const where = { ...this.#where(scope, brandScope, period), granularity };
     const rows = await this.#db.metricObservation.groupBy({
       by: ['metricKey', 'unit'],
-      where: { ...this.#where(scope, brandScope, period), granularity },
+      where,
       _sum: { value: true },
-      _max: { value: true },
       _count: { _all: true },
     });
 
     const out = new Map<string, AggregateRow>();
     for (const row of rows) {
+      /*
+       * `latest` IS COMPUTED ONLY FOR THE METRICS THAT HAVE ONE (P7-R7).
+       *
+       * It used to be `MAX(value)` for every metric, taken in the same pass —
+       * cheap, and wrong for exactly the metric that needed it. A level's window
+       * value is each SUBJECT'S most recent reading, added across subjects, so
+       * it needs its own two-query resolution and gets one. A flow has no
+       * "latest" at all and is now `null` rather than a maximum nobody should
+       * read.
+       */
+      const latest = isLevelMetric(row.metricKey)
+        ? await this.#latestPerSubject(where, row.metricKey, granularity)
+        : null;
+
       out.set(row.metricKey, {
         metricKey: row.metricKey,
         unit: row.unit,
         total: row._sum.value ?? null,
-        // For a NON-additive level metric — a follower count — the meaningful
-        // answer over a window is the most recent reading, not a sum and not a
-        // mean. `_max` is the closest aggregate PostgreSQL will give in one pass
-        // and matches the behaviour of a monotonic follower count; a genuinely
-        // declining one is served by `follower_change`, which IS additive.
-        latest: row._max.value ?? null,
+        latest: latest === null ? null : latest.total,
         observations: BigInt(row._count._all),
       });
     }
     return out;
+  }
+
+  /**
+   * EACH SUBJECT'S MOST RECENT READING IN THE WINDOW, ADDED UP.
+   *
+   * THE SEMANTICS, stated so a test can assert them directly. A brand with two
+   * Instagram accounts and one LinkedIn account, asked for `followers` over
+   * March: take each account's LAST March reading — not its largest, not its
+   * first — and add the three. An account that lost followers contributes the
+   * number it ended March with.
+   *
+   * TWO QUERIES, AND NEITHER READS A ROW IT THEN DISCARDS. The first asks the
+   * database for each subject's latest `periodStart`; the second fetches exactly
+   * those observations. `observationKey` is UNIQUE per
+   * (workspace, connection, subject, metric, granularity, periodStart), so each
+   * (subject, latest period) pair identifies exactly ONE row — there is no
+   * tie to break and no second ordering to get wrong.
+   *
+   * THE SUBJECT IS (connection, external id), not the connection alone: one
+   * connection can carry several measured subjects, and collapsing them would
+   * drop all but one.
+   *
+   * It returns the per-provider split as well, because `byProvider` needs the
+   * same reading and must not compute it a second way.
+   */
+  async #latestPerSubject(
+    where: Prisma.MetricObservationWhereInput,
+    metricKey: string,
+    granularity: MetricGranularity,
+  ): Promise<{
+    total: bigint | null;
+    byProvider: Map<SocialProvider, bigint>;
+    observations: number;
+  } | null> {
+    /*
+     * ONE GRANULARITY, NAMED BY THE CALLER, AND IT IS NOT OPTIONAL.
+     *
+     * `observationKey` is unique per (subject, metric, GRANULARITY, periodStart),
+     * so a subject that carries both a DAY and a MONTH reading for the same
+     * instant has two rows — and a "latest per subject" that did not pin the
+     * granularity would add both, double-counting an account. Pinning it makes
+     * each (subject, latest period) pair exactly one row, which is what lets the
+     * second query below be a plain fetch with no tie to break.
+     */
+    const scopedWhere: Prisma.MetricObservationWhereInput = { ...where, metricKey, granularity };
+
+    const subjects = await this.#db.metricObservation.groupBy({
+      by: ['socialConnectionId', 'subjectExternalId'],
+      where: scopedWhere,
+      _max: { periodStart: true },
+    });
+    if (subjects.length === 0) return null;
+
+    const pairs = subjects.flatMap((subject) =>
+      subject._max.periodStart === null
+        ? []
+        : [
+            {
+              socialConnectionId: subject.socialConnectionId,
+              subjectExternalId: subject.subjectExternalId,
+              periodStart: subject._max.periodStart,
+            },
+          ],
+    );
+    /* c8 ignore next -- a grouped subject always has a max period. */
+    if (pairs.length === 0) return null;
+
+    const rows = await this.#db.metricObservation.findMany({
+      where: { ...scopedWhere, OR: pairs },
+      select: { provider: true, value: true },
+    });
+
+    let total = 0n;
+    const byProvider = new Map<SocialProvider, bigint>();
+    for (const row of rows) {
+      total += row.value;
+      byProvider.set(row.provider, (byProvider.get(row.provider) ?? 0n) + row.value);
+    }
+    return { total, byProvider, observations: rows.length };
   }
 
   #derivedValue(

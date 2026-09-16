@@ -12,7 +12,8 @@ import {
   ContentCalendarService,
   TenantContentPolicySource,
 } from '@brandspace/content';
-import { NotificationService } from '@brandspace/notifications';
+import { createScheduleQuota } from '@brandspace/entitlements';
+import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
 import { createLogger } from '@brandspace/shared';
 
@@ -98,17 +99,20 @@ function portsFor(
          * `publishing.manage`; telling anybody else would be noise, and letting a
          * rule name recipients would let it address people who cannot act.
          */
-        const recipients = await db.membership.findMany({
-          where: {
-            workspaceId,
-            status: 'ACTIVE',
-            role: { permissions: { some: { permission: { key: 'publishing.manage' } } } },
-          },
-          select: { userId: true },
-          take: 50,
+        /*
+         * AND THEIR BRANDSCOPE MUST COVER THIS BRAND (P7-R10). The rule is
+         * `resolveRecipients`, in `@brandspace/notifications`, where it can be
+         * tested and shared — it used to be an inlined query here that checked
+         * the permission and nothing else.
+         */
+        const userIds = await resolveRecipients({
+          db,
+          workspaceId,
+          permissionKey: 'publishing.manage',
+          brandId: input.brandId,
         });
         const delivered = await service.create({
-          userIds: recipients.map((recipient) => recipient.userId),
+          userIds,
           templateKey: input.templateKey as never,
           brandId: input.brandId,
           resourceType: input.resourceType,
@@ -152,21 +156,17 @@ function portsFor(
           policy,
           timezone: workspace?.timezone ?? 'UTC',
           /*
-           * THE QUOTA IS REAL, and an automation is subject to it exactly as a
-           * person is. A rule that could schedule past a plan's monthly ceiling
-           * would be a way to buy headroom by writing a rule.
+           * THE QUOTA IS REAL (P7-R6), and an automation is subject to it
+           * exactly as a person is. A rule that could schedule past a plan's
+           * monthly ceiling would be a way to buy headroom by writing a rule.
+           *
+           * It USED to be three no-op methods under this very comment. The
+           * shared implementation now lives in `@brandspace/entitlements`, where
+           * every surface can reach it, so there is one answer to "may this
+           * workspace schedule another post?" and the same usage ledger rows and
+           * idempotency keys behind it.
            */
-          quota: {
-            async limit() {
-              return null;
-            },
-            async consume() {
-              return true;
-            },
-            async refund() {
-              /* No-op: the caller wires the real quota where one is available. */
-            },
-          },
+          quota: createScheduleQuota({ db, workspaceId, environment }),
         });
         const view = await calendar.schedule({
           contentItemId: input.contentItemId,

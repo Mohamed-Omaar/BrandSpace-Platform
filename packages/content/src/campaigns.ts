@@ -108,12 +108,27 @@ export class CampaignService {
       throw new AppError('VALIDATION_FAILED', 'A campaign cannot end before it starts.');
     }
 
-    // Idempotency: a retried creation returns the first campaign rather than
-    // making a second. Matters more here than usual, because the Copilot creates
-    // campaigns and a retried tool call must not duplicate one.
+    /*
+     * Idempotency: a retried creation returns the first campaign rather than
+     * making a second. Matters more here than usual, because the Copilot creates
+     * campaigns and a retried tool call must not duplicate one.
+     *
+     * AND THE LOOKUP IS BOUND TO THE BRAND, THE SCOPE AND THE CREATOR (P7-R2).
+     *
+     * Matching on the key alone hands a member who guessed or observed another
+     * member's key that member's campaign row. The Copilot's key is derived and
+     * not guessable, but this method is not the Copilot's alone, and a lookup
+     * whose safety depends on which caller happens to reach it is one caller
+     * away from being wrong.
+     */
     if (input.idempotencyKey) {
       const existing = await this.#db.campaign.findFirst({
-        where: { workspaceId: this.#workspaceId, idempotencyKey: input.idempotencyKey },
+        where: {
+          workspaceId: this.#workspaceId,
+          idempotencyKey: input.idempotencyKey,
+          createdByUserId: input.actor.userId,
+          ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.actor.brandScope }),
+        },
       });
       if (existing) return existing;
     }

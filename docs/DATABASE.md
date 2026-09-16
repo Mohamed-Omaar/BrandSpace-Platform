@@ -1530,3 +1530,30 @@ A Copilot message ROW survives its body, because the shape of the conversation a
 tool calls and audit events must outlive the words — an audit event pointing at a row that no longer
 exists is a dangling reference in a security record. `audit_event`, `credit_transaction`,
 `ai_usage_ledger` and `ai_request` are never touched by either pass.
+
+### 18.4 Phase 7 remediation — `insight.sourceInsightId`
+
+One nullable column, one composite foreign key, one index; migration
+`20260916230000_phase_7_remediation_strategy_provenance`.
+
+| Column            | Type   | Notes                                                                             |
+| ----------------- | ------ | --------------------------------------------------------------------------------- |
+| `sourceInsightId` | `UUID` | The insight this one was generated FROM. Today: a `MONTHLY_PLAN` → its `STRATEGY` |
+
+**Why it exists.** "Grounded in the accepted strategy" lived entirely in a prompt: the generated plan
+stored no link, so a reader could not tell which strategy it followed from and nothing could detect a plan
+still being shown after its strategy was superseded (D-166).
+
+**The key is COMPOSITE (D-112) and SELF-REFERENTIAL.** `FOREIGN KEY ("workspaceId", "sourceInsightId")
+REFERENCES "insight"("workspaceId", "id")`. A plain `sourceInsightId -> insight(id)` would resolve another
+workspace's insight — PostgreSQL evaluates referential integrity as the table owner with RLS bypassed —
+and "inserted" versus "violates foreign key" would answer "does that insight exist?" across the tenant
+boundary.
+
+**`ON DELETE SET NULL` NAMES ITS COLUMN (D-114):** `ON DELETE SET NULL ("sourceInsightId")`. A bare SET
+NULL on a composite key nulls every referencing column, `workspaceId` included, and `workspaceId` is NOT
+NULL — the delete would fail outright. `SET NULL` rather than cascade because a plan outlives the proposal
+it came from: deleting the strategy must not delete the month's work.
+
+No RLS change: `insight` already carries the tenant policy, and a new column on an existing table inherits
+it.

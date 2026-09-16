@@ -17,6 +17,7 @@ import {
   CampaignService,
   ContentApprovalService,
   ContentCalendarService,
+  ContentLibraryService,
   ContentStudioService,
   TenantContentPolicySource,
   resolveContentExpiry,
@@ -77,9 +78,14 @@ const sessionSchema = z.object({
   locale: z.enum(['AR', 'EN']).default('EN'),
 });
 
+/*
+ * NO `brandId` (P7-R1). The brand a turn runs against is the brand its SESSION
+ * owns, and the session was admitted against the caller's BrandScope when it was
+ * opened and again on every turn. A second, caller-supplied brand beside the
+ * session id was two answers to one question, and the unchecked one won.
+ */
 const turnSchema = z.object({
   sessionId: z.string().uuid(),
-  brandId: z.string().uuid().nullable().default(null),
   request: z.string().min(1).max(4_000),
   idempotencyKey: z.string().min(8).max(200),
 });
@@ -112,8 +118,33 @@ function externalActions(db: TenantScopedClient): ExternalActionPort {
   return {
     async publishNow(input) {
       const environment = currentEnvironment();
-      const policy = await resolvePublishingPolicy(configurationService(), environment);
       const contentPolicy = await new TenantContentPolicySource(db, environment).load();
+
+      /*
+       * THE TARGET IS ADMITTED BEFORE ANYTHING IS BUILT (P7-R3).
+       *
+       * One query, three predicates, all in the WHERE: the workspace, the
+       * caller's LIVE BrandScope, and the brand the confirmed step NAMED. The
+       * third is what binds `contentItemId` to `brandId` — a plan carrying a
+       * brand the caller may act on and a content item belonging to a different
+       * brand used to pass every check and publish the wrong post.
+       *
+       * IT COMES BEFORE EVERY EFFECT on purpose: no calendar, no slot, no
+       * materialisation, no queue entry, no provider request. A refusal here
+       * happens before anything exists to undo — the only acceptable shape for a
+       * fail-closed check on an action that leaves the platform.
+       */
+      await new ContentLibraryService({
+        db,
+        workspaceId: input.workspaceId,
+        policy: contentPolicy,
+      }).requireItemForBrand({
+        contentItemId: input.contentItemId,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+      });
+
+      const policy = await resolvePublishingPolicy(configurationService(), environment);
 
       const workspace = await db.workspace.findFirst({
         where: { id: input.workspaceId },
@@ -152,8 +183,14 @@ function externalActions(db: TenantScopedClient): ExternalActionPort {
         contentItemId: input.contentItemId,
         localTime: `${localTime['year']}-${localTime['month']}-${localTime['day']}T${localTime['hour']}:${localTime['minute']}`,
         actorUserId: input.actorUserId,
-        // The caller has already been authorized; the calendar re-checks anyway.
-        actorBrandScope: [],
+        /*
+         * THE CONFIRMER'S OWN SCOPE. It used to be `[]` with a comment claiming
+         * the calendar re-checked anyway — but empty means UNRESTRICTED here, so
+         * that literal DISABLED the calendar's brand check on the one action
+         * that leaves the platform. Carrying the real scope is what makes the
+         * re-check a re-check.
+         */
+        actorBrandScope: input.actorBrandScope,
       });
 
       const pipeline = new PublishPipelineService({
@@ -220,8 +257,20 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               policy,
               gateway: gateway(),
             });
+            /*
+             * THE LIVE AUTHORIZATION, BEFORE A SESSION EXISTS (P7-R1). The
+             * orchestrator admits the brand against this scope with a query, and
+             * refuses an out-of-scope or fabricated brand identically.
+             */
+            const authorization = await resolveLiveAuthorization(
+              db,
+              caller.workspaceId,
+              caller.userId,
+            );
+            if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
+
             return orchestrator.openSession({
-              userId: caller.userId,
+              authorization,
               brandId: parsed.data.brandId,
               surface: parsed.data.surface,
               locale: parsed.data.locale,
@@ -296,7 +345,6 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
             });
             const turn = await orchestrator.turn({
               sessionId: body.sessionId,
-              brandId: body.brandId,
               request: body.request,
               authorization,
               planKey: facts.planKey,
@@ -313,7 +361,8 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
             });
             const created = await plans.createPlan({
               sessionId: body.sessionId,
-              brandId: body.brandId,
+              // THE SESSION'S BRAND, returned by the turn that just admitted it.
+              brandId: turn.brandId,
               authorization,
               steps: turn.steps,
               summary: turn.summary,
@@ -542,6 +591,13 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
                   policy: contentPolicy,
                   timezone: workspace?.timezone ?? 'UTC',
                   quota: scheduleQuota(db, caller.workspaceId),
+                }),
+                // THE CONTENT DOMAIN'S OWN ARCHIVE (P7-R4). The undo no longer
+                // knows how to write a content row.
+                library: new ContentLibraryService({
+                  db,
+                  workspaceId: caller.workspaceId,
+                  policy: contentPolicy,
                 }),
               },
             });

@@ -4,8 +4,12 @@ import {
   type CopilotToolCall,
   type TenantScopedClient,
 } from '@brandspace/database';
-import type { CampaignService, ContentCalendarService } from '@brandspace/content';
-import { systemClock, type Clock } from '@brandspace/shared';
+import type {
+  CampaignService,
+  ContentCalendarService,
+  ContentLibraryService,
+} from '@brandspace/content';
+import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import { copilotPlanNotFound, undoUnsafe, undoWindowClosed } from './errors';
 import type { LiveAuthorization } from './authorization';
 import { resolveLiveAuthorization, holds } from './authorization';
@@ -51,6 +55,12 @@ export interface UndoServiceOptions {
 export interface UndoCollaborators {
   readonly campaigns: CampaignService;
   readonly calendar: ContentCalendarService;
+  /**
+   * The content domain's own archive. REQUIRED, not optional (P7-R4): the
+   * compensation used to reach past the domain with raw Prisma, and an optional
+   * collaborator would let the next surface do it again.
+   */
+  readonly library: ContentLibraryService;
 }
 
 export interface UndoOutcome {
@@ -124,7 +134,7 @@ export class CopilotUndoService {
         continue;
       }
 
-      const reason = await this.#compensate(call, authorization, input.collaborators);
+      const reason = await this.#compensate(call, plan, authorization, input.collaborators);
       if (reason === null) {
         await this.#db.copilotToolCall.update({
           where: { id: call.id },
@@ -183,6 +193,7 @@ export class CopilotUndoService {
    */
   async #compensate(
     call: CopilotToolCall,
+    plan: CopilotActionPlan,
     authorization: LiveAuthorization,
     collaborators: UndoCollaborators,
   ): Promise<string | null> {
@@ -191,12 +202,34 @@ export class CopilotUndoService {
 
     const actor = { userId: authorization.userId, brandScope: authorization.brandScope };
 
+    /*
+     * THE PREDICATE EVERY PRECONDITION READ CARRIES (P7-R4).
+     *
+     * Two things at once, and both were missing:
+     *
+     *   - THE LIVE SCOPE. Undo is re-authorized against the membership as it is
+     *     NOW, and an administrator who narrowed somebody's BrandScope after a
+     *     plan ran expects that to close the undo button too. Reading the target
+     *     by `{ id, workspaceId }` meant it did not.
+     *   - THE PLAN'S OWN BRAND. A compensation contract is stored JSON on a row;
+     *     binding the target id to the brand the plan ran against means a
+     *     contract naming some other brand's resource finds nothing.
+     *
+     * An out-of-scope target therefore reads as `already_gone` — the same
+     * machine code a genuinely missing one produces, so the refusal reason
+     * cannot be used to probe for ids (CLAUDE.md §2.1).
+     */
+    const scoped = brandIdQueryFilter({
+      brandId: plan.brandId ?? undefined,
+      brandScope: authorization.brandScope,
+    });
+
     switch (contract['kind'] as CompensationKind) {
       case 'campaign.archive': {
         const campaignId = String(contract['campaignId']);
         const expectedVersion = Number(contract['expectedVersion']);
         const campaign = await this.#db.campaign.findFirst({
-          where: { id: campaignId, workspaceId: this.#workspaceId },
+          where: { id: campaignId, workspaceId: this.#workspaceId, ...scoped },
           select: { version: true, deletedAt: true },
         });
         if (!campaign) return 'already_gone';
@@ -207,7 +240,7 @@ export class CopilotUndoService {
 
         if (contract['requireNoContent'] === true) {
           const attached = await this.#db.contentItem.count({
-            where: { workspaceId: this.#workspaceId, campaignId, deletedAt: null },
+            where: { workspaceId: this.#workspaceId, campaignId, deletedAt: null, ...scoped },
           });
           // CONTENT WAS FILED UNDER IT. Archiving would take somebody's work out
           // of view along with an empty shell nobody minded.
@@ -223,7 +256,7 @@ export class CopilotUndoService {
         const expectedVersion = Number(contract['expectedVersion']);
         const previous = (contract['previous'] ?? {}) as Record<string, unknown>;
         const campaign = await this.#db.campaign.findFirst({
-          where: { id: campaignId, workspaceId: this.#workspaceId },
+          where: { id: campaignId, workspaceId: this.#workspaceId, ...scoped },
           select: { version: true },
         });
         if (!campaign) return 'already_gone';
@@ -241,37 +274,35 @@ export class CopilotUndoService {
       }
 
       case 'content.archive': {
-        const contentItemId = String(contract['contentItemId']);
-        const allowed = (contract['requireStatusIn'] as string[] | undefined) ?? ['DRAFT'];
-        const item = await this.#db.contentItem.findFirst({
-          where: { id: contentItemId, workspaceId: this.#workspaceId },
-          select: { status: true, deletedAt: true },
-        });
-        if (!item) return 'already_gone';
-        if (item.deletedAt) return null;
         /*
-         * IT LEFT THE UNDO-SAFE STATE. A draft that has been submitted, approved
-         * or scheduled is now part of somebody else's workflow — a reviewer has
-         * it in their queue, or it is on a calendar — and archiving it out from
-         * under them is not an undo.
+         * THROUGH THE CONTENT DOMAIN, NOT PAST IT. `archiveItem` carries the
+         * BrandScope and the plan's brand into BOTH the read and a conditional
+         * write, and audits the change with the brand it actually touched. This
+         * service no longer knows how to archive a content item, which is the
+         * point: a rule enforced in one place cannot be forgotten in a second.
+         *
+         * IT LEFT THE UNDO-SAFE STATE — a draft since submitted, approved or
+         * scheduled is part of somebody else's workflow now, and archiving it
+         * out from under them is not an undo.
          */
-        if (!allowed.includes(item.status)) return 'content_no_longer_draft';
-
-        await this.#db.contentItem.update({
-          where: { id: contentItemId },
-          data: { status: 'ARCHIVED', deletedAt: this.#clock.now() },
-        });
-        await writeAuditEvent(this.#db, this.#workspaceId, {
-          action: 'content.archived',
-          actorType: 'USER',
-          actorId: authorization.userId,
-          resourceType: 'ContentItem',
-          resourceId: contentItemId,
+        const outcome = await collaborators.library.archiveItem({
+          contentItemId: String(contract['contentItemId']),
+          brandId: plan.brandId,
+          brandScope: authorization.brandScope,
+          actorUserId: authorization.userId,
+          requireStatusIn: (contract['requireStatusIn'] as string[] | undefined) ?? ['DRAFT'],
           reason: 'copilot_undo',
-          before: { status: item.status },
-          after: { status: 'ARCHIVED' },
+          now: this.#clock.now(),
         });
-        return null;
+        switch (outcome.outcome) {
+          case 'ARCHIVED':
+          case 'ALREADY_ARCHIVED':
+            return null;
+          case 'NOT_FOUND':
+            return 'already_gone';
+          default:
+            return 'content_no_longer_draft';
+        }
       }
 
       case 'calendar.cancel': {
@@ -279,7 +310,7 @@ export class CopilotUndoService {
         const allowed = (contract['requireStatusIn'] as string[] | undefined) ?? ['SCHEDULED'];
         const expectedAt = contract['expectedScheduledAtUtc'];
         const slot = await this.#db.calendarSlot.findFirst({
-          where: { id: slotId, workspaceId: this.#workspaceId },
+          where: { id: slotId, workspaceId: this.#workspaceId, ...scoped },
           select: { status: true, scheduledAtUtc: true },
         });
         if (!slot) return 'already_gone';

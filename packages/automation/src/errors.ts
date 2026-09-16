@@ -31,6 +31,21 @@ export function unknownTriggerOrAction(): AppError {
 }
 
 /**
+ * THE ACTION CANNOT BE REACHED FROM THAT TRIGGER.
+ *
+ * Three actions operate on a content item; four triggers carry a reference that
+ * is not one — an Insight, a MetricObservation, an ingestion run, or nothing at
+ * all. Pairing them used to be authorable, and the engine then passed the
+ * trigger's id through as a content item id.
+ *
+ * REFUSED AT AUTHORING, where a person is there to be told. At run time the same
+ * pair is a `BLOCKED_BY_POLICY` run, because by then nobody is watching.
+ */
+export function triggerActionIncompatible(): AppError {
+  return new AppError('VALIDATION_FAILED', 'That action cannot run from that trigger.');
+}
+
+/**
  * THE CREATOR NO LONGER HOLDS WHAT THE RULE NEEDS.
  *
  * Raised at CREATION. At RUN time the same situation is not an error at all — it

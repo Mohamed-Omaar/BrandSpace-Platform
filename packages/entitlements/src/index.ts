@@ -12,6 +12,7 @@ export * from './credit-policy';
 export * from './credits';
 export * from './plan-catalogue';
 export * from './precedence';
+export * from './schedule-quota';
 export * from './service';
 export * from './subscription';
 export * from './usage';

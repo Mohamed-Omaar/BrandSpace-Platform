@@ -81,6 +81,22 @@ export interface EvidencePackage {
    * else is.
    */
   readonly allowedNumbers: ReadonlySet<string>;
+  /**
+   * THE SAME DIGIT RUNS, BUT PER EVIDENCE ITEM — and this is the set that
+   * decides whether a claim is grounded (P7-R8).
+   *
+   * `allowedNumbers` above is the union over the WHOLE package, and validating
+   * against it was the defect: a package containing `e1 impressions=12480` and
+   * `e7 followers=980` accepted the sentence "engagement fell to 980" citing
+   * `e1`, because 980 appeared SOMEWHERE. The more evidence a customer has, the
+   * more numbers a model is licensed to attach to the wrong claim — the check
+   * got WEAKER as the data got richer, which is precisely backwards.
+   *
+   * A claim is now checked against the union of the items IT CITED and nothing
+   * else. The union stays on the package because the export and the prompt
+   * builder legitimately need "every number in this evidence".
+   */
+  readonly numbersByOrdinal: ReadonlyMap<number, ReadonlySet<string>>;
   /** The fenced block handed to the gateway as untrusted context. */
   readonly contextText: string;
 }
@@ -202,9 +218,15 @@ export function buildEvidencePackage(input: EvidenceBuilderInput): EvidencePacka
   }
 
   const contextText = renderEvidence(items);
+  const numbersByOrdinal = new Map<number, ReadonlySet<string>>(
+    // ONE ITEM RENDERED ALONE, so the set is exactly what THAT row says — the
+    // value, the previous value, the change, the dates, its own ordinal.
+    items.map((item) => [item.ordinal, digitRuns(renderEvidence([item]))]),
+  );
   return {
     items,
     allowedNumbers: digitRuns(contextText),
+    numbersByOrdinal,
     /*
      * FENCED, AND NOT AS A FORMALITY. Evidence carries provider-supplied account
      * display names and customer-authored post titles, both of which an attacker
@@ -285,18 +307,30 @@ export interface GroundingViolation {
 }
 
 /**
- * Check one piece of model prose against the evidence it cited.
+ * Check ONE piece of model prose against ONLY the evidence THAT PIECE cited.
  *
- * TWO INDEPENDENT CHECKS, because they catch different lies:
+ * THE SCOPE OF THE NUMERAL CHECK IS THE WHOLE POINT (P7-R8). It used to be the
+ * entire package, which made the check weaker the more evidence there was: with
+ * eight rows on the table a model could put any of their numbers into any
+ * sentence and cite whichever row it liked. A claim is a statement about the
+ * things it points at, and the numbers in it must come from those things.
+ *
+ * THREE INDEPENDENT CHECKS, because they catch different lies:
  *
  *   - `unknown_citation` catches a model that invented `e9` when the package has
- *     six items. That is the classic hallucinated reference.
+ *     six items. That is the classic hallucinated reference, and it stays a HARD
+ *     rejection — an unknown ordinal contributes no allowed numbers either, so
+ *     it cannot be used to widen the numeral check.
  *   - `ungrounded_number` catches a model that cited `e3` correctly and then
- *     wrote a number that is nowhere in the evidence. That is the far more
- *     dangerous one, because the citation makes it look verified.
+ *     wrote a number that is nowhere in `e3`. That is the far more dangerous
+ *     one, because the citation makes it look verified.
+ *   - `no_citation` catches "performance was strong", which is not an
+ *     explanation; it is a mood. Every CLAIM must rest on something.
  *
- * A CLAIM WITH NO CITATION AT ALL IS ALSO A VIOLATION. "Performance was strong"
- * is not an explanation; it is a mood. Every claim must rest on something.
+ * `requireCitation: false` IS FOR UNCITED PROSE — a summary. It does not relax
+ * the numeral check; it TIGHTENS it, because an uncited piece of text cites
+ * nothing and therefore has no allowed numbers at all beyond single digits and
+ * whatever the caller declared. See `validateGroundedDocument`.
  */
 export function validateGrounding(input: {
   text: string;
@@ -304,21 +338,33 @@ export function validateGrounding(input: {
   evidence: EvidencePackage;
   /** Additional numerals the caller legitimately supplied, e.g. a year. */
   extraAllowedNumbers?: ReadonlySet<string> | undefined;
+  /** Default true. False for prose that is not itself a claim. */
+  requireCitation?: boolean | undefined;
 }): readonly GroundingViolation[] {
   const violations: GroundingViolation[] = [];
   const known = new Set(input.evidence.items.map((item) => item.ordinal));
 
-  if (input.citedOrdinals.length === 0) {
+  if ((input.requireCitation ?? true) && input.citedOrdinals.length === 0) {
     violations.push({ kind: 'no_citation', detail: '0' });
   }
+
+  /*
+   * THE ALLOW-LIST IS BUILT FROM THE CITED ITEMS, and an UNKNOWN ordinal
+   * contributes nothing to it. So a model cannot launder a fabricated figure by
+   * citing an ordinal that does not exist: it gets a violation for the citation
+   * AND still a violation for the number.
+   */
+  const allowed = new Set<string>();
   for (const ordinal of input.citedOrdinals) {
     if (!known.has(ordinal)) {
       violations.push({ kind: 'unknown_citation', detail: `e${ordinal}` });
+      continue;
     }
+    for (const numeral of input.evidence.numbersByOrdinal.get(ordinal) ?? []) allowed.add(numeral);
   }
 
   for (const numeral of digitRuns(input.text)) {
-    if (input.evidence.allowedNumbers.has(numeral)) continue;
+    if (allowed.has(numeral)) continue;
     if (input.extraAllowedNumbers?.has(numeral)) continue;
     /*
      * SINGLE DIGITS ARE ALLOWED. "the top 3 posts", "week 2", an ordinal in a
@@ -328,6 +374,60 @@ export function validateGrounding(input: {
      */
     if (numeral.length <= 1) continue;
     violations.push({ kind: 'ungrounded_number', detail: numeral });
+  }
+
+  return violations;
+}
+
+/**
+ * VALIDATE A WHOLE DOCUMENT, CLAIM BY CLAIM — the only entry point a service
+ * should use.
+ *
+ * WHAT IT REPLACES. Every caller used to concatenate all the prose, union all
+ * the ordinals, and make one call. That is document-wide grounding: it asks
+ * "does this number appear somewhere in everything that was cited anywhere?",
+ * which is a question whose answer is almost always yes and which no customer
+ * would recognise as a check.
+ *
+ * THE SUMMARY IS EXPLICIT, NOT FORGOTTEN. A summary carries no `evidenceRefs` in
+ * any of these schemas, so it cites nothing — and prose that cites nothing may
+ * not state a measured figure. Single digits still pass (see above); a
+ * two-digit-or-longer numeral in an uncited summary is a violation, so "your
+ * impressions reached 40,000" has to become a claim with a citation before it
+ * can be written at all. That is the stricter of the two options the design
+ * allows, and it is the one that cannot be gamed by a model that would rather
+ * write its numbers where nothing checks them.
+ */
+export function validateGroundedDocument(input: {
+  claims: readonly { evidenceRefs: readonly number[]; text: { ar: string; en: string } }[];
+  /** Prose belonging to the document rather than to a claim. */
+  uncited?: readonly { ar: string; en: string }[] | undefined;
+  evidence: EvidencePackage;
+  extraAllowedNumbers?: ReadonlySet<string> | undefined;
+}): readonly GroundingViolation[] {
+  const violations: GroundingViolation[] = [];
+
+  for (const claim of input.claims) {
+    violations.push(
+      ...validateGrounding({
+        text: `${claim.text.ar}\n${claim.text.en}`,
+        citedOrdinals: claim.evidenceRefs,
+        evidence: input.evidence,
+        extraAllowedNumbers: input.extraAllowedNumbers,
+      }),
+    );
+  }
+
+  for (const prose of input.uncited ?? []) {
+    violations.push(
+      ...validateGrounding({
+        text: `${prose.ar}\n${prose.en}`,
+        citedOrdinals: [],
+        evidence: input.evidence,
+        extraAllowedNumbers: input.extraAllowedNumbers,
+        requireCitation: false,
+      }),
+    );
   }
 
   return violations;

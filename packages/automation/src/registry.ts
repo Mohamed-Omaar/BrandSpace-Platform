@@ -38,6 +38,31 @@ export interface TriggerDefinition {
   readonly config: z.ZodTypeAny;
   /** What the run's `triggerRefType` will be, or null for a timed trigger. */
   readonly refType: string | null;
+  /**
+   * HOW — IF AT ALL — A CONTENT ITEM IS REACHED FROM THIS TRIGGER'S REFERENCE.
+   *
+   * Three actions operate on a content item and used to take `event.refId` and
+   * pass it straight through as one. That is only true for `CONTENT_APPROVED`.
+   * For `ANOMALY_DETECTED` the reference is an Insight, for
+   * `METRIC_THRESHOLD_CROSSED` a MetricObservation, for `ANALYTICS_REFRESHED` an
+   * ingestion run and for `SCHEDULED_TIME` nothing at all — so a rule pairing one
+   * of those with "place it on the calendar" was aiming a content operation at an
+   * id that is not a content item's.
+   *
+   * `null` MEANS THE PAIRING IS NOT AUTHORABLE, and `createRule` refuses it. The
+   * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
+   * query rather than by assuming the ids interchange.
+   */
+  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | null;
+  /**
+   * Does this trigger's identity come from a CLOCK rather than from a row?
+   *
+   * Only the timed one. It is what decides whether a run's idempotency key
+   * carries a time bucket (P7-R5): an event with a reference is identified by
+   * that reference for ever, and bucketing it by the wall-clock hour made a
+   * delayed redelivery look like a new event and run the rule twice.
+   */
+  readonly timeBucketed: boolean;
   readonly messageKey: string;
 }
 
@@ -48,24 +73,32 @@ export const AUTOMATION_TRIGGERS = [
     type: 'CONTENT_APPROVED',
     config: emptyConfig,
     refType: 'ContentItem',
+    contentItemVia: 'direct',
+    timeBucketed: false,
     messageKey: 'contentApproved',
   },
   {
     type: 'CONTENT_SCHEDULED',
     config: emptyConfig,
     refType: 'CalendarSlot',
+    contentItemVia: 'calendarSlot',
+    timeBucketed: false,
     messageKey: 'contentScheduled',
   },
   {
     type: 'POST_PUBLISHED',
     config: emptyConfig,
     refType: 'PublishJob',
+    contentItemVia: 'publishJob',
+    timeBucketed: false,
     messageKey: 'postPublished',
   },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
     refType: 'AnalyticsIngestionRun',
+    contentItemVia: null,
+    timeBucketed: false,
     messageKey: 'analyticsRefreshed',
   },
   {
@@ -77,6 +110,8 @@ export const AUTOMATION_TRIGGERS = [
       })
       .default({}),
     refType: 'Insight',
+    contentItemVia: null,
+    timeBucketed: false,
     messageKey: 'anomalyDetected',
   },
   {
@@ -90,6 +125,8 @@ export const AUTOMATION_TRIGGERS = [
       windowDays: z.number().int().min(1).max(90).default(7),
     }),
     refType: 'MetricObservation',
+    contentItemVia: null,
+    timeBucketed: false,
     messageKey: 'metricThreshold',
   },
   {
@@ -101,6 +138,8 @@ export const AUTOMATION_TRIGGERS = [
       hourLocal: z.number().int().min(0).max(23),
     }),
     refType: null,
+    contentItemVia: null,
+    timeBucketed: true,
     messageKey: 'scheduledTime',
   },
 ] as const satisfies readonly TriggerDefinition[];
@@ -168,6 +207,13 @@ export interface ActionDefinition {
   readonly actionClass: CopilotActionClass;
   /** The workspace permission the rule's CREATOR must still hold at RUN time. */
   readonly permission: string;
+  /**
+   * Does this action operate on a CONTENT ITEM?
+   *
+   * When it does, it may only be paired with a trigger that declares a
+   * `contentItemVia` mapping. See `actionSupportsTrigger`.
+   */
+  readonly needsContentItem: boolean;
   readonly messageKey: string;
 }
 
@@ -183,6 +229,8 @@ export const AUTOMATION_ACTIONS = [
     // being able to see the workspace; the notification carries a pointer, and
     // following it applies the ordinary permission checks.
     permission: 'workspace.read',
+    // A notification points at whatever fired the rule, whatever that is.
+    needsContentItem: false,
     messageKey: 'notify',
   },
   {
@@ -190,6 +238,7 @@ export const AUTOMATION_ACTIONS = [
     config: emptyConfig,
     actionClass: 'INTERNAL_REVERSIBLE',
     permission: 'content.submit',
+    needsContentItem: true,
     messageKey: 'submitForApproval',
   },
   {
@@ -205,6 +254,7 @@ export const AUTOMATION_ACTIONS = [
     }),
     actionClass: 'INTERNAL_REVERSIBLE',
     permission: 'content.schedule',
+    needsContentItem: true,
     messageKey: 'placeOnCalendar',
   },
   {
@@ -221,6 +271,7 @@ export const AUTOMATION_ACTIONS = [
      */
     actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
     permission: 'publishing.manage',
+    needsContentItem: true,
     messageKey: 'proposePublish',
   },
 ] as const satisfies readonly ActionDefinition[];
@@ -238,6 +289,28 @@ export function findTrigger(type: string): TriggerDefinition | undefined {
 
 export function findAction(type: string): ActionDefinition | undefined {
   return ACTIONS_BY_TYPE.get(type);
+}
+
+/**
+ * MAY THIS ACTION BE AUTHORED AGAINST THIS TRIGGER?
+ *
+ * The compatibility rule, in one place, asked at authoring time so an impossible
+ * rule cannot be stored — and asked again at run time by the resolution that
+ * needs the mapping, so a rule stored before this existed fails closed rather
+ * than acting on the wrong id.
+ *
+ * An unknown trigger or action is NOT compatible: failing closed is the only
+ * safe answer for a pair nobody has reasoned about.
+ */
+export function actionSupportsTrigger(
+  actionType: AutomationActionType,
+  triggerType: AutomationTrigger,
+): boolean {
+  const action = findAction(actionType);
+  const trigger = findTrigger(triggerType);
+  if (!action || !trigger) return false;
+  if (!action.needsContentItem) return true;
+  return trigger.contentItemVia !== null;
 }
 
 /** Does this action leave the platform, and therefore need a person? */

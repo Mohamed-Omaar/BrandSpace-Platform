@@ -15,7 +15,7 @@ import {
 import { detectAnomalies, type Anomaly } from './anomalies';
 import {
   buildEvidencePackage,
-  validateGrounding,
+  validateGroundedDocument,
   type EvidenceItem,
   type EvidencePackage,
 } from './evidence';
@@ -27,13 +27,7 @@ import {
   ungroundedExplanation,
 } from './errors';
 import type { AnalyticsPolicy } from './policy';
-import {
-  citedOrdinals,
-  explanationSchema,
-  parseJsonResponse,
-  proseOf,
-  type ParsedExplanation,
-} from './schemas';
+import { explanationSchema, parseJsonResponse, type ParsedExplanation } from './schemas';
 import type { AnalyticsPeriod, AnalyticsQueryService, AnalyticsScope } from './queries';
 
 /**
@@ -84,6 +78,35 @@ const SYSTEM_INSTRUCTION = [
   'Write both Arabic and English. Respond with JSON only, matching the requested schema.',
 ].join(' ');
 
+/**
+ * WHERE AN UNGROUNDED GENERATION GETS RECORDED.
+ *
+ * IT CANNOT BE THIS SERVICE'S OWN TRANSACTION, for the reason
+ * `CopilotDenialSink` carries: every caller reaches this service inside
+ * `withWorkspace`, which is ONE transaction. `explain` audits the rejection and
+ * then THROWS, so the audit row rolls back with the refusal — and an ungrounded
+ * model response is precisely the event docs/SECURITY.md §7 wants a detection
+ * signal for. It was being written and immediately discarded.
+ *
+ * The caller supplies the sink, because the caller owns connections. When it is
+ * absent the service still writes on its own client — correct for a caller that
+ * is not inside a transaction, harmlessly discarded for one that is.
+ */
+export interface InsightDenialSink {
+  (event: {
+    /**
+     * WHICH GENERATION WAS REFUSED. `StrategyService` shares this sink and
+     * writes its own action, so an auditor reading the trail sees a strategy
+     * rejection under the strategy's name rather than under the explanation's.
+     */
+    action: 'analytics.explain_rejected' | 'strategy.rejected';
+    brandId: string;
+    userId: string;
+    reason: string;
+    detail: Record<string, string | number>;
+  }): Promise<void>;
+}
+
 export interface InsightServiceOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -91,6 +114,7 @@ export interface InsightServiceOptions {
   readonly queries: AnalyticsQueryService;
   readonly gateway: AiGateway;
   readonly clock?: Clock;
+  readonly denialSink?: InsightDenialSink | undefined;
 }
 
 export interface ExplainInput {
@@ -124,6 +148,7 @@ export class AnalyticsInsightService {
   readonly #queries: AnalyticsQueryService;
   readonly #gateway: AiGateway;
   readonly #clock: Clock;
+  readonly #denialSink: InsightDenialSink | undefined;
 
   constructor(options: InsightServiceOptions) {
     this.#db = options.db;
@@ -132,6 +157,39 @@ export class AnalyticsInsightService {
     this.#queries = options.queries;
     this.#gateway = options.gateway;
     this.#clock = options.clock ?? systemClock;
+    this.#denialSink = options.denialSink;
+  }
+
+  /**
+   * Record a rejection somewhere it SURVIVES the throw that follows it.
+   *
+   * The sink's own failure is swallowed deliberately: a customer must not get a
+   * 500 because the audit connection was unavailable, and turning a correct
+   * refusal into a server error is the worse of the two outcomes.
+   */
+  async #auditRejection(event: {
+    brandId: string;
+    userId: string;
+    reason: string;
+    detail: Record<string, string | number>;
+  }): Promise<void> {
+    if (this.#denialSink) {
+      await this.#denialSink({ action: 'analytics.explain_rejected', ...event }).catch(
+        () => undefined,
+      );
+      return;
+    }
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'analytics.explain_rejected',
+      actorType: 'SYSTEM',
+      actorId: event.userId,
+      resourceType: 'Insight',
+      brandId: event.brandId,
+      severity: 'WARNING',
+      outcome: 'ERROR',
+      reason: event.reason,
+      after: event.detail,
+    });
   }
 
   /**
@@ -179,10 +237,35 @@ export class AnalyticsInsightService {
       throw explainWindowTooWide(this.#policy.explain.maxWindowDays);
     }
 
-    // Idempotency: a retried request returns the first insight and makes no
-    // second gateway call, so a lost response cannot bill twice.
+    /*
+     * Idempotency: a retried request returns the first insight and makes no
+     * second gateway call, so a lost response cannot bill twice.
+     *
+     * AND IT IS BOUND TO THE CALLER, THE BRAND AND THE TYPE (P7-R2).
+     *
+     * It matched on `workspaceId + idempotencyKey` alone, and the key is chosen
+     * by the CLIENT — so a member who guessed or observed another member's key
+     * was handed that member's insight: its claims, its evidence, its figures.
+     * The `assertBrandInScope` above had only checked the brand they ASKED for,
+     * which is not the brand the replayed row belongs to.
+     *
+     * Four predicates, all in the WHERE: the brand INTERSECTED with the live
+     * scope (so a narrowed scope stops replaying what it would now refuse to
+     * create), the TYPE — an explanation key must not replay as something else —
+     * and the person who generated it. A miss falls through to generation, which
+     * is authorized on its own terms.
+     */
     const replay = await this.#db.insight.findFirst({
-      where: { workspaceId: this.#workspaceId, idempotencyKey: input.idempotencyKey },
+      where: {
+        workspaceId: this.#workspaceId,
+        idempotencyKey: input.idempotencyKey,
+        type: 'ANALYTICS_EXPLANATION',
+        generatedByUserId: input.actorUserId,
+        ...brandIdQueryFilter({
+          brandId: input.brandId,
+          brandScope: input.actorBrandScope,
+        }),
+      },
       include: { evidence: { orderBy: { ordinal: 'asc' } } },
     });
     if (replay) {
@@ -259,25 +342,33 @@ export class AnalyticsInsightService {
      * honest accounting: we paid the provider, and we are refusing to show the
      * customer something we cannot stand behind.
      */
-    const allClaims = [...parsed.claims, ...parsed.notableChanges, ...parsed.recommendations];
-    const violations = validateGrounding({
-      text: proseOf(allClaims, parsed.summary),
-      citedOrdinals: citedOrdinals(allClaims),
+    /*
+     * CLAIM BY CLAIM (P7-R8). This used to concatenate every sentence and union
+     * every ordinal into ONE call, which asked whether each number appeared
+     * somewhere in everything cited anywhere — a check that passes almost always
+     * and gets weaker as a customer accumulates data. Each claim is now measured
+     * against only the evidence it points at, and the summary — which cites
+     * nothing — may not carry a measured figure at all.
+     */
+    const violations = validateGroundedDocument({
+      claims: [...parsed.claims, ...parsed.notableChanges, ...parsed.recommendations],
+      uncited: [parsed.summary],
       evidence: built.evidence,
     });
     if (violations.length > 0) {
-      await writeAuditEvent(this.#db, this.#workspaceId, {
-        action: 'analytics.explain_rejected',
-        actorType: 'SYSTEM',
-        actorId: input.actorUserId,
-        resourceType: 'Insight',
+      /*
+       * THROUGH THE SINK, so the record OUTLIVES the throw on the next line.
+       * Written on this service's own client it was rolled back with the
+       * refusing transaction, and an ungrounded model response — the one event
+       * this whole gate exists to catch — left no trace at all.
+       */
+      await this.#auditRejection({
         brandId: input.brandId,
-        severity: 'WARNING',
-        outcome: 'ERROR',
+        userId: input.actorUserId,
         reason: 'ungrounded_output',
         // KINDS AND COUNTS, never the model's text — which is the thing under
         // suspicion and the last thing to copy into an audit table.
-        after: {
+        detail: {
           violationCount: violations.length,
           kinds: [...new Set(violations.map((v) => v.kind))].join(','),
           aiRequestId: result.requestId,

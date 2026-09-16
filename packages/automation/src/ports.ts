@@ -89,6 +89,17 @@ export interface PublishPort {
     readonly brandId: string;
     readonly contentItemId: string;
     readonly actorUserId: string;
+    /**
+     * THE CONFIRMER'S LIVE BRANDSCOPE (P7-R3).
+     *
+     * Required, not optional, and for the same reason the Copilot's port
+     * requires it: the implementation used to build a calendar with
+     * `actorBrandScope: []`, and empty means UNRESTRICTED here — so the literal
+     * turned the brand check OFF on the one action that leaves the platform. A
+     * required field cannot be forgotten, and an optional one would default to
+     * the permissive value.
+     */
+    readonly actorBrandScope: readonly string[];
     readonly idempotencyKey: string;
   }): Promise<{ readonly jobsCreated: number; readonly slotId: string }>;
 }

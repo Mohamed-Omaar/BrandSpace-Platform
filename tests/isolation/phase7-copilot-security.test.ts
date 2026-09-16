@@ -3,7 +3,12 @@ import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withWorkspace, writeDeniedAudit, type TenantScopedClient } from '@brandspace/database';
 import { defaultPayload } from '@brandspace/config';
-import { CampaignService, ContentCalendarService, parseContentPolicy } from '@brandspace/content';
+import {
+  CampaignService,
+  ContentCalendarService,
+  ContentLibraryService,
+  parseContentPolicy,
+} from '@brandspace/content';
 import {
   COPILOT_TOOLS,
   CopilotPlanService,
@@ -740,6 +745,11 @@ describe('undo is a compensation contract, not a reversed command', () => {
               refund: async () => undefined,
             },
           }),
+          library: new ContentLibraryService({
+            db,
+            workspaceId: fixtures.a.workspaceId,
+            policy: parseContentPolicy(defaultPayload('content')),
+          }),
         },
       }),
     );
@@ -771,6 +781,11 @@ describe('undo is a compensation contract, not a reversed command', () => {
                 consume: async () => true,
                 refund: async () => undefined,
               },
+            }),
+            library: new ContentLibraryService({
+              db,
+              workspaceId: fixtures.a.workspaceId,
+              policy: parseContentPolicy(defaultPayload('content')),
             }),
           },
         }),

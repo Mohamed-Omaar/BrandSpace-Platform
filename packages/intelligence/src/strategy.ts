@@ -9,25 +9,29 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import { BrandBrainRetriever, type RetrievalContext } from '@brandspace/brand-brain';
 import {
   buildEvidencePackage,
-  citedOrdinals,
   contentGapSchema,
   detectAnomalies,
   parseJsonResponse,
-  proseOf,
   strategySchema,
   ungroundedExplanation,
-  validateGrounding,
+  validateGroundedDocument,
   type AnalyticsPeriod,
   type AnalyticsPolicy,
   type AnalyticsQueryService,
   type Anomaly,
   type EvidenceItem,
   type EvidencePackage,
+  type InsightDenialSink,
   type ParsedContentGap,
   type ParsedStrategy,
 } from '@brandspace/analytics';
-import { assertBrandInScope, brandIdQueryFilter, type Clock } from '@brandspace/shared';
-import { generationFailed, insufficientGrounding } from './errors';
+import {
+  assertBrandInScope,
+  brandIdQueryFilter,
+  fenceUntrusted,
+  type Clock,
+} from '@brandspace/shared';
+import { generationFailed, insufficientGrounding, strategyNotFound } from './errors';
 
 /**
  * AI STRATEGY AND MARKETING INTELLIGENCE — the reasoning half of Phase 7.
@@ -97,6 +101,17 @@ export interface StrategyServiceOptions {
    * different customers.
    */
   readonly minimumKnowledgeItems?: number;
+  /**
+   * WHERE AN UNGROUNDED GENERATION IS RECORDED — on a connection this service's
+   * transaction cannot roll back.
+   *
+   * `#generate` audits the rejection and then THROWS, and every caller reaches
+   * it inside `withWorkspace`, which is one transaction. Written on this
+   * service's own client the row went away with the refusal, so the one event
+   * the grounding gate exists to catch left no trace. Same reasoning, same
+   * shape, same reason for being stated again here as `CopilotDenialSink`.
+   */
+  readonly denialSink?: InsightDenialSink | undefined;
   readonly clock?: Clock;
 }
 
@@ -132,6 +147,7 @@ export class StrategyService {
   readonly #gateway: AiGateway;
   readonly #retriever: BrandBrainRetriever;
   readonly #minimumKnowledgeItems: number;
+  readonly #denialSink: InsightDenialSink | undefined;
 
   constructor(options: StrategyServiceOptions) {
     this.#db = options.db;
@@ -141,6 +157,31 @@ export class StrategyService {
     this.#gateway = options.gateway;
     this.#retriever = new BrandBrainRetriever({ db: options.db });
     this.#minimumKnowledgeItems = options.minimumKnowledgeItems ?? DEFAULT_MINIMUM_KNOWLEDGE_ITEMS;
+    this.#denialSink = options.denialSink;
+  }
+
+  /** Record a rejection where it survives the throw. Its own failure is swallowed. */
+  async #auditRejection(event: {
+    brandId: string;
+    userId: string;
+    reason: string;
+    detail: Record<string, string | number>;
+  }): Promise<void> {
+    if (this.#denialSink) {
+      await this.#denialSink({ action: 'strategy.rejected', ...event }).catch(() => undefined);
+      return;
+    }
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'strategy.rejected',
+      actorType: 'SYSTEM',
+      actorId: event.userId,
+      resourceType: 'Insight',
+      brandId: event.brandId,
+      severity: 'WARNING',
+      outcome: 'ERROR',
+      reason: event.reason,
+      after: event.detail,
+    });
   }
 
   /** What would a strategy cost? Sized on the same grounding it will send. */
@@ -190,19 +231,46 @@ export class StrategyService {
   async planMonthly(
     input: StrategyInput & { readonly strategyInsightId: string },
   ): Promise<StrategyResult> {
+    // SCOPE FIRST, so the lookup below cannot be the thing that reveals the
+    // brand. The same F-74 ordering `#generate` uses.
+    assertBrandInScope(input.actorBrandScope, input.brandId);
+
+    /*
+     * THE STRATEGY MUST BELONG TO THE BRAND THE PLAN IS FOR (P7-R9).
+     *
+     * `brandIdQueryFilter` used to be called with the SCOPE ONLY, so the
+     * predicate said "an accepted strategy, anywhere in this workspace, for any
+     * brand the caller may see". A member with two brands could plan brand A's
+     * month against brand B's accepted strategy — and the plan would be
+     * persisted under brand A with B's pillars, B's channel mix and B's
+     * reasoning, with nothing on the row to say where it came from. Passing
+     * `brandId` puts both clauses in an `AND`, so the two INTERSECT.
+     *
+     * A miss is a 404-shaped refusal for the usual reason: "not accepted", "not
+     * this brand's" and "not yours" must be indistinguishable.
+     */
     const strategy = await this.#db.insight.findFirst({
       where: {
         id: input.strategyInsightId,
         workspaceId: this.#workspaceId,
         type: 'STRATEGY',
         status: 'ACCEPTED',
-        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+        ...brandIdQueryFilter({
+          brandId: input.brandId,
+          brandScope: input.actorBrandScope,
+        }),
       },
+      include: { evidence: { orderBy: { ordinal: 'asc' } } },
     });
-    // A miss here is a 404-shaped refusal for the usual reason: "not accepted"
-    // and "not yours" must be indistinguishable.
-    if (!strategy) throw generationFailed(null);
-    return this.#generate(input, 'MONTHLY_PLAN', strategySchema, 'plan.monthly');
+    /*
+     * A 404, NOT AN INTERNAL ERROR. The refusal used to be `generationFailed`,
+     * whose code is `INTERNAL` — under a comment claiming it was 404-shaped. A
+     * caller could therefore tell "that strategy is not yours" (500) from "that
+     * brand is not yours" (404), which is the inference §2.1 closes.
+     */
+    if (!strategy) throw strategyNotFound();
+
+    return this.#generate(input, 'MONTHLY_PLAN', strategySchema, 'plan.monthly', strategy);
   }
 
   /**
@@ -229,12 +297,36 @@ export class StrategyService {
     type: InsightType,
     schema: S,
     taskKey: 'strategy.generate' | 'plan.monthly',
+    /** The ACCEPTED strategy this generation is grounded in, when there is one. */
+    sourceInsight?: SourceInsight | undefined,
   ): Promise<StrategyResult> {
     // SCOPE FIRST, BEFORE THE REPLAY CHECK — the F-74 ordering.
     assertBrandInScope(input.actorBrandScope, input.brandId);
 
+    /*
+     * A REPLAY LOOKUP IS NOT AN AUTHORIZATION CREDENTIAL (P7-R2).
+     *
+     * This matched on `workspaceId + idempotencyKey` alone, and the key is
+     * chosen by the CLIENT — so a member who guessed or observed another
+     * member's key was handed that member's insight, past the `assertBrandInScope`
+     * two lines above, which had only checked the brand they ASKED for.
+     *
+     * Four more predicates, all in the WHERE: the brand (intersected with the
+     * caller's live scope, so a narrowed scope stops replaying what it would now
+     * refuse to create), the TYPE — a strategy key must not replay as a monthly
+     * plan — and the person who generated it.
+     */
     const replay = await this.#db.insight.findFirst({
-      where: { workspaceId: this.#workspaceId, idempotencyKey: input.idempotencyKey },
+      where: {
+        workspaceId: this.#workspaceId,
+        idempotencyKey: input.idempotencyKey,
+        type,
+        generatedByUserId: input.actorUserId,
+        ...brandIdQueryFilter({
+          brandId: input.brandId,
+          brandScope: input.actorBrandScope,
+        }),
+      },
       include: { evidence: { orderBy: { ordinal: 'asc' } } },
     });
     if (replay) {
@@ -306,7 +398,25 @@ export class StrategyService {
       input: {
         kind: 'text',
         prompt: this.#prompt(input.objective, input.period, type),
-        untrustedContext: [grounding.brandContext, grounding.evidence.contextText],
+        untrustedContext: [
+          grounding.brandContext,
+          grounding.evidence.contextText,
+          /*
+           * THE ACCEPTED STRATEGY ITSELF (P7-R9), when there is one.
+           *
+           * "Grounded in the accepted strategy" used to mean that `planMonthly`
+           * checked one existed and then called the ordinary generator, which
+           * was handed brand knowledge and metrics and NOTHING FROM THE
+           * STRATEGY. The model was asked to plan a month against pillars it had
+           * never been shown. The approved body, its version and the evidence it
+           * was accepted on now go into the context explicitly.
+           *
+           * FENCED, like every other retrieved block: the body is model-written
+           * text a customer accepted, which makes it trustworthy as a decision
+           * and still untrusted as an instruction.
+           */
+          ...(sourceInsight ? [renderAcceptedStrategy(sourceInsight)] : []),
+        ],
       },
     });
 
@@ -327,26 +437,25 @@ export class StrategyService {
      * appearing in the evidence, because the number IS the recommendation rather
      * than a claim about measured performance.
      */
-    const violations = validateGrounding({
-      text: proseOf(claims, summaryOf(parsed)),
-      citedOrdinals: citedOrdinals(claims),
+    const violations = validateGroundedDocument({
+      // CLAIM BY CLAIM (P7-R8), each against only the evidence IT cited.
+      claims,
+      // The summary cites nothing, so it may carry no measured figure.
+      uncited: [summaryOf(parsed)],
       evidence: grounding.evidence,
       extraAllowedNumbers: declaredNumbers(parsed),
     });
     if (violations.length > 0) {
-      await writeAuditEvent(this.#db, this.#workspaceId, {
-        action: 'strategy.rejected',
-        actorType: 'SYSTEM',
-        actorId: input.actorUserId,
-        resourceType: 'Insight',
+      // THROUGH THE SINK, so the record outlives the throw on the next line.
+      await this.#auditRejection({
         brandId: input.brandId,
-        severity: 'WARNING',
-        outcome: 'ERROR',
+        userId: input.actorUserId,
         reason: 'ungrounded_output',
-        after: {
+        detail: {
           violationCount: violations.length,
           kinds: [...new Set(violations.map((v) => v.kind))].join(','),
           aiRequestId: result.requestId,
+          type,
         },
       });
       throw ungroundedExplanation();
@@ -358,6 +467,7 @@ export class StrategyService {
       grounding,
       body: parsed,
       aiRequestId: result.requestId,
+      ...(sourceInsight ? { sourceInsightId: sourceInsight.id } : {}),
     });
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
@@ -391,6 +501,8 @@ export class StrategyService {
     grounding: Grounding;
     body: unknown;
     aiRequestId: string;
+    /** PROVENANCE (P7-R9): the accepted strategy this was generated from. */
+    sourceInsightId?: string | undefined;
   }): Promise<Insight> {
     const insight = await this.#db.insight.create({
       data: {
@@ -412,6 +524,12 @@ export class StrategyService {
             }
           : {}),
         aiRequestId: input.aiRequestId,
+        /*
+         * WHICH STRATEGY THIS PLAN FOLLOWS FROM, written down rather than
+         * implied by a prompt nobody can read afterwards. The composite key
+         * means it can only ever point inside this workspace (D-112).
+         */
+        ...(input.sourceInsightId ? { sourceInsightId: input.sourceInsightId } : {}),
         generatedByUserId: input.input.actorUserId,
         idempotencyKey: input.input.idempotencyKey,
         expiresAt: input.input.expiresAt,
@@ -770,4 +888,44 @@ function toItem(row: {
     periodStart: row.periodStart ?? undefined,
     periodEnd: row.periodEnd ?? undefined,
   };
+}
+
+/**
+ * The accepted strategy a monthly plan is grounded in.
+ *
+ * Its stored row plus the evidence it was accepted on — the version the customer
+ * agreed to, not a re-derivation of it.
+ */
+interface SourceInsight {
+  readonly id: string;
+  readonly updatedAt: Date;
+  readonly body: unknown;
+  readonly evidence: readonly { ordinal: number; labelKey: string; metricKey: string | null }[];
+}
+
+/**
+ * Render the accepted strategy as reference material.
+ *
+ * THE VERSION IS `updatedAt`, which is what changes when a strategy is accepted
+ * or re-reviewed, so a plan generated against one revision is visibly generated
+ * against that revision.
+ *
+ * ITS EVIDENCE IS LISTED BY LABEL, NOT RE-CITED. The plan cites ITS OWN evidence
+ * package, which is rebuilt from live queries; reproducing the strategy's
+ * ordinals here would let a plan claim `e3` meaning something the plan's own
+ * package never contained.
+ */
+function renderAcceptedStrategy(source: SourceInsight): string {
+  const lines = [
+    `accepted_strategy_id=${source.id}`,
+    `accepted_version=${source.updatedAt.toISOString()}`,
+    'accepted_body:',
+    JSON.stringify(source.body),
+    'accepted_on_evidence:',
+    ...source.evidence.map(
+      (item) =>
+        `s${item.ordinal} | ${item.labelKey}${item.metricKey ? ` | ${item.metricKey}` : ''}`,
+    ),
+  ];
+  return fenceUntrusted('ACCEPTED STRATEGY', lines.join('\n'));
 }

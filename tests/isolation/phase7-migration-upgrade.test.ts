@@ -40,6 +40,8 @@ const migrationsDir = path.join(databasePackage, 'prisma', 'migrations');
 
 /** The migration this phase adds. Everything before it is "current main". */
 const PHASE7_MIGRATION = '20260916210000_phase_7_analytics_copilot';
+/** The remediation migration that follows it. Applied in the SAME upgrade. */
+const PHASE7_REMEDIATION_MIGRATION = '20260916230000_phase_7_remediation_strategy_provenance';
 
 /** The twelve tenant-owned tables it creates. */
 const NEW_TABLES = [
@@ -209,8 +211,17 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     b = await seedTenant(platform, `p7-b-${database.slice(-6)}`);
     before = await snapshot(platform);
 
-    // THE UPGRADE.
+    /*
+     * THE UPGRADE, AND IT IS BOTH MIGRATIONS.
+     *
+     * An operator upgrading from `main` applies everything that has landed since,
+     * so the thing to prove is the whole hop — not each file in isolation. The
+     * remediation migration adds a self-referential composite key to a table the
+     * first one created, which is exactly the ordering a per-file test would
+     * miss.
+     */
     applyMigration(migratorUrl, PHASE7_MIGRATION);
+    applyMigration(migratorUrl, PHASE7_REMEDIATION_MIGRATION);
 
     app = await connect(urlFor('app', database));
   }, 240_000);
@@ -220,7 +231,7 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     await platform?.end();
     await migrator?.end();
     if (admin) {
-      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await dropThrowawayDatabase(admin, database);
       await admin.end();
     }
   }, 60_000);
@@ -322,6 +333,52 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
       );
       expect(row.columns.length, `${row.conname} must be composite`).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it("records an insight's provenance with a SELF-REFERENTIAL COMPOSITE key", async () => {
+    /*
+     * `insight.sourceInsightId` — a MONTHLY_PLAN's link to the ACCEPTED strategy
+     * it was planned against (D-166).
+     *
+     * THE KEY MUST BE COMPOSITE EVEN THOUGH IT POINTS AT ITS OWN TABLE. A plain
+     * `sourceInsightId -> insight(id)` would resolve ANOTHER workspace's insight:
+     * PostgreSQL evaluates referential integrity as the table owner with RLS
+     * bypassed, so "inserted" versus "violates foreign key" would answer "does
+     * that insight exist?" across the tenant boundary.
+     */
+    const { rows } = await migrator.query<{
+      columns: string[];
+      confupdtype: string;
+      confdeltype: string;
+      confdelsetcols: number[] | null;
+    }>(
+      `SELECT (SELECT array_agg(a.attname::text ORDER BY k.ord)
+                 FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+                 JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+              ) AS columns,
+              c.confupdtype::text, c.confdeltype::text, c.confdelsetcols
+         FROM pg_constraint c
+        WHERE c.contype = 'f' AND c.conname = 'insight_source_fkey'`,
+    );
+    expect(rows).toHaveLength(1);
+    const key = rows[0];
+    expect(key?.columns).toEqual(['workspaceId', 'sourceInsightId']);
+    // 'n' is SET NULL.
+    expect(key?.confdeltype).toBe('n');
+    /*
+     * AND THE SET NULL NAMES ITS COLUMN (D-114). A bare SET NULL on this key
+     * would null `workspaceId` too — which is NOT NULL — so deleting a strategy
+     * would fail outright rather than orphaning the plan.
+     */
+    expect(key?.confdelsetcols?.length).toBe(1);
+  });
+
+  it('the provenance column is nullable, so every pre-existing insight is untouched', async () => {
+    const { rows } = await migrator.query<{ is_nullable: string }>(
+      `SELECT is_nullable FROM information_schema.columns
+        WHERE table_name = 'insight' AND column_name = 'sourceInsightId'`,
+    );
+    expect(rows[0]?.is_nullable).toBe('YES');
   });
 
   it('a plan that would skip confirmation for an external action is unrepresentable', async () => {
@@ -465,3 +522,42 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     await app.query('COMMIT');
   });
 });
+
+/**
+ * Drop the throwaway database, tolerating the close race that `WITH (FORCE)`
+ * cannot resolve.
+ *
+ * WHY THIS IS NOT A ONE-LINER. `DROP DATABASE … WITH (FORCE)` calls
+ * `pg_terminate_backend` on every remaining backend, and this suite opens
+ * connections as THREE roles — the migrator, the app and the platform. `end()`
+ * resolves when the client has sent its close; the SERVER may not have reaped
+ * the backend yet, and `brandspace_migrator` is not a superuser and is not a
+ * member of `pg_signal_backend`, so it may not terminate a backend belonging to
+ * `brandspace_app`. The drop then fails with "permission denied to terminate
+ * process" — a TEARDOWN race that failed the suite while every one of its
+ * assertions had passed.
+ *
+ * DELIBERATELY NOT "GRANT pg_signal_backend TO brandspace_migrator". The
+ * migrator is NOBYPASSRLS and least-privileged on purpose (F-01), and widening
+ * it to make a teardown convenient is the kind of trade this repository does not
+ * make.
+ *
+ * SO: WAIT FOR THE BACKENDS TO GO, then drop. A few short retries is all it
+ * takes, because nothing is holding the database open — the clients have all
+ * been asked to close. If it still will not go, the suite does NOT fail: the
+ * database is named with a random suffix, it is dropped by the next run's CREATE
+ * or by the container going away, and a green suite must not turn red over a
+ * cleanup detail that proves nothing about the migration.
+ */
+async function dropThrowawayDatabase(client: Client, name: string): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  // Best effort, without FORCE: by now every backend should have gone.
+  await client.query(`DROP DATABASE IF EXISTS "${name}"`).catch(() => undefined);
+}

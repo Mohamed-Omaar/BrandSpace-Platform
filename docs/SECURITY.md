@@ -2237,3 +2237,105 @@ asserts the file's own bytes contain zero rows from another workspace.
 Nothing. `client_viewer` holds exactly `workspace.read`, asserted from the role definition in the unit
 suite and from four 404s in both locales in the end-to-end suite. Analytics, strategy, the Copilot and
 automations are all closed to it, and none of them appears in its navigation.
+
+## 30. Phase 7 remediation — what an independent review found after the suites were green
+
+Ten blocking defects (P7-R1 … P7-R10), in code that passed every gate this repository has. Each is
+recorded as a decision (D-158 … D-169); this section states the SECURITY properties that now hold and,
+for each, the property that did not.
+
+Two of them are worth naming as classes rather than as bugs, because both recurred inside one phase:
+
+- **An empty BrandScope means UNRESTRICTED.** Writing `[]` where a caller's scope belongs does not
+  "re-check anyway" — it turns the check off. It appeared twice, both times on the publish path.
+- **A client-chosen idempotency key is not a credential.** `where: { workspaceId, idempotencyKey }`
+  hands one member another member's record. It appeared in five services, three of them Phase 7's.
+
+### 30.1 The Copilot's brand binding
+
+A session is admitted before it exists: one query asking "a brand with this id, in this workspace, within
+this member's scope", with an empty answer as the refusal. `/v1/copilot/turn` accepts no `brandId` — the
+brand is the session's, and the session lookup carries the caller's LIVE scope, so narrowing a member's
+BrandScope closes their existing brand conversations on the next turn with nothing to remember to run.
+Brand-less conversations stay reachable (`nullableBrandIdScopeFilter`), because a deny-by-default reading
+there would be a broken product rather than a security property.
+
+Nothing happens before admission: no Brand Brain retrieval, no gateway call, no reservation, no message
+row. An out-of-scope brand, a brand in another workspace and a fabricated uuid produce the same code and
+the same message.
+
+**What did not hold before.** `openSession` took `brandId` from the request body and wrote it. A member
+restricted to Brand A could open a session naming Brand B, and every turn afterwards grounded itself in
+B's Brand Brain — because the session row said so and nothing had ever checked the row.
+
+### 30.2 Replay lookups
+
+Every replay is bound to the workspace AND the actor AND the brand, intersected with the caller's live
+scope, AND — where one exists — the session and the record type. A narrowed scope therefore stops
+replaying a record it would now refuse to create. The Copilot turn is retry-safe by `ON CONFLICT DO
+NOTHING` on the per-session message key, reusing the surviving row's `correlationId`, so a retry rejoins
+the original turn rather than starting a parallel one; the confirmation token is never re-issued on a
+replay, so one plan never has two simultaneously valid credentials.
+
+The same correction was applied to `ContentStudioService.generate`, `CampaignService.create` and Brand
+Brain chat, which the Copilot's own tools make reachable from a path a model can be talked into naming a
+key on — five services in total once the three the review named are counted.
+
+**Two remain, recorded rather than fixed.** `AssetUploadService` and Brand Brain document ingestion carry
+the same shape on Phase 5 upload paths the assistant cannot reach; F-84 names them, their exact files and
+the two-clause binding they need. Fixing them inside a Phase 7 remediation would widen it into a Phase 5
+audit with its own verification surface.
+
+### 30.3 External actions
+
+`ExternalActionPort.publishNow` and `PublishPort.publishNow` both REQUIRE the confirmer's live
+BrandScope — a required field cannot be forgotten and an optional one would default to the permissive
+value. The target is admitted by `ContentLibraryService.requireItemForBrand`, which intersects the item
+id, the brand the confirmed step named and that scope in ONE predicate, as the first statement on the
+path: before a slot, a materialisation, a queue entry or a provider request exists. The Copilot's plan
+PREVIEW refuses the same way at build time, rather than rendering a blank line for content the caller
+cannot see.
+
+`tests/unit/phase7-remediation-gates.test.ts` fails the build on `actorBrandScope: []` anywhere in
+`apps/` or `packages/`, and on any app that hands a calendar a hand-written quota.
+
+### 30.4 Compensations
+
+An undo is a mutation and is authorized like one, against the LIVE membership AND the actual target:
+`ContentLibraryService.archiveItem` carries the plan's brand and the caller's scope into the read and into
+a conditional `updateMany`, and every other compensation read carries the same predicate. An out-of-scope
+target refuses as `already_gone`, the same machine code a genuinely missing one produces, so a refusal
+reason cannot be used to probe for ids.
+
+### 30.5 Automations
+
+- **Run identity contains no clock** for the six referenced triggers, so a delayed redelivery converges on
+  the original run indefinitely. Only `SCHEDULED_TIME` buckets by time, and its bucket is the rule's own
+  configured occurrence rather than the instant a sweep happened to run.
+- **An action that operates on a content item** may only be authored against a trigger that has one. The
+  mapping is declared per trigger and resolved with a query scoped to the workspace, the rule's brand and
+  the actor's live scope; an unreachable pair is refused at authoring and fails closed at run time.
+- **The scheduling quota is the real one**, shared from `@brandspace/entitlements`, with the same usage
+  ledger rows and idempotency keys manual scheduling uses.
+- **BrandScope decides who is TOLD.** Recipients are the intersection of an active membership, the
+  required permission and a scope that admits the event's brand.
+
+### 30.6 Grounded output
+
+Each claim is validated against only the evidence IT cited; an unknown ordinal remains a hard rejection
+and contributes no allowed numerals, so a fabricated figure cannot be laundered by citing an ordinal that
+does not exist. A summary carries no citations in any of these schemas and therefore may state no measured
+figure at all — that is the stricter of the two options the design allows, and the one a model cannot
+route around. Arabic-Indic folding is unchanged.
+
+**And an ungrounded generation is now recorded where the refusal cannot roll it back.** Both
+`AnalyticsInsightService` and `StrategyService` audited the rejection and then threw, inside one
+transaction, so the single event the grounding gate exists to catch was written and immediately discarded.
+Both now take an `InsightDenialSink`, wired exactly as the Copilot and automation sinks are.
+
+### 30.7 Level metrics
+
+`MAX(value)` is never "latest". A metric declares how it combines, and a level's window value is each
+subject's most recent reading summed across subjects — applied identically to the summary, the platform
+comparison and the series, so the three cannot disagree about what "followers" means. An account that
+loses followers no longer reports its peak for ever.

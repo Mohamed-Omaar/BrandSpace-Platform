@@ -11,6 +11,7 @@
 export {
   AUTOMATION_ACTIONS,
   AUTOMATION_TRIGGERS,
+  actionSupportsTrigger,
   CONDITION_FIELDS,
   CONDITION_OPERATORS,
   conditionSchema,
@@ -29,7 +30,7 @@ export type {
   TriggerDefinition,
 } from './registry';
 
-export { AutomationEngine, runIdempotencyKeyFor } from './engine';
+export { AutomationEngine, runBucketFor, runIdempotencyKeyFor } from './engine';
 export type {
   AutomationActor,
   AutomationDenialSink,
@@ -63,5 +64,6 @@ export {
   creatorLacksAuthority,
   ruleLimitReached,
   tooManyConditions,
+  triggerActionIncompatible,
   unknownTriggerOrAction,
 } from './errors';

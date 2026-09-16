@@ -8,7 +8,13 @@ import {
   type AutomationTrigger,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { AppError, brandInScope, systemClock, type Clock } from '@brandspace/shared';
+import {
+  AppError,
+  brandIdQueryFilter,
+  brandInScope,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import {
   automationConfirmationRejected,
   automationRuleNotFound,
@@ -16,12 +22,14 @@ import {
   creatorLacksAuthority,
   ruleLimitReached,
   tooManyConditions,
+  triggerActionIncompatible,
   unknownTriggerOrAction,
 } from './errors';
 import type { AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
   AUTOMATION_ACTIONS,
+  actionSupportsTrigger,
   conditionsSchema,
   evaluateConditions,
   findAction,
@@ -123,10 +131,8 @@ export interface RunOutcome {
  * thing that fired it, the bucket) — so the same event delivered twice collides
  * on the unique constraint and the second delivery does nothing.
  *
- * THE BUCKET IS WHAT MAKES A TIMED RULE IDEMPOTENT. A scheduled rule has no
- * triggering row, so without a bucket every sweep would look like a new event; the
- * local hour is the bucket, and a rule fires once per hour it is scheduled for
- * however many sweeps pass through that hour.
+ * WHAT GOES IN THE BUCKET IS `runBucketFor`'s decision, and it is the whole of
+ * P7-R5. Read that function next.
  */
 export function runIdempotencyKeyFor(input: {
   ruleId: string;
@@ -137,6 +143,53 @@ export function runIdempotencyKeyFor(input: {
   return createHash('sha256')
     .update([input.ruleId, input.triggerType, input.refId ?? '-', input.bucket].join('|'))
     .digest('hex');
+}
+
+/** The bucket for an event-driven trigger: none, because the ref IS the identity. */
+const EVENT_BUCKET = 'event';
+
+/**
+ * WHICH BUCKET, AND THE ANSWER IS "ONLY A TIMED TRIGGER GETS ONE" (P7-R5).
+ *
+ * THE DEFECT THIS REPLACES. Every trigger used the wall-clock hour, including
+ * the six that carry a reference to the row that fired them. A `POST_PUBLISHED`
+ * event delivered at 12:59 and redelivered at 13:01 — an ordinary BullMQ retry
+ * after a worker restart, a backoff, or a queue drained after an incident —
+ * hashed to two different keys, so the unique constraint that exists to make
+ * redelivery safe never saw a duplicate and the rule ran a second time. For
+ * `PROPOSE_PUBLISH` that is a second confirmation request for a post already
+ * awaiting one; for `PLACE_ON_CALENDAR` it is a second slot.
+ *
+ * AN EVENT'S IDENTITY IS ITS REFERENCE, FOR EVER. `(rule, trigger, refId)`
+ * identifies "this rule, reacting to that row" with no time in it at all, so a
+ * redelivery converges on the original run a minute later or a week later. That
+ * is what "idempotent and safe to retry" (CLAUDE.md §5) actually requires; an
+ * expiring key is a retry window dressed as a guarantee.
+ *
+ * A TIMED TRIGGER HAS NO REFERENCE, so its identity must come from the clock —
+ * and it comes from the OCCURRENCE THE RULE IS CONFIGURED FOR, not from the
+ * instant the sweep happened to run. The bucket is the workspace-local DATE plus
+ * the rule's own `hourLocal`, so however many sweeps pass through that
+ * occurrence, and whenever their deliveries arrive, they are one run. Bucketing
+ * by the sweep's own hour instead would split one scheduled occurrence in two
+ * whenever a delivery slipped across the hour boundary.
+ *
+ * A TRIGGER THIS FUNCTION DOES NOT RECOGNISE gets the event bucket, which is the
+ * conservative answer: it de-duplicates MORE, never less.
+ */
+export function runBucketFor(input: {
+  triggerType: AutomationTrigger;
+  /** The workspace-local date, `YYYY-MM-DD`, for a timed trigger. */
+  localDate: string;
+  /** The hour the RULE is configured to fire at, for a timed trigger. */
+  hourLocal: number;
+}): string {
+  const trigger = findTrigger(input.triggerType);
+  if (!trigger?.timeBucketed) return EVENT_BUCKET;
+  const hour = Number.isFinite(input.hourLocal)
+    ? Math.min(23, Math.max(0, Math.trunc(input.hourLocal)))
+    : 0;
+  return `${input.localDate}T${String(hour).padStart(2, '0')}`;
 }
 
 function hashToken(token: string): string {
@@ -220,6 +273,17 @@ export class AutomationEngine {
     const trigger = findTrigger(input.triggerType);
     const action = findAction(input.actionType);
     if (!trigger || !action) throw unknownTriggerOrAction();
+
+    /*
+     * THE PAIR MUST BE REACHABLE. An action that operates on a content item
+     * cannot be authored against a trigger whose reference is an Insight, a
+     * MetricObservation, an ingestion run, or nothing at all — the id would be
+     * passed to a content operation as if it were a content item's. Refused
+     * here, where a person is looking at the screen.
+     */
+    if (!actionSupportsTrigger(input.actionType, input.triggerType)) {
+      throw triggerActionIncompatible();
+    }
 
     // The creator must hold BOTH the authoring permission and the permission the
     // ACTION needs. Holding `automation.manage` is not a way to acquire
@@ -452,12 +516,17 @@ export class AutomationEngine {
     if (!rule.enabled || rule.deletedAt)
       return { run: null, status: 'NOT_RUN', confirmationToken: null };
 
+    const triggerConfig = (rule.triggerConfig ?? {}) as Record<string, unknown>;
     const idempotencyKey = runIdempotencyKeyFor({
       ruleId: rule.id,
       triggerType: event.type,
       refId: event.refId,
-      // The hour is the bucket. See `runIdempotencyKeyFor`.
-      bucket: now.toISOString().slice(0, 13),
+      // ONLY A TIMED RULE CARRIES A CLOCK. See `runBucketFor`.
+      bucket: runBucketFor({
+        triggerType: event.type,
+        localDate: await this.#localDateFor(now),
+        hourLocal: Number(triggerConfig['hourLocal'] ?? 0),
+      }),
     });
 
     /*
@@ -709,12 +778,43 @@ export class AutomationEngine {
       return finished.run ?? run;
     }
 
+    /*
+     * THE ITEM IS RESOLVED AGAINST THE CONFIRMER, NOT ASSUMED FROM THE RUN.
+     *
+     * `run.triggerRefId` is whatever the trigger referenced — a calendar slot, a
+     * publish job, or a content item — and it used to be handed to the publish
+     * port as a content item id whichever it was. It is resolved here through
+     * the registry's declared mapping, with the run's brand and the CONFIRMING
+     * PERSON'S live BrandScope in the predicate, so a confirmer who may not act
+     * on this brand cannot publish through a rule somebody else wrote.
+     */
+    const contentItemId = await this.#resolveContentItem(
+      rule,
+      {
+        type: run.triggerType,
+        brandId: run.brandId,
+        refType: run.triggerRefType,
+        refId: run.triggerRefId,
+        facts: {},
+      },
+      input.actor,
+    );
+    if (!contentItemId) {
+      const finished = await this.#finish(rule, run, 'BLOCKED_BY_POLICY', {
+        failureCode: 'external_action_unavailable',
+      });
+      /* c8 ignore next -- `#finish` always returns a run here. */
+      return finished.run ?? run;
+    }
+
     try {
       const outcome = await this.#ports.publishing.publishNow({
         workspaceId: this.#workspaceId,
         brandId: run.brandId,
-        contentItemId: run.triggerRefId,
+        contentItemId,
         actorUserId: input.actor.userId,
+        // THE CONFIRMER'S LIVE SCOPE, never `[]`. See `PublishPort` (P7-R3).
+        actorBrandScope: input.actor.brandScope,
         // THE RUN'S OWN KEY. A retried confirmation cannot publish twice.
         idempotencyKey: `automation-run:${run.id}`,
       });
@@ -769,10 +869,13 @@ export class AutomationEngine {
       }
 
       case 'SUBMIT_FOR_APPROVAL': {
-        if (!this.#ports.approvals || !event.refId) throw unknownTriggerOrAction();
+        if (!this.#ports.approvals) throw unknownTriggerOrAction();
+        // RESOLVED AND BOUND, never `event.refId` assumed to be an item id.
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) throw unknownTriggerOrAction();
         const result = await this.#ports.approvals.submitForApproval({
           workspaceId: this.#workspaceId,
-          contentItemId: event.refId,
+          contentItemId,
           actorUserId: actor.userId,
           // THE CREATOR'S LIVE AUTHORITY, passed straight through so the approval
           // service authorizes against what they actually hold right now.
@@ -789,7 +892,9 @@ export class AutomationEngine {
       }
 
       case 'PLACE_ON_CALENDAR': {
-        if (!this.#ports.calendar || !event.refId) throw unknownTriggerOrAction();
+        if (!this.#ports.calendar) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) throw unknownTriggerOrAction();
         const timezone = this.#ports.timezone
           ? await this.#ports.timezone.timezoneFor(this.#workspaceId)
           : 'UTC';
@@ -800,7 +905,7 @@ export class AutomationEngine {
         );
         const result = await this.#ports.calendar.placeOnCalendar({
           workspaceId: this.#workspaceId,
-          contentItemId: event.refId,
+          contentItemId,
           localTime,
           actorUserId: actor.userId,
           actorBrandScope: actor.brandScope,
@@ -841,6 +946,88 @@ export class AutomationEngine {
     const get = (type: string): string => parts.find((part) => part.type === type)?.value ?? '00';
     const hour = hourLocal === null ? get('hour') : String(hourLocal).padStart(2, '0');
     return `${get('year')}-${get('month')}-${get('day')}T${hour}:${hourLocal === null ? get('minute') : '00'}`;
+  }
+
+  /**
+   * The workspace-local date, `YYYY-MM-DD`.
+   *
+   * IN THE WORKSPACE'S OWN ZONE, via `Intl`, for the same reason
+   * `#localTimeFor` is: "the day a rule is scheduled for" is a wall-clock fact,
+   * and a UTC slice would put a Sydney customer's 09:00 rule on the previous
+   * day's bucket for most of the year. Without a timezone port the zone is UTC,
+   * which is stable — the bucket only has to be CONSISTENT, not correct in some
+   * absolute sense.
+   */
+  async #localDateFor(instant: Date): Promise<string> {
+    const timezone = this.#ports.timezone
+      ? await this.#ports.timezone.timezoneFor(this.#workspaceId)
+      : 'UTC';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(instant);
+    const get = (type: string): string => parts.find((part) => part.type === type)?.value ?? '00';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+
+  /**
+   * THE CONTENT ITEM AN ACTION OPERATES ON — resolved, never assumed.
+   *
+   * WHAT IT REPLACES. `#performInternal` passed `event.refId` straight through as
+   * a `contentItemId`, and `confirmRun` did the same with `run.triggerRefId`.
+   * That is only correct for `CONTENT_APPROVED`. For `CONTENT_SCHEDULED` the
+   * reference is a calendar slot, for `POST_PUBLISHED` a publish job, and for the
+   * analytics triggers an Insight, a MetricObservation or an ingestion run — ids
+   * that are not content items and must never be used as one.
+   *
+   * THE MAPPING IS DECLARED IN THE REGISTRY (`contentItemVia`) AND RESOLVED HERE
+   * WITH A SCOPED QUERY. Three predicates in every branch's WHERE: the workspace,
+   * the RULE'S OWN BRAND, and the actor's LIVE BrandScope. So the item is bound
+   * to the brand the rule is for — a slot or a job belonging to another brand
+   * resolves to nothing — and an actor whose scope no longer covers that brand
+   * resolves to nothing either.
+   *
+   * NULL IS A REFUSAL, and the caller turns it into a recorded, blocked run
+   * rather than an action aimed at the wrong row.
+   */
+  async #resolveContentItem(
+    rule: AutomationRule,
+    event: TriggerEvent,
+    actor: AutomationActor,
+  ): Promise<string | null> {
+    const trigger = findTrigger(event.type);
+    if (!trigger?.contentItemVia || !event.refId) return null;
+
+    const scoped = {
+      workspaceId: this.#workspaceId,
+      ...brandIdQueryFilter({ brandId: rule.brandId, brandScope: actor.brandScope }),
+    };
+
+    switch (trigger.contentItemVia) {
+      case 'direct': {
+        const item = await this.#db.contentItem.findFirst({
+          where: { id: event.refId, ...scoped },
+          select: { id: true },
+        });
+        return item?.id ?? null;
+      }
+      case 'calendarSlot': {
+        const slot = await this.#db.calendarSlot.findFirst({
+          where: { id: event.refId, ...scoped },
+          select: { contentItemId: true },
+        });
+        return slot?.contentItemId ?? null;
+      }
+      case 'publishJob': {
+        const job = await this.#db.publishJob.findFirst({
+          where: { id: event.refId, ...scoped },
+          select: { contentItemId: true },
+        });
+        return job?.contentItemId ?? null;
+      }
+    }
   }
 
   async #finish(

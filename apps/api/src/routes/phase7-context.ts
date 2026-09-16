@@ -18,6 +18,7 @@ import {
   writeDeniedAudit,
   type TenantScopedClient,
 } from '@brandspace/database';
+import type { InsightDenialSink } from '@brandspace/analytics';
 import type { CopilotDenialSink } from '@brandspace/copilot';
 import type { AutomationDenialSink } from '@brandspace/automation';
 import { getPlatformClient } from '@brandspace/database/platform';
@@ -278,6 +279,29 @@ export function copilotDenialSink(workspaceId: string): CopilotDenialSink {
         resourceId: event.planId,
         ...(event.brandId ? { brandId: event.brandId } : {}),
         reason: event.reason,
+      }),
+    );
+  };
+}
+
+/**
+ * The same sink for an UNGROUNDED GENERATION.
+ *
+ * `analytics.explain` and `StrategyService` both audit a rejection and then
+ * throw, which rolled the record back — so the one event the grounding gate
+ * exists to catch was being written and immediately discarded.
+ */
+export function insightDenialSink(workspaceId: string): InsightDenialSink {
+  return async (event) => {
+    await withWorkspace(workspaceId, async (db) =>
+      writeDeniedAudit(db, workspaceId, {
+        action: event.action,
+        actorType: 'SYSTEM',
+        actorId: event.userId,
+        resourceType: 'Insight',
+        brandId: event.brandId,
+        reason: event.reason,
+        after: event.detail,
       }),
     );
   };

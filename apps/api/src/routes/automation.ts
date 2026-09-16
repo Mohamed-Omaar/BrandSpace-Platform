@@ -8,6 +8,7 @@ import {
 import {
   ContentApprovalService,
   ContentCalendarService,
+  ContentLibraryService,
   TenantContentPolicySource,
 } from '@brandspace/content';
 import {
@@ -70,6 +71,27 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
       const environment = currentEnvironment();
       const policy = await resolvePublishingPolicy(configurationService(), environment);
       const contentPolicy = await new TenantContentPolicySource(db, environment).load();
+
+      /*
+       * THE TARGET IS ADMITTED BEFORE ANYTHING IS BUILT (P7-R3).
+       *
+       * The content domain's own query, carrying BOTH the run's brand and the
+       * CONFIRMING PERSON'S live BrandScope — so an item belonging to a
+       * different brand, or one the confirmer may not act on, is refused here,
+       * before a slot, a publish job, a queue entry or a provider request
+       * exists. Nothing to unwind, which is the only acceptable shape for a
+       * fail-closed check on an action that leaves the platform.
+       */
+      await new ContentLibraryService({
+        db,
+        workspaceId: input.workspaceId,
+        policy: contentPolicy,
+      }).requireItemForBrand({
+        contentItemId: input.contentItemId,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+      });
+
       const workspace = await db.workspace.findFirst({
         where: { id: input.workspaceId },
         select: { timezone: true },
@@ -109,7 +131,12 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
         contentItemId: input.contentItemId,
         localTime: `${parts['year']}-${parts['month']}-${parts['day']}T${parts['hour']}:${parts['minute']}`,
         actorUserId: input.actorUserId,
-        actorBrandScope: [],
+        /*
+         * THE CONFIRMER'S OWN SCOPE (P7-R3). `[]` here did not "re-check
+         * anyway" — empty is UNRESTRICTED on this platform, so the literal
+         * disabled the calendar's brand check on the one action that leaves it.
+         */
+        actorBrandScope: input.actorBrandScope,
       });
 
       const pipeline = new PublishPipelineService({

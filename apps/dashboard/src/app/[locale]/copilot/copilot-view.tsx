@@ -158,7 +158,7 @@ export function CopilotView({
 
       const result = (await post('/api/copilot/turn', {
         sessionId: opened.sessionId,
-        brandId: brandId || null,
+        // NO brandId. The session owns its brand; see the turn route (P7-R1).
         request,
         // ONE KEY PER REQUEST TEXT, so a double click replays the first turn
         // rather than paying for a second.

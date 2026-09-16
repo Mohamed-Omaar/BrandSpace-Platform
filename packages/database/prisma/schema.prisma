@@ -4170,6 +4170,21 @@ model Insight {
 
   campaignId String? @db.Uuid
 
+  /// THE INSIGHT THIS ONE WAS GENERATED FROM.
+  ///
+  /// Today that is exactly one relationship: a `MONTHLY_PLAN` and the ACCEPTED
+  /// `STRATEGY` it plans against. It exists because "grounded in the accepted
+  /// strategy" was a sentence in a prompt and nothing else — the generated plan
+  /// recorded no link at all, so nobody reading a plan afterwards could tell
+  /// WHICH strategy it followed from, or whether that strategy had since been
+  /// superseded.
+  ///
+  /// `SET NULL` rather than cascade: a plan outlives the proposal it came from,
+  /// and deleting the strategy must not delete the month's work. The column is
+  /// named explicitly in the migration (D-114), because a bare composite SET
+  /// NULL would try to null `workspaceId` too.
+  sourceInsightId String? @db.Uuid
+
   type   InsightType
   status InsightStatus @default(NEW)
   basis  InsightBasis
@@ -4213,6 +4228,11 @@ model Insight {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "insight_brand_fkey")
   campaign  Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_campaign_fkey")
+  /// COMPOSITE AND SELF-REFERENTIAL (D-112): a plain key would resolve another
+  /// workspace's insight, and "violates foreign key" versus "inserted" would
+  /// answer whether that id exists across the tenant boundary.
+  sourceInsight   Insight?  @relation("InsightProvenance", fields: [workspaceId, sourceInsightId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_source_fkey")
+  derivedInsights Insight[] @relation("InsightProvenance")
 
   evidence           InsightEvidence[]
   /// Phase 7 — the Brand Brain learnings this insight was drawn from.
@@ -4223,6 +4243,7 @@ model Insight {
   @@index([workspaceId, brandId, type, createdAt(sort: Desc)])
   @@index([workspaceId, brandId, status, createdAt(sort: Desc)])
   @@index([workspaceId, campaignId])
+  @@index([workspaceId, sourceInsightId])
   @@index([expiresAt])
   @@map("insight")
 }

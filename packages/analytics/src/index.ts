@@ -16,6 +16,8 @@ export {
   computeDerived,
   findMetric,
   isAdditive,
+  isLevelMetric,
+  aggregationFor,
   isIngestedMetric,
   isMetricKey,
   metricsForProvider,
@@ -89,6 +91,7 @@ export {
   foldDigits,
   renderEvidence,
   validateGrounding,
+  validateGroundedDocument,
 } from './evidence';
 export type { EvidenceItem, EvidencePackage, GroundingViolation } from './evidence';
 
@@ -103,7 +106,12 @@ export {
 export type { ParsedContentGap, ParsedExplanation, ParsedStrategy } from './schemas';
 
 export { AnalyticsInsightService, toEvidenceItem } from './insights';
-export type { ExplainInput, ExplainResult, InsightServiceOptions } from './insights';
+export type {
+  ExplainInput,
+  ExplainResult,
+  InsightDenialSink,
+  InsightServiceOptions,
+} from './insights';
 
 export { pruneAnalytics } from './retention';
 export type { PruneResult } from './retention';

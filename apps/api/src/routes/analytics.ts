@@ -17,6 +17,7 @@ import {
   configurationService,
   fail,
   gateway,
+  insightDenialSink,
   periodFromDays,
   previousPeriod,
   resolveCaller,
@@ -143,6 +144,9 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
               policy,
               queries,
               gateway: gateway(),
+              // AN UNGROUNDED GENERATION MUST OUTLIVE THE TRANSACTION THAT
+              // REFUSED IT. See `insightDenialSink`.
+              denialSink: insightDenialSink(caller.workspaceId),
             });
             return insights.explain({
               brandId: body.brandId,
@@ -237,6 +241,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
               policy,
               queries,
               gateway: gateway(),
+              denialSink: insightDenialSink(caller.workspaceId),
             });
             return strategy.generate({
               brandId: body.brandId,

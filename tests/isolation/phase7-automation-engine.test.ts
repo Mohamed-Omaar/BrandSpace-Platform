@@ -6,6 +6,7 @@ import { defaultPayload } from '@brandspace/config';
 import {
   AutomationEngine,
   parseAutomationPolicy,
+  runBucketFor,
   runIdempotencyKeyFor,
   type AutomationActor,
   type AutomationPolicy,
@@ -319,11 +320,23 @@ describe('a duplicate delivery produces exactly one run', () => {
       inA((db) => engineFor(db, recorded).run({ rule, event, resolveActor: async () => owner() })),
     ]);
 
+    /*
+     * THE KEY IS DERIVED THE WAY PRODUCTION DERIVES IT (P7-R5). It used to be
+     * `new Date().toISOString().slice(0, 13)` here and in the engine — the hour
+     * — and this assertion would have gone GREEN while the defect was live: two
+     * deliveries inside one hour did collapse, and the redelivery an hour later
+     * that the constraint was supposed to catch was never exercised. The test
+     * below this one now exercises exactly that.
+     */
     const key = runIdempotencyKeyFor({
       ruleId: rule.id,
       triggerType: event.type,
       refId: event.refId,
-      bucket: new Date().toISOString().slice(0, 13),
+      bucket: runBucketFor({
+        triggerType: event.type,
+        localDate: new Date().toISOString().slice(0, 10),
+        hourLocal: 0,
+      }),
     });
     const runs = await inA((db) => db.automationRun.findMany({ where: { idempotencyKey: key } }));
     expect(runs).toHaveLength(1);

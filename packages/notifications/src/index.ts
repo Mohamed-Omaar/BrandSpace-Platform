@@ -3,6 +3,7 @@
  *
  * In-app only (D-123). No transport, no external delivery, no third party.
  */
+export { resolveRecipients } from './recipients';
 export { NotificationService } from './service';
 export type { CreateNotificationInput, NotificationOptions, NotificationView } from './service';
 export { NOTIFICATION_TEMPLATES, NOTIFICATION_TEMPLATE_KEYS } from './templates';

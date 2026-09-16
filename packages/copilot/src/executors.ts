@@ -8,7 +8,7 @@ import type {
 } from '@brandspace/content';
 import { type RetentionInput } from '@brandspace/content';
 import { brandIdQueryFilter, type Clock } from '@brandspace/shared';
-import { externalActionUnavailable } from './errors';
+import { copilotPlanNotFound, externalActionUnavailable } from './errors';
 import type { LiveAuthorization } from './authorization';
 import type { ToolPreviewLine } from './tools';
 
@@ -87,6 +87,21 @@ export interface ExternalActionPort {
     readonly brandId: string;
     readonly contentItemId: string;
     readonly actorUserId: string;
+    /**
+     * THE CONFIRMER'S LIVE SCOPE, AND IT IS NOT OPTIONAL (P7-R3).
+     *
+     * Both implementations of this port used to build their own calendar with
+     * `actorBrandScope: []` and a comment saying the caller had already been
+     * authorized. Empty means UNRESTRICTED on this platform, so that line did
+     * not "re-check anyway" — it turned the calendar's own brand check off, at
+     * the exact call that leaves the product. The port now demands the scope, so
+     * an implementation cannot forget to carry it and a reviewer cannot miss
+     * that it did.
+     *
+     * It is `readonly string[]` rather than optional deliberately: a missing
+     * field would default to empty, and empty is the permissive value.
+     */
+    readonly actorBrandScope: readonly string[];
     readonly idempotencyKey: string;
   }): Promise<{ readonly jobsCreated: number; readonly slotId: string }>;
 }
@@ -431,6 +446,8 @@ const publishNow: ToolExecutor = async (context, args) => {
     brandId: String(args['brandId']),
     contentItemId: String(args['contentItemId']),
     actorUserId: context.authorization.userId,
+    // THE LIVE SCOPE, resolved by `execute` from the membership as it is now.
+    actorBrandScope: context.authorization.brandScope,
     idempotencyKey: context.idempotencyKey,
   });
 
@@ -525,30 +542,16 @@ export async function buildPreview(
         },
       ];
     case 'calendar.place': {
-      const item = await context.db.contentItem.findFirst({
-        where: {
-          id: String(args['contentItemId']),
-          workspaceId: context.workspaceId,
-          ...brandIdQueryFilter({ brandScope: context.authorization.brandScope }),
-        },
-        select: { title: true },
-      });
+      const item = await requireTargetItem(context, args);
       return [
-        { labelKey: 'copilot.preview.content', after: item?.title ?? '' },
+        { labelKey: 'copilot.preview.content', after: item.title },
         { labelKey: 'copilot.preview.scheduledFor', after: String(args['localTime'] ?? '') },
       ];
     }
     case 'publishing.publish_now': {
-      const item = await context.db.contentItem.findFirst({
-        where: {
-          id: String(args['contentItemId']),
-          workspaceId: context.workspaceId,
-          ...brandIdQueryFilter({ brandScope: context.authorization.brandScope }),
-        },
-        select: { title: true },
-      });
+      const item = await requireTargetItem(context, args);
       return [
-        { labelKey: 'copilot.preview.content', after: item?.title ?? '' },
+        { labelKey: 'copilot.preview.content', after: item.title },
         // The preview SAYS what class of action this is, in the dialog, in the
         // reader's language. "Publish" and "draft" must not look alike.
         { labelKey: 'copilot.preview.external', after: 'publish' },
@@ -559,4 +562,40 @@ export async function buildPreview(
       // no before and no after to show.
       return [];
   }
+}
+
+/**
+ * The content item a step targets — or a refusal (P7-R3).
+ *
+ * THREE THINGS IN ONE PREDICATE, and none of them read first and checked after:
+ * the workspace, the caller's LIVE BrandScope, and — the one that was missing —
+ * that the item belongs to the BRAND THE STEP NAMED. A plan could previously
+ * carry `brandId: A` (which the scope check passed) and `contentItemId` pointing
+ * at a B item, and nothing anywhere compared the two.
+ *
+ * AN EMPTY PREVIEW WAS THE WORST OF THE OPTIONS. The old code rendered
+ * `item?.title ?? ''`, so a step aimed at content the caller cannot see produced
+ * a plan that looked ordinary with one blank line in it — and the customer
+ * confirmed it. A refusal at BUILD time means the plan never exists, which is
+ * also when refusing is cheapest.
+ *
+ * `copilotPlanNotFound()` is the 404-shaped refusal, identical for an item that
+ * is out of scope, one that belongs to a different brand, and one that was never
+ * there.
+ */
+async function requireTargetItem(
+  context: PreviewContext,
+  args: Record<string, unknown>,
+): Promise<{ title: string }> {
+  const brandId = args['brandId'] === undefined ? undefined : String(args['brandId']);
+  const item = await context.db.contentItem.findFirst({
+    where: {
+      id: String(args['contentItemId']),
+      workspaceId: context.workspaceId,
+      ...brandIdQueryFilter({ brandId, brandScope: context.authorization.brandScope }),
+    },
+    select: { title: true },
+  });
+  if (!item) throw copilotPlanNotFound();
+  return { title: item.title };
 }

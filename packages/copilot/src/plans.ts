@@ -7,7 +7,13 @@ import {
   type CopilotToolCall,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { AppError, brandInScope, systemClock, type Clock } from '@brandspace/shared';
+import {
+  AppError,
+  brandInScope,
+  nullableBrandIdScopeFilter,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import {
   confirmationRejected,
   copilotPlanNotFound,
@@ -214,8 +220,39 @@ export class CopilotPlanService {
       throw planTooLarge(this.#policy.plans.maxSteps);
     }
     if (input.idempotencyKey) {
+      /*
+       * A REPLAY LOOKUP IS NOT AN AUTHORIZATION CHECK, AND THIS ONE USED TO BE
+       * BOTH (P7-R2).
+       *
+       * It matched on `workspaceId + idempotencyKey` alone. The key is chosen by
+       * the CLIENT, so any member of the workspace who guessed or observed
+       * another member's key was handed that member's plan — its summary, its
+       * steps, its previewed ids — by a lookup that never asked whose plan it
+       * was. A user-controlled idempotency key is a de-duplication token, never a
+       * credential.
+       *
+       * FOUR MORE PREDICATES, ALL IN THE WHERE: the person, the session, the
+       * exact brand this plan is for, and — separately — that the brand is still
+       * inside the caller's LIVE scope. The last is not redundant with the
+       * fourth: `brandId` pins which plan, `nullableBrandIdScopeFilter` decides
+       * whether this caller may still be given it at all, so a narrowed scope
+       * stops replaying a plan it would now refuse to create.
+       *
+       * A MISS FALLS THROUGH TO CREATION rather than erroring, which is the same
+       * behaviour a genuinely new key gets — and creation is authorized on its
+       * own terms below.
+       */
       const existing = await this.#db.copilotActionPlan.findFirst({
-        where: { workspaceId: this.#workspaceId, idempotencyKey: input.idempotencyKey },
+        where: {
+          workspaceId: this.#workspaceId,
+          idempotencyKey: input.idempotencyKey,
+          userId: input.authorization.userId,
+          sessionId: input.sessionId,
+          AND: [
+            { brandId: input.brandId },
+            nullableBrandIdScopeFilter(input.authorization.brandScope),
+          ],
+        },
       });
       if (existing) {
         return {

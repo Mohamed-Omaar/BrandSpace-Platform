@@ -50,6 +50,26 @@ export interface MetricDefinition {
    */
   readonly additive: boolean;
   /**
+   * HOW THIS METRIC IS COMBINED — stated, not inferred (P7-R7).
+   *
+   *   `SUM`                   a FLOW. Impressions in a window are the sum of the
+   *                           impressions in its buckets, across every account.
+   *   `LATEST_PER_SUBJECT_SUM` a STOCK, or level. "Followers over March" is not a
+   *                           sum over March and it is not the largest reading in
+   *                           March either — it is each account's MOST RECENT
+   *                           reading in March, added up across accounts.
+   *   `DERIVED`               recomputed from components; never aggregated at all.
+   *
+   * WHY THE FLAG EXISTS WHEN `additive` ALREADY DID. `additive` answers "may I
+   * sum this?", and the answer for a level is "no" — which left every call site
+   * to invent what to do instead. All three invented the same thing, `MAX(value)`,
+   * and `MAX` is not `latest`: an account that LOSES followers reports its
+   * highest reading in the window for ever, and the number only ever goes up.
+   * Naming the semantics is what stops a fourth call site inventing a fifth
+   * answer.
+   */
+  readonly aggregation: 'SUM' | 'LATEST_PER_SUBJECT_SUM' | 'DERIVED';
+  /**
    * For a derived metric: the numerator and denominator it is computed from.
    * A derived metric is NEVER ingested; it is computed at query time from
    * observations a provider actually returned, so it cannot exist without them.
@@ -76,6 +96,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ALL,
     messageKey: 'impressions',
   },
@@ -84,6 +105,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     // X publishes impressions but not de-duplicated reach on the public
     // analytics surface, so it is absent rather than mapped onto impressions —
     // which would be inventing a metric the provider did not return.
@@ -95,6 +117,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ALL,
     messageKey: 'engagements',
   },
@@ -103,6 +126,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ALL,
     messageKey: 'likes',
   },
@@ -111,6 +135,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ALL,
     messageKey: 'comments',
   },
@@ -119,6 +144,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ALL,
     messageKey: 'shares',
   },
@@ -127,6 +153,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     // Saves are an Instagram, Facebook and TikTok concept. LinkedIn and X do not
     // publish one, so neither has a row — not a zero.
     supportedBy: ['FACEBOOK', 'INSTAGRAM', 'TIKTOK'],
@@ -137,6 +164,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ['FACEBOOK', 'LINKEDIN', 'X'],
     messageKey: 'clicks',
   },
@@ -145,6 +173,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'COUNT',
     kind: 'volume',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X'],
     messageKey: 'videoViews',
   },
@@ -153,6 +182,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     unit: 'SECONDS',
     kind: 'duration',
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ['TIKTOK', 'FACEBOOK'],
     messageKey: 'watchTime',
   },
@@ -164,6 +194,9 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     // produces a number with no meaning at all, which is why this is the one
     // volume metric that is not additive.
     additive: false,
+    // THE ONE LEVEL METRIC. Each account's latest reading in the window, summed
+    // across the brand's accounts.
+    aggregation: 'LATEST_PER_SUBJECT_SUM',
     supportedBy: ALL,
     messageKey: 'followers',
   },
@@ -174,6 +207,7 @@ export const INGESTED_METRICS: readonly MetricDefinition[] = [
     // A movement DOES add up: net change over a week is the sum of the daily
     // net changes. It is signed, which is why its unit is DELTA.
     additive: true,
+    aggregation: 'SUM',
     supportedBy: ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'LINKEDIN'],
     messageKey: 'followerChange',
   },
@@ -192,6 +226,7 @@ export const DERIVED_METRICS: readonly MetricDefinition[] = [
     unit: 'RATIO_MILLI',
     kind: 'rate',
     additive: false,
+    aggregation: 'DERIVED',
     derivedFrom: { numerator: 'engagements', denominator: 'impressions' },
     supportedBy: ALL,
     messageKey: 'engagementRate',
@@ -201,6 +236,7 @@ export const DERIVED_METRICS: readonly MetricDefinition[] = [
     unit: 'RATIO_MILLI',
     kind: 'rate',
     additive: false,
+    aggregation: 'DERIVED',
     derivedFrom: { numerator: 'clicks', denominator: 'impressions' },
     supportedBy: ['FACEBOOK', 'LINKEDIN', 'X'],
     messageKey: 'clickThroughRate',
@@ -210,6 +246,7 @@ export const DERIVED_METRICS: readonly MetricDefinition[] = [
     unit: 'RATIO_MILLI',
     kind: 'rate',
     additive: false,
+    aggregation: 'DERIVED',
     derivedFrom: { numerator: 'saves', denominator: 'reach' },
     supportedBy: ['FACEBOOK', 'INSTAGRAM', 'TIKTOK'],
     messageKey: 'saveRate',
@@ -289,4 +326,20 @@ export function computeDerived(
  */
 export function isAdditive(key: string): boolean {
   return BY_KEY.get(key)?.additive === true;
+}
+
+/**
+ * The declared combination rule for a metric.
+ *
+ * An unknown key is `SUM` — the caller has already refused an unknown metric by
+ * the time this is reached, and a default that matched the common case is less
+ * surprising than one that matched nothing.
+ */
+export function aggregationFor(key: string): 'SUM' | 'LATEST_PER_SUBJECT_SUM' | 'DERIVED' {
+  return BY_KEY.get(key)?.aggregation ?? 'SUM';
+}
+
+/** Does this metric measure a LEVEL, whose window value is its latest reading? */
+export function isLevelMetric(key: string): boolean {
+  return aggregationFor(key) === 'LATEST_PER_SUBJECT_SUM';
 }
