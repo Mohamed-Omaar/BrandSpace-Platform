@@ -9,3 +9,4 @@ export * from './public-error';
 export * from './redaction';
 export * from './result';
 export * from './roles';
+export * from './untrusted-text';

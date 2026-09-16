@@ -105,12 +105,18 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@brandspace/assets':
         specifier: workspace:*
         version: link:../../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@brandspace/automation':
+        specifier: workspace:*
+        version: link:../../packages/automation
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -120,12 +126,18 @@ importers:
       '@brandspace/content':
         specifier: workspace:*
         version: link:../../packages/content
+      '@brandspace/copilot':
+        specifier: workspace:*
+        version: link:../../packages/copilot
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@brandspace/intelligence':
+        specifier: workspace:*
+        version: link:../../packages/intelligence
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
@@ -166,12 +178,18 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@brandspace/assets':
         specifier: workspace:*
         version: link:../../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@brandspace/automation':
+        specifier: workspace:*
+        version: link:../../packages/automation
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -258,9 +276,15 @@ importers:
 
   apps/worker:
     dependencies:
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@brandspace/assets':
         specifier: workspace:*
         version: link:../../packages/assets
+      '@brandspace/automation':
+        specifier: workspace:*
+        version: link:../../packages/automation
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -334,6 +358,37 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/analytics:
+    dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../ai-gateway
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@brandspace/social-connectors':
+        specifier: workspace:*
+        version: link:../social-connectors
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/assets:
     dependencies:
       '@brandspace/config':
@@ -376,6 +431,31 @@ importers:
       otpauth:
         specifier: 9.5.1
         version: 9.5.1
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/automation:
+    dependencies:
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -478,6 +558,43 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/copilot:
+    dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../ai-gateway
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../analytics
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../brand-brain
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../content
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/intelligence':
+        specifier: workspace:*
+        version: link:../intelligence
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/database:
     dependencies:
       '@brandspace/auth':
@@ -523,6 +640,37 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/intelligence:
+    dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../ai-gateway
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../analytics
+      '@brandspace/brand-brain':
+        specifier: workspace:*
+        version: link:../brand-brain
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -696,12 +844,18 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../packages/ai-gateway
+      '@brandspace/analytics':
+        specifier: workspace:*
+        version: link:../packages/analytics
       '@brandspace/assets':
         specifier: workspace:*
         version: link:../packages/assets
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../packages/auth
+      '@brandspace/automation':
+        specifier: workspace:*
+        version: link:../packages/automation
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../packages/brand-brain
@@ -711,12 +865,18 @@ importers:
       '@brandspace/content':
         specifier: workspace:*
         version: link:../packages/content
+      '@brandspace/copilot':
+        specifier: workspace:*
+        version: link:../packages/copilot
       '@brandspace/database':
         specifier: workspace:*
         version: link:../packages/database
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../packages/entitlements
+      '@brandspace/intelligence':
+        specifier: workspace:*
+        version: link:../packages/intelligence
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../packages/jobs

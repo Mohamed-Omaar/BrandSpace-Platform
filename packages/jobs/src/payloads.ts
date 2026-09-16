@@ -116,3 +116,58 @@ export type PublishJobsPayload = PublishSocialPostPayload | VerifySocialPostPayl
 
 export const PUBLISH_SOCIAL_POST = 'social.publish-post' as const;
 export const VERIFY_SOCIAL_POST = 'social.verify-post' as const;
+
+/**
+ * Pull one connection's analytics for one window — Phase 7.
+ *
+ * THE PAYLOAD IS A POINTER, for the third time in this file and for the same
+ * reasons: it names an `analytics_ingestion_cursor` row and a workspace, and
+ * nothing else. No token, no metric value, no account name. Redis is not
+ * tenant-isolated and is not encrypted at rest the way the database is, and a
+ * customer's follower count sitting in a queue message is their performance data
+ * outside every guarantee this platform makes about it.
+ *
+ * THE WORKER RESOLVES THE CREDENTIAL ITSELF, inside the workspace's own RLS
+ * context, from `social_credential`, decrypted with the SOCIAL key domain
+ * (D-136) — the same path publishing uses, and the only one.
+ *
+ * `kind` DISTINGUISHES A SCHEDULED PULL FROM A BACKFILL, and they are separate
+ * members rather than a boolean for the reason `social.verify-post` is separate
+ * from `social.publish-post`: the two walk the window in opposite directions and
+ * one of them is bounded by a horizon the other does not have. A flag would put
+ * both behaviours behind one `if`.
+ */
+export interface IngestAnalyticsPayload extends TenantJobPayload {
+  readonly kind: 'analytics.ingest';
+  readonly cursorId: string;
+}
+
+export interface BackfillAnalyticsPayload extends TenantJobPayload {
+  readonly kind: 'analytics.backfill';
+  readonly cursorId: string;
+}
+
+/**
+ * Evaluate the automation rules listening for one event.
+ *
+ * A POINTER AGAIN: the brand, the trigger type and the row that fired it. The
+ * FACTS a condition reads are gathered by the processor from the database, not
+ * carried in the message — a fact in a queue message is a fact that was true when
+ * the message was written and may not be when it is read, and an automation that
+ * acted on stale facts would be the hardest kind of bug to see.
+ */
+export interface EvaluateAutomationPayload extends TenantJobPayload {
+  readonly kind: 'automation.evaluate';
+  readonly brandId: string;
+  readonly triggerType: string;
+  readonly refType: string | null;
+  readonly refId: string | null;
+}
+
+/** Everything the `analytics-ingest` queue carries. */
+export type AnalyticsIngestPayload =
+  IngestAnalyticsPayload | BackfillAnalyticsPayload | EvaluateAutomationPayload;
+
+export const INGEST_ANALYTICS = 'analytics.ingest' as const;
+export const BACKFILL_ANALYTICS = 'analytics.backfill' as const;
+export const EVALUATE_AUTOMATION = 'automation.evaluate' as const;

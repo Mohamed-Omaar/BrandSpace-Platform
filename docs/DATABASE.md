@@ -1441,3 +1441,92 @@ A job is stale when `status = 'PUBLISHING'` and `claimedAt` is older than
 nothing else**: recovery moves it to `VERIFICATION_PENDING` and asks the provider, or leaves it for a
 person where the provider cannot be asked. The move is a conditional UPDATE, so a worker that turns
 out to be alive and settles a moment later simply wins — its real outcome lands on top of the guess.
+
+---
+
+## 18. Phase 7 — Analytics and Copilot
+
+Twelve tenant-owned tables and one column on an existing one. Every table carries a non-null
+`workspaceId`, has `ENABLE + FORCE` row-level security with a `tenant_isolation` policy naming only
+`brandspace_app`, and reaches every tenant-owned parent through a COMPOSITE key on
+`(workspaceId, <parent id>)` — D-112, with no exceptions in this phase either. Every column-scoped
+`SET NULL` names its own column (D-114), so a vanished parent never nulls the tenant key.
+
+| Table                        | Tenant key | Brand       | Notes                                                                                                                            |
+| ---------------------------- | ---------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `metric_observation`         | NOT NULL   | NOT NULL    | One row per measurement. `(workspaceId, observationKey)` unique — the identity of the MEASUREMENT, not of the fetch (D-145)      |
+| `analytics_ingestion_cursor` | NOT NULL   | NOT NULL    | Durable progress per (connection, subject type, granularity). Carries the lease, the backoff and the freshness                   |
+| `analytics_ingestion_run`    | NOT NULL   | NOT NULL    | Operations evidence. **Terminal once** by trigger, and **not tenant-deletable** by privilege                                     |
+| `campaign`                   | NOT NULL   | NOT NULL    | No budget, no currency, no attribution — deliberately narrower than §4.3 anticipated (D-155). `version` is optimistic locking    |
+| `insight`                    | NOT NULL   | NOT NULL    | Generated prose and its lifecycle. `(workspaceId, idempotencyKey)` unique, so a retry replays rather than regenerates            |
+| `insight_evidence`           | NOT NULL   | NOT NULL    | The measurements the prose rests on. **Append-only** by trigger and **not tenant-deletable** by privilege (D-148)                |
+| `copilot_session`            | NOT NULL   | nullable    | One person's conversation. Brand is optional: "what happened last week" names no brand                                           |
+| `copilot_message`            | NOT NULL   | via session | `body` is nullable and a purge is STAMPED, so a purged turn is visibly purged rather than silently blank                         |
+| `copilot_action_plan`        | NOT NULL   | nullable    | `confirmationTokenHash` unique PLATFORM-wide. **Frozen once confirmed** by trigger                                               |
+| `copilot_tool_call`          | NOT NULL   | via plan    | `(workspaceId, idempotencyKey)` unique — the key is DERIVED from the plan, ordinal, tool and arguments, so a retry cannot re-run |
+| `automation_rule`            | NOT NULL   | NOT NULL    | Closed trigger and action enums. Stores no authority — see §18.2                                                                 |
+| `automation_run`             | NOT NULL   | NOT NULL    | `(workspaceId, idempotencyKey)` unique on an hour bucket. `confirmationTokenHash` unique PLATFORM-wide, single-use by trigger    |
+
+`content_item` gained one nullable column, `campaignId`, with a composite foreign key and a
+column-scoped `ON DELETE SET NULL ("campaignId")`. `brand_knowledge_candidate` gained `sourceKind`,
+`insightId` and `conflictsWithItemId`, and its `sourceDocumentId` became nullable — a learning inferred
+from performance has no source document, and a CHECK requires exactly one provenance to be present.
+
+### 18.1 The constraints that carry a rule
+
+Each of these encodes an invariant rather than a format, and each closes a way a future call site could
+make the data lie:
+
+- `metric_observation_value_sign` — a COUNT and a duration cannot be negative; a DELTA can, because
+  losing followers is a real measurement. A provider returning `-5` impressions is a parsing bug, and
+  this is where it stops.
+- `metric_observation_ratio_bounds` — a rate is parts per mille and cannot exceed 1000.
+- `metric_observation_account_has_no_post` — an account-level reading may not point at our content rows.
+- `insight_evidence_metric_is_measured` — **the anti-fabrication constraint.** A `METRIC` or
+  `METRIC_COMPARISON` evidence row must carry a metric key, a value, a unit and a window. An evidence row
+  with a label and no measurement would be a citation pointing at nothing, which is exactly the shape a
+  fabricated one takes.
+- `insight_evidence_comparison_has_two_sides` — a comparison must have something to compare with.
+- `copilot_plan_external_requires_confirmation` — **CLAUDE.md §2.5 as a database constraint.** A plan
+  whose strictest step leaves the platform or destroys something may not exist with
+  `requiresConfirmation` false. No screen, no payload and no refactor can produce one.
+- `copilot_plan_execution_follows_confirmation` — a plan that has not been confirmed has not started.
+- `copilot_plan_confirmation_is_attributable` — "confirmed by nobody" is the state a replay would leave.
+- `automation_rule_external_requires_confirmation` — the same §2.5 rule reached by the other door: an
+  automation is not a way around the Copilot's confirmation boundary.
+- `copilot_message_purge_is_recorded` — a purged body carries its purge stamp, and a body that is still
+  there has none.
+
+### 18.2 Triggers, and why each one is a trigger
+
+- `insight_evidence_no_update` — evidence is what a customer is shown INSTEAD of trusting the model's
+  sentence. A record that can be edited afterwards is not evidence.
+- `analytics_run_completes_once` — a run leaves `RUNNING` exactly once, into a terminal status with its
+  counters and its finish time. Its identity may never move.
+- `copilot_plan_frozen_once_confirmed` — the steps and the hash of a CONFIRMED plan cannot change. This
+  closes the attack the plan hash alone does not: change the plan and KEEP the confirmation.
+- `automation_run_confirmation_single_use` — a confirmed run may not be re-confirmed, and may not be
+  RE-AIMED at a different action or resource. `resourceId` holds what a human agreed to; what the
+  confirmed action PRODUCED goes in `actionResult`, so the two can never be confused.
+
+### 18.3 Privileges, where a policy is not enough
+
+`DELETE` is revoked from `brandspace_app` on `insight_evidence` and `analytics_ingestion_run`. RLS would
+merely scope a delete to the tenant's own rows; the point here is that the tenant role may not delete
+these rows AT ALL. Pruning them past their retention window is a platform operation, for the same reason
+`publish_attempt` and `ai_usage_ledger` already carry: a record somebody can erase is not a record.
+
+### 18.4 Retention
+
+Three windows, two owners, and both are declared in `AI_OUTPUT_RETENTION_REGISTRY`:
+
+| Artefact                                        | Window                                     | Owner                   | What happens                                                                                         |
+| ----------------------------------------------- | ------------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `metric_observation`, `analytics_ingestion_run` | `analytics.retention.*`, narrowed per plan | `@brandspace/analytics` | DELETED                                                                                              |
+| `insight` + evidence                            | `analytics.retention.insightRetentionDays` | `@brandspace/analytics` | DELETED (evidence by cascade)                                                                        |
+| `copilot_message.body`, plans, sessions         | `copilot.conversation.retentionDays`       | `@brandspace/copilot`   | Body NULLED and stamped; an unconfirmed plan EXPIRES and surrenders its token; a session is ARCHIVED |
+
+A Copilot message ROW survives its body, because the shape of the conversation and its links to plans,
+tool calls and audit events must outlive the words — an audit event pointing at a row that no longer
+exists is a dangling reference in a security record. `audit_event`, `credit_transaction`,
+`ai_usage_ledger` and `ai_request` are never touched by either pass.

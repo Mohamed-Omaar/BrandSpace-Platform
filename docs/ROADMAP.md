@@ -614,14 +614,39 @@ What shipped:
 
 ### Exit criteria
 
-- [ ] Metrics ingest idempotently and are visible per post, account, campaign, and brand
-- [ ] Analytics explanations cite the actual metric values they reference
-- [ ] The Copilot can create a campaign, draft content, and place it on the calendar — with a preview and
+- [x] Metrics ingest idempotently and are visible per post, account, campaign, and brand
+- [x] Analytics explanations cite the actual metric values they reference
+- [x] The Copilot can create a campaign, draft content, and place it on the calendar — with a preview and
       an undo path
-- [ ] The Copilot **cannot** publish, delete, disconnect, pay, or send external communications without
+- [x] The Copilot **cannot** publish, delete, disconnect, pay, or send external communications without
       explicit human confirmation, and its tool calls are authorized against the user's real permissions
-- [ ] Automations never perform an unauthorized external action
-- [ ] Copilot isolation tests confirm it can never reach another workspace's data
+- [x] Automations never perform an unauthorized external action
+- [x] Copilot isolation tests confirm it can never reach another workspace's data
+
+### Delivered in Phase 7, and what was deliberately not
+
+| Delivered                  | What it is                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Analytics ingestion**    | A provider-agnostic adapter boundary, a canonical metric vocabulary, durable per-connection cursors with a lease, bounded jittered backoff, backfill, freshness, retention pruning, and a rate-limit budget SHARED with publishing that reserves headroom for it. One `INSERT … ON CONFLICT DO UPDATE` is the whole concurrency story (D-145). |
+| **Smart Analytics**        | Totals, comparisons, trends and top posts per brand, campaign, platform and post; CSV export with formula-injection protection and an allow-listed column set; accessible single-hue charts, each with a data table (D-156).                                                                                                                   |
+| **Grounded AI insights**   | `analytics.explain` through the existing gateway, reserve → execute → settle. Evidence is persisted as rows carrying the measurement; prose may cite only those ordinals and restate only those numerals; a violation refuses the whole generation (D-148). A refusal below the evidence floor is free (D-149).                                |
+| **Anomaly detection**      | Forward-walking, baseline-bounded, gap-aware. Every finding states its baseline, its window, the observed change and the threshold it crossed — there is no "AI detected a problem" label.                                                                                                                                                     |
+| **AI Strategy**            | `strategy.generate` and `plan.monthly`, grounded in the four Brand Brain memories in their existing precedence order, with the evidence exposed. Output is a PROPOSAL until a permitted human accepts it, and nothing rewrites a brand fact.                                                                                                   |
+| **Marketing Intelligence** | Content-gap analysis from what this brand has actually published and what its own figures show, stating its basis. See the exclusions below for what this deliberately is not.                                                                                                                                                                 |
+| **AI Copilot**             | Ten typed, permissioned tools in the existing visual shell; three action classes; previews; a single-use plan-bound confirmation (D-152); per-tool compensation contracts for undo (D-153); full plan, tool-call and audit recording with a correlation id joining plan → tool call → mutation → audit event.                                  |
+| **Automations**            | Closed trigger, condition and action registries; authority re-resolved on every run; hour-bucketed run de-duplication; external actions stop at `AWAITING_CONFIRMATION` and notify (D-154).                                                                                                                                                    |
+| **Campaign**               | The smallest honest tenant-owned domain: name, objective, brief, dates, channels, owner, optimistic version (D-155).                                                                                                                                                                                                                           |
+| **Learning write-back**    | Inferred learnings enter the EXISTING Brand Brain candidate review with provenance, evidence, derived confidence, inference version and a recorded conflict where one exists (D-150).                                                                                                                                                          |
+
+| Deliberately not built                         | Why                                                                                                                                                                                                                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Video generation**                           | D-16 makes it a Phase 7+ candidate requiring a separate cost, latency and product review. That review has not happened, so `video.generate` remains unavailable exactly as it was and the routing resolver still refuses it.                              |
+| **A live competitor feed or a trend provider** | Both would need a data source this product does not have. Inventing one — or passing a model's prior knowledge off as live intelligence — would be fabricated market data presented as measurement. Content-gap analysis states its actual basis instead. |
+| **Real social analytics credentials**          | Every platform requires business verification and app review before it issues one (D-18, D-19), and that is owner-driven work measured in weeks. The adapter boundary is real; no adapter claims an integration nobody has run (D-135, D-147).            |
+| **Arbitrary-code or webhook automations**      | Customer-controlled egress from a multi-tenant platform. The action registry is closed and its closure is a database constraint, not a convention (D-154).                                                                                                |
+| **Any silent external Copilot action**         | CLAUDE.md §2.5, enforced as a CHECK constraint rather than a service rule: a plan whose strictest step leaves the platform cannot exist with confirmation switched off.                                                                                   |
+| **A cross-workspace "AI memory"**              | Every learning, insight, plan and run is tenant-owned, brand-scoped and RLS-constrained. There is no store that spans workspaces.                                                                                                                         |
+| **Anything from Phase 8**                      | No billing provider, no checkout, no invoices, no subscription lifecycle, no payment webhooks, no dunning, no launch hardening. No deployment, infrastructure, DNS or staging secret was touched.                                                         |
 
 ---
 
@@ -721,7 +746,9 @@ Approvals + Command Center + Activity Log + Notifications ✅ · then the final 
 now carry real figures — upcoming slots, recent activity, notifications — beside a new "Needs your
 approval" panel, and every one reads through the module that OWNS the data rather than counting rows
 itself. **The published/engagement card still states its reason**: publishing is Phase 6 and
-analytics Phase 7, and a zero there would read as "you published nothing".
+analytics Phase 7, and a zero there would read as "you published nothing". **Phase 7 makes this card
+real:** the slot now shows measured engagement, and still renders UNAVAILABLE with a stated reason rather
+than a zero when no reading has arrived.
 
 **Activity Log** (module 17, AC-15.2, AC-15.3). A read model over `audit_event` that adds **no table
 and no writer** (D-124). Graded four ways from `audit.read` (D-125), scoped at the QUERY, keyset

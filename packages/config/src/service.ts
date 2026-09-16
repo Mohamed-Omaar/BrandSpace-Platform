@@ -112,6 +112,38 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
   // NO CREDENTIAL IS PROJECTED. App ids and secret refs live in
   // `integrations.social-apps`, which is deliberately NOT on this list.
   'publishing',
+  /*
+   * Phase 7. The ANALYTICS policy the customer's own screens state and enforce:
+   * what "stale" means before a chart labels itself stale, the freshness window
+   * a freshness badge is computed from, the export ceiling the export control
+   * has to know BEFORE the customer picks a wider range, and the anomaly
+   * threshold an anomaly card states so the customer can disagree with it.
+   * Restating any of it in the dashboard would be a second setting that drifts
+   * from the first (CLAUDE.md §2.2).
+   *
+   * NO CREDENTIAL AND NO PROVIDER IS PROJECTED. Analytics reads a CUSTOMER token
+   * from `social_credential` on the worker; nothing about a credential is in
+   * this document at all.
+   */
+  'analytics',
+  /*
+   * Phase 7. The COPILOT policy the customer's own panel states: the plan
+   * ceiling, how long a confirmation stays valid (the panel counts it down), how
+   * long the undo path is open (the panel offers it), and the conversation
+   * retention the settings screen explains.
+   *
+   * THE CONFIRMATION REQUIREMENT IS NOT IN THIS DOCUMENT AT ALL — it is a CHECK
+   * constraint on `copilot_action_plan`. A projected key that could switch it
+   * off would put CLAUDE.md §2.5 within reach of an operator screen.
+   */
+  'copilot',
+  /*
+   * Phase 7. The AUTOMATION ceilings the rule editor states and enforces: how
+   * many rules a brand may hold, the daily run ceiling a rule may set, and how
+   * long a proposed external action waits for a person. The trigger, condition
+   * and action registries are closed sets in code and are not configuration.
+   */
+  'automations',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

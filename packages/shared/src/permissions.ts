@@ -205,6 +205,60 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('integrations.manage', 'workspace', 'Connect and disconnect social accounts'),
   def('publishing.read', 'workspace', 'View publishing history and status'),
   def('publishing.manage', 'workspace', 'Cancel a queued post or retry a failed one'),
+
+  /*
+   * Phase 7 — Analytics, Strategy, the Copilot and Automations.
+   *
+   * SPLIT WHERE THE AUTHORITIES GENUINELY DIFFER, which in this phase is
+   * unusually easy to see: three of these SPEND MONEY and the rest do not, and
+   * two of them can CHANGE THE WORLD through an assistant that a person talks
+   * to in sentences.
+   *
+   *   - `analytics.read` is seeing the numbers. An Analyst needs it and a
+   *     read-only Viewer does not get it, because performance data is
+   *     commercially sensitive and D-130 keeps the Viewer at exactly
+   *     `workspace.read`.
+   *   - `analytics.export` is TAKING THE NUMBERS OUT of the platform. It is not
+   *     `read`: a file leaves the product, is forwarded, and outlives every
+   *     permission change afterwards. A role that may look at a chart is not
+   *     automatically one that may hand the quarter's performance to somebody
+   *     outside the workspace.
+   *   - `analytics.explain` SPENDS AI CREDITS. That is the same distinction
+   *     `content.create` carries and the one that matters most here: every other
+   *     read on this list is free, and this one moves money.
+   *   - `strategy.read` is seeing proposals. `strategy.manage` is generating one
+   *     (credits again) and, more consequentially, ACCEPTING it — the act that
+   *     turns a machine proposal into something the rest of the product will
+   *     build campaigns from. It belongs with the role that runs the brand.
+   *   - `copilot.use` is the whole assistant. It is ONE key rather than one per
+   *     tool, because the Copilot never exceeds the permissions its user already
+   *     holds: every tool call re-resolves the caller's own permissions at
+   *     execution time, so `copilot.use` grants access to the assistant and
+   *     nothing beyond what the person could already do by hand. A per-tool
+   *     permission family would be a second, drifting copy of the first.
+   *   - `automation.read` is seeing the rules and their run history.
+   *     `automation.manage` is creating and enabling them, which is the authority
+   *     to make things happen when nobody is watching — so it sits with the
+   *     admins and the Marketing Manager, and with nobody else.
+   *
+   * NO NEW ROLE. These attach to the roles that already exist, and the read-only
+   * roles stay read-only: `analyst` gets the reads and the export and nothing
+   * that can cause an effect, and `client_viewer` gets NOTHING (D-62, D-130).
+   */
+  def('analytics.read', 'workspace', 'View performance analytics'),
+  def('analytics.export', 'workspace', 'Export analytics data out of BrandSpace'),
+  def(
+    'analytics.explain',
+    'workspace',
+    'Generate an AI explanation of performance (spends credits)',
+  ),
+  def('strategy.read', 'workspace', 'View proposed strategies, plans and insights'),
+  def('strategy.manage', 'workspace', 'Generate and accept strategies and plans (spends credits)'),
+  def('campaigns.read', 'workspace', 'View campaigns'),
+  def('campaigns.manage', 'workspace', 'Create and edit campaigns'),
+  def('copilot.use', 'workspace', 'Use the AI Copilot (spends credits)'),
+  def('automation.read', 'workspace', 'View automation rules and their run history'),
+  def('automation.manage', 'workspace', 'Create, edit and enable automation rules'),
 ] as const;
 
 /** Platform-realm permissions. Disjoint from the workspace set by construction. */

@@ -19,6 +19,7 @@ import {
 import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inAnalytics } from '../../../server/analytics-context';
 import { activityService, notificationService } from '../../../server/approvals-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -54,6 +55,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const maySeeMembers = workspace.permissionKeys.includes('member.read');
 
   const maySeeContent = workspace.permissionKeys.includes('content.read');
+  const maySeeAnalytics = workspace.permissionKeys.includes('analytics.read');
 
   const { effective, wallet, memberCount } = await inWorkspace(
     workspace.workspaceId,
@@ -83,6 +85,33 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
    * counts and engagement need the publishing pipeline (Phase 6) and analytics
    * ingestion (Phase 7). Those panels keep saying so.
    */
+  /*
+   * PHASE 7 — THE ENGAGEMENT FIGURE THE COMMAND CENTER COULD NOT MEASURE BEFORE.
+   *
+   * READ THROUGH THE MODULE THAT OWNS IT, exactly as every other figure on this
+   * screen is: `AnalyticsQueryService` applies BrandScope as a query predicate
+   * and tells missing from zero, so the home screen and the analytics screen
+   * cannot disagree. A dashboard that summed `metric_observation` itself would
+   * be a second implementation of both rules.
+   *
+   * ONLY WHEN THE READER MAY SEE IT. A total fetched and then dropped in
+   * JavaScript is a disclosure computed over rows this person may not see (F-10).
+   */
+  const engagements = maySeeAnalytics
+    ? await inAnalytics(workspace.workspaceId, async (services) => {
+        const queries = await services.queries();
+        const now = systemClock.now();
+        const result = await queries.summary({
+          scope: {},
+          period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
+          brandScope: workspace.brandScope,
+          metricKeys: ['engagements'],
+        });
+        const metric = result.metrics.find((entry) => entry.metricKey === 'engagements');
+        return metric?.value === null || metric?.value === undefined ? null : Number(metric.value);
+      })
+    : null;
+
   const summary = await inWorkspace(workspace.workspaceId, async (scoped) => {
     const notifications = notificationService({
       db: scoped.db,
@@ -278,16 +307,35 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             testId="metric-scheduled"
           />
           {/*
-            Publishing belongs to Phase 6 and engagement to Phase 7. The card
-            states that plainly rather than rendering a zero that would read as
-            "you published nothing" — a fabricated measurement of a feature that
-            does not exist (CLAUDE.md §2.2).
+            PHASE 7 MAKES THIS ONE REAL, AND ONLY BECAUSE THERE IS SOMETHING TO
+            MEASURE.
+
+            The card said "available when publishing ships" through Phases 5B-2
+            and 6, because a zero there would have read as "you published
+            nothing" — a fabricated measurement of a feature that did not exist
+            (CLAUDE.md §2.2). Publishing shipped in Phase 6 and analytics
+            ingestion in Phase 7, so the number is now a real sum over stored
+            observations.
+
+            IT IS STILL UNAVAILABLE RATHER THAN ZERO when there is no
+            measurement: `engagements === null` means no reading has arrived,
+            which is a different thing from a measured none, and the card keeps
+            saying which.
           */}
           <MetricCard
-            label={t('overview.metric.published')}
-            unavailable
-            unavailableLabel={t('overview.metric.laterPhase')}
-            testId="metric-published"
+            label={t('overview.metric.engagement')}
+            {...(engagements === null
+              ? {
+                  unavailable: true,
+                  unavailableLabel: maySeeAnalytics
+                    ? t('analytics.absent.metrics_pending')
+                    : t('overview.metric.hidden'),
+                }
+              : {
+                  value: new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(engagements),
+                })}
+            hint={t('overview.metric.engagementHint')}
+            testId="metric-engagement"
           />
         </ContentGrid>
 

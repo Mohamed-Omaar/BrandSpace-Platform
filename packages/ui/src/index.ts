@@ -2,6 +2,7 @@ export * from './a11y';
 export * from './ambient';
 export * from './app-shell';
 export * from './calendar';
+export * from './charts';
 export * from './composer';
 export * from './copilot-shell';
 export * from './copilot-types';

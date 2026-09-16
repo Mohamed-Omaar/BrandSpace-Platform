@@ -57,7 +57,22 @@ const REASON = 'Development fixture: enable the quota features the product needs
  * ZERO — "not unlimited, none" — and every scheduling attempt is refused with a
  * quota error. The Content Calendar is then untestable through the product.
  */
-const QUOTA_FEATURES = ['limit.storage_gb', 'limit.scheduled_posts'] as const;
+/**
+ * The features an end-to-end run needs switched on.
+ *
+ * TWO LIMITS AND ONE CAPABILITY, and the capability is here for the same reason
+ * the limits are: the entitlements engine fails CLOSED, so a feature nothing
+ * grants resolves to `enabled: false` and the Copilot refuses every plan that
+ * would change anything. That is correct in production, where an operator has
+ * not finished configuring the platform, and it makes the assistant untestable
+ * through the product — which is how a capability comes to exist only in unit
+ * tests.
+ *
+ * `ai.copilot` STILL CARRIES NO LIMIT AND NO PRICE. The flag turns it on; what
+ * it costs comes from the credit rules and what a plan allows comes from the
+ * plan, neither of which this seed writes.
+ */
+const QUOTA_FEATURES = ['limit.storage_gb', 'limit.scheduled_posts', 'ai.copilot'] as const;
 
 function assertNotProduction(): void {
   if ((process.env['APP_ENV'] ?? 'development') === 'production') {

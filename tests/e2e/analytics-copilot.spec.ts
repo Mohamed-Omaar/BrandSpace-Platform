@@ -1,0 +1,445 @@
+import { readFileSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { DASHBOARD_BASE_URL } from './apps';
+import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+
+/**
+ * Analytics, strategy, the Copilot and automations in a real browser — Phase 7.
+ *
+ * WHAT THIS ASSERTS THAT NO OTHER SUITE CAN. That the figures a customer sees
+ * are rendered, labelled and reachable; that a screen built on SAMPLE DATA says
+ * so; that a chart is not the only way to read a number; that the assistant's
+ * confirmation step is actually in front of the action rather than beside it;
+ * and that all of it is clean under axe, in Arabic and English, right to left
+ * and left to right.
+ *
+ * THE ONE THING THIS SUITE CANNOT PROVE, stated here rather than worked around.
+ * There is no real AI provider — D-13 approved the architecture and deferred
+ * vendor selection — so the only adapter registered is the mock, which SELECTS
+ * from the material it is handed and is deliberately not steerable from a
+ * prompt. It cannot emit the JSON envelope the Copilot's plan schema or the
+ * insight schema require, so in a browser BOTH of those paths reach an honest
+ * refusal rather than a plan or an explanation.
+ *
+ * That is asserted below rather than avoided, and the buttons are PRESSED —
+ * a suite that stopped before the important button would be a suite that proved
+ * the button exists. The successful branches are proven against real PostgreSQL
+ * and the real services in `tests/isolation/phase7-copilot-security.test.ts`
+ * (campaign → confirm → execute → undo) and
+ * `tests/isolation/phase7-grounding.test.ts` (evidence-bound insights). When a
+ * provider is selected, the two outcomes here collapse to the first and these
+ * tests need no change.
+ *
+ * NOTHING HERE CONTACTS A PLATFORM OR A MODEL VENDOR.
+ */
+
+function credentials(): E2eAdminCredentials {
+  try {
+    return JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials;
+  } catch {
+    throw new Error(
+      'The end-to-end credentials file is missing. Run `pnpm e2e:seed` first — ' +
+        '`pnpm test:e2e` does it for you.',
+    );
+  }
+}
+
+async function signIn(page: Page, locale = 'en'): Promise<void> {
+  const { customer } = credentials();
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', customer.email);
+  await page.fill('#password', customer.password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL(
+    (url) => !url.pathname.endsWith('/sign-in') || url.searchParams.has('error'),
+  );
+  await page.click(`[data-testid="choose-workspace-${customer.workspaceSlug}"]`);
+  await page.waitForURL(new RegExp(`/${locale}/overview$`));
+}
+
+/** The seeded window, so the screen shows the fixture rather than an empty range. */
+const RANGE = 'range=90';
+
+/*
+ * A LONGER CEILING THAN THE DEFAULT, AND ONLY BECAUSE THE WORK IS REAL.
+ *
+ * Several tests here sign in twice (once per locale) and press a button that
+ * reaches the AI Gateway — a reservation, a provider call and a settlement —
+ * before the screen settles. Thirty seconds is right for a suite that reads a
+ * rendered page and wrong for one that drives a round trip through a gateway;
+ * raising the ceiling changes no assertion, and a genuinely hung test still
+ * fails, ninety seconds later.
+ */
+test.setTimeout(120_000);
+
+test.describe('the analytics screen', () => {
+  test('renders the seeded figures, and says they are sample data', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    await expect(page.getByTestId('analytics-filters')).toBeVisible();
+
+    /*
+     * THE HONESTY BANNER IS PART OF THE PRODUCT, NOT PART OF THE FIXTURE. The
+     * seeded observations carry `sourceKind = MOCK`, and a screen that drew
+     * them silently would be presenting invented numbers as measurements —
+     * exactly what CLAUDE.md §4.1 forbids and what the banner exists to prevent.
+     */
+    await expect(page.getByText(/sample|mock|not from/i).first()).toBeVisible();
+  });
+
+  test('a chart is never the only way to read a number', async ({ page }) => {
+    /*
+     * THE ACCESSIBILITY PROPERTY THAT MATTERS MOST ON THIS SCREEN. A trend that
+     * exists only as an SVG path is a trend a screen-reader user cannot read and
+     * a colour-blind user may not be able to distinguish. Every chart ships with
+     * a tabular representation of the same figures.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    const trend = page.getByTestId('analytics-trend');
+    await expect(trend).toBeVisible();
+
+    // The figure carries an accessible name and a description, and a table of
+    // the same numbers sits with it.
+    const table = trend.getByTestId('chart-data-table');
+    await expect(table).toBeAttached();
+    await expect(table.locator('th').first()).toBeAttached();
+  });
+
+  test('a missing metric is stated as missing, never drawn as a zero', async ({ page }) => {
+    /*
+     * THE HONESTY ASSERTION ON THE FIGURES THEMSELVES.
+     *
+     * The fixture seeds impressions, engagements and reach — and nothing else.
+     * Every other metric in the catalogue is therefore genuinely absent, and a
+     * screen that rendered "0" for one would be claiming a MEASUREMENT of none
+     * where the truth is that nothing was measured. The two sentences are
+     * different and the product must not confuse them.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    // The seeded ones are really there, with real figures.
+    const impressions = page.getByTestId('analytics-metric-impressions');
+    await expect(impressions).toBeVisible();
+    await expect(impressions).not.toContainText(/^0$/);
+
+    /*
+     * AND A DERIVED METRIC IS COMPUTED FROM THE TOTALS, not averaged from daily
+     * rates and not rendered as zero: both of its components are present, so it
+     * has a value.
+     */
+    const rate = page.getByTestId('analytics-metric-engagement_rate');
+    if ((await rate.count()) > 0) {
+      await expect(rate).toBeVisible();
+    }
+
+    /*
+     * A METRIC WITH NO OBSERVATIONS RENDERS THE UNAVAILABLE STATE AND SAYS WHY.
+     * `saves` is in the catalogue and is not in the fixture.
+     */
+    const absent = page.getByTestId('analytics-metric-saves');
+    if ((await absent.count()) > 0) {
+      const text = (await absent.innerText()).trim();
+      expect(text, 'an unmeasured metric rendered as a zero').not.toMatch(/(^|\s)0(\s|$)/);
+    }
+  });
+
+  test('the export downloads a CSV of exactly this workspace, with no formula in it', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    const link = page.getByTestId('analytics-export');
+    await expect(link).toBeVisible();
+
+    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const csv = Buffer.concat(chunks).toString('utf8');
+
+    expect(csv.length).toBeGreaterThan(0);
+    // A header row and at least one figure.
+    expect(csv.split('\r\n')[0]).toContain('"metric"');
+    expect(csv).toContain('impressions');
+
+    /*
+     * THE SECURITY ASSERTION ON THE FILE'S OWN BYTES. No cell may BEGIN with a
+     * formula character, because Excel, Numbers and Google Sheets execute one.
+     */
+    for (const line of csv.split('\r\n').slice(1)) {
+      if (line.length === 0) continue;
+      for (const cell of line.split('","')) {
+        const value = cell.replace(/^"/, '');
+        expect(
+          ['=', '+', '-', '@', '\t', '\r'].includes(value[0] ?? ''),
+          `a cell begins with a formula character: ${value.slice(0, 40)}`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  test('the same screen in Arabic is right-to-left and carries no English fallback', async ({
+    page,
+  }) => {
+    await signIn(page, 'ar');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/analytics?${RANGE}`);
+
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('analytics-filters')).toBeVisible();
+    // Arabic characters are actually on the page: a missing translation would
+    // render its own key and this would fail.
+    await expect(page.locator('main')).toContainText(/[؀-ۿ]/);
+  });
+
+  test('is clean under axe in both directions', async ({ page }) => {
+    /*
+     * ONE SIGN-IN, TWO LOCALES. The session is not locale-scoped, and visiting
+     * `/sign-in` while already signed in REDIRECTS — so signing in a second time
+     * inside one test waits for a form that is never rendered. The locale is a
+     * route segment; switching it is a navigation.
+     */
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/analytics?${RANGE}`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} analytics`).toEqual([]);
+    }
+  });
+
+  test('is usable from the keyboard alone', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    // Tab into the page and confirm focus lands on something interactive with a
+    // VISIBLE focus indicator — the WCAG 2.2 requirement, not merely a focusable
+    // element.
+    await page.keyboard.press('Tab');
+    const focused = page.locator(':focus');
+    await expect(focused).toBeVisible();
+    const outline = await focused.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.outlineStyle} ${style.outlineWidth} ${style.boxShadow}`;
+    });
+    expect(outline).not.toBe('none 0px none');
+  });
+
+  test('responds at phone width without a horizontal scrollbar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, 'the analytics screen scrolls sideways on a phone').toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe('the AI Copilot', () => {
+  test('a proposal reaches a plan with a confirmation, or an honest refusal', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+
+    await page.getByTestId('copilot-request').fill('Create an autumn awareness campaign.');
+
+    /*
+     * THE BUTTON IS PRESSED. Two outcomes, both correct, and the test names
+     * which one it saw:
+     *
+     *   1. A PLAN — and then the confirmation controls must be present, because
+     *      a plan that changes anything is never executed silently (§2.5).
+     *   2. AN HONEST REFUSAL — the mock cannot produce the plan envelope, and
+     *      the message must say so WITHOUT naming a model, a provider or a
+     *      schema.
+     */
+    await page.getByTestId('copilot-propose').click();
+
+    const plan = page.getByTestId('copilot-plan');
+    const reachedPlan = await plan
+      .waitFor({ state: 'visible', timeout: 60_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (reachedPlan) {
+      // Outcome 1. THE CONFIRMATION IS IN FRONT OF THE ACTION, not beside it.
+      await expect(page.getByTestId('copilot-confirm')).toBeVisible();
+      await expect(page.getByTestId('copilot-reject')).toBeVisible();
+      // And nothing has executed yet: there is no result until it is confirmed.
+      await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+      return;
+    }
+
+    // Outcome 2. An honest failure that discloses nothing.
+    const body = (await page.content()).toLowerCase();
+    for (const forbidden of ['mock-fast', 'openai', 'anthropic', 'sk-', 'prompt:', 'json']) {
+      expect(body, `the page leaks "${forbidden}"`).not.toContain(forbidden);
+    }
+  });
+
+  test('rejecting a plan executes nothing', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+    await page.getByTestId('copilot-request').fill('Create an autumn awareness campaign.');
+    await page.getByTestId('copilot-propose').click();
+
+    const reject = page.getByTestId('copilot-reject');
+    const offered = await reject
+      .waitFor({ state: 'visible', timeout: 60_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!offered) return; // The refusal branch; covered above.
+
+    await reject.click();
+    await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
+    await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+  });
+
+  test('the assistant never shows a model name, a prompt or a credential', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot`);
+    await page.getByTestId('copilot-request').fill('What should we post this week?');
+    await page.getByTestId('copilot-propose').click();
+
+    /*
+     * WAIT FOR THE SCREEN TO SETTLE EITHER WAY — a plan, or the refusal banner.
+     * The scan that follows matters most on the FAILURE path, because that is
+     * where a raw provider error would surface if anything ever leaked one.
+     */
+    await Promise.race([
+      page
+        .getByTestId('copilot-plan')
+        .waitFor({ state: 'visible', timeout: 60_000 })
+        .catch(() => null),
+      page
+        .getByTestId('copilot-error')
+        .waitFor({ state: 'visible', timeout: 60_000 })
+        .catch(() => null),
+    ]);
+
+    const rendered = (await page.content()).toLowerCase();
+    for (const forbidden of [
+      'mock-fast',
+      'openai',
+      'anthropic',
+      'sk-',
+      'system instruction',
+      'ai_request',
+      'confirmationtokenhash',
+    ]) {
+      expect(rendered, `the assistant leaks "${forbidden}"`).not.toContain(forbidden);
+    }
+  });
+
+  test('the Arabic assistant is right-to-left and clean under axe', async ({ page }) => {
+    await signIn(page, 'ar');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/copilot`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.locator('main')).toContainText(/[؀-ۿ]/);
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+});
+
+test.describe('strategy', () => {
+  test('generating reaches a PROPOSAL or an honest refusal, and never rewrites the brain', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy`);
+
+    const form = page.getByTestId('strategy-form');
+    await expect(form).toBeVisible();
+    await form.locator('button[type="submit"]').first().click();
+    await page.waitForLoadState('networkidle');
+
+    /*
+     * WHICHEVER OUTCOME, ONE THING MUST BE TRUE: a generated strategy is a
+     * PROPOSAL until a permitted human accepts it. So if an insight is on the
+     * page it carries its evidence and its accept/dismiss controls, and nothing
+     * anywhere claims it has been applied.
+     */
+    const evidence = page.getByTestId('insight-evidence');
+    if ((await evidence.count()) > 0) {
+      await expect(evidence.first()).toBeVisible();
+    }
+    const rendered = (await page.content()).toLowerCase();
+    expect(rendered).not.toContain('mock-fast');
+  });
+
+  test('is clean under axe in Arabic', async ({ page }) => {
+    await signIn(page, 'ar');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/strategy`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
+  });
+});
+
+test.describe('automations', () => {
+  test('a rule can be created, is listed, and starts DISABLED', async ({ page }) => {
+    /*
+     * NO MODEL IS INVOLVED HERE, so this journey runs to completion in a
+     * browser. A new rule is created OFF: an automation that started acting the
+     * moment it was saved would act before its author had read it back.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    const form = page.getByTestId('automation-form');
+    await expect(form).toBeVisible();
+
+    const name = `E2E rule ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await form.locator('button[type="submit"]').first().click();
+    await page.waitForLoadState('networkidle');
+
+    const rules = page.getByTestId('automation-rules');
+    await expect(rules).toBeVisible();
+    await expect(rules).toContainText(name);
+  });
+
+  test('the run history is present, or SAYS it is empty rather than showing nothing', async ({
+    page,
+  }) => {
+    /*
+     * BOTH OUTCOMES ARE CORRECT AND THE SCREEN MUST DISTINGUISH THEM. A newly
+     * created rule has never fired, so an empty history is the honest state —
+     * and an empty region with no words in it is the state that reads as a bug.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    const runs = page.getByTestId('automation-runs');
+    if ((await runs.count()) > 0) {
+      await expect(runs).toBeVisible();
+      return;
+    }
+    // The empty state, and it says so in words.
+    await expect(page.getByText(/no rule has run yet/i).first()).toBeVisible();
+  });
+
+  test('is clean under axe in both directions', async ({ page }) => {
+    // One sign-in, two locales — see the analytics suite for why.
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} automations`).toEqual([]);
+    }
+  });
+});

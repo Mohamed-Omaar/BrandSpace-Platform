@@ -692,3 +692,85 @@ Output moderation (§10.2) belongs with the content workflows that persist gener
 _BYOK_: the `byok` column and its ledger flag exist, but a customer-supplied credential needs
 workspace-scoped secret storage that Phase 4 does not build. Deferred rather than half-built — a BYOK path
 that fell back to the platform key would bill BrandSpace for a customer's usage.
+
+---
+
+## 16. Phase 7 as built — grounded insights, and the Copilot's real tool layer
+
+§13 described the Copilot as designed. This section records what shipped, where it differs, and why.
+
+### 16.1 The tool registry, as built
+
+Ten tools, not the capability list in §13.1 — the difference is that each one is now a concrete entry with
+a Zod schema, a permission key, a BrandScope requirement, an action class, an entitlement key where it
+spends, and an explicit `undoable` flag.
+
+| Tool                     | Permission          | Class                     | Undoable |
+| ------------------------ | ------------------- | ------------------------- | -------- |
+| `analytics.summary`      | `analytics.read`    | `READ_ONLY`               | —        |
+| `brand.context`          | `brand_brain.read`  | `READ_ONLY`               | —        |
+| `content.search`         | `content.read`      | `READ_ONLY`               | —        |
+| `calendar.lookup`        | `content.read`      | `READ_ONLY`               | —        |
+| `campaign.list`          | `campaigns.read`    | `READ_ONLY`               | —        |
+| `campaign.create`        | `campaigns.manage`  | `INTERNAL_REVERSIBLE`     | yes      |
+| `campaign.update`        | `campaigns.manage`  | `INTERNAL_REVERSIBLE`     | yes      |
+| `content.draft`          | `content.create`    | `INTERNAL_REVERSIBLE`     | yes      |
+| `calendar.place`         | `content.schedule`  | `INTERNAL_REVERSIBLE`     | yes      |
+| `publishing.publish_now` | `publishing.manage` | `EXTERNAL_OR_DESTRUCTIVE` | **no**   |
+
+**Three differences from §13.2 worth stating rather than leaving to be discovered.**
+
+1. **`INTERNAL_REVERSIBLE` also requires confirmation.** §13.2 required it only for the high-impact class.
+   In practice a customer who typed a sentence and received four drafts and a calendar entry without being
+   asked has been surprised by their own tooling, so anything that changes state is confirmed. A read-only
+   plan runs without ceremony, which is the only case where ceremony would be noise.
+2. **There is no "propose automations" tool.** Creating a rule is a form, and an assistant that could
+   create stored authority is an assistant that could create a thing that keeps acting.
+3. **`publishing.publish_now` declares `undoable: false`**, in the registry rather than by implication.
+   §13.3 guarantee 5 says undo is supported "wherever technically possible"; this states the boundary.
+
+The forbidden set is enforced by ABSENCE: there is no payment, refund, plan-change, role-change, secret or
+cross-workspace tool to expose, and `video.generate` remains unavailable per D-16.
+
+### 16.2 The execution contract, as built
+
+Every step re-resolves the caller's LIVE authorization, then re-checks the permission, the brand scope and
+the entitlement — in that order — before the tool runs. A refused step stops the plan; later steps are
+recorded as `SKIPPED` rather than attempted, because placing a draft on the calendar after failing to
+create it would be acting on a state that does not exist.
+
+A tool runs at most once: its idempotency key is DERIVED from the plan, the ordinal, the tool and the
+canonical arguments, and is unique per workspace, so a retried execution finds the completed call rather
+than running the tool again. Two concurrent executions of one plan are resolved by a conditional claim,
+so pressing "run" twice is harmless.
+
+Undo is a per-tool COMPENSATION CONTRACT recorded at execution with the resource version it acted on, and
+it refuses any step whose resource has moved since. Contracts run in reverse order. A campaign is
+ARCHIVED rather than deleted, because an undo that erased the row would also erase the evidence that the
+assistant ever acted.
+
+### 16.3 `analytics.explain` — the grounding contract
+
+A new gateway task, charged and settled through the normal reserve → execute → settle pipeline, with five
+properties the rest of this document does not otherwise require:
+
+1. **The model never sees "explain performance".** It sees an ordinal-indexed evidence table built from
+   this workspace's own stored observations, and is asked to explain THOSE. A prompt without the numbers
+   is a prompt that produces numbers.
+2. **A refusal below the evidence floor is free** — no gateway call, no reservation, no credit movement.
+3. **Evidence is persisted separately from prose.** `insight_evidence` rows carry the metric, the value,
+   the unit, the window and the source, and the UI renders figures from them. No numeral the model wrote
+   reaches a chart.
+4. **A fabricated citation is structurally impossible.** A claim citing an ordinal outside the package
+   fails validation; so does a claim containing a numeral that appears nowhere in the evidence, with
+   Arabic-Indic digits folded so the check is not bypassed by writing in Arabic. Either refuses the whole
+   generation — there is no degraded insight and no warning banner.
+5. **A retry replays.** The insight is keyed on the caller's idempotency key, so a lost response cannot
+   bill twice or call the provider twice.
+
+### 16.4 Ingestion is not an AI operation
+
+Analytics ingestion consumes **no AI credits**. It is network and database work against a social platform;
+charging for it would make a customer's bill depend on how often this product polls, which is our decision
+and not theirs. It shares the provider rate-limit budget with publishing and reserves headroom for it:
+a chart refreshing must never delay a post going out.

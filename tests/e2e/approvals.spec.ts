@@ -278,11 +278,22 @@ test.describe('the Command Center aggregates the modules', () => {
     await expect(page.getByTestId('overview-activity')).toBeVisible();
 
     /*
-     * AND WHAT IS STILL HONEST ABOUT WHAT IT CANNOT MEASURE. Publishing is
-     * Phase 6 and engagement Phase 7, so that card still states the reason
-     * rather than rendering a zero that would read as "you published nothing".
+     * AND THE CARD THAT USED TO SAY WHAT IT COULD NOT MEASURE NOW MEASURES IT.
+     *
+     * Through Phases 5B-3 and 6 this slot was `metric-published`, permanently
+     * unavailable, because a zero would have read as "you published nothing"
+     * about a feature that did not exist. Publishing shipped in Phase 6 and
+     * analytics ingestion in Phase 7, so the slot is `metric-engagement` and
+     * carries a real sum over stored observations.
+     *
+     * WHAT DID NOT CHANGE IS THE HONESTY RULE. With no reading yet the card is
+     * still UNAVAILABLE with a stated reason rather than a zero — missing and
+     * zero are different states, and the Command Center must not confuse them.
      */
-    await expect(page.getByTestId('metric-published')).toBeVisible();
+    await expect(page.getByTestId('metric-published')).toHaveCount(0);
+    const engagement = page.getByTestId('metric-engagement');
+    await expect(engagement).toBeVisible();
+    await expect(engagement).not.toHaveText(/^\s*0\s*$/);
   });
 
   test('every panel links somewhere real', async ({ page }) => {

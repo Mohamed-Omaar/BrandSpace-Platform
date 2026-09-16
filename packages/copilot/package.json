@@ -1,0 +1,30 @@
+{
+  "name": "@brandspace/copilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --emitDeclarationOnly --declarationDir dist"
+  },
+  "dependencies": {
+    "@brandspace/ai-gateway": "workspace:*",
+    "@brandspace/analytics": "workspace:*",
+    "@brandspace/brand-brain": "workspace:*",
+    "@brandspace/config": "workspace:*",
+    "@brandspace/content": "workspace:*",
+    "@brandspace/database": "workspace:*",
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/intelligence": "workspace:*",
+    "@brandspace/shared": "workspace:*",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

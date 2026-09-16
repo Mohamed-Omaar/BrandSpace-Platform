@@ -805,3 +805,71 @@ sweep re-dispatches when it is due.
 A delayed job is faster; the reconciliation sweep is what makes a Redis failure cost punctuality rather
 than correctness. Both halves are idempotent: materialising a slot twice derives the same keys and creates
 nothing, and dispatching twice is a BullMQ job-id collision.
+
+---
+
+## Phase 7 as built — Analytics and Copilot
+
+### Four new packages, and the boundary each one holds
+
+| Package                    | Owns                                                                                                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@brandspace/analytics`    | The canonical metric vocabulary, the adapter boundary, ingestion, the query and export surfaces, evidence and grounding, `analytics.explain`, retention pruning |
+| `@brandspace/intelligence` | Strategy generation, monthly plans, content-gap analysis, and the learning write-back that feeds Brand Brain's existing review                                  |
+| `@brandspace/copilot`      | The tool registry, plan construction and hashing, the confirmation contract, execution, and the undo compensation contracts                                     |
+| `@brandspace/automation`   | The closed trigger, condition and action registries, and the engine that re-resolves authority on every run                                                     |
+
+None of them imports an app; none talks to PostgreSQL except through `@brandspace/database`'s
+tenant-scoped client. The module-boundary matrix in `eslint.config.mjs` makes that a lint failure rather
+than a convention.
+
+### Where the AI work executes, and why not in the dashboard
+
+`analytics.explain`, `strategy.generate` and every Copilot turn run in **`apps/api`**, for the reason
+Phase 5A's appendix already gives: the gateway needs the PLATFORM database identity, and F-07 keeps that
+out of tenant-facing applications. The dashboard reaches them over HTTP.
+
+**Reading analytics needs neither, and stays in the dashboard** on the tenant identity, where it belongs —
+a chart is an ordinary tenant read, and routing it through the API would be widening a boundary for no
+reason.
+
+### The external-action port, and the one place it is wired
+
+Publishing needs the social connectors, a decrypted customer token and the publish queue — none of which
+belongs in a package the dashboard links against. Both the Copilot and the automation engine reach it
+through a narrow injected PORT, and that port is wired in **`apps/api` only**, behind a human
+confirmation. The worker wires none, so a confirmed external automation run there is blocked by policy
+rather than reaching a platform. A surface that was not given the port cannot publish at all — the F-07
+pattern applied to the assistant.
+
+### The analytics queue is a third worker
+
+`analytics-ingest` gets its own BullMQ worker rather than sharing `publish-jobs`. It is network work
+against somebody else's platform, like publishing — but it is also the work that must NEVER delay
+publishing: a backfill walking ninety days of a busy account would hold a publish slot for minutes, and a
+post that went out late because a chart was refreshing is a customer failed by an architectural decision.
+Three workers, three concurrency budgets. The rate limiter reserves a publishing floor on top of that, so
+ingestion cannot spend the whole provider budget either.
+
+Automation evaluation shares this queue rather than taking a fourth: both are bounded database work that
+must not sit on a request path, both want the same modest concurrency, and the `kind` discriminant routes
+them apart — the same reasoning that put asset processing and Brand Brain ingestion together.
+
+### Queue payloads stay pointers
+
+An analytics message names a cursor row and a workspace. No token, no metric value, no account name.
+Redis is not tenant-isolated and is not encrypted at rest the way the database is, and a customer's
+follower count in a queue message is their performance data outside every guarantee this platform makes
+about it. The worker resolves the credential itself, inside the workspace's own RLS context, from
+`social_credential` decrypted with the social key domain (D-136) — the same path publishing uses, and the
+only one.
+
+### Two new maintenance sweeps, and one Phase 6 gap closed
+
+`MaintenanceScheduler` gained an analytics dispatch sweep and an analytics/Copilot retention sweep, both
+on the platform identity because "which cursors are due" and "which rows are past their window" are
+cross-tenant questions no single tenant can ask.
+
+It also gained the timer for `sweepPublishing`, which Phase 6 wrote and left reachable only from
+`runOnce` — so the publishing reconciliation sweep had never actually run on a schedule. Found while
+wiring the analytics sweep beside it.

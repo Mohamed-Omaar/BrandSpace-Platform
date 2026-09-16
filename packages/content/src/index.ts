@@ -99,3 +99,14 @@ export {
   unsupportedDialect,
   unsupportedPlatform,
 } from './errors';
+
+/*
+ * Phase 7 — the Campaign domain.
+ *
+ * It lives in this package because docs/DATABASE.md §4.4b already settled the
+ * ownership question: campaigns belong to the Social Calendar, and a campaign in
+ * this product is a way of grouping content and reading its performance together
+ * rather than a lifecycle of its own.
+ */
+export { CampaignService, campaignNotFound, campaignVersionConflict } from './campaigns';
+export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';

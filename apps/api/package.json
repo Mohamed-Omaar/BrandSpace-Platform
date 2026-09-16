@@ -10,6 +10,10 @@
   },
   "dependencies": {
     "@brandspace/ai-gateway": "workspace:*",
+    "@brandspace/analytics": "workspace:*",
+    "@brandspace/automation": "workspace:*",
+    "@brandspace/copilot": "workspace:*",
+    "@brandspace/intelligence": "workspace:*",
     "@brandspace/assets": "workspace:*",
     "@brandspace/auth": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",

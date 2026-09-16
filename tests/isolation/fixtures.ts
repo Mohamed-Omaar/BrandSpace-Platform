@@ -97,6 +97,24 @@ export interface TenantFixture {
   readonly publishJobId: string;
   readonly publishIdempotencyKey: string;
   readonly publishAttemptId: string;
+  // --- Phase 7 (Analytics & Copilot) ---
+  readonly campaignId: string;
+  readonly metricObservationId: string;
+  readonly metricObservationKey: string;
+  readonly analyticsCursorId: string;
+  readonly analyticsRunId: string;
+  readonly analyticsRunIdempotencyKey: string;
+  readonly insightId: string;
+  readonly insightEvidenceId: string;
+  readonly copilotSessionId: string;
+  readonly copilotMessageId: string;
+  readonly copilotPlanId: string;
+  readonly copilotPlanHash: string;
+  readonly copilotToolCallId: string;
+  readonly copilotToolCallIdempotencyKey: string;
+  readonly automationRuleId: string;
+  readonly automationRunId: string;
+  readonly automationRunIdempotencyKey: string;
 }
 
 export interface IsolationFixtures {
@@ -1160,6 +1178,255 @@ async function createTenant(
         },
       });
 
+      /*
+       * PHASE 7 — a measured account, a campaign, a grounded insight with its
+       * evidence, a Copilot plan with one tool call, and an automation with a
+       * run.
+       *
+       * EVERY ROW IS SHAPED LIKE ITS PRODUCTION COUNTERPART, not like the
+       * smallest thing the columns accept. The observation key is computed the
+       * way `observationKeyFor` computes it, the plan carries a real hash and a
+       * real confirmation-token hash, and the evidence row carries the measured
+       * value the anti-fabrication CHECK requires. A fixture that stored a
+       * placeholder would prove isolation about a placeholder.
+       */
+      const campaign = await db.campaign.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          name: `Fixture Campaign ${slug}`,
+          objective: 'AWARENESS',
+          status: 'ACTIVE',
+          channels: ['LINKEDIN'],
+          ownerUserId: user.id,
+          createdByUserId: user.id,
+          idempotencyKey: `fixture-campaign-${slug}`,
+        },
+      });
+
+      const periodStart = new Date('2026-09-01T00:00:00.000Z');
+      const periodEnd = new Date('2026-09-02T00:00:00.000Z');
+      const observationKey = crypto
+        .createHash('sha256')
+        .update(
+          [
+            id,
+            socialConnection.id,
+            'ACCOUNT',
+            socialConnection.externalAccountId,
+            'impressions',
+            'DAY',
+            periodStart.toISOString(),
+          ].join('|'),
+        )
+        .digest('hex');
+
+      const observation = await db.metricObservation.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          socialConnectionId: socialConnection.id,
+          provider: 'LINKEDIN',
+          subjectType: 'ACCOUNT',
+          subjectExternalId: socialConnection.externalAccountId,
+          metricKey: 'impressions',
+          granularity: 'DAY',
+          periodStart,
+          periodEnd,
+          value: BigInt(slug.length * 1000 + 17),
+          unit: 'COUNT',
+          observedAt: periodEnd,
+          sourceKind: 'PROVIDER',
+          sourceVersion: 'mock-linkedin-1',
+          observationKey,
+        },
+      });
+
+      const analyticsCursor = await db.analyticsIngestionCursor.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          socialConnectionId: socialConnection.id,
+          provider: 'LINKEDIN',
+          subjectType: 'ACCOUNT',
+          granularity: 'DAY',
+          lastCoveredPeriodEnd: periodEnd,
+          lastSucceededAt: periodEnd,
+          lastAttemptedAt: periodEnd,
+          nextAttemptAt: new Date(Date.now() + 3_600_000),
+          freshness: 'FRESH',
+        },
+      });
+
+      const analyticsRunKey = `fixture-analytics-run-${slug}`;
+      const analyticsRun = await db.analyticsIngestionRun.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          cursorId: analyticsCursor.id,
+          socialConnectionId: socialConnection.id,
+          provider: 'LINKEDIN',
+          kind: 'SCHEDULED',
+          status: 'SUCCEEDED',
+          idempotencyKey: analyticsRunKey,
+          windowStart: periodStart,
+          windowEnd: periodEnd,
+          finishedAt: periodEnd,
+          durationMs: 42,
+          subjectsRequested: 1,
+          subjectsAnswered: 1,
+          observationsWritten: 1,
+        },
+      });
+
+      const insight = await db.insight.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          campaignId: campaign.id,
+          type: 'ANALYTICS_EXPLANATION',
+          status: 'NEW',
+          basis: 'OWN_PERFORMANCE',
+          title: { en: `Fixture insight ${slug}`, ar: `رؤية تجريبية ${slug}` },
+          body: { en: `Impressions moved for ${slug}.`, ar: `تغيرت الظهور لـ ${slug}.` },
+          periodStart,
+          periodEnd,
+          aiRequestId: aiRequest.id,
+          confidenceMilli: 700,
+          generatedByUserId: user.id,
+          idempotencyKey: `fixture-insight-${slug}`,
+        },
+      });
+
+      const insightEvidence = await db.insightEvidence.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          insightId: insight.id,
+          ordinal: 1,
+          kind: 'METRIC',
+          metricObservationId: observation.id,
+          campaignId: campaign.id,
+          metricKey: 'impressions',
+          value: observation.value,
+          unit: 'COUNT',
+          granularity: 'DAY',
+          periodStart,
+          periodEnd,
+          subjectType: 'ACCOUNT',
+          subjectExternalId: socialConnection.externalAccountId,
+          provider: 'LINKEDIN',
+          observedAt: periodEnd,
+          sourceKind: 'PROVIDER',
+          labelKey: 'analytics.evidence.impressions',
+        },
+      });
+
+      const copilotSession = await db.copilotSession.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          userId: user.id,
+          surface: 'general',
+          locale: 'EN',
+          title: `Fixture Copilot ${slug}`,
+          lastMessageAt: new Date(),
+        },
+      });
+
+      const planCorrelationId = crypto.randomUUID();
+      const planHash = crypto.createHash('sha256').update(`fixture-plan-${slug}`).digest('hex');
+      const confirmationTokenHash = crypto
+        .createHash('sha256')
+        .update(`fixture-confirmation-${slug}`)
+        .digest('hex');
+      const copilotPlan = await db.copilotActionPlan.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          sessionId: copilotSession.id,
+          userId: user.id,
+          status: 'AWAITING_CONFIRMATION',
+          planVersion: 1,
+          planHash,
+          summary: { en: 'Create a campaign', ar: 'إنشاء حملة' },
+          steps: [{ toolKey: 'campaign.create', actionClass: 'INTERNAL_REVERSIBLE' }],
+          highestActionClass: 'INTERNAL_REVERSIBLE',
+          requiresConfirmation: true,
+          estimatedCreditsMilli: BigInt(0),
+          confirmationTokenHash,
+          confirmationExpiresAt: new Date(Date.now() + 600_000),
+          correlationId: planCorrelationId,
+          idempotencyKey: `fixture-plan-${slug}`,
+        },
+      });
+
+      const copilotMessage = await db.copilotMessage.create({
+        data: {
+          workspaceId: id,
+          sessionId: copilotSession.id,
+          role: 'USER',
+          body: `fixture-copilot-body-${slug}`,
+          planId: copilotPlan.id,
+          idempotencyKey: `fixture-copilot-message-${slug}`,
+          correlationId: planCorrelationId,
+        },
+      });
+
+      const toolCallKey = `fixture-tool-call-${slug}`;
+      const copilotToolCall = await db.copilotToolCall.create({
+        data: {
+          workspaceId: id,
+          planId: copilotPlan.id,
+          sessionId: copilotSession.id,
+          ordinal: 1,
+          toolKey: 'campaign.create',
+          actionClass: 'INTERNAL_REVERSIBLE',
+          status: 'PLANNED',
+          argumentsJson: { name: `fixture-tool-argument-${slug}` },
+          idempotencyKey: toolCallKey,
+        },
+      });
+
+      const automationRule = await db.automationRule.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          name: `Fixture Automation ${slug}`,
+          description: `fixture-automation-description-${slug}`,
+          enabled: true,
+          triggerType: 'CONTENT_APPROVED',
+          triggerConfig: {},
+          conditions: [],
+          actionType: 'NOTIFY',
+          actionConfig: { templateKey: 'automation.notice' },
+          maxRunsPerDay: 10,
+          createdByUserId: user.id,
+        },
+      });
+
+      const automationRunKey = `fixture-automation-run-${slug}`;
+      const automationRun = await db.automationRun.create({
+        data: {
+          workspaceId: id,
+          brandId: brand.id,
+          ruleId: automationRule.id,
+          status: 'SUCCEEDED',
+          triggerType: 'CONTENT_APPROVED',
+          triggerRefType: 'ContentItem',
+          triggerRefId: contentItem.id,
+          idempotencyKey: automationRunKey,
+          conditionsHeld: true,
+          actionType: 'NOTIFY',
+          actionResult: { notified: 1 },
+          resourceType: 'Notification',
+          resourceId: notification.id,
+          correlationId: crypto.randomUUID(),
+          finishedAt: new Date(),
+          durationMs: 7,
+        },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -1224,6 +1491,23 @@ async function createTenant(
         publishJobId: publishJob.id,
         publishIdempotencyKey: publishKey,
         publishAttemptId: publishAttempt.id,
+        campaignId: campaign.id,
+        metricObservationId: observation.id,
+        metricObservationKey: observationKey,
+        analyticsCursorId: analyticsCursor.id,
+        analyticsRunId: analyticsRun.id,
+        analyticsRunIdempotencyKey: analyticsRunKey,
+        insightId: insight.id,
+        insightEvidenceId: insightEvidence.id,
+        copilotSessionId: copilotSession.id,
+        copilotMessageId: copilotMessage.id,
+        copilotPlanId: copilotPlan.id,
+        copilotPlanHash: planHash,
+        copilotToolCallId: copilotToolCall.id,
+        copilotToolCallIdempotencyKey: toolCallKey,
+        automationRuleId: automationRule.id,
+        automationRunId: automationRun.id,
+        automationRunIdempotencyKey: automationRunKey,
       };
     },
     { prisma, bootstrap: true },

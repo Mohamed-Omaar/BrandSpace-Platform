@@ -792,3 +792,83 @@ layer that settles it: `[U]` unit, `[ISO]` isolation against real PostgreSQL, `[
 a real platform, and none asserting webhook signature verification: no real provider credential exists
 until app review completes (D-18, D-19, D-135), and nothing can send a webhook to verify (D-140). Writing
 an acceptance criterion that no test can settle would make this document less useful, not more complete.
+
+---
+
+## 24. Phase 7 Acceptance Criteria — Analytics and Copilot
+
+Each is stated so it can be failed. The suite that settles it is named, because a criterion nothing
+exercises is a sentence rather than a criterion.
+
+### AC-16 Ingestion
+
+| ID      | Criterion                                                                                                                       | Settled by                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| AC-16.1 | Two writers converging on one observation produce exactly ONE row, and the later value wins only if it is at least as fresh     | `phase7-analytics-service` (real PostgreSQL) |
+| AC-16.2 | A late redelivery carrying an OLDER reading does not roll a stored figure backwards, and is reported as unchanged               | `phase7-analytics-service`                   |
+| AC-16.3 | Two schedulers cannot claim one cursor; a sweep in one workspace never claims another's                                         | `phase7-analytics-service`                   |
+| AC-16.4 | Retry backoff grows, is capped, is jittered, and every retry is in the future                                                   | `phase7-analytics` (unit)                    |
+| AC-16.5 | A mock adapter is unreachable in `PRODUCTION`, including as an explicit override, and every observation records its source kind | `phase7-analytics` (unit)                    |
+| AC-16.6 | Ingestion consumes no AI credits                                                                                                | design: no gateway call exists on the path   |
+
+### AC-17 Smart Analytics
+
+| ID      | Criterion                                                                                                                                                | Settled by                      |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| AC-17.1 | A metric with no observations is `null` with a stated reason — never `0`; a rate with a zero or missing denominator is `null`                            | `phase7-analytics` (unit), E2E  |
+| AC-17.2 | A rate is computed from the TOTALS, not averaged from daily rates, and rounds half-up                                                                    | `phase7-analytics` (unit)       |
+| AC-17.3 | A change from a zero baseline is `null`, not a percentage                                                                                                | `phase7-analytics` (unit)       |
+| AC-17.4 | BrandScope narrows the TOTAL, not just the list — a scoped summary returns the scoped sum                                                                | `phase7-analytics-service`      |
+| AC-17.5 | An export contains zero rows from another workspace, carries no internal identifier, and neutralises every formula prefix — asserted on the file's bytes | `phase7-analytics-service`, E2E |
+| AC-17.6 | Every chart has a tabular representation of the same figures, and a gap is drawn as a gap                                                                | E2E                             |
+| AC-17.7 | A screen containing any `MOCK` figure says so                                                                                                            | E2E                             |
+
+### AC-18 Grounded insights
+
+| ID      | Criterion                                                                                                                                      | Settled by                                    |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| AC-18.1 | Below the evidence floor: no provider call, no reservation, no credit movement, and the customer is told why                                   | `phase7-grounding` (real PostgreSQL)          |
+| AC-18.2 | Every persisted `METRIC` evidence row carries a metric key, a value, a unit and a window, and points at a real observation with the same value | `phase7-grounding`                            |
+| AC-18.3 | A citation to an ordinal outside the package refuses the whole generation; nothing is persisted                                                | `phase7-grounding`                            |
+| AC-18.4 | A correctly-cited claim containing an unmeasured numeral refuses too — including in Arabic-Indic digits                                        | `phase7-grounding`, `phase7-analytics` (unit) |
+| AC-18.5 | A retry with the same key replays: no second provider call, no second charge, no leaked reservation                                            | `phase7-grounding`                            |
+| AC-18.6 | An anomaly states its baseline, its window, the observed change and the threshold it crossed, and is found without hindsight                   | `phase7-analytics` (unit)                     |
+
+### AC-19 The Copilot
+
+| ID       | Criterion                                                                                                                       | Settled by                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| AC-19.1  | Every tool names a permission that exists; a caller holding nothing is offered nothing; `client_viewer` is offered nothing      | `phase7-copilot-automation` (unit)                  |
+| AC-19.2  | One external step lifts the whole plan's class and forces a confirmation; an UNKNOWN tool key classifies as external            | `phase7-copilot-automation` (unit)                  |
+| AC-19.3  | The raw confirmation token is returned once and only its digest is stored                                                       | `phase7-copilot-security` (real PostgreSQL)         |
+| AC-19.4  | A replayed confirmation is refused; a stale plan hash is refused; a different user is refused; a cancelled plan's token is dead | `phase7-copilot-security`                           |
+| AC-19.5  | A refused confirmation is AUDITED and survives the transaction that refused it, and the audit carries no token                  | `phase7-copilot-security`                           |
+| AC-19.6  | An unconfirmed plan will not execute; a confirmed plan executes once; two concurrent executions produce one run                 | `phase7-copilot-security`                           |
+| AC-19.7  | A membership revoked between confirmation and execution stops the plan                                                          | `phase7-copilot-security`                           |
+| AC-19.8  | The MVP journey — create a campaign, confirm, execute, undo — works, and the undo ARCHIVES rather than erases                   | `phase7-copilot-security`                           |
+| AC-19.9  | A plan, a tool call or an undo belonging to another workspace is unreachable, unconfirmable and unexecutable                    | `phase7-copilot-tenancy`, `phase7-copilot-security` |
+| AC-19.10 | No screen shows a model name, a provider, a prompt, a schema error or a token                                                   | E2E                                                 |
+
+### AC-20 Automations
+
+| ID      | Criterion                                                                                                                                                    | Settled by                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| AC-20.1 | The action registry contains no webhook, script, SQL or URL action                                                                                           | `phase7-copilot-automation` (unit)           |
+| AC-20.2 | A rule cannot be created for an action its author may not perform, or for a brand outside their scope                                                        | `phase7-automation-engine` (real PostgreSQL) |
+| AC-20.3 | Authority is re-resolved on every run: a lost permission, a narrowed brand scope or a lost membership blocks the run with a stated reason                    | `phase7-automation-engine`                   |
+| AC-20.4 | A condition that does not hold is SKIPPED, not FAILED                                                                                                        | `phase7-automation-engine`                   |
+| AC-20.5 | Two concurrent deliveries of one event produce exactly one run, and the action runs at most once                                                             | `phase7-automation-engine`                   |
+| AC-20.6 | An external action stops at `AWAITING_CONFIRMATION`, publishes nothing, and notifies                                                                         | `phase7-automation-engine`                   |
+| AC-20.7 | A confirmer without the action's permission is refused and the refusal is audited; a wrong token publishes nothing; a replayed token publishes nothing twice | `phase7-automation-engine`                   |
+| AC-20.8 | A surface with no publish port cannot publish at all — the run is blocked by policy                                                                          | `phase7-automation-engine`                   |
+
+### AC-21 Isolation, migration and the Viewer
+
+| ID      | Criterion                                                                                                                                              | Settled by                                            |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| AC-21.1 | All twelve new models: cross-tenant read, list, count, AGGREGATE, search, write, update, delete and re-parent are all refused                          | `phase7-*-tenancy`                                    |
+| AC-21.2 | A foreign id and a fabricated id are indistinguishable                                                                                                 | `phase7-analytics-tenancy`                            |
+| AC-21.3 | The migration applies to a POPULATED database from current main, and every pre-existing row survives — compared by id                                  | `phase7-migration-upgrade`                            |
+| AC-21.4 | After the upgrade: RLS enabled AND forced on all twelve, a tenant policy on each, DELETE revoked on the two evidence tables, every tenant FK composite | `phase7-migration-upgrade`                            |
+| AC-21.5 | A migrations-only database matches the Prisma schema — no drift                                                                                        | `f80-migration-upgrade` drift check                   |
+| AC-21.6 | `client_viewer` holds exactly `workspace.read`; all four Phase 7 routes answer 404 in both locales and appear in no navigation                         | `phase2b-boundaries` (unit), `viewer-read-only` (E2E) |

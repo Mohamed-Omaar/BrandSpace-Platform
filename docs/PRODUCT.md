@@ -520,3 +520,68 @@ promised; each would need its own owner decision (D-62).
 | **Client Viewer as a sold feature** | The `client_viewer` RBAC key remains in the role catalogue and is unchanged; it is simply not offered or promoted as a plan feature        |
 | **Postpaid overage**                | D-11 chose hard-stop-plus-top-up for the MVP; postpaid billing can be added once customers have a usage history to reason about            |
 | **Custom workspace roles**          | U-07 — the fixed role set is enough at launch                                                                                              |
+
+---
+
+## 12. Phase 7 as shipped — what a customer can actually do
+
+Four modules move from "described" to "usable" in this phase, and the paragraphs below say what each one
+does AND what it deliberately does not, so a reader does not infer a capability from a heading.
+
+### 12.1 Smart Analytics (module 12)
+
+Performance for a brand, a campaign, a platform or a single post, over a chosen range and optionally
+against the preceding one. Totals, rates, trends, top posts and a per-platform comparison, exportable as
+CSV.
+
+**What it will not do is invent a number.** A metric with no readings says which of six things is true —
+this platform does not publish that figure; nothing has been published; readings have not arrived; a
+rate's components are missing; there is no connected account; the connection needs reauthorization — and
+never shows a zero in place of any of them. A screen showing any sample figure says so on the screen.
+
+### 12.2 Grounded explanations and anomalies
+
+`Explain this` turns the numbers into sentences, and every sentence rests on evidence a customer can
+open: the metric, the value, the window and where it came from, rendered from the stored measurement
+rather than from the model's prose. An explanation that cannot be grounded is refused rather than
+softened, and a refusal for lack of data costs nothing.
+
+An anomaly always states its own basis — what was observed, what it is being compared with, how many
+periods that baseline came from, and the threshold it crossed. There is no "we detected a problem" label.
+
+### 12.3 AI Strategy and content gaps (modules 8 and 12)
+
+A strategy, a monthly plan and a content-gap reading, grounded in the four Brand Brain memories in their
+existing precedence order. **Everything generated is a PROPOSAL** until a permitted person accepts it,
+and accepting is the only thing that changes a brand fact. Learnings inferred from performance enter the
+review queue that already exists, carrying their evidence, their confidence and any conflict with a fact
+a person wrote — and a human-authored fact always wins.
+
+Content-gap analysis reads what this brand has published and what its own figures show. It is **not** a
+competitor feed and **not** a trend service; there is no such data source, and presenting a model's prior
+knowledge as live market intelligence would be a fabrication with a chart around it.
+
+### 12.4 The AI Copilot (module 10)
+
+Ten things it can do, each one something the person asking could already do by hand, through the same
+domain services they would use. It can read analytics, brand context, content and the calendar; it can
+create and update a campaign, draft content and place it on the calendar; and it can publish — only ever
+after a person has read the exact plan and confirmed it.
+
+**It always shows the plan first.** Anything that changes state waits for a confirmation, and anything
+that leaves the platform says so before the button. What it did can be undone where undoing is safe, and
+where it is not — a published post — the product says so rather than offering an undo it cannot honour.
+
+It has no way to pay, refund, change a plan, change a role, touch a secret, delete a workspace, or
+disconnect an account: those tools do not exist.
+
+### 12.5 Automations (module 15)
+
+When something happens, check a condition, do one thing. Four triggers, a short list of comparable facts,
+and four actions: notify, submit for approval, place on the calendar, or PROPOSE a publish. A rule can
+only do what its author could do, checked again every time it runs — so a rule stops working the day its
+author loses the permission, rather than quietly keeping it. A rule that would publish never publishes on
+its own: it waits, tells the workspace, and a permitted person confirms that exact run.
+
+There is no way to make an automation call a URL, run code, or send email: the list of things a rule can
+do is fixed.

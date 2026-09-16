@@ -910,6 +910,15 @@ describe('the constraints are composite in the database catalogue', () => {
     );
 
     expect(rows.map((r) => [r.conname, r.columns])).toEqual([
+      /*
+       * PHASE 7 ADDED TWO MORE, and they are here rather than exempted: a
+       * candidate may now point at the insight it was inferred from and at the
+       * human-authored item it conflicts with, and BOTH must null their own
+       * column rather than the tenant key when the target goes away. The list
+       * grows with the schema, which is the point of pinning it.
+       */
+      ['brand_knowledge_candidate_conflict_fkey', ['conflictsWithItemId']],
+      ['brand_knowledge_candidate_insight_fkey', ['insightId']],
       ['brand_knowledge_candidate_target_fkey', ['targetItemId']],
       ['brand_knowledge_item_conflict_fkey', ['conflictsWithItemId']],
       ['brand_knowledge_item_source_fkey', ['sourceDocumentId']],

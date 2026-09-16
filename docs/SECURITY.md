@@ -2132,3 +2132,108 @@ authorization row under the same envelope a stored credential gets.
 **Every one of the five ships with a regression test confirmed to FAIL against the previous code**,
 run rather than asserted — including the end-to-end callback, which fails four ways the moment the
 route is registered the way it was.
+
+---
+
+## 29. Phase 7 — Analytics and Copilot
+
+The two new attack surfaces in this phase are an ASSISTANT that can change tenant state and a set of
+STORED RULES that act long after their author has gone. Everything below exists because one of those two
+is a way to do something nobody authorized.
+
+### 29.1 Tenant isolation
+
+Twelve new tenant-owned tables, each with `ENABLE + FORCE` row-level security, a `tenant_isolation`
+policy naming only `brandspace_app`, and composite `(workspaceId, <parent id>)` foreign keys throughout
+(D-112). The D-29 gate refuses a build in which any of them lacks coverage; the isolation suite probes
+each one six ways — read, list, count, AGGREGATE, write and re-parent.
+
+**The aggregate probe is the one that matters most here.** A total is a disclosure: "their impressions
+came to 412,000" tells a competitor most of what a row would. The fixtures give the two tenants
+_different_ figures precisely so a sum that crossed the boundary would be a different number rather than
+a coincidentally equal one.
+
+### 29.2 BrandScope is a query predicate, never a post-read filter
+
+D-132 and D-134, applied to every Phase 7 read. `brandIdQueryFilter` is the single composition point, and
+a service that read every brand's rows and dropped the ones the caller may not see would be correct on
+screen and wrong in the total, the export and the evidence package. The gate in
+`tests/unit/brand-scope-predicate-gate.test.ts` fails the build on a brand read off a fetched row; it
+caught one real violation in this phase's learning write-back, which now carries the scope in its `WHERE`.
+
+An out-of-scope brand and a fabricated one are indistinguishable everywhere: both are a 404 shaped like a
+genuine miss, refused BEFORE any replay path that could otherwise confirm an insight exists.
+
+### 29.3 The Copilot's authorization model
+
+- **A closed, typed registry.** Ten tools, each with a Zod schema, a permission, a BrandScope requirement
+  and an action class. The model never receives Prisma, never sees a credential, and never decides whether
+  authorization applies.
+- **Authorization is deterministic server code at EXECUTION.** Permissions, brand scope and entitlements
+  are re-resolved from the LIVE membership before every step. A preview is never authorization: a person
+  whose role narrowed between the preview and the run is refused at the run.
+- **Fail closed on the unknown.** An unrecognised tool key classifies as `EXTERNAL_OR_DESTRUCTIVE`, not as
+  a harmless read.
+- **Arguments are PARSED at the boundary**, and the parsed value is what is stored, hashed and executed —
+  so a field a model invented cannot reach a domain service.
+- **The absence of a capability is a control.** There is no payment tool, no refund tool, no
+  delete-workspace tool, no disconnect tool and no `video.generate`. A capability the assistant does not
+  have is one no prompt can talk it into.
+
+### 29.4 The confirmation contract
+
+32 CSPRNG bytes, returned exactly once and stored only as a sha256 digest — the D-141 discipline, so a
+database read cannot be replayed as a confirmation. Confirming is a single conditional `UPDATE` matching
+the plan id, the plan HASH the customer was shown, the digest, the same user, an unexpired window and the
+`AWAITING_CONFIRMATION` status. A replay therefore affects zero rows rather than racing a read.
+
+Changing the plan invalidates the confirmation, because the hash is part of the match. Keeping the
+confirmation and changing the plan is closed by a separate trigger that freezes a confirmed plan's steps
+and hash. Cancelling clears the digest, so a customer who said "no" is not left holding a live credential.
+
+**Every refused confirmation is audited on a SEPARATE CONNECTION.** Each service runs inside
+`withWorkspace`, which is one transaction: a refusal throws, the transaction rolls back, and an audit row
+written just before the throw goes with it. A replayed token is exactly the shape an attempted replay
+takes and must leave a trace, so the denial sink writes where the rollback cannot reach — the pattern
+`ApprovalOptions.denialSink` established, applied here and to automation confirmations.
+
+### 29.5 Automations store no authority
+
+The creator's permissions, brand scope and entitlement are re-resolved on EVERY run; a creator who lost
+the permission, lost the brand or left the workspace stops the rule the next time it fires, recorded as
+`BLOCKED_BY_AUTHORIZATION` with the reason. Creating a rule requires BOTH `automation.manage` and the
+permission the ACTION needs — holding the first is not a way to acquire the second by writing a rule that
+uses it — and enabling a rule is checked the same way.
+
+The trigger, condition and action registries are closed sets in code. There is no webhook, no script, no
+SQL and no URL: a configurable action list is one migration away from customer-controlled egress from a
+multi-tenant platform. The external boundary is a CHECK constraint, not a service rule.
+
+### 29.6 Secrets, tokens and what is never written down
+
+- No social token, vault plaintext, session cookie or provider credential appears in any Phase 7 log,
+  audit record, queue payload, exception or API response. Queue payloads are POINTERS — a cursor id and a
+  workspace — and the worker resolves the credential itself inside the workspace's own RLS context.
+- **Hidden chain-of-thought is never persisted.** Only the customer-facing summary is written to
+  `copilot_message`; the model's raw response, its reasoning and its intermediate text are not.
+- Tool arguments are redacted before they are audited, and a confirmation token never appears in a URL —
+  it lives in client memory and travels in a request body, because a query string lands in browser
+  history, in the referrer of every later request and in an access log.
+- A customer-facing refusal names no model, provider, prompt or schema. The error banner renders a
+  sentence chosen from a closed bilingual catalogue, and an unrecognised code renders the generic
+  sentence rather than itself.
+
+### 29.7 Export
+
+The CSV column list is an ALLOW-LIST: no row id, no observation key, no ingestion run link, no workspace
+id. Every cell is quoted unconditionally and any cell beginning `=`, `+`, `-`, `@`, a tab or a carriage
+return is prefixed with an apostrophe — provider-supplied text reaches these cells, and Excel, Numbers and
+Google Sheets execute a formula. The count is taken BEFORE the rows, so a request that is too large is
+refused with its ceiling rather than answered with a truncated file that looks complete. An isolation test
+asserts the file's own bytes contain zero rows from another workspace.
+
+### 29.8 What a Viewer gained
+
+Nothing. `client_viewer` holds exactly `workspace.read`, asserted from the role definition in the unit
+suite and from four 404s in both locales in the end-to-end suite. Analytics, strategy, the Copilot and
+automations are all closed to it, and none of them appears in its navigation.

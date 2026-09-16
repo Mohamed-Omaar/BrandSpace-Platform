@@ -5,15 +5,21 @@ import {
 } from '@brandspace/assets';
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
+import { pruneAnalytics, resolveAnalyticsPolicy } from '@brandspace/analytics';
+import { pruneCopilot, resolveCopilotPolicy } from '@brandspace/copilot';
 import { ConfigurationService, type Environment } from '@brandspace/config';
 import { getPrisma, withWorkspace, type PrismaClient } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
+  BACKFILL_ANALYTICS,
+  INGEST_ANALYTICS,
   INGEST_SOURCE_DOCUMENT,
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
   enqueue,
+  type BackfillAnalyticsPayload,
+  type IngestAnalyticsPayload,
   type IngestSourceDocumentPayload,
   type ProcessAssetPayload,
   type PublishSocialPostPayload,
@@ -72,6 +78,10 @@ export interface MaintenanceResult {
   readonly publishJobsDispatched: number;
   /** Jobs whose worker died mid-flight, handed to verification (D-143). */
   readonly publishJobsRecovered: number;
+  /** Phase 7 — the analytics sweeps. */
+  readonly analyticsCursorsDispatched: number;
+  readonly analyticsBackfillsDispatched: number;
+  readonly analyticsRowsPruned: number;
 }
 
 export interface SchedulerOptions {
@@ -449,6 +459,130 @@ export class MaintenanceScheduler {
     return { created, dispatched, recovered };
   }
 
+  /**
+   * Phase 7 — dispatch the analytics cursors that are due, and the backfills.
+   *
+   * THE ENUMERATION IS CROSS-TENANT AND THE WORK IS NOT, exactly as the
+   * publishing sweep is. Which cursors are due needs the platform identity;
+   * everything that reads or writes a tenant row happens on the WORKER, inside
+   * that tenant's own `withWorkspace` context. This pass only decides who gets a
+   * message.
+   *
+   * IT DOES NOT CLAIM. The claim is the worker's conditional UPDATE, which is
+   * what makes two schedulers safe; a sweep that claimed here and dispatched
+   * afterwards would hold a claim across a queue hop and stall every cursor whose
+   * message was lost.
+   *
+   * BOTH HALVES ARE IDEMPOTENT. The cursor id is the BullMQ job id, so a sweep
+   * racing a successful dispatch adds nothing; and a duplicate delivery collides
+   * on the ingestion run's derived key rather than fetching twice.
+   */
+  async sweepAnalytics(batch: number): Promise<{ dispatched: number; backfills: number }> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    const due = await platform.analyticsIngestionCursor.findMany({
+      where: {
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+        // A cursor a worker is actively holding is left alone. The lease is
+        // re-checked by the worker's own claim; this only avoids a pointless
+        // message.
+        connection: { status: 'ACTIVE' },
+      },
+      select: { id: true, workspaceId: true, backfillCompletedAt: true, lastSucceededAt: true },
+      orderBy: { nextAttemptAt: 'asc' },
+      take: batch,
+    });
+
+    let dispatched = 0;
+    let backfills = 0;
+    for (const cursor of due) {
+      const result = await enqueue('analytics-ingest', INGEST_ANALYTICS, {
+        kind: INGEST_ANALYTICS,
+        workspaceId: cursor.workspaceId,
+        // THE CURSOR ID IS THE KEY. BullMQ refuses a duplicate job id, so a sweep
+        // racing a successful dispatch adds nothing rather than queuing a second
+        // pull of the same window.
+        idempotencyKey: `analytics-${cursor.id}`,
+        cursorId: cursor.id,
+      } satisfies IngestAnalyticsPayload);
+      if (result.dispatched) dispatched += 1;
+
+      /*
+       * A BACKFILL IS ONLY OFFERED TO A CURSOR THAT HAS ALREADY SUCCEEDED ONCE.
+       * Walking ninety days backwards for an account we have never managed to
+       * read is spending a rate limit to confirm we still cannot read it.
+       */
+      if (cursor.backfillCompletedAt === null && cursor.lastSucceededAt !== null) {
+        const backfill = await enqueue('analytics-ingest', BACKFILL_ANALYTICS, {
+          kind: BACKFILL_ANALYTICS,
+          workspaceId: cursor.workspaceId,
+          // A DISTINCT QUEUE ID from the scheduled pull for the same cursor, so a
+          // backfill is never de-duplicated against it.
+          idempotencyKey: `analytics-backfill-${cursor.id}`,
+          cursorId: cursor.id,
+        } satisfies BackfillAnalyticsPayload);
+        if (backfill.dispatched) backfills += 1;
+      }
+    }
+
+    return { dispatched, backfills };
+  }
+
+  /**
+   * Phase 7 — prune analytics past its retention window (D-116/D-117).
+   *
+   * ON THE PLATFORM IDENTITY, because "which rows are past their window" is not a
+   * question any single tenant can ask — and because the tenant role has no
+   * DELETE on `analytics_ingestion_run` at all, by design.
+   *
+   * IT NEVER TOUCHES A LEDGER OR THE AUDIT LOG. `pruneAnalytics` deletes
+   * observations, run records and expired insights and nothing else, and
+   * `pruneCopilot` only nulls message bodies and expires plans that never ran; a
+   * retention control able to erase a financial or a security record would be a
+   * control that erases evidence.
+   */
+  async pruneAnalyticsRetention(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await resolveAnalyticsPolicy(
+      new ConfigurationService({ prisma: platform }),
+      this.#environment,
+    );
+    const pruned = await pruneAnalytics({
+      prisma: platform,
+      policy,
+      clock: this.#clock,
+      limit: batch,
+    });
+
+    /*
+     * THE COPILOT'S OWN ARTEFACTS, PRUNED BY THEIR OWN OWNER in the same pass.
+     * Two functions rather than one because the treatments differ — an analytics
+     * row is deleted, a Copilot message body is NULLED and stamped so the row
+     * survives for the audit trail that points at it — and a single function
+     * doing both would hide that difference behind one name.
+     */
+    const copilotPolicy = await resolveCopilotPolicy(
+      new ConfigurationService({ prisma: platform }),
+      this.#environment,
+    );
+    const copilot = await pruneCopilot({
+      prisma: platform,
+      policy: copilotPolicy,
+      clock: this.#clock,
+      limit: batch,
+    });
+
+    return (
+      pruned.observations +
+      pruned.runs +
+      pruned.insights +
+      copilot.messageBodiesPurged +
+      copilot.plansExpired +
+      copilot.sessionsArchived
+    );
+  }
+
   /** The dispatch half of the publishing policy, read once per pass. */
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
     const policy = await resolvePublishingPolicy(
@@ -471,6 +605,8 @@ export class MaintenanceScheduler {
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
     const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
+    const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
+    const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -481,6 +617,9 @@ export class MaintenanceScheduler {
       publishJobsCreated: publishing.created,
       publishJobsDispatched: publishing.dispatched,
       publishJobsRecovered: publishing.recovered,
+      analyticsCursorsDispatched: analytics.dispatched,
+      analyticsBackfillsDispatched: analytics.backfills,
+      analyticsRowsPruned,
     };
   }
 
@@ -535,6 +674,32 @@ export class MaintenanceScheduler {
       const swept = await this.sweepAssets(cadence.retentionPurgeBatch);
       return swept.sessions + swept.purged;
     });
+
+    /*
+     * PHASE 6 AND 7 — THE SWEEPS THAT WERE ONLY EVER REACHABLE FROM `runOnce`.
+     *
+     * `sweepPublishing` existed from Phase 6 and was called by `runOnce` but was
+     * never given a timer, so in a running deployment a lost queue message
+     * degraded correctness rather than punctuality — precisely the opposite of
+     * what docs/ARCHITECTURE.md §9 promises a reconciliation sweep is for. Both
+     * it and the two analytics sweeps are scheduled here.
+     *
+     * They ride the cadences their nearest counterparts already use rather than
+     * introducing four more operator settings for the same two pressures: work
+     * waiting to be dispatched is the reconcile cadence, and content past its
+     * window is the purge cadence.
+     */
+    every(cadence.ingestionReconcileSeconds, 'publishing-sweep', async () => {
+      const swept = await this.sweepPublishing(cadence.ingestionReconcileBatch);
+      return swept.created + swept.dispatched + swept.recovered;
+    });
+    every(cadence.ingestionReconcileSeconds, 'analytics-sweep', async () => {
+      const swept = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
+      return swept.dispatched + swept.backfills;
+    });
+    every(cadence.retentionPurgeSeconds, 'analytics-retention', () =>
+      this.pruneAnalyticsRetention(cadence.retentionPurgeBatch),
+    );
 
     log.info('maintenance scheduler started', {
       ingestionReconcileSeconds: cadence.ingestionReconcileSeconds,

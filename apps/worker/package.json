@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@brandspace/analytics": "workspace:*",
     "@brandspace/assets": "workspace:*",
+    "@brandspace/automation": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/content": "workspace:*",

@@ -455,6 +455,20 @@ model Workspace {
   publishJobs       PublishJob[]
   publishAttempts   PublishAttempt[]
 
+  /// Phase 7 — Analytics, Intelligence, Copilot and Automations.
+  metricObservations        MetricObservation[]
+  analyticsIngestionCursors AnalyticsIngestionCursor[]
+  analyticsIngestionRuns    AnalyticsIngestionRun[]
+  campaigns                 Campaign[]
+  insights                  Insight[]
+  insightEvidence           InsightEvidence[]
+  copilotSessions           CopilotSession[]
+  copilotMessages           CopilotMessage[]
+  copilotActionPlans        CopilotActionPlan[]
+  copilotToolCalls          CopilotToolCall[]
+  automationRules           AutomationRule[]
+  automationRuns            AutomationRun[]
+
   @@index([status])
   @@index([ownerUserId])
   @@index([planKey])
@@ -1614,6 +1628,24 @@ enum BrandIngestionStage {
   FAILED
 }
 
+/// WHERE A KNOWLEDGE CANDIDATE CAME FROM — Phase 7.
+///
+/// Phase 5A had one source: an uploaded document. Phase 7 opens the second, and
+/// D-64's write-back path needs the two told apart, because they land with
+/// different authority. A candidate extracted from a document the customer
+/// supplied becomes DOCUMENT knowledge once a human accepts it; a learning
+/// inferred from performance stays AI_INFERRED even after acceptance, because a
+/// human agreeing that an inference looks right does not turn it into a
+/// statement the brand made about itself.
+///
+/// The column also decides what the review screen shows: a document candidate
+/// diffs against its extract, and an analytics candidate shows the evidence and
+/// the window it was drawn from.
+enum BrandCandidateSource {
+  DOCUMENT
+  ANALYTICS
+}
+
 enum BrandCandidateStatus {
   PENDING
   ACCEPTED
@@ -1686,6 +1718,20 @@ model Brand {
   socialConnections SocialConnection[]
   socialOAuthStates SocialOAuthState[]
   publishJobs       PublishJob[]
+
+  /// Phase 7. Every one is brand-scoped with a NON-NULL brand except the
+  /// Copilot session and plan, where null means the conversation has not yet
+  /// settled which brand it is about (the tool calls always have).
+  metricObservations        MetricObservation[]
+  analyticsIngestionCursors AnalyticsIngestionCursor[]
+  analyticsIngestionRuns    AnalyticsIngestionRun[]
+  campaigns                 Campaign[]
+  insights                  Insight[]
+  insightEvidence           InsightEvidence[]
+  copilotSessions           CopilotSession[]
+  copilotActionPlans        CopilotActionPlan[]
+  automationRules           AutomationRule[]
+  automationRuns            AutomationRun[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -1779,6 +1825,11 @@ model BrandKnowledgeItem {
   /// brand knowledge. Column-scoped SET NULL, for the reason on `source`.
   conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [workspaceId, conflictsWithItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_conflict_fkey")
   conflicting   BrandKnowledgeItem[] @relation("BrandKnowledgeConflict")
+
+  /// Phase 7 — where an insight cited this piece of approved brand knowledge,
+  /// and the inferred learnings that were recorded as disagreeing with it.
+  insightEvidence     InsightEvidence[]
+  conflictingLearning BrandKnowledgeCandidate[] @relation("BrandCandidateConflict")
 
   /// One live item per key per area. A second row with the same key is an
   /// EDIT (a new version), not a duplicate — enforced here rather than hoped
@@ -1955,10 +2006,31 @@ model BrandKnowledgeCandidate {
   workspaceId String @db.Uuid
   brandId     String @db.Uuid
 
-  sourceDocumentId String  @db.Uuid
+  /// NULLABLE FROM PHASE 7. A document candidate names its document; an
+  /// ANALYTICS candidate has none, because it was drawn from measurements rather
+  /// than from a file. MATCH SIMPLE exempts the null case from the composite
+  /// foreign key, so every candidate that DOES name a document is still checked.
+  sourceDocumentId String? @db.Uuid
   /// The item this candidate would change, when one already exists. Null means
   /// it proposes something new. This is what the review screen diffs.
   targetItemId     String? @db.Uuid
+
+  /// Phase 7. Which kind of candidate this is, and therefore what it may become.
+  sourceKind BrandCandidateSource @default(DOCUMENT)
+
+  /// Phase 7. The insight this learning was drawn from, so the reviewer can see
+  /// the evidence rather than being asked to trust a sentence. D-65 calls this
+  /// reproducibility, and an inference nobody can retrace is not reproducible.
+  insightId String? @db.Uuid
+
+  /// Phase 7. AN INFERENCE THAT DISAGREES WITH SOMETHING A HUMAN WROTE.
+  ///
+  /// Set when the proposed learning contradicts an ACTIVE, human-authored item.
+  /// The candidate is still created and still reviewed — the conflict is
+  /// SURFACED, never silently resolved, and accepting the learning never touches
+  /// the item it disagrees with. D-65 is explicit that the platform does not
+  /// correct the brand on the strength of a statistic.
+  conflictsWithItemId String? @db.Uuid
 
   area    BrandKnowledgeArea
   itemKey String
@@ -1985,22 +2057,29 @@ model BrandKnowledgeCandidate {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  brand     Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_candidate_brand_fkey")
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand                @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_knowledge_candidate_brand_fkey")
   /// COMPOSITE (D-99, D-112, F-83), for the reason on
   /// `BrandSourceChunk.document`.
-  document  BrandSourceDocument @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_candidate_document_fkey")
+  document  BrandSourceDocument? @relation(fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_knowledge_candidate_document_fkey")
   /// COMPOSITE (D-99, D-112, F-83). This one crosses the GOVERNANCE boundary:
   /// `targetItemId` is the item a candidate would edit once accepted, so a
   /// foreign id here pointed the review screen's diff at another tenant's
   /// approved knowledge. NULL is legal and means "proposes something new",
   /// which MATCH SIMPLE exempts by construction. Column-scoped SET NULL, for
   /// the reason on `BrandKnowledgeItem.source`.
-  target    BrandKnowledgeItem? @relation(fields: [workspaceId, targetItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_target_fkey")
+  target    BrandKnowledgeItem?  @relation(fields: [workspaceId, targetItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_target_fkey")
+  /// COMPOSITE (D-112), Phase 7. The insight and the conflicting item are both
+  /// tenant-owned, and a foreign id in either would answer "does that exist?"
+  /// across the boundary — sharper here than anywhere, because an analytics
+  /// candidate's whole purpose is to point at evidence.
+  insight   Insight?             @relation(fields: [workspaceId, insightId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_insight_fkey")
+  conflicts BrandKnowledgeItem?  @relation("BrandCandidateConflict", fields: [workspaceId, conflictsWithItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_candidate_conflict_fkey")
 
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, area, status])
   @@index([sourceDocumentId, status])
+  @@index([workspaceId, sourceKind, status])
   @@map("brand_knowledge_candidate")
 }
 
@@ -2639,6 +2718,15 @@ model ContentItem {
   pillar        String?
   tags          String[] @default([])
 
+  /// Phase 7 — the campaign this item belongs to. NULLABLE: content that
+  /// belongs to no campaign is the ordinary case, not an omission.
+  ///
+  /// docs/DATABASE.md §4.4b recorded this column as deliberately NOT created in
+  /// Phase 5B-2, on the grounds that "a column with no writer is a column whose
+  /// meaning nobody has settled". Phase 7 settles it: `campaign` exists, the
+  /// Campaign service writes it, and campaign analytics read through it.
+  campaignId String? @db.Uuid
+
   status ContentStatus @default(DRAFT)
 
   /// D-65-style provenance, for the same reason Brand Brain carries it: a
@@ -2687,6 +2775,11 @@ model ContentItem {
   approvals     Approval[]
   /// Phase 6 — one job per (slot, connection, variant).
   publishJobs   PublishJob[]
+
+  /// Phase 7 — the campaign this item belongs to, and the analytics it earned.
+  campaign           Campaign?           @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_item_campaign_fkey")
+  metricObservations MetricObservation[]
+  insightEvidence    InsightEvidence[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -3184,8 +3277,8 @@ model SocialConnection {
 
   /// When the access token stops working. Mirrored from the credential so the
   /// UI can warn without the token table being read at all.
-  tokenExpiresAt    DateTime? @db.Timestamptz(6)
-  lastRefreshedAt   DateTime? @db.Timestamptz(6)
+  tokenExpiresAt  DateTime? @db.Timestamptz(6)
+  lastRefreshedAt DateTime? @db.Timestamptz(6)
 
   /// Connection health. `lastSyncedAt` is the last time we successfully talked
   /// to the provider about this account for any reason.
@@ -3205,6 +3298,12 @@ model SocialConnection {
 
   credentials SocialCredential[]
   publishJobs PublishJob[]
+
+  /// Phase 7 — the analytics this account produces, and the durable state of
+  /// the pulls that produced it.
+  metricObservations MetricObservation[]
+  analyticsCursors   AnalyticsIngestionCursor[]
+  analyticsRuns      AnalyticsIngestionRun[]
 
   /// The composite target its children point at (D-112).
   @@unique([workspaceId, id], name: "social_connection_workspace_scope")
@@ -3296,13 +3395,13 @@ model SocialOAuthState {
 
   /// Recorded so the callback can verify the redirect URI matched EXACTLY what
   /// was sent, rather than trusting the one in the request.
-  redirectUri    String
+  redirectUri     String
   requestedScopes String[] @default([])
 
-  startedByUserId String   @db.Uuid
-  expiresAt       DateTime @db.Timestamptz(6)
+  startedByUserId String    @db.Uuid
+  expiresAt       DateTime  @db.Timestamptz(6)
   consumedAt      DateTime? @db.Timestamptz(6)
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
 
   // --- The pending grant, when one authorization offered several targets ----
   //
@@ -3375,8 +3474,8 @@ model PublishJob {
   /// does not silently re-time a job already in flight.
   scheduledAtUtc DateTime @db.Timestamptz(6)
 
-  attemptCount Int       @default(0)
-  maxAttempts  Int
+  attemptCount  Int       @default(0)
+  maxAttempts   Int
   nextAttemptAt DateTime? @db.Timestamptz(6)
 
   /// Set by the conditional claim. Two workers cannot both hold a job.
@@ -3407,6 +3506,9 @@ model PublishJob {
   connection SocialConnection @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "publish_job_connection_fkey")
 
   attempts PublishAttempt[]
+
+  /// Phase 7 — the metrics the published post went on to earn.
+  metricObservations MetricObservation[]
 
   @@unique([workspaceId, id], name: "publish_job_workspace_scope")
   @@unique([workspaceId, idempotencyKey])
@@ -3458,4 +3560,1153 @@ model PublishAttempt {
   @@unique([workspaceId, publishJobId, attemptNumber])
   @@index([workspaceId, publishJobId, attemptNumber])
   @@map("publish_attempt")
+}
+
+// ===========================================================================
+// PHASE 7 — Analytics, Intelligence, Copilot and Automations
+//
+// docs/ROADMAP.md Phase 7, docs/DATABASE.md §4.3, §5.5 and §9.1–9.2.
+//
+// THE LOOP THIS PHASE CLOSES: published content produces real metrics, metrics
+// become evidence, evidence grounds an explanation and a strategy, an accepted
+// learning re-enters Brand Brain at its LOWEST authority, and the Copilot and
+// the automation engine act on all of it — never silently, and never with
+// authority the acting person does not hold at the moment of the act.
+//
+// EVERY MODEL BELOW IS TENANT-OWNED AND BRAND-SCOPED WITH A NON-NULL BRAND.
+// D-138's reasoning applies to all of them and not only to a publishing
+// credential: BrandScope has to be expressible as a query predicate
+// (D-132/D-134), and a row whose brand is "all of them" is exactly the hole a
+// brand-restricted member reads, explains, automates or publishes through.
+// ===========================================================================
+
+/// What a metric observation is ABOUT. A post is one published thing; an
+/// account is the connected page, channel or profile as a whole.
+///
+/// There is deliberately no `BRAND` member. A brand figure is an AGGREGATE of
+/// account and post figures, computed at query time from rows a provider
+/// actually returned — storing one would be storing a number no provider ever
+/// reported, which is the single thing this subsystem exists not to do.
+enum MetricSubjectType {
+  POST
+  ACCOUNT
+}
+
+/// The width of the window a value covers. Part of the observation's identity:
+/// "1,200 impressions" means nothing until you know whether that is an hour, a
+/// day or the lifetime of the post.
+enum MetricGranularity {
+  HOUR
+  DAY
+  WEEK
+  MONTH
+  LIFETIME
+}
+
+/// What the stored integer MEANS.
+///
+/// INTEGERS ALL THE WAY DOWN, exactly as credits are. A rate is stored as parts
+/// per mille rather than as a float, because a float that reaches a comparison
+/// is how "engagement went up" becomes a rounding artefact.
+enum MetricUnit {
+  /// A plain tally: impressions, likes, comments.
+  COUNT
+  /// A rate in parts per mille. 47 means 4.7%.
+  RATIO_MILLI
+  /// A duration in whole seconds — watch time, average view duration.
+  SECONDS
+  /// A signed change in followers or audience size.
+  DELTA
+}
+
+/// Where an observation came from. It is STORED, never inferred, so a chart
+/// drawn from mock data can say so and a production surface can refuse it.
+enum MetricSourceKind {
+  /// A real provider API answered.
+  PROVIDER
+  /// A deterministic in-process mock. Never reachable in PRODUCTION.
+  MOCK
+}
+
+/// How current this connection's analytics are.
+///
+/// Computed after each pull from the configured thresholds and STORED, so a
+/// screen states a freshness the ingestion actually achieved rather than one it
+/// recomputes from a timestamp with its own idea of "recent".
+enum AnalyticsFreshness {
+  /// Ingested within the configured freshness window.
+  FRESH
+  /// Past the freshness window but inside the stale window.
+  AGING
+  /// Past the stale window. Every figure drawn from it must say so.
+  STALE
+  /// Never successfully ingested, or the connection can no longer be asked.
+  UNAVAILABLE
+}
+
+/// Why a pull happened. `BACKFILL` is bounded by configuration and walks
+/// backwards; `SCHEDULED` walks the recent window forward.
+enum AnalyticsRunKind {
+  SCHEDULED
+  BACKFILL
+  MANUAL
+}
+
+/// How a pull ended.
+///
+/// `PARTIAL` is a first-class outcome rather than a failure: a provider that
+/// answered for three accounts and rate-limited the fourth has given us three
+/// accounts' worth of truth, and discarding it would make a partial outage look
+/// like a total one.
+enum AnalyticsRunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+  /// The shared provider budget was exhausted; nothing was asked for.
+  SKIPPED_RATE_LIMITED
+}
+
+/// What an insight IS. Mirrors docs/DATABASE.md §5.5's `type` column.
+enum InsightType {
+  ANALYTICS_EXPLANATION
+  RECOMMENDATION
+  ANOMALY
+  CONTENT_GAP
+  OPPORTUNITY
+  STRATEGY
+  MONTHLY_PLAN
+}
+
+/// An insight's lifecycle. A generated strategy is a PROPOSAL until a permitted
+/// human accepts it — `ACCEPTED` is the only state that lets anything else act
+/// on it.
+enum InsightStatus {
+  NEW
+  SEEN
+  ACCEPTED
+  DISMISSED
+  /// Superseded by a newer generation over the same scope and period.
+  SUPERSEDED
+}
+
+/// WHAT THE SUGGESTION IS ACTUALLY BASED ON, stated on the row.
+///
+/// BrandSpace has no approved external trend or competitor provider, so a
+/// suggestion can only rest on things this workspace already owns. Recording
+/// which one removes the product's ability to imply a live market feed it does
+/// not have: a screen renders this, and there is no member meaning "the wider
+/// internet".
+enum InsightBasis {
+  /// This brand's own stored metric observations.
+  OWN_PERFORMANCE
+  /// Approved Brand Brain knowledge the customer entered or supplied.
+  BRAND_CONTEXT
+  /// What this brand has actually published before.
+  CONTENT_HISTORY
+  /// Several of the above together.
+  MIXED
+}
+
+/// What one piece of evidence IS.
+///
+/// `ABSENCE` is the member that makes an honest content-gap claim possible: "no
+/// post on this pillar in this window" is a statement about rows that are NOT
+/// there, and it needs to be expressible as evidence rather than asserted in
+/// prose.
+enum EvidenceKind {
+  METRIC
+  METRIC_COMPARISON
+  BRAND_KNOWLEDGE
+  CONTENT
+  ABSENCE
+}
+
+/// Why a campaign exists. A closed set, because the objective decides which
+/// metrics the campaign's own analytics lead with.
+enum CampaignObjective {
+  AWARENESS
+  ENGAGEMENT
+  TRAFFIC
+  LEADS
+  RETENTION
+  LAUNCH
+}
+
+enum CampaignStatus {
+  DRAFT
+  PLANNED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+/// THE COPILOT'S THREE ACTION CLASSES — CLAUDE.md §2.5 and A-17.
+///
+/// The class is a property of the TOOL, stored on every plan step and every
+/// tool call, so "may this run without a fresh human confirmation?" is answered
+/// from a column rather than from a condition somebody has to remember to
+/// write.
+enum CopilotActionClass {
+  /// Reads. No tenant state changes.
+  READ_ONLY
+  /// Changes tenant state and can be compensated: a draft, a calendar
+  /// placement, a campaign proposal.
+  INTERNAL_REVERSIBLE
+  /// Leaves the platform, or destroys something. Publish, delete, disconnect,
+  /// send. NEVER executed without a fresh, plan-bound human confirmation.
+  EXTERNAL_OR_DESTRUCTIVE
+}
+
+enum CopilotPlanStatus {
+  /// Being assembled. Not yet shown.
+  DRAFT
+  /// Shown to the customer with its preview and its estimated cost.
+  AWAITING_CONFIRMATION
+  /// A human confirmed THIS plan hash. The only state execution may start from.
+  CONFIRMED
+  EXECUTING
+  COMPLETED
+  FAILED
+  CANCELLED
+  /// The confirmation window closed before anyone acted.
+  EXPIRED
+}
+
+enum CopilotToolCallStatus {
+  PLANNED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  /// Authorization, scope or entitlement refused it AT EXECUTION TIME.
+  REFUSED
+  /// An earlier step failed, so this one never ran.
+  SKIPPED
+  UNDONE
+}
+
+/// Whether the work a plan did can still be taken back.
+///
+/// `REFUSED` is the important member: an undo that would overwrite somebody
+/// else's later edit is refused and says why, rather than silently winning.
+enum CopilotUndoStatus {
+  /// Nothing was changed, so there is nothing to undo.
+  NOT_APPLICABLE
+  AVAILABLE
+  PARTIALLY_UNDONE
+  UNDONE
+  REFUSED
+  EXPIRED
+}
+
+enum CopilotMessageRole {
+  USER
+  ASSISTANT
+}
+
+/// The events an automation rule may fire on. A CLOSED REGISTRY — there is no
+/// "custom event", because a customer-defined trigger is customer-defined code
+/// with extra steps.
+enum AutomationTrigger {
+  CONTENT_APPROVED
+  CONTENT_SCHEDULED
+  POST_PUBLISHED
+  ANALYTICS_REFRESHED
+  ANOMALY_DETECTED
+  METRIC_THRESHOLD_CROSSED
+  SCHEDULED_TIME
+}
+
+/// What a rule may DO. Also closed, and deliberately small.
+///
+/// NO WEBHOOK, NO SCRIPT, NO SQL AND NO ARBITRARY URL. Every member here is a
+/// call into a domain service this platform already owns, with that service's
+/// own authorization intact.
+enum AutomationActionType {
+  /// In-app notification to the members who can act on it.
+  NOTIFY
+  /// Move an eligible draft into the approval queue.
+  SUBMIT_FOR_APPROVAL
+  /// Place an eligible, approved item on the calendar.
+  PLACE_ON_CALENDAR
+  /// EXTERNAL. Always proposes; never executes without a human confirmation.
+  PROPOSE_PUBLISH
+}
+
+enum AutomationRunStatus {
+  RUNNING
+  /// The action ran and finished.
+  SUCCEEDED
+  /// The condition did not hold. Not a failure.
+  SKIPPED
+  /// An EXTERNAL action reached a proposal and is waiting for a person.
+  AWAITING_CONFIRMATION
+  /// The action was refused by policy — an external action on a rule that may
+  /// not auto-run, a daily ceiling reached.
+  BLOCKED_BY_POLICY
+  /// The rule's creator no longer holds the permission, brand scope or
+  /// entitlement the action needs. Re-evaluated at RUN TIME, every time.
+  BLOCKED_BY_AUTHORIZATION
+  FAILED
+  CANCELLED
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. ONE NORMALIZED METRIC FACT, as one provider
+/// reported it for one subject over one window — docs/DATABASE.md §5.5.
+///
+/// ONE ROW PER (metric, subject, window), NOT A BLOB OF EVERY METRIC AT ONCE.
+/// §5.5's design carried a `metrics jsonb`; this is narrower on purpose, and the
+/// reason is the rule the whole phase rests on: MISSING AND ZERO ARE DIFFERENT
+/// STATES. In a blob, a provider that does not report `saves` and a provider
+/// that reports `saves: 0` are told apart only by a key's absence — which every
+/// `?? 0` in every consumer quietly erases. As rows, a metric a provider did not
+/// return simply has NO ROW, and there is nothing for a default to fill in.
+///
+/// IT ALSO MAKES IDEMPOTENCY A DATABASE PROPERTY rather than a code habit.
+/// `observationKey` is a deterministic hash of the logical observation, unique
+/// per workspace, and ingestion writes through `INSERT … ON CONFLICT DO UPDATE`
+/// — so two schedulers, a duplicate queue delivery and a backfill overlapping a
+/// scheduled pull all converge on one row instead of racing a read-then-write.
+///
+/// OUT-OF-ORDER DELIVERY IS HANDLED BY THE CONFLICT CLAUSE, not by the caller:
+/// the update applies only when the incoming observation is at least as recent
+/// as the stored one, so a late redelivery of an older reading cannot roll a
+/// figure backwards.
+model MetricObservation {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  socialConnectionId String         @db.Uuid
+  provider           SocialProvider
+
+  subjectType       MetricSubjectType
+  /// The provider's own id for the thing measured — a post id, or the account
+  /// id. Public on every platform here, but still tenant data.
+  subjectExternalId String
+
+  /// Which of OUR rows this measurement belongs to, when the subject is a post
+  /// we published. Both are nullable because an account-level reading belongs
+  /// to no single post, and because a post published before the customer joined
+  /// has no publish job here.
+  publishJobId  String? @db.Uuid
+  contentItemId String? @db.Uuid
+
+  /// The canonical metric key — `impressions`, `reach`, `engagements`, … The
+  /// vocabulary is CODE (packages/analytics/src/metrics.ts) for the same reason
+  /// the AI task keys are: application code asks for it by name. What each
+  /// PROVIDER calls it is the adapter's business and appears nowhere here.
+  metricKey String
+
+  granularity MetricGranularity
+  periodStart DateTime          @db.Timestamptz(6)
+  periodEnd   DateTime          @db.Timestamptz(6)
+
+  /// The value, as an integer in `unit`. BigInt because a lifetime impression
+  /// count on a large account outgrows a 32-bit integer, and because every
+  /// other number in this platform that must not be approximated is an integer.
+  value BigInt
+  unit  MetricUnit
+
+  /// WHEN THE PROVIDER SAYS IT OBSERVED THIS, and when WE wrote it down. Two
+  /// different facts: a provider can answer today with a reading it took
+  /// yesterday, and a freshness indicator that conflated them would call stale
+  /// data current.
+  observedAt DateTime @db.Timestamptz(6)
+  ingestedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// PROVENANCE. `sourceKind` says whether a real provider answered;
+  /// `sourceVersion` is the adapter's own contract version, so a normalization
+  /// change is detectable rather than silently rewriting history.
+  sourceKind    MetricSourceKind
+  sourceVersion String
+
+  /// The run that wrote it. Null after the run is pruned; the observation
+  /// outlives its run record.
+  ingestionRunId String? @db.Uuid
+
+  /// sha256 of the logical observation: workspace, connection, subject type,
+  /// subject id, metric key, granularity and period start. THE IDEMPOTENCY KEY,
+  /// and the conflict target.
+  observationKey String
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand      Brand            @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "metric_observation_brand_fkey")
+  /// COMPOSITE (D-112). A plain key would resolve another workspace's
+  /// connection — PostgreSQL checks referential integrity as the table owner
+  /// with RLS bypassed — and "inserted" versus "violates foreign key" would
+  /// answer "does that connection exist?" across the tenant boundary.
+  connection SocialConnection @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "metric_observation_connection_fkey")
+  job        PublishJob?      @relation(fields: [workspaceId, publishJobId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "metric_observation_job_fkey")
+  item       ContentItem?     @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "metric_observation_item_fkey")
+
+  evidence InsightEvidence[]
+
+  /// The composite target evidence rows point at (D-112).
+  @@unique([workspaceId, id], name: "metric_observation_workspace_scope")
+  /// THE CONFLICT TARGET. One row per logical observation per workspace.
+  @@unique([workspaceId, observationKey])
+  @@index([workspaceId, brandId, metricKey, periodStart(sort: Desc)])
+  @@index([workspaceId, brandId, subjectType, periodStart(sort: Desc)])
+  @@index([workspaceId, socialConnectionId, periodStart(sort: Desc)])
+  @@index([workspaceId, contentItemId])
+  @@index([workspaceId, publishJobId])
+  /// Retention pruning walks this.
+  @@index([periodStart])
+  @@map("metric_observation")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. THE DURABLE INGESTION STATE for one connection,
+/// one subject type and one granularity.
+///
+/// WHY A ROW AND NOT A REDIS KEY. "Which window did we last fetch?" has to
+/// survive a Redis flush, a deploy and a worker crash, or a restart silently
+/// re-fetches from the beginning (or, worse, skips forward and leaves a hole
+/// nobody ever fills). It is also the CLAIM: two schedulers running at once is
+/// an ordinary deployment shape, and the conditional `UPDATE … WHERE
+/// nextAttemptAt <= now AND claim is free` is what makes the second one a
+/// no-op — a database primitive, not a check-then-act.
+model AnalyticsIngestionCursor {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  socialConnectionId String            @db.Uuid
+  provider           SocialProvider
+  subjectType        MetricSubjectType
+  granularity        MetricGranularity
+
+  /// The newest period this cursor has successfully covered. Ingestion asks for
+  /// what comes after it, so a gap is closed rather than skipped.
+  lastCoveredPeriodEnd DateTime? @db.Timestamptz(6)
+  lastSucceededAt      DateTime? @db.Timestamptz(6)
+  lastAttemptedAt      DateTime? @db.Timestamptz(6)
+
+  /// How far BACKWARDS the bounded backfill has reached. Null means backfill
+  /// has not started; `backfillCompletedAt` means it reached the configured
+  /// horizon and will not run again.
+  backfillCursor      DateTime? @db.Timestamptz(6)
+  backfillCompletedAt DateTime? @db.Timestamptz(6)
+
+  /// Bounded exponential backoff, written down rather than recomputed, so a
+  /// process restart honours the wait a provider asked for.
+  nextAttemptAt           DateTime?            @db.Timestamptz(6)
+  consecutiveFailureCount Int                  @default(0)
+  lastFailureClass        PublishFailureClass?
+  lastFailureCode         String?
+
+  /// Computed from the configured windows after each pull, and STORED.
+  freshness AnalyticsFreshness @default(UNAVAILABLE)
+
+  /// The claim. A pass that finds a claim younger than the configured lease
+  /// leaves the cursor alone; past the lease the claim is treated as abandoned.
+  claimedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand      Brand            @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "analytics_cursor_brand_fkey")
+  connection SocialConnection @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "analytics_cursor_connection_fkey")
+
+  runs AnalyticsIngestionRun[]
+
+  @@unique([workspaceId, id], name: "analytics_ingestion_cursor_workspace_scope")
+  @@unique([workspaceId, socialConnectionId, subjectType, granularity])
+  @@index([workspaceId, brandId, freshness])
+  /// The scheduler's claim query.
+  @@index([nextAttemptAt, claimedAt])
+  @@map("analytics_ingestion_cursor")
+}
+
+/// TENANT-OWNED. THE EVIDENCE TRAIL FOR ONE PULL — what was asked for, what came
+/// back, how long it took and why it stopped.
+///
+/// APPEND-ONLY EXCEPT FOR ITS OWN COMPLETION, enforced by a trigger. An
+/// operations record that can be rewritten afterwards is not a record; the
+/// trigger permits exactly the transition from `RUNNING` to a terminal status
+/// and refuses everything else.
+model AnalyticsIngestionRun {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  cursorId           String         @db.Uuid
+  socialConnectionId String         @db.Uuid
+  provider           SocialProvider
+
+  kind   AnalyticsRunKind
+  status AnalyticsRunStatus @default(RUNNING)
+
+  /// Deterministic: hash(cursor, kind, window). UNIQUE per workspace, so a
+  /// duplicate queue delivery finds the existing run rather than starting a
+  /// second one against the same window.
+  idempotencyKey String
+
+  windowStart DateTime @db.Timestamptz(6)
+  windowEnd   DateTime @db.Timestamptz(6)
+
+  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+  durationMs Int?
+
+  /// Counters the UI reports rather than guesses. `subjectsRequested` and
+  /// `subjectsAnswered` differing is exactly what `PARTIAL` means.
+  subjectsRequested     Int @default(0)
+  subjectsAnswered      Int @default(0)
+  observationsWritten   Int @default(0)
+  observationsUnchanged Int @default(0)
+
+  failureClass      PublishFailureClass?
+  /// A stable machine code the UI maps to a localized sentence. NEVER a raw
+  /// provider message, which routinely echoes request content.
+  failureCode       String?
+  /// Short, redacted and bounded by a CHECK, exactly as `publish_attempt` is.
+  safeSummary       String?
+  /// Honoured for `RATE_LIMITED`, where the provider says when to come back.
+  retryAfterSeconds Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace  Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand      Brand                    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "analytics_run_brand_fkey")
+  cursor     AnalyticsIngestionCursor @relation(fields: [workspaceId, cursorId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "analytics_run_cursor_fkey")
+  connection SocialConnection         @relation(fields: [workspaceId, socialConnectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "analytics_run_connection_fkey")
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, startedAt(sort: Desc)])
+  @@index([workspaceId, cursorId, startedAt(sort: Desc)])
+  @@index([startedAt])
+  @@map("analytics_ingestion_run")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. A campaign — docs/DATABASE.md §4.3.
+///
+/// NARROWER THAN §4.3 ON PURPOSE, and the narrowing is the honest half.
+/// `budgetMinor`, `currency` and `kpis` are NOT created: this platform buys no
+/// media, records no spend and receives no paid-media attribution, so a budget
+/// column would be a number nobody can reconcile and a KPI column a target
+/// nothing measures. §4.4b established the rule — a column with no writer is a
+/// column whose meaning nobody has settled — and it applies here.
+///
+/// `version` IS THE UNDO PRIMITIVE. The Copilot's compensation contract restores
+/// a previous value only when the version it acted on is still the current one,
+/// so a person who edited the campaign afterwards is never silently overwritten.
+model Campaign {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  name        String
+  objective   CampaignObjective
+  /// Localized `{ ar, en }`, validated at the boundary. Both locales are
+  /// first-class (CLAUDE.md §4).
+  brief       Json?
+  description String?
+
+  status CampaignStatus @default(DRAFT)
+
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  /// Platform keys from the activated `content` configuration — never an enum,
+  /// because the set of platforms is an operator's fact (CLAUDE.md §2.2).
+  channels String[] @default([])
+
+  /// The accepted strategy proposal this campaign came out of, when it came out
+  /// of one. Null for a campaign a person simply created.
+  strategyInsightId String? @db.Uuid
+
+  ownerUserId     String? @db.Uuid
+  createdByUserId String? @db.Uuid
+
+  /// Optimistic concurrency. Incremented on every accepted edit.
+  version Int @default(1)
+
+  /// Client idempotency key, so a retried creation returns the first campaign
+  /// rather than making a second.
+  idempotencyKey String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete (docs/DATABASE.md §2).
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "campaign_brand_fkey")
+
+  contentItems ContentItem[]
+  insights     Insight[]
+  evidence     InsightEvidence[]
+
+  @@unique([workspaceId, id], name: "campaign_workspace_scope")
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, status])
+  @@index([workspaceId, brandId, startDate, endDate])
+  @@map("campaign")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. ONE GENERATED PIECE OF INTELLIGENCE — an
+/// explanation, an anomaly, a recommendation, a content gap, a strategy or a
+/// monthly plan (docs/DATABASE.md §5.5).
+///
+/// THE PROSE IS HERE; THE NUMBERS ARE NOT. Every figure a customer reads is
+/// rendered from an `InsightEvidence` row, and the model's own text may contain
+/// only digits that appeared in the evidence package it was given. A fabricated
+/// citation is therefore structurally impossible in the same way a Content
+/// Studio citation is: the reference set is written from the QUERY RESULTS, and
+/// a claim citing anything outside it is rejected before the row exists.
+///
+/// `basis` IS THE HONESTY COLUMN. This platform has no external trend or
+/// competitor feed (D-18/D-19 approved no such provider), so every suggestion
+/// rests on something this workspace already owns, and the row says which. The
+/// enum has no member meaning "the wider market", which is what stops the
+/// product from implying one.
+model Insight {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  campaignId String? @db.Uuid
+
+  type   InsightType
+  status InsightStatus @default(NEW)
+  basis  InsightBasis
+
+  /// Localized `{ ar, en }`.
+  title Json
+  /// The structured, localized body: claims, notable changes, anomalies and
+  /// recommendations, each carrying the evidence ordinals it rests on.
+  body  Json
+
+  /// The window the insight is ABOUT, which is not when it was generated.
+  periodStart           DateTime  @db.Timestamptz(6)
+  periodEnd             DateTime  @db.Timestamptz(6)
+  /// The comparison window, when the insight compared two periods.
+  comparisonPeriodStart DateTime? @db.Timestamptz(6)
+  comparisonPeriodEnd   DateTime? @db.Timestamptz(6)
+
+  /// The gateway request that produced it — provenance and cost, exactly as a
+  /// content draft carries. Null for an insight computed without a model call.
+  aiRequestId String? @db.Uuid
+
+  /// 0–1000 per mille, kept integer so no float reaches a comparison. Null when
+  /// the insight is arithmetic rather than inference.
+  confidenceMilli Int?
+
+  generatedByUserId String?   @db.Uuid
+  reviewedByUserId  String?   @db.Uuid
+  reviewedAt        DateTime? @db.Timestamptz(6)
+  reviewReason      String?
+
+  /// Client idempotency key. A retried generation returns the first insight and
+  /// makes no second gateway call.
+  idempotencyKey String?
+
+  /// D-116 / D-117 retention.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "insight_brand_fkey")
+  campaign  Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_campaign_fkey")
+
+  evidence           InsightEvidence[]
+  /// Phase 7 — the Brand Brain learnings this insight was drawn from.
+  learningCandidates BrandKnowledgeCandidate[]
+
+  @@unique([workspaceId, id], name: "insight_workspace_scope")
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, brandId, type, createdAt(sort: Desc)])
+  @@index([workspaceId, brandId, status, createdAt(sort: Desc)])
+  @@index([workspaceId, campaignId])
+  @@index([expiresAt])
+  @@map("insight")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. ONE PIECE OF EVIDENCE BEHIND ONE INSIGHT.
+///
+/// STORED INDEPENDENTLY OF THE MODEL'S PROSE, and that separation is the whole
+/// mechanism. The evidence package is built from the analytics query BEFORE any
+/// model call; the model is given ordinals and may only cite them; the UI
+/// renders every number from THIS row rather than from the sentence. So the
+/// model cannot invent a figure — not because it was told not to, but because
+/// there is no path by which a number it wrote reaches a screen.
+///
+/// A row is either a METRIC (pointing at the observation it came from), a
+/// COMPARISON between two windows, a piece of BRAND KNOWLEDGE, a CONTENT
+/// reference, or an ABSENCE — "nothing was published on this pillar in this
+/// window", which is a fact about rows that are not there and cannot point at
+/// one.
+model InsightEvidence {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  insightId String @db.Uuid
+  /// 1-based. THE HANDLE THE MODEL CITES — `e1`, `e2` — and the sort order the
+  /// UI renders in.
+  ordinal   Int
+
+  kind EvidenceKind
+
+  /// What it points at. Exactly one is set for METRIC / BRAND_KNOWLEDGE /
+  /// CONTENT; an ABSENCE points at nothing, which is what it is.
+  metricObservationId String? @db.Uuid
+  knowledgeItemId     String? @db.Uuid
+  contentItemId       String? @db.Uuid
+  campaignId          String? @db.Uuid
+
+  /// The measurement, copied onto the evidence row so the insight remains
+  /// readable after retention prunes the observation it came from. A citation
+  /// that stops resolving is a citation that stops being evidence.
+  metricKey             String?
+  value                 BigInt?
+  /// The other side of a comparison, and the change between them in parts per
+  /// mille. Both null unless `kind` is METRIC_COMPARISON.
+  comparisonValue       BigInt?
+  changeRatioMilli      Int?
+  unit                  MetricUnit?
+  granularity           MetricGranularity?
+  periodStart           DateTime?          @db.Timestamptz(6)
+  periodEnd             DateTime?          @db.Timestamptz(6)
+  comparisonPeriodStart DateTime?          @db.Timestamptz(6)
+  comparisonPeriodEnd   DateTime?          @db.Timestamptz(6)
+
+  subjectType       MetricSubjectType?
+  subjectExternalId String?
+  provider          SocialProvider?
+  observedAt        DateTime?          @db.Timestamptz(6)
+  sourceKind        MetricSourceKind?
+
+  /// A STABLE MACHINE CODE, never customer copy: `metric.total`,
+  /// `metric.period_change`, `content.none_in_window`. The dashboard translates
+  /// it, so the evidence line is bilingual without the model writing either
+  /// language.
+  labelKey String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand       Brand               @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "insight_evidence_brand_fkey")
+  insight     Insight             @relation(fields: [workspaceId, insightId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "insight_evidence_insight_fkey")
+  observation MetricObservation?  @relation(fields: [workspaceId, metricObservationId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_evidence_observation_fkey")
+  knowledge   BrandKnowledgeItem? @relation(fields: [workspaceId, knowledgeItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_evidence_knowledge_fkey")
+  item        ContentItem?        @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_evidence_item_fkey")
+  campaign    Campaign?           @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_evidence_campaign_fkey")
+
+  @@unique([workspaceId, insightId, ordinal])
+  @@index([workspaceId, insightId])
+  @@index([workspaceId, metricObservationId])
+  @@map("insight_evidence")
+}
+
+/// TENANT-OWNED. ONE COPILOT CONVERSATION.
+///
+/// BRAND-SCOPED WITH A NULLABLE BRAND, and this is the one place in the phase
+/// where null is right: a conversation begins before the person has said which
+/// brand they mean, and a session forced to name one up front would have to
+/// guess. Every TOOL CALL resolves and enforces a brand; the session is only
+/// where the conversation happens.
+model CopilotSession {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  brandId     String? @db.Uuid
+
+  /// Whose conversation it is. A Copilot session is personal: another member of
+  /// the same workspace does not read it, because it carries what this person
+  /// asked and what they were shown.
+  userId String @db.Uuid
+
+  /// Which screen opened it — the `CopilotSurface` vocabulary the design system
+  /// already declares. A string rather than an enum for the same reason
+  /// `platformKey` is: the surface list grows with the product.
+  surface String  @default("general")
+  locale  Locale  @default(EN)
+  title   String?
+
+  lastMessageAt DateTime? @db.Timestamptz(6)
+  archivedAt    DateTime? @db.Timestamptz(6)
+
+  /// D-116 / D-117 retention.
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "copilot_session_brand_fkey")
+
+  messages  CopilotMessage[]
+  plans     CopilotActionPlan[]
+  toolCalls CopilotToolCall[]
+
+  @@unique([workspaceId, id], name: "copilot_session_workspace_scope")
+  @@index([workspaceId, userId, lastMessageAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("copilot_session")
+}
+
+/// TENANT-OWNED. ONE TURN OF A COPILOT CONVERSATION.
+///
+/// WHAT IS PERSISTED AND WHAT IS DELIBERATELY NOT. The customer's request, the
+/// final customer-facing answer, and the plan the turn produced. NOT hidden
+/// chain-of-thought, NOT a raw provider response, and NOT a tool's full result
+/// payload — a tool result can carry a caption, a token-bearing URL or another
+/// system's error text, and a conversation log is the last place any of that
+/// should come to rest.
+///
+/// `body` IS NULLED BY THE RETENTION PURGE while the row survives, exactly as
+/// `brand_brain_message.body` and `content_variant.body` are, so the shape of
+/// the conversation and its accounting links outlive the words.
+model CopilotMessage {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  sessionId String             @db.Uuid
+  role      CopilotMessageRole
+
+  /// CUSTOMER CONTENT. Nulled by the purge; `bodyPurgedAt` records that it was,
+  /// so a purged turn is visibly purged rather than silently blank.
+  body         String?
+  bodyPurgedAt DateTime? @db.Timestamptz(6)
+
+  /// The gateway request behind an assistant turn. Provenance and cost.
+  aiRequestId String? @db.Uuid
+  /// The plan this turn produced, when it produced one.
+  planId      String? @db.Uuid
+
+  /// Per-session client key, so a retried send never writes the turn twice.
+  idempotencyKey String?
+
+  /// Joins this turn to its plan, its tool calls and its audit events.
+  correlationId String @db.Uuid
+
+  expiresAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session   CopilotSession     @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "copilot_message_session_fkey")
+  plan      CopilotActionPlan? @relation(fields: [workspaceId, planId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "copilot_message_plan_fkey")
+
+  @@unique([workspaceId, sessionId, idempotencyKey])
+  @@index([workspaceId, sessionId, createdAt])
+  @@index([expiresAt])
+  @@map("copilot_message")
+}
+
+/// TENANT-OWNED. AN ACTION PLAN — what the Copilot proposes to do, shown before
+/// anything is done, and the ONLY thing a confirmation can be bound to.
+///
+/// `planHash` IS THE BINDING. It is a sha256 over the CANONICAL steps — tool
+/// keys, arguments, action classes, in order — so changing the plan changes the
+/// hash, and a confirmation issued against the old hash no longer matches.
+/// "Changing the plan invalidates the confirmation" is therefore arithmetic
+/// rather than a rule somebody has to enforce.
+///
+/// `confirmationTokenHash` IS SINGLE-USE AND STORED HASHED, exactly as the OAuth
+/// state is (D-141): the value that travels through the browser is never written
+/// down, so a database read cannot be replayed as a confirmation. Single use is
+/// enforced by a conditional UPDATE on `confirmedAt`, not by a read-then-write.
+///
+/// A PREVIEW IS NOT AUTHORIZATION. Nothing about this row grants anything:
+/// permissions, brand scope and entitlements are resolved again, from the live
+/// membership, at the moment each tool call executes.
+model CopilotActionPlan {
+  id          String  @id @default(uuid()) @db.Uuid
+  workspaceId String  @db.Uuid
+  brandId     String? @db.Uuid
+
+  sessionId String @db.Uuid
+  /// The person the plan was built FOR, and the only person who may confirm it.
+  userId    String @db.Uuid
+
+  status CopilotPlanStatus @default(DRAFT)
+
+  /// Monotonic within a session. A revised plan is a NEW ROW at the next
+  /// version rather than an edit, so the thing a customer confirmed stays
+  /// readable after they revised it.
+  planVersion Int    @default(1)
+  /// sha256 over the canonical steps. The confirmation binds to THIS value.
+  planHash    String
+
+  /// Localized `{ ar, en }` summary, and the typed step list the UI previews.
+  /// Steps carry tool keys, redacted arguments and per-step previews — never a
+  /// secret, never a token, never a raw provider payload.
+  summary Json
+  steps   Json
+
+  /// The strictest class any step carries. `EXTERNAL_OR_DESTRUCTIVE` here means
+  /// confirmation is mandatory and can never be configured away.
+  highestActionClass   CopilotActionClass @default(READ_ONLY)
+  requiresConfirmation Boolean            @default(true)
+
+  /// What the AI work in this plan is estimated to cost, quoted through the
+  /// gateway's own route resolution so the price shown is the price reserved.
+  estimatedCreditsMilli BigInt @default(0)
+
+  /// sha256 of the single-use confirmation secret. Unique platform-wide for the
+  /// same reason `social_oauth_state.stateHash` is: two workspaces cannot
+  /// collide and a replay across tenants cannot match either.
+  confirmationTokenHash String?   @unique
+  confirmationExpiresAt DateTime? @db.Timestamptz(6)
+  confirmedAt           DateTime? @db.Timestamptz(6)
+  confirmedByUserId     String?   @db.Uuid
+
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  /// A stable machine code. Never a raw error.
+  failureCode String?
+
+  undoStatus      CopilotUndoStatus @default(NOT_APPLICABLE)
+  undoExpiresAt   DateTime?         @db.Timestamptz(6)
+  undoneAt        DateTime?         @db.Timestamptz(6)
+  undoneByUserId  String?           @db.Uuid
+  /// Why an undo was refused, as a machine code the UI translates.
+  undoRefusedCode String?
+
+  /// Joins plan → tool call → domain mutation → audit event.
+  correlationId String @db.Uuid
+
+  /// Client idempotency key. A retried creation returns the first plan.
+  idempotencyKey String?
+
+  expiresAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?         @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "copilot_plan_brand_fkey")
+  session   CopilotSession @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "copilot_plan_session_fkey")
+
+  toolCalls CopilotToolCall[]
+  messages  CopilotMessage[]
+
+  @@unique([workspaceId, id], name: "copilot_action_plan_workspace_scope")
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, sessionId, planVersion])
+  @@index([workspaceId, sessionId, createdAt(sort: Desc)])
+  @@index([workspaceId, status])
+  @@index([expiresAt])
+  @@map("copilot_action_plan")
+}
+
+/// TENANT-OWNED. ONE TOOL INVOCATION INSIDE ONE PLAN.
+///
+/// THE COPILOT IS AN ORCHESTRATOR, NOT A DATABASE SHORTCUT. Every row here
+/// records a call into a domain service that performed its own authorization;
+/// the model never holds a database handle, and `toolKey` is drawn from a closed
+/// registry, so a tool nobody declared cannot be invoked by a model that invents
+/// its name.
+///
+/// `compensation` IS AN EXPLICIT CONTRACT, not "run the opposite command and
+/// hope": it records what to restore and the resource VERSION it was restored
+/// from, so an undo that would overwrite somebody's later edit is refused with a
+/// reason rather than silently winning.
+model CopilotToolCall {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  planId    String @db.Uuid
+  sessionId String @db.Uuid
+  /// Position within the plan. Steps run in order and stop at the first
+  /// failure, so a later step cannot act on a state an earlier one failed to
+  /// reach.
+  ordinal   Int
+
+  /// From the closed registry in packages/copilot/src/tools.ts.
+  toolKey     String
+  actionClass CopilotActionClass
+  status      CopilotToolCallStatus @default(PLANNED)
+
+  /// The arguments, REDACTED and bounded. Ids and enum values; never a caption,
+  /// never a credential, never a free-text prompt the customer typed.
+  argumentsJson Json?
+  /// Result METADATA only — counts, ids, a status. Never a provider payload and
+  /// never generated content, which lives in the row the tool created.
+  resultJson    Json?
+
+  /// What it touched, so an audit reader can follow plan → call → row.
+  resourceType          String?
+  resourceId            String? @db.Uuid
+  /// Optimistic-concurrency anchors for the undo.
+  resourceVersionBefore Int?
+  resourceVersionAfter  Int?
+
+  /// How to take this back, when it can be taken back at all.
+  compensation Json?
+
+  /// A stable machine code. `permission_denied`, `brand_out_of_scope`,
+  /// `entitlement_denied`, `insufficient_credits`, `not_found`.
+  failureCode String?
+
+  /// The gateway request this step spent, when it spent one.
+  aiRequestId String? @db.Uuid
+
+  /// Deterministic: hash(plan, ordinal, tool, arguments). UNIQUE per workspace,
+  /// so a retried execution finds the completed call rather than running the
+  /// tool a second time.
+  idempotencyKey String
+
+  startedAt  DateTime? @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+  durationMs Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      CopilotActionPlan @relation(fields: [workspaceId, planId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "copilot_tool_call_plan_fkey")
+  session   CopilotSession    @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "copilot_tool_call_session_fkey")
+
+  @@unique([workspaceId, planId, ordinal])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, planId, ordinal])
+  @@index([workspaceId, status])
+  @@map("copilot_tool_call")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. ONE AUTOMATION RULE — docs/DATABASE.md §9.1.
+///
+/// `brandId` IS NOT NULL, for D-138's reason rather than by imitation: a rule
+/// that acts on "every brand" is precisely the hole a brand-restricted member
+/// would act through, and BrandScope has to be a query predicate (D-132/D-134).
+///
+/// A RULE STORES NO AUTHORITY. It records who created it and which brand it
+/// acts on; whether that person may still do what it asks is re-resolved from
+/// the LIVE membership on every run. A rule created by a Marketing Manager who
+/// has since become a Viewer does nothing, and says so.
+///
+/// TRIGGER, CONDITION AND ACTION ARE CLOSED REGISTRIES. There is no customer
+/// code, no expression language, no SQL, no webhook and no arbitrary URL — the
+/// JSON columns hold PARAMETERS for a declared type, validated by a schema at
+/// the boundary, never a program.
+model AutomationRule {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  name        String
+  description String?
+
+  enabled Boolean @default(false)
+
+  triggerType   AutomationTrigger
+  /// Parameters for the trigger type. A schema validates it on write.
+  triggerConfig Json              @default("{}")
+
+  /// An ordered list of typed conditions, ALL of which must hold. Each is a
+  /// declared comparison over a declared field — never an expression.
+  conditions Json @default("[]")
+
+  actionType   AutomationActionType
+  actionConfig Json                 @default("{}")
+
+  /// A ceiling per rule per day, from configuration. A runaway rule costs one
+  /// day's ceiling rather than a workspace's credits.
+  maxRunsPerDay Int @default(0)
+
+  /// Always TRUE for an external action — a CHECK constraint enforces it, so it
+  /// cannot be configured away by a future screen or a crafted payload.
+  requiresConfirmationForExternal Boolean @default(true)
+
+  createdByUserId String  @db.Uuid
+  updatedByUserId String? @db.Uuid
+
+  lastRunAt     DateTime?            @db.Timestamptz(6)
+  lastRunStatus AutomationRunStatus?
+  runCount      Int                  @default(0)
+
+  /// Optimistic concurrency, for the same reason `campaign` carries one.
+  version Int @default(1)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  /// Soft delete (docs/DATABASE.md §2).
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "automation_rule_brand_fkey")
+
+  runs AutomationRun[]
+
+  @@unique([workspaceId, id], name: "automation_rule_workspace_scope")
+  @@unique([workspaceId, brandId, name])
+  @@index([workspaceId, brandId, enabled])
+  @@index([workspaceId, triggerType, enabled])
+  @@map("automation_rule")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. ONE EVALUATION OF ONE RULE — docs/DATABASE.md
+/// §9.2.
+///
+/// `idempotencyKey` IS DERIVED FROM THE TRIGGER, NOT MINTED PER DELIVERY:
+/// hash(rule, trigger type, the thing that triggered it, the bucket). A
+/// duplicate delivery of the same event therefore finds the existing run and
+/// produces no second action — which is the only way "every run is idempotent"
+/// survives a queue that promises at-least-once.
+///
+/// AN EXTERNAL ACTION STOPS HERE, at `AWAITING_CONFIRMATION`, with a single-use
+/// confirmation bound to this run. An automation is not a way around the
+/// Copilot's confirmation boundary; it is the same boundary reached by a
+/// different door.
+model AutomationRun {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  ruleId String @db.Uuid
+
+  status AutomationRunStatus @default(RUNNING)
+
+  triggerType    AutomationTrigger
+  /// What fired it, as a type and an id: a content item, a publish job, an
+  /// insight, or nothing for a scheduled rule.
+  triggerRefType String?
+  triggerRefId   String?           @db.Uuid
+
+  /// Derived. UNIQUE per workspace.
+  idempotencyKey String
+
+  /// Whether the conditions held. FALSE with status `SKIPPED` is a complete,
+  /// successful evaluation — not an error.
+  conditionsHeld Boolean?
+
+  actionType   AutomationActionType
+  /// Action METADATA only: what was created, how many, which id. Never content.
+  actionResult Json?
+  resourceType String?
+  resourceId   String?              @db.Uuid
+
+  /// The same single-use, hashed, plan-bound confirmation discipline the
+  /// Copilot uses. Unique platform-wide.
+  confirmationTokenHash String?   @unique
+  confirmationExpiresAt DateTime? @db.Timestamptz(6)
+  confirmedAt           DateTime? @db.Timestamptz(6)
+  confirmedByUserId     String?   @db.Uuid
+
+  /// A stable machine code, and a short redacted summary bounded by a CHECK.
+  failureCode String?
+  safeSummary String?
+
+  correlationId String @db.Uuid
+
+  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+  durationMs Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand          @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "automation_run_brand_fkey")
+  rule      AutomationRule @relation(fields: [workspaceId, ruleId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "automation_run_rule_fkey")
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, ruleId, startedAt(sort: Desc)])
+  @@index([workspaceId, brandId, status])
+  @@index([startedAt])
+  @@map("automation_run")
 }

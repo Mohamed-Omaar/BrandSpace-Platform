@@ -1,0 +1,303 @@
+import { z } from 'zod';
+import type {
+  AutomationActionType,
+  AutomationTrigger,
+  CopilotActionClass,
+} from '@brandspace/database';
+
+/**
+ * THE AUTOMATION REGISTRY — closed triggers, closed conditions, closed actions.
+ *
+ * WHAT IS DELIBERATELY IMPOSSIBLE HERE, and why each one is worth the narrower
+ * product:
+ *
+ *   - NO CUSTOMER CODE, NO `eval`, NO EXPRESSION LANGUAGE. A rule engine that
+ *     evaluates customer-authored expressions is a code-execution surface in a
+ *     multi-tenant platform, and every sandbox for one is a CVE waiting to be
+ *     written. A condition here is a declared FIELD, a declared OPERATOR and a
+ *     literal — three things a schema can check.
+ *   - NO ARBITRARY SQL. The fields a condition may read are named below and
+ *     resolved by code; there is no path from a rule to a query the customer
+ *     shaped.
+ *   - NO WEBHOOK AND NO ARBITRARY URL ACTION. Customer-controlled outbound
+ *     requests from a platform's own network is a server-side request forgery
+ *     primitive handed over as a feature, and it is explicitly out of scope for
+ *     this phase.
+ *   - NO CONFIGURABLE ACTION LIST. The registry is CODE. A configurable one is
+ *     one migration away from an action nobody reviewed.
+ *
+ * WHAT AN ACTION IS: a call into a domain service the platform already owns,
+ * reached through an injected PORT (see `ports.ts`). The set of things an
+ * automation can do is therefore visible at the wiring site, as a short list,
+ * rather than being the whole surface of every package this one imports.
+ */
+
+/** Which triggers a rule may fire on, and what each one carries. */
+export interface TriggerDefinition {
+  readonly type: AutomationTrigger;
+  readonly config: z.ZodTypeAny;
+  /** What the run's `triggerRefType` will be, or null for a timed trigger. */
+  readonly refType: string | null;
+  readonly messageKey: string;
+}
+
+const emptyConfig = z.object({}).default({});
+
+export const AUTOMATION_TRIGGERS = [
+  {
+    type: 'CONTENT_APPROVED',
+    config: emptyConfig,
+    refType: 'ContentItem',
+    messageKey: 'contentApproved',
+  },
+  {
+    type: 'CONTENT_SCHEDULED',
+    config: emptyConfig,
+    refType: 'CalendarSlot',
+    messageKey: 'contentScheduled',
+  },
+  {
+    type: 'POST_PUBLISHED',
+    config: emptyConfig,
+    refType: 'PublishJob',
+    messageKey: 'postPublished',
+  },
+  {
+    type: 'ANALYTICS_REFRESHED',
+    config: emptyConfig,
+    refType: 'AnalyticsIngestionRun',
+    messageKey: 'analyticsRefreshed',
+  },
+  {
+    type: 'ANOMALY_DETECTED',
+    config: z
+      .object({
+        /** Restrict to one metric, or leave empty for any. */
+        metricKey: z.string().max(60).optional(),
+      })
+      .default({}),
+    refType: 'Insight',
+    messageKey: 'anomalyDetected',
+  },
+  {
+    type: 'METRIC_THRESHOLD_CROSSED',
+    config: z.object({
+      metricKey: z.string().min(1).max(60),
+      direction: z.enum(['above', 'below']),
+      /** An integer in the metric's own unit. Integers all the way down. */
+      threshold: z.number().int(),
+      /** How many days of the metric the threshold is evaluated over. */
+      windowDays: z.number().int().min(1).max(90).default(7),
+    }),
+    refType: 'MetricObservation',
+    messageKey: 'metricThreshold',
+  },
+  {
+    type: 'SCHEDULED_TIME',
+    config: z.object({
+      /** 0 = Sunday. Empty means every day. */
+      daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+      /** Whole hour in the workspace's own zone. */
+      hourLocal: z.number().int().min(0).max(23),
+    }),
+    refType: null,
+    messageKey: 'scheduledTime',
+  },
+] as const satisfies readonly TriggerDefinition[];
+
+/**
+ * THE FIELDS A CONDITION MAY READ. A closed list, resolved by code.
+ *
+ * Each one is something the run's own context already carries, so evaluating a
+ * condition never issues a query the customer shaped — it reads a value the
+ * engine put there.
+ */
+export const CONDITION_FIELDS = [
+  'content.status',
+  'content.pillar',
+  'content.platformCount',
+  'content.hasCampaign',
+  'publish.provider',
+  'publish.failureClass',
+  'metric.key',
+  'metric.value',
+  'metric.changeMilli',
+  'brand.id',
+] as const;
+export type ConditionField = (typeof CONDITION_FIELDS)[number];
+
+export const CONDITION_OPERATORS = [
+  'equals',
+  'not_equals',
+  'greater_than',
+  'less_than',
+  'in',
+  'not_in',
+  'is_true',
+  'is_false',
+] as const;
+export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
+
+export const conditionSchema = z.object({
+  field: z.enum(CONDITION_FIELDS),
+  operator: z.enum(CONDITION_OPERATORS),
+  /**
+   * A LITERAL, and only a literal: a string, a number, a boolean or a short list
+   * of strings. Not an object, not a nested condition, not a reference to another
+   * field — every one of which is the first step toward an expression language.
+   */
+  value: z
+    .union([z.string().max(200), z.number(), z.boolean(), z.array(z.string().max(80)).max(20)])
+    .optional(),
+});
+export type AutomationCondition = z.infer<typeof conditionSchema>;
+
+export const conditionsSchema = z.array(conditionSchema).max(20).default([]);
+
+export interface ActionDefinition {
+  readonly type: AutomationActionType;
+  readonly config: z.ZodTypeAny;
+  /**
+   * THE ACTION CLASS, shared with the Copilot's vocabulary on purpose.
+   *
+   * An automation is not a second answer to "is this dangerous?" — it is the same
+   * question reached by a different door, and the same three classes answer it.
+   * `EXTERNAL_OR_DESTRUCTIVE` here means the run stops at AWAITING_CONFIRMATION
+   * and a person decides, exactly as a Copilot plan does.
+   */
+  readonly actionClass: CopilotActionClass;
+  /** The workspace permission the rule's CREATOR must still hold at RUN time. */
+  readonly permission: string;
+  readonly messageKey: string;
+}
+
+export const AUTOMATION_ACTIONS = [
+  {
+    type: 'NOTIFY',
+    config: z.object({
+      /** A notification template key. A closed set in `@brandspace/notifications`. */
+      templateKey: z.string().min(1).max(60),
+    }),
+    actionClass: 'READ_ONLY',
+    // Notifying members about their own workspace's events needs no more than
+    // being able to see the workspace; the notification carries a pointer, and
+    // following it applies the ordinary permission checks.
+    permission: 'workspace.read',
+    messageKey: 'notify',
+  },
+  {
+    type: 'SUBMIT_FOR_APPROVAL',
+    config: emptyConfig,
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permission: 'content.submit',
+    messageKey: 'submitForApproval',
+  },
+  {
+    type: 'PLACE_ON_CALENDAR',
+    config: z.object({
+      /** Hours from the trigger. A rule places content relative to its event. */
+      offsetHours: z
+        .number()
+        .int()
+        .min(0)
+        .max(24 * 30),
+      hourLocal: z.number().int().min(0).max(23).optional(),
+    }),
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permission: 'content.schedule',
+    messageKey: 'placeOnCalendar',
+  },
+  {
+    type: 'PROPOSE_PUBLISH',
+    config: emptyConfig,
+    /*
+     * THE EXTERNAL ONE, AND THE ONLY ONE.
+     *
+     * It never executes on its own. The run reaches AWAITING_CONFIRMATION, the
+     * workspace is notified, and a permitted human confirms the exact action — the
+     * same boundary the Copilot enforces, reached by a different door. A CHECK
+     * constraint on `automation_rule` refuses a rule of this type that does not
+     * require confirmation, so no future editor can switch it off.
+     */
+    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
+    permission: 'publishing.manage',
+    messageKey: 'proposePublish',
+  },
+] as const satisfies readonly ActionDefinition[];
+
+const TRIGGERS_BY_TYPE = new Map<string, TriggerDefinition>(
+  AUTOMATION_TRIGGERS.map((trigger) => [trigger.type, trigger]),
+);
+const ACTIONS_BY_TYPE = new Map<string, ActionDefinition>(
+  AUTOMATION_ACTIONS.map((action) => [action.type, action]),
+);
+
+export function findTrigger(type: string): TriggerDefinition | undefined {
+  return TRIGGERS_BY_TYPE.get(type);
+}
+
+export function findAction(type: string): ActionDefinition | undefined {
+  return ACTIONS_BY_TYPE.get(type);
+}
+
+/** Does this action leave the platform, and therefore need a person? */
+export function isExternalAction(type: AutomationActionType): boolean {
+  return findAction(type)?.actionClass === 'EXTERNAL_OR_DESTRUCTIVE';
+}
+
+/**
+ * Evaluate one condition against the facts the engine gathered.
+ *
+ * NO COERCION SURPRISES. A comparison between a number and a string is FALSE
+ * rather than NaN-ish or truthy: a rule whose condition silently became "always
+ * true" because of a type mismatch would publish things nobody asked for, and
+ * that is the worst failure mode this engine has.
+ */
+export function evaluateCondition(
+  condition: AutomationCondition,
+  facts: Readonly<Record<string, unknown>>,
+): boolean {
+  const actual = facts[condition.field];
+
+  switch (condition.operator) {
+    case 'is_true':
+      return actual === true;
+    case 'is_false':
+      return actual === false;
+    case 'equals':
+      return actual === condition.value;
+    case 'not_equals':
+      return actual !== condition.value;
+    case 'greater_than':
+      return typeof actual === 'number' && typeof condition.value === 'number'
+        ? actual > condition.value
+        : false;
+    case 'less_than':
+      return typeof actual === 'number' && typeof condition.value === 'number'
+        ? actual < condition.value
+        : false;
+    case 'in':
+      return Array.isArray(condition.value) && typeof actual === 'string'
+        ? condition.value.includes(actual)
+        : false;
+    case 'not_in':
+      return Array.isArray(condition.value) && typeof actual === 'string'
+        ? !condition.value.includes(actual)
+        : false;
+  }
+}
+
+/** ALL conditions must hold. There is no `OR`, and that is deliberate. */
+export function evaluateConditions(
+  conditions: readonly AutomationCondition[],
+  facts: Readonly<Record<string, unknown>>,
+): boolean {
+  /*
+   * NO BOOLEAN ALGEBRA, ON PURPOSE. `AND` over a flat list is the whole grammar:
+   * it is trivially readable in a rule editor, trivially testable, and cannot
+   * express the kind of nested condition a person writes at 6pm and misreads at
+   * 9am. A rule that needs `OR` is two rules, and two rules are two run histories
+   * a person can actually audit.
+   */
+  return conditions.every((condition) => evaluateCondition(condition, facts));
+}

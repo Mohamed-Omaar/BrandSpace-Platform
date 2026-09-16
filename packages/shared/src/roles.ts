@@ -123,6 +123,25 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'integrations.manage',
       'publishing.read',
       'publishing.manage',
+      /*
+       * Phase 7. This is the role Phase 7 exists for: it reads the numbers,
+       * exports them, asks for an explanation, generates and ACCEPTS a strategy,
+       * runs campaigns, uses the Copilot and writes automations. Accepting a
+       * strategy and enabling an automation are the two heaviest keys here —
+       * one turns a machine proposal into something the product builds on, the
+       * other makes things happen when nobody is watching — and both belong to
+       * the person who runs the brand.
+       */
+      'analytics.read',
+      'analytics.export',
+      'analytics.explain',
+      'strategy.read',
+      'strategy.manage',
+      'campaigns.read',
+      'campaigns.manage',
+      'copilot.use',
+      'automation.read',
+      'automation.manage',
     ],
   },
   {
@@ -168,6 +187,25 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // the same reason `content.archive` is withheld.
       'integrations.read',
       'publishing.read',
+      /*
+       * Phase 7. Sees how its own work performed, reads the strategy it is
+       * writing against, and uses the Copilot — which can do nothing this role
+       * could not already do by hand, because every tool call re-resolves THESE
+       * permissions at execution time.
+       *
+       * NOT `analytics.export`: a file leaves the product and outlives every
+       * permission change afterwards, and that is a different amount of trust
+       * from looking at a chart. NOT `analytics.explain` either — it spends
+       * credits, and this role already has `content.create` for the spending it
+       * is meant to do. NOT `strategy.manage`: accepting a strategy is the
+       * Marketing Manager decision. NOT `automation.manage`, for the same
+       * reason `publishing.manage` is withheld.
+       */
+      'analytics.read',
+      'strategy.read',
+      'campaigns.read',
+      'copilot.use',
+      'automation.read',
     ],
   },
   {
@@ -201,6 +239,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'content.submit',
       // Phase 5B-3, own actions only (§4.3).
       'audit.read_own',
+      /*
+       * Phase 7. Reads the strategy it writes against and uses the Copilot for
+       * the writing this role already does. No analytics at all: this role does
+       * not plan and does not schedule, and the F-15 rule says an ungranted
+       * capability is the recoverable mistake.
+       */
+      'strategy.read',
+      'copilot.use',
     ],
   },
   {
@@ -231,6 +277,10 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // else; it does not judge it.
       'content.submit',
       'audit.read_own',
+      // Phase 7. Designs against the brand's direction, so it reads the
+      // strategy; uses the Copilot for the visual work it already does.
+      'strategy.read',
+      'copilot.use',
     ],
   },
   {
@@ -267,6 +317,17 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // Phase 6. Seeing what became of something they approved is part of
       // approving it. Read-only, like everything else this role holds.
       'publishing.read',
+      /*
+       * Phase 7. Judging whether a post should go out is better done knowing how
+       * the last ones did, so the numbers are readable. Everything else is
+       * withheld: this role does not author, does not spend, and does not
+       * automate. NOT `copilot.use` — every action class the Copilot offers
+       * beyond reading is authoring or scheduling, and an approver who drafts
+       * the thing they approve has not approved it.
+       */
+      'analytics.read',
+      'strategy.read',
+      'campaigns.read',
     ],
   },
   {
@@ -299,6 +360,22 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // `publishing.manage` both cause external effects and are withheld.
       'integrations.read',
       'publishing.read',
+      /*
+       * Phase 7, and the role the analytics surface exists for.
+       *
+       * READ AND EXPORT, and nothing that causes an effect. `analytics.export`
+       * IS granted here — taking the numbers out is the job — while
+       * `analytics.explain`, `strategy.manage`, `copilot.use` and
+       * `automation.manage` are all withheld because every one of them either
+       * spends credits or changes something. A read-only role must not be able
+       * to spend money, which is the same reasoning that withholds
+       * `brand_brain.chat` from it.
+       */
+      'analytics.read',
+      'analytics.export',
+      'strategy.read',
+      'campaigns.read',
+      'automation.read',
     ],
   },
   {
@@ -320,6 +397,14 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     realm: 'workspace',
     nameEn: 'Viewer (read-only)',
     nameAr: 'مُشاهِد (قراءة فقط)',
+    /*
+     * PHASE 7 ADDS NOTHING HERE, AND THAT IS A DECISION RATHER THAN AN
+     * OVERSIGHT. Analytics is the most commercially sensitive data in a
+     * workspace, the Copilot can change state, and an automation acts when
+     * nobody is watching. D-62 and D-130 keep this role at exactly
+     * `workspace.read`; a single analytics grant would be the first crack in
+     * the rule that every later phase would widen.
+     */
     permissionKeys: ['workspace.read'],
   },
   {

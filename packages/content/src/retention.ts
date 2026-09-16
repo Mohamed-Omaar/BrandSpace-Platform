@@ -55,6 +55,45 @@ export const AI_OUTPUT_RETENTION_REGISTRY: readonly AiOutputRetentionDeclaration
     behaviour: { kind: 'subscription-linked', configPath: 'content.retention' },
     honoursWorkspaceControl: true,
   },
+  /*
+   * PHASE 7. Three features that persist generated output, declared here for the
+   * same reason the two above are: so "who deletes this, and when?" has an
+   * answer in the source.
+   *
+   * ANALYTICS IS TWO DIFFERENT THINGS AND THEY HAVE DIFFERENT OWNERS. The
+   * OBSERVATIONS are measurements, not generated output, and they are pruned on
+   * the operator's window narrowed by the plan's `analytics_retention_days`. The
+   * INSIGHTS are generated prose and its evidence, and they carry their own
+   * shorter window — an explanation of last month's numbers is stale long before
+   * the numbers are.
+   */
+  {
+    featureKey: 'analytics',
+    retentionOwner: '@brandspace/analytics',
+    persists: ['metric_observation', 'analytics_ingestion_run'],
+    behaviour: { kind: 'configured-days', configPath: 'analytics.retention.maxRetentionDays' },
+    // The ceiling is the operator's and the plan's; the customer cannot shorten
+    // a measurement window they did not create. Recorded honestly.
+    honoursWorkspaceControl: false,
+  },
+  {
+    featureKey: 'analytics.insights',
+    retentionOwner: '@brandspace/analytics',
+    persists: ['insight.title', 'insight.body', 'insight_evidence'],
+    behaviour: { kind: 'configured-days', configPath: 'analytics.retention.insightRetentionDays' },
+    honoursWorkspaceControl: false,
+  },
+  {
+    featureKey: 'ai.copilot',
+    retentionOwner: '@brandspace/copilot',
+    persists: [
+      'copilot_message.body',
+      'copilot_action_plan.summary',
+      'copilot_tool_call.argumentsJson',
+    ],
+    behaviour: { kind: 'configured-days', configPath: 'copilot.retention.messageRetentionDays' },
+    honoursWorkspaceControl: false,
+  },
 ];
 
 /**
