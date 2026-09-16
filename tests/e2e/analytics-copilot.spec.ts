@@ -61,6 +61,33 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 /** The seeded window, so the screen shows the fixture rather than an empty range. */
 const RANGE = 'range=90';
 
+/**
+ * Wait for whichever outcome the assistant actually reaches, and say which.
+ *
+ * RACE THE TWO OUTCOMES RATHER THAN TIME OUT ON ONE. Waiting on the plan alone
+ * and catching the timeout works, but it spends the FULL ceiling on the refusal
+ * path — and with no real provider that is the path these tests take. Two
+ * browser workers each burning a minute on a wait whose answer arrived in two
+ * seconds is a minute stolen from every other suite sharing the runner, which
+ * is how a slow machine turns a passing suite into a flaky one.
+ *
+ * Racing costs nothing in rigour: both outcomes are still asserted by the
+ * caller, and a genuinely hung request still fails at the ceiling.
+ */
+async function settle(page: Page): Promise<'plan' | 'refused' | 'neither'> {
+  const plan = page
+    .getByTestId('copilot-plan')
+    .waitFor({ state: 'visible', timeout: 60_000 })
+    .then(() => 'plan' as const)
+    .catch(() => 'neither' as const);
+  const refused = page
+    .getByTestId('copilot-error')
+    .waitFor({ state: 'visible', timeout: 60_000 })
+    .then(() => 'refused' as const)
+    .catch(() => 'neither' as const);
+  return Promise.race([plan, refused]);
+}
+
 /*
  * A LONGER CEILING THAN THE DEFAULT, AND ONLY BECAUSE THE WORK IS REAL.
  *
@@ -262,13 +289,7 @@ test.describe('the AI Copilot', () => {
      */
     await page.getByTestId('copilot-propose').click();
 
-    const plan = page.getByTestId('copilot-plan');
-    const reachedPlan = await plan
-      .waitFor({ state: 'visible', timeout: 60_000 })
-      .then(() => true)
-      .catch(() => false);
-
-    if (reachedPlan) {
+    if ((await settle(page)) === 'plan') {
       // Outcome 1. THE CONFIRMATION IS IN FRONT OF THE ACTION, not beside it.
       await expect(page.getByTestId('copilot-confirm')).toBeVisible();
       await expect(page.getByTestId('copilot-reject')).toBeVisible();
@@ -290,13 +311,10 @@ test.describe('the AI Copilot', () => {
     await page.getByTestId('copilot-request').fill('Create an autumn awareness campaign.');
     await page.getByTestId('copilot-propose').click();
 
-    const reject = page.getByTestId('copilot-reject');
-    const offered = await reject
-      .waitFor({ state: 'visible', timeout: 60_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!offered) return; // The refusal branch; covered above.
+    if ((await settle(page)) !== 'plan') return; // The refusal branch; covered above.
 
+    const reject = page.getByTestId('copilot-reject');
+    await expect(reject).toBeVisible();
     await reject.click();
     await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
     await expect(page.getByTestId('copilot-result')).toHaveCount(0);
@@ -313,16 +331,7 @@ test.describe('the AI Copilot', () => {
      * The scan that follows matters most on the FAILURE path, because that is
      * where a raw provider error would surface if anything ever leaked one.
      */
-    await Promise.race([
-      page
-        .getByTestId('copilot-plan')
-        .waitFor({ state: 'visible', timeout: 60_000 })
-        .catch(() => null),
-      page
-        .getByTestId('copilot-error')
-        .waitFor({ state: 'visible', timeout: 60_000 })
-        .catch(() => null),
-    ]);
+    await settle(page);
 
     const rendered = (await page.content()).toLowerCase();
     for (const forbidden of [
