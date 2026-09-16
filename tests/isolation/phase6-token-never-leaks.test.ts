@@ -71,6 +71,11 @@ function enabledPolicy(): PublishingPolicy {
   return parsePublishingPolicy({
     providers: {
       linkedin: { enabled: true, scopes: ['w_member_social'], targetKind: 'organization' },
+      // TIKTOK's mock offers ONE target, so the flow below connects in one step
+      // rather than pausing for a choice (D-142). What this suite is about is
+      // what a credential row and an audit event CONTAIN, not which page was
+      // picked — that has its own suite.
+      tiktok: { enabled: true, scopes: ['video.publish'], targetKind: 'creator_account' },
     },
   });
 }
@@ -169,7 +174,10 @@ describe('the audit trail records what happened, never the credential', () => {
           vault,
           applications,
         }).start({
-          provider: 'LINKEDIN',
+          // TIKTOK: its mock offers ONE target, so the callback connects in one
+          // step. This case is about what a credential row contains, not about
+          // the selection step (D-142), which has its own suite.
+          provider: 'TIKTOK',
           brandId: fixtures.a.brandId,
           actor: { userId: fixtures.a.userId, brandScope: [] },
         }),
@@ -194,6 +202,9 @@ describe('the audit trail records what happened, never the credential', () => {
       { prisma: app },
     );
 
+    if (completed.outcome !== 'connected') {
+      throw new Error(`expected a single-target grant, got ${completed.outcome}`);
+    }
     const credential = await withWorkspace(
       fixtures.a.workspaceId,
       async (db) =>

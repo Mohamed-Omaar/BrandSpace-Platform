@@ -75,6 +75,8 @@ export interface PublishingPolicy {
     readonly latenessToleranceMinutes: number;
     readonly sweepBatchSize: number;
     readonly tokenRefreshAtLifetimeRatio: number;
+    readonly claimLeaseSeconds: number;
+    readonly staleClaimBatchSize: number;
   };
 }
 

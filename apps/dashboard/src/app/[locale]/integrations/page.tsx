@@ -1,7 +1,7 @@
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { inSocial } from '../../../server/social-context';
+import { callSocialApi, inSocial } from '../../../server/social-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
@@ -9,6 +9,8 @@ import {
   type BrandOption,
   type ConnectableProvider,
   type ConnectionRow,
+  type PendingSelection,
+  type PendingTarget,
   type PublishRow,
 } from './integrations-view';
 import {
@@ -17,6 +19,7 @@ import {
   connectAccountAction,
   disconnectAccountAction,
   retryPublishAction,
+  selectTargetAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -55,8 +58,36 @@ export default async function IntegrationsPage({
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
-  const successText = ok ? statusMessage(ok, locale) : null;
-  const errorText = error ? statusMessage(error, locale, reference) : null;
+
+  /*
+   * WHERE THE OAUTH CALLBACK LANDS (D-141).
+   *
+   * The provider redirects the browser to `apps/api`, which has no UI and
+   * cannot have one, and the API redirects here with a single coarse `social`
+   * word. It is mapped to a sentence from a CLOSED SET — an unrecognised value
+   * renders nothing at all — so a crafted link cannot put text of its choosing
+   * on this page.
+   */
+  const landing = typeof query.social === 'string' ? query.social : null;
+  const landingStatus =
+    landing === 'connected'
+      ? 'ACCOUNT_CONNECTED'
+      : landing === 'partial'
+        ? 'ACCOUNT_NEEDS_REAUTH'
+        : landing === 'declined'
+          ? 'ACCOUNT_CONNECT_DECLINED'
+          : landing === 'invalid'
+            ? 'ACCOUNT_CONNECT_INVALID'
+            : null;
+
+  const successText =
+    (ok ? statusMessage(ok, locale) : null) ??
+    (landingStatus === 'ACCOUNT_CONNECTED' ? statusMessage(landingStatus, locale) : null);
+  const errorText =
+    (error ? statusMessage(error, locale, reference) : null) ??
+    (landingStatus && landingStatus !== 'ACCOUNT_CONNECTED'
+      ? statusMessage(landingStatus, locale)
+      : null);
 
   const permissions = workspace.permissionKeys;
   const mayManage = permissions.includes('integrations.manage');
@@ -131,6 +162,54 @@ export default async function IntegrationsPage({
 
   const providerLabel = (provider: string): string =>
     t(`integrations.provider.${provider.toLowerCase()}` as MessageKey);
+
+  /*
+   * A GRANT WAITING ON A CHOICE (D-142).
+   *
+   * The customer authorized an account that administers several pages, and
+   * BrandSpace has deliberately not picked one. The offered pages are fetched
+   * from `apps/api` — which re-checks the workspace, the permission, the brand
+   * scope and that this is the person who started the flow — so a stale or
+   * borrowed `?select=` renders nothing rather than another workspace's pages.
+   *
+   * ONLY FOR A MEMBER WHO MAY CONNECT. A reader without `integrations.manage`
+   * is never shown a choice they could not act on.
+   */
+  const selectionToken =
+    mayManage && typeof query.select === 'string' && query.select.length > 0 ? query.select : null;
+  let pendingSelection: PendingSelection | null = null;
+  if (selectionToken) {
+    const response = await callSocialApi('/v1/social/connections/selection', { selectionToken });
+    if (response.ok) {
+      const payload = response.payload as {
+        provider?: unknown;
+        targets?: unknown;
+      };
+      const targets = Array.isArray(payload.targets) ? payload.targets : [];
+      const parsed = targets.flatMap((entry): PendingTarget[] => {
+        if (typeof entry !== 'object' || entry === null) return [];
+        const row = entry as Record<string, unknown>;
+        const id = row['externalAccountId'];
+        if (typeof id !== 'string' || id === '') return [];
+        return [
+          {
+            externalAccountId: id,
+            displayName: typeof row['displayName'] === 'string' ? row['displayName'] : id,
+            targetKind: typeof row['targetKind'] === 'string' ? row['targetKind'] : '',
+          },
+        ];
+      });
+      if (parsed.length > 0) {
+        pendingSelection = {
+          selectionToken,
+          providerLabel: providerLabel(
+            typeof payload.provider === 'string' ? payload.provider : '',
+          ),
+          targets: parsed,
+        };
+      }
+    }
+  }
 
   const connectionRows: readonly ConnectionRow[] = connections.map((connection) => ({
     id: connection.id,
@@ -208,12 +287,14 @@ export default async function IntegrationsPage({
         publishing={publishRows}
         mayManage={mayManage}
         mayManagePublishing={mayManagePublishing}
+        pendingSelection={pendingSelection}
         actions={{
           connect: connectAccountAction,
           disconnect: disconnectAccountAction,
           check: checkAccountAction,
           cancel: cancelPublishAction,
           retry: retryPublishAction,
+          selectTarget: selectTargetAction,
         }}
       />
     </WorkspaceShell>

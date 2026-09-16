@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ConfigurationService } from '@brandspace/config';
@@ -50,10 +51,44 @@ const startSchema = z.object({
   brandId: z.string().uuid(),
 });
 
-const callbackSchema = z.object({
-  provider: z.enum(SOCIAL_PROVIDERS),
-  state: z.string().min(1).max(512),
-  code: z.string().min(1).max(4_096),
+/**
+ * The path parameter, matched case-insensitively against the provider set.
+ *
+ * `callbackUriFor()` lower-cases the provider when it builds the URL, so that
+ * is what a provider redirects back with. Parsing it here rather than trusting
+ * it keeps an unknown value from ever reaching the registry.
+ */
+const providerParamSchema = z.object({
+  provider: z
+    .string()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.enum(SOCIAL_PROVIDERS)),
+});
+
+/**
+ * What a provider puts in the query string of its redirect.
+ *
+ * `code` AND `state` ARE OPTIONAL IN THE SCHEMA and required by the handler,
+ * because a denial carries `error` and neither of the other two. Making them
+ * mandatory here would turn "the customer pressed Cancel" into a validation
+ * failure and lose the one case worth telling them apart from a fault.
+ */
+const callbackQuerySchema = z.object({
+  state: z.string().min(1).max(512).optional(),
+  code: z.string().min(1).max(4_096).optional(),
+  error: z.string().max(256).optional(),
+  // ACCEPTED AND DISCARDED. A provider's `error_description` echoes the
+  // request, which carried a code; it is parsed so an unexpected key cannot
+  // fail the request, and never read.
+  error_description: z.string().max(2_048).optional(),
+});
+
+const selectionTokenSchema = z.object({
+  selectionToken: z.string().min(1).max(512),
+});
+
+const chooseTargetSchema = selectionTokenSchema.extend({
+  externalAccountId: z.string().min(1).max(256),
 });
 
 let cachedConfiguration: ConfigurationService | null = null;
@@ -292,54 +327,230 @@ export function registerSocialRoutes(app: FastifyInstance): void {
   );
 
   /**
-   * Finish an authorization.
+   * Finish an authorization — the URL every provider is actually given.
    *
-   * THE PROVIDER REDIRECTS A BROWSER HERE, so the session cookie is what
-   * identifies the workspace — the state proves the flow, the session proves
-   * the person. Both must agree: a state belonging to another workspace simply
-   * does not match the `workspaceId` predicate and is refused as invalid.
+   * IT IS A `GET`, AND THE PATH CARRIES THE PROVIDER, because that is what
+   * `callbackUriFor()` registers and what a provider does with it. The first
+   * implementation registered `POST /v1/social/callback` while handing
+   * providers `/v1/social/callback/<provider>` and expecting a JSON body: two
+   * separate reasons the redirect could never have arrived. A browser
+   * completing an OAuth flow performs a top-level GET navigation with `code`
+   * and `state` in the query string — there is no body, no JSON, and no way for
+   * the provider to send one.
+   *
+   * IT IS `scope: 'public'`, AND THAT IS THE ONLY CORRECT ANSWER HERE — NOT A
+   * RELAXATION (D-141).
+   *
+   * The customer session cookie is `__Host-bs_customer_session`. The `__Host-`
+   * prefix FORBIDS a `Domain` attribute, so the cookie is locked to the exact
+   * origin that set it. In the staging topology the dashboard is
+   * `staging.brandspace.cc` and this API is `api-staging.brandspace.cc`: the
+   * browser will not send that cookie here, and it must not — widening it to
+   * `.brandspace.cc` would hand every subdomain the session, which is precisely
+   * what the prefix exists to prevent. There is no session to resolve on this
+   * request, and pretending otherwise is what made the original route
+   * unreachable in the first place.
+   *
+   * SO THE STATE IS THE IDENTITY, which is what OAuth state is FOR. It is 32
+   * bytes of CSPRNG, stored only as a hash, single-use, bound when it was
+   * created to one workspace, one brand and one user, and consumed by a
+   * conditional UPDATE. Possession of it proves the flow; the row it matches
+   * names the workspace. Nothing here trusts the request for any of that:
+   * `workspaceId` comes from the row, never from the query.
+   *
+   * AND NOTHING IS ANSWERED TO THE BROWSER BUT A REDIRECT. Success, an expired
+   * state, a forged state, a replayed state and a provider-side denial all end
+   * at the same dashboard URL differing only by a coarse status — no JSON, no
+   * error code, and nothing that distinguishes "that state was wrong" from
+   * "that state belongs to someone else".
    */
   route(
     app,
-    'POST',
-    '/v1/social/callback',
+    'GET',
+    '/v1/social/callback/:provider',
     {
-      scope: 'workspace',
-      permission: CONNECT_PERMISSION,
+      scope: 'public',
       confirmation: 'required',
       idempotent: true,
     },
     async (req, reply) => {
+      const params = providerParamSchema.safeParse(req.params);
+      if (!params.success) return redirectToDashboard(reply, 'invalid');
+      const provider = params.data.provider;
+
+      const query = callbackQuerySchema.safeParse(req.query);
+      if (!query.success) return redirectToDashboard(reply, 'invalid');
+
+      /*
+       * THE PROVIDER SAID NO. A customer who pressed Cancel on the consent
+       * screen is not an error and must not read like one; the provider's own
+       * `error_description` is discarded rather than echoed, because it
+       * routinely repeats the request.
+       */
+      if (query.data.error) return redirectToDashboard(reply, 'declined');
+      if (!query.data.code || !query.data.state) return redirectToDashboard(reply, 'invalid');
+
+      /*
+       * WHICH WORKSPACE. Resolved from the state's own row and nowhere else.
+       *
+       * The lookup runs on the PLATFORM client because there is no tenant
+       * context yet — that is the thing being resolved — and it reads exactly
+       * one column, `workspaceId`, by the hash of a secret the caller had to
+       * already possess. It consumes nothing: the single-use claim still
+       * happens inside `complete()`, under the tenant client, as a conditional
+       * UPDATE. This is the same platform-client routing the publishing sweep
+       * already does, and it is why `apps/api` is the platform surface.
+       */
+      const stateHash = createHash('sha256').update(query.data.state).digest('hex');
+      const located = await getPlatformClient().socialOAuthState.findFirst({
+        where: { stateHash },
+        select: { workspaceId: true },
+      });
+      if (!located) return redirectToDashboard(reply, 'invalid');
+
+      try {
+        const result = await oauthServiceFor(located.workspaceId, (service) =>
+          service.complete({
+            state: query.data.state as string,
+            code: query.data.code as string,
+            // THE URI IS REBUILT FROM CONFIGURATION, and `complete()` compares
+            // it with the one recorded when the flow started. Comparing against
+            // the request's own value would compare it with itself.
+            redirectUri: callbackUriFor(provider),
+          }),
+        );
+
+        if (result.outcome === 'selection_required') {
+          /*
+           * SEVERAL PAGES WERE OFFERED AND NOBODY HAS CHOSEN (D-142). The
+           * selection secret goes back through the browser that completed the
+           * callback — over the dashboard's own origin, where the session lives
+           * — and the choice is made there, authenticated, before any
+           * connection exists.
+           */
+          return redirectToDashboard(reply, 'select', {
+            select: result.selectionToken,
+            provider: provider.toLowerCase(),
+          });
+        }
+
+        return redirectToDashboard(
+          reply,
+          result.missingScopes.length > 0 ? 'partial' : 'connected',
+          { provider: provider.toLowerCase() },
+        );
+      } catch (error: unknown) {
+        /*
+         * ONE OUTCOME FOR EVERY FAILURE. An expired state, a state already
+         * used, a forged one, a provider that refused the exchange and a
+         * half-configured application all land here and all redirect
+         * identically. The correlation id joins it to a redacted server log;
+         * the browser gets a word.
+         */
+        if (!isAppError(error)) {
+          log.error('social callback failed', {
+            action: 'callback',
+            ...internalErrorFields(error),
+          });
+        }
+        return redirectToDashboard(reply, 'invalid');
+      }
+    },
+  );
+
+  /**
+   * What a pending multi-target grant is offering.
+   *
+   * SESSION-AUTHENTICATED, unlike the callback: this one IS called by the
+   * dashboard, server to server, with the customer's own session forwarded. So
+   * the secret is not the only lock — the workspace, the permission, the brand
+   * scope and the identity of the person who started the flow are all checked
+   * as well, inside `pendingSelection()`.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/social/connections/selection',
+    { scope: 'workspace', permission: CONNECT_PERMISSION, idempotent: true },
+    async (req, reply) => {
       const caller = await resolveCaller(req, reply, CONNECT_PERMISSION);
       if (!caller) return;
 
-      const parsed = callbackSchema.safeParse(req.body);
+      const parsed = selectionTokenSchema.safeParse(req.body);
       if (!parsed.success) {
         return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       }
 
       try {
-        const result = await oauthServiceFor(caller.workspaceId, (service) =>
-          service.complete({
-            state: parsed.data.state,
-            code: parsed.data.code,
-            redirectUri: callbackUriFor(parsed.data.provider),
+        const view = await oauthServiceFor(caller.workspaceId, (service) =>
+          service.pendingSelection({
+            selectionToken: parsed.data.selectionToken,
+            actor: { userId: caller.userId, brandScope: caller.brandScope },
+          }),
+        );
+        return reply.send({
+          provider: view.provider,
+          expiresAt: view.expiresAt.toISOString(),
+          // THE CUSTOMER'S OWN PAGES, and nothing else. No token, no scope, no
+          // provider payload.
+          targets: view.targets.map((target) => ({
+            externalAccountId: target.externalAccountId,
+            displayName: target.displayName,
+            avatarUrl: target.avatarUrl,
+            targetKind: target.targetKind,
+          })),
+        });
+      } catch (error: unknown) {
+        await sendFailure(reply, error, 'selection');
+        return;
+      }
+    },
+  );
+
+  /**
+   * Bind a pending grant to the page the customer chose.
+   *
+   * A HIGH-IMPACT ACTION for the same reason `connect` is: it ends with
+   * BrandSpace able to post as the customer, to a specific page they named.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/social/connections/select',
+    {
+      scope: 'workspace',
+      permission: CONNECT_PERMISSION,
+      confirmation: 'required',
+      idempotent: false,
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, CONNECT_PERMISSION);
+      if (!caller) return;
+
+      const parsed = chooseTargetSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
+
+      try {
+        const connection = await oauthServiceFor(caller.workspaceId, (service) =>
+          service.chooseTarget({
+            selectionToken: parsed.data.selectionToken,
+            externalAccountId: parsed.data.externalAccountId,
+            actor: { userId: caller.userId, brandScope: caller.brandScope },
           }),
         );
         return reply.code(201).send({
-          // IDENTITY AND STATUS ONLY. No token, no scope secret, no provider
-          // payload — this response reaches a browser.
           connection: {
-            id: result.connection.id,
-            provider: result.connection.provider,
-            displayName: result.connection.displayName,
-            status: result.connection.status,
-            targetKind: result.connection.targetKind,
+            id: connection.id,
+            provider: connection.provider,
+            displayName: connection.displayName,
+            status: connection.status,
+            targetKind: connection.targetKind,
           },
-          missingScopes: result.missingScopes,
         });
       } catch (error: unknown) {
-        await sendFailure(reply, error, 'callback');
+        await sendFailure(reply, error, 'select');
         return;
       }
     },
@@ -365,7 +576,11 @@ export function registerSocialRoutes(app: FastifyInstance): void {
 
       try {
         const connection = await oauthServiceFor(caller.workspaceId, (service) =>
-          service.refresh(connectionId),
+          // THE SCOPE TRAVELS WITH THE ID (D-132/D-134). It was resolved from
+          // the session above and was already being resolved before this fix —
+          // it simply was not passed, so a member restricted to one brand could
+          // rotate another brand's token by knowing its id.
+          service.refresh({ connectionId, brandScope: caller.brandScope }),
         );
         return reply.send({
           connection: {
@@ -478,6 +693,45 @@ export function registerSocialRoutes(app: FastifyInstance): void {
       });
     },
   );
+}
+
+/**
+ * Where a completed callback sends the browser.
+ *
+ * BACK TO THE DASHBOARD, ALWAYS, AND TO A CONFIGURED ORIGIN. The API has no UI
+ * and must not grow one: a JSON body rendered in a browser address bar is not a
+ * result a customer can act on. `PUBLIC_DASHBOARD_BASE_URL` is read per request
+ * for the same reason `PUBLIC_API_BASE_URL` is — staging and production differ
+ * and neither is known here.
+ *
+ * THE STATUS IS COARSE ON PURPOSE. `connected`, `partial`, `select`,
+ * `declined`, `invalid`. Every failure — expired, replayed, forged, belonging
+ * to another workspace, a provider that refused the exchange — is `invalid`,
+ * because a redirect is the most public surface in the product and telling an
+ * attacker which of their guesses was closest is the leak.
+ */
+function redirectToDashboard(
+  reply: FastifyReply,
+  status: 'connected' | 'partial' | 'select' | 'declined' | 'invalid',
+  extra: Record<string, string> = {},
+): FastifyReply {
+  const base = process.env['PUBLIC_DASHBOARD_BASE_URL'];
+  if (!base) {
+    // NO GUESSED HOST. Redirecting to a default origin would be an open
+    // redirect with extra steps; a misconfigured environment fails closed.
+    log.error('PUBLIC_DASHBOARD_BASE_URL is not configured; cannot complete a social callback');
+    return reply.code(500).send({ error: { code: 'INTERNAL' } });
+  }
+  const query = new URLSearchParams({ social: status, ...extra });
+  /*
+   * 303, not 302. The browser arrived by GET and must continue by GET; 303 says
+   * so unambiguously rather than leaving it to the agent.
+   */
+  return reply
+    .code(303)
+    .header('location', `${base.replace(/\/+$/, '')}/integrations?${query.toString()}`)
+    .header('cache-control', 'no-store')
+    .send();
 }
 
 /**

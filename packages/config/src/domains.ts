@@ -1336,6 +1336,23 @@ const publishingSchema = z.object({
        * proactive refresh docs/SOCIAL-INTEGRATIONS.md §5 describes.
        */
       tokenRefreshAtLifetimeRatio: z.number().min(0.1).max(0.95).default(0.75),
+      /**
+       * How long a worker's claim on a job is believed (D-143).
+       *
+       * `execute()` moves a job to PUBLISHING BEFORE the external call, so a
+       * worker that dies mid-flight leaves a row saying "we may have sent
+       * this". Past this lease the claim is treated as dead and the job is
+       * RECOVERED — verified where the provider can be asked, handed to a human
+       * where it cannot. Never resent on the strength of a timer.
+       *
+       * It must comfortably exceed the slowest realistic provider call plus the
+       * BullMQ lock duration; too short recovers a job a live worker still
+       * holds, which is the one way this mechanism could itself cause a
+       * duplicate. Fifteen minutes against a two-minute lock.
+       */
+      claimLeaseSeconds: z.number().int().positive().min(60).max(3_600).default(900),
+      /** Stale claims examined per recovery pass. */
+      staleClaimBatchSize: z.number().int().positive().max(500).default(50),
     })
     .default({}),
 });

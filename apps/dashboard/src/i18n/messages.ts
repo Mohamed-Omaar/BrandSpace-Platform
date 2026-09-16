@@ -548,6 +548,11 @@ export const messages = {
     'integrations.emptyTitle': 'لا توجد حسابات متصلة بعد',
     'integrations.emptyBody': 'اربط حسابًا لتتمكن من نشر المحتوى المجدول تلقائيًا.',
     'integrations.connectEyebrow': 'ربط',
+    'integrations.selectTargetTitle': 'اختر الصفحة التي سننشر عليها',
+    'integrations.selectTargetBody':
+      'هذا الحساب يدير أكثر من صفحة. اختر الصفحة التي تريد أن ينشر BrandSpace عليها — لن يتم ربط أي صفحة حتى تختار.',
+    'integrations.selectTargetLegend': 'الصفحات المتاحة',
+    'integrations.selectTargetSubmit': 'ربط الصفحة المختارة',
     'integrations.connectTitle': 'ربط حساب جديد',
     'integrations.connectBody': 'سننقلك إلى المنصة لتمنح الإذن. لا نطلب كلمة المرور أبدًا.',
     'integrations.connect': 'ربط الحساب',
@@ -1262,6 +1267,11 @@ export const messages = {
     'integrations.emptyTitle': 'No accounts connected yet',
     'integrations.emptyBody': 'Connect an account so scheduled content can publish automatically.',
     'integrations.connectEyebrow': 'Connect',
+    'integrations.selectTargetTitle': 'Choose the page to publish to',
+    'integrations.selectTargetBody':
+      'This account administers more than one page. Choose the one BrandSpace should publish to — nothing is connected until you do.',
+    'integrations.selectTargetLegend': 'Available pages',
+    'integrations.selectTargetSubmit': 'Connect the chosen page',
     'integrations.connectTitle': 'Connect a new account',
     'integrations.connectBody':
       'We send you to the platform to grant access. We never ask for your password.',
@@ -1459,6 +1469,22 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   ACCOUNT_CHECKED: {
     en: 'Connection checked.',
     ar: 'تم فحص الاتصال.',
+  },
+  ACCOUNT_CONNECTED: {
+    en: 'The account is connected and ready to publish.',
+    ar: 'تم ربط الحساب وهو جاهز للنشر.',
+  },
+  ACCOUNT_NEEDS_REAUTH: {
+    en: 'The account was connected, but some permissions were not granted. Reconnect to publish.',
+    ar: 'تم ربط الحساب لكن بعض الأذونات لم تُمنح. أعد الربط للنشر.',
+  },
+  ACCOUNT_CONNECT_DECLINED: {
+    en: 'The connection was not completed. Nothing was linked.',
+    ar: 'لم يكتمل الربط. لم يتم ربط أي حساب.',
+  },
+  ACCOUNT_CONNECT_INVALID: {
+    en: 'That connection request is no longer valid. Start again from this page.',
+    ar: 'لم يعد طلب الربط صالحًا. ابدأ من جديد من هذه الصفحة.',
   },
   POST_CANCELLED: {
     en: 'The post was cancelled before it was sent.',

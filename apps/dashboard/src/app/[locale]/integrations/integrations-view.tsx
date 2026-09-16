@@ -8,6 +8,7 @@ import {
   StatusBadge,
   buttonStyle,
   colorTokens,
+  radiusTokens,
   spacingTokens,
   typographyTokens,
   type BadgeTone,
@@ -131,6 +132,20 @@ const PUBLISH_STATUS_KEY: Record<PublishRow['status'], MessageKey> = {
   CANCELLED: 'publishing.status.cancelled',
 };
 
+/** One page, channel or organization a pending grant offered (D-142). */
+export interface PendingTarget {
+  readonly externalAccountId: string;
+  readonly displayName: string;
+  readonly targetKind: string;
+}
+
+/** A grant waiting for the customer to say which of their pages they meant. */
+export interface PendingSelection {
+  readonly selectionToken: string;
+  readonly providerLabel: string;
+  readonly targets: readonly PendingTarget[];
+}
+
 export function IntegrationsView({
   locale,
   t,
@@ -140,6 +155,7 @@ export function IntegrationsView({
   publishing,
   mayManage,
   mayManagePublishing,
+  pendingSelection,
   actions,
 }: {
   readonly locale: string;
@@ -150,16 +166,69 @@ export function IntegrationsView({
   readonly publishing: readonly PublishRow[];
   readonly mayManage: boolean;
   readonly mayManagePublishing: boolean;
+  readonly pendingSelection: PendingSelection | null;
   readonly actions: {
     connect(formData: FormData): Promise<void>;
     disconnect(formData: FormData): Promise<void>;
     check(formData: FormData): Promise<void>;
     cancel(formData: FormData): Promise<void>;
     retry(formData: FormData): Promise<void>;
+    selectTarget(formData: FormData): Promise<void>;
   };
 }) {
   return (
     <Stack>
+      {/*
+        THE CHOICE, WHEN ONE GRANT OFFERED SEVERAL PAGES (D-142).
+
+        FIRST ON THE PAGE because it is the one thing blocking the customer:
+        they have authorized, nothing is connected yet, and until they choose,
+        nothing will publish. Rendered only when the server found a live pending
+        grant belonging to this person, so there is no empty variant of it.
+
+        NO DEFAULT IS PRE-SELECTED. A radio group with one already chosen is the
+        same decision-on-their-behalf this whole step exists to undo; the submit
+        cannot fire until they pick one.
+      */}
+      {pendingSelection ? (
+        <Card testId="select-target">
+          <SectionHeader
+            eyebrow={pendingSelection.providerLabel}
+            title={t('integrations.selectTargetTitle')}
+            description={t('integrations.selectTargetBody')}
+          />
+          <form
+            action={actions.selectTarget}
+            style={connectFormStyle}
+            data-testid="select-target-form"
+          >
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="selectionToken" value={pendingSelection.selectionToken} />
+            <fieldset style={fieldsetStyle}>
+              <legend style={metaStyle}>{t('integrations.selectTargetLegend')}</legend>
+              {pendingSelection.targets.map((target) => (
+                <label key={target.externalAccountId} style={choiceStyle}>
+                  <input
+                    type="radio"
+                    name="externalAccountId"
+                    value={target.externalAccountId}
+                    required
+                  />
+                  <span>
+                    <span style={titleStyle}>{target.displayName}</span>
+                    {target.targetKind ? (
+                      <span style={metaStyle}> · {target.targetKind}</span>
+                    ) : null}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <button type="submit" style={buttonStyle('primary')} data-testid="select-target-submit">
+              {t('integrations.selectTargetSubmit')}
+            </button>
+          </form>
+        </Card>
+      ) : null}
       <Card testId="connected-accounts">
         <SectionHeader
           eyebrow={t('integrations.eyebrow')}
@@ -461,6 +530,28 @@ const headerRowStyle = {
 const titleStyle = { ...typographyTokens.body, fontWeight: 600 } as const;
 
 const metaStyle = { ...typographyTokens.caption, color: colorTokens.textMuted } as const;
+
+/*
+ * THE CHOICE LIST. Existing tokens only, composed the way the connect form
+ * already composes them — a new screen element, not a new visual language
+ * (CLAUDE.md §4.2).
+ */
+const fieldsetStyle = {
+  display: 'grid',
+  gap: spacingTokens.sm,
+  border: 'none',
+  margin: 0,
+  padding: 0,
+} as const;
+
+const choiceStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: spacingTokens.sm,
+  padding: spacingTokens.sm,
+  borderRadius: radiusTokens.md,
+  border: `1px solid ${colorTokens.border}`,
+} as const;
 
 const noticeStyle = {
   ...typographyTokens.bodySm,

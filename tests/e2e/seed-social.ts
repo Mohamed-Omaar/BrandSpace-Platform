@@ -26,6 +26,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { withWorkspace } from '@brandspace/database';
 import { ConfigurationService, type ConfigActor, type Environment } from '@brandspace/config';
+import { SecretService } from '@brandspace/secrets';
 import { SocialTokenVault } from '@brandspace/social-connectors';
 import { E2E_CREDENTIALS_FILE, loadE2eEnv, type E2eAdminCredentials } from './env';
 
@@ -47,6 +48,10 @@ const SCHEDULED_LOCAL_TIME = '2026-01-15T09:00';
  */
 const E2E_SOCIAL_KEK = 'e2e-only-social-token-kek-00000000000000';
 
+/** Visibly fake, and the only "credential" anywhere in this phase's tests. */
+const CLIENT_SECRET_REF = 'social/linkedin/e2e-mock-client-secret';
+const MOCK_CLIENT_SECRET = 'e2e-only-not-a-real-client-secret';
+
 const ENVIRONMENT: Environment = 'DEVELOPMENT';
 const REASON = 'End-to-end fixture: enable the social providers the suite renders.';
 
@@ -63,7 +68,8 @@ const REASON = 'End-to-end fixture: enable the social providers the suite render
  * ids and client secrets live in `integrations.social-apps`, which this seed
  * does not touch and which is never projected to tenants.
  */
-async function enableProviders(prisma: PrismaClient): Promise<void> {
+/** The Platform Owner, with their real permission set. No private door. */
+async function platformActor(prisma: PrismaClient): Promise<ConfigActor> {
   const owner = await prisma.platformUser.findFirstOrThrow({
     where: { status: 'ACTIVE' },
     orderBy: { createdAt: 'asc' },
@@ -73,13 +79,15 @@ async function enableProviders(prisma: PrismaClient): Promise<void> {
     where: { roleId: owner.roleId },
     include: { permission: true },
   });
-  const actor: ConfigActor = {
+  return {
     platformUserId: owner.id,
     roleKey: 'platform_owner',
     mfaVerified: true,
     permissionKeys: grants.map((grant) => grant.permission.key),
   };
+}
 
+async function enableProviders(prisma: PrismaClient, actor: ConfigActor): Promise<void> {
   const configuration = new ConfigurationService({ prisma, cacheTtlMs: 0 });
   const current = await configuration.get('publishing', ENVIRONMENT);
 
@@ -112,6 +120,94 @@ async function enableProviders(prisma: PrismaClient): Promise<void> {
   if (!report.valid) {
     throw new Error(
       `The publishing fixture failed validation: ${report.issues
+        .map((issue) => `${issue.path}: ${issue.message}`)
+        .join('; ')}`,
+    );
+  }
+  await configuration.activate(actor, draft.id, { acknowledgeHighImpact: true });
+}
+
+/**
+ * CONFIGURE THE PLATFORM'S OWN MOCK APPLICATION, so the callback can be walked.
+ *
+ * WHY THIS EXISTS NOW AND DID NOT BEFORE. The first version of this fixture
+ * stopped at the connect BUTTON: the suite rendered the screen and never
+ * pressed it, because `applicationResolver()` needs an active row in
+ * `integrations.social-apps` and a client secret to resolve — and neither was
+ * seeded. That is exactly why the callback could be registered at a path no
+ * provider would ever reach and CI stayed green (P6-R1). A route nothing
+ * exercises is a route nothing tests.
+ *
+ * NOTHING REAL IS WRITTEN. The app id and the client secret are visibly fake
+ * and would be rejected by any platform on first use. The secret goes through
+ * the REAL Secret Service — encrypted at rest, masked on read, never returned
+ * by an API — because a fixture that wrote a credential some other way would be
+ * testing a path production does not have.
+ */
+async function configureMockApplication(prisma: PrismaClient, actor: ConfigActor): Promise<void> {
+  /*
+   * INFORMATIONAL ONLY, AND DELIBERATELY SO. `applicationResolver()` builds the
+   * redirect from the API's OWN `PUBLIC_API_BASE_URL` at request time and
+   * ignores whatever this document says, precisely so one activated
+   * configuration is correct in every environment. The schema requires a URL, so
+   * one is recorded; if it disagrees with the running API the exact-match check
+   * in `complete()` is unaffected, because both sides of that comparison come
+   * from the API.
+   */
+  const apiBase = process.env['PUBLIC_API_BASE_URL'] ?? 'http://127.0.0.1:3103';
+
+  const secrets = new SecretService({ prisma });
+  const secretActor = {
+    platformUserId: actor.platformUserId,
+    roleKey: actor.roleKey,
+    mfaVerified: true,
+    permissionKeys: actor.permissionKeys,
+  };
+  const existing = await prisma.secretRecord.findUnique({
+    where: { ref_environment: { ref: CLIENT_SECRET_REF, environment: ENVIRONMENT } },
+  });
+  if (!existing) {
+    await secrets.createSecret(secretActor, {
+      ref: CLIENT_SECRET_REF,
+      name: 'End-to-end mock LinkedIn client secret',
+      category: 'social_oauth_app',
+      environment: ENVIRONMENT,
+      value: MOCK_CLIENT_SECRET,
+      description: 'Test-only. Visibly fake, and rejected by every real platform.',
+    });
+  }
+
+  const configuration = new ConfigurationService({ prisma, cacheTtlMs: 0 });
+  const current = (await configuration.get('integrations.social-apps', ENVIRONMENT)) as {
+    applications?: readonly unknown[];
+  };
+  const draft = await configuration.createDraft(
+    actor,
+    'integrations.social-apps',
+    ENVIRONMENT,
+    'End-to-end fixture: a visibly fake social application, so the callback is walkable.',
+    {
+      ...current,
+      applications: [
+        {
+          providerKey: 'linkedin',
+          appId: 'e2e-only-mock-app-id',
+          // THE SAME URL `callbackUriFor()` BUILDS. If these ever disagree the
+          // exact-match check in `complete()` refuses the callback, which is
+          // the behaviour under test rather than a fixture detail.
+          redirectUri: `${apiBase.replace(/\/+$/, '')}/v1/social/callback/linkedin`,
+          scopes: ['w_member_social'],
+          clientSecretRef: CLIENT_SECRET_REF,
+          webhookSecretRef: null,
+          status: 'active',
+        },
+      ],
+    },
+  );
+  const report = await configuration.validateDraft(actor, draft.id);
+  if (!report.valid) {
+    throw new Error(
+      `The social-application fixture failed validation: ${report.issues
         .map((issue) => `${issue.path}: ${issue.message}`)
         .join('; ')}`,
     );
@@ -157,7 +253,9 @@ async function main(): Promise<void> {
     }
     const workspaceId = workspace.id;
 
-    await enableProviders(platform);
+    const actor = await platformActor(platform);
+    await enableProviders(platform, actor);
+    await configureMockApplication(platform, actor);
 
     const vault = new SocialTokenVault({
       env: { SOCIAL_TOKEN_VAULT_KEK: E2E_SOCIAL_KEK } as NodeJS.ProcessEnv,

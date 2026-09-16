@@ -11,7 +11,7 @@ import {
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { processAssetJob } from './processors/assets';
 import { processIngestionJob } from './processors/ingestion';
-import { processPublishJob } from './processors/publishing';
+import { processPublishJob, processVerifyJob } from './processors/publishing';
 
 /**
  * Worker entrypoint.
@@ -143,16 +143,28 @@ async function main(): Promise<void> {
         case 'social.publish-post':
           await processPublishJob(payload);
           return;
+        case 'social.verify-post':
+          /*
+           * THE RECOVERY PATH, AND IT CANNOT PUBLISH (D-143). A different
+           * processor reaching a different pipeline method, so a verification
+           * message has no route to `publish()` at all — not a guarded one,
+           * none.
+           */
+          await processVerifyJob(payload);
+          return;
         default: {
           /*
-           * EXHAUSTIVENESS ON THE DISCRIMINANT, not on the payload. The union
-           * has one member today, and TypeScript narrows a single interface's
-           * literal field to `never` here while it will not narrow the
-           * interface itself — so this is the form that both compiles now and
-           * becomes a compile error the day a second kind is added and left
-           * unhandled.
+           * EXHAUSTIVENESS, ON THE PAYLOAD ITSELF now that the union has two
+           * members. (While it had one, TypeScript narrowed only the literal
+           * `kind` field here and not the interface, so this assignment had to
+           * name `payload.kind`; with a real union it narrows the payload to
+           * `never`, and `payload.kind` no longer type-checks at all.)
+           *
+           * Either way the property this gives us is the one that matters: the
+           * day a third kind is added and left unhandled, this line stops
+           * compiling rather than the message being silently dropped.
            */
-          const unroutable: never = payload.kind;
+          const unroutable: never = payload;
           throw new Error(`Unroutable publish job: ${JSON.stringify(unroutable)}`);
         }
       }

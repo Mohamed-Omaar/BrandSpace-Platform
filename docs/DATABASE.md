@@ -1407,3 +1407,37 @@ The guarantee that results is precise, and is worth stating precisely rather tha
   longer exists has no subject.
 - The **platform identity keeps `DELETE`**, because erasure on request is a platform operation and must
   remain possible.
+
+### 17.4 The pending grant on `social_oauth_state` (D-142)
+
+A grant that offers more than one publishable target does not produce a connection at the callback,
+because **a connection row IS a chosen target** and nobody has chosen one. The exchanged token is
+sealed onto the in-flight authorization instead:
+
+| Column                                           | Holds                                                                                                                                                                                                      |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pendingCiphertext` … `pendingEncryptionContext` | The AES-256-GCM envelope, wrapped data key and authenticated context. The same protection a `social_credential` gets, under the same key domain (D-136), because a pending grant **is** a live credential. |
+| `offeredTargets`                                 | What the provider said this grant can publish to. The customer's own page names, under the customer's own RLS. No token.                                                                                   |
+| `grantedScopes`                                  | Carried across the pause so the connection records the same scopes it would have recorded directly.                                                                                                        |
+| `selectionTokenHash`                             | SHA-256 of the single-use secret authorising the choice. Unique platform-wide, for the same reason `stateHash` is.                                                                                         |
+| `selectionExpiresAt`, `selectionConsumedAt`      | The same TTL the authorization had, and the same conditional-UPDATE consumption.                                                                                                                           |
+
+`social_oauth_state_pending_grant_is_whole` makes the two half-states unrepresentable: a selection
+secret with no sealed token is a selection that cannot complete, and a sealed token with no secret is
+a token nobody can reach and nobody can revoke. Once the grant becomes a credential every one of
+these columns is set back to NULL.
+
+### 17.5 Recovering a stalled claim (D-143)
+
+`publish_job` gained no column for this — `claimedAt` already existed, written by the conditional
+claim — but it gained the index that makes finding a stalled row a lookup:
+
+```sql
+CREATE INDEX "publish_job_status_claimedAt_idx" ON "publish_job" ("status", "claimedAt");
+```
+
+A job is stale when `status = 'PUBLISHING'` and `claimedAt` is older than
+`publishing.dispatch.claimLeaseSeconds`. That is evidence its worker is gone and **evidence of
+nothing else**: recovery moves it to `VERIFICATION_PENDING` and asks the provider, or leaves it for a
+person where the provider cannot be asked. The move is a conditional UPDATE, so a worker that turns
+out to be alive and settles a moment later simply wins — its real outcome lands on top of the guess.

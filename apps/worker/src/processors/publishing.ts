@@ -1,7 +1,7 @@
 import type { Environment } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
-import type { PublishSocialPostPayload } from '@brandspace/jobs';
+import type { PublishSocialPostPayload, VerifySocialPostPayload } from '@brandspace/jobs';
 import {
   createConnectorRegistry,
   PublishPipelineService,
@@ -63,10 +63,17 @@ function currentEnvironment(): Environment {
  * refreshing a token) live in `apps/api`, the designated platform surface.
  */
 
-export async function processPublishJob(payload: PublishSocialPostPayload): Promise<void> {
+/**
+ * Build the pipeline for one workspace. Shared by both processors so the
+ * publish path and the verification path cannot end up with different
+ * configuration, a different registry or a different notifier.
+ */
+async function withPipeline<T>(
+  workspaceId: string,
+  fn: (pipeline: PublishPipelineService) => Promise<T>,
+): Promise<T> {
   const environment = currentEnvironment();
-
-  const result = await withWorkspace(payload.workspaceId, async (db) => {
+  return withWorkspace(workspaceId, async (db) => {
     // THE SAME CONFIGURATION THE DASHBOARD READS, through the same tenant-side
     // projection. A worker with its own retry schedule would be a second set of
     // settings an operator cannot see (CLAUDE.md §2.2).
@@ -75,7 +82,7 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
 
     const pipeline = new PublishPipelineService({
       db,
-      workspaceId: payload.workspaceId,
+      workspaceId,
       policy,
       registry: createConnectorRegistry({ policy, environment }),
       vault: new SocialTokenVault(),
@@ -87,7 +94,7 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
        */
       approvals: new ContentApprovalService({
         db,
-        workspaceId: payload.workspaceId,
+        workspaceId,
         policy: contentPolicy,
       }),
       /*
@@ -98,15 +105,15 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
        */
       notifier: publishNotifier({
         db,
-        workspaceId: payload.workspaceId,
+        workspaceId,
         accountNameFor: async (jobId) => {
           const job = await db.publishJob.findFirst({
-            where: { id: jobId, workspaceId: payload.workspaceId },
+            where: { id: jobId, workspaceId },
             select: { socialConnectionId: true },
           });
           if (!job) return null;
           const connection = await db.socialConnection.findFirst({
-            where: { id: job.socialConnectionId, workspaceId: payload.workspaceId },
+            where: { id: job.socialConnectionId, workspaceId },
             select: { displayName: true },
           });
           return connection ? { accountName: connection.displayName } : null;
@@ -114,8 +121,14 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
       }),
     });
 
-    return pipeline.execute(payload.publishJobId);
+    return fn(pipeline);
   });
+}
+
+export async function processPublishJob(payload: PublishSocialPostPayload): Promise<void> {
+  const result = await withPipeline(payload.workspaceId, (pipeline) =>
+    pipeline.execute(payload.publishJobId),
+  );
 
   log.info('publish job finished', {
     workspaceId: payload.workspaceId,
@@ -124,6 +137,34 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
     ...(result.failureClass ? { failureClass: result.failureClass } : {}),
     // The EXTERNAL POST ID, which is public on the platform and is the one
     // thing support needs to find the post. No token, no caption, no account.
+    ...(result.externalPostId ? { externalPostId: result.externalPostId } : {}),
+  });
+}
+
+/**
+ * Recover a job whose worker died mid-flight — by asking, never by re-sending.
+ *
+ * THIS FUNCTION CALLS `recoverStaleClaim()` AND NOTHING ELSE, and that is the
+ * safety property rather than a stylistic preference (D-143). There is no
+ * branch here that reaches `execute()`, so a `social.verify-post` message has
+ * no route to `adapter.publish()` at all — a duplicate delivery of one, a
+ * malformed one, or one whose job has since finished all do the same harmless
+ * thing.
+ *
+ * The provider lookup that resolves it is an external call, which is why it
+ * runs here rather than in the API's sweep: unbounded work against somebody
+ * else's infrastructure belongs in a worker, exactly as publishing does.
+ */
+export async function processVerifyJob(payload: VerifySocialPostPayload): Promise<void> {
+  const result = await withPipeline(payload.workspaceId, (pipeline) =>
+    pipeline.recoverStaleClaim(payload.publishJobId),
+  );
+
+  log.info('publish job verification finished', {
+    workspaceId: payload.workspaceId,
+    jobId: result.jobId,
+    status: result.status,
+    ...(result.failureClass ? { failureClass: result.failureClass } : {}),
     ...(result.externalPostId ? { externalPostId: result.externalPostId } : {}),
   });
 }

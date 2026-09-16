@@ -222,6 +222,8 @@ jobs:
           # secret is used in CI.
           SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
           PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          # Phase 6 — where the OAuth callback sends the browser back (D-141).
+          PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
           BRANDSPACE_API_URL=http://127.0.0.1:3002
           ENVEOF
 
@@ -330,6 +332,8 @@ jobs:
           # secret is used in CI.
           SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
           PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          # Phase 6 — where the OAuth callback sends the browser back (D-141).
+          PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
           BRANDSPACE_API_URL=http://127.0.0.1:3002
           ENVEOF
 

@@ -239,8 +239,41 @@ export class PublishPipelineService {
       orderBy: [{ platformKey: 'asc' }, { id: 'asc' }],
     });
 
-    let created = 0;
-    let existing = 0;
+    /*
+     * THE ROWS ARE BUILT FIRST AND WRITTEN IN ONE STATEMENT, and that is the
+     * whole concurrency fix (D-144).
+     *
+     * The first version asked `findFirst` whether the job existed and then
+     * called `create`. Two sweeps running together — the scheduler and a manual
+     * dispatch, or two API instances, which is the normal deployment — both see
+     * no row, both insert, and the unique index correctly refuses the second.
+     * Correct DATA, and a thrown `P2002` that aborts the loser's whole
+     * workspace pass, so every later slot in that batch goes unmaterialised
+     * because an earlier one was already done. The check-then-act was never
+     * atomic; the index was doing all the work and reporting it as a crash.
+     *
+     * `createMany` with `skipDuplicates` compiles to `INSERT ... ON CONFLICT DO
+     * NOTHING`, which is ONE statement: the conflict is resolved inside
+     * PostgreSQL, the loser inserts nothing and raises nothing, and `count` is
+     * the number of rows that actually landed. `existing` is then arithmetic
+     * rather than a second query, and it is exact under concurrency, which the
+     * `findFirst` answer never was.
+     */
+    const rows: {
+      workspaceId: string;
+      brandId: string;
+      calendarSlotId: string;
+      contentItemId: string;
+      contentVariantId: string;
+      socialConnectionId: string;
+      provider: SocialProvider;
+      status: 'QUEUED';
+      idempotencyKey: string;
+      scheduledAtUtc: Date;
+      maxAttempts: number;
+      nextAttemptAt: Date;
+      createdByUserId: string | null;
+    }[] = [];
 
     for (const connection of connections) {
       /*
@@ -257,41 +290,34 @@ export class PublishPipelineService {
       const capabilities = capabilitiesFor(this.#policy, connection.provider);
       if (!capabilities.enabled) continue;
 
-      const idempotencyKey = publishIdempotencyKey({
+      rows.push({
         workspaceId: this.#workspaceId,
+        brandId: slot.brandId,
         calendarSlotId: slot.id,
-        socialConnectionId: connection.id,
+        contentItemId: item.id,
         contentVariantId: variant.id,
-      });
-
-      const already = await this.#db.publishJob.findFirst({
-        where: { workspaceId: this.#workspaceId, idempotencyKey },
-        select: { id: true },
-      });
-      if (already) {
-        existing += 1;
-        continue;
-      }
-
-      await this.#db.publishJob.create({
-        data: {
+        socialConnectionId: connection.id,
+        provider: connection.provider,
+        status: 'QUEUED',
+        idempotencyKey: publishIdempotencyKey({
           workspaceId: this.#workspaceId,
-          brandId: slot.brandId,
           calendarSlotId: slot.id,
-          contentItemId: item.id,
-          contentVariantId: variant.id,
           socialConnectionId: connection.id,
-          provider: connection.provider,
-          status: 'QUEUED',
-          idempotencyKey,
-          scheduledAtUtc: slot.scheduledAtUtc,
-          maxAttempts: this.#policy.retry.maxAttempts,
-          nextAttemptAt: this.#clock.now(),
-          createdByUserId: slot.createdByUserId,
-        },
+          contentVariantId: variant.id,
+        }),
+        scheduledAtUtc: slot.scheduledAtUtc,
+        maxAttempts: this.#policy.retry.maxAttempts,
+        nextAttemptAt: this.#clock.now(),
+        createdByUserId: slot.createdByUserId,
       });
-      created += 1;
     }
+
+    const inserted =
+      rows.length === 0
+        ? { count: 0 }
+        : await this.#db.publishJob.createMany({ data: rows, skipDuplicates: true });
+    const created = inserted.count;
+    const existing = rows.length - created;
 
     if (created > 0) {
       await this.#db.calendarSlot.update({
@@ -323,6 +349,22 @@ export class PublishPipelineService {
    * THE CLAIM IS THE CONCURRENCY CONTROL. `updateMany` with the prior status in
    * the predicate either matches one row or none; two workers cannot both take
    * it, and a job whose status moved underneath us is simply not ours.
+   *
+   * ONLY `QUEUED` ENTERS THIS METHOD, AND THAT IS A CORRECTNESS RULE, NOT A
+   * TIDINESS ONE (D-143).
+   *
+   * The first version claimed `QUEUED` OR `VERIFICATION_PENDING` and then ran
+   * straight into `adapter.publish()`. `VERIFICATION_PENDING` means exactly one
+   * thing: the request left, the answer never came back, and THE POST MAY BE
+   * LIVE. Publishing such a job is the single outcome this whole pipeline is
+   * built to prevent, and a duplicate BullMQ delivery — which the queue
+   * guarantees is possible, not merely conceivable — was enough to cause it.
+   * The header of this file claimed "an uncertain outcome is never retried"
+   * while the claim predicate said otherwise; the predicate was what ran.
+   *
+   * An uncertain outcome now has its own path, `verify()`, which has no call to
+   * `publish()` in it at all — not a guarded one, none — so the rule holds by
+   * construction rather than by remembering.
    */
   async execute(jobId: string): Promise<ExecuteResult> {
     const now = this.#clock.now();
@@ -330,17 +372,23 @@ export class PublishPipelineService {
       where: {
         id: jobId,
         workspaceId: this.#workspaceId,
-        status: { in: ['QUEUED', 'VERIFICATION_PENDING'] },
+        // QUEUED AND NOTHING ELSE. See above.
+        status: 'QUEUED',
       },
-      data: { status: 'PUBLISHING', claimedAt: now, startedAt: now },
+      data: {
+        status: 'PUBLISHING',
+        claimedAt: now,
+        startedAt: now,
+      },
     });
     if (claimed.count !== 1) {
       const current = await this.#db.publishJob.findFirst({
         where: { id: jobId, workspaceId: this.#workspaceId },
       });
       if (!current) throw publishJobNotFound();
-      // NOT AN ERROR. A duplicate delivery finding the job already finished is
-      // the system working: the row is the state, and it says what happened.
+      // NOT AN ERROR. A duplicate delivery finding the job already finished —
+      // or already claimed, or awaiting verification — is the system working:
+      // the row is the state, and it says what happened. Nothing is sent.
       return {
         jobId,
         status: current.status,
@@ -680,6 +728,252 @@ export class PublishPipelineService {
   }
 
   // -------------------------------------------------------------------------
+  // Verification and recovery: deciding what happened, never re-sending.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Resolve a job whose outcome is UNKNOWN — by asking, never by re-sending.
+   *
+   * THIS METHOD CONTAINS NO CALL TO `adapter.publish()`, AND THAT IS THE POINT
+   * (D-143). `VERIFICATION_PENDING` means the request left and the answer did
+   * not come back, so the post may already be live. There are exactly three
+   * honest answers and this returns one of them:
+   *
+   *   - THE PROVIDER CAN BE ASKED AND SAYS THE POST IS THERE. It published. We
+   *     record the external id we were given and stop.
+   *   - THE PROVIDER CAN BE ASKED AND SAYS IT IS NOT THERE. Nothing went out,
+   *     so the job may go back on the queue and be sent — once — through the
+   *     ordinary path. The provider's answer is what authorises that, not a
+   *     timer and not an assumption.
+   *   - THE PROVIDER CANNOT BE ASKED. We stop, and a human decides. A provider
+   *     with `supportsPostLookup: false` is NEVER automatically resent, no
+   *     matter how long it has been waiting: elapsed time is not evidence.
+   *
+   * IDEMPOTENT AND SAFE TO CALL REPEATEDLY. A job in any other status is
+   * returned unchanged, so a duplicate delivery does nothing.
+   */
+  async verify(jobId: string): Promise<ExecuteResult> {
+    const job = await this.#db.publishJob.findFirst({
+      where: { id: jobId, workspaceId: this.#workspaceId },
+    });
+    if (!job) throw publishJobNotFound();
+    if (job.status !== 'VERIFICATION_PENDING') {
+      return {
+        jobId: job.id,
+        status: job.status,
+        failureClass: job.failureClass,
+        externalPostId: job.externalPostId,
+      };
+    }
+
+    const adapter = this.#registry.get(job.provider);
+    const lookup = adapter.findPostByIdempotencyKey;
+    if (!adapter.capabilities.supportsPostLookup || !lookup) {
+      // NOT A FAILURE AND NOT A RETRY. It stays where a human can see it.
+      return {
+        jobId: job.id,
+        status: 'VERIFICATION_PENDING',
+        failureClass: job.failureClass,
+        externalPostId: null,
+      };
+    }
+
+    const connection = await this.#db.socialConnection.findFirst({
+      where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
+    });
+    if (!connection) return this.#fail(job, 'NOT_CONNECTED', 'verify.not_connected', null);
+
+    const credentials = await this.#credentialsFor(connection.id);
+    if (!credentials) return this.#fail(job, 'NOT_CONNECTED', 'verify.no_credential', null);
+
+    let found: { externalPostId: string; externalPostUrl: string | null } | null;
+    try {
+      found = await lookup.call(adapter, {
+        externalAccountId: connection.externalAccountId,
+        idempotencyKey: job.idempotencyKey,
+        credentials,
+      });
+    } catch {
+      /*
+       * WE ASKED AND COULD NOT GET AN ANSWER. That is not "it did not publish";
+       * it is the same uncertainty we started with, so the job does not move.
+       * The provider's own words are not repeated for the usual reason.
+       */
+      return {
+        jobId: job.id,
+        status: 'VERIFICATION_PENDING',
+        failureClass: job.failureClass,
+        externalPostId: null,
+      };
+    }
+
+    if (found) return this.#succeed(job, found.externalPostId, found.externalPostUrl);
+
+    /*
+     * THE PROVIDER SAYS NOTHING LANDED. Only now may this be sent again, and
+     * only through the ordinary QUEUED path with its attempt budget intact — so
+     * a verification that keeps answering "not there" cannot loop for ever.
+     */
+    const attemptCount = job.attemptCount;
+    if (attemptCount >= job.maxAttempts) {
+      return this.#fail(job, job.failureClass ?? 'TIMEOUT', 'verify.exhausted', attemptCount);
+    }
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        claimedAt: null,
+        failureCode: 'verify.not_published',
+        nextAttemptAt: this.#clock.now(),
+      },
+    });
+    return {
+      jobId: job.id,
+      status: 'QUEUED',
+      failureClass: job.failureClass,
+      externalPostId: null,
+    };
+  }
+
+  /**
+   * Recover a job whose worker died between the claim and the answer.
+   *
+   * THE GAP THIS CLOSES (D-143). `execute()` moves a job to PUBLISHING before
+   * the external call — the right order, because if the process dies in between
+   * the row already says "we may have sent this". But the reconciliation sweep
+   * only ever re-dispatched QUEUED jobs, so such a row stayed PUBLISHING for
+   * ever, with the post possibly live, the customer shown "Publishing", and
+   * nothing in the system looking at it again.
+   *
+   * THE LEASE IS THE EVIDENCE OF DEATH, AND IT IS NOT EVIDENCE OF ANYTHING
+   * ELSE. Past `claimLeaseSeconds` the claim is treated as abandoned and the
+   * job moves to `VERIFICATION_PENDING` — the state that means UNKNOWN — and is
+   * then resolved by `verify()`, which asks the provider or stops. A timer
+   * never authorises a send.
+   *
+   * THE MOVE IS A CONDITIONAL UPDATE, so a worker that is alive after all and
+   * settles a millisecond later simply wins: its `PUBLISHED` or `FAILED` write
+   * lands on top, and the row records the real outcome rather than the guess.
+   */
+  async recoverStaleClaim(jobId: string): Promise<ExecuteResult> {
+    const now = this.#clock.now();
+    const deadline = new Date(now.getTime() - this.#policy.dispatch.claimLeaseSeconds * 1_000);
+
+    const moved = await this.#db.publishJob.updateMany({
+      where: {
+        id: jobId,
+        workspaceId: this.#workspaceId,
+        status: 'PUBLISHING',
+        claimedAt: { lt: deadline },
+      },
+      data: {
+        status: 'VERIFICATION_PENDING',
+        // TIMEOUT is the truthful class: the request left and no answer came.
+        failureClass: 'TIMEOUT',
+        failureCode: 'recovery.claim_expired',
+        nextAttemptAt: null,
+      },
+    });
+    if (moved.count !== 1) {
+      const current = await this.#db.publishJob.findFirst({
+        where: { id: jobId, workspaceId: this.#workspaceId },
+      });
+      if (!current) throw publishJobNotFound();
+      return {
+        jobId: current.id,
+        status: current.status,
+        failureClass: current.failureClass,
+        externalPostId: current.externalPostId,
+      };
+    }
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'social.post.claim_recovered',
+      actorType: 'SYSTEM',
+      resourceType: 'PublishJob',
+      resourceId: jobId,
+      brandId: undefined,
+      before: { status: 'PUBLISHING' },
+      after: { status: 'VERIFICATION_PENDING', reason: 'claim_expired' },
+    });
+
+    // AND THEN ASK. A provider that can be queried resolves in this same pass;
+    // one that cannot stays VERIFICATION_PENDING for a human.
+    return this.verify(jobId);
+  }
+
+  /**
+   * Resolve a verification by hand, when the provider cannot be asked.
+   *
+   * THE ONLY WAY AN UNVERIFIABLE JOB LEAVES `VERIFICATION_PENDING`, and it
+   * requires a person to state which of the two things happened. That is the
+   * honest shape: we genuinely do not know, the provider cannot tell us, and
+   * guessing in either direction has a cost — a duplicate post one way, a
+   * missing one the other.
+   *
+   * `PUBLISHED` NEEDS THE EXTERNAL ID. Not bureaucracy: the database CHECK
+   * `publish_job_published_has_post` refuses a published job without one, and a
+   * human who has found the post in order to confirm it is holding its id.
+   */
+  async resolveVerification(input: {
+    jobId: string;
+    actorUserId: string;
+    brandScope: readonly string[];
+    resolution: 'PUBLISHED' | 'NOT_PUBLISHED';
+    externalPostId?: string | undefined;
+    externalPostUrl?: string | undefined;
+  }): Promise<ExecuteResult> {
+    const job = await this.#db.publishJob.findFirst({
+      where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
+    });
+    if (!job) throw publishJobNotFound();
+    if (job.status !== 'VERIFICATION_PENDING') throw publishJobNotRetryable();
+
+    if (input.resolution === 'PUBLISHED') {
+      if (!input.externalPostId) throw publishJobNotRetryable();
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'social.post.verification_resolved',
+        actorType: 'USER',
+        actorId: input.actorUserId,
+        resourceType: 'PublishJob',
+        resourceId: job.id,
+        brandId: job.brandId,
+        before: { status: job.status },
+        after: { resolution: 'PUBLISHED' },
+      });
+      return this.#succeed(job, input.externalPostId, input.externalPostUrl ?? null);
+    }
+
+    const now = this.#clock.now();
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        // A PERSON DECIDED TO SEND IT, so the budget starts again — same rule
+        // as a manual retry, and for the same reason.
+        attemptCount: 0,
+        maxAttempts: this.#policy.retry.maxAttempts,
+        nextAttemptAt: now,
+        completedAt: null,
+        claimedAt: null,
+        failureClass: null,
+        failureCode: null,
+      },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'social.post.verification_resolved',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'PublishJob',
+      resourceId: job.id,
+      brandId: job.brandId,
+      before: { status: job.status },
+      after: { resolution: 'NOT_PUBLISHED', status: 'QUEUED' },
+    });
+    return { jobId: job.id, status: 'QUEUED', failureClass: null, externalPostId: null };
+  }
+
+  // -------------------------------------------------------------------------
   // Customer-initiated transitions.
   // -------------------------------------------------------------------------
 
@@ -734,6 +1028,19 @@ export class PublishPipelineService {
    * REFUSED FOR CLASSES WHERE RETRYING CANNOT HELP. `AUTH_REVOKED` needs a
    * reconnection, not another attempt, and offering a button that cannot work
    * is worse than not offering one.
+   *
+   * `FAILED` ONLY. `VERIFICATION_PENDING` IS NOT RETRYABLE, AND THAT WAS A REAL
+   * HOLE (D-143). The first version accepted both, and `TIMEOUT` and
+   * `PLATFORM_UNAVAILABLE` are both `indeterminate: true` AND
+   * `manualRetryUseful: true` — so a customer pressing Retry on a post whose
+   * outcome was deliberately recorded as UNKNOWN sent it again. A button in the
+   * product, two clicks from the publishing history, that produced exactly the
+   * duplicate post the indeterminate state exists to prevent.
+   *
+   * An unknown outcome is not a failure to retry, it is a question to answer.
+   * `resolveVerification()` is where it is answered, by a person saying which
+   * of the two things happened — and only a "NOT_PUBLISHED" from that person,
+   * or a provider lookup in `verify()`, ever puts such a job back on the queue.
    */
   async retry(input: {
     jobId: string;
@@ -744,10 +1051,17 @@ export class PublishPipelineService {
       where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
     });
     if (!job) throw publishJobNotFound();
-    if (job.status !== 'FAILED' && job.status !== 'VERIFICATION_PENDING') {
+    if (job.status !== 'FAILED') throw publishJobNotRetryable();
+    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
       throw publishJobNotRetryable();
     }
-    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
+    /*
+     * AND NOT AN INDETERMINATE CLASS EVEN WHEN FAILED. A job that exhausted its
+     * attempts on a TIMEOUT is a job whose last request may have landed; it
+     * reaches FAILED through `#fail`, and retrying it is the same duplicate by
+     * a longer route.
+     */
+    if (job.failureClass && FAILURE_BEHAVIOUR[job.failureClass].indeterminate) {
       throw publishJobNotRetryable();
     }
 

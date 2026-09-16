@@ -49,6 +49,31 @@ function sourceFiles(app: string): string[] {
   return found;
 }
 
+/**
+ * Read a file that may have vanished since it was listed.
+ *
+ * WHY THIS IS NOT A WEAKENING. `module-boundaries.test.ts` proves the ESLint
+ * boundaries are real by PLANTING `apps/dashboard/src/__boundary_probe.ts`,
+ * running the linter against it and deleting it again. The two suites run in
+ * the same pass, so this one can list a probe and then read it after the other
+ * has removed it — an `ENOENT` that says nothing at all about the boundary
+ * under test. (`brand-scope-predicate-gate.test.ts` was corrected for exactly
+ * this, and this is the second instance of the same race.)
+ *
+ * A FILE THAT IS NO LONGER THERE CANNOT VIOLATE ANYTHING, so it is skipped
+ * rather than failed. Every file that IS there is still read and still checked,
+ * and the gate's own strength is asserted below by planting a violation and
+ * confirming it is caught.
+ */
+function readIfPresent(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 describe('the customer application cannot reach platform-only modules', () => {
   const files = sourceFiles('dashboard');
 
@@ -65,7 +90,8 @@ describe('the customer application cannot reach platform-only modules', () => {
     ['platform-client', 'the platform client has cross-tenant visibility'],
   ])('imports %s nowhere (%s)', (specifier) => {
     for (const file of files) {
-      const source = readFileSync(file, 'utf8');
+      const source = readIfPresent(file);
+      if (source === null) continue;
       expect(source, `${path.relative(repoRoot, file)} imports ${specifier}`).not.toContain(
         `from '${specifier}'`,
       );
@@ -75,14 +101,18 @@ describe('the customer application cannot reach platform-only modules', () => {
 
   it('never references the platform connection string', () => {
     for (const file of files) {
-      expect(readFileSync(file, 'utf8')).not.toContain('DATABASE_PLATFORM_URL');
+      const source = readIfPresent(file);
+      if (source === null) continue;
+      expect(source, path.relative(repoRoot, file)).not.toContain('DATABASE_PLATFORM_URL');
     }
   });
 
   it('never calls asPlatform()', () => {
     // The one audited cross-tenant entrance is not for tenant surfaces.
     for (const file of files) {
-      expect(readFileSync(file, 'utf8')).not.toContain('asPlatform(');
+      const source = readIfPresent(file);
+      if (source === null) continue;
+      expect(source, path.relative(repoRoot, file)).not.toContain('asPlatform(');
     }
   });
 

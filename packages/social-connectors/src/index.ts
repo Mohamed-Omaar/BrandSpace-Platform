@@ -52,6 +52,7 @@ export type {
   ApplicationResolver,
   CompleteConnectionResult,
   OAuthActor,
+  PendingSelectionView,
   SocialOAuthOptions,
   StartConnectionResult,
 } from './oauth';

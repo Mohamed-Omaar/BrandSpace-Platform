@@ -91,12 +91,28 @@ export interface PublishSocialPostPayload extends TenantJobPayload {
 }
 
 /**
+ * Recover a job whose worker died between the claim and the answer (D-143).
+ *
+ * A SEPARATE KIND, NOT A FLAG ON THE ONE ABOVE, and the separation is the
+ * safety property. `social.publish-post` may send; `social.verify-post` may
+ * only ASK. A boolean on a single payload would put both behaviours behind one
+ * code path and one `if`, which is how an uncertain outcome gets re-sent by a
+ * mistake nobody notices — the exact defect this whole mechanism exists to
+ * prevent. Two kinds means the publishing path is unreachable from a
+ * verification message, by construction.
+ */
+export interface VerifySocialPostPayload extends TenantJobPayload {
+  readonly kind: 'social.verify-post';
+  readonly publishJobId: string;
+}
+
+/**
  * Everything the `publish-jobs` queue carries.
  *
- * A UNION OF ONE, on purpose. The discriminant is what makes adding a second
- * kind later a compile error in the consumer rather than a silently dropped
- * message, and declaring the shape now costs nothing.
+ * The discriminant is what makes adding a kind a compile error in the consumer
+ * rather than a silently dropped message.
  */
-export type PublishJobsPayload = PublishSocialPostPayload;
+export type PublishJobsPayload = PublishSocialPostPayload | VerifySocialPostPayload;
 
 export const PUBLISH_SOCIAL_POST = 'social.publish-post' as const;
+export const VERIFY_SOCIAL_POST = 'social.verify-post' as const;

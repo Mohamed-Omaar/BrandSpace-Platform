@@ -2075,3 +2075,60 @@ guards, because that column is the one place a raw provider body would otherwise
 - **The local key provider is still the only implemented one.** `KmsKeyProvider` throws, for both key
   domains, and `createKeyProvider` refuses to build a local provider when `NODE_ENV=production` — so
   production without a KMS is a startup failure rather than a silent downgrade (F-09).
+
+### 28.7 The second review pass — five findings, and what each one actually was
+
+The first Phase 6 head passed every check CI ran and carried five defects CI did not cover. The
+pattern is worth naming because it is the same one §27.6 and §27.7 record: **a control is only as
+good as the thing that exercises it**, and here nothing exercised the most important path at all.
+
+**P6-R1 — the OAuth callback was unreachable, in two independent ways.** `callbackUriFor()` handed
+every provider `/v1/social/callback/<provider>`; the API registered `POST /v1/social/callback` and
+parsed a JSON body. A provider redirects a browser with a top-level **GET** carrying `code` and
+`state` in the query string — there is no body and no way for it to send one. The flow could never
+have completed, and the end-to-end suite deliberately never pressed Connect, so nothing noticed.
+
+The identity question was the substantive half. The customer session cookie is
+`__Host-bs_customer_session`, and the `__Host-` prefix **forbids a `Domain` attribute** — the cookie
+is locked to the exact origin that set it. In the staging topology (`staging.brandspace.cc` and
+`api-staging.brandspace.cc`) the browser will not send it to the API, and it must not: widening it to
+`.brandspace.cc` would hand every subdomain the session, which is precisely what the prefix exists to
+prevent. So the callback resolves the workspace from **the state row** — which is what OAuth state is
+for — on the platform client, and reads no session at all (D-141). PKCE, exact redirect-URI matching,
+single-use consumption by conditional UPDATE and post-grant scope verification are all unchanged. The
+route answers only a `303` to the dashboard with one coarse word; expired, replayed, forged, foreign
+and a failed exchange are indistinguishable, and a provider's own `error_description` is discarded
+rather than echoed.
+
+**P6-R2 — token refresh bypassed BrandScope.** The route resolved `caller.brandScope` and then called
+`service.refresh(connectionId)`, which loaded the connection by id and workspace alone. It returns
+almost nothing, so it reads like a small leak. It is not a leak at all: it is a **write across a
+boundary the member cannot read across** — a token rotated, the previous version retired, the
+connection's status moved, and an external call made to the provider as that brand. The scope is now
+in the `where` (D-132/D-134), so the refused path never retrieves the row, never opens a credential
+and never rotates anything.
+
+**P6-R3 — the publish-once state machine could resend, and could strand.** `execute()` claimed
+`QUEUED` **or** `VERIFICATION_PENDING` and then ran into `adapter.publish()`. `VERIFICATION_PENDING`
+means the request left and no answer came back — the post may be live — so a duplicate queue
+delivery re-sent it. The Retry button reached the same place: `TIMEOUT` and `PLATFORM_UNAVAILABLE`
+are both `indeterminate` **and** `manualRetryUseful`, so two clicks in the product did it. And the
+opposite gap: the sweep dispatched only `QUEUED`, so a worker that died after moving a job to
+`PUBLISHING` left that row stalled indefinitely with the post possibly live and the customer shown
+"Publishing". The paths are now separate — `verify()` contains no call to `publish()` — and a claim
+older than `dispatch.claimLeaseSeconds` authorises a **question**, never a send (D-143).
+
+**P6-R4 — materialisation was check-then-act.** `findFirst` then `create`. Two sweeps running
+together, which is the normal deployment rather than an edge case, both see no row, both insert, and
+the unique index correctly refuses the second — aborting the loser's whole workspace pass, so every
+later slot in that batch goes unmaterialised. Now one `INSERT ... ON CONFLICT DO NOTHING` (D-144).
+
+**P6-R5 — a multi-target grant silently bound the first page.** `complete()` took `targets[0]`. Meta
+returns every Page a person administers; the ordering is an accident of their API, and the
+consequence of getting it wrong is a customer's scheduled posts published, publicly, to the wrong
+page of their own. The flow now pauses and asks (D-142), and the token waits sealed on the
+authorization row under the same envelope a stored credential gets.
+
+**Every one of the five ships with a regression test confirmed to FAIL against the previous code**,
+run rather than asserted — including the end-to-end callback, which fails four ways the moment the
+route is registered the way it was.

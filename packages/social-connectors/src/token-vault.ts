@@ -125,4 +125,34 @@ export class SocialTokenVault {
   async openVerifier(material: EncryptedMaterial): Promise<string> {
     return decryptSecret(material, this.#keyProvider);
   }
+
+  /**
+   * Seal an exchanged token that has no connection to belong to yet (D-142).
+   *
+   * A GRANT OFFERING SEVERAL TARGETS PAUSES BEFORE A CONNECTION EXISTS, because
+   * a connection row implies a chosen target and nobody has chosen one. The
+   * token is real from the moment of the exchange, though, so it is sealed with
+   * the same envelope, the same AEAD and the same key domain a stored
+   * credential gets — the only difference is the context it is bound to, which
+   * names the authorization rather than a connection version.
+   */
+  async sealPendingGrant(input: {
+    workspaceId: string;
+    stateHash: string;
+    material: TokenMaterial;
+  }): Promise<EncryptedMaterial> {
+    return encryptSecret(
+      JSON.stringify({
+        accessToken: input.material.accessToken,
+        refreshToken: input.material.refreshToken,
+      }),
+      `brandspace:social-pending-grant:v1:${input.workspaceId}:${input.stateHash}`,
+      this.#keyProvider,
+    );
+  }
+
+  /** Open a sealed pending grant. Same shape as `open`, different context. */
+  async openPendingGrant(material: EncryptedMaterial): Promise<TokenMaterial> {
+    return this.open(material);
+  }
 }

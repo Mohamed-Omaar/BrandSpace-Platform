@@ -3304,6 +3304,41 @@ model SocialOAuthState {
   consumedAt      DateTime? @db.Timestamptz(6)
   createdAt       DateTime @default(now()) @db.Timestamptz(6)
 
+  // --- The pending grant, when one authorization offered several targets ----
+  //
+  // D-142. A grant that exposes more than one page, channel or organization is
+  // not finished at the callback: BrandSpace must not pick one on the customer
+  // behalf. The exchanged token is sealed HERE rather than written to a
+  // connection, because a connection row that exists before the target is known
+  // is a connection bound to a target nobody chose.
+  //
+  // Every one of these is NULL for a single-target grant, which never pauses.
+
+  /// The exchanged TokenBundle, sealed under its own encryption context. It is
+  /// the same material a `social_credential` holds and is protected identically.
+  pendingCiphertext        String?
+  pendingIv                String?
+  pendingAuthTag           String?
+  pendingWrappedDataKey    String?
+  pendingKeyProvider       String?
+  pendingKeyId             String?
+  pendingEncryptionContext String?
+
+  /// What the provider said this grant can publish to. The customer own pages,
+  /// under the customer own RLS. No token, and nothing from another workspace.
+  offeredTargets Json?
+
+  /// What the provider ACTUALLY granted, carried across the selection step so
+  /// the connection records the same scopes it would have recorded directly.
+  grantedScopes String[] @default([])
+
+  /// SHA-256 of the single-use secret that authorises the CHOICE. Held by the
+  /// browser that completed the callback; unique platform-wide for the same
+  /// reason `stateHash` is.
+  selectionTokenHash  String?   @unique
+  selectionExpiresAt  DateTime? @db.Timestamptz(6)
+  selectionConsumedAt DateTime? @db.Timestamptz(6)
+
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "social_oauth_state_brand_fkey")
 
@@ -3380,6 +3415,10 @@ model PublishJob {
   @@index([workspaceId, contentItemId])
   @@index([status, nextAttemptAt])
   @@index([status, scheduledAtUtc])
+  /// The stale-claim sweep (D-143). A job PUBLISHING with an expired claim is
+  /// one whose worker died mid-flight; this makes finding it a lookup rather
+  /// than a scan of every publishing job on the platform.
+  @@index([status, claimedAt])
   @@map("publish_job")
 }
 

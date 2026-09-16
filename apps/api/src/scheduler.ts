@@ -12,10 +12,12 @@ import {
   INGEST_SOURCE_DOCUMENT,
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
+  VERIFY_SOCIAL_POST,
   enqueue,
   type IngestSourceDocumentPayload,
   type ProcessAssetPayload,
   type PublishSocialPostPayload,
+  type VerifySocialPostPayload,
 } from '@brandspace/jobs';
 import {
   createConnectorRegistry,
@@ -68,6 +70,8 @@ export interface MaintenanceResult {
   /** Phase 6 — the publishing sweep. */
   readonly publishJobsCreated: number;
   readonly publishJobsDispatched: number;
+  /** Jobs whose worker died mid-flight, handed to verification (D-143). */
+  readonly publishJobsRecovered: number;
 }
 
 export interface SchedulerOptions {
@@ -315,7 +319,9 @@ export class MaintenanceScheduler {
    * BullMQ job id collision. A pass that runs while the previous one is still
    * finishing is therefore safe rather than merely unlikely.
    */
-  async sweepPublishing(batch: number): Promise<{ created: number; dispatched: number }> {
+  async sweepPublishing(
+    batch: number,
+  ): Promise<{ created: number; dispatched: number; recovered: number }> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
 
@@ -403,7 +409,56 @@ export class MaintenanceScheduler {
       if (result.dispatched) dispatched += 1;
     }
 
-    return { created, dispatched };
+    /*
+     * AND THEN THE JOBS NOBODY WAS LOOKING AT (D-143).
+     *
+     * `execute()` moves a job to PUBLISHING before the external call — the
+     * right order, because a process that dies in between leaves a row already
+     * saying "we may have sent this". But the sweep above only ever considered
+     * QUEUED, so such a row sat at PUBLISHING for ever: the post possibly live,
+     * the customer shown "Publishing", and nothing in the system due to look at
+     * it again. A worker crash was an unbounded stall, silently.
+     *
+     * PAST ITS LEASE, A CLAIM IS TREATED AS ABANDONED — and as nothing more
+     * than that. The message dispatched here is `social.verify-post`, a
+     * DIFFERENT kind reaching a different processor that can only ASK the
+     * provider what happened. A timer never authorises a send.
+     */
+    const lease = await this.#publishingPolicy();
+    const staleBefore = new Date(now.getTime() - lease.claimLeaseSeconds * 1_000);
+    const stale = await platform.publishJob.findMany({
+      where: { status: 'PUBLISHING', claimedAt: { lt: staleBefore } },
+      select: { id: true, workspaceId: true, idempotencyKey: true },
+      orderBy: { claimedAt: 'asc' },
+      take: lease.staleClaimBatchSize,
+    });
+
+    let recovered = 0;
+    for (const job of stale) {
+      const result = await enqueue('publish-jobs', VERIFY_SOCIAL_POST, {
+        kind: VERIFY_SOCIAL_POST,
+        workspaceId: job.workspaceId,
+        // A DISTINCT QUEUE ID FROM THE PUBLISH MESSAGE for the same job, so a
+        // verification is never de-duplicated against the publish that stalled.
+        idempotencyKey: `verify:${job.idempotencyKey}`,
+        publishJobId: job.id,
+      } satisfies VerifySocialPostPayload);
+      if (result.dispatched) recovered += 1;
+    }
+
+    return { created, dispatched, recovered };
+  }
+
+  /** The dispatch half of the publishing policy, read once per pass. */
+  async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
+    const policy = await resolvePublishingPolicy(
+      new ConfigurationService({ prisma: getPlatformClient() }),
+      this.#environment,
+    );
+    return {
+      claimLeaseSeconds: policy.dispatch.claimLeaseSeconds,
+      staleClaimBatchSize: policy.dispatch.staleClaimBatchSize,
+    };
   }
 
   /** One full pass of everything. Exposed so a test can run it deterministically. */
@@ -425,6 +480,7 @@ export class MaintenanceScheduler {
       deletedAssetsPurged: assets.purged,
       publishJobsCreated: publishing.created,
       publishJobsDispatched: publishing.dispatched,
+      publishJobsRecovered: publishing.recovered,
     };
   }
 

@@ -171,3 +171,37 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);
 }
+
+/**
+ * Bind a pending multi-target grant to the page the customer chose (D-142).
+ *
+ * THE SELECTION SECRET COMES FROM THE FORM AND PROVES NOTHING ON ITS OWN. It
+ * arrived in the callback redirect, so it is in a browser history and possibly
+ * a referrer; that is why the API checks the workspace, the permission, the
+ * brand scope AND that the caller is the person who started the authorization
+ * before it will act on it. This action forwards, and `apps/api` decides.
+ *
+ * FORWARDED RATHER THAN RUN HERE for the usual reason: completing a grant
+ * writes a credential, and the dashboard holds no key material at all (F-07).
+ */
+export async function selectTargetAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  let destination: string;
+  try {
+    await requireWorkspace(locale, 'integrations.manage');
+    const selectionToken = String(formData.get('selectionToken') ?? '');
+    const externalAccountId = String(formData.get('externalAccountId') ?? '');
+
+    const result = await callSocialApi('/v1/social/connections/select', {
+      selectionToken,
+      externalAccountId,
+    });
+    destination = result.ok
+      ? pageUrl(locale, { ok: 'ACCOUNT_CONNECTED' })
+      : pageUrl(locale, { error: upstreamCode(result.payload) });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'select-target');
+  }
+  revalidatePath(`/${locale}/integrations`);
+  redirect(destination);
+}

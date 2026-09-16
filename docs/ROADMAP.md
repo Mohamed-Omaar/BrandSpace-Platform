@@ -557,12 +557,20 @@ What shipped:
    client secret held by reference in the Secret Service and resolved only in `apps/api`.
 3. **OAuth flows** — authorization, callback, PKCE, single-use hashed state, exact redirect matching and
    scope verification. A partial grant becomes `needs_reauth` rather than a connection that looks healthy.
+   The callback is a **public browser `GET`** at the exact URL registered with the provider, and it reads
+   no session: `__Host-` cookies cannot cross to the API host and must not, so the state row is the
+   identity (D-141). A grant that offers several pages **pauses and asks** rather than binding the first
+   one (D-142).
 4. **Token management** — envelope-encrypted in a tenant-owned table under its own key domain (D-136),
    versioned and retired rather than overwritten, with refresh, rotation and revocation.
 5. **Platform adapters** — Facebook, Instagram, TikTok, LinkedIn and X, as deterministic mocks.
    **YouTube is not in this phase** (D-139).
 6. **Publishing pipeline** — pre-flight checks, derived idempotency keys, uncertain-outcome verification,
-   retry classification by error class, cancellation before dispatch and manual retry.
+   retry classification by error class, cancellation before dispatch and manual retry. Publishing and
+   verification are **separate paths on separate queue kinds**, so an unknown outcome has no route to a
+   second send; a claim past its lease is recovered by asking the provider, never by resending (D-143).
+   Materialisation inserts with `ON CONFLICT DO NOTHING`, so concurrent sweeps cannot abort each other
+   (D-144).
 7. **Content validation** — the platform ceiling is declared in configuration, stated on the screen before
    the customer commits, and enforced again by the adapter at publish time.
 8. **Social hub UI** — connected accounts with identity, health and last sync; publishing history with a

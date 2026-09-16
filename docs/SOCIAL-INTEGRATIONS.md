@@ -526,3 +526,63 @@ checked against the item's own state rather than inferred from the slot's.
 - **Analytics ingestion** (§9). Phase 7.
 - **`deletePost`.** Declared in the adapter contract as optional and implemented by nobody, because no
   product surface asks for it yet. A capability with no caller is a capability nobody has thought about.
+
+## 15. The second review pass — what changed, and why
+
+Five findings against the first Phase 6 head. `docs/SECURITY.md` §28.7 states each defect; this
+section records the resulting CONTRACTS, because they are what a later reader has to build against.
+
+### 15.1 The callback is a public GET and the state is the identity (D-141)
+
+```
+GET  {PUBLIC_API_BASE_URL}/v1/social/callback/{provider}?code=…&state=…
+303  {PUBLIC_DASHBOARD_BASE_URL}/integrations?social={connected|partial|select|declined|invalid}
+```
+
+- **Exactly the URL `callbackUriFor()` registers with the provider.** One function builds it and the
+  route matches it; a disagreement between the two is what the first version shipped.
+- **No session is read.** `__Host-bs_customer_session` cannot cross to the API host, by design. The
+  workspace comes from the state row, resolved on the platform client, reading one column.
+- **Nothing is consumed by that lookup.** Single-use claiming stays inside `complete()`, under the
+  tenant client, as a conditional UPDATE.
+- **One coarse word back, never JSON.** `declined` is told apart from `invalid` because a customer
+  who pressed Cancel deserves the truth; everything else is uniform.
+- **Both public base URLs are environment-driven.** Staging needs no code change, and an unset
+  dashboard URL fails closed rather than guessing an origin.
+
+### 15.2 A multi-target grant pauses for the customer (D-142)
+
+```
+callback → several targets → seal token on social_oauth_state, mint selection secret
+         → 303 …/integrations?social=select&select={secret}
+POST /v1/social/connections/selection  { selectionToken }        → the offered pages
+POST /v1/social/connections/select     { selectionToken, externalAccountId } → the connection
+```
+
+Both selection routes are **session-authenticated**, unlike the callback. The row is found by four
+predicates in one `where` — the secret's hash, the workspace, the brand scope, and the user who
+started the flow — and the chosen `externalAccountId` must appear in the list recorded at callback
+time, so the endpoint is not a target-enumeration primitive. The choice is single-use, and the sealed
+grant is erased once it has become a credential: two copies of a live token is one too many, and the
+copy nobody is looking at is the one that outlives the disconnect.
+
+### 15.3 Verification is a separate path from publishing (D-143)
+
+| State                                                 | May `execute()` claim it? | What resolves it                                                                                |
+| ----------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `QUEUED`                                              | yes                       | the ordinary publish path                                                                       |
+| `PUBLISHING`, claim fresh                             | no                        | the worker holding it                                                                           |
+| `PUBLISHING`, claim past `dispatch.claimLeaseSeconds` | no                        | `recoverStaleClaim()` → `VERIFICATION_PENDING` → `verify()`                                     |
+| `VERIFICATION_PENDING`                                | **no**                    | `verify()` where the provider can be asked; `resolveVerification()` by a person where it cannot |
+| `PUBLISHED` / `FAILED` / `CANCELLED`                  | no                        | nothing; the row is the answer                                                                  |
+
+`verify()` has no call to `publish()` in it — not a guarded one, none — and the queue carries a
+separate `social.verify-post` kind reaching a separate processor, so a verification message has no
+route to the publishing path at all. `retry()` accepts `FAILED` only, and refuses every indeterminate
+class even there: a `TIMEOUT` that exhausted its attempts is still a post that may have landed.
+
+### 15.4 Materialisation is one statement (D-144)
+
+`createMany({ skipDuplicates: true })` — `INSERT ... ON CONFLICT DO NOTHING`. The conflict is
+resolved inside PostgreSQL, the losing sweep inserts nothing and raises nothing, and `created` is the
+number of rows that actually landed rather than the number a non-atomic check predicted.

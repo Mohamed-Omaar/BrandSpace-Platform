@@ -122,6 +122,14 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
      * developer's local port, not this suite's.
      */
     env['PUBLIC_API_BASE_URL'] = `http://127.0.0.1:${PORTS.api}`;
+    /*
+     * AND WHERE THE CALLBACK SENDS THE BROWSER BACK TO (P6-R1). The API has no
+     * UI: a completed OAuth redirect ends at the dashboard, and this is the only
+     * thing that tells the API where the dashboard is. Unset, the callback fails
+     * closed rather than guessing an origin — which would be an open redirect
+     * with extra steps.
+     */
+    env['PUBLIC_DASHBOARD_BASE_URL'] = `http://127.0.0.1:${PORTS.dashboard}`;
   }
 
   if (app === 'worker') {

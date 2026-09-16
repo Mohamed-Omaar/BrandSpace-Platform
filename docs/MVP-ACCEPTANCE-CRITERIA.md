@@ -766,7 +766,27 @@ layer that settles it: `[U]` unit, `[ISO]` isolation against real PostgreSQL, `[
 | AC-18.45 | The screen is clean under axe (WCAG 2.2 AA) in both locales, with one `h1` and full keyboard operation             | [E2E]     |
 | AC-18.46 | A failure is explained by OUR translated sentence; the stored machine code is never shown to a person              | [E2E]     |
 
-### 23.6 Not claimed
+### 23.6 The second review pass (P6-R1 … P6-R5)
+
+| ID       | Criterion                                                                                                                                                                                 | Evidence    |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| AC-18.49 | A provider's redirect — a browser `GET` to `/v1/social/callback/{provider}` with `code` and `state` — completes the flow and answers `303` to the dashboard                               | [E2E]       |
+| AC-18.50 | The callback completes with NO session cookie present, from a context holding none                                                                                                        | [E2E]       |
+| AC-18.51 | A forged state, an absent state, an unknown provider and a provider-side denial all answer `303` to the same path; only `declined` is distinguished, and no `error_description` is echoed | [E2E]       |
+| AC-18.52 | A grant offering several targets creates NO connection and returns a selection secret                                                                                                     | [Isolation] |
+| AC-18.53 | The pending grant's token is encrypted at rest and its selection secret is stored hashed                                                                                                  | [Isolation] |
+| AC-18.54 | Choosing the SECOND offered target connects to that one; a target not on the list is refused identically to a forged secret                                                               | [Isolation] |
+| AC-18.55 | The choice is single-use, refused for another member, and refused outside the brand scope — all with one sentence                                                                         | [Isolation] |
+| AC-18.56 | The customer is shown the choice with no option pre-selected, and picking one connects that page                                                                                          | [E2E]       |
+| AC-18.57 | Refreshing a token outside the caller's brand scope is refused identically to a fabricated id, and rotates nothing                                                                        | [Isolation] |
+| AC-18.58 | `execute()` on a `VERIFICATION_PENDING` job invokes `publish()` zero times                                                                                                                | [Isolation] |
+| AC-18.59 | `retry()` refuses a `VERIFICATION_PENDING` job and every indeterminate failure class                                                                                                      | [Isolation] |
+| AC-18.60 | A `PUBLISHING` job past its claim lease is recovered, verified by provider lookup, and never resent                                                                                       | [Isolation] |
+| AC-18.61 | A provider without post lookup is never automatically resent, however long it has waited                                                                                                  | [Isolation] |
+| AC-18.62 | A duplicate queue delivery invokes `publish()` zero times in every non-`QUEUED` state                                                                                                     | [Isolation] |
+| AC-18.63 | Six concurrent materialisations of one slot produce one job, and none of them fails                                                                                                       | [Isolation] |
+
+### 23.7 Not claimed
 
 **AC-18.47 and AC-18.48 are deliberately absent.** There is no criterion asserting a successful publish to
 a real platform, and none asserting webhook signature verification: no real provider credential exists

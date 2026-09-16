@@ -223,3 +223,204 @@ test.describe('navigation', () => {
     await expect(page.locator('[data-testid="connected-accounts"]')).toBeVisible();
   });
 });
+
+/**
+ * P6-R1 — THE OAUTH CALLBACK, WALKED IN THE SHAPE A PROVIDER ACTUALLY USES.
+ *
+ * WHY THIS SUITE EXISTS AND WHY ITS ABSENCE MATTERED. Everything above
+ * deliberately stopped at the connect button, and that gap is exactly how the
+ * callback came to be registered as `POST /v1/social/callback` — expecting a
+ * JSON body — while every provider was handed
+ * `/v1/social/callback/<provider>` and would arrive by GET with `code` and
+ * `state` in the query string. Two independent reasons the redirect could never
+ * land, and a green CI, because nothing ever performed one.
+ *
+ * SO THESE PERFORM ONE. A real `GET`, with a real state taken from the real
+ * authorization URL the connect button produced, against the running API.
+ *
+ * AND WITH NO SESSION COOKIE, which is the part that proves the staging
+ * topology works. `__Host-bs_customer_session` forbids a `Domain` attribute, so
+ * it is locked to the origin that set it: the browser will not send it to
+ * `api-staging.brandspace.cc`, and it must not. The identity therefore comes
+ * from the state row and nowhere else. Locally the dashboard and the API differ
+ * only by port — and cookies ignore ports — so proving this needs a context
+ * that holds no cookies at all rather than merely a different port.
+ */
+test.describe('P6-R1 — the OAuth callback a provider would actually reach', () => {
+  const API_BASE_URL = 'http://127.0.0.1:3103';
+
+  /**
+   * Press Connect and capture the `state` from the authorization URL.
+   *
+   * The provider host does not exist, so the navigation to it is intercepted
+   * and aborted — which is also what makes this safe: nothing leaves the
+   * machine, and no credential is involved on either side.
+   */
+  async function startAuthorization(page: Page): Promise<string> {
+    let authorizationUrl: string | null = null;
+    await page.route('**mock.invalid/**', async (route) => {
+      authorizationUrl = route.request().url();
+      await route.abort();
+    });
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    await page.selectOption('[data-testid="connect-provider"]', 'LINKEDIN');
+    await page.click('[data-testid="connect-submit"]');
+
+    await expect
+      .poll(() => authorizationUrl, { message: 'the connect button never reached a provider' })
+      .not.toBeNull();
+
+    const state = new URL(authorizationUrl!).searchParams.get('state');
+    expect(state, 'the authorization URL carried no state').toBeTruthy();
+    return state!;
+  }
+
+  test('a browser-shaped GET completes the flow and redirects to the dashboard', async ({
+    page,
+    playwright,
+  }) => {
+    await signIn(page);
+    const state = await startAuthorization(page);
+
+    /*
+     * A BARE HTTP GET, NO COOKIES, NO HEADERS OF OURS. This is the request a
+     * provider's redirect produces. Redirects are not followed so the
+     * `Location` header itself can be asserted — it is the entire contract
+     * between the API and the dashboard.
+     */
+    const anonymous = await playwright.request.newContext();
+    const response = await anonymous.get(
+      `${API_BASE_URL}/v1/social/callback/linkedin?code=e2e-callback-code&state=${encodeURIComponent(state)}`,
+      { maxRedirects: 0 },
+    );
+
+    // 303: the browser arrived by GET and must continue by GET.
+    expect(response.status()).toBe(303);
+    const location = response.headers()['location'];
+    expect(location, 'the callback answered without a redirect').toBeTruthy();
+
+    const target = new URL(location!);
+    expect(target.origin).toBe(DASHBOARD_BASE_URL);
+    expect(target.pathname).toBe('/integrations');
+    /*
+     * LINKEDIN'S MOCK OFFERS TWO TARGETS, so the flow correctly PAUSES rather
+     * than binding a page nobody chose (D-142). Against the pre-fix code this
+     * would have been a connected account already.
+     */
+    expect(target.searchParams.get('social')).toBe('select');
+    expect(target.searchParams.get('select')).toBeTruthy();
+
+    // NOTHING THE PROVIDER SENT IS ECHOED BACK. Not the code, not the state.
+    expect(location).not.toContain('e2e-callback-code');
+    expect(location).not.toContain(state);
+
+    await anonymous.dispose();
+  });
+
+  test('a real browser navigation completes it too, and lands on the choice', async ({
+    page,
+    browser,
+  }) => {
+    await signIn(page);
+    const state = await startAuthorization(page);
+
+    // A SECOND BROWSER, holding no cookies at all — the staging topology, where
+    // the session cookie cannot reach the API host.
+    const anonymousContext = await browser.newContext();
+    const anonymousPage = await anonymousContext.newPage();
+    await anonymousPage.goto(
+      `${API_BASE_URL}/v1/social/callback/linkedin?code=e2e-callback-code&state=${encodeURIComponent(state)}`,
+    );
+    // The callback redirected here; the dashboard then bounced an unauthenticated
+    // visitor to sign-in, which is correct and is not what is under test.
+    await expect
+      .poll(() => anonymousPage.url(), {
+        message: 'the callback never reached the dashboard origin',
+      })
+      .toContain('127.0.0.1:3101');
+    await anonymousContext.close();
+  });
+
+  test('THE SIGNED-IN MEMBER IS THEN ASKED WHICH PAGE, AND PICKS ONE', async ({
+    page,
+    playwright,
+  }) => {
+    await signIn(page);
+    const state = await startAuthorization(page);
+
+    const anonymous = await playwright.request.newContext();
+    const response = await anonymous.get(
+      `${API_BASE_URL}/v1/social/callback/linkedin?code=e2e-callback-code&state=${encodeURIComponent(state)}`,
+      { maxRedirects: 0 },
+    );
+    const selectionToken = new URL(response.headers()['location']!).searchParams.get('select');
+    await anonymous.dispose();
+
+    // BACK IN THE SIGNED-IN BROWSER, which is where the choice belongs: it needs
+    // the session, the permission and the brand scope.
+    await page.goto(
+      `${DASHBOARD_BASE_URL}/en/integrations?social=select&select=${encodeURIComponent(selectionToken!)}`,
+    );
+
+    const form = page.locator('[data-testid="select-target-form"]');
+    await expect(form).toBeVisible();
+    const choices = form.locator('input[name="externalAccountId"]');
+    // TWO PAGES OFFERED, and NEITHER pre-selected: a default is the same
+    // decision-on-the-customer's-behalf the pause exists to undo.
+    await expect(choices).toHaveCount(2);
+    expect(await choices.nth(0).isChecked()).toBe(false);
+    expect(await choices.nth(1).isChecked()).toBe(false);
+
+    // THE SECOND ONE, deliberately — picking the first would also pass against
+    // the code that always took `targets[0]`.
+    const chosen = await choices.nth(1).getAttribute('value');
+    await choices.nth(1).check();
+    await page.click('[data-testid="select-target-submit"]');
+
+    await page.waitForURL(/\/integrations/);
+    const list = page.locator('[data-testid="connected-accounts-list"]');
+    await expect(list).toBeVisible();
+    await expect(list).toContainText('Organization 2');
+    expect(chosen).toBeTruthy();
+  });
+
+  test('a forged, replayed or expired state all end at the same place', async ({ playwright }) => {
+    const anonymous = await playwright.request.newContext();
+
+    const forged = await anonymous.get(
+      `${API_BASE_URL}/v1/social/callback/linkedin?code=whatever&state=${encodeURIComponent('not-a-real-state')}`,
+      { maxRedirects: 0 },
+    );
+    const declined = await anonymous.get(
+      `${API_BASE_URL}/v1/social/callback/linkedin?error=access_denied&error_description=user%20cancelled`,
+      { maxRedirects: 0 },
+    );
+    const noParameters = await anonymous.get(`${API_BASE_URL}/v1/social/callback/linkedin`, {
+      maxRedirects: 0,
+    });
+    const unknownProvider = await anonymous.get(
+      `${API_BASE_URL}/v1/social/callback/myspace?code=a&state=b`,
+      { maxRedirects: 0 },
+    );
+
+    for (const response of [forged, declined, noParameters, unknownProvider]) {
+      expect(response.status()).toBe(303);
+      // NO JSON, NO ERROR CODE, NO PROSE. A redirect is the most public surface
+      // in the product; a refusal that explained itself would explain it to
+      // whoever crafted the link.
+      expect(response.headers()['location']).toContain('/integrations?social=');
+    }
+
+    // A DENIAL IS TOLD APART FROM A FAULT — the customer pressed Cancel, and
+    // saying "something went wrong" would be false. Everything else is uniform.
+    expect(declined.headers()['location']).toContain('social=declined');
+    for (const response of [forged, noParameters, unknownProvider]) {
+      expect(response.headers()['location']).toContain('social=invalid');
+    }
+    // AND THE PROVIDER'S OWN WORDS ARE NEVER REPEATED.
+    expect(declined.headers()['location']).not.toContain('cancelled');
+
+    await anonymous.dispose();
+  });
+});
