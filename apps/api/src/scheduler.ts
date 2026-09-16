@@ -871,10 +871,26 @@ export class MaintenanceScheduler {
         occurrence: event.occurrence,
       } satisfies EvaluateAutomationPayload);
       if (!result.dispatched) continue;
-      await platform.automationEvent.update({
-        where: { id: event.id },
-        data: { dispatchedAt: now, attempts: { increment: 1 } },
-      });
+      /*
+       * THE BOOKKEEPING IS WRITTEN IN THE TENANT'S OWN CONTEXT, not on the
+       * platform connection that just enumerated the row.
+       *
+       * ONLY THE ENUMERATION IS CROSS-TENANT — that is the whole of F-07 and it
+       * is what every other sweep in this file does. Writing back through the
+       * platform client would have made this the one place in the scheduler that
+       * MUTATES a tenant row with RLS bypassed, and the exception would have been
+       * for stamping a timestamp, which is the least defensible reason to make
+       * one.
+       */
+      await withWorkspace(
+        event.workspaceId,
+        (db) =>
+          db.automationEvent.updateMany({
+            where: { id: event.id, workspaceId: event.workspaceId },
+            data: { dispatchedAt: now, attempts: { increment: 1 } },
+          }),
+        { prisma: getPrisma() },
+      );
       dispatched += 1;
     }
     return dispatched;
