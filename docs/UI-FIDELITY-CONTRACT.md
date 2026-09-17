@@ -242,39 +242,6 @@ take it on trust.
 | `/[locale]/automations`    | Module 15 in `docs/PRODUCT.md`, and absent from the demo altogether                                                                                                                                                                                                                                                                                                                                                                    | `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell. The rule editor is a plain GET/POST form over the CLOSED trigger, action and CONDITION registries, so every control is a `select` over a fixed option list rather than free text; a condition's operator list, value control and closed values are all derived from `CONDITION_FIELD_CONTRACTS` (D-180), and `in`/`not_in` use a `multiple` select so the browser posts a real list | D-154    |
 | `/[locale]/settings/brand` | **Brand Profile.** The demo has no brand-identity route at all — `#customer/brand` is not in `app-1.js`'s navigation, not in `meta` and not in `page()`'s router. It is also not a new KIND of screen: it is a settings form for one brand                                                                                                                                                                                             | `packages/ui`'s `SettingsSplit`, `Card`, `Field`, `StateMessage` and the input, button, spacing and typography tokens — the SAME composition `/[locale]/settings` already uses, deliberately, so a reader moving between workspace settings and brand settings meets one page design rather than two. The only addition is a row of colour swatches, each carrying its hex in a `title` and a visually-hidden span so the colour is never the only way to read the value                        | D-193    |
 
-### 6.5 Phase 8 — the Brand Selector, and a conflict worth recording
-
-**THE COMPONENT.** `BrandSwitcher` (`packages/ui/src/switchers.tsx`) is the workspace card's sibling,
-not a second navigation system: the same `DropdownMenu`, the same `trigger="card"` surface, the same
-`layoutTokens.railAvatar` tile, the same two lines of copy, the same tick-plus-`aria-current` marking
-that never relies on colour alone. Two differences, both necessary and neither a new language:
-
-- **The glyph.** `TagIcon`, drawn in `packages/ui/src/icons.tsx` to the same 24-unit box, 1.75 stroke
-  and round joinery as every other icon in that file — §4.2 rule 5 forbids a second icon style, and a
-  borrowed glyph is how one starts. A tag rather than a swatch because a brand here is an IDENTITY
-  APPLIED TO WORK, not a colour.
-- **The items are forms.** The workspace switcher navigates, because switching workspace rewrites the
-  session the server already owns. A brand selection is remembered in a cookie and a link cannot set
-  one, so each option posts to a server action — exactly the markup shape the profile card's sign-out
-  already uses in the same rail.
-
-**THE CONFLICT, STATED RATHER THAN RESOLVED SILENTLY.** The Phase 8 brief describes the Workspace
-Selector as living "in the top bar" and asks for the Brand Selector beside it. In the IMPLEMENTED
-product the Workspace Selector is `AppShell`'s `headerStart` — the rail's identity block (D-59) — and
-the top bar carries search, notifications, the language square and the create action (§9, §10).
-
-Both instructions cannot be followed at once. The brand selector went to the RAIL, beneath the
-workspace card, because:
-
-1. "Beside the Workspace Selector" is the more specific instruction, and it is the one the brief
-   repeats ("must visually belong beside the existing Workspace Selector").
-2. A selector in the top bar would be separated from the thing it is scoped BY, and would add a
-   second place where scope is chosen — the "second navigation system" the same brief forbids.
-3. The rail's `headerStart` already renders in the mobile drawer, so the selector is usable on a
-   phone without a desktop-only control being invented for it.
-
-The order is containment: a brand lives inside a workspace, so it reads underneath it.
-
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
@@ -309,6 +276,39 @@ drift apart.
 when there is no comparison — an indicator with no baseline would be a direction with nothing behind it.
 
 ---
+
+### 6.5 Phase 8 — the Brand Selector, and a conflict worth recording
+
+**THE COMPONENT.** `BrandSwitcher` (`packages/ui/src/switchers.tsx`) is the workspace card's sibling,
+not a second navigation system: the same `DropdownMenu`, the same `trigger="card"` surface, the same
+`layoutTokens.railAvatar` tile, the same two lines of copy, the same tick-plus-`aria-current` marking
+that never relies on colour alone. Two differences, both necessary and neither a new language:
+
+- **The glyph.** `TagIcon`, drawn in `packages/ui/src/icons.tsx` to the same 24-unit box, 1.75 stroke
+  and round joinery as every other icon in that file — §4.2 rule 5 forbids a second icon style, and a
+  borrowed glyph is how one starts. A tag rather than a swatch because a brand here is an IDENTITY
+  APPLIED TO WORK, not a colour.
+- **The items are forms.** The workspace switcher navigates, because switching workspace rewrites the
+  session the server already owns. A brand selection is remembered in a cookie and a link cannot set
+  one, so each option posts to a server action — exactly the markup shape the profile card's sign-out
+  already uses in the same rail.
+
+**THE CONFLICT, STATED RATHER THAN RESOLVED SILENTLY.** The Phase 8 brief describes the Workspace
+Selector as living "in the top bar" and asks for the Brand Selector beside it. In the IMPLEMENTED
+product the Workspace Selector is `AppShell`'s `headerStart` — the rail's identity block (D-59) — and
+the top bar carries search, notifications, the language square and the create action (§9, §10).
+
+Both instructions cannot be followed at once. The brand selector went to the RAIL, beneath the
+workspace card, because:
+
+1. "Beside the Workspace Selector" is the more specific instruction, and it is the one the brief
+   repeats ("must visually belong beside the existing Workspace Selector").
+2. A selector in the top bar would be separated from the thing it is scoped BY, and would add a
+   second place where scope is chosen — the "second navigation system" the same brief forbids.
+3. The rail's `headerStart` already renders in the mobile drawer, so the selector is usable on a
+   phone without a desktop-only control being invented for it.
+
+The order is containment: a brand lives inside a workspace, so it reads underneath it.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
