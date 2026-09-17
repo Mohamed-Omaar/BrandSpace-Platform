@@ -35,6 +35,7 @@ export {
   BRAND_COOKIE,
   brandCookieValue,
   brandFilterFor,
+  defaultBrandFor,
   parseBrandCookie,
   requiredBrand,
   resolveSelection,

@@ -375,6 +375,7 @@ async function seedCustomerEstate(
     password,
     workspaceSlug: primarySlug,
     workspaceName: 'E2E Primary Workspace',
+    workspaceId: primary.id,
     secondWorkspaceSlug: secondSlug,
     viewerEmail,
     viewerPassword,

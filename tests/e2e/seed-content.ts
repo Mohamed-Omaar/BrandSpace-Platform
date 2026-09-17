@@ -24,11 +24,16 @@
  * Idempotent: keyed on a fixed idempotency key, so re-running finds the same
  * draft rather than growing the library on every seed.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { withWorkspace } from '@brandspace/database';
-import { E2E_CREDENTIALS_FILE, loadE2eEnv, type E2eAdminCredentials } from './env';
+import {
+  E2E_CREDENTIALS_FILE,
+  loadE2eEnv,
+  type E2eAdminCredentials,
+  type E2eBrandFixtures,
+} from './env';
 
 loadE2eEnv();
 
@@ -239,13 +244,13 @@ async function main(): Promise<void> {
      * The brand's policy row is removed too, so the suite starts from the
      * activated defaults rather than from whatever it last switched on.
      */
-    await withWorkspace(
+    const brands = await withWorkspace(
       workspaceId,
       async (db) => {
         const brand = await db.brand.findFirstOrThrow({
           where: { deletedAt: null },
           orderBy: { createdAt: 'asc' },
-          select: { id: true },
+          select: { id: true, name: true },
         });
 
         const existing = await db.contentItem.findFirst({
@@ -322,6 +327,20 @@ async function main(): Promise<void> {
           }));
         await platform.approvalPolicy.deleteMany({ where: { brandId: secondBrand.id } });
 
+        /*
+         * WHAT EVERY OTHER SUITE READS. From Phase 8 a brand-scoped screen
+         * refuses to pick a brand for the visitor (D-191), so a suite has to
+         * name one — and it must name the SAME one the seeds attached their
+         * content, connections and metrics to. That is this brand, resolved
+         * here once, rather than whichever row happens to sort first in a menu.
+         */
+        const fixtures: E2eBrandFixtures = {
+          primaryBrandId: brand.id,
+          primaryBrandName: brand.name,
+          secondBrandId: secondBrand.id,
+          secondBrandName: secondBrand.name,
+        };
+
         const secondExisting = await db.contentItem.findFirst({
           where: { idempotencyKey: SECOND_IDEMPOTENCY_KEY },
           include: { variants: true },
@@ -367,6 +386,8 @@ async function main(): Promise<void> {
             },
           });
         }
+
+        return fixtures;
       },
       { prisma },
     );
@@ -375,8 +396,15 @@ async function main(): Promise<void> {
     console.log('  One DRAFT item with one caption. Nothing is scheduled and nothing publishes.');
     console.log(`✔ Reviewable draft reset: ${APPROVAL_TITLE}`);
     console.log('  One DRAFT item, no review history, and the brand back on its default policy.');
+    const merged: E2eAdminCredentials = {
+      ...credentials,
+      customer: { ...credentials.customer, ...brands },
+    };
+    writeFileSync(E2E_CREDENTIALS_FILE, JSON.stringify(merged, null, 2), { mode: 0o600 });
+
     console.log(`✔ Second brand and its draft reset: ${SECOND_TITLE}`);
     console.log('  So brand scope can be shown admitting one brand and not another.');
+    console.log('✔ Brand fixtures recorded, so every suite selects the same brand.');
   } finally {
     await prisma.$disconnect();
     await platform.$disconnect();

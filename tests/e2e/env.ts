@@ -75,6 +75,26 @@ export interface E2eVisualFixture {
   readonly pendingCandidates: number;
 }
 
+/**
+ * The brands the customer fixture guarantees exist, recorded by the seed that
+ * resolves them (`seed-content`).
+ *
+ * WHY THE SEED RECORDS THEM RATHER THAN A TEST GUESSING. From Phase 8 a
+ * brand-scoped screen requires an EXPLICIT brand and never picks one for you
+ * (D-191), so a suite that wants Brand Brain or Analytics has to establish the
+ * context first — and "the first option in the menu" is not a fixture, it is
+ * the same silent guess moved into the test. `seed-content` already resolves
+ * the canonical brand (the oldest one in the workspace, created if absent) and
+ * the second brand; it writes both down so every suite selects the SAME brand
+ * the other seeds attached their data to.
+ */
+export interface E2eBrandFixtures {
+  readonly primaryBrandId: string;
+  readonly primaryBrandName: string;
+  readonly secondBrandId: string;
+  readonly secondBrandName: string;
+}
+
 export interface E2eAdminCredentials {
   readonly email: string;
   readonly password: string;
@@ -92,6 +112,8 @@ export interface E2eAdminCredentials {
     readonly password: string;
     readonly workspaceSlug: string;
     readonly workspaceName: string;
+    /** The primary workspace's id — what the brand cookie is keyed by. */
+    readonly workspaceId: string;
     /** A second workspace, so switching can be exercised. */
     readonly secondWorkspaceSlug: string;
     /** A read-only member, for the RBAC assertions. */
@@ -106,5 +128,23 @@ export interface E2eAdminCredentials {
      */
     readonly newcomerToken: string;
     readonly newcomerEmail: string;
-  };
+  } & Partial<E2eBrandFixtures>;
+}
+
+/**
+ * The brand fixtures, or a message saying which seed was not run.
+ *
+ * Declared optional above and required here on purpose: `seed-admin` writes the
+ * file before any brand exists, so the field is genuinely absent for a moment.
+ * A suite reading it half-seeded should be told that, not handed `undefined`.
+ */
+export function brandFixtures(credentials: E2eAdminCredentials): E2eBrandFixtures {
+  const { primaryBrandId, primaryBrandName, secondBrandId, secondBrandName } = credentials.customer;
+  if (!primaryBrandId || !primaryBrandName || !secondBrandId || !secondBrandName) {
+    throw new Error(
+      'The end-to-end credentials file carries no brand fixtures. Run `pnpm e2e:seed` first — ' +
+        '`pnpm test:e2e` does it for you.',
+    );
+  }
+  return { primaryBrandId, primaryBrandName, secondBrandId, secondBrandName };
 }

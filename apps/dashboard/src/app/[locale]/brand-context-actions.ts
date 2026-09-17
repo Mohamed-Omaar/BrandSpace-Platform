@@ -81,7 +81,14 @@ export async function selectBrandAction(formData: FormData): Promise<void> {
     sameSite: 'lax',
     // Lax rather than Strict so following a colleague's link into the dashboard
     // still arrives with the reader's own selection intact.
-    secure: process.env['APP_ENV'] === 'production',
+    /*
+     * SECURE UNCONDITIONALLY, exactly as the session cookie is set. An
+     * environment-dependent flag would mean the one environment where somebody
+     * forgets to set the variable is the one that ships a cookie over plain
+     * HTTP — and localhost is treated as a secure origin, so nothing local
+     * needs the exception.
+     */
+    secure: true,
     path: '/',
     // A YEAR, because a preference that expires mid-session is a preference
     // that looks like a bug. It carries no authority, so its lifetime is a

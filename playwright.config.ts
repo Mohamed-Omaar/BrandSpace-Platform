@@ -299,7 +299,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -309,7 +309,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {

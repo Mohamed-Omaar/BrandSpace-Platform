@@ -251,6 +251,30 @@ export function brandFilterFor(context: BrandContext): string | undefined {
 }
 
 /**
+ * The brand a CREATION surface should start on, or `null` for "ask".
+ *
+ * NOT THE SAME QUESTION AS `brandFilterFor`, which is about READING. A filter
+ * may honestly answer "everything"; a new piece of content cannot be filed
+ * under "everything" — it belongs to exactly one brand. So a creation form asks
+ * this instead, and the answers differ in one case: the aggregate.
+ *
+ * ON THE AGGREGATE WITH ONE ACCESSIBLE BRAND THE ANSWER IS THAT BRAND, for the
+ * same reason a brand-required page resolves a sole brand to itself (D-191).
+ * "All brands" over one brand names that brand; there is no alternative to
+ * choose between and therefore no choice being made on the reader's behalf.
+ * With two or more, this returns `null` and the form asks — which is the whole
+ * point.
+ */
+export function defaultBrandFor(context: BrandContext): string | null {
+  const { resolution } = context;
+  if (resolution.kind === 'brand') return resolution.brand.id;
+  if (resolution.kind === 'all' && resolution.brandIds.length === 1) {
+    return resolution.brandIds[0] ?? null;
+  }
+  return null;
+}
+
+/**
  * The path the selector returns to, or the locale's overview.
  *
  * A SELECTOR THAT TAKES A DESTINATION IS A REDIRECT, and an unvalidated one is

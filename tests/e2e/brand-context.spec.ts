@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
-import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { useBrand } from './brand';
+import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 
 /**
  * PHASE 8 — the global Brand Context and Brand Profile, in a real browser.
@@ -12,6 +13,12 @@ import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
  * browser can show that the selector is actually THERE, in both languages, in
  * both directions, on a phone, and that the profile form is the Settings design
  * rather than a page of its own invention.
+ *
+ * THE SELECTOR EXISTS TWICE IN THE DOM, on purpose: `headerStart` renders in
+ * the rail and again in the mobile drawer, so one control serves both layouts
+ * (§20 — no desktop-only control). Every locator here is therefore scoped to
+ * the surface it means, because an unscoped `brand-switcher` is ambiguous by
+ * design rather than by accident.
  *
  * NOTHING HERE PUBLISHES and nothing here changes another suite's fixtures: the
  * profile edit writes to a field this suite reads back and then restores.
@@ -26,6 +33,16 @@ function credentials(): E2eAdminCredentials {
         '`pnpm test:e2e` does it for you.',
     );
   }
+}
+
+/** The rail's copy of the selector — the one a desktop visitor sees. */
+function rail(page: Page): Locator {
+  return page.getByTestId('sidebar');
+}
+
+/** The drawer's copy — the one a phone visitor sees, once it is open. */
+function drawer(page: Page): Locator {
+  return page.getByTestId('navigation-drawer');
 }
 
 async function signIn(page: Page, locale = 'en'): Promise<void> {
@@ -46,15 +63,14 @@ test.describe('the global brand selector', () => {
     await signIn(page);
 
     // BOTH CARDS, IN THE SAME BLOCK. The brand card is the workspace card's
-    // sibling, not a second navigation system somewhere else on the page.
-    await expect(page.getByTestId('workspace-switcher')).toBeVisible();
-    const brandCard = page.getByTestId('brand-switcher');
-    await expect(brandCard).toBeVisible();
+    // sibling in the rail, not a second navigation system somewhere else.
+    await expect(rail(page).getByTestId('workspace-switcher')).toBeVisible();
+    await expect(rail(page).getByTestId('brand-switcher')).toBeVisible();
 
     // THE CARD NEVER LIES ABOUT WHICH BRAND YOU ARE ON: it either names one or
     // says it has none. What it must never do is be blank.
-    await expect(page.getByTestId('active-brand')).not.toBeEmpty();
-    await expect(page.getByTestId('active-brand-caption')).not.toBeEmpty();
+    await expect(rail(page).getByTestId('active-brand')).not.toBeEmpty();
+    await expect(rail(page).getByTestId('active-brand-caption')).not.toBeEmpty();
   });
 
   test('offers the aggregate where it means something, and not where it does not', async ({
@@ -64,62 +80,71 @@ test.describe('the global brand selector', () => {
 
     // `/assets` is BRAND-OR-ALL: the aggregate is a real state there.
     await page.goto(`${DASHBOARD_BASE_URL}/en/assets`);
-    await page.getByTestId('brand-switcher').click();
-    await expect(page.getByTestId('brand-option-all')).toBeVisible();
+    await rail(page).getByTestId('brand-switcher').click();
+    await expect(rail(page).getByTestId('brand-option-all')).toBeVisible();
     await page.keyboard.press('Escape');
 
     // `/brand-brain` needs exactly one brand, so a control that would set a
     // state the page cannot act on is not rendered at all (the dead control
     // §20 forbids).
     await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-    await page.getByTestId('brand-switcher').click();
-    await expect(page.getByTestId('brand-option-all')).toHaveCount(0);
+    await rail(page).getByTestId('brand-switcher').click();
+    await expect(rail(page).getByTestId('brand-option-all')).toHaveCount(0);
   });
 
   test('the selection survives ordinary navigation', async ({ page }) => {
+    const loaded = credentials();
+    const { primaryBrandId, primaryBrandName } = brandFixtures(loaded);
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/assets`);
 
-    await page.getByTestId('brand-switcher').click();
-    const firstBrand = page.locator('[data-testid^="brand-option-"]').filter({
-      hasNotText: /^$/,
-    });
-    // The aggregate row is an option too; take a real brand.
-    const brandOption = page
-      .locator('[data-testid^="brand-option-"]')
-      .filter({ has: page.locator('span') })
-      .last();
-    await expect(brandOption).toBeVisible();
-    await expect(firstBrand.first()).toBeVisible();
-    await brandOption.click();
+    // THROUGH THE REAL CONTROL, not through the cookie: this test is about the
+    // selector, so it uses it.
+    await rail(page).getByTestId('brand-switcher').click();
+    await rail(page).getByTestId(`brand-option-${primaryBrandId}`).click();
 
     await page.waitForURL(/\/en\/assets/);
-    const chosen = await page.getByTestId('active-brand').textContent();
-    expect(chosen?.trim()).not.toBe('');
+    await expect(rail(page).getByTestId('active-brand')).toHaveText(primaryBrandName);
 
-    // Somewhere else entirely, and the rail still says the same thing.
+    // Somewhere else entirely, and the rail still says the same thing — which
+    // is the point of a SERVER-READABLE selection rather than client state.
     await page.goto(`${DASHBOARD_BASE_URL}/en/content`);
-    await expect(page.getByTestId('active-brand')).toHaveText(chosen!.trim());
+    await expect(rail(page).getByTestId('active-brand')).toHaveText(primaryBrandName);
   });
 
   test('renders in Arabic, right to left, and on a phone', async ({ page }) => {
     await signIn(page, 'ar');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByTestId('brand-switcher')).toBeVisible();
+    await expect(rail(page).getByTestId('brand-switcher')).toBeVisible();
 
     // THE MOBILE DRAWER, not a desktop-only control. `headerStart` renders in
     // both, which is why the selector went to the rail rather than the top bar.
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto(`${DASHBOARD_BASE_URL}/ar/overview`);
     await page.getByTestId('open-navigation').click();
-    await expect(page.getByTestId('brand-switcher')).toBeVisible();
+    await expect(drawer(page).getByTestId('brand-switcher')).toBeVisible();
   });
 });
 
 test.describe('brand profile', () => {
+  /*
+   * A BRAND IS A PRECONDITION HERE, not the subject. `/settings/brand` is
+   * brand-scoped and asks rather than guesses (D-191) — which the selector
+   * suite above proves. These tests are about the FORM, so they arrive with a
+   * brand already chosen, the same one the seeds built.
+   */
+  test.beforeEach(async ({ page }) => {
+    const loaded = credentials();
+    await useBrand(page, loaded.customer.workspaceId, brandFixtures(loaded).primaryBrandId);
+  });
+
   test('is reached from the selector and uses the settings design', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/brand`);
+
+    // THE ROUTE THE SELECTOR POINTS AT, followed from the selector itself.
+    await rail(page).getByTestId('brand-switcher').click();
+    await rail(page).getByTestId('manage-brand').click();
+    await page.waitForURL(/\/en\/settings\/brand/);
 
     await expect(page.getByTestId('brand-profile-form')).toBeVisible();
     // The Settings composition, not a page of its own invention.
@@ -132,6 +157,7 @@ test.describe('brand profile', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/brand`);
 
     const industry = page.locator('#brand-industry');
+    await expect(industry).toBeVisible();
     const original = (await industry.inputValue()) ?? '';
     const next = `E2E industry ${Date.now()}`;
 
@@ -152,14 +178,16 @@ test.describe('brand profile', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/brand`);
     // Either a picker with a "no logo" option selected, or a plain sentence
     // saying there are no images yet. Never a broken image.
-    const picker = page.getByTestId('brand-profile-primary-logo');
-    await expect(picker).toBeVisible();
+    await expect(page.getByTestId('brand-profile-primary-logo')).toBeVisible();
     await expect(page.locator('img[src=""]')).toHaveCount(0);
   });
 
   test('renders in Arabic and is clean under axe in both languages', async ({ page }) => {
+    // ONE SIGN-IN, TWO LOCALES. The session is not locale-bound and the locale
+    // is a route segment, so signing in again would only be redirected away
+    // from a sign-in page the session has already passed.
+    await signIn(page);
     for (const locale of ['en', 'ar'] as const) {
-      await signIn(page, locale);
       await page.goto(`${DASHBOARD_BASE_URL}/${locale}/settings/brand`);
       await expect(page.getByTestId('brand-profile-form')).toBeVisible();
 

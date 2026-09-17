@@ -3,8 +3,11 @@ import { AppError } from '@brandspace/shared';
 import {
   ALL_BRANDS,
   brandCookieValue,
+  defaultBrandFor,
   parseBrandCookie,
+  resolveSelection,
   safeReturnPath,
+  type AccessibleBrand,
 } from '../../apps/dashboard/src/server/brand-selection';
 import { ROUTE_SCOPES, scopeForPath } from '../../apps/dashboard/src/server/route-scope';
 import {
@@ -231,5 +234,43 @@ describe('P8: the stored JSON shapes are read defensively', () => {
     });
     expect(typographyFrom(null)).toEqual({ heading: null, body: null });
     expect(typographyFrom(['Inter'])).toEqual({ heading: null, body: null });
+  });
+});
+
+describe('P8: a creation surface starts on a brand or asks, and never guesses', () => {
+  const one: AccessibleBrand = { id: BRAND, name: 'One', slug: 'one', status: 'ACTIVE' };
+  const two: AccessibleBrand = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Two',
+    slug: 'two',
+    status: 'ACTIVE',
+  };
+
+  function contextFor(brands: readonly AccessibleBrand[], selected: string | null) {
+    // A brand-or-all route, because the aggregate is the case that differs.
+    return resolveSelection(brands, { scope: 'brand-or-all', requested: selected, stored: null });
+  }
+
+  it('takes the selected brand', () => {
+    expect(defaultBrandFor(contextFor([one, two], BRAND))).toBe(BRAND);
+  });
+
+  /*
+   * THE REGRESSION THIS EXISTS FOR. A workspace with ONE brand and nothing
+   * selected resolves to the aggregate on a brand-or-all route — and the
+   * composer, reading the aggregate as "no brand", disabled generation for the
+   * commonest customer there is. "All brands" over one brand names that brand.
+   */
+  it('takes the sole accessible brand when the context is the aggregate', () => {
+    expect(defaultBrandFor(contextFor([one], ALL_BRANDS))).toBe(BRAND);
+    expect(defaultBrandFor(contextFor([one], null))).toBe(BRAND);
+  });
+
+  it('asks when the aggregate covers a real choice', () => {
+    expect(defaultBrandFor(contextFor([one, two], ALL_BRANDS))).toBeNull();
+  });
+
+  it('has nothing to offer when the member can act on no brand', () => {
+    expect(defaultBrandFor(contextFor([], null))).toBeNull();
   });
 });

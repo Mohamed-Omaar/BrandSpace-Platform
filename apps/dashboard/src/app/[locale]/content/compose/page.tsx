@@ -3,7 +3,7 @@ import { CONTENT_TOOLS } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
-import { brandContextFor, brandFilterFor } from '../../../../server/brand-context';
+import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -162,7 +162,7 @@ export default async function ComposePage({
         locale={locale}
         t={dictionaryFor(translate)}
         brands={brands}
-        defaultBrandId={brandFilterFor(brandContext) ?? null}
+        defaultBrandId={defaultBrandFor(brandContext)}
         platforms={platforms}
         contentTypes={CONTENT_TYPES}
         maxBriefChars={policy.generation.maxBriefChars}
