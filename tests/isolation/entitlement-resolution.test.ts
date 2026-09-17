@@ -132,10 +132,18 @@ const PLANS = [
 async function freshWorkspace(planKey: string | null): Promise<string> {
   const run = crypto.randomUUID();
   const user = await platform.user.create({
-    data: { email: `ent-${run}@example.local`, name: 'Entitlement Fixture', status: 'ACTIVE' },
+    data: {
+      email: `ent-${run}@example.local`,
+      name: 'Entitlement Fixture',
+      status: 'ACTIVE',
+      timezone: 'UTC',
+    },
   });
   const workspace = await platform.workspace.create({
     data: {
+      defaultLocale: 'EN',
+      timezone: 'UTC',
+      currency: 'USD',
       id: run,
       workspaceId: run,
       slug: `ent-${run.slice(0, 12)}`,

@@ -17,9 +17,10 @@ import {
   type ChartLabels,
   type ChartPoint,
 } from '@brandspace/ui';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { systemClock } from '@brandspace/shared';
 import type { MetricAbsenceReason } from '@brandspace/analytics';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -86,16 +87,21 @@ export default async function AnalyticsPage({
    * offering a brand every query would then refuse is the dead control §20
    * forbids.
    */
-  const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    db.brand.findMany({
-      where: { status: 'ACTIVE', ...brandScopeFilter(workspace.brandScope) },
-      select: { id: true, name: true },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-    }),
+  /*
+   * THE GLOBAL BRAND CONTEXT, NOT A SECOND PICKER (D-190).
+   *
+   * This screen used to list the brands itself and fall back to `brands[0]`,
+   * which meant the toolbar's dropdown and the rail could disagree about which
+   * brand the reader was looking at — and the fallback made "no brand chosen"
+   * look like "this brand's numbers". `?brand=` still works and still wins, so
+   * every existing deep link and the CSV export href behave exactly as before.
+   */
+  const brandContext = await brandContextFor(
+    session.workspace,
+    '/analytics',
+    typeof query['brand'] === 'string' ? query['brand'] : null,
   );
-
-  const requested = typeof query['brand'] === 'string' ? query['brand'] : null;
-  const brand = brands.find((candidate) => candidate.id === requested) ?? brands[0] ?? null;
+  const brand = requiredBrand(brandContext);
 
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
   const percent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
@@ -125,8 +131,11 @@ export default async function AnalyticsPage({
     reason ? t(`analytics.absent.${reason}` as MessageKey) : t('analytics.noValue');
 
   if (!brand) {
+    const unselected = brandContext.resolution.kind === 'unselected';
+
     return (
       <WorkspaceShell
+        brandContext={brandContext}
         locale={locale}
         heading={t('analytics.title')}
         description={t('analytics.subtitle')}
@@ -138,8 +147,8 @@ export default async function AnalyticsPage({
       >
         <StateMessage
           kind="empty"
-          title={t('analytics.noBrandTitle')}
-          description={t('analytics.noBrandBody')}
+          title={unselected ? t('brand.chooseTitle') : t('analytics.noBrandTitle')}
+          description={unselected ? t('brand.chooseBody') : t('analytics.noBrandBody')}
         />
       </WorkspaceShell>
     );
@@ -291,18 +300,14 @@ export default async function AnalyticsPage({
               alignItems: 'end',
             }}
           >
-            <label style={{ display: 'grid', gap: '0.25rem' }}>
-              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                {t('analytics.brandLabel')}
-              </span>
-              <select name="brand" defaultValue={brand.id} className="bs-control">
-                {brands.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/*
+              NO BRAND DROPDOWN HERE ANY MORE (D-190). The brand is the rail's
+              selection, and a second control setting the same thing is how the
+              two came to disagree. It is carried through this GET form as a
+              hidden field so applying a RANGE does not silently drop the brand
+              the reader deep-linked to.
+            */}
+            <input type="hidden" name="brand" value={brand.id} />
             <label style={{ display: 'grid', gap: '0.25rem' }}>
               <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
                 {t('analytics.rangeLabel')}

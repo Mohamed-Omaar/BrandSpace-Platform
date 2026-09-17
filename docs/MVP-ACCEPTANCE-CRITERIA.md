@@ -450,7 +450,7 @@ notification architecture — is preserved untouched, and none of that capabilit
 is built.
 
 **Two deviations, both recorded.** Notifications are **in-app only** where ROADMAP scope item 8 says
-"in-app + email": no mail transport exists in the platform, and D-123 records email as Phase 8
+"in-app + email": no mail transport exists in the platform, and D-123 records email as Phase 10
 launch hardening. `docs/DATABASE.md` §4.8's **`Comment`** is not built — threads, mentions and
 anchored positions are a collaboration surface of their own; the approval's request and decision
 notes carry the review's context. Both are listed in `docs/ROADMAP.md` under "deliberately not
@@ -872,3 +872,45 @@ exercises is a sentence rather than a criterion.
 | AC-21.4 | After the upgrade: RLS enabled AND forced on all twelve, a tenant policy on each, DELETE revoked on the two evidence tables, every tenant FK composite | `phase7-migration-upgrade`                            |
 | AC-21.5 | A migrations-only database matches the Prisma schema — no drift                                                                                        | `f80-migration-upgrade` drift check                   |
 | AC-21.6 | `client_viewer` holds exactly `workspace.read`; all four Phase 7 routes answer 404 in both locales and appear in no navigation                         | `phase2b-boundaries` (unit), `viewer-read-only` (E2E) |
+
+### AC-22 Global Brand Context (Phase 8)
+
+| ID      | Criterion                                                                                                                                          | Settled by                                |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| AC-22.1 | A member with unrestricted BrandScope is offered every live brand in their workspace; a restricted member is offered only theirs                   | `phase8-brand-context` (real PostgreSQL)  |
+| AC-22.2 | A brand id from another workspace can never be selected, and is indistinguishable from one that does not exist                                     | `phase8-brand-context`                    |
+| AC-22.3 | A brand the member's scope excludes cannot be selected and its name is never disclosed                                                             | `phase8-brand-context`                    |
+| AC-22.4 | Switching workspace drops an incompatible selection without asking whether that brand exists anywhere                                              | `phase8-brand-context` (unit + isolation) |
+| AC-22.5 | The selection survives ordinary navigation, and an explicit `?brand=` in the URL wins over it without rewriting it                                 | `phase8-brand-context` (unit), E2E        |
+| AC-22.6 | A brand-required screen NEVER silently selects the first brand: with no valid selection it asks, and with no brands at all it offers to create one | `phase8-brand-context`, E2E               |
+| AC-22.7 | "All Brands" aggregates only the brands the CURRENT MEMBER may access                                                                              | `phase8-brand-context`                    |
+
+### AC-23 Brand Profile and canonical identity assets (Phase 8)
+
+| ID      | Criterion                                                                                                               | Settled by             |
+| ------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| AC-23.1 | Reading Brand Profile requires `brand.read`; updating it requires `brand.update`; both refuse out of scope with a 404   | `phase8-brand-profile` |
+| AC-23.2 | A canonical logo cannot reference an asset in another workspace — the composite key refuses it at the database          | `phase8-brand-profile` |
+| AC-23.3 | A canonical logo cannot reference ANOTHER brand's asset; only the brand's own or a workspace-shared asset is admissible | `phase8-brand-profile` |
+| AC-23.4 | A quarantined, failed or deleted asset cannot become a canonical logo                                                   | `phase8-brand-profile` |
+| AC-23.5 | Deleting the referenced asset clears the reference and never the tenant key                                             | `phase8-brand-profile` |
+| AC-23.6 | Every Brand Profile update writes an `AuditEvent`                                                                       | `phase8-brand-profile` |
+| AC-23.7 | The screen renders in AR and EN, and the no-logo state says so rather than showing a broken image                       | E2E                    |
+
+### AC-24 Asset Library context (Phase 8)
+
+| ID      | Criterion                                                                                          | Settled by             |
+| ------- | -------------------------------------------------------------------------------------------------- | ---------------------- |
+| AC-24.1 | "Shared" returns exactly the assets with `brandId = null`                                          | `phase8-asset-context` |
+| AC-24.2 | Selecting one brand never returns another brand's assets                                           | `phase8-asset-context` |
+| AC-24.3 | "All Assets" is the member's scope plus shared — never the whole workspace for a restricted member | `phase8-asset-context` |
+| AC-24.4 | A brand outside the member's scope cannot be requested as a filter                                 | `phase8-asset-context` |
+
+### AC-25 No product-wide country assumption (Phase 8)
+
+| ID      | Criterion                                                                                                   | Settled by                 |
+| ------- | ----------------------------------------------------------------------------------------------------------- | -------------------------- |
+| AC-25.1 | The database declares no country, locale, timezone or currency default for a workspace, and none for a user | `phase8-locale-defaults`   |
+| AC-25.2 | Creating a workspace without those values is refused rather than defaulted                                  | `phase8-locale-defaults`   |
+| AC-25.3 | The migration preserves every existing stored value exactly                                                 | `phase8-migration-upgrade` |
+| AC-25.4 | The Arabic dialect default remains MSA                                                                      | `phase8-locale-defaults`   |

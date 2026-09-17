@@ -54,10 +54,22 @@ export interface CreateWorkspaceInput {
   readonly ownerEmail: string;
   readonly ownerName?: string | undefined;
   readonly type?: string | undefined;
-  readonly country?: string | undefined;
-  readonly defaultLocale?: 'AR' | 'EN' | undefined;
-  readonly timezone?: string | undefined;
-  readonly currency?: string | undefined;
+  /*
+   * REQUIRED, NOT OPTIONAL WITH A FALLBACK (D-194).
+   *
+   * These four were optional and fell back to `SA` / `AR` / `Asia/Riyadh` /
+   * `SAR`, so every workspace anybody forgot to configure became a Saudi one.
+   * Making them required moves the question from runtime to COMPILE TIME: a
+   * caller that does not know where its customer is cannot proceed by accident,
+   * and the compiler names every place that has to ask.
+   *
+   * Phase 9's onboarding is what will ask a customer directly; until then the
+   * platform operator supplies them, explicitly, on the create form.
+   */
+  readonly country: string;
+  readonly defaultLocale: 'AR' | 'EN';
+  readonly timezone: string;
+  readonly currency: string;
   readonly planKey?: string | undefined;
   readonly trialDays?: number | undefined;
 }
@@ -302,7 +314,10 @@ export class WorkspaceAdminService {
             name: input.ownerName?.trim() || null,
             // PENDING and passwordless: the invitation makes the account usable.
             status: 'PENDING',
-            locale: input.defaultLocale ?? 'AR',
+            locale: input.defaultLocale,
+            // The owner of a workspace works where the workspace works, until
+            // they say otherwise. An explicit value, not a platform assumption.
+            timezone: input.timezone,
           },
           update: {},
         });
@@ -329,10 +344,10 @@ export class WorkspaceAdminService {
             name,
             type: (input.type ?? 'STARTUP') as never,
             status: trialDays > 0 ? 'TRIALING' : 'ACTIVE',
-            country: input.country ?? 'SA',
-            defaultLocale: input.defaultLocale ?? 'AR',
-            timezone: input.timezone ?? 'Asia/Riyadh',
-            currency: input.currency ?? 'SAR',
+            country: input.country,
+            defaultLocale: input.defaultLocale,
+            timezone: input.timezone,
+            currency: input.currency,
             ownerUserId: owner.id,
             planKey: input.planKey ?? null,
             planAssignedAt: input.planKey ? this.#clock.now() : null,

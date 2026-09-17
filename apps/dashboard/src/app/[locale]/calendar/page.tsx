@@ -3,6 +3,7 @@ import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type { CalendarDay, PostRecord, SocialPlatform } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -241,8 +242,11 @@ export default async function CalendarPage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
+  const brandContext = await brandContextFor(workspace, '/calendar');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={translate('calendar.title')}
       description={translate('calendar.subtitle')}

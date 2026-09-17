@@ -13,6 +13,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { activityService } from '../../../server/approvals-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -111,8 +112,11 @@ export default async function ActivityPage({
     return translated === key ? entry.actorType : translated;
   };
 
+  const brandContext = await brandContextFor(workspace, '/activity');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/activity"
       heading={t('activity.title')}

@@ -67,6 +67,7 @@ async function freshWorkspace(): Promise<string> {
   const run = crypto.randomUUID();
   const user = await platform.user.create({
     data: {
+      timezone: 'UTC',
       email: `credit-${run}@example.local`,
       name: 'Credit Fixture',
       status: 'ACTIVE',
@@ -74,6 +75,10 @@ async function freshWorkspace(): Promise<string> {
   });
   const workspace = await platform.workspace.create({
     data: {
+      country: 'US',
+      defaultLocale: 'EN',
+      timezone: 'UTC',
+      currency: 'USD',
       id: run,
       workspaceId: run,
       slug: `credit-${run.slice(0, 12)}`,
@@ -211,10 +216,19 @@ describe('granting credits', () => {
     // catch would leave every later statement in that transaction failing.
     const run = crypto.randomUUID();
     const user = await platform.user.create({
-      data: { email: `race-${run}@example.local`, name: 'Race Fixture', status: 'ACTIVE' },
+      data: {
+        email: `race-${run}@example.local`,
+        name: 'Race Fixture',
+        status: 'ACTIVE',
+        timezone: 'UTC',
+      },
     });
     const workspace = await platform.workspace.create({
       data: {
+        country: 'US',
+        defaultLocale: 'EN',
+        timezone: 'UTC',
+        currency: 'USD',
         id: run,
         workspaceId: run,
         slug: `race-${run.slice(0, 12)}`,

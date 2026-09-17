@@ -9,6 +9,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -62,8 +63,11 @@ export default async function SettingsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
+  const brandContext = await brandContextFor(workspace, '/settings');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('settings.title')}
       workspaceName={workspace.workspaceName}

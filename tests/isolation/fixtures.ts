@@ -383,7 +383,13 @@ async function createTenant(
   platformUserId: string,
 ): Promise<TenantFixture> {
   const user = await prisma.user.create({
-    data: { email, name: `User ${slug}`, status: 'ACTIVE', emailVerifiedAt: new Date() },
+    data: {
+      email,
+      name: `User ${slug}`,
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      timezone: 'UTC',
+    },
   });
 
   return asPlatform(
@@ -397,6 +403,10 @@ async function createTenant(
       const id = crypto.randomUUID();
       const workspace = await db.workspace.create({
         data: {
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'UTC',
+          currency: 'USD',
           id,
           workspaceId: id,
           slug,

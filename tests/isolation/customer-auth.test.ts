@@ -128,6 +128,7 @@ describe('sign-in does not reveal whether an account exists', () => {
     const email = `suspended-${Date.now()}@example.local`;
     await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         status: 'SUSPENDED',
         passwordHash: await hashPassword(PASSWORD),
@@ -173,6 +174,7 @@ describe('lockout actually locks', () => {
     const email = `lockout-${Date.now()}@example.local`;
     const user = await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         status: 'ACTIVE',
         passwordHash: await hashPassword(PASSWORD),
@@ -198,6 +200,7 @@ describe('lockout actually locks', () => {
     const email = `parallel-${Date.now()}@example.local`;
     const user = await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         status: 'ACTIVE',
         passwordHash: await hashPassword(PASSWORD),
@@ -430,6 +433,7 @@ describe('a password reset never reactivates an account', () => {
     const email = `reset-${status.toLowerCase()}-${randomUUID()}@example.local`;
     const user = await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         name: `Reset ${status}`,
         status: 'ACTIVE',
@@ -494,7 +498,7 @@ describe('a password reset never reactivates an account', () => {
   it('mints no token for a suspended account in the first place', async () => {
     const email = `reset-nomint-${randomUUID()}@example.local`;
     await platform.user.create({
-      data: { email, name: 'No mint', status: 'SUSPENDED' },
+      data: { email, name: 'No mint', status: 'SUSPENDED', timezone: 'UTC' },
     });
     // Null, not a throw: the caller's response must be identical to the
     // unknown-address case or the endpoint becomes a status oracle.
@@ -546,6 +550,7 @@ describe('password reset is atomic', () => {
     const email = `reset-atomic-${randomUUID()}@example.local`;
     const user = await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         name: 'Atomic',
         status: 'ACTIVE',

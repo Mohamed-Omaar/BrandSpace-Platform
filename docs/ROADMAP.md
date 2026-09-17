@@ -646,36 +646,113 @@ What shipped:
 | **Arbitrary-code or webhook automations**      | Customer-controlled egress from a multi-tenant platform. The action registry is closed and its closure is a database constraint, not a convention (D-154).                                                                                                |
 | **Any silent external Copilot action**         | CLAUDE.md §2.5, enforced as a CHECK constraint rather than a service rule: a plan whose strictest step leaves the platform cannot exist with confirmation switched off.                                                                                   |
 | **A cross-workspace "AI memory"**              | Every learning, insight, plan and run is tenant-owned, brand-scoped and RLS-constrained. There is no store that spans workspaces.                                                                                                                         |
-| **Anything from Phase 8**                      | No billing provider, no checkout, no invoices, no subscription lifecycle, no payment webhooks, no dunning, no launch hardening. No deployment, infrastructure, DNS or staging secret was touched.                                                         |
+| **Anything from Phase 9 or Phase 10**          | No billing provider, no checkout, no invoices, no subscription lifecycle, no payment webhooks, no dunning, no launch hardening. No deployment, infrastructure, DNS or staging secret was touched.                                                         |
 
 ---
 
-## Phase 8 — Billing and Launch
+## The final delivery roadmap — three remaining phases
 
-**Goal:** take real money and open the doors.
+**The remaining MVP delivery is fixed to exactly three top-level phases.** No further top-level
+phase may be added, and no original MVP product scope may be deferred out of them, without an owner
+decision recorded in `docs/DECISIONS.md` (D-187).
+
+| Phase                               | What it closes                                                 |
+| ----------------------------------- | -------------------------------------------------------------- |
+| **Phase 8 — Product Completion**    | The product a customer uses is whole and coherent              |
+| **Phase 9 — Commerce & Onboarding** | A stranger can sign up, configure their own workspace, and pay |
+| **Phase 10 — Production Launch**    | The public site, the launch bar, and the doors open            |
+
+The previous "Phase 8 — Billing and Launch" is superseded: its billing half is Phase 9, its public
+website and launch-readiness half is Phase 10, and the product work neither of them ever covered is
+Phase 8.
+
+---
+
+## Phase 8 — Product Completion
+
+**Goal:** the customer-facing product is one coherent system rather than a set of modules that each
+answer "which brand?" their own way.
 
 ### Scope
 
-1. **Payment provider adapter** — hosted checkout and portal, subscriptions, one-time charges, refunds.
-   **[Owner decision D-21: provider(s) and markets]**
-2. **Subscription lifecycle** — trials, upgrades with proration, downgrades with impact checks,
-   cancellation, dunning, grace periods, suspension.
-3. **Invoices** — generation, numbering, tax handling, bilingual PDFs, credit notes.
-4. **Billing webhooks** — verified, idempotent, ordered, reconciled.
-5. **Customer billing portal** and **platform billing reports**.
-6. **Credit purchase** — packs, add-ons, overage.
-7. **Public website** — all 15 pages, CMS-driven, bilingual, SEO complete, config-driven pricing page,
-   status page.
-8. **Launch readiness** — performance budgets met, penetration test completed and findings resolved,
-   restore drill passed, load test passed, legal documents published, support processes documented,
-   monitoring and alerting verified, incident runbooks written.
+1. **Final delivery contract** — the workspace/brand model, the navigation inventory and the
+   three-phase roadmap recorded in the repository as authoritative (D-187 … D-189).
+2. **Global Workspace/Brand context** — one server-authoritative Brand Context for the authenticated
+   dashboard: a Brand Selector beside the Workspace Selector, deterministic persistence, and the end
+   of every page-level brand picker that answered the question differently (D-190, D-191).
+3. **Route scope classification** — every dashboard route declared Workspace-scoped, Brand-scoped or
+   Brand-or-All-Brands in ONE place, rather than decided again in each page (D-192).
+4. **Brand Profile** — the canonical identity of a brand (name, industry, description, website,
+   locales, palette, typography) and its canonical identity ASSETS, referenced into the one Asset
+   Library rather than copied into a second one (D-193).
+5. **Asset Library context** — All Assets / Shared / per-Brand, over the single workspace library.
+6. **Removal of product-wide Saudi defaults** — country, locale, timezone and currency become
+   explicit inputs rather than assumptions baked into the schema (D-194).
 
 ### Exit criteria
 
+- [ ] The shell carries a Workspace Selector and a Brand Selector, and the sidebar does not duplicate per brand
+- [ ] No brand-required screen silently selects the workspace's first brand
+- [ ] A selected brand from another workspace can never survive a workspace switch
+- [ ] "All Brands" means the brands the CURRENT MEMBER may access, never every brand in the workspace
+- [ ] Brand Profile reads and writes canonical identity, and its canonical asset references cannot
+      point outside the workspace or outside the member's brand scope
+- [ ] The Asset Library offers All / Shared / per-Brand over one library, permission-safe
+- [ ] Creating a workspace requires an explicit country, locale, timezone and currency; existing
+      stored values are untouched
+
+### Deliberately NOT in Phase 8
+
+Campaigns customer UI · AI Creative Studio · media publishing · real AI provider adapters · real
+social providers · payments, checkout or invoices · self-service signup · production deployment,
+object storage or scanner selection. Those belong to Phase 9 and Phase 10, which are already fixed.
+
+---
+
+## Phase 9 — Commerce & Onboarding
+
+**Goal:** a stranger can create an account, configure their own workspace, and pay for it.
+
+### Scope
+
+1. **Self-service onboarding** — signup, workspace creation, and the explicit country / locale /
+   timezone / currency choice Phase 8 made mandatory. This is the UX that replaces the removed
+   defaults; Phase 8 removed the assumption, Phase 9 asks the question.
+2. **Payment provider adapter** — hosted checkout and portal, subscriptions, one-time charges,
+   refunds. **[Owner decision D-21: provider(s) and markets]**
+3. **Subscription lifecycle** — trials, upgrades with proration, downgrades with impact checks,
+   cancellation, dunning, grace periods, suspension.
+4. **Invoices** — generation, numbering, tax handling, bilingual PDFs, credit notes.
+5. **Billing webhooks** — verified, idempotent, ordered, reconciled.
+6. **Customer billing portal** and **platform billing reports**.
+7. **Credit purchase** — packs, add-ons, overage.
+
+### Exit criteria
+
+- [ ] A stranger signs up, chooses their own country/locale/timezone/currency, and lands in a working workspace
 - [ ] A customer subscribes, is charged, receives an invoice, and gets the right entitlements
 - [ ] Payment failure moves through dunning to suspension and recovers correctly
 - [ ] Upgrade and downgrade behave exactly as specified, including credit handling
 - [ ] Webhook replays change nothing; spoofed webhooks are rejected
+
+---
+
+## Phase 10 — Production Launch
+
+**Goal:** the public site is live, the launch bar is met, and the doors open.
+
+### Scope
+
+1. **Public website** — all 15 pages, CMS-driven, bilingual, SEO complete, config-driven pricing
+   page, status page.
+2. **Launch readiness** — performance budgets met, penetration test completed and findings resolved,
+   restore drill passed, load test passed, legal documents published, support processes documented,
+   monitoring and alerting verified, incident runbooks written.
+3. **Production infrastructure** — deployment, production object storage, the virus-scanner decision,
+   and the real provider credentials every earlier phase deliberately refused to invent.
+
+### Exit criteria
+
 - [ ] Public site scores ≥ 95 Lighthouse on performance, accessibility, best practices, and SEO in both locales
 - [ ] Penetration test findings of high severity are resolved
 - [ ] A production restore drill has been completed and timed
@@ -763,7 +840,7 @@ no mail transport exists in this platform, and a CHECK constraint pins every row
 
 | Not built                                                  | Why                                                                                                                                                                                                                                                     |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Email, SMS, push and Slack delivery**                    | ROADMAP scope item 8 says "in-app + email", but no mail transport exists anywhere in the platform. A `channel` accepting `EMAIL` would be a row claiming a delivery that never happened. Phase 8 launch hardening (D-123)                               |
+| **Email, SMS, push and Slack delivery**                    | ROADMAP scope item 8 says "in-app + email", but no mail transport exists anywhere in the platform. A `channel` accepting `EMAIL` would be a row claiming a delivery that never happened. Phase 10 launch hardening (D-123)                              |
 | **Threaded comments, mentions, anchored review notes**     | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own — threads, `@mentions`, a position in the text, resolution. The approval's request and decision notes carry the review's context; the rest belongs with the surface it is for |
 | **Multi-step approval chains, role assignment, due dates** | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten — the rule §4.4b applied to `campaignId`                                                                           |
 | **Notification channel preferences**                       | A preferences screen for channels the product cannot deliver on would be a promise it does not keep. It arrives with the transports                                                                                                                     |

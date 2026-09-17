@@ -1,6 +1,7 @@
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { callSocialApi, inSocial } from '../../../server/social-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -265,8 +266,11 @@ export default async function IntegrationsPage({
     canRetry: job.canRetry,
   }));
 
+  const brandContext = await brandContextFor(session.workspace, '/integrations');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('integrations.title')}
       description={t('integrations.subtitle')}

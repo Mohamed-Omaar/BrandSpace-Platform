@@ -39,10 +39,19 @@ function actor(permissions: readonly string[] = [AI_USAGE_READ_PERMISSION]): AiE
 async function freshWorkspace(): Promise<string> {
   const run = crypto.randomUUID();
   const user = await platform.user.create({
-    data: { email: `exp-${run}@example.local`, name: 'Explorer Fixture', status: 'ACTIVE' },
+    data: {
+      email: `exp-${run}@example.local`,
+      name: 'Explorer Fixture',
+      status: 'ACTIVE',
+      timezone: 'UTC',
+    },
   });
   const workspace = await platform.workspace.create({
     data: {
+      country: 'US',
+      defaultLocale: 'EN',
+      timezone: 'UTC',
+      currency: 'USD',
       id: run,
       workspaceId: run,
       slug: `exp-${run.slice(0, 12)}`,

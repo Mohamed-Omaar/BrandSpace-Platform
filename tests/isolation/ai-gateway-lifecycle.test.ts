@@ -156,10 +156,19 @@ let activeConfiguration: AiConfiguration = configuration();
 async function freshWorkspace(credits: number): Promise<string> {
   const run = crypto.randomUUID();
   const user = await platform.user.create({
-    data: { email: `ai-${run}@example.local`, name: 'AI Fixture', status: 'ACTIVE' },
+    data: {
+      email: `ai-${run}@example.local`,
+      name: 'AI Fixture',
+      status: 'ACTIVE',
+      timezone: 'UTC',
+    },
   });
   const workspace = await platform.workspace.create({
     data: {
+      country: 'US',
+      defaultLocale: 'EN',
+      timezone: 'UTC',
+      currency: 'USD',
       id: run,
       workspaceId: run,
       slug: `ai-${run.slice(0, 12)}`,

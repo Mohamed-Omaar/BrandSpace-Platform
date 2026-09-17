@@ -5,6 +5,7 @@ import {
 } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -260,8 +261,11 @@ export default async function ApprovalsPage({
       }
     : null;
 
+  const brandContext = await brandContextFor(workspace, '/approvals');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/approvals"
       heading={t('approvals.title')}

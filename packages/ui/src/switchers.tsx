@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { colorTokens, layoutTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
-import { BuildingIcon, CheckIcon } from './icons';
+import { BuildingIcon, CheckIcon, TagIcon } from './icons';
 import { DropdownMenu } from './overlays';
 import { menuItemStyle } from './menu-style';
 
@@ -152,6 +152,210 @@ export function WorkspaceSwitcher({
           href={manageHref}
           role="menuitem"
           data-testid={manageTestId}
+          style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
+        >
+          {manageLabel}
+        </a>
+      ) : null}
+    </DropdownMenu>
+  );
+}
+
+/**
+ * THE GLOBAL BRAND SELECTOR (D-190).
+ *
+ * IT IS THE WORKSPACE CARD'S SIBLING, NOT A SECOND NAVIGATION SYSTEM. Same
+ * `DropdownMenu`, same `trigger="card"` surface, same avatar tile, same two
+ * lines of copy, same tick-plus-`aria-current` marking. Nothing here is a new
+ * visual language: the ONLY differences from `WorkspaceSwitcher` are the glyph
+ * (a tag, because a brand is an identity applied to work) and the second line,
+ * which says what the selection MEANS rather than repeating a role.
+ *
+ * WHY THE ITEMS ARE FORMS. The workspace switcher navigates, because switching
+ * workspace rewrites the session the server already owns. A brand selection is
+ * remembered in a cookie and a link cannot set one — so each option posts to a
+ * server action, exactly as the profile card's sign-out does. The markup shape
+ * is the one the rail already uses.
+ *
+ * THE AGGREGATE OPTION IS OFFERED ONLY WHERE IT MEANS SOMETHING. A page that
+ * needs exactly one brand gets no "All Brands" row, because a control that sets
+ * a state the page cannot act on is the dead control the fidelity contract
+ * forbids.
+ */
+export interface BrandSwitcherOption {
+  readonly id: string;
+  readonly name: string;
+  /** The second line: what this brand is, in the reader's language. */
+  readonly caption?: string | undefined;
+  readonly current?: boolean | undefined;
+}
+
+export function BrandSwitcher({
+  label,
+  current,
+  options,
+  action,
+  hiddenFields,
+  allOption,
+  emptyLabel,
+  manageHref,
+  manageLabel,
+}: {
+  readonly label: string;
+  /** The trigger's two lines: the selection, and what kind of selection it is. */
+  readonly current: { readonly name: string; readonly caption: string };
+  readonly options: readonly BrandSwitcherOption[];
+  /** The server action each option posts to. */
+  readonly action: (formData: FormData) => void | Promise<void>;
+  /** Fields every option carries — the locale and the path to return to. */
+  readonly hiddenFields: Readonly<Record<string, string>>;
+  /** Rendered first when the route admits an aggregate. */
+  readonly allOption?: { readonly label: string; readonly current: boolean } | undefined;
+  /** Shown instead of options when this member can act on no brand. */
+  readonly emptyLabel?: string | undefined;
+  readonly manageHref?: string | undefined;
+  readonly manageLabel?: string | undefined;
+}) {
+  const row = (
+    value: string,
+    name: string,
+    caption: string | undefined,
+    isCurrent: boolean,
+    testId: string,
+  ) => (
+    <form action={action} key={value}>
+      {Object.entries(hiddenFields).map(([field, fieldValue]) => (
+        <input key={field} type="hidden" name={field} value={fieldValue} />
+      ))}
+      <input type="hidden" name="brandId" value={value} />
+      <button
+        type="submit"
+        role="menuitem"
+        data-testid={testId}
+        // The current brand is marked by a tick AND `aria-current`, never by
+        // colour alone — the rule the workspace switcher already follows.
+        aria-current={isCurrent ? 'true' : undefined}
+        style={{
+          ...menuItemStyle(),
+          background: isCurrent ? colorTokens.brandPurpleTint : 'transparent',
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-flex',
+            color: isCurrent ? colorTokens.brandPurple : 'transparent',
+          }}
+        >
+          <CheckIcon size={16} />
+        </span>
+        <span style={{ display: 'grid', minInlineSize: 0 }}>
+          <span style={{ fontWeight: 600 }}>{name}</span>
+          {caption ? (
+            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+              {caption}
+            </span>
+          ) : null}
+        </span>
+      </button>
+    </form>
+  );
+
+  return (
+    <DropdownMenu
+      label={label}
+      testId="brand-switcher"
+      align="start"
+      trigger="card"
+      triggerContent={
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: spacingTokens.sm,
+            minInlineSize: 0,
+            flex: '1 1 auto',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-grid',
+              placeItems: 'center',
+              // The workspace card's tile, to the pixel. A different size here
+              // would read as a different KIND of control.
+              inlineSize: layoutTokens.railAvatar,
+              blockSize: layoutTokens.railAvatar,
+              flexShrink: 0,
+              borderRadius: radiusTokens.control,
+              background: 'linear-gradient(145deg, #EEE5FF, #FFF5B3)',
+              color: colorTokens.textPrimary,
+            }}
+          >
+            <TagIcon size={16} />
+          </span>
+          <span
+            className="bs-rail-copy"
+            style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
+          >
+            <span
+              data-testid="active-brand"
+              style={{
+                ...typographyTokens.label,
+                color: colorTokens.textPrimary,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {current.name}
+            </span>
+            <span
+              data-testid="active-brand-caption"
+              style={{
+                ...typographyTokens.caption,
+                marginBlockStart: spacingTokens['3xs'],
+                color: colorTokens.textMuted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {current.caption}
+            </span>
+          </span>
+        </span>
+      }
+    >
+      {allOption
+        ? row('all', allOption.label, undefined, allOption.current, 'brand-option-all')
+        : null}
+      {options.map((option) =>
+        row(
+          option.id,
+          option.name,
+          option.caption,
+          option.current === true,
+          `brand-option-${option.id}`,
+        ),
+      )}
+      {options.length === 0 && emptyLabel ? (
+        <p
+          style={{
+            ...menuItemStyle(),
+            cursor: 'default',
+            color: colorTokens.textMuted,
+            margin: 0,
+          }}
+        >
+          {emptyLabel}
+        </p>
+      ) : null}
+      {manageHref && manageLabel ? (
+        <a
+          href={manageHref}
+          role="menuitem"
+          data-testid="manage-brand"
           style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
         >
           {manageLabel}

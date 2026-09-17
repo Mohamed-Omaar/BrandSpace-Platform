@@ -1504,7 +1504,7 @@ the same outcome as an id that never existed.
 
 | Not done                                               | Why                                                                                                                                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 8 launch hardening (D-123)                                                         |
+| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 10 launch hardening (D-123)                                                        |
 | Multi-step approval chains, role assignment, due dates | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten            |
 | Threaded comments with mentions and anchors            | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own. The approval's request and decision notes carry the review's context |
 | Weakening the audit trail for the UI                   | The screen was shaped to the append-only record, not the reverse                                                                                |
@@ -1808,7 +1808,7 @@ Recorded because a clean result is a result:
   feature expansion this milestone is not.
 - **`RolePermission`** carries no tenant key of its own and inherits the role's,
   so it raises no cross-tenant question and was deliberately left alone.
-- **Phase 8 retention** remains the recorded launch dependency (D-116, D-117).
+- **Phase 10 retention** remains the recorded launch dependency (D-116, D-117).
   This milestone did not build a retention engine.
 
 ### 27.6 The review of the audit — four things the first pass got wrong

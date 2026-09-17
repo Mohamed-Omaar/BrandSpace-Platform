@@ -73,13 +73,21 @@ async function seedWorkspaces(count: number): Promise<void> {
   for (let i = 0; i < count; i += 1) {
     const suffix = `${RUN}-${String(i).padStart(3, '0')}`;
     const user = await platform.user.create({
-      data: { email: `${suffix}@example.local`, name: 'Listing fixture', status: 'ACTIVE' },
+      data: {
+        email: `${suffix}@example.local`,
+        name: 'Listing fixture',
+        status: 'ACTIVE',
+        timezone: 'UTC',
+      },
     });
     // `workspace_tenant_key_matches_id` requires the two to agree: the tenant
     // key IS the id, which is what makes every RLS predicate one comparison.
     const workspaceId = randomUUID();
     await platform.workspace.create({
       data: {
+        defaultLocale: 'EN',
+        timezone: 'UTC',
+        currency: 'USD',
         id: workspaceId,
         workspaceId,
         slug: suffix,

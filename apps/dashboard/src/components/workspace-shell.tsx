@@ -23,6 +23,7 @@ import {
   SparkIcon,
   TeamIcon,
   WorkspaceSwitcher,
+  BrandSwitcher,
   Banner,
   StateMessage,
   buttonStyle,
@@ -37,6 +38,8 @@ import {
   initialsFrom,
 } from '@brandspace/ui';
 import { translator, type MessageKey } from '../i18n/messages';
+import type { BrandContext } from '../server/brand-context';
+import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction } from '../app/[locale]/(auth)/actions';
 
@@ -182,6 +185,29 @@ const NAV: readonly {
   },
 ];
 
+/**
+ * The two lines the brand card shows, for each of the four resolutions.
+ *
+ * THE CARD NEVER LIES ABOUT WHICH BRAND YOU ARE ON. "No brand selected" is a
+ * state the reader can see and act on; the alternative — showing a brand name
+ * nobody chose — is the silent guess this whole phase exists to remove.
+ */
+function brandTrigger(
+  context: BrandContext,
+  t: (key: MessageKey) => string,
+): { name: string; caption: string } {
+  switch (context.resolution.kind) {
+    case 'brand':
+      return { name: context.resolution.brand.name, caption: t('brand.selectedCaption') };
+    case 'all':
+      return { name: t('brand.allBrands'), caption: t('brand.allBrandsCaption') };
+    case 'unselected':
+      return { name: t('brand.noneSelected'), caption: t('brand.noneSelectedCaption') };
+    case 'empty':
+      return { name: t('brand.noBrands'), caption: t('brand.noBrandsCaption') };
+  }
+}
+
 export function WorkspaceShell({
   locale,
   heading,
@@ -195,6 +221,7 @@ export function WorkspaceShell({
   customerName,
   permissionKeys,
   availableWorkspaces = [],
+  brandContext,
   children,
 }: {
   locale: string;
@@ -232,6 +259,15 @@ export function WorkspaceShell({
     roleName: string;
     current: boolean;
   }>;
+  /**
+   * The resolved global brand context (D-190).
+   *
+   * OPTIONAL, and that is deliberate rather than lax: the sign-in, workspace
+   * chooser and no-workspace screens render this shell without a workspace to
+   * resolve brands in. A page that HAS a workspace passes it, and the selector
+   * appears; a page that does not simply has no second card.
+   */
+  brandContext?: BrandContext | undefined;
   children: ReactNode;
 }) {
   const t = translator(locale);
@@ -274,14 +310,61 @@ export function WorkspaceShell({
         expandSidebar: t('nav.expand'),
       }}
       headerStart={
-        <WorkspaceSwitcher
-          label={t('ws.switcherLabel')}
-          current={{ name: workspaceName, roleName }}
-          options={workspaceOptions}
-          manageHref={`/${locale}/workspaces`}
-          manageLabel={t('nav.switch')}
-          manageTestId="switch-workspace"
-        />
+        /*
+         * TWO CARDS, ONE STACK — the workspace, then the brand inside it.
+         *
+         * THE BRAND CARD SITS WHERE THE WORKSPACE CARD ALREADY IS, which is the
+         * rail rather than the top bar. The phase brief describes the Workspace
+         * Selector as being "in the top bar"; in the implemented product it is
+         * `headerStart`, the rail's identity block (D-59), and the top bar
+         * carries search, notifications, language and create. Putting the brand
+         * selector in the top bar would have separated it from the thing it is
+         * scoped BY and introduced the second navigation system the brief
+         * forbids, so the stronger instruction — "beside the Workspace
+         * Selector" — decides, and the conflict is recorded in
+         * docs/UI-FIDELITY-CONTRACT.md §6.
+         *
+         * The order is containment: a brand lives inside a workspace, so it
+         * reads underneath it. Same card, same tile, same two lines.
+         */
+        <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+          <WorkspaceSwitcher
+            label={t('ws.switcherLabel')}
+            current={{ name: workspaceName, roleName }}
+            options={workspaceOptions}
+            manageHref={`/${locale}/workspaces`}
+            manageLabel={t('nav.switch')}
+            manageTestId="switch-workspace"
+          />
+          {brandContext ? (
+            <BrandSwitcher
+              label={t('brand.switcherLabel')}
+              current={brandTrigger(brandContext, t)}
+              options={brandContext.brands.map((brand) => ({
+                id: brand.id,
+                name: brand.name,
+                current: brandContext.selectedValue === brand.id,
+              }))}
+              action={selectBrandAction}
+              hiddenFields={{ locale, next: `/${locale}${activePath ?? '/overview'}` }}
+              {...(brandContext.aggregateAllowed
+                ? {
+                    allOption: {
+                      label: t('brand.allBrands'),
+                      current: brandContext.resolution.kind === 'all',
+                    },
+                  }
+                : {})}
+              emptyLabel={t('brand.emptyMenu')}
+              {...(brandContext.resolution.kind === 'brand'
+                ? {
+                    manageHref: `/${locale}/settings/brand?brand=${brandContext.resolution.brand.id}`,
+                    manageLabel: t('brand.profile'),
+                  }
+                : {})}
+            />
+          ) : null}
+        </div>
       }
       headerEnd={
         /*

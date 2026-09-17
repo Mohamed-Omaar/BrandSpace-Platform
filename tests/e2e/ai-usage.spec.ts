@@ -67,7 +67,12 @@ async function expectNoBlockingA11yViolations(page: Page, label: string): Promis
 test.beforeAll(async () => {
   await withPlatformPrisma(async (prisma) => {
     const user = await prisma.user.create({
-      data: { email: `${RUN}@example.local`, name: 'AI usage E2E', status: 'ACTIVE' },
+      data: {
+        email: `${RUN}@example.local`,
+        name: 'AI usage E2E',
+        status: 'ACTIVE',
+        timezone: 'UTC',
+      },
     });
     // `workspaceId` on a Workspace row is its OWN id — the self-reference the
     // RLS policies key on, enforced by `workspace_tenant_key_matches_id`. Both
@@ -76,6 +81,10 @@ test.beforeAll(async () => {
     const id = crypto.randomUUID();
     const workspace = await prisma.workspace.create({
       data: {
+        country: 'US',
+        defaultLocale: 'EN',
+        timezone: 'UTC',
+        currency: 'USD',
         id,
         workspaceId: id,
         slug: RUN.slice(0, 30),

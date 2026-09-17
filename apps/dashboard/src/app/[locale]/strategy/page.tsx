@@ -10,8 +10,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -58,15 +58,18 @@ export default async function StrategyPage({
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
 
-  const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    db.brand.findMany({
-      where: { status: 'ACTIVE', ...brandScopeFilter(workspace.brandScope) },
-      select: { id: true, name: true },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-    }),
+  /*
+   * THE GLOBAL BRAND CONTEXT (D-190). A strategy is generated FROM one brand's
+   * memories and accepted AGAINST that brand, so the screen still needs exactly
+   * one — it just no longer picks it, and no longer keeps its own list beside
+   * the rail's.
+   */
+  const brandContext = await brandContextFor(
+    session.workspace,
+    '/strategy',
+    typeof query['brand'] === 'string' ? query['brand'] : null,
   );
-  const requested = typeof query['brand'] === 'string' ? query['brand'] : null;
-  const brand = brands.find((candidate) => candidate.id === requested) ?? brands[0] ?? null;
+  const brand = requiredBrand(brandContext);
 
   const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
     dateStyle: 'medium',
@@ -93,6 +96,7 @@ export default async function StrategyPage({
 
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('strategy.title')}
       description={t('strategy.subtitle')}

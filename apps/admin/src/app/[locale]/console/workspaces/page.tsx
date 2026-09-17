@@ -388,7 +388,8 @@ export default async function WorkspacesPage({
                 className="bs-control"
                 id="country"
                 name="country"
-                defaultValue="SA"
+                required
+                placeholder="ISO 3166-1 alpha-2"
                 maxLength={2}
                 style={inputStyle()}
               />
@@ -398,7 +399,8 @@ export default async function WorkspacesPage({
                 className="bs-control"
                 id="timezone"
                 name="timezone"
-                defaultValue="Asia/Riyadh"
+                required
+                placeholder="IANA time zone"
                 style={inputStyle()}
               />
             </Field>
@@ -407,7 +409,8 @@ export default async function WorkspacesPage({
                 className="bs-control"
                 id="currency"
                 name="currency"
-                defaultValue="SAR"
+                required
+                placeholder="ISO 4217"
                 maxLength={3}
                 style={inputStyle()}
               />

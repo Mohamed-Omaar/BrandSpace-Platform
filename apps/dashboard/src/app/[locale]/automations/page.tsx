@@ -21,6 +21,7 @@ import {
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -136,8 +137,11 @@ export default async function AutomationsPage({
     timeZone: 'UTC',
   });
 
+  const brandContext = await brandContextFor(session.workspace, '/automations');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('automations.title')}
       description={t('automations.subtitle')}

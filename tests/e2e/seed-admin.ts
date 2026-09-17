@@ -220,6 +220,15 @@ async function seedCustomerEstate(
         slug,
         ownerEmail,
         ownerName: 'E2E Workspace Owner',
+        /*
+         * EXPLICIT (D-194). A fixture states where its workspace is rather than
+         * inheriting a platform assumption, because there is no longer one to
+         * inherit — and a fixture that silently took `SA`/`SAR` was part of how
+         * the assumption stayed invisible.
+         */
+        country: 'US',
+        timezone: 'UTC',
+        currency: 'USD',
         defaultLocale: 'EN',
       });
     }
@@ -269,6 +278,7 @@ async function seedCustomerEstate(
       email: viewerEmail,
       name: 'E2E Viewer',
       status: 'ACTIVE',
+      timezone: 'UTC',
       emailVerifiedAt: new Date(),
       passwordHash: await hashPassword(viewerPassword),
     },
@@ -321,6 +331,7 @@ async function seedCustomerEstate(
       email: invitedEmail,
       name: 'E2E Invitee',
       status: 'ACTIVE',
+      timezone: 'UTC',
       emailVerifiedAt: new Date(),
       passwordHash: await hashPassword(password),
     },

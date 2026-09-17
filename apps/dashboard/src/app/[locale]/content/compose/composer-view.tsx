@@ -67,6 +67,15 @@ export interface ComposerViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
   readonly brands: readonly { id: string; name: string }[];
+  /**
+   * The globally selected brand, or null when the rail is on "All brands".
+   *
+   * NEW CONTENT TAKES THE GLOBAL SELECTION (D-190); an EXISTING draft takes its
+   * own stored `brandId` and nothing can reinterpret it, because the global
+   * context is a filter over what you are looking at and never a re-parenting
+   * of what already exists.
+   */
+  readonly defaultBrandId: string | null;
   readonly platforms: readonly ComposerPlatform[];
   readonly contentTypes: readonly string[];
   readonly maxBriefChars: number;
@@ -93,6 +102,7 @@ export function ComposerView({
   locale,
   t,
   brands,
+  defaultBrandId,
   platforms,
   contentTypes,
   maxBriefChars,
@@ -105,7 +115,16 @@ export function ComposerView({
   const router = useRouter();
   const fieldId = useId();
 
-  const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
+  /*
+   * NOT `brands[0]`. That was the silent first-brand guess wearing client state:
+   * a composer opened in a four-brand workspace generated against whichever
+   * brand sorted first, and the person writing the brief never saw a choice.
+   *
+   * A draft's own brand wins, then the rail's selection, then nothing — and
+   * "nothing" disables generation rather than picking, because `canGenerate`
+   * below already requires a non-empty brand.
+   */
+  const [brandId, setBrandId] = useState(draft?.brandId ?? defaultBrandId ?? '');
   const [selected, setSelected] = useState<string[]>(() =>
     platforms[0] ? [platforms[0].key] : [],
   );
@@ -268,7 +287,14 @@ export function ComposerView({
       <div className="cs-composer">
         {/* ---------------------------------------------- the editor --- */}
         <section className="cs-surface-card">
-          {brands.length > 1 ? (
+          {/*
+            THE LOCAL PICKER SURVIVES ONLY WHERE THE GLOBAL ONE CANNOT ANSWER:
+            a NEW item composed while the rail is on "All brands". With a brand
+            selected, or while editing a draft that already has one, this would
+            be a second control setting the same thing — which is exactly how
+            the rail and the page came to disagree (D-190).
+          */}
+          {draft === null && defaultBrandId === null && brands.length > 1 ? (
             <div className="cs-field">
               <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
               <select

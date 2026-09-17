@@ -251,7 +251,10 @@ model User {
   passwordHash    String?
   name            String?
   locale          Locale     @default(EN)
-  timezone        String     @default("Asia/Riyadh")
+  /// NO DEFAULT (D-194). A person's zone is a fact about that person, and
+  /// `Asia/Riyadh` was a guess about all of them. Whoever creates the row
+  /// resolves it.
+  timezone        String
   status          UserStatus @default(PENDING)
 
   // MFA. The secret itself lives in the vault; only its reference is stored here.
@@ -336,10 +339,16 @@ model Workspace {
   legalName     String?
   type          WorkspaceType   @default(STARTUP)
   status        WorkspaceStatus @default(TRIALING)
-  country       String          @default("SA")
-  defaultLocale Locale          @default(AR)
-  timezone      String          @default("Asia/Riyadh")
-  currency      String          @default("SAR") @db.Char(3)
+  /// NO PRODUCT-WIDE DEFAULT (D-194). These four decided that every customer was
+  /// Saudi unless somebody remembered otherwise, which is not a default, it is an
+  /// assumption. They are dropped rather than replaced: US/USD/New York would be
+  /// the same mistake facing the other way. A creation path must resolve them,
+  /// and `CreateWorkspaceInput` makes that a compile error rather than a silent
+  /// fallback. Existing rows keep exactly what they hold.
+  country       String
+  defaultLocale Locale
+  timezone      String
+  currency      String          @db.Char(3)
 
   ownerUserId String @db.Uuid
   owner       User   @relation("WorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
@@ -1674,6 +1683,24 @@ model Brand {
   typography   Json?
   voiceProfile Json?
 
+  /// THE CANONICAL IDENTITY ASSETS (D-193).
+  ///
+  /// A REFERENCE INTO THE ONE ASSET LIBRARY, never a second copy of the file.
+  /// The bytes live in `asset`; these columns say which of them IS this brand's
+  /// logo, so the Creative Studio can find it later and nobody has to upload
+  /// the same file per post.
+  ///
+  /// TENANT-SAFE BY CONSTRUCTION: the foreign key is composite on
+  /// `(workspaceId, <column>)` (D-112), so a brand cannot name an asset in
+  /// another workspace — the key has nowhere to point. A database trigger adds
+  /// the rule a key cannot express: the asset must be this brand's own or
+  /// workspace-shared, never another brand's.
+  ///
+  /// `ON DELETE SET NULL` names the column (D-114), so deleting the file clears
+  /// the reference and never the tenant key.
+  primaryLogoAssetId   String? @db.Uuid
+  secondaryLogoAssetId String? @db.Uuid
+
   status BrandStatus @default(DRAFT)
 
   /// D-115. This brand's Arabic dialect, overriding the workspace's. NULL means
@@ -1687,6 +1714,9 @@ model Brand {
   deletedAt DateTime? @db.Timestamptz(6)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  primaryLogoAsset Asset? @relation("BrandPrimaryLogo", fields: [workspaceId, primaryLogoAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_primary_logo_fkey")
+  secondaryLogoAsset Asset? @relation("BrandSecondaryLogo", fields: [workspaceId, secondaryLogoAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_secondary_logo_fkey")
 
   knowledgeItems    BrandKnowledgeItem[]
   knowledgeVersions BrandKnowledgeVersion[]
@@ -1740,6 +1770,8 @@ model Brand {
   @@unique([workspaceId, id], name: "brand_workspace_scope")
   @@unique([workspaceId, slug])
   @@index([workspaceId, status])
+  @@index([workspaceId, primaryLogoAssetId])
+  @@index([workspaceId, secondaryLogoAssetId])
   @@map("brand")
 }
 
@@ -2419,6 +2451,11 @@ model Asset {
 
   workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand?       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_brand_fkey")
+
+  /// The brands that name this asset as a canonical logo (D-193). Back-relations
+  /// only; the reference lives on `brand`.
+  primaryLogoOf   Brand[] @relation("BrandPrimaryLogo")
+  secondaryLogoOf Brand[] @relation("BrandSecondaryLogo")
   /// COMPOSITE, for the reason spelled out on AssetFolder.parent: a plain key
   /// would let a tenant file its own asset under another tenant folder, and
   /// would answer "does this folder id exist anywhere" for free.

@@ -11,6 +11,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { notificationService } from '../../../server/approvals-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -67,8 +68,11 @@ export default async function NotificationsPage({
     timeZone: 'UTC',
   });
 
+  const brandContext = await brandContextFor(workspace, '/notifications');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/notifications"
       heading={t('notifications.title')}

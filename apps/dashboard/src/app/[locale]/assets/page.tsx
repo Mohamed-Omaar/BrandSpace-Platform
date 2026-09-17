@@ -2,6 +2,7 @@ import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -67,6 +68,7 @@ export default async function AssetsPage({
   const tagFilter = single('tag');
   const folderFilter = single('folder');
   const sort = (single('sort') ?? 'createdAt') as 'createdAt' | 'name' | 'sizeBytes';
+  const scopeParam = single('scope');
   const selectedId = single('asset');
 
   /*
@@ -89,6 +91,31 @@ export default async function AssetsPage({
     }),
   );
 
+  const brandContext = await brandContextFor(workspace, '/assets');
+
+  /*
+   * THE LIBRARY'S SLICE, AND WHERE ITS DEFAULT COMES FROM (D-193).
+   *
+   * `/assets` is a BRAND-OR-ALL route, so with a brand on the rail the library
+   * opens on THAT BRAND PLUS THE SHARED SHELF — the phase brief's default — and
+   * the reader can still widen to every asset they may see, or narrow to shared
+   * only, from the filter row. An explicit `?scope=` always wins, so a
+   * bookmarked view is the view that comes back.
+   *
+   * A BRAND ID IS NOT TAKEN ON TRUST. `library.browse` calls
+   * `assertAssetBrandInScope` on any named brand, and an id outside the
+   * member's scope is refused there rather than filtered out here — so this
+   * only has to decide what was ASKED FOR, never what is allowed.
+   */
+  const contextBrand = brandFilterFor(brandContext);
+  const effectiveScope = scopeParam ?? contextBrand;
+  const browseScope: { brandId?: string | null; includeShared?: boolean } =
+    effectiveScope === undefined
+      ? {}
+      : effectiveScope === 'shared'
+        ? { brandId: null }
+        : { brandId: effectiveScope, includeShared: true };
+
   const actor = {
     userId: customer.userId,
     permissionKeys: permissions,
@@ -101,6 +128,7 @@ export default async function AssetsPage({
 
     const page = await library.browse({
       actor,
+      ...browseScope,
       ...(folderFilter ? { folderId: folderFilter } : {}),
       ...(kindFilter ? { kinds: [kindFilter] } : {}),
       ...(statusFilter ? { statuses: [statusFilter] } : {}),
@@ -217,6 +245,7 @@ export default async function AssetsPage({
 
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('assets.title')}
       description={t('assets.subtitle')}
@@ -241,6 +270,7 @@ export default async function AssetsPage({
           ...(statusFilter ? { status: statusFilter } : {}),
           ...(tagFilter ? { tag: tagFilter } : {}),
           ...(folderFilter ? { folder: folderFilter } : {}),
+          ...(effectiveScope ? { scope: effectiveScope } : {}),
           sort,
         }}
         can={{

@@ -21,6 +21,7 @@ import {
   type MediaSeed,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import {
@@ -190,8 +191,11 @@ export default async function MembersPage({
     ...(mayManage ? [t('members.actions')] : []),
   ];
 
+  const brandContext = await brandContextFor(session.workspace, '/members');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/members"
       heading={t('members.title')}
