@@ -2539,3 +2539,61 @@ tie-break. `#dispatchAutomationEvents` and `#expireAutomationProposals` operate 
 rows that RETIRE and already order oldest-first over a durable column, and the
 publishing and retention sweeps predate Phase 7 and retire their rows too; none
 of them carries the defect.
+
+## 34. Phase 7 remediation, round 5 — the decoder that turned invalid into wider
+
+A fifth review of the green branch found one residual defect, in the last place
+between a customer's form and the engine that had not been made to fail closed.
+
+### 34.1 Invalid input must never broaden what a rule does
+
+`conditionsFrom` dropped an unrecognised `conditionField` and returned `[]`. That
+reads like defensive tidiness and is the opposite: **a request that meant a
+CONDITIONAL rule created an UNCONDITIONAL one.** A rule written as "notify me
+when an APPROVED post goes out" was stored as "notify me when ANY post goes
+out" — enabled, listed, and firing on everything, with nothing anywhere saying
+the condition had been dropped. Conditional to unconditional is the one
+direction a decoder must never move a rule in, and a silent fallback takes it
+every time.
+
+**D-183** refuses it. Only the exact empty string means "no condition", because
+that is the value the picker's own option carries; whitespace is not folded into
+it, or the same unconditional rule arrives one character along. The lookup is
+`Object.hasOwn` rather than a truthiness or `undefined` test — `['__proto__']`
+returns `Object.prototype` and `['toString']` a function, so an `undefined`
+check admits three names that are not fields and then reads a value kind off the
+prototype.
+
+### 34.2 `Number('')` is `0`, and zero is a valid answer
+
+The same class, reached by arithmetic. A blank threshold became "when this
+metric crosses zero"; a blank hour became "at midnight"; a blank platform count
+became "more than zero platforms". Every one of those is a rule somebody could
+have written, and none of them is the rule they were writing — which is exactly
+what makes the coercion hard to notice from either side of the screen.
+
+**D-184** requires a present, finite number and a present, non-empty string, and
+removes the invented defaults (`?? 0` for the hour, `?? 'above'` for the
+direction). The two real product defaults stay and stay in the registry schema:
+an untouched set of weekday checkboxes means every day, and an absent window
+means `.default(7)`, reached by omitting the key rather than repeating the
+number in the decoder. A window that is present and blank is refused.
+
+### 34.3 What did not change
+
+The engine is still the independent validator. `conditionRejection` decides
+POLICY — whether a field is produced by the chosen trigger, whether an operator
+can answer it, whether the value is of the right kind — on create and on update,
+and the decoder does not duplicate any of it. A decoder that enforced policy too
+would be a second copy, and two copies drift; this one narrows a request into a
+well-formed one or refuses it, and nothing more.
+
+The decoders moved to `apps/dashboard/src/server/automation-form.ts` so they can
+be asserted directly. A `'use server'` module may only export async server
+actions, so while they lived in `actions.ts` the only way to reach them was
+through a browser — and a browser can only ever demonstrate that the screen
+behaves. Every case here is a request the screen cannot produce: a stale tab, a
+replayed submission, a hand-made POST. The isolation suite then asserts the
+consequence that matters: a refused decode leaves the database exactly as it
+found it, and no rule on the probe brand carries an empty condition list it was
+never asked for.

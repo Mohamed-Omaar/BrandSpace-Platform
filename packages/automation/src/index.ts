@@ -86,6 +86,7 @@ export {
   automationRuleNotFound,
   automationRunNotFound,
   conditionFieldNotProduced,
+  conditionFieldUnknown,
   conditionOperatorNotAllowed,
   conditionValueInvalid,
   brandRuleLimitReached,
@@ -93,5 +94,6 @@ export {
   ruleLimitReached,
   tooManyConditions,
   triggerActionIncompatible,
+  triggerConfigInvalid,
   unknownTriggerOrAction,
 } from './errors';

@@ -108,3 +108,38 @@ export function conditionValueInvalid(field: string, operator: string): AppError
     operator,
   });
 }
+
+/**
+ * THE FORM NAMED A CONDITION FIELD THAT DOES NOT EXIST (R5).
+ *
+ * WHY THIS IS AN ERROR AND NOT AN EMPTY LIST. The decoder used to drop an
+ * unrecognised field and return no conditions at all — so a stale or tampered
+ * request that MEANT a conditional rule created an UNCONDITIONAL one instead.
+ * The rule was stored, enabled and listed, and it fired on every event rather
+ * than the narrow set somebody had chosen.
+ *
+ * Invalid input must never broaden what a rule does. An empty picker still
+ * means "no condition", because that is a choice the screen offers; a field
+ * nobody could have chosen means the request is not one this product can
+ * honour, and the only safe answer is to refuse it.
+ */
+export function conditionFieldUnknown(field: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That condition field is not available.', { field });
+}
+
+/**
+ * A TRIGGER PARAMETER WAS MISSING, BLANK OR UNREADABLE (R5).
+ *
+ * `Number('')` is `0`, and zero is a perfectly valid threshold, hour and day of
+ * week. So a blank required input did not fail — it became a DIFFERENT RULE
+ * from the one the customer was writing, and one they would have no reason to
+ * suspect. A parameter the screen renders is a parameter the request must
+ * carry; the registry's own default applies only where the product actually
+ * declares one.
+ */
+export function triggerConfigInvalid(triggerType: string, parameter: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That automation is missing something it needs.', {
+    triggerType,
+    parameter,
+  });
+}
