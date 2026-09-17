@@ -1051,6 +1051,9 @@ export class MaintenanceScheduler {
         workspaceId: event.workspaceId,
         idempotencyKey: `automation-event-${event.id}`,
         eventId: event.id,
+        // THE IDENTITY THE PRODUCER CHOSE, carried so the engine's run key is
+        // built from the same notion of "the same event" the outbox is (R6).
+        eventKey: event.dedupeKey,
         brandId: event.brandId,
         triggerType: event.triggerType,
         refType: event.refType,

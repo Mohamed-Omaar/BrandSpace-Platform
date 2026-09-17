@@ -2601,3 +2601,75 @@ replayed submission, a hand-made POST. The isolation suite then asserts the
 consequence that matters: a refused decode leaves the database exactly as it
 found it, and no rule on the probe brand carries an empty condition list it was
 never asked for.
+
+## 35. Phase 7 remediation, round 6 — two components of one identity that disagreed
+
+A sixth review found no new authorization or tenancy defect. It found something
+quieter and, for a customer, worse: **a real threshold crossing that the platform
+dropped in silence.**
+
+### 35.1 The outbox and the engine meant different things by "the same event"
+
+The producer identifies a threshold event by the rule's **arming cycle** —
+`METRIC_THRESHOLD_CROSSED:<rule>:<cycle>` — because that is exactly what makes a
+second crossing a second event (D-177). The engine identified a **run** by
+`(rule, trigger, refId, bucket)`, and for a non-timed trigger the bucket is the
+constant `'event'` on the reasoning that the reference IS the identity (P7-R5).
+
+That reasoning holds for a content item, a calendar slot and a publish job. It
+does **not** hold for a metric observation, because ingestion is
+
+```sql
+INSERT … ON CONFLICT ("workspaceId", "observationKey") DO UPDATE SET value = …
+```
+
+— so a provider revising yesterday's figure changes the **same row** while its id
+stays put. Below the line; revised above (a crossing, cycle 0); revised below
+(the rule re-arms, cycle 1); revised above again (a second, genuine crossing).
+The outbox wrote two events, correctly. The engine saw the same refId and the
+same `'event'` bucket, derived one run key, and treated the second crossing as a
+redelivery of the first.
+
+**Nothing failed, nothing was logged, and nobody was told.** The customer's rule
+simply did not fire the second time.
+
+### 35.2 The event now carries its own identity
+
+**D-185**: `dedupeKey` travels as `EvaluateAutomationPayload.eventKey` →
+`TriggerEvent.eventKey` → the run key's discriminator, resolved in the order
+`occurrence ?? eventKey ?? runBucketFor(…)`. The payload field is **required**,
+so a producer cannot forget it; the dedupe key is used rather than the row id
+because it is the identity the producer _chose_ rather than the one the database
+happened to mint.
+
+**The reference did not move and is still in the key.** It is provenance — the
+reading the crossing was seen in — and both runs still name it. It is only no
+longer asked to be an identity it cannot carry.
+
+**Neither other producer changes an equivalence class.** A timed event still
+prefers its carried occurrence, which is what keeps a message that sits past the
+hour boundary from running the same schedule twice (P7-R5). A domain event's
+dedupe key is `<trigger>:<refId>` — both already components of the run key — so
+the same reference still collides with itself and two references still differ.
+
+The idempotency contract is unchanged in every direction that mattered before,
+and repaired in the one that did not hold: a redelivery of the same outbox event
+is one run, a new arming cycle is a new run, and two legitimate crossings that
+share a `MetricObservation` id now produce two runs.
+
+### 35.3 What an upgrade does to messages and runs that already exist
+
+The run key's **value** changes for a domain event, because the discriminator it
+hashes moves from the constant `'event'` to `<trigger>:<refId>`. Its equivalence
+class does not, so nothing is newly de-duplicated or newly split; only already
+recorded `AutomationRun.idempotencyKey` values are no longer the values the same
+event would produce today.
+
+A message that was **already on the queue** when the upgrade landed carries no
+`eventKey`, because the field did not exist when it was enqueued — the queue
+holds the payload as it was written, and the worker routes on `kind` rather than
+re-parsing. `undefined` falls through the `??` chain to `runBucketFor(…)`, which
+is precisely the key that message would have produced before the upgrade, so an
+in-flight delivery still converges on the run it already created rather than
+duplicating it. The next event the producer writes carries the field, and there
+is no window in which a threshold crossing is dropped.

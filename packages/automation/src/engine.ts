@@ -137,6 +137,30 @@ export interface TriggerEvent {
    * from the one it was created for, and the same occurrence runs twice.
    */
   readonly occurrence?: string | null;
+  /**
+   * THE OUTBOX EVENT'S OWN LOGICAL IDENTITY, carried from its `dedupeKey` (R6).
+   *
+   * WHY THE ENGINE NEEDS IT AT ALL. A run's identity used to be
+   * `(rule, trigger, refId, bucket)` — and for a threshold event that is
+   * `(rule, METRIC_THRESHOLD_CROSSED, observationId, 'event')`, which is NOT
+   * the identity the producer used. The outbox identifies a threshold event by
+   * the rule's ARMING CYCLE, because that is what makes a second crossing a
+   * second event.
+   *
+   * THE TWO DISAGREED, AND A METRIC OBSERVATION IS UPDATED IN PLACE. Ingestion
+   * is `INSERT … ON CONFLICT (workspaceId, observationKey) DO UPDATE`, so a
+   * provider revising yesterday's figure moves the SAME ROW across the line
+   * while its id stays put. Below the line, revised above (crossing, cycle 0),
+   * revised below (re-arm, cycle 1), revised above again (crossing, cycle 1):
+   * the outbox correctly writes two events, and the engine — seeing the same
+   * refId and the same `'event'` bucket both times — derived one run key and
+   * SUPPRESSED THE SECOND LEGITIMATE RUN. A real crossing, silently dropped.
+   *
+   * SO THE EVENT SAYS WHO IT IS, and the run key uses that. The reference stays
+   * exactly where it was: it is PROVENANCE, the reading the crossing was seen
+   * in, and it is no longer asked to be an identity it cannot carry.
+   */
+  readonly eventKey?: string | null;
   /** The facts a condition may read. Gathered by the caller, never queried here. */
   readonly facts: Readonly<Record<string, unknown>>;
 }
@@ -581,18 +605,32 @@ export class AutomationEngine {
       triggerType: event.type,
       refId: event.refId,
       /*
-       * ONLY A TIMED RULE CARRIES A CLOCK (see `runBucketFor`) — AND IT PREFERS
-       * THE OCCURRENCE THE EVENT WAS CREATED FOR.
+       * THE EVENT'S OWN IDENTITY, IN THE ORDER THE PRODUCERS ESTABLISH IT.
        *
-       * The fallback below re-derives the bucket from `now`, which is right for
-       * a caller that has just observed the occurrence itself and wrong for a
-       * message that has been sitting in a queue: a delivery that slips past the
-       * hour boundary would re-derive the NEXT bucket and run the same schedule
-       * a second time. The producer knows which occurrence it created the event
-       * for, so when it says so, that is the answer.
+       * 1. THE OCCURRENCE A TIMED EVENT WAS CREATED FOR. Re-deriving it from
+       *    `now` is right for a caller that has just observed the occurrence and
+       *    wrong for a message that has been sitting in a queue: a delivery that
+       *    slips past the hour boundary would re-derive the NEXT bucket and run
+       *    the same schedule a second time (P7-R5). The producer knows which
+       *    occurrence it created the event for, so when it says so, that is the
+       *    answer.
+       *
+       * 2. THE OUTBOX EVENT'S OWN KEY, which is what makes the engine and the
+       *    producer agree about what "the same event" means (R6). For a
+       *    threshold that is the rule's ARMING CYCLE, so a second crossing of an
+       *    observation that was revised in place is a second run — and a
+       *    redelivery of either event is still one. For a domain event it is
+       *    `<trigger>:<refId>`, which is the reference this key already carried,
+       *    so nothing about their identity changes.
+       *
+       * 3. `runBucketFor`, for a caller that composed the event itself rather
+       *    than reading it out of the outbox. It answers `'event'` for every
+       *    trigger that carries a reference, because there the reference IS the
+       *    identity.
        */
       bucket:
         event.occurrence ??
+        event.eventKey ??
         runBucketFor({
           triggerType: event.type,
           localDate: await this.#localDateFor(now),

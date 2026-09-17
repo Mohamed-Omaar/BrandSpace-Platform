@@ -225,6 +225,14 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
       refId: payload.refId,
       ruleId: payload.ruleId,
       occurrence: payload.occurrence,
+      /*
+       * THE OUTBOX ROW'S OWN IDENTITY, carried so the run key the engine builds
+       * means the same thing the outbox's dedupe key means (R6). Without it a
+       * threshold event falls back to its observation id, and an observation is
+       * UPDATED IN PLACE — so a second legitimate crossing of the same row was
+       * suppressed as a duplicate of the first.
+       */
+      eventKey: payload.eventKey,
       facts,
     };
     const delivered = await engine.deliver({

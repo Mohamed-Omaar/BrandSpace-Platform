@@ -160,6 +160,21 @@ export interface EvaluateAutomationPayload extends TenantJobPayload {
   readonly kind: 'automation.evaluate';
   /** The outbox row this message carries, and the row the worker retires. */
   readonly eventId: string;
+  /**
+   * THE OUTBOX EVENT'S OWN LOGICAL IDENTITY — its `dedupeKey` (R6).
+   *
+   * REQUIRED, so a producer cannot forget it. The engine builds a run's
+   * idempotency key from it, and that is the whole point: the OUTBOX and the
+   * ENGINE must agree on what "the same event" means, or one of them
+   * de-duplicates something the other considers new.
+   *
+   * THE DEDUPE KEY RATHER THAN THE ROW ID, because it is the identity the
+   * PRODUCER chose — `METRIC_THRESHOLD_CROSSED:<rule>:<cycle>`,
+   * `SCHEDULED_TIME:<rule>:<occurrence>`, `<trigger>:<refId>`. A row id is the
+   * identity the database happened to mint, and it changes if the same logical
+   * event is ever written again.
+   */
+  readonly eventKey: string;
   readonly brandId: string;
   readonly triggerType: string;
   readonly refType: string | null;
