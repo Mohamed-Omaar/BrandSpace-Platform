@@ -98,28 +98,52 @@ async function clickUntil(page: Page, testId: string, settled: () => Promise<voi
  *
  *   1. The click is LOST. Under parallel load a click can land between renders
  *      and do nothing at all; the URL then never changes and the failure looks
- *      like a server problem rather than a missed click. So the click is
- *      retried while — and only while — the URL is still what it was, which
- *      cannot double-submit once one has taken.
+ *      like a server problem rather than a missed click.
  *   2. `waitForURL` DOES NOT FIRE. A server action's `redirect()` is a client
  *      navigation with no new document, so both `load` and `commit` hang.
  *      Sampling `page.url()` depends on nothing but the URL.
  *   3. A REFUSAL LOOKS LIKE A TIMEOUT. Waiting for `ok=…` alone turns a real
  *      `error=…` redirect into thirty seconds of silence, so the assertion
  *      prints the URL it actually saw.
+ *
+ * AND ONE MORE, WHICH THE FIRST FIX CAUSED.
+ *
+ * The click used to be repeated every 750ms for as long as the URL had not
+ * moved, on the reasoning that a submit which had "taken" would have moved it.
+ * THAT IS NOT TRUE OF A SLOW ONE. `<form action={serverAction}>` starts a new
+ * action on every submit, so on a loaded runner — where the round trip is
+ * longer than the interval — the next click superseded the pending action
+ * before it could redirect, and the loop could click forty times in thirty
+ * seconds without one ever completing. Meanwhile the SERVER had accepted one of
+ * them: the draft really was scheduled. The retry then found this suite's own
+ * fixture already on the calendar, could not select it by name, and spent the
+ * whole two-minute test budget in a completely different assertion.
+ *
+ * SO THE CLICK IS REPEATED ONLY WHILE IT DEMONSTRABLY NEVER REACHED THE SERVER.
+ * A submit that lands sends a POST, and waiting for the REQUEST rather than the
+ * response separates the two cases exactly: no request means the click was lost
+ * and must be repeated, a request means an action is in flight and must be left
+ * alone to finish. A genuinely broken action still fails — it just fails at the
+ * URL that never moved, instead of destroying the fixture on its way there.
  */
 async function submitAndExpect(page: Page, testId: string, marker: RegExp): Promise<void> {
   const before = page.url();
+
   await expect(async () => {
-    if (page.url() === before) {
-      await page.getByTestId(testId).click();
-      // Long enough for a round trip to start, short enough that a genuinely
-      // lost click is retried rather than waited out.
-      await page.waitForTimeout(750);
-    }
-    expect(page.url(), 'the form did not submit').not.toBe(before);
+    // Armed BEFORE the click, so a request that races the await is not missed.
+    const sent = page
+      .waitForRequest((request) => request.method() === 'POST', { timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.getByTestId(testId).click();
+    expect(await sent, 'the click never reached the server').toBe(true);
   }).toPass({ timeout: 30_000 });
 
+  // ONE ACTION, UNINTERRUPTED. Generous, because the only thing being waited on
+  // now is the server finishing work it has definitely started.
+  await expect
+    .poll(() => page.url(), { message: 'the form did not submit', timeout: 60_000 })
+    .not.toBe(before);
   await expect.poll(() => page.url(), { timeout: 15_000 }).toMatch(marker);
 }
 
