@@ -443,6 +443,25 @@ export default defineConfig({
        * that measures overflow, which is more honest than inferring layout from
        * which project happened to run.
        */
+      name: 'brand-context',
+      testMatch: /brand-context\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 8 — the global Brand Context and Brand Profile.
+       *
+       * ITS OWN SERIAL PROJECT, for the reason approvals has one: it edits a
+       * brand's profile and puts it back, and two workers doing that at once
+       * would each see the other's intermediate state. It also changes the
+       * stored brand SELECTION, which is a cookie every other authenticated
+       * suite in the same browser context would then inherit.
+       */
       name: 'approvals',
       testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
       fullyParallel: false,

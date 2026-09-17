@@ -1,4 +1,3 @@
-import 'server-only';
 import { AppError } from '@brandspace/shared';
 
 /**

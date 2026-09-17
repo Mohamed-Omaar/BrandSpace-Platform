@@ -1,4 +1,4 @@
-import type { BrandScopeKind } from './brand-context';
+import type { BrandScopeKind } from './brand-selection';
 
 /**
  * EVERY DASHBOARD ROUTE'S SCOPE, IN ONE TABLE (D-192).
