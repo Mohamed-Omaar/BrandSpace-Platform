@@ -18,6 +18,8 @@ import {
 import {
   automationConfirmationRejected,
   conditionFieldNotProduced,
+  conditionOperatorNotAllowed,
+  conditionValueInvalid,
   automationRuleNotFound,
   brandRuleLimitReached,
   creatorLacksAuthority,
@@ -31,7 +33,7 @@ import type { AutomationPorts } from './ports';
 import {
   AUTOMATION_ACTIONS,
   actionSupportsTrigger,
-  conditionFieldsFor,
+  conditionRejection,
   conditionsSchema,
   evaluateConditions,
   findAction,
@@ -332,10 +334,7 @@ export class AutomationEngine {
      * gatherer is held to by the parity test — so "offered", "accepted" and
      * "produced" are one list rather than three.
      */
-    const producible = new Set(conditionFieldsFor(input.triggerType));
-    for (const condition of conditions) {
-      if (!producible.has(condition.field)) throw conditionFieldNotProduced(condition.field);
-    }
+    this.#requireEvaluableConditions(conditions, input.triggerType);
 
     const triggerConfig = trigger.config.parse(input.triggerConfig) as Prisma.InputJsonValue;
     const actionConfig = action.config.parse(input.actionConfig) as Prisma.InputJsonValue;
@@ -424,6 +423,22 @@ export class AutomationEngine {
     if (conditions && conditions.length > this.#policy.limits.maxConditionsPerRule) {
       throw tooManyConditions(this.#policy.limits.maxConditionsPerRule);
     }
+    /*
+     * THE UPDATE PATH IS THE CREATE PATH'S EQUAL (R4-1).
+     *
+     * It used to schema-parse the supplied conditions and store them, and that
+     * is all — so every rule `createRule` refused could be reached in two calls
+     * instead of one: create a rule with no conditions, then update it with the
+     * conditions that were never authorable. A field this trigger never
+     * produces, an operator this field cannot answer, a value of the wrong
+     * kind: all three were a PATCH away.
+     *
+     * THE TRIGGER IS THE STORED ONE, NEVER A SUPPLIED ONE. A rule's trigger is
+     * fixed at creation and this method does not change it, so validating
+     * against `existing.triggerType` is validating against the trigger the
+     * conditions will actually be evaluated under.
+     */
+    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
 
     const rule = await this.#db.automationRule.update({
       where: { id: existing.id },
@@ -1263,6 +1278,46 @@ export class AutomationEngine {
     }
 
     return { run: updated, status, confirmationToken: null };
+  }
+
+  /**
+   * A CONDITION MUST BE EVALUABLE, OR IT IS NOT STORED (R3-3, R4-1).
+   *
+   * `conditionsSchema` checks the SHAPE — a declared field, a declared
+   * operator, a literal — and a shape can be perfectly valid and still mean
+   * nothing. Three separate ways, each of which used to be storable:
+   *
+   *   THE FIELD IS NOT PRODUCED by this trigger. `content.status equals
+   *   APPROVED` on a scheduled rule names a fact no scheduled event carries.
+   *   THE OPERATOR CANNOT ANSWER this field. `brand.id greater_than 5`,
+   *   `publish.provider is_true` — `evaluateCondition` refuses a mixed
+   *   comparison by design, so both are false for ever.
+   *   THE VALUE IS OF THE WRONG KIND. `content.hasCampaign equals "true"`,
+   *   which is what an HTML form posts unless somebody stops it.
+   *
+   * All three look configured. That is what makes them worse than a missing
+   * feature: the rule is saved, enabled, listed — and silent.
+   *
+   * THE TABLES ARE THE REGISTRY'S, so "offered", "accepted" and "produced" stay
+   * one list rather than three, and the authoring screen narrows its controls
+   * from the same declaration this refuses against.
+   */
+  #requireEvaluableConditions(
+    conditions: readonly AutomationCondition[],
+    triggerType: AutomationTrigger,
+  ): void {
+    for (const condition of conditions) {
+      switch (conditionRejection(condition, triggerType)) {
+        case 'field':
+          throw conditionFieldNotProduced(condition.field);
+        case 'operator':
+          throw conditionOperatorNotAllowed(condition.field, condition.operator);
+        case 'value':
+          throw conditionValueInvalid(condition.field, condition.operator);
+        case null:
+          break;
+      }
+    }
   }
 
   async #requireRule(ruleId: string, brandScope: readonly string[]): Promise<AutomationRule> {

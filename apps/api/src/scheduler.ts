@@ -19,7 +19,12 @@ import {
   type PrismaClient,
 } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { evaluateThresholdRule, localMomentFor, timedRuleIsDue } from '@brandspace/automation';
+import {
+  evaluateThresholdRule,
+  localMomentFor,
+  nextTimedEvaluationAt,
+  timedRuleIsDue,
+} from '@brandspace/automation';
 import {
   BACKFILL_ANALYTICS,
   EVALUATE_AUTOMATION,
@@ -90,6 +95,26 @@ const log = createLogger({ context: { component: 'api.scheduler' } });
  * the second one does nothing.
  */
 const AUTOMATION_REDISPATCH_SECONDS = 120;
+
+/**
+ * The furthest ahead a rule-derived automation rule may be parked (R4-2).
+ *
+ * NOT CONFIGURATION EITHER, and for the same reason: it is not a product
+ * behaviour an owner tunes, it is the width of the window in which everything
+ * this scheduler read about a rule is still assumed true. `nextTimedEvaluationAt`
+ * computes the real next occurrence — often a day or a week away — from a local
+ * moment measured once, and a workspace that moves zone, or a daylight-saving
+ * shift, changes that answer underneath a rule that is already asleep. The cap
+ * bounds how long a wrong park can last.
+ *
+ * ONE HOUR IS THE OCCURRENCE WINDOW ITSELF, so no timed rule is ever invisible
+ * for longer than the thing it is waiting for. It also sets the honest capacity
+ * statement for the sweep: with a minutely cadence, `batch` rules per pass
+ * evaluates `batch × 60` rules an hour, and every timed rule needs one visit in
+ * that hour. At the default batch of 200 that is 12,000 timed rules — past which
+ * the batch, not the ordering, is what needs raising.
+ */
+const AUTOMATION_RULE_PARK_MAX_SECONDS = 3_600;
 
 export interface MaintenanceResult {
   readonly ingestionDispatched: number;
@@ -520,7 +545,19 @@ export class MaintenanceScheduler {
         connection: { status: 'ACTIVE' },
       },
       select: { id: true, workspaceId: true, backfillCompletedAt: true, lastSucceededAt: true },
-      orderBy: { nextAttemptAt: 'asc' },
+      /*
+       * NULLS FIRST, EXPLICITLY (R4-2, adjacent audit).
+       *
+       * `ORDER BY … ASC` puts NULLs LAST in PostgreSQL, and `nextAttemptAt` is
+       * null for a cursor that has NEVER been attempted — a connection somebody
+       * has just authorised. So plain ascending order sent exactly the cursors
+       * with the most waiting to happen to the back of the queue, and on a
+       * platform with more than `batch` due cursors a brand new connection
+       * could have waited behind them indefinitely. Same starvation shape as
+       * the automation producers, reached through a nullable column instead of
+       * a missing one; the id breaks ties so the order is total.
+       */
+      orderBy: [{ nextAttemptAt: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
       take: batch,
     });
 
@@ -749,9 +786,36 @@ export class MaintenanceScheduler {
     const platform = getPlatformClient();
     const now = this.#clock.now();
 
+    /*
+     * THE OLDEST-DUE RULES, NOT AN ARBITRARY `batch` OF THEM (R4-2).
+     *
+     * This query used to have no ordering and no cursor. An outbox row retires
+     * — `deliveredAt` takes it out of its own query — but AN EVALUATED RULE DOES
+     * NOT: it is enabled before the sweep and enabled after it, so the identical
+     * query next minute was free to return the identical subset, and past
+     * `batch` rules the ones outside it were never evaluated at all. For this
+     * trigger that is not lateness. The whole meaning of the trigger is "in the
+     * customer's own hour", and an hour nobody looked at is an occurrence missed
+     * permanently and silently.
+     *
+     * `nextEvaluationAt` makes it a QUEUE. A rule reaches the front by waiting
+     * and leaves it by being visited, so every enabled rule is evaluated within
+     * ceil(rules / batch) passes and no rule can hold the front. A rule nowhere
+     * near due is parked out of the way, so it is not competing for the batch
+     * with the ones that are.
+     */
     const rules = await platform.automationRule.findMany({
-      where: { triggerType: 'SCHEDULED_TIME', enabled: true, deletedAt: null },
-      select: { id: true, workspaceId: true, brandId: true, triggerConfig: true },
+      where: {
+        triggerType: 'SCHEDULED_TIME',
+        enabled: true,
+        deletedAt: null,
+        nextEvaluationAt: { lte: now },
+      },
+      select: { id: true, workspaceId: true, brandId: true, nextEvaluationAt: true },
+      // The id breaks ties, so the order is TOTAL. Two rules parked in the same
+      // pass share a timestamp, and "whichever the planner felt like" is the
+      // property this cursor exists to remove.
+      orderBy: [{ nextEvaluationAt: 'asc' }, { id: 'asc' }],
       take: batch,
     });
     if (rules.length === 0) return 0;
@@ -763,18 +827,75 @@ export class MaintenanceScheduler {
 
     let produced = 0;
     for (const rule of rules) {
-      const moment = localMomentFor(now, zones.get(rule.workspaceId) ?? 'UTC');
-      const due = timedRuleIsDue({ config: rule.triggerConfig, moment });
-      if (!due.due) continue;
+      const zone = zones.get(rule.workspaceId) ?? 'UTC';
       const written = await withWorkspace(
         rule.workspaceId,
-        (db) =>
-          recordRuleAutomationEvent(db, rule.workspaceId, {
-            triggerType: 'SCHEDULED_TIME',
-            brandId: rule.brandId,
-            ruleId: rule.id,
-            occurrence: due.occurrence,
-          }),
+        async (db) => {
+          /*
+           * RE-READ INSIDE THE TENANT'S OWN TRANSACTION, and take the
+           * CONFIGURATION from here rather than from the enumeration.
+           *
+           * The platform enumeration is a snapshot. Between it and this
+           * transaction the rule may have been disabled, soft-deleted or
+           * edited, and producing an event for a rule somebody has just
+           * switched off is exactly the kind of "it fired after I stopped it"
+           * a person cannot argue with. Enumeration is the only cross-tenant
+           * half (F-07); the decision is made here, under RLS.
+           */
+          const live = await db.automationRule.findFirst({
+            where: {
+              id: rule.id,
+              workspaceId: rule.workspaceId,
+              enabled: true,
+              deletedAt: null,
+            },
+            select: { brandId: true, triggerConfig: true },
+          });
+          if (!live) return false;
+
+          const moment = localMomentFor(now, zone);
+          const due = timedRuleIsDue({ config: live.triggerConfig, moment });
+          const wrote = due.due
+            ? await recordRuleAutomationEvent(db, rule.workspaceId, {
+                triggerType: 'SCHEDULED_TIME',
+                brandId: live.brandId,
+                ruleId: rule.id,
+                occurrence: due.occurrence,
+              })
+            : false;
+
+          /*
+           * THE EVENT AND THE PARK COMMIT TOGETHER, in this one transaction.
+           * Parking first would lose the occurrence if the process died between
+           * the two; producing first and parking in a separate write would
+           * leave the rule at the front of the queue on a crash. One
+           * transaction has neither failure: it either happened or it did not,
+           * and a rule that did not is simply still due.
+           *
+           * `lte: now` RATHER THAN AN EXACT COMPARE-AND-SWAP. A second
+           * scheduler that has already parked this rule into the future must
+           * not have its park undone, and a timestamp read back through
+           * millisecond-precision `Date` cannot be compared for equality
+           * against a microsecond column with any confidence.
+           */
+          await db.automationRule.updateMany({
+            where: {
+              id: rule.id,
+              workspaceId: rule.workspaceId,
+              nextEvaluationAt: { lte: now },
+            },
+            data: {
+              nextEvaluationAt: nextTimedEvaluationAt({
+                config: live.triggerConfig,
+                moment,
+                now,
+                maxAheadSeconds: AUTOMATION_RULE_PARK_MAX_SECONDS,
+              }),
+              lastEvaluatedAt: now,
+            },
+          });
+          return wrote;
+        },
         { prisma: getPrisma() },
       );
       if (written) produced += 1;
@@ -801,16 +922,27 @@ export class MaintenanceScheduler {
     const platform = getPlatformClient();
     const now = this.#clock.now();
 
+    /*
+     * THE SAME FAIR-WORK CURSOR THE TIMED PRODUCER USES (R4-2), for the same
+     * reason: a threshold rule does not retire either, so an unordered `take`
+     * could return the same subset for ever and the memory of every rule
+     * outside it would never advance — a crossing nobody was watching for.
+     *
+     * A THRESHOLD RULE IS PARKED TO `now`, NOT INTO THE FUTURE. There is no due
+     * time to compute: the question "has the number moved across the line" is
+     * worth asking on every pass. Parking it to the current instant keeps it
+     * eligible while sending it to the BACK of the queue, which is exactly what
+     * round-robin over more rules than one batch requires.
+     */
     const rules = await platform.automationRule.findMany({
-      where: { triggerType: 'METRIC_THRESHOLD_CROSSED', enabled: true, deletedAt: null },
-      select: {
-        id: true,
-        workspaceId: true,
-        brandId: true,
-        triggerConfig: true,
-        thresholdBreached: true,
-        thresholdCycle: true,
+      where: {
+        triggerType: 'METRIC_THRESHOLD_CROSSED',
+        enabled: true,
+        deletedAt: null,
+        nextEvaluationAt: { lte: now },
       },
+      select: { id: true, workspaceId: true },
+      orderBy: [{ nextEvaluationAt: 'asc' }, { id: 'asc' }],
       take: batch,
     });
     if (rules.length === 0) return 0;
@@ -828,11 +960,36 @@ export class MaintenanceScheduler {
        */
       const outcome = await withWorkspace(
         rule.workspaceId,
-        (db) =>
-          evaluateThresholdRule({
+        async (db) => {
+          /*
+           * RE-READ UNDER RLS, AND TAKE THE RULE'S STATE FROM HERE. A rule
+           * disabled or deleted between the enumeration and this transaction
+           * must not produce anything, and its remembered side must be the one
+           * this transaction will compare-and-swap against rather than a
+           * snapshot taken on another connection.
+           */
+          const live = await db.automationRule.findFirst({
+            where: {
+              id: rule.id,
+              workspaceId: rule.workspaceId,
+              enabled: true,
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              workspaceId: true,
+              brandId: true,
+              triggerConfig: true,
+              thresholdBreached: true,
+              thresholdCycle: true,
+            },
+          });
+          if (!live) return 'no_observation' as const;
+
+          const result = await evaluateThresholdRule({
             db,
             workspaceId: rule.workspaceId,
-            rule,
+            rule: live,
             metrics: createMetricWindowPort({
               db,
               workspaceId: rule.workspaceId,
@@ -840,7 +997,19 @@ export class MaintenanceScheduler {
               clock: this.#clock,
             }),
             now,
-          }),
+          });
+
+          // The event, the threshold memory and the park commit together.
+          await db.automationRule.updateMany({
+            where: {
+              id: rule.id,
+              workspaceId: rule.workspaceId,
+              nextEvaluationAt: { lte: now },
+            },
+            data: { nextEvaluationAt: now, lastEvaluatedAt: now },
+          });
+          return result;
+        },
         { prisma: getPrisma() },
       );
       if (outcome === 'fired') produced += 1;

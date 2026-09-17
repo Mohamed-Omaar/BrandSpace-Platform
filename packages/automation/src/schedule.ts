@@ -107,6 +107,70 @@ export function timedRuleIsDue(input: {
   return { due: true, occurrence: occurrenceKey(input.moment.date, input.moment.hour) };
 }
 
+/**
+ * WHEN THIS TIMED RULE IS NEXT WORTH LOOKING AT (R4-2).
+ *
+ * WHY A RULE IS PARKED AT ALL. The producer used to take an arbitrary `batch`
+ * of every enabled timed rule, with no ordering and no durable marker — and an
+ * evaluated rule, unlike a delivered outbox row, stays eligible for the exact
+ * same query on the next minute. So past `batch` rules the database was free to
+ * return the same subset for ever, and for `SCHEDULED_TIME` a rule that is never
+ * looked at in its own hour misses the occurrence permanently, by design.
+ *
+ * Parking every visited rule turns the enumeration into a QUEUE: a rule reaches
+ * the front by waiting, and leaves it by being visited.
+ *
+ * ALWAYS EARLY, NEVER LATE — the half-hour below is the whole safety argument.
+ * A local hour is not a fixed distance in real time: a daylight-saving shift
+ * moves it by an hour in either direction, and the local moment this reads was
+ * measured before the park rather than after it. Waking EARLY costs one
+ * re-evaluation that finds nothing and parks again. Waking LATE costs the
+ * customer their occurrence. Since an occurrence spans a full hour and the bias
+ * is half of one, a ±1h shift still lands inside the window.
+ *
+ * AND NEVER FURTHER AHEAD THAN THE CAP, whatever the arithmetic says. A rule
+ * parked for a day is a rule whose park cannot be corrected for a day — by a
+ * workspace that moved zone, or by anything else this function read once. The
+ * cap makes the worst case bounded and small instead of bounded and long.
+ */
+export function nextTimedEvaluationAt(input: {
+  readonly config: unknown;
+  readonly moment: LocalMoment;
+  readonly now: Date;
+  readonly maxAheadSeconds: number;
+}): Date {
+  const park = (seconds: number): Date =>
+    new Date(input.now.getTime() + Math.min(Math.max(seconds, 0), input.maxAheadSeconds) * 1_000);
+
+  const parsed = scheduledTimeConfigSchema.safeParse(input.config ?? {});
+  /*
+   * A RULE WHOSE CONFIGURATION WILL NOT PARSE IS STILL PARKED. It can never be
+   * due — `timedRuleIsDue` refuses it too — but leaving it unparked would let
+   * it sit at the front of the queue for ever, which is the starvation this
+   * function exists to end, arriving by a different door.
+   */
+  if (!parsed.success) return park(input.maxAheadSeconds);
+
+  const { daysOfWeek, hourLocal } = parsed.data;
+  // EMPTY MEANS EVERY DAY, exactly as `timedRuleIsDue` reads it.
+  const days = daysOfWeek.length > 0 ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
+
+  let aheadHours = Number.POSITIVE_INFINITY;
+  for (const day of days) {
+    let delta = ((day - input.moment.dayOfWeek + 7) % 7) * 24 + (hourLocal - input.moment.hour);
+    /*
+     * `<= 0` IS THE CURRENT OCCURRENCE, NOT THE NEXT ONE. A rule evaluated
+     * inside its own hour has just produced its event; the next one it needs to
+     * be awake for is a week away, or tomorrow, and the cap decides how much of
+     * that it is actually allowed to sleep through.
+     */
+    if (delta <= 0) delta += 7 * 24;
+    aheadHours = Math.min(aheadHours, delta);
+  }
+
+  return park(aheadHours * 3_600 - 1_800);
+}
+
 /** The `METRIC_THRESHOLD_CROSSED` trigger configuration. */
 export const metricThresholdConfigSchema = z.object({
   metricKey: z.string().min(1).max(60),

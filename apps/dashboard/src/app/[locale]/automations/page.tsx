@@ -13,9 +13,10 @@ import {
   AUTOMATION_ACTIONS,
   AUTOMATION_TRIGGERS,
   CONDITION_FIELDS,
-  CONDITION_OPERATORS,
+  CONDITION_FIELD_CONTRACTS,
   actionSupportsTrigger,
   conditionFieldsFor,
+  type ConditionField,
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
 import { brandScopeFilter } from '@brandspace/shared';
@@ -48,6 +49,51 @@ export const dynamic = 'force-dynamic';
  *    `BLOCKED_BY_AUTHORIZATION` in words, so a rule that stopped working because
  *    its author was demoted says so rather than failing silently.
  */
+/**
+ * A CLOSED FIELD'S CHOICES, ALREADY TRANSLATED.
+ *
+ * `brand.id` and `metric.key` name things the registry cannot enumerate — one
+ * is tenant data, the other is the analytics catalogue — so their lists are
+ * supplied by the caller, which already holds both. Everything else comes
+ * straight from the contract's own closed set.
+ */
+function conditionChoicesFor(
+  field: ConditionField,
+  locale: string,
+  brands: readonly { readonly id: string; readonly name: string }[],
+): readonly { readonly value: string; readonly label: string }[] {
+  const t = translator(locale);
+  const contract = CONDITION_FIELD_CONTRACTS[field];
+
+  if (contract.catalogue === 'brands') {
+    return brands.map((brand) => ({ value: brand.id, label: brand.name }));
+  }
+  if (contract.catalogue === 'metricKeys') {
+    return INGESTED_METRIC_KEYS.map((key) => ({
+      value: key,
+      label: t(`analytics.metric.${key}` as MessageKey),
+    }));
+  }
+  if (contract.options === null) return [];
+
+  if (field === 'content.status') {
+    return contract.options.map((value) => ({
+      value,
+      label: t(`content.status.${value}` as MessageKey),
+    }));
+  }
+  if (field === 'publish.provider') {
+    return contract.options.map((value) => ({
+      value,
+      label: t(`integrations.provider.${value.toLowerCase()}` as MessageKey),
+    }));
+  }
+  return contract.options.map((value) => ({
+    value,
+    label: t(`automations.failureClass.${value}` as MessageKey),
+  }));
+}
+
 export default async function AutomationsPage({
   params,
   searchParams,
@@ -73,6 +119,8 @@ export default async function AutomationsPage({
     }),
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
+  const conditionChoices = (field: ConditionField): readonly { value: string; label: string }[] =>
+    conditionChoicesFor(field, locale, brands);
 
   const { rules, runs } = await inAnalytics(workspace.workspaceId, async (services) => {
     const engine = await services.automations();
@@ -145,16 +193,39 @@ export default async function AutomationsPage({
                   t(`automations.action.${action.type}` as MessageKey),
                 ]),
               )}
-              conditionFieldLabels={Object.fromEntries(
-                CONDITION_FIELDS.map((field) => [
-                  field,
-                  t(`automations.field.${field}` as MessageKey),
-                ]),
+              /*
+                EVERY FIELD'S WHOLE AUTHORING CONTRACT, DERIVED FROM THE ENGINE
+                (R4-1).
+
+                The screen used to hand the client every operator in the
+                registry and a text box, whatever the field was — so
+                `brand.id greater_than 5` and `content.hasCampaign equals
+                "true"` were both one click away, both stored, and both false
+                for ever. The operators, the value control and the parsing now
+                all come from `CONDITION_FIELD_CONTRACTS`, which is also what
+                `createRule` and `updateRule` refuse against.
+
+                CLOSED SETS ARE LABELLED HERE, on the server, where `t` lives —
+                a raw `PARTIALLY_PUBLISHED` in a picker is untranslated copy,
+                and §4 does not make an exception for enum values.
+              */
+              conditionCatalogue={Object.fromEntries(
+                CONDITION_FIELDS.map((field) => {
+                  const contract = CONDITION_FIELD_CONTRACTS[field];
+                  return [
+                    field,
+                    {
+                      label: t(`automations.field.${field}` as MessageKey),
+                      kind: contract.kind,
+                      operators: contract.operators.map((operator) => ({
+                        value: operator,
+                        label: t(`automations.operator.${operator}` as MessageKey),
+                      })),
+                      options: conditionChoices(field),
+                    },
+                  ];
+                }),
               )}
-              operators={CONDITION_OPERATORS.map((operator) => ({
-                value: operator,
-                label: t(`automations.operator.${operator}` as MessageKey),
-              }))}
               metrics={INGESTED_METRIC_KEYS.map((key) => ({
                 key,
                 label: t(`analytics.metric.${key}` as MessageKey),
@@ -178,6 +249,8 @@ export default async function AutomationsPage({
                 conditionField: t('automations.conditionField'),
                 conditionOperator: t('automations.conditionOperator'),
                 conditionValue: t('automations.conditionValue'),
+                conditionValues: t('automations.conditionValues'),
+                conditionValuesHint: t('automations.conditionValuesHint'),
                 weekdays: [
                   t('automations.day.0'),
                   t('automations.day.1'),

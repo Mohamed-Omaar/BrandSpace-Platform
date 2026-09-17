@@ -1614,3 +1614,56 @@ and whose content is by then days stale.
 
 Neither is a new table, and both are runtime state on a row that already carried
 `lastRunAt`, `lastRunStatus` and `runCount`.
+
+### 18.7 Phase 7 remediation round 4 — the rule-derived producers' fair-work cursor
+
+**`automation_rule` carries its own place in a queue.**
+
+| Column             | Meaning                                                                                                                                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nextEvaluationAt` | **NOT NULL**, default `now()`. When the scheduler should next look at this rule. The two rule-derived producers select `lte now()`, order by it ascending with `id` as a total tie-break, and park every rule they visit in the same transaction that writes its event. |
+| `lastEvaluatedAt`  | Advisory. When a sweep last actually looked, for an operator reading the row.                                                                                                                                                                                           |
+
+One index, and it is the only cross-tenant one on the table:
+`("triggerType", "enabled", "nextEvaluationAt")`. The sweep asks a
+platform-wide question, so it cannot lead with `workspaceId`; that is the
+enumeration half of F-07, and every row the sweep then reads or writes inside a
+workspace still goes through `withWorkspace` under that tenant's own RLS.
+
+**Why a cursor at all.** An outbox row RETIRES — `deliveredAt` removes it from
+its own query — so `take: batch` there is honest pagination through shrinking
+work. **An evaluated rule does not retire.** It is enabled before the sweep and
+enabled after it, so the identical query on the next minute was free to return
+the identical subset, and past `batch` rules the ones outside it were never
+evaluated at all. For `METRIC_THRESHOLD_CROSSED` that is a memory that never
+advances; for `SCHEDULED_TIME` it is worse than lateness, because the trigger's
+whole meaning is "in the customer's own hour" and an hour nobody looked at is an
+occurrence missed permanently and silently.
+
+**Why NOT NULL.** `ORDER BY … ASC` puts NULLs LAST in PostgreSQL. A nullable
+cursor would have sent every rule that had never been evaluated — which is every
+newly created rule — to the back of the very queue that exists to reach it. The
+migration backfills existing rows from `createdAt`, so they enter in creation
+order rather than all sharing one instant.
+
+**The backfill lifts FORCE for one transaction, and proves it put it back.**
+`automation_rule` is `ENABLE + FORCE` and the MIGRATOR role is NOBYPASSRLS like
+every other role (docs/SECURITY.md §2.2), so a plain `UPDATE` in a migration does
+not fail — it reports `UPDATE 0` and commits, and the backfill would have shipped
+doing nothing. The migration therefore uses PostgreSQL's own prescribed remedy,
+the same shape as the F-80/F-83 migration: `NO FORCE` for the duration of the
+transaction, the `UPDATE`, `FORCE` again, and a `DO` block that refuses to commit
+unless the catalogue shows the table `ENABLED` and `FORCED`. `ALTER TABLE` holds
+an ACCESS EXCLUSIVE lock to COMMIT, so no other session can observe the lifted
+state; `ENABLE ROW LEVEL SECURITY` is untouched, no policy is touched, and the
+application and platform roles are unaffected throughout. The upgrade suite
+applies the file against rules that already exist and asserts both halves.
+
+**The bound this buys.** Every enabled rule reaches the front within
+`ceil(rules / batch)` passes, and no rule can hold the front, because visiting
+it is what moves it back. A timed rule parks to its real next occurrence, half
+an hour early so a daylight-saving shift cannot push the wake past the window,
+capped at one hour so nothing is invisible for longer than the occurrence it is
+waiting for. With a minutely cadence that gives `batch × 60` timed rules an
+hour — 12,000 at the default batch of 200, past which the batch, not the
+ordering, is what needs raising.

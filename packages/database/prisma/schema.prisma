@@ -468,7 +468,7 @@ model Workspace {
   copilotToolCalls          CopilotToolCall[]
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
-  automationEvents            AutomationEvent[]
+  automationEvents          AutomationEvent[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1733,7 +1733,7 @@ model Brand {
   copilotActionPlans        CopilotActionPlan[]
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
-  automationEvents            AutomationEvent[]
+  automationEvents          AutomationEvent[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -4234,9 +4234,9 @@ model Insight {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "insight_brand_fkey")
-  campaign  Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_campaign_fkey")
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand           Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "insight_brand_fkey")
+  campaign        Campaign? @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "insight_campaign_fkey")
   /// COMPOSITE AND SELF-REFERENTIAL (D-112): a plain key would resolve another
   /// workspace's insight, and "violates foreign key" versus "inserted" would
   /// answer whether that id exists across the tenant boundary.
@@ -4672,6 +4672,30 @@ model AutomationRule {
   thresholdCycle       Int       @default(0)
   thresholdEvaluatedAt DateTime? @db.Timestamptz(6)
 
+  /// WHEN THIS RULE IS NEXT WORTH LOOKING AT — the fair-work cursor (R4-2).
+  ///
+  /// WHAT IT FIXES. The two rule-derived producers asked "which enabled rules
+  /// have this trigger?" and took the first `batch` rows, with no ordering and
+  /// no durable marker. Unlike an outbox row, an EVALUATED RULE STAYS ELIGIBLE
+  /// FOR THE IDENTICAL QUERY on the next minute — so once a platform held more
+  /// than `batch` of them, PostgreSQL was free to hand back the same subset for
+  /// ever and the rules outside it were never evaluated at all. For
+  /// `SCHEDULED_TIME` that is not a delay: the customer's hour passes, and the
+  /// occurrence is missed by design.
+  ///
+  /// SO EVERY RULE CARRIES ITS OWN NEXT-EVALUATION INSTANT, the producer takes
+  /// the OLDEST ones, and parks each one it visits. That makes the enumeration a
+  /// queue rather than an arbitrary window: every enabled rule reaches the front
+  /// within `ceil(rules / batch)` passes, and a rule cannot hold the front
+  /// because visiting it is what moves it to the back.
+  ///
+  /// NOT NULL, DELIBERATELY. `ORDER BY … ASC` puts NULLs LAST in PostgreSQL, so
+  /// a nullable cursor would have sent every never-evaluated rule — a brand new
+  /// one — to the back of the very queue that exists to reach it.
+  nextEvaluationAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// Advisory, for operators: when a sweep last actually looked at this rule.
+  lastEvaluatedAt  DateTime? @db.Timestamptz(6)
+
   /// Optimistic concurrency, for the same reason `campaign` carries one.
   version Int @default(1)
 
@@ -4690,6 +4714,10 @@ model AutomationRule {
   @@unique([workspaceId, brandId, name])
   @@index([workspaceId, brandId, enabled])
   @@index([workspaceId, triggerType, enabled])
+  /// THE PRODUCERS' OWN INDEX, and the only cross-tenant one on this table.
+  /// The sweep asks a platform-wide question — which rules of this trigger are
+  /// enabled and due — so its index cannot lead with `workspaceId`.
+  @@index([triggerType, enabled, nextEvaluationAt])
   @@map("automation_rule")
 }
 
@@ -4842,7 +4870,7 @@ model AutomationEvent {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand           @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "automation_event_brand_fkey")
   rule      AutomationRule? @relation(fields: [workspaceId, ruleId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "automation_event_rule_fkey")
 

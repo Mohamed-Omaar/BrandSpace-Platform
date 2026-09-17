@@ -75,3 +75,36 @@ export function conditionFieldNotProduced(field: string): AppError {
     field,
   });
 }
+
+/**
+ * A condition asks a question this field cannot answer (R4-1).
+ *
+ * `brand.id greater_than`, `publish.provider is_true`, `metric.value in […]` —
+ * each one parses, each one is stored, and each one compares FALSE for ever
+ * because `evaluateCondition` refuses a mixed comparison by design. The screen
+ * no longer offers them; this is why going around the screen does not work
+ * either.
+ *
+ * NAMED, for the same reason the field error is: it is the customer's own
+ * choice on their own rule, not a tenancy secret.
+ */
+export function conditionOperatorNotAllowed(field: string, operator: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That comparison cannot be made on this field.', {
+    field,
+    operator,
+  });
+}
+
+/**
+ * The value is not of the kind this field's facts are.
+ *
+ * A number field compared against text, a list operator given a single string,
+ * an empty list, a closed enum given a member that does not exist — all of them
+ * store a rule that looks configured and can never match.
+ */
+export function conditionValueInvalid(field: string, operator: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That value cannot be compared against this field.', {
+    field,
+    operator,
+  });
+}

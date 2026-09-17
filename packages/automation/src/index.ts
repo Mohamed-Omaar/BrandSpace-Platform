@@ -21,7 +21,10 @@ export {
   CONDITION_OPERATORS,
   conditionSchema,
   conditionFieldsFor,
+  conditionOperatorsFor,
+  conditionRejection,
   conditionsSchema,
+  CONDITION_FIELD_CONTRACTS,
   CONDITION_FIELD_TRIGGERS,
   evaluateCondition,
   evaluateConditions,
@@ -33,7 +36,10 @@ export type {
   ActionDefinition,
   AutomationCondition,
   ConditionField,
+  ConditionFieldContract,
   ConditionOperator,
+  ConditionRejection,
+  ConditionValueKind,
   TriggerDefinition,
 } from './registry';
 
@@ -41,6 +47,7 @@ export { AutomationEngine, runBucketFor, runIdempotencyKeyFor } from './engine';
 export {
   localMomentFor,
   metricThresholdConfigSchema,
+  nextTimedEvaluationAt,
   occurrenceKey,
   scheduledTimeConfigSchema,
   metricIsBreaching,
@@ -79,6 +86,8 @@ export {
   automationRuleNotFound,
   automationRunNotFound,
   conditionFieldNotProduced,
+  conditionOperatorNotAllowed,
+  conditionValueInvalid,
   brandRuleLimitReached,
   creatorLacksAuthority,
   ruleLimitReached,

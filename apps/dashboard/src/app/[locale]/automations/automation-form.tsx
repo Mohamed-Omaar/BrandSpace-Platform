@@ -50,6 +50,33 @@ export interface TriggerOption {
   readonly needsThreshold: boolean;
 }
 
+export interface ConditionChoice {
+  readonly value: string;
+  readonly label: string;
+}
+
+/**
+ * ONE FIELD'S WHOLE AUTHORING CONTRACT, derived on the server from
+ * `CONDITION_FIELD_CONTRACTS` (R4-1).
+ *
+ * THE SCREEN USED TO RENDER EVERY OPERATOR FOR EVERY FIELD, so `brand.id
+ * greater_than`, `publish.provider is_true` and `metric.value in …` were all
+ * one click away — stored, enabled, listed, and false for ever. And the value
+ * box was always a text input, so a boolean field's `equals` posted the STRING
+ * `"true"` against a real boolean fact.
+ *
+ * NOW THE FIELD DECIDES ALL THREE: which operators exist, which control renders,
+ * and how the value is parsed. The same declaration refuses anything else
+ * server-side, so this is the affordance and not the control.
+ */
+export interface ConditionFieldOption {
+  readonly label: string;
+  readonly kind: 'string' | 'number' | 'boolean';
+  readonly operators: readonly ConditionChoice[];
+  /** Closed or catalogued choices; empty means a free value control. */
+  readonly options: readonly ConditionChoice[];
+}
+
 export interface AutomationFormLabels {
   readonly name: string;
   readonly brand: string;
@@ -69,6 +96,8 @@ export interface AutomationFormLabels {
   readonly conditionField: string;
   readonly conditionOperator: string;
   readonly conditionValue: string;
+  readonly conditionValues: string;
+  readonly conditionValuesHint: string;
   readonly weekdays: readonly string[];
 }
 
@@ -77,8 +106,8 @@ export interface AutomationFormProps {
   readonly brands: readonly { readonly id: string; readonly name: string }[];
   readonly triggers: readonly TriggerOption[];
   readonly actionLabels: Readonly<Record<string, string>>;
-  readonly conditionFieldLabels: Readonly<Record<string, string>>;
-  readonly operators: readonly { readonly value: string; readonly label: string }[];
+  /** Every condition field's contract, keyed by field. */
+  readonly conditionCatalogue: Readonly<Record<string, ConditionFieldOption>>;
   readonly metrics: readonly { readonly key: string; readonly label: string }[];
   readonly labels: AutomationFormLabels;
   readonly action: (formData: FormData) => void | Promise<void>;
@@ -89,12 +118,27 @@ const FIELD: React.CSSProperties = { display: 'grid', gap: '0.25rem' };
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const [triggerType, setTriggerType] = useState(props.triggers[0]?.type ?? '');
   const [conditionField, setConditionField] = useState('');
-  const [conditionOperator, setConditionOperator] = useState(props.operators[0]?.value ?? '');
+  const [conditionOperator, setConditionOperator] = useState('');
 
   const trigger = useMemo(
     () => props.triggers.find((option) => option.type === triggerType) ?? props.triggers[0],
     [props.triggers, triggerType],
   );
+
+  const field = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
+
+  /*
+   * THE OPERATOR LIST IS THE FIELD'S, NEVER THE WHOLE REGISTRY'S. A string fact
+   * is asked about by identity and membership, a number by magnitude, a boolean
+   * by `is_true`/`is_false` and nothing else — and the engine refuses every
+   * other pairing independently, so this narrows a legal set rather than being
+   * the thing that makes it legal.
+   */
+  const operators = field?.operators ?? [];
+  const operator =
+    operators.some((option) => option.value === conditionOperator) && conditionOperator !== ''
+      ? conditionOperator
+      : (operators[0]?.value ?? '');
 
   /*
    * `is_true` AND `is_false` TAKE NO VALUE, and the schema marks the value
@@ -102,7 +146,15 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
    * somebody to type something the engine then ignores, which is its own small
    * lie about what a rule does.
    */
-  const needsValue = conditionOperator !== 'is_true' && conditionOperator !== 'is_false';
+  const needsValue = operator !== '' && operator !== 'is_true' && operator !== 'is_false';
+  /*
+   * `in` AND `not_in` TAKE A REAL LIST. They used to be offered beside a single
+   * text box, which posted a string where the engine requires `string[]` — so
+   * the condition compared false whatever was typed. A multi-select produces a
+   * genuine array; a free-text field (a pillar has no enum to close it against)
+   * is split on commas by the server action, and an empty list is refused.
+   */
+  const isList = operator === 'in' || operator === 'not_in';
 
   const caption = { ...typographyTokens.caption, color: colorTokens.textSecondary } as const;
 
@@ -296,17 +348,24 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               className="bs-control"
               data-testid="automation-condition-field"
               value={conditionField}
-              onChange={(event) => setConditionField(event.target.value)}
+              onChange={(event) => {
+                setConditionField(event.target.value);
+                // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than` is
+                // legal on a count and meaningless on a provider; carrying it
+                // across would post a pair the engine refuses, against a
+                // control that never showed it.
+                setConditionOperator('');
+              }}
             >
               <option value="">{props.labels.conditionNone}</option>
-              {(trigger?.conditionFields ?? []).map((field) => (
-                <option key={field} value={field}>
-                  {props.conditionFieldLabels[field] ?? field}
+              {(trigger?.conditionFields ?? []).map((name) => (
+                <option key={name} value={name}>
+                  {props.conditionCatalogue[name]?.label ?? name}
                 </option>
               ))}
             </select>
           </label>
-          {conditionField === '' ? null : (
+          {field === undefined ? null : (
             <>
               <label style={FIELD}>
                 <span style={caption}>{props.labels.conditionOperator}</span>
@@ -314,26 +373,60 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   name="conditionOperator"
                   className="bs-control"
                   data-testid="automation-condition-operator"
-                  value={conditionOperator}
+                  value={operator}
                   onChange={(event) => setConditionOperator(event.target.value)}
                 >
-                  {props.operators.map((operator) => (
-                    <option key={operator.value} value={operator.value}>
-                      {operator.label}
+                  {operators.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
               </label>
               {needsValue ? (
                 <label style={FIELD}>
-                  <span style={caption}>{props.labels.conditionValue}</span>
-                  <input
-                    name="conditionValue"
-                    maxLength={200}
-                    className="bs-control"
-                    style={inputStyle()}
-                    data-testid="automation-condition-value"
-                  />
+                  <span style={caption}>
+                    {isList ? props.labels.conditionValues : props.labels.conditionValue}
+                  </span>
+                  {/*
+                    THE CONTROL IS THE FIELD'S KIND, NOT ALWAYS A TEXT BOX.
+
+                    A closed or catalogued field gets a picker, so a status that
+                    does not exist cannot be typed; a list operator gets a
+                    MULTIPLE picker, so the browser posts several entries and
+                    the server action assembles a real `string[]`; a number gets
+                    a number input, so `greater_than` compares numerically
+                    instead of refusing a mixed comparison.
+                  */}
+                  {field.options.length > 0 ? (
+                    <select
+                      name="conditionValue"
+                      multiple={isList}
+                      className="bs-control"
+                      data-testid="automation-condition-value"
+                      defaultValue={isList ? [] : field.options[0]?.value}
+                    >
+                      {field.options.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      name="conditionValue"
+                      type={field.kind === 'number' ? 'number' : 'text'}
+                      step={field.kind === 'number' ? 1 : undefined}
+                      maxLength={field.kind === 'number' ? undefined : 200}
+                      required
+                      className="bs-control"
+                      style={inputStyle()}
+                      data-testid="automation-condition-value"
+                    />
+                  )}
+                  {isList && field.options.length === 0 ? (
+                    <span style={caption}>{props.labels.conditionValuesHint}</span>
+                  ) : null}
                 </label>
               ) : null}
             </>

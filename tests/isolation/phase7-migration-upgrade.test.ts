@@ -61,6 +61,18 @@ const PHASE7_ROUND2_MIGRATION = '20260917090000_phase_7_automation_outbox_and_id
  */
 const PHASE7_ROUND3_MIGRATION = '20260917120000_phase_7_threshold_edge_and_confirmation_lifecycle';
 
+/**
+ * ROUND 4. Two columns and a BACKFILL, which is the half a fresh database can
+ * never exercise.
+ *
+ * `automation_rule` is ENABLE + FORCE and the migrator is NOBYPASSRLS like every
+ * other role, so a plain `UPDATE` in a migration does not fail — it reports
+ * `UPDATE 0` and commits. This suite applies the file against rules that already
+ * exist, so a backfill that silently does nothing is a failing test rather than
+ * a shipped no-op.
+ */
+const PHASE7_ROUND4_MIGRATION = '20260917150000_phase_7_automation_rule_fair_work_cursor';
+
 /** The twelve tenant-owned tables it creates. */
 const NEW_TABLES = [
   'metric_observation',
@@ -245,6 +257,35 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     applyMigration(migratorUrl, PHASE7_ROUND2_MIGRATION);
     applyMigration(migratorUrl, PHASE7_ROUND3_MIGRATION);
 
+    /*
+     * RULES THAT ALREADY EXIST WHEN ROUND 4 ARRIVES, with DISTINCT creation
+     * times three days apart. Written as the PLATFORM role, because the
+     * migrator cannot see this table either.
+     */
+    for (const [index, tenant] of [a, b].entries()) {
+      for (let rule = 0; rule < 2; rule += 1) {
+        await platform.query(
+          `INSERT INTO "automation_rule"
+             ("id","workspaceId","brandId","name","enabled","triggerType","triggerConfig",
+              "conditions","actionType","actionConfig","maxRunsPerDay","createdByUserId",
+              "createdAt","updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, true, 'SCHEDULED_TIME',
+                   '{"hourLocal":9,"daysOfWeek":[]}'::jsonb, '[]'::jsonb, 'NOTIFY',
+                   '{"templateKey":"automation.confirmation_required"}'::jsonb, 0, $4,
+                   now() - ($5 || ' days')::interval, now())`,
+          [
+            tenant.workspaceId,
+            tenant.brandId,
+            `pre-upgrade rule ${index}-${rule}`,
+            tenant.userId,
+            String(index * 2 + rule + 1),
+          ],
+        );
+      }
+    }
+
+    applyMigration(migratorUrl, PHASE7_ROUND4_MIGRATION);
+
     app = await connect(urlFor('app', database));
   }, 240_000);
 
@@ -298,6 +339,54 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     const cycle = rows.find((row) => row.column_name === 'thresholdCycle');
     expect(cycle?.is_nullable).toBe('NO');
     expect(cycle?.column_default).toContain('0');
+  });
+
+  it('THE FAIR-WORK CURSOR IS BACKFILLED FROM createdAt, NOT SILENTLY SKIPPED', async () => {
+    /*
+     * THE FAILURE THIS CATCHES. `automation_rule` is ENABLE + FORCE and the
+     * MIGRATOR role is NOBYPASSRLS, so an `UPDATE` in a migration reports
+     * `UPDATE 0` and commits rather than raising. The backfill would have
+     * shipped doing nothing, every existing rule would have started at the
+     * migration's own `now()`, and the id tie-break would have been the only
+     * ordering the queue had.
+     */
+    const rows = await platform.query<{
+      nextEvaluationAt: Date;
+      createdAt: Date;
+      lastEvaluatedAt: Date | null;
+    }>('SELECT "nextEvaluationAt", "createdAt", "lastEvaluatedAt" FROM "automation_rule"');
+
+    expect(rows.rows.length).toBe(4);
+    for (const row of rows.rows) {
+      expect(row.nextEvaluationAt.getTime()).toBe(row.createdAt.getTime());
+      // NEVER EVALUATED is null, and never a fabricated timestamp.
+      expect(row.lastEvaluatedAt).toBeNull();
+    }
+    // FOUR DISTINCT POSITIONS, which is the fairness property: the queue has a
+    // real order rather than one instant shared by every row.
+    expect(new Set(rows.rows.map((row) => row.nextEvaluationAt.getTime())).size).toBe(4);
+  });
+
+  it('AND FORCE IS BACK ON AFTERWARDS', async () => {
+    /*
+     * The one way that migration could do real harm is by committing with FORCE
+     * left off — `automation_rule` would be a tenant table whose owner is no
+     * longer subject to its own policies. The file asserts this itself and
+     * refuses to commit; this asserts it from outside, against the catalogue.
+     */
+    const rls = await platform.query<{ enabled: boolean; forced: boolean }>(
+      `SELECT relrowsecurity AS enabled, relforcerowsecurity AS forced
+         FROM pg_class WHERE relname = 'automation_rule'`,
+    );
+    expect(rls.rows[0]).toEqual({ enabled: true, forced: true });
+  });
+
+  it('and the tenant role still cannot read another workspace\u2019s rules', async () => {
+    // The lifted FORCE was the OWNER's, for one transaction. Nothing about the
+    // application role's isolation changed, and this is the check that says so.
+    await app.query(`SELECT set_config('app.workspace_id', $1, false)`, [a.workspaceId]);
+    const seen = await app.query<{ count: string }>('SELECT count(*)::text FROM "automation_rule"');
+    expect(seen.rows[0]?.count).toBe('2');
   });
 
   it('EXPIRED IS A REAL LABEL ON THE RUN STATUS TYPE AFTER THE UPGRADE', async () => {

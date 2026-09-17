@@ -565,6 +565,202 @@ test.describe('automations', () => {
     expect(metric).not.toContain('content.status');
   });
 
+  /*
+   * R4-1 — THE CONDITION CONTROLS ARE THE FIELD'S, AND THE VALUES ARE REAL.
+   *
+   * The screen used to render every operator in the registry beside every
+   * field, and a single text box beside every operator. So `brand.id
+   * greater_than 5` was one click away; `content.hasCampaign equals` posted the
+   * STRING "true" against a real boolean fact; and `in` posted a lone string
+   * where the engine requires an array. Each of those saved a rule that was
+   * listed, enabled — and false for ever.
+   */
+  test('A NUMERIC CONDITION OFFERS MAGNITUDE, AND A NUMBER INPUT', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.platformCount');
+
+    const operators = await page
+      .getByTestId('automation-condition-operator')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(operators).toEqual(['equals', 'not_equals', 'greater_than', 'less_than']);
+    // NO `in`, NO `is_true`: neither can be satisfied against a number.
+    expect(operators).not.toContain('in');
+    expect(operators).not.toContain('is_true');
+
+    const value = page.getByTestId('automation-condition-value');
+    await expect(value).toHaveAttribute('type', 'number');
+
+    const name = `E2E numeric ${Date.now()}`;
+    await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await page.getByTestId('automation-condition-operator').selectOption('greater_than');
+    await value.fill('1');
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    // IT WAS ACCEPTED, and it enables — the engine validated field, operator
+    // and value kind, and none of them was refused.
+    await expect(page.getByTestId('automation-rules')).toContainText(name);
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await row.getByRole('button', { name: /enable/i }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
+    ).toContainText(/disable/i);
+  });
+
+  test('A BOOLEAN CONDITION OFFERS is_true / is_false, AND NO VALUE BOX AT ALL', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+
+    const operators = await page
+      .getByTestId('automation-condition-operator')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(operators).toEqual(['is_true', 'is_false']);
+    // THE DEFECT, GONE: there is no `equals` to pair with the string "true".
+    expect(operators).not.toContain('equals');
+    await expect(page.getByTestId('automation-condition-value')).toHaveCount(0);
+
+    const name = `E2E boolean ${Date.now()}`;
+    await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByTestId('automation-rules')).toContainText(name);
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await row.getByRole('button', { name: /enable/i }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
+    ).toContainText(/disable/i);
+  });
+
+  test('A CLOSED STRING FIELD IS PICKED, NEVER TYPED, AND ITS OPTIONS ARE TRANSLATED', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.status');
+
+    const operators = await page
+      .getByTestId('automation-condition-operator')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(operators).toEqual(['equals', 'not_equals', 'in', 'not_in']);
+
+    const value = page.getByTestId('automation-condition-value');
+    // A PICKER, so a status that does not exist cannot be entered at all.
+    await expect(value).toHaveJSProperty('tagName', 'SELECT');
+    const statuses = await value
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(statuses).toContain('APPROVED');
+    expect(statuses).toContain('PARTIALLY_PUBLISHED');
+    // AND THE LABELS ARE COPY, not enum names (§4: no hard-coded user copy).
+    const labels = await value
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    expect(labels).toContain('Partially published');
+
+    const name = `E2E string ${Date.now()}`;
+    await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await value.selectOption('APPROVED');
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('automation-rules')).toContainText(name);
+  });
+
+  test('A LIST OPERATOR POSTS A REAL ARRAY, FROM A MULTIPLE PICKER', async ({ page }) => {
+    /*
+     * THE ARRAY PATH, PROVEN END TO END. `in` and `not_in` remain exposed, so
+     * the rule from the review applies: the UI must produce a genuine
+     * `string[]`. It used to sit beside a single text box that posted one
+     * string, and `evaluateCondition` requires an array — so the condition was
+     * false whatever was chosen.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.status');
+    await page.getByTestId('automation-condition-operator').selectOption('in');
+
+    const value = page.getByTestId('automation-condition-value');
+    await expect(value).toHaveJSProperty('multiple', true);
+
+    const name = `E2E list ${Date.now()}`;
+    await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await value.selectOption(['APPROVED', 'SCHEDULED']);
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    // ACCEPTED — the engine refuses a list operator whose value is not a
+    // non-empty array of members of the closed set, so reaching the list at all
+    // is the proof that a real array was posted.
+    await expect(page.getByTestId('automation-rules')).toContainText(name);
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await row.getByRole('button', { name: /enable/i }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
+    ).toContainText(/disable/i);
+  });
+
+  test('CHANGING THE FIELD RESETS AN OPERATOR THAT NO LONGER APPLIES', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.platformCount');
+    await page.getByTestId('automation-condition-operator').selectOption('greater_than');
+
+    // `greater_than` is meaningless on a boolean, and must not survive.
+    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+    await expect(page.getByTestId('automation-condition-operator')).toHaveValue('is_true');
+  });
+
+  test('the Arabic authoring form offers the same narrowed controls, in Arabic', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+
+    const operators = await page
+      .getByTestId('automation-condition-operator')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(operators).toEqual(['is_true', 'is_false']);
+
+    // NO ENGLISH FALLBACK in the operator labels, and none in the status
+    // picker either — the closed sets are translated, not printed raw.
+    const operatorLabels = await page
+      .getByTestId('automation-condition-operator')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    for (const label of operatorLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
+
+    await page.getByTestId('automation-condition-field').selectOption('content.status');
+    const statusLabels = await page
+      .getByTestId('automation-condition-value')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
+    for (const label of statusLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
+  });
+
   test('the run history is present, or SAYS it is empty rather than showing nothing', async ({
     page,
   }) => {

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { isAppError } from '@brandspace/shared';
 import type { AutomationActionType, AutomationTrigger } from '@brandspace/database';
+import { CONDITION_FIELD_CONTRACTS, type ConditionField } from '@brandspace/automation';
 import { requireWorkspace } from '../../../server/customer-context';
 import { inAnalytics, callPhase7Api } from '../../../server/analytics-context';
 
@@ -70,20 +71,51 @@ function triggerConfigFrom(formData: FormData, triggerType: string): Record<stri
  * `CONDITION_FIELD_TRIGGERS`, so a customer can only choose something the
  * runtime actually produces for the trigger they picked.
  *
- * A VALUE IS A LITERAL, never an expression: the engine's schema accepts a
- * string, a number, a boolean or a short list, and a number typed into the box
- * is sent as a number so `greater_than` compares numerically rather than
- * refusing a mixed comparison.
+ * AND THE VALUE USED TO BE GUESSED (R4-1). Whatever was typed became a number
+ * if it parsed as one and a string otherwise — so `content.hasCampaign equals`
+ * posted the STRING `"true"` against a real boolean fact, and `in` posted a
+ * lone string where the engine requires `string[]`. Both stored a rule that
+ * looked configured and could never match.
+ *
+ * THE KIND NOW COMES FROM THE SAME CONTRACT THE FORM RENDERED AND THE ENGINE
+ * REFUSES AGAINST — `CONDITION_FIELD_CONTRACTS` — so the three cannot disagree.
+ * This is still not the check: `createRule` and `updateRule` validate the
+ * field, the operator and the value kind independently, because a server that
+ * trusts a form is a server with no validation.
  */
 function conditionsFrom(formData: FormData): readonly Record<string, unknown>[] {
   const field = String(formData.get('conditionField') ?? '');
   if (!field) return [];
-  const operator = String(formData.get('conditionOperator') ?? 'equals');
+  const contract = CONDITION_FIELD_CONTRACTS[field as ConditionField];
+  // An unknown field is dropped rather than forwarded: the engine would refuse
+  // it, and forwarding it would turn a tampered form into an error banner about
+  // a field nobody chose.
+  if (!contract) return [];
+
+  const operator = String(formData.get('conditionOperator') ?? '');
+  // THESE TAKE NO VALUE AT ALL, and sending one would be a rule whose text says
+  // one thing and whose behaviour does another.
   if (operator === 'is_true' || operator === 'is_false') return [{ field, operator }];
 
-  const raw = String(formData.get('conditionValue') ?? '');
-  const numeric = raw.trim() !== '' && Number.isFinite(Number(raw));
-  return [{ field, operator, value: numeric ? Number(raw) : raw }];
+  if (operator === 'in' || operator === 'not_in') {
+    /*
+     * A REAL `string[]`. A `<select multiple>` posts one entry per choice; a
+     * free-text field (a pillar has no enum to close it against) posts one
+     * entry the customer separated with commas. Both end up here as the same
+     * de-duplicated list, and an empty one is refused by the engine rather
+     * than stored as a condition that is false for ever.
+     */
+    const members = formData
+      .getAll('conditionValue')
+      .flatMap((entry) => String(entry).split(','))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== '');
+    return [{ field, operator, value: [...new Set(members)] }];
+  }
+
+  const raw = String(formData.get('conditionValue') ?? '').trim();
+  if (contract.kind === 'number') return [{ field, operator, value: Number(raw) }];
+  return [{ field, operator, value: raw }];
 }
 
 export async function createAutomationAction(formData: FormData): Promise<void> {

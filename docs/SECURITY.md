@@ -2468,3 +2468,74 @@ without extending it, and a sweep gives the proposal an explicit ending. The
 guarantees that were already right are untouched — single-use, compare-and-swap,
 the confirmer's live permission and BrandScope, the raw token never persisted,
 and external publishing still only behind a human confirmation.
+
+## 33. Phase 7 remediation, round 4 — two contracts that were still open
+
+A fourth review of the green branch found no new authorization or tenancy
+defect. It found two places where the platform still OFFERED something it could
+not honour, which is the same class the previous round closed for fields.
+
+### 33.1 A condition the customer could author and the engine could never evaluate
+
+`CONDITION_FIELD_TRIGGERS` made "offered", "accepted" and "produced" one list for
+FIELDS. The operator and value halves were untouched: the screen rendered every
+operator in the registry beside every field, and the server accepted every pair a
+schema could parse. So `brand.id greater_than 5`, `publish.provider is_true` and
+`metric.value in [...]` were each one click away — stored, listed, enabled, and
+FALSE for ever, because `evaluateCondition` refuses a mixed comparison by design.
+`content.hasCampaign equals true` was the worst of them: the form posted the
+STRING `"true"` against a real boolean fact, so the one condition a person would
+most expect to work never did.
+
+**D-180** declares the value kind, the satisfiable operators and any closed enum
+per field, once, beside the trigger table. **D-181** makes `createRule` and
+`updateRule` refuse against it identically — `updateRule` previously schema-parsed
+and stored, so every rule `createRule` refused was reachable in two calls instead
+of one. The authoring screen derives its operator list, its value control and its
+parsing from the same table, and `in`/`not_in` render a MULTIPLE picker so the
+browser posts a genuine `string[]`.
+
+Nothing here widens what an automation may do. The registry stays closed, there
+is still no expression language, no arbitrary SQL, no webhook and no URL action,
+and a closed enum is now enforced server-side rather than merely offered.
+
+### 33.2 A rule the scheduler could enumerate and never reach
+
+`#produceTimedEvents` and `#produceThresholdEvents` took an unordered `take:
+batch` of every enabled matching rule. Unlike a delivered outbox row an evaluated
+rule stays eligible for the identical query, so past `batch` rules the database
+could return the same subset for ever. **D-182** replaces both with a durable
+fair-work cursor (docs/DATABASE.md §18.7): bounded per pass, fair across passes,
+and race-safe between instances because production is idempotent on the outbox
+dedupe key, the park is conditional, and the event and the park commit in ONE
+transaction.
+
+**The tenancy properties are unchanged and were re-checked.** Only the
+enumeration is cross-tenant (F-07). Every read and write the producer then
+performs — including the re-read that refuses to produce for a rule disabled or
+deleted since the enumeration — happens inside `withWorkspace`, under that
+tenant's own RLS, and the engine still re-resolves the rule creator's live
+permissions and BrandScope before any action and still stops an external one for
+a human.
+
+**One thing the populated-upgrade rehearsal caught before it shipped.** The
+migration's backfill is an `UPDATE` on a table that is `ENABLE + FORCE`, and the
+migrator role is NOBYPASSRLS like every other role here — so it did not fail, it
+reported `UPDATE 0` and committed. A no-op that looks like a success is worse
+than an error. The migration now lifts FORCE for the duration of its own
+transaction and restores it, exactly as the F-80/F-83 migration does, and a `DO`
+block refuses to commit unless the catalogue shows the table ENABLED and FORCED
+again. `ALTER TABLE` holds an ACCESS EXCLUSIVE lock to COMMIT so no other session
+can observe the lifted state, no policy and no GRANT is touched, and the upgrade
+suite now asserts the backfill happened, that FORCE is back, and that the
+application role's isolation is exactly as it was.
+
+The adjacent audit of every bounded recurring Phase 7 enumeration found one more
+instance of the class: `sweepAnalytics` ordered by a NULLABLE `nextAttemptAt`,
+and PostgreSQL sorts NULLs LAST under `ASC` — so a cursor that had never been
+attempted, which is a connection somebody had just authorised, sorted behind
+every cursor that had. It now orders `nulls: 'first'` with `id` as a total
+tie-break. `#dispatchAutomationEvents` and `#expireAutomationProposals` operate on
+rows that RETIRE and already order oldest-first over a durable column, and the
+publishing and retention sweeps predate Phase 7 and retire their rows too; none
+of them carries the defect.

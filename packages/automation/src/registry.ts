@@ -2,7 +2,10 @@ import { z } from 'zod';
 import type {
   AutomationActionType,
   AutomationTrigger,
+  ContentStatus,
   CopilotActionClass,
+  PublishFailureClass,
+  SocialProvider,
 } from '@brandspace/database';
 
 /**
@@ -240,6 +243,268 @@ export const CONDITION_OPERATORS = [
   'is_false',
 ] as const;
 export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
+
+/**
+ * WHAT EACH FIELD'S VALUE ACTUALLY IS (R4-1).
+ *
+ * THE DEFECT THIS CLOSES. `CONDITION_FIELD_TRIGGERS` made "offered", "accepted"
+ * and "produced" one list for FIELDS, and the operator half was left exactly as
+ * it had always been: the authoring screen rendered every operator for every
+ * field, and the server accepted every pair a schema could parse. So a customer
+ * could save `brand.id greater_than 5`, `publish.provider is_true`, or
+ * `metric.value in [...]` — each one stored, listed, enabled, and each one
+ * FALSE for ever, because `evaluateCondition` refuses a mixed comparison by
+ * design. And `content.hasCampaign equals true` was worse than false: the form
+ * posted the STRING `"true"` against a real boolean fact, so the one condition
+ * a person would most expect to work never did.
+ *
+ * That is the same product defect class as the field one: a control that is
+ * selectable, stored, and looks valid, and can never behave as the customer
+ * expects.
+ *
+ * SO THE VALUE CONTRACT IS DECLARED, ONCE, HERE, beside the trigger table. The
+ * authoring screen derives its operator list, its value control AND its parsing
+ * from it; the engine validates against it INDEPENDENTLY, on create and on
+ * update, because a server that trusts a form is a server with no validation.
+ */
+export type ConditionValueKind = 'string' | 'number' | 'boolean';
+
+export interface ConditionFieldContract {
+  /** The runtime type of the fact, and therefore of any literal compared to it. */
+  readonly kind: ConditionValueKind;
+  /**
+   * The operators that can be SATISFIED for this field — not merely parsed.
+   * Every one of them has a value the UI can really produce and a fact the
+   * gatherer really emits, and a test walks the whole table proving it.
+   */
+  readonly operators: readonly ConditionOperator[];
+  /**
+   * A CLOSED SET THE ENGINE ENFORCES, or `null` when the legal values are not
+   * knowable in code. A closed set is checked server-side: a condition naming a
+   * status that does not exist is refused rather than stored as a rule that can
+   * never match.
+   */
+  readonly options: readonly string[] | null;
+  /**
+   * For a field whose legal values are TENANT DATA or CONFIGURATION rather than
+   * a code enum, which catalogue the authoring screen should offer.
+   *
+   * IT IS AN AFFORDANCE, NEVER A CHECK. A brand id is authorised by the
+   * BrandScope predicate on the query that uses it and a metric key by the
+   * analytics catalogue; this only decides which list a person picks from.
+   */
+  readonly catalogue: 'brands' | 'metricKeys' | null;
+}
+
+/**
+ * COMPILE-TIME EXHAUSTIVENESS FOR A CLOSED ENUM.
+ *
+ * `satisfies readonly ContentStatus[]` would catch a value that is not a status
+ * and miss a status that is not a value — which is the direction that actually
+ * hurts: a new status shipped in a migration would silently become unselectable
+ * AND unstorable, and the rule refusing it would blame the customer. This makes
+ * the omission a build failure naming the missing member.
+ */
+const closedEnum =
+  <Enum extends string>() =>
+  <const T extends readonly Enum[]>(
+    values: [Enum] extends [T[number]] ? T : { readonly missing: Exclude<Enum, T[number]> },
+  ): T =>
+    values as T;
+
+const CONTENT_STATUS_OPTIONS = closedEnum<ContentStatus>()([
+  'DRAFT',
+  'IN_REVIEW',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+  'SCHEDULED',
+  'PUBLISHING',
+  'PUBLISHED',
+  'PARTIALLY_PUBLISHED',
+  'FAILED',
+  'ARCHIVED',
+]);
+
+const SOCIAL_PROVIDER_OPTIONS = closedEnum<SocialProvider>()([
+  'FACEBOOK',
+  'INSTAGRAM',
+  'TIKTOK',
+  'LINKEDIN',
+  'X',
+]);
+
+const PUBLISH_FAILURE_CLASS_OPTIONS = closedEnum<PublishFailureClass>()([
+  'AUTH_EXPIRED',
+  'AUTH_REVOKED',
+  'INSUFFICIENT_SCOPE',
+  'RATE_LIMITED',
+  'CONTENT_REJECTED',
+  'MEDIA_INVALID',
+  'DUPLICATE_CONTENT',
+  'TARGET_UNAVAILABLE',
+  'PLATFORM_UNAVAILABLE',
+  'TIMEOUT',
+  'APPROVAL_REVOKED',
+  'NOT_CONNECTED',
+  'UNSUPPORTED',
+  'UNKNOWN',
+]);
+
+/**
+ * A STRING FACT compares for identity and membership, and never by magnitude:
+ * `brand.id greater_than` has no meaning, and offering it only invites a rule
+ * that never fires.
+ */
+const STRING_OPERATORS = ['equals', 'not_equals', 'in', 'not_in'] as const;
+
+/**
+ * A NUMBER FACT compares by magnitude and identity. `in` is deliberately absent:
+ * the value union carries a list of STRINGS, so a numeric membership test could
+ * be authored and could never match — which is precisely the class of defect
+ * this table exists to end.
+ */
+const NUMBER_OPERATORS = ['equals', 'not_equals', 'greater_than', 'less_than'] as const;
+
+/**
+ * A BOOLEAN FACT is asked about with `is_true` / `is_false`, and with nothing
+ * else.
+ *
+ * NO `equals true`, ON PURPOSE. An HTML form posts strings; a typed boolean
+ * equality would therefore have been one careless `String(...)` away from
+ * comparing `"true"` against `true` for ever — which is exactly what the screen
+ * used to do. Two operators that take NO VALUE AT ALL cannot be got wrong, and
+ * the value control simply does not render beside them.
+ */
+const BOOLEAN_OPERATORS = ['is_true', 'is_false'] as const;
+
+/** EXHAUSTIVE BY TYPE: TypeScript refuses the file if a field is missing. */
+export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldContract> = {
+  'brand.id': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'brands',
+  },
+  'content.status': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: CONTENT_STATUS_OPTIONS,
+    catalogue: null,
+  },
+  // A pillar is the brand's own word for a theme. There is no enum to close it
+  // against, so the value stays free text and the length cap in the schema is
+  // the whole of the constraint.
+  'content.pillar': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: null,
+  },
+  'content.platformCount': {
+    kind: 'number',
+    operators: NUMBER_OPERATORS,
+    options: null,
+    catalogue: null,
+  },
+  'content.hasCampaign': {
+    kind: 'boolean',
+    operators: BOOLEAN_OPERATORS,
+    options: null,
+    catalogue: null,
+  },
+  'publish.provider': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: SOCIAL_PROVIDER_OPTIONS,
+    catalogue: null,
+  },
+  'publish.failureClass': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: PUBLISH_FAILURE_CLASS_OPTIONS,
+    catalogue: null,
+  },
+  'metric.key': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'metricKeys',
+  },
+  'metric.value': {
+    kind: 'number',
+    operators: NUMBER_OPERATORS,
+    options: null,
+    catalogue: null,
+  },
+  'metric.changeMilli': {
+    kind: 'number',
+    operators: NUMBER_OPERATORS,
+    options: null,
+    catalogue: null,
+  },
+};
+
+/** The operators a customer may choose for THIS field. */
+export function conditionOperatorsFor(field: ConditionField): readonly ConditionOperator[] {
+  return CONDITION_FIELD_CONTRACTS[field].operators;
+}
+
+/**
+ * WHY A CONDITION CANNOT BE STORED — or `null` when it can.
+ *
+ * ONE ANSWER, ASKED BY EVERY DOOR. `createRule` asks it, `updateRule` asks it
+ * (it did not, which is how an update could introduce a condition a create
+ * would have refused), and a test walks every authorable combination through
+ * it. The authoring screen narrows its controls from the same table, so the two
+ * cannot disagree — but the screen is tidiness and THIS is the control.
+ */
+export type ConditionRejection = 'field' | 'operator' | 'value';
+
+export function conditionRejection(
+  condition: AutomationCondition,
+  trigger: AutomationTrigger,
+): ConditionRejection | null {
+  if (!CONDITION_FIELD_TRIGGERS[condition.field].includes(trigger)) return 'field';
+  const contract = CONDITION_FIELD_CONTRACTS[condition.field];
+  if (!contract.operators.includes(condition.operator)) return 'operator';
+  return conditionValueRejected(contract, condition) ? 'value' : null;
+}
+
+function conditionValueRejected(
+  contract: ConditionFieldContract,
+  condition: AutomationCondition,
+): boolean {
+  const value = condition.value;
+
+  switch (condition.operator) {
+    // THESE TAKE NO VALUE. A value beside them is not harmless: it is a rule
+    // whose text says one thing and whose behaviour does another.
+    case 'is_true':
+    case 'is_false':
+      return value !== undefined;
+
+    // A REAL LIST, AND NEVER AN EMPTY ONE. `in []` is false for ever, and
+    // `evaluateCondition` requires an array — a lone string here would have
+    // compared false whatever the fact was.
+    case 'in':
+    case 'not_in': {
+      if (!Array.isArray(value) || value.length === 0) return true;
+      const options = contract.options;
+      return options !== null && value.some((member) => !options.includes(member));
+    }
+
+    case 'greater_than':
+    case 'less_than':
+      return contract.kind !== 'number' || typeof value !== 'number' || !Number.isFinite(value);
+
+    case 'equals':
+    case 'not_equals':
+      if (contract.kind === 'number') return typeof value !== 'number' || !Number.isFinite(value);
+      if (contract.kind !== 'string') return true;
+      if (typeof value !== 'string' || value.length === 0) return true;
+      return contract.options !== null && !contract.options.includes(value);
+  }
+}
 
 export const conditionSchema = z.object({
   field: z.enum(CONDITION_FIELDS),
