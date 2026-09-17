@@ -1592,3 +1592,25 @@ something wider:
 
 The two F-84 upload paths are deliberately untouched: their lookups have not been
 narrowed, so their constraints and their services still agree.
+
+### 18.6 Phase 7 remediation round 3 — threshold memory and a proposal's ending
+
+**`automation_rule` remembers which side its metric is on.** Three columns, and
+the nullable one carries the load:
+
+| Column                 | Meaning                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `thresholdBreached`    | `null` = never evaluated, and that is NOT `false`. The first evaluation records the side and fires nothing, because a rule created while the metric is already past the line has not seen anything cross since somebody asked for it.                                    |
+| `thresholdCycle`       | The identity of the current ARMING. It advances when the metric returns to the non-triggered side, and the outbox's dedupe key is built from it — so every sweep inside one arming writes one event between them, and the next genuine crossing writes exactly one more. |
+| `thresholdEvaluatedAt` | When the side was last established, for an operator reading the row.                                                                                                                                                                                                     |
+
+`automation_rule_threshold_cycle_non_negative` keeps the cycle counting forwards.
+
+**`AutomationRunStatus` gained `EXPIRED`,** distinct from `CANCELLED`: cancelled
+is a decision somebody made, expired is one nobody made. A proposal whose
+confirmation window closes moves there, its digest is cleared, and the screen
+stops offering a Confirm control for something that can no longer be confirmed
+and whose content is by then days stale.
+
+Neither is a new table, and both are runtime state on a row that already carried
+`lastRunAt`, `lastRunStatus` and `runCount`.

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   localMomentFor,
   occurrenceKey,
+  metricIsBreaching,
   runBucketFor,
-  thresholdCrossed,
+  thresholdOccurrenceKey,
+  thresholdTransition,
   timedRuleIsDue,
 } from '@brandspace/automation';
 import { stepBrandPermitted } from '@brandspace/copilot';
@@ -153,45 +155,113 @@ describe('A1: a timed rule fires in the workspace’s own zone', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A1 — the edge that makes a threshold rule fire once
+// R3-2 — the edge that makes a threshold rule fire ONCE, across sweeps
 // ---------------------------------------------------------------------------
 
-describe('A1: a threshold rule fires on the CROSSING, not on the level', () => {
-  it('fires when the window moves past the number', () => {
-    expect(
-      thresholdCrossed({ direction: 'above', threshold: 100, current: 120n, previous: 90n }),
-    ).toBe(true);
-    expect(
-      thresholdCrossed({ direction: 'below', threshold: 100, current: 80n, previous: 110n }),
-    ).toBe(true);
+describe('R3-2: a threshold rule fires on the CROSSING, decided from durable memory', () => {
+  /*
+   * WHAT REPLACED WHAT, AND WHY IT IS NOT A WEAKER TEST.
+   *
+   * This block used to check `thresholdCrossed(current window, previous adjacent
+   * window)`. That predicate looked like edge detection and was not: a metric
+   * that climbs past the line and STAYS there keeps answering "crossed" on sweep
+   * after sweep, and de-duplicating on the newest observation's id hid the repeat
+   * only until the next reading landed. The predicate is gone, so its tests are
+   * gone with it — and what is here instead covers strictly more: the side test,
+   * the state machine over the remembered side, and the identity that makes a
+   * second event legitimate only after a genuine re-arm.
+   */
+
+  describe('which side the metric is on', () => {
+    it('reads each direction, with the boundary on neither side', () => {
+      const at = (value: bigint | null, direction: 'above' | 'below' = 'above') =>
+        metricIsBreaching({ direction, threshold: 100, value });
+      expect(at(120n)).toBe(true);
+      expect(at(80n)).toBe(false);
+      expect(at(80n, 'below')).toBe(true);
+      expect(at(120n, 'below')).toBe(false);
+      // A reading exactly ON the line is past neither, so "above 100" and
+      // "below 100" can never both be true of it.
+      expect(at(100n)).toBe(false);
+      expect(at(100n, 'below')).toBe(false);
+    });
+
+    it('MISSING IS NOT A SIDE, so an unmeasured window changes nothing', () => {
+      expect(metricIsBreaching({ direction: 'above', threshold: 100, value: null })).toBeNull();
+      expect(metricIsBreaching({ direction: 'below', threshold: 100, value: null })).toBeNull();
+    });
   });
 
-  it('DOES NOT FIRE WHILE IT MERELY STAYS THERE — the defect a level check has', () => {
-    // A rule that fired on every pass while the number stayed above would notify
-    // a growing brand every minute for ever, and be switched off by the end of
-    // the day.
-    expect(
-      thresholdCrossed({ direction: 'above', threshold: 100, current: 130n, previous: 120n }),
-    ).toBe(false);
+  describe('the state machine over the remembered side', () => {
+    const at = (previous: boolean | null, current: boolean | null) =>
+      thresholdTransition({ previous, current }).kind;
+
+    it('A — below then above fires exactly once', () => {
+      expect(at(false, true)).toBe('fire');
+    });
+
+    it('B — still above adds nothing, however many sweeps see it', () => {
+      expect(at(true, true)).toBe('steady');
+    });
+
+    it('C — above then below RE-ARMS, and fires nothing on the way back', () => {
+      expect(at(true, false)).toBe('rearm');
+    });
+
+    it('D — below then above again fires once more', () => {
+      expect(at(false, true)).toBe('fire');
+    });
+
+    it('E — the same sequence reads identically for direction=below', () => {
+      // The direction is resolved into the side by `metricIsBreaching`, so the
+      // machine is direction-agnostic by construction: "breaching" means whatever
+      // the rule asked for. Stated as a test so a future direction-aware branch
+      // has to break this.
+      const below = (value: bigint) =>
+        metricIsBreaching({ direction: 'below', threshold: 100, value });
+      expect(at(below(120n), below(80n))).toBe('fire');
+      expect(at(below(80n), below(70n))).toBe('steady');
+      expect(at(below(80n), below(120n))).toBe('rearm');
+    });
+
+    it('F — an unmeasured sweep leaves the memory exactly as it found it', () => {
+      expect(at(true, null)).toBe('unmeasured');
+      expect(at(false, null)).toBe('unmeasured');
+      expect(at(null, null)).toBe('unmeasured');
+    });
+
+    it('THE FIRST EVALUATION ESTABLISHES THE SIDE AND FIRES NOTHING', () => {
+      /*
+       * A rule created while the metric is ALREADY past the line has not seen
+       * anything cross since somebody asked for it. Alerting immediately on a
+       * number that has been sitting there for months is the fastest way to teach
+       * a customer to switch the feature off.
+       */
+      expect(thresholdTransition({ previous: null, current: true })).toEqual({
+        kind: 'establish',
+        breached: true,
+      });
+      expect(thresholdTransition({ previous: null, current: false })).toEqual({
+        kind: 'establish',
+        breached: false,
+      });
+    });
   });
 
-  it('treats the boundary as not-yet-crossed, consistently on both sides', () => {
-    expect(
-      thresholdCrossed({ direction: 'above', threshold: 100, current: 100n, previous: 90n }),
-    ).toBe(false);
-    expect(
-      thresholdCrossed({ direction: 'below', threshold: 100, current: 100n, previous: 110n }),
-    ).toBe(false);
-  });
-
-  it('MISSING IS NEVER ZERO: absent data is not a crossing', () => {
-    // The platform rule for every metric. A brand with no readings before today
-    // has not "fallen below" anything.
-    expect(
-      thresholdCrossed({ direction: 'below', threshold: 100, current: 10n, previous: null }),
-    ).toBe(false);
-    expect(
-      thresholdCrossed({ direction: 'above', threshold: 100, current: null, previous: 10n }),
-    ).toBe(false);
+  describe('the identity of a threshold event', () => {
+    it('is the rule and its ARMING, not the observation that happened to be newest', () => {
+      /*
+       * THE DEFECT THIS ENCODES. Keying on the latest observation id means a new
+       * reading while the metric stays past the line produces a NEW key — and
+       * therefore a second event about the same crossing. The arming cycle
+       * changes only when the rule re-arms, which is exactly when a second event
+       * is legitimate.
+       */
+      expect(thresholdOccurrenceKey('rule-1', 0)).toBe('rule-1:0');
+      expect(thresholdOccurrenceKey('rule-1', 0)).toBe(thresholdOccurrenceKey('rule-1', 0));
+      expect(thresholdOccurrenceKey('rule-1', 1)).not.toBe(thresholdOccurrenceKey('rule-1', 0));
+      // And it is per rule: two rules on the same metric are two subscriptions.
+      expect(thresholdOccurrenceKey('rule-2', 0)).not.toBe(thresholdOccurrenceKey('rule-1', 0));
+    });
   });
 });

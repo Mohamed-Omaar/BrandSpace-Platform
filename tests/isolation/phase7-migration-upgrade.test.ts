@@ -51,6 +51,15 @@ const PHASE7_REMEDIATION_MIGRATION = '20260916230000_phase_7_remediation_strateg
  * the new, narrower key is not unique over what they already have.
  */
 const PHASE7_ROUND2_MIGRATION = '20260917090000_phase_7_automation_outbox_and_idempotency_scope';
+/**
+ * ROUND 3. A new enum label and three columns on a table that already has rows.
+ *
+ * `ALTER TYPE … ADD VALUE` inside a transaction is the interesting half: it is
+ * permitted from PostgreSQL 12 onward only while the new label is not USED
+ * before the commit. Applying it here, against a populated database, is what
+ * proves the migration actually commits rather than proving it parses.
+ */
+const PHASE7_ROUND3_MIGRATION = '20260917120000_phase_7_threshold_edge_and_confirmation_lifecycle';
 
 /** The twelve tenant-owned tables it creates. */
 const NEW_TABLES = [
@@ -234,6 +243,7 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
     applyMigration(migratorUrl, PHASE7_MIGRATION);
     applyMigration(migratorUrl, PHASE7_REMEDIATION_MIGRATION);
     applyMigration(migratorUrl, PHASE7_ROUND2_MIGRATION);
+    applyMigration(migratorUrl, PHASE7_ROUND3_MIGRATION);
 
     app = await connect(urlFor('app', database));
   }, 240_000);
@@ -255,6 +265,51 @@ describe('the Phase 7 migration as an upgrade from current main', () => {
      * difference is somebody's work.
      */
     expect(await snapshot(platform)).toEqual(before);
+  });
+
+  it('THE THRESHOLD COLUMNS ARRIVE WITHOUT ASSUMING A SIDE', async () => {
+    /*
+     * `thresholdBreached` MUST BE NULL ON EVERY EXISTING ROW, and that is not a
+     * detail of defaults: null means "never evaluated", and a migration that
+     * back-filled `false` would tell every threshold rule in the estate that its
+     * metric is currently below the line. The next sweep would then read the
+     * first measurement as a CROSSING and alert about a number that had not
+     * moved.
+     */
+    const { rows } = await migrator.query<{
+      column_name: string;
+      column_default: string | null;
+      is_nullable: string;
+    }>(
+      `SELECT column_name, column_default, is_nullable
+         FROM information_schema.columns
+        WHERE table_name = 'automation_rule'
+          AND column_name IN ('thresholdBreached', 'thresholdCycle', 'thresholdEvaluatedAt')
+        ORDER BY column_name`,
+    );
+    expect(rows.map((row) => row.column_name)).toEqual([
+      'thresholdBreached',
+      'thresholdCycle',
+      'thresholdEvaluatedAt',
+    ]);
+    const breached = rows.find((row) => row.column_name === 'thresholdBreached');
+    expect(breached?.is_nullable).toBe('YES');
+    expect(breached?.column_default).toBeNull();
+    const cycle = rows.find((row) => row.column_name === 'thresholdCycle');
+    expect(cycle?.is_nullable).toBe('NO');
+    expect(cycle?.column_default).toContain('0');
+  });
+
+  it('EXPIRED IS A REAL LABEL ON THE RUN STATUS TYPE AFTER THE UPGRADE', async () => {
+    // `ALTER TYPE … ADD VALUE` in a transaction commits or it does not; asking
+    // the catalogue is the only way to know which.
+    const { rows } = await migrator.query<{ enumlabel: string }>(
+      `SELECT enumlabel FROM pg_enum
+         JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+        WHERE pg_type.typname = 'AutomationRunStatus'
+        ORDER BY enumlabel`,
+    );
+    expect(rows.map((row) => row.enumlabel)).toContain('EXPIRED');
   });
 
   it('THE NARROWED IDEMPOTENCY UNIQUES HOLD OVER DATA THAT WAS ALREADY THERE', () => {

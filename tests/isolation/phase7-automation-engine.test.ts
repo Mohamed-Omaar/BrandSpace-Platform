@@ -374,11 +374,52 @@ describe('an EXTERNAL action never runs on its own', () => {
     return { rule, outcome, recorded };
   }
 
-  it('it stops at AWAITING_CONFIRMATION, issues a single-use token, and publishes nothing', async () => {
+  /**
+   * THE CREDENTIAL, OBTAINED THE WAY THE PRODUCT OBTAINS IT (D-179).
+   *
+   * `run()` used to return a live token, and these tests read it from there.
+   * That was the defect: the only caller of `run()` is the WORKER, which logs a
+   * status and drops whatever it returns, so the token existed for microseconds
+   * inside a background process and then nowhere — and every external proposal
+   * was unconfirmable by anybody.
+   *
+   * The run now records that a person is needed and mints nothing; an authorized
+   * person's request mints the live token, after the same permission and
+   * BrandScope checks `confirmRun` applies. Asking for it here is what a customer
+   * pressing Confirm does, so these tests exercise the real path rather than a
+   * value no real caller could hold.
+   */
+  async function credentialFor(runId: string): Promise<string> {
+    const issued = await inA((db) =>
+      engineFor(db, { notified: [], published: [] }).reissueRunConfirmation({
+        runId,
+        actor: owner(),
+      }),
+    );
+    return issued.token;
+  }
+
+  it('it stops at AWAITING_CONFIRMATION, mints no credential, and publishes nothing', async () => {
     const { outcome, recorded } = await awaitingRun();
     expect(outcome.status).toBe('AWAITING_CONFIRMATION');
-    expect(outcome.confirmationToken).toBeTruthy();
     expect(recorded.published).toHaveLength(0);
+    // NOTHING IS MINTED BY THE RUN ITSELF (D-179). A raw credential created here
+    // would be created by a process that cannot deliver it.
+    expect(outcome.confirmationToken).toBeNull();
+
+    const proposed = await inA((db) =>
+      db.automationRun.findFirstOrThrow({
+        where: { id: outcome.run?.id ?? '' },
+        select: { confirmationTokenHash: true, confirmationExpiresAt: true, confirmedAt: true },
+      }),
+    );
+    expect(proposed.confirmationTokenHash).toBeNull();
+    // The PROPOSAL still has a window, which is what gives it an ending.
+    expect(proposed.confirmationExpiresAt).not.toBeNull();
+    expect(proposed.confirmedAt).toBeNull();
+
+    const token = await credentialFor(outcome.run?.id ?? '');
+    expect(token).toBeTruthy();
 
     const stored = await inA((db) =>
       db.automationRun.findFirstOrThrow({
@@ -388,7 +429,8 @@ describe('an EXTERNAL action never runs on its own', () => {
     );
     // ONLY THE HASH IS ON DISK. A database read cannot be replayed as a
     // confirmation — the same discipline the Copilot and the OAuth state carry.
-    expect(stored.confirmationTokenHash).not.toBe(outcome.confirmationToken);
+    expect(stored.confirmationTokenHash).not.toBe(token);
+    expect(stored.confirmationTokenHash).not.toBeNull();
     expect(stored.confirmedAt).toBeNull();
   });
 
@@ -398,6 +440,10 @@ describe('an EXTERNAL action never runs on its own', () => {
     const before = await inA((db) =>
       db.auditEvent.count({ where: { action: 'automation.confirmation_refused' } }),
     );
+
+    // A REAL, LIVE CREDENTIAL, so the refusal below is unambiguously about the
+    // PERMISSION rather than about a token that was never valid.
+    const token = await credentialFor(outcome.run?.id ?? '');
 
     await expect(
       inA((db) =>
@@ -410,7 +456,7 @@ describe('an EXTERNAL action never runs on its own', () => {
           },
         }).confirmRun({
           runId: outcome.run?.id ?? '',
-          token: outcome.confirmationToken as string,
+          token,
           actor: owner({ permissionKeys: ['automation.read'] }),
         }),
       ),
@@ -461,11 +507,12 @@ describe('an EXTERNAL action never runs on its own', () => {
         return { jobsCreated: 1, slotId: randomUUID() };
       },
     };
+    const token = await credentialFor(outcome.run?.id ?? '');
 
     await inA((db) =>
       engineFor(db, recorded, { publishing }).confirmRun({
         runId: outcome.run?.id ?? '',
-        token: outcome.confirmationToken as string,
+        token,
         actor: owner(),
       }),
     );
@@ -476,7 +523,7 @@ describe('an EXTERNAL action never runs on its own', () => {
       inA((db) =>
         engineFor(db, recorded, { publishing }).confirmRun({
           runId: outcome.run?.id ?? '',
-          token: outcome.confirmationToken as string,
+          token,
           actor: owner(),
         }),
       ),
@@ -492,11 +539,12 @@ describe('an EXTERNAL action never runs on its own', () => {
      */
     const { outcome } = await awaitingRun();
     const recorded: Recorded = { notified: [], published: [] };
+    const token = await credentialFor(outcome.run?.id ?? '');
 
     const run = await inA((db) =>
       engineFor(db, recorded).confirmRun({
         runId: outcome.run?.id ?? '',
-        token: outcome.confirmationToken as string,
+        token,
         actor: owner(),
       }),
     );

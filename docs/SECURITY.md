@@ -2416,3 +2416,55 @@ sweep dispatches it, so a lost queue costs punctuality and not correctness. The
 producer's pairing of trigger to reference is a CHECK constraint, not a convention,
 because a producer that names the wrong kind of row aims a content operation at an
 id that is not a content item's.
+
+## 32. Phase 7 remediation, round 3 — the product half of a security contract
+
+None of the four defects a third review found is a vulnerability, and that is
+the point of this section. Each one is a CONTRACT the platform states and then
+does not keep, and an unkept contract is how a customer stops believing the ones
+that matter.
+
+### 32.1 A registry that offers more than the product can do
+
+Two of six triggers were offered in the dashboard and could not be authored from
+it, because the form posted an empty configuration whatever was chosen. A
+condition field was offered and produced by nothing. An action could be paired
+with a trigger that rejects it, and the rejection arrived after submit.
+
+**D-176 and D-178:** every trigger the screen offers is fully authorable from
+that screen; the actions offered are the ones `actionSupportsTrigger` allows; the
+condition fields offered are the ones the runtime produces, and `createRule`
+refuses the others even when reached around the screen. Offered, accepted and
+produced are one table.
+
+**What did not change:** every option is an item from a closed list the engine
+declares. The only free text in the form is a rule's name. There is still no
+input anywhere that turns code, an expression, SQL, a webhook or a URL into
+behaviour, and that is a property of the registry rather than of the screen.
+
+### 32.2 An alert that repeats is an alert nobody reads
+
+A threshold rule compared the current rolling window with the previous adjacent
+one. That is not edge detection: a metric that climbs past the line and stays
+there keeps the comparison true, and de-duplicating on the newest observation
+hid the repeat only until the next reading arrived.
+
+**D-177:** the rule remembers which side it is on. It fires on the transition,
+re-arms only on a genuine return, and the event's identity is the rule's ARMING
+CYCLE. `null` is "never evaluated", not "not breaching" — so a rule created while
+the metric is already past the line establishes silently rather than alerting
+about a number that has been sitting there for months.
+
+### 32.3 A credential whose lifecycle nobody owned
+
+Round 2 moved the automation's confirmation token to mint-on-demand and left the
+worker still minting the first one. The new route required that ORIGINAL window
+to be open, so once it closed the run stayed `AWAITING_CONFIRMATION` for ever,
+the screen kept offering Confirm, and no usable credential could be issued.
+
+**D-179** picks one contract and closes both ends: the worker mints nothing, an
+authorized person's request mints the live token inside the proposal's window
+without extending it, and a sweep gives the proposal an explicit ending. The
+guarantees that were already right are untouched — single-use, compare-and-swap,
+the confirmer's live permission and BrandScope, the raw token never persisted,
+and external publishing still only behind a human confirmation.

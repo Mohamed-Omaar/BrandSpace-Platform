@@ -3,10 +3,13 @@ import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
   AutomationEngine,
   TenantAutomationPolicySource,
+  gatherFacts,
   type AutomationActor,
   type AutomationPorts,
+  type MetricWindowPort,
   type TriggerEvent,
 } from '@brandspace/automation';
+import { createMetricWindowPort } from '@brandspace/analytics';
 import {
   ContentApprovalService,
   ContentCalendarService,
@@ -203,7 +206,18 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
       ports: portsFor(db, payload.workspaceId, environment),
     });
 
-    const facts = await gatherFacts(db, payload);
+    const facts = await gatherFacts(
+      db,
+      {
+        workspaceId: payload.workspaceId,
+        brandId: payload.brandId,
+        triggerType: payload.triggerType as TriggerEvent['type'],
+        refType: payload.refType,
+        refId: payload.refId,
+        ruleId: payload.ruleId,
+      },
+      { metrics: metricWindowPort(db, payload.workspaceId) },
+    );
     const event: TriggerEvent = {
       type: payload.triggerType as TriggerEvent['type'],
       brandId: payload.brandId,
@@ -250,120 +264,16 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
 }
 
 /**
- * THE FACTS A CONDITION MAY READ, gathered HERE from the database.
+ * THE METRIC WINDOW PORT — the SAME implementation the scheduler's threshold
+ * producer uses.
  *
- * NOT CARRIED IN THE MESSAGE, deliberately. A fact in a queue message was true
- * when the message was written; by the time it is read the draft may have been
- * edited, the post may have failed, the campaign may have been detached. An
- * automation acting on a stale fact is the hardest kind of bug to see, because
- * the rule and the data each look right on their own.
- *
- * The set is CLOSED and matches `CONDITION_FIELDS` exactly: a condition can only
- * read a key this function puts here, so there is no path from a rule to a query
- * the customer shaped.
+ * `gatherFacts` lives in `@brandspace/automation`, beside the list of fields a
+ * customer may choose, so the two cannot drift. It does not import analytics; it
+ * asks through this port, and the port is `@brandspace/analytics`'s own factory.
+ * One answer to "what is this metric over this window" — P7-R7's
+ * level-versus-additive rule included — means a rule's CONDITION can never
+ * disagree with the TRIGGER that fired it.
  */
-async function gatherFacts(
-  db: TenantScopedClient,
-  payload: EvaluateAutomationPayload,
-): Promise<Record<string, unknown>> {
-  const facts: Record<string, unknown> = { 'brand.id': payload.brandId };
-
-  if (payload.refType === 'ContentItem' && payload.refId) {
-    const item = await db.contentItem.findFirst({
-      where: { id: payload.refId, workspaceId: payload.workspaceId },
-      select: {
-        status: true,
-        pillar: true,
-        campaignId: true,
-        _count: { select: { variants: true } },
-      },
-    });
-    if (item) {
-      facts['content.status'] = item.status;
-      facts['content.pillar'] = item.pillar;
-      facts['content.platformCount'] = item._count.variants;
-      facts['content.hasCampaign'] = item.campaignId !== null;
-    }
-  }
-
-  /*
-   * A SLOT REACHES ITS CONTENT ITEM, and the facts are the ITEM's.
-   *
-   * `CONTENT_SCHEDULED` references a CalendarSlot, which the registry already
-   * says reaches a content item `via: 'calendarSlot'`. Without this branch every
-   * `content.*` condition on a scheduling rule read `undefined` and compared
-   * false — so a rule with any condition at all could never fire, and one with
-   * none fired on everything. A condition that can only ever be false is worse
-   * than a missing feature: it looks configured.
-   */
-  if (payload.refType === 'CalendarSlot' && payload.refId) {
-    const slot = await db.calendarSlot.findFirst({
-      where: { id: payload.refId, workspaceId: payload.workspaceId },
-      select: { contentItemId: true },
-    });
-    if (slot) {
-      const item = await db.contentItem.findFirst({
-        where: { id: slot.contentItemId, workspaceId: payload.workspaceId },
-        select: {
-          status: true,
-          pillar: true,
-          campaignId: true,
-          _count: { select: { variants: true } },
-        },
-      });
-      if (item) {
-        facts['content.status'] = item.status;
-        facts['content.pillar'] = item.pillar;
-        facts['content.platformCount'] = item._count.variants;
-        facts['content.hasCampaign'] = item.campaignId !== null;
-      }
-    }
-  }
-
-  /*
-   * THE METRIC FACTS, FOR A THRESHOLD CROSSING.
-   *
-   * `CONDITION_FIELDS` has declared `metric.key`, `metric.value` and
-   * `metric.changeMilli` since the registry was written, and nothing ever put
-   * one there. Same shape as the calendar gap above: three fields a customer
-   * could pick in the UI, all of which compared false for ever.
-   *
-   * READ FROM THE OBSERVATION, HERE, rather than carried in the message — the
-   * reading is what the event points AT, and the rule against stale facts in a
-   * payload is exactly why.
-   */
-  if (payload.refType === 'MetricObservation' && payload.refId) {
-    const observation = await db.metricObservation.findFirst({
-      where: { id: payload.refId, workspaceId: payload.workspaceId },
-      select: { metricKey: true, value: true },
-    });
-    if (observation) {
-      facts['metric.key'] = observation.metricKey;
-      // A `bigint` never reaches a condition: every declared operator compares
-      // numbers, and a mixed comparison is FALSE rather than surprising.
-      facts['metric.value'] = Number(observation.value);
-    }
-  }
-
-  if (payload.refType === 'PublishJob' && payload.refId) {
-    const job = await db.publishJob.findFirst({
-      where: { id: payload.refId, workspaceId: payload.workspaceId },
-      select: { provider: true, failureClass: true, contentItemId: true },
-    });
-    if (job) {
-      facts['publish.provider'] = job.provider;
-      facts['publish.failureClass'] = job.failureClass;
-      const item = await db.contentItem.findFirst({
-        where: { id: job.contentItemId, workspaceId: payload.workspaceId },
-        select: { status: true, pillar: true, campaignId: true },
-      });
-      if (item) {
-        facts['content.status'] = item.status;
-        facts['content.pillar'] = item.pillar;
-        facts['content.hasCampaign'] = item.campaignId !== null;
-      }
-    }
-  }
-
-  return facts;
+function metricWindowPort(db: TenantScopedClient, workspaceId: string): MetricWindowPort {
+  return createMetricWindowPort({ db, workspaceId, environment: currentEnvironment() });
 }

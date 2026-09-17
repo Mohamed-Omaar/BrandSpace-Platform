@@ -6,16 +6,24 @@ import {
   StatusBadge,
   buttonStyle,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { AUTOMATION_ACTIONS, AUTOMATION_TRIGGERS } from '@brandspace/automation';
+import {
+  AUTOMATION_ACTIONS,
+  AUTOMATION_TRIGGERS,
+  CONDITION_FIELDS,
+  CONDITION_OPERATORS,
+  actionSupportsTrigger,
+  conditionFieldsFor,
+} from '@brandspace/automation';
+import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { AutomationForm } from './automation-form';
 import {
   confirmAutomationRunAction,
   createAutomationAction,
@@ -103,74 +111,84 @@ export default async function AutomationsPage({
 
         {mayManage && brands.length > 0 ? (
           <Card title={t('automations.create')}>
-            <form action={createAutomationAction} data-testid="automation-form">
-              <input type="hidden" name="locale" value={locale} />
-              <div
-                style={{
-                  display: 'flex',
-                  gap: spacingTokens.md,
-                  flexWrap: 'wrap',
-                  alignItems: 'end',
-                }}
-              >
-                <label style={{ display: 'grid', gap: '0.25rem' }}>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                    {t('automations.nameLabel')}
-                  </span>
-                  <input
-                    name="name"
-                    required
-                    maxLength={120}
-                    className="bs-control"
-                    style={inputStyle()}
-                  />
-                </label>
-                <label style={{ display: 'grid', gap: '0.25rem' }}>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                    {t('analytics.brandLabel')}
-                  </span>
-                  <select name="brandId" className="bs-control">
-                    {brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: 'grid', gap: '0.25rem' }}>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                    {t('automations.triggerLabel')}
-                  </span>
-                  {/*
-                   * RENDERED FROM THE REGISTRY. A customer can only choose a
-                   * trigger the engine declares — there is no free-text field
-                   * that becomes behaviour.
-                   */}
-                  <select name="triggerType" className="bs-control">
-                    {AUTOMATION_TRIGGERS.map((trigger) => (
-                      <option key={trigger.type} value={trigger.type}>
-                        {t(`automations.trigger.${trigger.type}` as MessageKey)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: 'grid', gap: '0.25rem' }}>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                    {t('automations.actionLabel')}
-                  </span>
-                  <select name="actionType" className="bs-control">
-                    {AUTOMATION_ACTIONS.map((action) => (
-                      <option key={action.type} value={action.type}>
-                        {t(`automations.action.${action.type}` as MessageKey)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" style={buttonStyle('brand', 'sm')}>
-                  {t('automations.create')}
-                </button>
-              </div>
-            </form>
+            {/*
+              THE FORM IS BUILT FROM THE REGISTRY, ON THE SERVER, AND HANDED
+              PLAIN DATA.
+
+              Every option a customer can choose — trigger, action, condition
+              field, operator, metric — is derived here from the engine's own
+              closed lists, including which ACTIONS `actionSupportsTrigger`
+              allows for each trigger and which CONDITION FIELDS actually have a
+              producer in that trigger's context. The client component only
+              decides which of these pre-approved options to show.
+
+              STRINGS CROSS THE BOUNDARY, NEVER `t`. Passing a translator into a
+              client component is what took the Copilot screen down at render.
+            */}
+            <AutomationForm
+              locale={locale}
+              action={createAutomationAction}
+              brands={brands.map((brand) => ({ id: brand.id, name: brand.name }))}
+              triggers={AUTOMATION_TRIGGERS.map((trigger) => ({
+                type: trigger.type,
+                label: t(`automations.trigger.${trigger.type}` as MessageKey),
+                actionTypes: AUTOMATION_ACTIONS.filter((action) =>
+                  actionSupportsTrigger(action.type, trigger.type),
+                ).map((action) => action.type),
+                conditionFields: [...conditionFieldsFor(trigger.type)],
+                needsSchedule: trigger.type === 'SCHEDULED_TIME',
+                needsThreshold: trigger.type === 'METRIC_THRESHOLD_CROSSED',
+              }))}
+              actionLabels={Object.fromEntries(
+                AUTOMATION_ACTIONS.map((action) => [
+                  action.type,
+                  t(`automations.action.${action.type}` as MessageKey),
+                ]),
+              )}
+              conditionFieldLabels={Object.fromEntries(
+                CONDITION_FIELDS.map((field) => [
+                  field,
+                  t(`automations.field.${field}` as MessageKey),
+                ]),
+              )}
+              operators={CONDITION_OPERATORS.map((operator) => ({
+                value: operator,
+                label: t(`automations.operator.${operator}` as MessageKey),
+              }))}
+              metrics={INGESTED_METRIC_KEYS.map((key) => ({
+                key,
+                label: t(`analytics.metric.${key}` as MessageKey),
+              }))}
+              labels={{
+                name: t('automations.nameLabel'),
+                brand: t('analytics.brandLabel'),
+                trigger: t('automations.triggerLabel'),
+                action: t('automations.actionLabel'),
+                submit: t('automations.create'),
+                hour: t('automations.hourLabel'),
+                days: t('automations.daysLabel'),
+                metric: t('automations.metricLabel'),
+                direction: t('automations.directionLabel'),
+                above: t('automations.directionAbove'),
+                below: t('automations.directionBelow'),
+                threshold: t('automations.thresholdLabel'),
+                windowDays: t('automations.windowLabel'),
+                conditionLegend: t('automations.conditionLegend'),
+                conditionNone: t('automations.conditionNone'),
+                conditionField: t('automations.conditionField'),
+                conditionOperator: t('automations.conditionOperator'),
+                conditionValue: t('automations.conditionValue'),
+                weekdays: [
+                  t('automations.day.0'),
+                  t('automations.day.1'),
+                  t('automations.day.2'),
+                  t('automations.day.3'),
+                  t('automations.day.4'),
+                  t('automations.day.5'),
+                  t('automations.day.6'),
+                ],
+              }}
+            />
           </Card>
         ) : null}
 
@@ -276,14 +294,23 @@ export default async function AutomationsPage({
                     />
                     <span>{stamp.format(run.startedAt)}</span>
                     {/*
-                      THE BUTTON A PROPOSED EXTERNAL ACTION WAITS FOR.
+                      THE BUTTON A PROPOSED EXTERNAL ACTION WAITS FOR, AND ONLY
+                      WHILE ITS WINDOW IS OPEN (R3-4).
+
+                      A proposal whose window has closed is EXPIRED by the sweep;
+                      until it is, the status alone would still read
+                      AWAITING_CONFIRMATION, and a button that cannot work is
+                      worse than no button — it offers to authorise something
+                      whose content is by now days stale.
                       Without it the run sat at AWAITING_CONFIRMATION for ever:
                       the engine minted a credential the worker dropped, and
                       nothing on any screen called the confirm action at all.
                       It posts the RUN's id and nothing else — the credential is
                       fetched server-side and never reaches this page.
                     */}
-                    {run.status === 'AWAITING_CONFIRMATION' ? (
+                    {run.status === 'AWAITING_CONFIRMATION' &&
+                    run.confirmationExpiresAt !== null &&
+                    run.confirmationExpiresAt.getTime() > Date.now() ? (
                       <form action={confirmAutomationRunAction}>
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="runId" value={run.id} />

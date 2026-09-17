@@ -6,9 +6,7 @@ import {
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import {
-  AnalyticsQueryService,
-  TenantAnalyticsPolicySource,
-  createAnalyticsRegistry,
+  createMetricWindowPort,
   pruneAnalytics,
   resolveAnalyticsPolicy,
 } from '@brandspace/analytics';
@@ -21,12 +19,7 @@ import {
   type PrismaClient,
 } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
-import {
-  localMomentFor,
-  metricThresholdConfigSchema,
-  thresholdCrossed,
-  timedRuleIsDue,
-} from '@brandspace/automation';
+import { evaluateThresholdRule, localMomentFor, timedRuleIsDue } from '@brandspace/automation';
 import {
   BACKFILL_ANALYTICS,
   EVALUATE_AUTOMATION,
@@ -118,6 +111,7 @@ export interface MaintenanceResult {
   /** Phase 7 remediation — the automation outbox (A1). */
   readonly automationEventsProduced: number;
   readonly automationEventsDispatched: number;
+  readonly automationProposalsExpired: number;
 }
 
 export interface SchedulerOptions {
@@ -668,11 +662,75 @@ export class MaintenanceScheduler {
    * rule creator's live permissions and BrandScope before any action runs, and
    * an external one still stops for a human.
    */
-  async sweepAutomations(batch: number): Promise<{ produced: number; dispatched: number }> {
+  async sweepAutomations(batch: number): Promise<{
+    produced: number;
+    dispatched: number;
+    expired: number;
+  }> {
     const produced =
       (await this.#produceTimedEvents(batch)) + (await this.#produceThresholdEvents(batch));
     const dispatched = await this.#dispatchAutomationEvents(batch);
-    return { produced, dispatched };
+    const expired = await this.#expireAutomationProposals(batch);
+    return { produced, dispatched, expired };
+  }
+
+  /**
+   * Close the proposals nobody confirmed (R3-4).
+   *
+   * WITHOUT THIS THE SCREEN LIES. An external action stops at
+   * `AWAITING_CONFIRMATION` with a window on it; when the window closes the run
+   * stays in that status for ever, and a Confirm control keeps offering to
+   * authorise something that can no longer be authorised — and, worse, something
+   * whose content is by then days stale. `EXPIRED` is the ending, and it is
+   * distinct from `CANCELLED` because cancelled is a decision somebody made.
+   *
+   * THE DIGEST IS CLEARED WITH IT, so a credential minted moments before the
+   * window closed cannot be spent afterwards.
+   *
+   * IT IS THE TENANT'S OWN WRITE. Only the enumeration is cross-tenant (F-07).
+   */
+  async #expireAutomationProposals(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+
+    const stale = await platform.automationRun.findMany({
+      where: {
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        confirmationExpiresAt: { lt: now },
+      },
+      select: { id: true, workspaceId: true },
+      orderBy: { startedAt: 'asc' },
+      take: batch,
+    });
+
+    let expired = 0;
+    for (const run of stale) {
+      const closed = await withWorkspace(
+        run.workspaceId,
+        (db) =>
+          db.automationRun.updateMany({
+            // CONDITIONAL, so a confirmation landing in the same instant wins
+            // rather than being erased by the sweep.
+            where: {
+              id: run.id,
+              workspaceId: run.workspaceId,
+              status: 'AWAITING_CONFIRMATION',
+              confirmedAt: null,
+              confirmationExpiresAt: { lt: now },
+            },
+            data: {
+              status: 'EXPIRED',
+              failureCode: 'confirmation_window_closed',
+              confirmationTokenHash: null,
+              finishedAt: now,
+            },
+          }),
+        { prisma: getPrisma() },
+      );
+      if (closed.count > 0) expired += 1;
+    }
+    return expired;
   }
 
   /**
@@ -745,86 +803,47 @@ export class MaintenanceScheduler {
 
     const rules = await platform.automationRule.findMany({
       where: { triggerType: 'METRIC_THRESHOLD_CROSSED', enabled: true, deletedAt: null },
-      select: { id: true, workspaceId: true, brandId: true, triggerConfig: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        brandId: true,
+        triggerConfig: true,
+        thresholdBreached: true,
+        thresholdCycle: true,
+      },
       take: batch,
     });
     if (rules.length === 0) return 0;
 
     let produced = 0;
     for (const rule of rules) {
-      const config = metricThresholdConfigSchema.safeParse(rule.triggerConfig ?? {});
-      if (!config.success) continue;
-      const { metricKey, direction, threshold, windowDays } = config.data;
-
-      const windowMs = windowDays * 86_400_000;
-      const period = { start: new Date(now.getTime() - windowMs), end: now };
-      const comparison = {
-        start: new Date(period.start.getTime() - windowMs),
-        end: period.start,
-      };
-
-      const written = await withWorkspace(
+      /*
+       * THE SEMANTICS ARE THE PACKAGE'S, THE ENUMERATION IS THIS FILE'S.
+       *
+       * What a crossing MEANS — the remembered side, the arming cycle, the
+       * compare-and-swap — lives in `@brandspace/automation`, where a test can
+       * drive the real code instead of a copy of it written in the test. All
+       * this loop decides is which rules to look at, which is the cross-tenant
+       * question F-07 keeps here.
+       */
+      const outcome = await withWorkspace(
         rule.workspaceId,
-        async (db) => {
-          const policy = await new TenantAnalyticsPolicySource(db, this.#environment).load();
-          const queries = new AnalyticsQueryService({
+        (db) =>
+          evaluateThresholdRule({
             db,
             workspaceId: rule.workspaceId,
-            policy,
-            registry: createAnalyticsRegistry({ environment: this.#environment }),
-          });
-          const summary = await queries.summary({
-            scope: { brandId: rule.brandId },
-            period,
-            comparison,
-            // THE RULE'S OWN BRAND PINS THE QUERY. There is no member here whose
-            // scope could narrow it further, and nothing is acted on: see the
-            // BrandScope note on `sweepAutomations`.
-            brandScope: [],
-            metricKeys: [metricKey],
-          });
-          const metric = summary.metrics.find((row) => row.metricKey === metricKey);
-          if (!metric) return false;
-          if (
-            !thresholdCrossed({
-              direction,
-              threshold,
-              current: metric.value,
-              previous: metric.previousValue,
-            })
-          ) {
-            return false;
-          }
-
-          /*
-           * THE REFERENCE IS THE READING THAT CROSSED, which is what the trigger
-           * registry declares (`refType: 'MetricObservation'`) and what makes the
-           * event's identity a ROW rather than a moment: the same crossing seen
-           * again on the next pass derives the same key and writes nothing, and a
-           * genuinely newer reading is a genuinely new event.
-           */
-          const observation = await db.metricObservation.findFirst({
-            where: {
+            rule,
+            metrics: createMetricWindowPort({
+              db,
               workspaceId: rule.workspaceId,
-              brandId: rule.brandId,
-              metricKey,
-              periodStart: { gte: period.start, lt: period.end },
-            },
-            orderBy: { periodStart: 'desc' },
-            select: { id: true },
-          });
-          if (!observation) return false;
-
-          return recordRuleAutomationEvent(db, rule.workspaceId, {
-            triggerType: 'METRIC_THRESHOLD_CROSSED',
-            brandId: rule.brandId,
-            ruleId: rule.id,
-            refId: observation.id,
-          });
-        },
+              environment: this.#environment,
+              clock: this.#clock,
+            }),
+            now,
+          }),
         { prisma: getPrisma() },
       );
-      if (written) produced += 1;
+      if (outcome === 'fired') produced += 1;
     }
     return produced;
   }
@@ -936,6 +955,7 @@ export class MaintenanceScheduler {
       analyticsRowsPruned,
       automationEventsProduced: automations.produced,
       automationEventsDispatched: automations.dispatched,
+      automationProposalsExpired: automations.expired,
     };
   }
 
@@ -1026,7 +1046,7 @@ export class MaintenanceScheduler {
      */
     every(cadence.ingestionReconcileSeconds, 'automation-sweep', async () => {
       const swept = await this.sweepAutomations(cadence.ingestionReconcileBatch);
-      return swept.produced + swept.dispatched;
+      return swept.produced + swept.dispatched + swept.expired;
     });
 
     log.info('maintenance scheduler started', {

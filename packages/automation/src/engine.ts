@@ -17,6 +17,7 @@ import {
 } from '@brandspace/shared';
 import {
   automationConfirmationRejected,
+  conditionFieldNotProduced,
   automationRuleNotFound,
   brandRuleLimitReached,
   creatorLacksAuthority,
@@ -30,6 +31,7 @@ import type { AutomationPorts } from './ports';
 import {
   AUTOMATION_ACTIONS,
   actionSupportsTrigger,
+  conditionFieldsFor,
   conditionsSchema,
   evaluateConditions,
   findAction,
@@ -314,6 +316,25 @@ export class AutomationEngine {
     const conditions = conditionsSchema.parse(input.conditions);
     if (conditions.length > this.#policy.limits.maxConditionsPerRule) {
       throw tooManyConditions(this.#policy.limits.maxConditionsPerRule);
+    }
+
+    /*
+     * A CONDITION MUST READ A FIELD THIS TRIGGER ACTUALLY PRODUCES (R3-3).
+     *
+     * `conditionsSchema` checks the SHAPE — a declared field, a declared
+     * operator, a literal — and a shape can be perfectly valid and still mean
+     * nothing: `content.status equals APPROVED` on a scheduled rule names a
+     * field no scheduled event ever carries, so it compares FALSE for ever and
+     * the rule never fires. The authoring screen no longer offers those
+     * combinations, and this is why it cannot be reached by going around it.
+     *
+     * The table is `CONDITION_FIELD_TRIGGERS`, which is also what the runtime
+     * gatherer is held to by the parity test — so "offered", "accepted" and
+     * "produced" are one list rather than three.
+     */
+    const producible = new Set(conditionFieldsFor(input.triggerType));
+    for (const condition of conditions) {
+      if (!producible.has(condition.field)) throw conditionFieldNotProduced(condition.field);
     }
 
     const triggerConfig = trigger.config.parse(input.triggerConfig) as Prisma.InputJsonValue;
@@ -696,7 +717,26 @@ export class AutomationEngine {
     run: AutomationRun,
     event: TriggerEvent,
   ): Promise<RunOutcome> {
-    const token = randomUUID() + randomUUID();
+    /*
+     * NO CREDENTIAL IS MINTED HERE (R3-4).
+     *
+     * THE DEFECT THIS CLOSES. This used to mint a raw token, store its digest
+     * and RETURN the raw value — to the WORKER, which logs a status and drops
+     * it. The notification that tells a permitted person to come and look
+     * carries no payload, deliberately, because a live publish credential does
+     * not belong in a notification row. So the credential existed for
+     * microseconds inside a background process and then nowhere, and every
+     * external proposal was unconfirmable.
+     *
+     * THE CONTRACT IS MINT-ON-DEMAND. The run records that a person is needed
+     * and how long they have; `reissueRunConfirmation` mints the live token when
+     * an authorized person actually asks for it, and rotates it under a
+     * compare-and-swap so two people asking at once leave exactly one.
+     *
+     * `confirmationExpiresAt` IS THE PROPOSAL'S WINDOW, not a token's. When it
+     * closes, the run becomes EXPIRED and the screen stops offering to confirm
+     * something that is now days stale.
+     */
     const expiresAt = new Date(
       this.#clock.now().getTime() + this.#policy.execution.confirmationTtlSeconds * 1_000,
     );
@@ -706,7 +746,7 @@ export class AutomationEngine {
       data: {
         status: 'AWAITING_CONFIRMATION',
         conditionsHeld: true,
-        confirmationTokenHash: hashToken(token),
+        confirmationTokenHash: null,
         confirmationExpiresAt: expiresAt,
         resourceType: event.refType,
         resourceId: event.refId,
@@ -738,7 +778,7 @@ export class AutomationEngine {
       after: { ruleId: rule.id, actionType: rule.actionType },
     });
 
-    return { run: updated, status: 'AWAITING_CONFIRMATION', confirmationToken: token };
+    return { run: updated, status: 'AWAITING_CONFIRMATION', confirmationToken: null };
   }
 
   /**
@@ -811,9 +851,6 @@ export class AutomationEngine {
 
     const now = this.#clock.now();
     const token = randomUUID() + randomUUID();
-    const expiresAt = new Date(
-      now.getTime() + this.#policy.execution.confirmationTtlSeconds * 1_000,
-    );
 
     const rotated = await this.#db.automationRun.updateMany({
       where: {
@@ -821,12 +858,26 @@ export class AutomationEngine {
         workspaceId: this.#workspaceId,
         status: 'AWAITING_CONFIRMATION',
         confirmedAt: null,
-        // THE RUN MUST STILL BE THE ONE THIS CALLER READ. A run confirmed,
-        // cancelled or re-issued in between affects zero rows here.
+        /*
+         * THE RUN MUST STILL BE THE ONE THIS CALLER READ. A run confirmed,
+         * cancelled or re-issued in between affects zero rows here.
+         *
+         * NULL IS THE ORDINARY FIRST CASE, not an edge one: the worker mints
+         * nothing, so the first person to ask finds no digest at all. Prisma
+         * renders a null here as `IS NULL`, which is exactly the compare-and-swap
+         * this needs.
+         */
         confirmationTokenHash: run.confirmationTokenHash,
+        // THE PROPOSAL'S OWN WINDOW, and the reason this refuses after it closes.
         confirmationExpiresAt: { gt: now },
       },
-      data: { confirmationTokenHash: hashToken(token), confirmationExpiresAt: expiresAt },
+      /*
+       * THE WINDOW IS NOT EXTENDED. Rotating the digest re-issues a credential
+       * WITHIN the window the proposal already had; pushing the expiry out on
+       * every request would let anybody keep a stale proposal alive indefinitely
+       * by asking for a token they never spend.
+       */
+      data: { confirmationTokenHash: hashToken(token) },
     });
     if (rotated.count === 0) throw automationConfirmationRejected();
 

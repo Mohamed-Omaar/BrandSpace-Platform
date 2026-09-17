@@ -420,6 +420,151 @@ test.describe('automations', () => {
     await expect(rules).toContainText(name);
   });
 
+  test('A SCHEDULED RULE IS FULLY AUTHORABLE, and is created with its hour', async ({ page }) => {
+    /*
+     * THE DEFECT THIS COVERS (R3-1). The form rendered every trigger and posted
+     * `triggerConfig: {}` whatever you chose — so "every day at a time" could be
+     * selected and the time could not be given, and `createRule` refused the
+     * rule with a validation error naming a field the screen had never shown.
+     * Two of the six authorable triggers were, in practice, unauthorable.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    const form = page.getByTestId('automation-form');
+    await expect(form).toBeVisible();
+
+    const name = `E2E scheduled ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
+
+    // THE SCHEDULE FIELDS APPEAR because the trigger needs them, and the
+    // threshold fields do not.
+    await expect(page.getByTestId('automation-schedule')).toBeVisible();
+    await expect(page.getByTestId('automation-threshold')).toHaveCount(0);
+
+    await page.getByTestId('automation-hour').selectOption('9');
+    await form.locator('input[name="daysOfWeek"][value="1"]').check();
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    const rules = page.getByTestId('automation-rules');
+    await expect(rules).toContainText(name);
+
+    // AND IT ENABLES, which is the second, deliberate act — a rule that could be
+    // created but never enabled would be the same defect one step along.
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await row.getByRole('button', { name: /enable/i }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
+    ).toContainText(/disable/i);
+  });
+
+  test('A THRESHOLD RULE IS FULLY AUTHORABLE, with metric, direction and number', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    const form = page.getByTestId('automation-form');
+    const name = `E2E threshold ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
+
+    await expect(page.getByTestId('automation-threshold')).toBeVisible();
+    await expect(page.getByTestId('automation-schedule')).toHaveCount(0);
+
+    await page.getByTestId('automation-metric').selectOption('followers');
+    await page.getByTestId('automation-direction').selectOption('above');
+    await page.getByTestId('automation-threshold-value').fill('1000');
+    await page.getByTestId('automation-window').fill('7');
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByTestId('automation-rules')).toContainText(name);
+
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await row.getByRole('button', { name: /enable/i }).click();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
+    ).toContainText(/disable/i);
+  });
+
+  test('A MISSING THRESHOLD NUMBER CANNOT BE SUBMITTED AT ALL', async ({ page }) => {
+    /*
+     * The browser refuses before the request leaves, because the field is
+     * `required` — the customer is told at the control they left empty rather
+     * than by a server error naming a field they never saw.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    const form = page.getByTestId('automation-form');
+    const name = `E2E invalid ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
+    // Deliberately leaving the threshold empty.
+    await page.getByTestId('automation-submit').click();
+    await page.waitForTimeout(500);
+
+    const invalid = await page
+      .getByTestId('automation-threshold-value')
+      .evaluate((node) => (node as HTMLInputElement).validity.valueMissing);
+    expect(invalid).toBe(true);
+    await expect(page.getByTestId('automation-rules')).not.toContainText(name);
+  });
+
+  test('AN INCOMPATIBLE TRIGGER/ACTION PAIR IS NEVER OFFERED', async ({ page }) => {
+    /*
+     * `actionSupportsTrigger` rejects an action that needs a content item on a
+     * trigger that has none. The screen used to let both be selected
+     * independently and refuse afterwards; now the action simply is not in the
+     * list, so the pair cannot be chosen.
+     */
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
+    const scheduledActions = await page
+      .getByTestId('automation-action')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(scheduledActions).toContain('NOTIFY');
+    expect(scheduledActions).not.toContain('SUBMIT_FOR_APPROVAL');
+    expect(scheduledActions).not.toContain('PLACE_ON_CALENDAR');
+
+    // And a trigger that DOES reach a content item offers them.
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    const approvedActions = await page
+      .getByTestId('automation-action')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(approvedActions).toContain('SUBMIT_FOR_APPROVAL');
+  });
+
+  test('A CONDITION FIELD IS OFFERED ONLY WHERE THE RUNTIME PRODUCES IT', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+
+    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
+    const timed = await page
+      .getByTestId('automation-condition-field')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    // Only the brand, plus the "no condition" default.
+    expect(timed.filter((value) => value !== '')).toEqual(['brand.id']);
+
+    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
+    const metric = await page
+      .getByTestId('automation-condition-field')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    expect(metric).toContain('metric.changeMilli');
+    expect(metric).not.toContain('content.status');
+  });
+
   test('the run history is present, or SAYS it is empty rather than showing nothing', async ({
     page,
   }) => {

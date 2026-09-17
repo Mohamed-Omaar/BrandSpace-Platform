@@ -38,6 +38,7 @@ export type {
 
 export { MockAnalyticsConnectorAdapter } from './mock-adapters';
 export { createAnalyticsRegistry } from './registry';
+export { createMetricWindowPort } from './metric-window';
 export type { AnalyticsRegistry, AnalyticsRegistryOptions } from './registry';
 
 export {

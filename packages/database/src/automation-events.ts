@@ -100,7 +100,23 @@ export async function recordRuleAutomationEvent(
         readonly triggerType: 'METRIC_THRESHOLD_CROSSED';
         readonly brandId: string;
         readonly ruleId: string;
+        /**
+         * The reading the crossing was seen in. PROVENANCE, not identity —
+         * see `occurrenceKey`.
+         */
         readonly refId: string;
+        /**
+         * THE ARMING THIS EVENT BELONGS TO (R3-2), supplied by the caller
+         * because only the sweep knows which cycle it just claimed.
+         *
+         * It is NOT the observation id, and that distinction is the whole
+         * finding: an observation id changes every time a new reading lands, so
+         * a key built from one de-duplicates a repeat until the metric is
+         * measured again and then fires the same crossing a second time. A cycle
+         * changes exactly when the rule re-arms, which is exactly when a second
+         * event is legitimate.
+         */
+        readonly occurrenceKey: string;
       },
 ): Promise<boolean> {
   const timed = input.triggerType === 'SCHEDULED_TIME';
@@ -117,13 +133,13 @@ export async function recordRuleAutomationEvent(
         /*
          * THE RULE AND ITS OCCASION. A timed rule's occasion is the local hour it
          * fired for, so a sweep that runs sixty times inside that hour writes ONE
-         * row; a threshold rule's occasion is the observation that crossed, so a
-         * sweep that keeps seeing the same crossing writes one row and a genuinely
-         * new reading writes another.
+         * row; a threshold rule's occasion is its ARMING CYCLE, so every sweep
+         * while the metric stays past the line writes one row between them, and
+         * the cycle only advances when the metric goes back and crosses again.
          */
         dedupeKey: timed
           ? `SCHEDULED_TIME:${input.ruleId}:${input.occurrence}`
-          : `METRIC_THRESHOLD_CROSSED:${input.ruleId}:${input.refId}`,
+          : `METRIC_THRESHOLD_CROSSED:${input.occurrenceKey}`,
       },
     ],
     skipDuplicates: true,

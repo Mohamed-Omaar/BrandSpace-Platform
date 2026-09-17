@@ -29,10 +29,68 @@ function codeFrom(error: unknown): string {
   return isAppError(error) ? error.code : 'INTERNAL';
 }
 
+/**
+ * THE TRIGGER'S OWN CONFIGURATION, READ FROM THE FORM THE CUSTOMER FILLED IN.
+ *
+ * IT USED TO BE `{}` — ALWAYS (R3-1). So a scheduled rule carried no hour and a
+ * threshold rule carried no metric, no direction and no number, and
+ * `createRule` refused both with a validation error naming fields the screen had
+ * never rendered. Two of the six authorable triggers could not, in fact, be
+ * authored.
+ *
+ * THE SHAPES ARE THE ENGINE'S. Parsing happens in `createRule` against the
+ * registry's own Zod schema; this only reads the named inputs the form posts, so
+ * there is still no path from a text box to behaviour.
+ */
+function triggerConfigFrom(formData: FormData, triggerType: string): Record<string, unknown> {
+  if (triggerType === 'SCHEDULED_TIME') {
+    return {
+      hourLocal: Number(formData.get('hourLocal') ?? 0),
+      // EMPTY MEANS EVERY DAY, which is what an untouched set of checkboxes
+      // means to the person who left them alone.
+      daysOfWeek: formData.getAll('daysOfWeek').map((day) => Number(day)),
+    };
+  }
+  if (triggerType === 'METRIC_THRESHOLD_CROSSED') {
+    return {
+      metricKey: String(formData.get('metricKey') ?? ''),
+      direction: String(formData.get('direction') ?? 'above'),
+      threshold: Number(formData.get('threshold') ?? Number.NaN),
+      windowDays: Number(formData.get('windowDays') ?? 7),
+    };
+  }
+  return {};
+}
+
+/**
+ * The one optional condition the authoring screen offers.
+ *
+ * IT USED TO BE `[]` UNCONDITIONALLY, so the condition half of the engine was
+ * unreachable from the product. The field list the form offers is derived from
+ * `CONDITION_FIELD_TRIGGERS`, so a customer can only choose something the
+ * runtime actually produces for the trigger they picked.
+ *
+ * A VALUE IS A LITERAL, never an expression: the engine's schema accepts a
+ * string, a number, a boolean or a short list, and a number typed into the box
+ * is sent as a number so `greater_than` compares numerically rather than
+ * refusing a mixed comparison.
+ */
+function conditionsFrom(formData: FormData): readonly Record<string, unknown>[] {
+  const field = String(formData.get('conditionField') ?? '');
+  if (!field) return [];
+  const operator = String(formData.get('conditionOperator') ?? 'equals');
+  if (operator === 'is_true' || operator === 'is_false') return [{ field, operator }];
+
+  const raw = String(formData.get('conditionValue') ?? '');
+  const numeric = raw.trim() !== '' && Number.isFinite(Number(raw));
+  return [{ field, operator, value: numeric ? Number(raw) : raw }];
+}
+
 export async function createAutomationAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const session = await requireWorkspace(locale, 'automation.manage');
   const brandId = String(formData.get('brandId') ?? '');
+  const triggerType = String(formData.get('triggerType') ?? '');
 
   try {
     await inAnalytics(session.workspace.workspaceId, async (services) => {
@@ -40,9 +98,9 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
       await engine.createRule({
         brandId,
         name: String(formData.get('name') ?? '').slice(0, 120),
-        triggerType: String(formData.get('triggerType') ?? '') as AutomationTrigger,
-        triggerConfig: {},
-        conditions: [],
+        triggerType: triggerType as AutomationTrigger,
+        triggerConfig: triggerConfigFrom(formData, triggerType),
+        conditions: conditionsFrom(formData) as never,
         actionType: String(formData.get('actionType') ?? '') as AutomationActionType,
         // `NOTIFY` is the only action with a required parameter, and its value is
         // a template key from the closed catalogue rather than customer text.

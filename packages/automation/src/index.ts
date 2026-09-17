@@ -8,6 +8,11 @@
  * run — the same boundary the Copilot enforces, reached by a different door.
  */
 
+export { contractedFieldsFor, gatherFacts } from './facts';
+export { evaluateThresholdRule } from './threshold-producer';
+export type { ThresholdOutcome, ThresholdRuleRow } from './threshold-producer';
+export type { FactEvent, MetricWindowPort } from './facts';
+
 export {
   AUTOMATION_ACTIONS,
   AUTOMATION_TRIGGERS,
@@ -15,7 +20,9 @@ export {
   CONDITION_FIELDS,
   CONDITION_OPERATORS,
   conditionSchema,
+  conditionFieldsFor,
   conditionsSchema,
+  CONDITION_FIELD_TRIGGERS,
   evaluateCondition,
   evaluateConditions,
   findAction,
@@ -36,10 +43,12 @@ export {
   metricThresholdConfigSchema,
   occurrenceKey,
   scheduledTimeConfigSchema,
-  thresholdCrossed,
+  metricIsBreaching,
+  thresholdOccurrenceKey,
+  thresholdTransition,
   timedRuleIsDue,
 } from './schedule';
-export type { LocalMoment } from './schedule';
+export type { LocalMoment, ThresholdTransition } from './schedule';
 export type {
   AutomationActor,
   AutomationDenialSink,
@@ -69,6 +78,7 @@ export {
   automationConfirmationRejected,
   automationRuleNotFound,
   automationRunNotFound,
+  conditionFieldNotProduced,
   brandRuleLimitReached,
   creatorLacksAuthority,
   ruleLimitReached,

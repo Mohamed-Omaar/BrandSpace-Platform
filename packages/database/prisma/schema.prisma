@@ -3852,6 +3852,13 @@ enum AutomationRunStatus {
   BLOCKED_BY_AUTHORIZATION
   FAILED
   CANCELLED
+  /// THE PROPOSAL'S WINDOW CLOSED WITH NOBODY CONFIRMING IT.
+  ///
+  /// Terminal, and distinct from CANCELLED on purpose: cancelled is a decision
+  /// somebody made, expired is one nobody made. A run that sat here would
+  /// otherwise keep a Confirm control alive on a screen for ever, pointing at a
+  /// proposal whose content is now days stale.
+  EXPIRED
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. ONE NORMALIZED METRIC FACT, as one provider
@@ -4642,6 +4649,28 @@ model AutomationRule {
   lastRunAt     DateTime?            @db.Timestamptz(6)
   lastRunStatus AutomationRunStatus?
   runCount      Int                  @default(0)
+
+  /// THE THRESHOLD RULE'S OWN MEMORY OF WHICH SIDE THE METRIC IS ON.
+  ///
+  /// WHY IT IS DURABLE (R3-2). A crossing is a TRANSITION, and a transition
+  /// cannot be read off a single sweep. Comparing the current rolling window
+  /// against the previous adjacent one looks like edge detection and is not: a
+  /// metric that climbs past the line and STAYS there keeps both comparisons
+  /// true for as long as it stays, so every sweep sees a "crossing". Dedupe on
+  /// the latest observation's id hides it only until the next reading arrives,
+  /// and then fires again — which is the same alert a second time about the same
+  /// event.
+  ///
+  /// So the rule remembers. `null` means NEVER EVALUATED: the first evaluation
+  /// records the side and fires nothing, because a rule created while the metric
+  /// is already past the line has not seen anything cross since somebody asked.
+  thresholdBreached    Boolean?
+  /// Incremented each time the metric returns to the non-triggered side. It is
+  /// the identity of the current ARMING, and it is what the event's dedupe key
+  /// is built from — so any number of sweeps inside one arming produce one
+  /// event, and the next genuine crossing produces exactly one more.
+  thresholdCycle       Int       @default(0)
+  thresholdEvaluatedAt DateTime? @db.Timestamptz(6)
 
   /// Optimistic concurrency, for the same reason `campaign` carries one.
   version Int @default(1)

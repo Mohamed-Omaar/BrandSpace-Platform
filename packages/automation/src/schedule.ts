@@ -116,28 +116,80 @@ export const metricThresholdConfigSchema = z.object({
 });
 
 /**
- * Has the metric CROSSED the threshold — as opposed to merely being past it?
+ * IS THE METRIC PAST THE LINE, RIGHT NOW?
  *
- * EDGE-TRIGGERED, AND THAT IS THE WHOLE POINT. A rule that fired every time the
- * current window was above the number would fire on every sweep, for as long as
- * the number stayed there — which for a growing brand is for ever. "Crossed"
- * means the window that ends now is past the threshold AND the window that
- * ended one period earlier was not.
+ * A PURE SIDE TEST, and deliberately nothing more. It answers "which side" and
+ * says nothing about whether anything crossed, because a crossing is a
+ * TRANSITION and a transition cannot be read off one reading.
  *
- * `null` for either side means "not enough data", and not enough data is NOT a
- * crossing: a brand with no observations before today has not just fallen below
- * anything, and treating a gap as a zero is the mistake the whole analytics
- * package refuses to make.
+ * `null` IS NOT A SIDE. Missing is never zero (the rule the whole analytics
+ * package keeps): a brand with no readings has not fallen below anything, and a
+ * window that could not be measured must leave the rule's memory exactly as it
+ * found it rather than recording a side nobody observed.
  */
-export function thresholdCrossed(input: {
+export function metricIsBreaching(input: {
   readonly direction: 'above' | 'below';
   readonly threshold: number;
-  readonly current: bigint | null;
-  readonly previous: bigint | null;
-}): boolean {
-  if (input.current === null || input.previous === null) return false;
+  readonly value: bigint | null;
+}): boolean | null {
+  if (input.value === null) return null;
   const limit = BigInt(input.threshold);
-  return input.direction === 'above'
-    ? input.current > limit && input.previous <= limit
-    : input.current < limit && input.previous >= limit;
+  // THE BOUNDARY IS NOT PAST THE LINE, on either side, so "above 100" and
+  // "below 100" can never both be true of the same reading.
+  return input.direction === 'above' ? input.value > limit : input.value < limit;
+}
+
+/** What one evaluation does to a threshold rule's memory. */
+export type ThresholdTransition =
+  /** Nothing measurable happened; the memory is untouched. */
+  | { readonly kind: 'unmeasured' }
+  /** First ever evaluation: record the side, fire nothing. */
+  | { readonly kind: 'establish'; readonly breached: boolean }
+  /** The metric crossed onto the triggered side. FIRE, once. */
+  | { readonly kind: 'fire' }
+  /** It returned to the other side. Re-arm, so the next crossing fires again. */
+  | { readonly kind: 'rearm' }
+  /** It stayed where it was. */
+  | { readonly kind: 'steady' };
+
+/**
+ * THE EDGE, DECIDED FROM DURABLE MEMORY RATHER THAN FROM TWO ADJACENT WINDOWS.
+ *
+ * WHY THE PREVIOUS WINDOW WAS NOT ENOUGH (R3-2). "Current window past the line
+ * AND previous window not" looks like edge detection. It is not: a metric that
+ * climbs past the line and STAYS there eventually has both windows past it, and
+ * before that it has a stretch where the comparison keeps answering yes on every
+ * sweep. De-duplicating on the newest observation's id hides the repeat only
+ * until the next reading arrives — and then the customer is told a second time
+ * about the same crossing, which is exactly the alert nobody trusts twice.
+ *
+ * SO THE RULE REMEMBERS WHICH SIDE IT IS ON, and this function is the whole
+ * state machine over that one remembered bit.
+ *
+ * `previous === null` MEANS NEVER EVALUATED, and it establishes rather than
+ * fires. A rule created while the metric is already past the line has not seen
+ * anything cross since somebody asked for it — and alerting immediately on a
+ * number that has been sitting there for months is how a customer learns to
+ * switch the feature off.
+ */
+export function thresholdTransition(input: {
+  readonly previous: boolean | null;
+  readonly current: boolean | null;
+}): ThresholdTransition {
+  if (input.current === null) return { kind: 'unmeasured' };
+  if (input.previous === null) return { kind: 'establish', breached: input.current };
+  if (input.current === input.previous) return { kind: 'steady' };
+  return input.current ? { kind: 'fire' } : { kind: 'rearm' };
+}
+
+/**
+ * The identity of a threshold event: the rule, and the ARMING it belongs to.
+ *
+ * NOT THE OBSERVATION. An observation id changes every time a new reading lands,
+ * so it de-duplicates a repeat only until the metric is measured again. The
+ * arming cycle changes exactly when the rule re-arms, which is exactly when a
+ * second event is legitimate.
+ */
+export function thresholdOccurrenceKey(ruleId: string, cycle: number): string {
+  return `${ruleId}:${cycle}`;
 }

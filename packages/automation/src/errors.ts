@@ -61,3 +61,17 @@ export function creatorLacksAuthority(): AppError {
 export function automationConfirmationRejected(): AppError {
   return new AppError('CONFLICT', 'That confirmation is no longer valid.');
 }
+
+/**
+ * A condition names a field this trigger never produces.
+ *
+ * NAMED IN THE ERROR, because unlike a tenancy refusal this one is not a secret:
+ * the field is the customer's own choice on their own rule, and a message that
+ * said only "invalid" would leave them changing things at random. Telling them
+ * WHICH field is the difference between a rule they can fix and one they delete.
+ */
+export function conditionFieldNotProduced(field: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That condition cannot be evaluated for this trigger.', {
+    field,
+  });
+}

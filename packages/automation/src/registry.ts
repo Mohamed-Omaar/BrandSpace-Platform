@@ -173,6 +173,62 @@ export const CONDITION_FIELDS = [
 ] as const;
 export type ConditionField = (typeof CONDITION_FIELDS)[number];
 
+/**
+ * WHICH TRIGGER CONTEXTS ACTUALLY PRODUCE EACH FIELD (R3-3).
+ *
+ * THE DEFECT THIS CLOSES. `CONDITION_FIELDS` is the list a customer may choose
+ * from, and it was a list of NAMES with no stated relationship to the facts the
+ * runtime gathers. `metric.changeMilli` was offered and never produced by
+ * anything; `content.*` was offered on a trigger whose reference is an ingestion
+ * run, where it can never resolve. A condition that always compares FALSE is
+ * worse than a missing feature, because it looks configured: the rule is saved,
+ * enabled, listed — and silent.
+ *
+ * SO THE MAPPING IS DECLARED, ONCE, HERE. The authoring UI offers a field only
+ * where this says it is produced, `gatherFacts` produces exactly these, and a
+ * parity test walks this table against the real gatherer on real PostgreSQL. A
+ * field added without a producer fails the build; a producer removed without its
+ * field fails it too.
+ *
+ * EXHAUSTIVE BY TYPE: every `ConditionField` must appear, and TypeScript refuses
+ * the file if one is missing.
+ */
+export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly AutomationTrigger[]> = {
+  // The brand is on every event, because `deliver` selects rules BY brand.
+  'brand.id': [
+    'CONTENT_APPROVED',
+    'CONTENT_SCHEDULED',
+    'POST_PUBLISHED',
+    'ANALYTICS_REFRESHED',
+    'METRIC_THRESHOLD_CROSSED',
+    'SCHEDULED_TIME',
+  ],
+  // Reachable wherever a content item is reachable — which is exactly where
+  // `contentItemVia` is not null.
+  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.platformCount': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  // Only the publish job carries these.
+  'publish.provider': ['POST_PUBLISHED'],
+  'publish.failureClass': ['POST_PUBLISHED'],
+  // Only the threshold trigger, because only it names the metric and the window
+  // the numbers are measured over.
+  'metric.key': ['METRIC_THRESHOLD_CROSSED'],
+  'metric.value': ['METRIC_THRESHOLD_CROSSED'],
+  'metric.changeMilli': ['METRIC_THRESHOLD_CROSSED'],
+};
+
+/**
+ * The fields a customer may choose for THIS trigger.
+ *
+ * The authoring screen calls this, so a picker can never offer a field that
+ * would compare false for ever on the rule being written.
+ */
+export function conditionFieldsFor(trigger: AutomationTrigger): readonly ConditionField[] {
+  return CONDITION_FIELDS.filter((field) => CONDITION_FIELD_TRIGGERS[field].includes(trigger));
+}
+
 export const CONDITION_OPERATORS = [
   'equals',
   'not_equals',
