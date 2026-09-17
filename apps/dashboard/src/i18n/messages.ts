@@ -1076,7 +1076,7 @@ export const messages = {
     'brandProfile.headingFont': 'Heading font',
     'brandProfile.bodyFont': 'Body font',
     'brandProfile.palette': 'Colour palette',
-    'brandProfile.paletteHint': 'Hex colours such as #7935FE, separated by commas.',
+    'brandProfile.paletteHint': 'Hex colours, separated by commas.',
     'brandProfile.primaryLogo': 'Primary logo',
     'brandProfile.secondaryLogo': 'Alternate logo',
     'brandProfile.logoHint':
