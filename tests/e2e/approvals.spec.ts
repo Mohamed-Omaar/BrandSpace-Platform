@@ -45,36 +45,45 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 }
 
 /**
- * Click, and keep clicking until it has taken effect.
- *
- * The same hydration race the calendar suite documents: `page.goto` resolves
- * when the document is parsed, React has not hydrated, and a click in that
- * window hits a button with no handler and is silently lost.
- */
-async function clickUntil(page: Page, selector: string, settled: () => Promise<void>) {
-  await expect(async () => {
-    await page.locator(selector).first().click();
-    await settled();
-  }).toPass({ timeout: 20_000 });
-}
-
-/**
  * Submit a form and wait for the server action's own outcome.
  *
- * A server action's `redirect()` is a CLIENT navigation with no new document,
- * so `waitForURL` with `load` or `commit` hangs. Sampling `page.url()` depends
- * on nothing but the URL. The click is retried only while the URL is unchanged,
- * which cannot double-submit once one has taken.
+ * TWO DIFFERENT WAITS, AND CONFLATING THEM IS WHAT BROKE THIS SUITE.
+ *
+ * The first is the HYDRATION RACE the calendar suite documents: `page.goto`
+ * resolves when the document is parsed, React has not attached its handlers
+ * yet, and a click that lands in that window is silently lost. Nothing happens,
+ * ever, so the click has to be repeated.
+ *
+ * The second is the SERVER DOING THE WORK. A server action's `redirect()` is a
+ * CLIENT navigation with no new document, so `waitForURL` hangs and the URL is
+ * the only honest signal — but the URL not having moved does NOT mean the click
+ * was lost. `<form action={serverAction}>` starts a NEW action on every submit,
+ * so re-clicking while one is in flight SUPERSEDES it: under load the loop can
+ * click forty times, none of them ever rendering a response, while the server
+ * has already accepted one and done the work. That is CI #83 on the calendar,
+ * and CI #88 here — "the form did not submit", thrown at a form that submitted.
+ *
+ * So the two waits are separated. The click is repeated only while it
+ * DEMONSTRABLY NEVER REACHED THE SERVER, and once a POST has gone out the wait
+ * is generous and uninterrupted, because the only thing left to wait for is
+ * work that has definitely started.
  */
 async function submitAndSettle(page: Page, selector: string, marker: RegExp): Promise<void> {
   const before = page.url();
+
   await expect(async () => {
-    if (page.url() === before) {
-      await page.locator(selector).first().click();
-      await page.waitForTimeout(750);
-    }
-    expect(page.url(), 'the form did not submit').not.toBe(before);
+    // Armed BEFORE the click, so a request that races the await is not missed.
+    const sent = page
+      .waitForRequest((request) => request.method() === 'POST', { timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.locator(selector).first().click();
+    expect(await sent, 'the click never reached the server').toBe(true);
   }).toPass({ timeout: 30_000 });
+
+  await expect
+    .poll(() => page.url(), { message: 'the form did not submit', timeout: 60_000 })
+    .not.toBe(before);
   await expect.poll(() => page.url(), { timeout: 15_000 }).toMatch(marker);
 }
 
@@ -105,21 +114,43 @@ test.describe('the approval workflow', () => {
      * record would mean nothing.
      */
     await signIn(page);
+
+    /*
+     * THE POLICY THIS TEST READS, ESTABLISHED RATHER THAN ASSUMED (F-23).
+     *
+     * Step 3 RELAXES the brand's self-approval rule and only the restore at
+     * the very end puts it back — so an attempt that fails in between leaves it
+     * permissive, and Playwright's retry then opens its first cycle under a
+     * policy the seed never set. Steps 2 and 4 assert the refusal, so the retry
+     * fails at `self-blocked-` with "element(s) not found": a second, invented
+     * failure that says nothing about the first and that no retry can ever get
+     * past. A suite must bootstrap what it reads.
+     *
+     * Saved only when it is actually wrong, so the normal run posts no extra
+     * form and the seed's own state is what is asserted against.
+     */
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    const policySelfApproval = page.locator('[data-testid^="policy-self-"]').first();
+    await expect(policySelfApproval).toBeVisible({ timeout: 15_000 });
+    if (await policySelfApproval.isChecked()) {
+      await policySelfApproval.uncheck();
+      await submitAndSettle(page, '[data-testid^="policy-save-"]', /ok=SAVED|error=/);
+      expect(page.url()).toMatch(/ok=SAVED/);
+    }
+
     await openReviewableDraft(page);
 
     /*
      * THE PRECONDITION, STATED. `pnpm e2e:seed` resets this draft to DRAFT with
      * no review history; if something else moved it, the submit button is
-     * absent and `clickUntil` below would time out twenty seconds later with an
+     * absent and the submit below would time out thirty seconds later with an
      * error pointing at the click rather than at the state. Asserting it here
      * makes the real cause the first thing the failure says.
      */
     await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
 
     // 1. Submit for review.
-    await clickUntil(page, '[data-testid="submit-for-review"]', async () => {
-      await expect.poll(() => page.url(), { timeout: 3_000 }).toMatch(/ok=SUBMITTED|error=/);
-    });
+    await submitAndSettle(page, '[data-testid="submit-for-review"]', /ok=SUBMITTED|error=/);
     expect(page.url()).toMatch(/ok=SUBMITTED/);
 
     // 2. It is in the queue, and the queue offers no verdict — the reader
@@ -157,9 +188,7 @@ test.describe('the approval workflow', () => {
 
     await openReviewableDraft(page);
     await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
-    await clickUntil(page, '[data-testid="submit-for-review"]', async () => {
-      await expect.poll(() => page.url(), { timeout: 3_000 }).toMatch(/ok=SUBMITTED|error=/);
-    });
+    await submitAndSettle(page, '[data-testid="submit-for-review"]', /ok=SUBMITTED|error=/);
     expect(page.url()).toMatch(/ok=SUBMITTED/);
 
     // 6. Now the verdict is offered, and taking it approves the content.
@@ -278,11 +307,22 @@ test.describe('the Command Center aggregates the modules', () => {
     await expect(page.getByTestId('overview-activity')).toBeVisible();
 
     /*
-     * AND WHAT IS STILL HONEST ABOUT WHAT IT CANNOT MEASURE. Publishing is
-     * Phase 6 and engagement Phase 7, so that card still states the reason
-     * rather than rendering a zero that would read as "you published nothing".
+     * AND THE CARD THAT USED TO SAY WHAT IT COULD NOT MEASURE NOW MEASURES IT.
+     *
+     * Through Phases 5B-3 and 6 this slot was `metric-published`, permanently
+     * unavailable, because a zero would have read as "you published nothing"
+     * about a feature that did not exist. Publishing shipped in Phase 6 and
+     * analytics ingestion in Phase 7, so the slot is `metric-engagement` and
+     * carries a real sum over stored observations.
+     *
+     * WHAT DID NOT CHANGE IS THE HONESTY RULE. With no reading yet the card is
+     * still UNAVAILABLE with a stated reason rather than a zero — missing and
+     * zero are different states, and the Command Center must not confuse them.
      */
-    await expect(page.getByTestId('metric-published')).toBeVisible();
+    await expect(page.getByTestId('metric-published')).toHaveCount(0);
+    const engagement = page.getByTestId('metric-engagement');
+    await expect(engagement).toBeVisible();
+    await expect(engagement).not.toHaveText(/^\s*0\s*$/);
   });
 
   test('every panel links somewhere real', async ({ page }) => {

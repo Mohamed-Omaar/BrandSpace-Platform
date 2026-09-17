@@ -4,6 +4,9 @@ import { registerBrandBrainRoutes } from './routes/brand-brain';
 import { registerContentRoutes } from './routes/content';
 import { registerHealthRoutes } from './routes/health';
 import { registerSocialRoutes } from './routes/social';
+import { registerAnalyticsRoutes } from './routes/analytics';
+import { registerAutomationRoutes } from './routes/automation';
+import { registerCopilotRoutes } from './routes/copilot';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
 
@@ -35,6 +38,15 @@ export async function buildServer() {
   registerBrandBrainRoutes(app);
   registerContentRoutes(app);
   registerSocialRoutes(app);
+  /*
+   * Phase 7. Each of these calls the AI Gateway or performs an external action
+   * behind a human confirmation, and both need the PLATFORM identity that F-07
+   * keeps out of the customer dashboard. Reading analytics needs neither and
+   * stays in the dashboard on the tenant identity, where it belongs.
+   */
+  registerAnalyticsRoutes(app);
+  registerCopilotRoutes(app);
+  registerAutomationRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

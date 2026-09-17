@@ -96,6 +96,41 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     }
   });
 
+  test('PHASE 7: analytics, strategy, the Copilot and automations are ALL closed to a Viewer', async ({
+    page,
+  }) => {
+    /*
+     * D-62 AND D-130 IN THEIR PHASE 7 FORM, and the assertion the whole phase
+     * had to keep: nothing new was granted to `client_viewer`.
+     *
+     * A Viewer holds exactly `workspace.read`. Every Phase 7 route requires a
+     * permission they do not have — `analytics.read`, `strategy.read`,
+     * `copilot.use`, `automation.read` — so each is a REAL refusal shaped like a
+     * genuine miss, not a hidden link. The commercial performance of a business
+     * is exactly the information the narrowest role has no need for, and an AI
+     * assistant that can change state is exactly the capability it must not
+     * have.
+     */
+    await signInAsViewer(page);
+
+    for (const route of ['analytics', 'strategy', 'copilot', 'automations']) {
+      for (const locale of ['en', 'ar']) {
+        const response = await page.goto(`${DASHBOARD_BASE_URL}/${locale}/${route}`);
+        expect(response?.status(), `/${locale}/${route} must not be readable by a Viewer`).toBe(
+          404,
+        );
+      }
+    }
+  });
+
+  test('the navigation offers a Viewer no Phase 7 surface at all', async ({ page }) => {
+    await signInAsViewer(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    for (const route of ['analytics', 'strategy', 'copilot', 'automations']) {
+      await expect(page.locator(`a[href$="/en/${route}"]`), route).toHaveCount(0);
+    }
+  });
+
   test('the navigation does not offer connected accounts either', async ({ page }) => {
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);

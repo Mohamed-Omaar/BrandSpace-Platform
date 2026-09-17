@@ -237,8 +237,25 @@ describe('the customer role matrix matches the Blueprint', () => {
   });
 
   it('read-only roles hold no mutating permission at all', () => {
+    /*
+     * "MUTATING" MEANS CHANGES STATE OR CAUSES AN EFFECT — which is what makes
+     * a role read-only. Two keys are exempted, and both exemptions are about
+     * the RULE rather than about a role we wish to widen:
+     *
+     *   - `audit.read` is a read whose `action` is not spelled "read".
+     *   - `analytics.export` writes an audit row and changes NOTHING ELSE. It
+     *     takes out exactly what the caller could already see on the screen, so
+     *     it cannot disclose anything a read could not. Taking the numbers out
+     *     is the Analyst's entire job, and a role that can read a chart but not
+     *     save it is a role nobody would use.
+     *
+     * Everything that spends credits or causes an effect stays on the list, and
+     * `analytics.explain`, `copilot.use`, `strategy.manage` and
+     * `automation.manage` are all on it.
+     */
+    const readOnlyExempt = ['audit.read', 'analytics.export'];
     const mutating = WORKSPACE_PERMISSIONS.filter(
-      (p) => !['read'].includes(p.action) && p.key !== 'audit.read',
+      (p) => !['read'].includes(p.action) && !readOnlyExempt.includes(p.key),
     ).map((p) => p.key);
 
     /*
@@ -260,6 +277,29 @@ describe('the customer role matrix matches the Blueprint', () => {
         expect(grants(role), `${role} must not hold ${key}`).not.toContain(key);
       }
     }
+
+    /*
+     * AND THE PHASE 7 KEYS, NAMED RATHER THAN INFERRED. Every one of these
+     * either spends credits or changes something, so a read-only role holding
+     * one would be a read-only role that can spend money — the same reasoning
+     * that withholds `brand_brain.chat`. Named explicitly so that renaming a
+     * permission's `action` cannot quietly drop it off the blanket list above.
+     */
+    for (const key of [
+      'analytics.explain',
+      'copilot.use',
+      'strategy.manage',
+      'automation.manage',
+    ]) {
+      expect(grants('analyst'), `analyst must not hold ${key}`).not.toContain(key);
+      expect(grants('client_viewer'), `client_viewer must not hold ${key}`).not.toContain(key);
+    }
+
+    /*
+     * D-62 / D-130: the Viewer's grant is EXACTLY `workspace.read`, and Phase 7
+     * added nothing to it.
+     */
+    expect(grants('client_viewer')).toEqual(['workspace.read']);
   });
 
   it('approver may review extracted knowledge, and may do nothing else to it', () => {

@@ -1357,6 +1357,275 @@ const publishingSchema = z.object({
     .default({}),
 });
 
+// --- Phase 7: Analytics, Copilot and Automations ----------------------------
+
+/**
+ * Analytics ingestion, presentation and retention policy (Phase 7).
+ *
+ * CLAUDE.md §2.2 again, and this domain is unusually dense with owner decisions
+ * because almost every number in an ingestion pipeline is one: how often to ask
+ * a platform, how far back to go, when a figure stops being current, how long to
+ * keep it, and how large an export a customer may pull. None of it is a
+ * developer's choice, and every one of them changes with the hardware, the
+ * platform's own limits and the commercial promise.
+ *
+ * WHAT IS DELIBERATELY NOT HERE:
+ *
+ *   - THE METRIC VOCABULARY. Metric keys and their units are CODE
+ *     (packages/analytics/src/metrics.ts) for the reason AI task keys are:
+ *     application code asks for `engagement_rate` by name, and an operator
+ *     renaming it would break the anomaly detector rather than retune it.
+ *   - THE ANALYTICS RETENTION CEILING PER PLAN. `limit.analytics_retention_days`
+ *     lives in `plans` (D-10) and is resolved through the entitlements engine.
+ *     `retention.maxRetentionDays` here is the PLATFORM ceiling; the stricter of
+ *     the two wins, and the plan is the one that varies by customer.
+ *   - ANY CREDENTIAL. Analytics reads a CUSTOMER token from `social_credential`,
+ *     resolved on the worker. Nothing about a credential appears in
+ *     configuration, projected or otherwise.
+ */
+const analyticsSchema = z.object({
+  ingestion: z
+    .object({
+      /**
+       * How often a connection's recent window is refreshed, per granularity.
+       *
+       * Daily figures settle slowly — a platform revises yesterday's numbers for
+       * hours — so asking every few minutes spends a rate limit to learn
+       * nothing. Hourly figures move faster and are asked for more often.
+       */
+      dailyIntervalMinutes: z.number().int().min(5).max(1_440).default(180),
+      hourlyIntervalMinutes: z.number().int().min(5).max(1_440).default(60),
+      /**
+       * The trailing window a scheduled pull re-asks for.
+       *
+       * NOT "since we last looked". Platforms revise recent figures for days,
+       * and a cursor that only ever moved forward would freeze the first,
+       * lowest reading of every day for ever. Re-asking a short trailing window
+       * is what lets a revision land — and the idempotent upsert is what makes
+       * re-asking free.
+       */
+      refreshWindowDays: z.number().int().min(1).max(30).default(3),
+      /** Post subjects asked about in one provider request. */
+      subjectsPerRequest: z.number().int().min(1).max(200).default(25),
+      /** Cursors a single scheduling pass may claim. */
+      claimBatchSize: z.number().int().min(1).max(500).default(25),
+      /**
+       * How long a claim on a cursor is believed.
+       *
+       * Past this lease the claim is treated as abandoned and another pass may
+       * take it — the same mechanism, and the same hazard, as D-143's publish
+       * claim: too short recovers a cursor a live worker still holds. Generous
+       * against a pull measured in seconds.
+       */
+      claimLeaseSeconds: z.number().int().min(60).max(3_600).default(600),
+      /**
+       * The share of a provider's request budget that analytics may NOT spend,
+       * in parts per mille. Publishing may spend it; a chart may wait.
+       */
+      publishingReserveMilli: z.number().int().min(0).max(900).default(250),
+    })
+    .default({}),
+
+  backfill: z
+    .object({
+      /** Whether a newly connected account is backfilled at all. */
+      enabled: z.boolean().default(true),
+      /**
+       * BOUNDED, and the bound matters. An unbounded backfill against a
+       * platform that answers for two years is a rate limit spent for a chart
+       * nobody asked for, and a bill in provider quota rather than in money.
+       * The adapter's own `maxBackfillDays` narrows this further per platform.
+       */
+      maxDays: z.number().int().min(1).max(730).default(90),
+      /** Days fetched per backfill pass, so one account cannot monopolise. */
+      daysPerPass: z.number().int().min(1).max(90).default(7),
+    })
+    .default({}),
+
+  freshness: z
+    .object({
+      /** Within this, a figure is FRESH and the screen says nothing. */
+      freshWithinMinutes: z.number().int().min(5).max(10_080).default(360),
+      /** Past this, a figure is STALE and every surface drawing it must say so. */
+      staleAfterMinutes: z.number().int().min(15).max(43_200).default(1_440),
+    })
+    .default({}),
+
+  retry: z
+    .object({
+      maxConsecutiveFailures: z.number().int().min(1).max(50).default(8),
+      initialBackoffSeconds: z.number().int().min(1).max(3_600).default(60),
+      backoffMultiplier: z.number().min(1).max(10).default(2),
+      maxBackoffSeconds: z.number().int().min(60).max(86_400).default(7_200),
+      /** Jitter spreads a thundering herd after a platform outage. */
+      jitterRatio: z.number().min(0).max(1).default(0.2),
+    })
+    .default({}),
+
+  anomaly: z
+    .object({
+      /**
+       * How far from the baseline a value must sit before it is called
+       * anomalous, in parts per mille of the baseline.
+       *
+       * A THRESHOLD IS NOT A MYSTERY. Every anomaly this product reports carries
+       * the baseline, the window it was computed over and the observed change,
+       * so a customer can disagree with it. This number is what "unusual" means,
+       * and it is an owner's judgement rather than a developer's.
+       */
+      deviationThresholdMilli: z.number().int().min(100).max(10_000).default(500),
+      /** Periods the baseline is averaged over. Fewer than this, no anomaly. */
+      baselinePeriods: z.number().int().min(3).max(90).default(14),
+      /**
+       * Below this baseline value, no anomaly is reported at all. A post that
+       * went from 2 impressions to 6 is not a 200% surge; it is noise, and
+       * calling it a surge is how an insights feed becomes unreadable.
+       */
+      minimumBaselineValue: z.number().int().min(0).max(1_000_000).default(50),
+    })
+    .default({}),
+
+  explain: z
+    .object({
+      /** Evidence rows allowed into one explanation's context. */
+      maxEvidenceItems: z.number().int().min(1).max(200).default(24),
+      /**
+       * The minimum evidence an explanation may be attempted on.
+       *
+       * BELOW IT, NOTHING IS GENERATED AND NOTHING IS CHARGED. A model asked to
+       * explain three numbers will produce a confident paragraph about three
+       * numbers, and a customer cannot tell that from insight. The honest answer
+       * is that there is not enough data yet, and it costs nothing to give.
+       */
+      minEvidenceItems: z.number().int().min(1).max(50).default(4),
+      /** Days of history one explanation may range over. */
+      maxWindowDays: z.number().int().min(1).max(400).default(92),
+    })
+    .default({}),
+
+  export: z
+    .object({
+      /** The widest date range one export may cover. */
+      maxWindowDays: z.number().int().min(1).max(400).default(92),
+      /** The most rows one export may contain. A bound, not a promise. */
+      maxRows: z.number().int().min(100).max(1_000_000).default(50_000),
+    })
+    .default({}),
+
+  retention: z
+    .object({
+      /**
+       * The PLATFORM ceiling on how long observations are kept. The PLAN's
+       * `limit.analytics_retention_days` narrows it per customer, and the
+       * stricter of the two wins.
+       */
+      maxRetentionDays: z.number().int().min(30).max(3_650).default(730),
+      /** How long an ingestion RUN record is kept. Operations evidence, not data. */
+      runRetentionDays: z.number().int().min(1).max(365).default(30),
+      /** How long a generated insight is kept before it is purged (D-116/D-117). */
+      insightRetentionDays: z.number().int().min(1).max(3_650).default(180),
+      /** Rows a single pruning pass may remove. */
+      pruneBatchSize: z.number().int().min(1).max(100_000).default(5_000),
+    })
+    .default({}),
+});
+
+/**
+ * AI Copilot policy (Phase 7).
+ *
+ * THE CONFIRMATION REQUIREMENT IS NOT HERE, AND THAT IS THE POINT. CLAUDE.md
+ * §2.5 and A-17 say the Copilot may never silently perform an external or
+ * destructive action; a configuration key that could switch that off would make
+ * a permanent product rule an operator setting. It is a CHECK constraint on
+ * `copilot_action_plan` instead. What an operator legitimately tunes is how LONG
+ * a confirmation stays valid, how large a plan may be, and how much of a
+ * conversation is kept — all of which are below.
+ */
+const copilotSchema = z.object({
+  plans: z
+    .object({
+      /**
+       * Steps one plan may contain. A ceiling, because a plan a person cannot
+       * read is a plan they cannot meaningfully confirm.
+       */
+      maxSteps: z.number().int().min(1).max(50).default(8),
+      /**
+       * How long a confirmation stays valid.
+       *
+       * SHORT ON PURPOSE. The token is a live authorization to change tenant
+       * state, and a long window is a long replay window — the same reasoning
+       * `publishing.oauth.stateTtlSeconds` carries.
+       */
+      confirmationTtlSeconds: z.number().int().min(30).max(3_600).default(600),
+      /** How long after execution the undo path stays open. */
+      undoWindowSeconds: z.number().int().min(60).max(86_400).default(3_600),
+      /** Plans one member may have awaiting confirmation at once. */
+      maxOpenPlansPerUser: z.number().int().min(1).max(50).default(5),
+    })
+    .default({}),
+
+  conversation: z
+    .object({
+      /** Turns kept as context for the next turn. A context window is finite. */
+      maxContextMessages: z.number().int().min(1).max(50).default(10),
+      /** Total characters of grounding text allowed into one turn. */
+      maxContextChars: z.number().int().min(500).max(200_000).default(16_000),
+      /** The longest request a customer may send. */
+      maxRequestChars: z.number().int().min(10).max(20_000).default(2_000),
+      /**
+       * D-116 / D-117 RETENTION. The Copilot persists what a customer asked and
+       * what they were told, so it owns the artifact and must declare how long
+       * it keeps it. There is no "forever".
+       */
+      retentionDays: z.number().int().min(1).max(3_650).default(90),
+    })
+    .default({}),
+});
+
+/**
+ * Automation engine policy (Phase 7).
+ *
+ * WHAT IS DELIBERATELY NOT CONFIGURABLE: the trigger, condition and action
+ * REGISTRIES. They are closed sets in code (packages/automation/src/registry.ts),
+ * because a configurable action list is one migration away from an arbitrary
+ * webhook, and an arbitrary webhook is customer-controlled egress from a
+ * multi-tenant platform. The same reasoning keeps
+ * `requiresConfirmationForExternal` out of configuration and in a CHECK
+ * constraint.
+ */
+const automationsSchema = z.object({
+  limits: z
+    .object({
+      /** Rules one workspace may hold. A ceiling, not a plan limit. */
+      maxRulesPerWorkspace: z.number().int().min(1).max(1_000).default(50),
+      maxRulesPerBrand: z.number().int().min(1).max(500).default(20),
+      /** The platform ceiling on a rule's own daily run limit. */
+      maxRunsPerRulePerDay: z.number().int().min(1).max(10_000).default(50),
+      /** Conditions one rule may carry, so evaluation stays bounded. */
+      maxConditionsPerRule: z.number().int().min(1).max(20).default(5),
+    })
+    .default({}),
+
+  execution: z
+    .object({
+      /**
+       * How long an AWAITING_CONFIRMATION run stays open before it expires.
+       *
+       * An external action proposed on Monday and confirmed on Friday is an
+       * action nobody remembers agreeing to. Longer than the Copilot's window
+       * because an automation fires without anyone watching.
+       */
+      confirmationTtlSeconds: z.number().int().min(300).max(604_800).default(86_400),
+      /** Runs a single sweeping pass may dispatch. */
+      dispatchBatchSize: z.number().int().min(1).max(500).default(50),
+      /** How long a run may hold its claim before it is treated as abandoned. */
+      claimLeaseSeconds: z.number().int().min(60).max(3_600).default(300),
+      /** How long a completed run record is kept. */
+      runRetentionDays: z.number().int().min(1).max(365).default(90),
+    })
+    .default({}),
+});
+
 // --- Messaging, website, operations ----------------------------------------
 const templatesSchema = z.object({
   templates: z
@@ -1473,6 +1742,20 @@ export const CONFIG_DOMAINS = {
   'integrations.observability': { schema: providerIntegrationSchema(), schemaVersion: 1 },
   'integrations.social-apps': { schema: socialAppsSchema, schemaVersion: 1 },
   publishing: { schema: publishingSchema, schemaVersion: 1 },
+  // Phase 7. Ingestion cadence, backfill bounds, freshness thresholds, anomaly
+  // thresholds, export ceilings and the retention windows. It carries no metric
+  // vocabulary (that is code), no plan limit (that is `plans`), no provider and
+  // no credential.
+  analytics: { schema: analyticsSchema, schemaVersion: 1 },
+  // Phase 7. Plan ceilings, the confirmation and undo windows, and the D-116 /
+  // D-117 conversation retention. The CONFIRMATION REQUIREMENT itself is not
+  // here — it is a CHECK constraint, because CLAUDE.md §2.5 is a product rule
+  // rather than an operator setting.
+  copilot: { schema: copilotSchema, schemaVersion: 1 },
+  // Phase 7. Rule and run ceilings and the confirmation window. The trigger,
+  // condition and action registries are closed sets in code: a configurable
+  // action list is one step from an arbitrary webhook.
+  automations: { schema: automationsSchema, schemaVersion: 1 },
   templates: { schema: templatesSchema, schemaVersion: 1 },
   website: { schema: websiteSchema, schemaVersion: 1 },
   operations: { schema: operationsSchema, schemaVersion: 1 },

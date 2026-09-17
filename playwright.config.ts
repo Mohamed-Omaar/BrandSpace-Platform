@@ -299,7 +299,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -309,7 +309,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -445,6 +445,36 @@ export default defineConfig({
        */
       name: 'approvals',
       testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 7 — its own SERIAL project, for the same reasons again and one
+       * more.
+       *
+       * IT READS A SEEDED ANALYTICS FIXTURE AND ASSERTS ON TOTALS. Two browsers
+       * running it at once against one database would each be summing rows the
+       * other had just replaced, and the seed RESETS its observations rather
+       * than appending — which is what keeps the figures on the screen the same
+       * on the tenth run as on the first, and what makes running it twice
+       * concurrently meaningless.
+       *
+       * IT ALSO CREATES AN AUTOMATION RULE, which is not idempotent across
+       * runs: a rule name is unique per brand, so a second browser creating the
+       * same rule would meet a conflict that has nothing to do with what is
+       * under test.
+       *
+       * The responsive and accessibility assertions do not need the viewport
+       * projects: the suite sets its own phone viewport for the one test that
+       * measures overflow, and runs axe in both directions itself.
+       */
+      name: 'analytics-copilot',
+      testMatch: /analytics-copilot\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

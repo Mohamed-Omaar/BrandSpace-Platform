@@ -41,6 +41,31 @@ export const NOTIFICATION_TEMPLATES = {
    * because everyone else can only worry about it.
    */
   'publishing.connection_needs_reauth': { severity: 'warning' },
+
+  /*
+   * Phase 7 — Analytics, Insights and Automations.
+   *
+   * FOUR TEMPLATES, AND EACH ONE IS SOMETHING A PERSON HAS TO DECIDE ABOUT OR
+   * ACT ON. A refreshed chart is not news; a number that moved unusually, an
+   * inference waiting for review, and an automation that will not proceed
+   * without a human are.
+   */
+  /**
+   * AN AUTOMATION WANTS TO DO SOMETHING EXTERNAL AND IS WAITING FOR A PERSON.
+   *
+   * ITS OWN TEMPLATE RATHER THAN `publishing.published`, deliberately. "Something
+   * was published" and "something wants to be published and will not be until you
+   * say so" are opposite messages, and sharing one would teach people to skim
+   * both — which is exactly what must not happen to the one notification that
+   * stands between an automation and the outside world.
+   */
+  'automation.confirmation_required': { severity: 'warning' },
+  /** An automation stopped because its creator no longer has the authority. */
+  'automation.blocked': { severity: 'warning' },
+  /** A metric moved far enough from its baseline to be worth a look. */
+  'analytics.anomaly_detected': { severity: 'info' },
+  /** An inferred learning is waiting in the Brand Brain review queue. */
+  'brand_brain.learning_proposed': { severity: 'info' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
@@ -73,4 +98,16 @@ export interface NotificationPayload {
   providerKey?: string;
   accountName?: string;
   failureClass?: string;
+  /*
+   * Phase 7. The rule and the metric, both of which are OUR OWN identifiers or a
+   * name the customer wrote — never a figure, and never a provider string.
+   *
+   * NO METRIC VALUE TRAVELS IN A NOTIFICATION. "Engagement fell to 412" in an
+   * inbox is a performance figure sitting outside every freshness, scope and
+   * permission check the analytics surface applies; the reader follows the link
+   * and sees the number under those checks, where it belongs.
+   */
+  automationName?: string;
+  actionType?: string;
+  metricKey?: string;
 }

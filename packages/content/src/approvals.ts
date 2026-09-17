@@ -1,4 +1,5 @@
 import {
+  recordAutomationEvent,
   writeAuditEvent,
   type Approval,
   type ApprovalStatus,
@@ -644,6 +645,32 @@ export class ContentApprovalService {
         hasNote: note !== null,
       },
     });
+
+    /*
+     * THE AUTOMATION EVENT, IN THIS TRANSACTION (A1).
+     *
+     * `CONTENT_APPROVED` was an authorable trigger with NO PRODUCER: a customer
+     * could write the rule, the worker held a complete consumer for it, and
+     * nothing in the platform ever connected the two. A rule on the most obvious
+     * event in the product simply never fired.
+     *
+     * A ROW, NOT AN ENQUEUE. It commits with the approval or not at all — so an
+     * approval never happens without its event, and an event never exists for an
+     * approval that rolled back. Nothing here talks to Redis, so a queue outage
+     * cannot fail somebody's approval, and the reconciliation sweep dispatches
+     * what is waiting.
+     *
+     * ONLY ON APPROVAL. `REQUEST_CHANGES` and `REJECT` are not this trigger, and
+     * a rule listening for an approval must not fire on a rejection.
+     */
+    if (input.verdict === 'APPROVE') {
+      await recordAutomationEvent(
+        this.#db,
+        this.#workspaceId,
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { brandId: approval.brandId, refId: item.id },
+      );
+    }
 
     await this.#notifier?.approvalDecided({
       approvalId: approval.id,

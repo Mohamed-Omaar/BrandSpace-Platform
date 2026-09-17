@@ -354,6 +354,145 @@ export class BrandKnowledgeService {
   }
 
   /**
+   * PROPOSE AN INFERRED LEARNING — Phase 7, and the close of D-64's return path.
+   *
+   * WHAT THIS DELIBERATELY IS NOT: a write to Brand Brain. It creates a
+   * CANDIDATE, in the same table, with the same PENDING status, judged through
+   * the same `reviewCandidate` by the same `brand_brain.review` permission a
+   * document candidate needs. Analytics does not get a private door into the
+   * corpus; it gets the queue everything else uses.
+   *
+   * THREE PROPERTIES THAT MAKE IT SAFE TO POINT A STATISTIC AT A BRAND:
+   *
+   *  1. IT ONLY EVER TARGETS A LEARNING. The area is `LEARNINGS`, whose memory
+   *     layer is D-64's lowest, and `targetItemId` is resolved WITHIN that area —
+   *     so an inference can never be aimed at an item in CANONICAL, STRATEGY or
+   *     any other area, whatever key it proposes. That is the structural half of
+   *     "human-authored facts outrank inferred learning": the inference has
+   *     nothing to overwrite.
+   *
+   *  2. A DISAGREEMENT IS RECORDED, NOT RESOLVED. When the proposed learning
+   *     contradicts an ACTIVE, human-authored item elsewhere in the brand, the
+   *     candidate records it in `conflictsWithItemId` and the review screen shows
+   *     both. Nothing touches the human item. D-65 is explicit that the platform
+   *     does not correct the brand on the strength of a statistic.
+   *
+   *  3. IT CARRIES ITS EVIDENCE. `insightId` points at the insight the inference
+   *     came from, whose own evidence rows carry the metric, the value and the
+   *     window — so a reviewer retraces the reasoning rather than trusting a
+   *     sentence. That is what D-65 calls reproducibility.
+   *
+   * IDEMPOTENT ON (brand, area, itemKey, insight): the same inference proposed
+   * twice finds its pending candidate rather than filling the queue with copies.
+   */
+  async proposeLearning(input: {
+    brandId: string;
+    itemKey: string;
+    title: LocalizedText;
+    body: LocalizedText;
+    /** 0-1000 per mille. An inference is a probability; a human statement is not. */
+    confidenceMilli: number;
+    /** The insight this was drawn from. Required: an inference without evidence
+     *  is an opinion, and this queue does not carry opinions. */
+    insightId: string;
+    /** Evidence references, copied from the insight so the candidate is readable
+     *  on its own. Never a provider payload. */
+    evidence: unknown;
+    actorBrandScope: readonly string[];
+  }): Promise<{ readonly candidateId: string; readonly created: boolean }> {
+    assertBrandInScope(input.actorBrandScope, input.brandId);
+
+    // D-132: the insight is read through the scope PREDICATE, so a foreign or
+    // fabricated insight id is a miss rather than a link to somebody else's row.
+    const insight = await this.db.insight.findFirst({
+      where: {
+        id: input.insightId,
+        brandId: input.brandId,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+      select: { id: true },
+    });
+    if (!insight) throw candidateNotFound();
+
+    const existing = await this.db.brandKnowledgeCandidate.findFirst({
+      where: {
+        brandId: input.brandId,
+        area: 'LEARNINGS',
+        itemKey: input.itemKey,
+        insightId: input.insightId,
+        status: 'PENDING',
+      },
+      select: { id: true },
+    });
+    if (existing) return { candidateId: existing.id, created: false };
+
+    /*
+     * THE TARGET IS RESOLVED INSIDE `LEARNINGS` AND NOWHERE ELSE. Even if a
+     * caller proposed a key that collides with a canonical item, the lookup is
+     * scoped to the learnings area, so the candidate can only ever offer to
+     * replace a previous learning.
+     */
+    const target = await this.db.brandKnowledgeItem.findFirst({
+      where: { brandId: input.brandId, area: 'LEARNINGS', itemKey: input.itemKey },
+      select: { id: true },
+    });
+
+    /*
+     * A CONFLICT IS ANYTHING HUMAN-AUTHORED, STILL ACTIVE, THAT SHARES THIS KEY
+     * OUTSIDE THE LEARNINGS AREA. Detected here rather than at review time
+     * because the reviewer needs to see it in the queue, before they decide.
+     */
+    const conflict = await this.db.brandKnowledgeItem.findFirst({
+      where: {
+        brandId: input.brandId,
+        itemKey: input.itemKey,
+        area: { not: 'LEARNINGS' },
+        status: 'ACTIVE',
+        origin: { in: ['HUMAN', 'DOCUMENT'] },
+      },
+      select: { id: true },
+    });
+
+    const candidate = await this.db.brandKnowledgeCandidate.create({
+      data: {
+        workspaceId: this.workspaceId,
+        brandId: input.brandId,
+        sourceKind: 'ANALYTICS',
+        // No document: an inference has none, and the CHECK constraint requires
+        // the insight instead.
+        sourceDocumentId: null,
+        insightId: input.insightId,
+        targetItemId: target?.id ?? null,
+        conflictsWithItemId: conflict?.id ?? null,
+        area: 'LEARNINGS',
+        itemKey: input.itemKey,
+        extractedTitle: toJson(input.title),
+        extractedBody: toJson(input.body),
+        confidenceMilli: input.confidenceMilli,
+        evidence: input.evidence as Prisma.InputJsonValue,
+        status: 'PENDING',
+      },
+    });
+
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'brand_brain.learning.proposed',
+      // AUTOMATION, not USER: nobody asked for this, the system inferred it.
+      actorType: 'AUTOMATION',
+      resourceType: 'BrandKnowledgeCandidate',
+      resourceId: candidate.id,
+      brandId: input.brandId,
+      after: {
+        itemKey: input.itemKey,
+        confidenceMilli: input.confidenceMilli,
+        insightId: input.insightId,
+        conflictsWithHumanKnowledge: conflict !== null,
+      },
+    });
+
+    return { candidateId: candidate.id, created: true };
+  }
+
+  /**
    * Accept, edit-and-accept, or reject a candidate.
    *
    * THE ONLY PATH FROM AN UPLOAD TO APPROVED KNOWLEDGE. Extraction cannot call
@@ -416,17 +555,30 @@ export class BrandKnowledgeService {
         ? input.body
         : localizedFrom(candidate.extractedBody);
 
-    /*
-     * ORIGIN AFTER ACCEPTANCE.
-     *
-     * A candidate a human read, judged and accepted is no longer an inference:
-     * a person has taken responsibility for it. It therefore lands as DOCUMENT
-     * — sourced from a document the customer supplied — rather than
-     * AI_INFERRED. That is what stops the review queue from producing knowledge
-     * that can never afterwards be edited by the very people who approved it,
-     * which `mayOverwrite` would otherwise enforce against them.
-     */
     const definition = areaDefinition(candidate.area);
+
+    /*
+     * WHAT THE ACCEPTED ITEM'S ORIGIN BECOMES, and why it is not one answer.
+     *
+     * A DOCUMENT candidate a human read, judged and accepted is no longer an
+     * inference: a person has taken responsibility for it, and it lands as
+     * DOCUMENT — sourced from a file the customer supplied. That is what stops
+     * the review queue from producing knowledge the very people who approved it
+     * can never afterwards edit, which `mayOverwrite` would otherwise enforce
+     * against them.
+     *
+     * AN ANALYTICS candidate stays AI_INFERRED, and that is deliberate rather
+     * than an omission. A human agreeing that an inference looks right does not
+     * turn it into a statement the brand made about itself, and CLAUDE.md is
+     * explicit that human-authored facts outrank inferred learning. Accepted, it
+     * is the lowest authority in the system twice over — LEARNING by memory and
+     * AI_INFERRED by origin — which is exactly what a statistic deserves against
+     * something the customer wrote. A human may still edit it afterwards, because
+     * an incoming HUMAN origin outranks an existing AI_INFERRED one.
+     */
+    const acceptedOrigin: BrandKnowledgeOrigin =
+      candidate.sourceKind === 'ANALYTICS' ? 'AI_INFERRED' : 'DOCUMENT';
+
     let itemId: string;
     let version: number;
 
@@ -448,7 +600,7 @@ export class BrandKnowledgeService {
         changeReason: input.reason ?? 'Accepted from document review',
         actor: input.actor,
         policy: input.policy,
-        incomingOrigin: 'DOCUMENT',
+        incomingOrigin: acceptedOrigin,
         changeKind: 'approved',
       });
       itemId = updated.id;
@@ -460,7 +612,7 @@ export class BrandKnowledgeService {
           brandId: candidate.brandId,
           area: candidate.area,
           memory: definition.memory,
-          origin: 'DOCUMENT',
+          origin: acceptedOrigin,
           status: 'ACTIVE',
           itemKey: candidate.itemKey,
           title: toJson(title),

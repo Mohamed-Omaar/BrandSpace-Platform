@@ -99,6 +99,30 @@ export const STRICT_TENANT_MODELS = [
   'SocialOAuthState',
   'PublishJob',
   'PublishAttempt',
+
+  // --- Phase 7: Analytics, Intelligence, Copilot and Automations -----------
+  // The whole intelligence loop is customer data, and most of it is the most
+  // commercially sensitive kind: what this brand published, what it earned, what
+  // the platform concluded from that, and what its team asked an assistant to do
+  // about it. Every one carries a non-null workspaceId, and every one is
+  // additionally brand-scoped with a NON-NULL brand except the two Copilot rows
+  // that begin before the conversation has settled which brand it is about.
+  //
+  // (No apostrophes in this block: readRegistryList parses it with a
+  // quote-matching regex, so one would silently swallow the names below.)
+  'MetricObservation',
+  'AnalyticsIngestionCursor',
+  'AnalyticsIngestionRun',
+  'Campaign',
+  'Insight',
+  'InsightEvidence',
+  'CopilotSession',
+  'CopilotMessage',
+  'CopilotActionPlan',
+  'CopilotToolCall',
+  'AutomationRule',
+  'AutomationRun',
+  'AutomationEvent',
 ] as const;
 
 /**
@@ -245,6 +269,20 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   SocialOAuthState: 'social_oauth_state',
   PublishJob: 'publish_job',
   PublishAttempt: 'publish_attempt',
+  // Phase 7 — Analytics, Intelligence, Copilot and Automations.
+  MetricObservation: 'metric_observation',
+  AnalyticsIngestionCursor: 'analytics_ingestion_cursor',
+  AnalyticsIngestionRun: 'analytics_ingestion_run',
+  Campaign: 'campaign',
+  Insight: 'insight',
+  InsightEvidence: 'insight_evidence',
+  CopilotSession: 'copilot_session',
+  CopilotMessage: 'copilot_message',
+  CopilotActionPlan: 'copilot_action_plan',
+  CopilotToolCall: 'copilot_tool_call',
+  AutomationRule: 'automation_rule',
+  AutomationRun: 'automation_run',
+  AutomationEvent: 'automation_event',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
 };

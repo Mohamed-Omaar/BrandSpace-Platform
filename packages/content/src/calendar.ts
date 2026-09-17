@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  recordAutomationEvent,
   writeAuditEvent,
   type CalendarSlot,
   type ContentItem,
@@ -233,6 +234,28 @@ export class ContentCalendarService {
       scheduledAtUtc: slot.scheduledAtUtc.toISOString(),
       platformCount: slot.platformKeys.length,
     });
+
+    /*
+     * THE AUTOMATION EVENT (A1). `CONTENT_SCHEDULED` had no producer either.
+     *
+     * THE REFERENCE IS THE SLOT, NOT THE ITEM, exactly as the trigger registry
+     * declares: `contentItemVia: 'calendarSlot'`. An action that needs a content
+     * item resolves it through the slot with a scoped query rather than assuming
+     * the two ids interchange — which is the assumption P7-R5's neighbour
+     * closed, and which a producer writing the item's id here would quietly
+     * reopen.
+     *
+     * ONLY THE FIRST PLACEMENT IS AN EVENT. `reschedule` moves an existing slot
+     * and is not "content was scheduled" happening again; the derived key would
+     * collide anyway, so a future caller that got this wrong writes nothing
+     * rather than firing every rule a second time.
+     */
+    await recordAutomationEvent(
+      this.#db,
+      this.#workspaceId,
+      { triggerType: 'CONTENT_SCHEDULED', refType: 'CalendarSlot' },
+      { brandId: slot.brandId, refId: slot.id },
+    );
 
     return { slot, item: updated, variants };
   }

@@ -260,7 +260,29 @@ test.describe('P6-R1 — the OAuth callback a provider would actually reach', ()
     let authorizationUrl: string | null = null;
     await page.route('**mock.invalid/**', async (route) => {
       authorizationUrl = route.request().url();
-      await route.abort();
+      /*
+       * FULFILLED, NOT ABORTED, AND THE DIFFERENCE IS A RACE.
+       *
+       * Aborting a TOP-LEVEL navigation leaves the browser settling onto
+       * `chrome-error://chromewebdata/` after this handler returns. The helper
+       * returns as soon as it has seen the URL, so the very next `page.goto` in
+       * the caller could be interrupted by that error navigation arriving late —
+       * "Navigation to … is interrupted by another navigation to
+       * chrome-error://chromewebdata/", which is a browser state rather than a
+       * product failure, and which only appears when the machine is loaded
+       * enough for the two to overlap.
+       *
+       * A stub response makes the navigation COMPLETE at a known URL, so the
+       * page is settled before anything navigates away from it. Nothing about
+       * what is asserted changes: the provider is still reached, and the
+       * authorization URL and its `state` are still read off the real request
+       * the product made.
+       */
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>provider</title>',
+      });
     });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
@@ -270,6 +292,8 @@ test.describe('P6-R1 — the OAuth callback a provider would actually reach', ()
     await expect
       .poll(() => authorizationUrl, { message: 'the connect button never reached a provider' })
       .not.toBeNull();
+    // The stub has rendered, so the page is no longer mid-navigation.
+    await page.waitForLoadState('domcontentloaded');
 
     const state = new URL(authorizationUrl!).searchParams.get('state');
     expect(state, 'the authorization URL carried no state').toBeTruthy();

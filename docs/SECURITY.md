@@ -2132,3 +2132,598 @@ authorization row under the same envelope a stored credential gets.
 **Every one of the five ships with a regression test confirmed to FAIL against the previous code**,
 run rather than asserted — including the end-to-end callback, which fails four ways the moment the
 route is registered the way it was.
+
+---
+
+## 29. Phase 7 — Analytics and Copilot
+
+The two new attack surfaces in this phase are an ASSISTANT that can change tenant state and a set of
+STORED RULES that act long after their author has gone. Everything below exists because one of those two
+is a way to do something nobody authorized.
+
+### 29.1 Tenant isolation
+
+Twelve new tenant-owned tables, each with `ENABLE + FORCE` row-level security, a `tenant_isolation`
+policy naming only `brandspace_app`, and composite `(workspaceId, <parent id>)` foreign keys throughout
+(D-112). The D-29 gate refuses a build in which any of them lacks coverage; the isolation suite probes
+each one six ways — read, list, count, AGGREGATE, write and re-parent.
+
+**The aggregate probe is the one that matters most here.** A total is a disclosure: "their impressions
+came to 412,000" tells a competitor most of what a row would. The fixtures give the two tenants
+_different_ figures precisely so a sum that crossed the boundary would be a different number rather than
+a coincidentally equal one.
+
+### 29.2 BrandScope is a query predicate, never a post-read filter
+
+D-132 and D-134, applied to every Phase 7 read. `brandIdQueryFilter` is the single composition point, and
+a service that read every brand's rows and dropped the ones the caller may not see would be correct on
+screen and wrong in the total, the export and the evidence package. The gate in
+`tests/unit/brand-scope-predicate-gate.test.ts` fails the build on a brand read off a fetched row; it
+caught one real violation in this phase's learning write-back, which now carries the scope in its `WHERE`.
+
+An out-of-scope brand and a fabricated one are indistinguishable everywhere: both are a 404 shaped like a
+genuine miss, refused BEFORE any replay path that could otherwise confirm an insight exists.
+
+### 29.3 The Copilot's authorization model
+
+- **A closed, typed registry.** Ten tools, each with a Zod schema, a permission, a BrandScope requirement
+  and an action class. The model never receives Prisma, never sees a credential, and never decides whether
+  authorization applies.
+- **Authorization is deterministic server code at EXECUTION.** Permissions, brand scope and entitlements
+  are re-resolved from the LIVE membership before every step. A preview is never authorization: a person
+  whose role narrowed between the preview and the run is refused at the run.
+- **Fail closed on the unknown.** An unrecognised tool key classifies as `EXTERNAL_OR_DESTRUCTIVE`, not as
+  a harmless read.
+- **Arguments are PARSED at the boundary**, and the parsed value is what is stored, hashed and executed —
+  so a field a model invented cannot reach a domain service.
+- **The absence of a capability is a control.** There is no payment tool, no refund tool, no
+  delete-workspace tool, no disconnect tool and no `video.generate`. A capability the assistant does not
+  have is one no prompt can talk it into.
+
+### 29.4 The confirmation contract
+
+32 CSPRNG bytes, returned exactly once and stored only as a sha256 digest — the D-141 discipline, so a
+database read cannot be replayed as a confirmation. Confirming is a single conditional `UPDATE` matching
+the plan id, the plan HASH the customer was shown, the digest, the same user, an unexpired window and the
+`AWAITING_CONFIRMATION` status. A replay therefore affects zero rows rather than racing a read.
+
+Changing the plan invalidates the confirmation, because the hash is part of the match. Keeping the
+confirmation and changing the plan is closed by a separate trigger that freezes a confirmed plan's steps
+and hash. Cancelling clears the digest, so a customer who said "no" is not left holding a live credential.
+
+**Every refused confirmation is audited on a SEPARATE CONNECTION.** Each service runs inside
+`withWorkspace`, which is one transaction: a refusal throws, the transaction rolls back, and an audit row
+written just before the throw goes with it. A replayed token is exactly the shape an attempted replay
+takes and must leave a trace, so the denial sink writes where the rollback cannot reach — the pattern
+`ApprovalOptions.denialSink` established, applied here and to automation confirmations.
+
+### 29.5 Automations store no authority
+
+The creator's permissions, brand scope and entitlement are re-resolved on EVERY run; a creator who lost
+the permission, lost the brand or left the workspace stops the rule the next time it fires, recorded as
+`BLOCKED_BY_AUTHORIZATION` with the reason. Creating a rule requires BOTH `automation.manage` and the
+permission the ACTION needs — holding the first is not a way to acquire the second by writing a rule that
+uses it — and enabling a rule is checked the same way.
+
+The trigger, condition and action registries are closed sets in code. There is no webhook, no script, no
+SQL and no URL: a configurable action list is one migration away from customer-controlled egress from a
+multi-tenant platform. The external boundary is a CHECK constraint, not a service rule.
+
+### 29.6 Secrets, tokens and what is never written down
+
+- No social token, vault plaintext, session cookie or provider credential appears in any Phase 7 log,
+  audit record, queue payload, exception or API response. Queue payloads are POINTERS — a cursor id and a
+  workspace — and the worker resolves the credential itself inside the workspace's own RLS context.
+- **Hidden chain-of-thought is never persisted.** Only the customer-facing summary is written to
+  `copilot_message`; the model's raw response, its reasoning and its intermediate text are not.
+- Tool arguments are redacted before they are audited, and a confirmation token never appears in a URL —
+  it lives in client memory and travels in a request body, because a query string lands in browser
+  history, in the referrer of every later request and in an access log.
+- A customer-facing refusal names no model, provider, prompt or schema. The error banner renders a
+  sentence chosen from a closed bilingual catalogue, and an unrecognised code renders the generic
+  sentence rather than itself.
+
+### 29.7 Export
+
+The CSV column list is an ALLOW-LIST: no row id, no observation key, no ingestion run link, no workspace
+id. Every cell is quoted unconditionally and any cell beginning `=`, `+`, `-`, `@`, a tab or a carriage
+return is prefixed with an apostrophe — provider-supplied text reaches these cells, and Excel, Numbers and
+Google Sheets execute a formula. The count is taken BEFORE the rows, so a request that is too large is
+refused with its ceiling rather than answered with a truncated file that looks complete. An isolation test
+asserts the file's own bytes contain zero rows from another workspace.
+
+### 29.8 What a Viewer gained
+
+Nothing. `client_viewer` holds exactly `workspace.read`, asserted from the role definition in the unit
+suite and from four 404s in both locales in the end-to-end suite. Analytics, strategy, the Copilot and
+automations are all closed to it, and none of them appears in its navigation.
+
+## 30. Phase 7 remediation — what an independent review found after the suites were green
+
+Ten blocking defects (P7-R1 … P7-R10), in code that passed every gate this repository has. Each is
+recorded as a decision (D-158 … D-169); this section states the SECURITY properties that now hold and,
+for each, the property that did not.
+
+Two of them are worth naming as classes rather than as bugs, because both recurred inside one phase:
+
+- **An empty BrandScope means UNRESTRICTED.** Writing `[]` where a caller's scope belongs does not
+  "re-check anyway" — it turns the check off. It appeared twice, both times on the publish path.
+- **A client-chosen idempotency key is not a credential.** `where: { workspaceId, idempotencyKey }`
+  hands one member another member's record. It appeared in five services, three of them Phase 7's.
+
+### 30.1 The Copilot's brand binding
+
+A session is admitted before it exists: one query asking "a brand with this id, in this workspace, within
+this member's scope", with an empty answer as the refusal. `/v1/copilot/turn` accepts no `brandId` — the
+brand is the session's, and the session lookup carries the caller's LIVE scope, so narrowing a member's
+BrandScope closes their existing brand conversations on the next turn with nothing to remember to run.
+Brand-less conversations stay reachable (`nullableBrandIdScopeFilter`), because a deny-by-default reading
+there would be a broken product rather than a security property.
+
+Nothing happens before admission: no Brand Brain retrieval, no gateway call, no reservation, no message
+row. An out-of-scope brand, a brand in another workspace and a fabricated uuid produce the same code and
+the same message.
+
+**What did not hold before.** `openSession` took `brandId` from the request body and wrote it. A member
+restricted to Brand A could open a session naming Brand B, and every turn afterwards grounded itself in
+B's Brand Brain — because the session row said so and nothing had ever checked the row.
+
+### 30.2 Replay lookups
+
+Every replay is bound to the workspace AND the actor AND the brand, intersected with the caller's live
+scope, AND — where one exists — the session and the record type. A narrowed scope therefore stops
+replaying a record it would now refuse to create. The Copilot turn is retry-safe by `ON CONFLICT DO
+NOTHING` on the per-session message key, reusing the surviving row's `correlationId`, so a retry rejoins
+the original turn rather than starting a parallel one; the confirmation token is never re-issued on a
+replay, so one plan never has two simultaneously valid credentials.
+
+The same correction was applied to `ContentStudioService.generate`, `CampaignService.create` and Brand
+Brain chat, which the Copilot's own tools make reachable from a path a model can be talked into naming a
+key on — five services in total once the three the review named are counted.
+
+**Two remain, recorded rather than fixed.** `AssetUploadService` and Brand Brain document ingestion carry
+the same shape on Phase 5 upload paths the assistant cannot reach; F-84 names them, their exact files and
+the two-clause binding they need. Fixing them inside a Phase 7 remediation would widen it into a Phase 5
+audit with its own verification surface.
+
+### 30.3 External actions
+
+`ExternalActionPort.publishNow` and `PublishPort.publishNow` both REQUIRE the confirmer's live
+BrandScope — a required field cannot be forgotten and an optional one would default to the permissive
+value. The target is admitted by `ContentLibraryService.requireItemForBrand`, which intersects the item
+id, the brand the confirmed step named and that scope in ONE predicate, as the first statement on the
+path: before a slot, a materialisation, a queue entry or a provider request exists. The Copilot's plan
+PREVIEW refuses the same way at build time, rather than rendering a blank line for content the caller
+cannot see.
+
+`tests/unit/phase7-remediation-gates.test.ts` fails the build on `actorBrandScope: []` anywhere in
+`apps/` or `packages/`, and on any app that hands a calendar a hand-written quota.
+
+### 30.4 Compensations
+
+An undo is a mutation and is authorized like one, against the LIVE membership AND the actual target:
+`ContentLibraryService.archiveItem` carries the plan's brand and the caller's scope into the read and into
+a conditional `updateMany`, and every other compensation read carries the same predicate. An out-of-scope
+target refuses as `already_gone`, the same machine code a genuinely missing one produces, so a refusal
+reason cannot be used to probe for ids.
+
+### 30.5 Automations
+
+- **Run identity contains no clock** for the six referenced triggers, so a delayed redelivery converges on
+  the original run indefinitely. Only `SCHEDULED_TIME` buckets by time, and its bucket is the rule's own
+  configured occurrence rather than the instant a sweep happened to run.
+- **An action that operates on a content item** may only be authored against a trigger that has one. The
+  mapping is declared per trigger and resolved with a query scoped to the workspace, the rule's brand and
+  the actor's live scope; an unreachable pair is refused at authoring and fails closed at run time.
+- **The scheduling quota is the real one**, shared from `@brandspace/entitlements`, with the same usage
+  ledger rows and idempotency keys manual scheduling uses.
+- **BrandScope decides who is TOLD.** Recipients are the intersection of an active membership, the
+  required permission and a scope that admits the event's brand.
+
+### 30.6 Grounded output
+
+Each claim is validated against only the evidence IT cited; an unknown ordinal remains a hard rejection
+and contributes no allowed numerals, so a fabricated figure cannot be laundered by citing an ordinal that
+does not exist. A summary carries no citations in any of these schemas and therefore may state no measured
+figure at all — that is the stricter of the two options the design allows, and the one a model cannot
+route around. Arabic-Indic folding is unchanged.
+
+**And an ungrounded generation is now recorded where the refusal cannot roll it back.** Both
+`AnalyticsInsightService` and `StrategyService` audited the rejection and then threw, inside one
+transaction, so the single event the grounding gate exists to catch was written and immediately discarded.
+Both now take an `InsightDenialSink`, wired exactly as the Copilot and automation sinks are.
+
+### 30.7 Level metrics
+
+`MAX(value)` is never "latest". A metric declares how it combines, and a level's window value is each
+subject's most recent reading summed across subjects — applied identically to the summary, the platform
+comparison and the series, so the three cannot disagree about what "followers" means. An account that
+loses followers no longer reports its peak for ever.
+
+## 31. Phase 7 remediation, round 2 — what a second review found after the first was green
+
+The first remediation closed ten findings and CI went green on every one. A second
+independent review then found four more, and two of them **existed because of the
+first**. That is the most useful thing in this section: a fix has consequences, and
+the consequences are not covered by the tests that proved the fix.
+
+### 31.1 A constraint that outlived its lookup
+
+Round 1 narrowed five replay lookups from "workspace + key" to "workspace + key +
+caller + brand + session". The DATABASE still said "one key per workspace". The
+leak was closed and a liveness bug took its place: a second member choosing the
+same key was correctly refused the first member's row, fell through to creation,
+and had their own legitimate insert killed by a unique violation on a key they had
+every right to choose.
+
+**The rule is D-170:** a unique constraint is exactly the identity its service
+replays on, and no wider. The authorization predicate — the live BrandScope — is
+deliberately not in the index, because a constraint enforces identity and
+authorization is not part of a row's identity.
+
+### 31.2 A credential that existed nowhere
+
+Two instances, one door apart, and both came from applying "a raw token is never
+persisted" to a moment where the customer needed one.
+
+**The Copilot's plan (D-171).** A turn succeeded, wrote an AWAITING_CONFIRMATION
+plan, returned the one token — and the HTTP response was lost. The retry replayed
+the plan and returned `confirmationToken: null`. The plan was real, it was theirs,
+and nothing in the world could confirm it.
+
+**The automation's run (D-175, F-86).** A run proposing an external action minted a
+token, stored its hash, notified the people who could act, and returned the raw
+value to the WORKER, which logs a status and drops it. The notification carries no
+payload by design. `PROPOSE_PUBLISH` was unconfirmable by anybody.
+
+Both are fixed the same way, and the shape is worth stating once: **rotate, do not
+retrieve.** A fresh token is issued, the stored digest is replaced under a
+COMPARE-AND-SWAP on the digest the caller just read, and the previous token dies.
+Two concurrent askers race, one wins, the loser is handed nothing — so at every
+instant at most one credential can confirm the thing. The raw value is still never
+stored, and for the automation it is now bound to somebody who holds the action's
+permission and the brand AT THE MOMENT THEY ASK rather than to whoever read a
+notification.
+
+### 31.3 Scope is necessary and not sufficient
+
+A Copilot session is admitted against one brand. Every step was then checked only
+for "is this brand somewhere in the caller's BrandScope?" — and for the ordinary
+customer with two brands, the answer for the OTHER brand is yes.
+
+This is not a tenancy leak: the caller genuinely holds both. It is worse in a
+quieter way. The assistant acts on Brand B while the screen, the conversation
+history and the audit trail all say Brand A, and **nobody reviews an action that
+looks authorized.**
+
+**D-172:** a brand-scoped step must name EXACTLY the session's brand, checked at
+plan construction before any preview query runs and again at execution against the
+plan's own brand. A session bound to no brand fails closed.
+
+### 31.4 A feature that existed in the UI and not in the product
+
+The automation worker held a complete consumer and nothing in the platform ever
+enqueued to it. `ANOMALY_DETECTED` referenced an `Insight` type nothing creates.
+An external action had no confirm control on any screen.
+
+None of these is a vulnerability and all of them are the same failure: a surface a
+customer can configure, enable and trust, behind which nothing runs. A rule that is
+silent teaches a customer that the feature does not work, and they are right.
+
+**D-173 and D-174:** every authorable trigger has a producer or is removed from the
+registry; a domain event is a row written in the domain's own transaction and the
+sweep dispatches it, so a lost queue costs punctuality and not correctness. The
+producer's pairing of trigger to reference is a CHECK constraint, not a convention,
+because a producer that names the wrong kind of row aims a content operation at an
+id that is not a content item's.
+
+## 32. Phase 7 remediation, round 3 — the product half of a security contract
+
+None of the four defects a third review found is a vulnerability, and that is
+the point of this section. Each one is a CONTRACT the platform states and then
+does not keep, and an unkept contract is how a customer stops believing the ones
+that matter.
+
+### 32.1 A registry that offers more than the product can do
+
+Two of six triggers were offered in the dashboard and could not be authored from
+it, because the form posted an empty configuration whatever was chosen. A
+condition field was offered and produced by nothing. An action could be paired
+with a trigger that rejects it, and the rejection arrived after submit.
+
+**D-176 and D-178:** every trigger the screen offers is fully authorable from
+that screen; the actions offered are the ones `actionSupportsTrigger` allows; the
+condition fields offered are the ones the runtime produces, and `createRule`
+refuses the others even when reached around the screen. Offered, accepted and
+produced are one table.
+
+**What did not change:** every option is an item from a closed list the engine
+declares. The only free text in the form is a rule's name. There is still no
+input anywhere that turns code, an expression, SQL, a webhook or a URL into
+behaviour, and that is a property of the registry rather than of the screen.
+
+### 32.2 An alert that repeats is an alert nobody reads
+
+A threshold rule compared the current rolling window with the previous adjacent
+one. That is not edge detection: a metric that climbs past the line and stays
+there keeps the comparison true, and de-duplicating on the newest observation
+hid the repeat only until the next reading arrived.
+
+**D-177:** the rule remembers which side it is on. It fires on the transition,
+re-arms only on a genuine return, and the event's identity is the rule's ARMING
+CYCLE. `null` is "never evaluated", not "not breaching" — so a rule created while
+the metric is already past the line establishes silently rather than alerting
+about a number that has been sitting there for months.
+
+### 32.3 A credential whose lifecycle nobody owned
+
+Round 2 moved the automation's confirmation token to mint-on-demand and left the
+worker still minting the first one. The new route required that ORIGINAL window
+to be open, so once it closed the run stayed `AWAITING_CONFIRMATION` for ever,
+the screen kept offering Confirm, and no usable credential could be issued.
+
+**D-179** picks one contract and closes both ends: the worker mints nothing, an
+authorized person's request mints the live token inside the proposal's window
+without extending it, and a sweep gives the proposal an explicit ending. The
+guarantees that were already right are untouched — single-use, compare-and-swap,
+the confirmer's live permission and BrandScope, the raw token never persisted,
+and external publishing still only behind a human confirmation.
+
+## 33. Phase 7 remediation, round 4 — two contracts that were still open
+
+A fourth review of the green branch found no new authorization or tenancy
+defect. It found two places where the platform still OFFERED something it could
+not honour, which is the same class the previous round closed for fields.
+
+### 33.1 A condition the customer could author and the engine could never evaluate
+
+`CONDITION_FIELD_TRIGGERS` made "offered", "accepted" and "produced" one list for
+FIELDS. The operator and value halves were untouched: the screen rendered every
+operator in the registry beside every field, and the server accepted every pair a
+schema could parse. So `brand.id greater_than 5`, `publish.provider is_true` and
+`metric.value in [...]` were each one click away — stored, listed, enabled, and
+FALSE for ever, because `evaluateCondition` refuses a mixed comparison by design.
+`content.hasCampaign equals true` was the worst of them: the form posted the
+STRING `"true"` against a real boolean fact, so the one condition a person would
+most expect to work never did.
+
+**D-180** declares the value kind, the satisfiable operators and any closed enum
+per field, once, beside the trigger table. **D-181** makes `createRule` and
+`updateRule` refuse against it identically — `updateRule` previously schema-parsed
+and stored, so every rule `createRule` refused was reachable in two calls instead
+of one. The authoring screen derives its operator list, its value control and its
+parsing from the same table, and `in`/`not_in` render a MULTIPLE picker so the
+browser posts a genuine `string[]`.
+
+Nothing here widens what an automation may do. The registry stays closed, there
+is still no expression language, no arbitrary SQL, no webhook and no URL action,
+and a closed enum is now enforced server-side rather than merely offered.
+
+### 33.2 A rule the scheduler could enumerate and never reach
+
+`#produceTimedEvents` and `#produceThresholdEvents` took an unordered `take:
+batch` of every enabled matching rule. Unlike a delivered outbox row an evaluated
+rule stays eligible for the identical query, so past `batch` rules the database
+could return the same subset for ever. **D-182** replaces both with a durable
+fair-work cursor (docs/DATABASE.md §18.8): bounded per pass, fair across passes,
+and race-safe between instances because production is idempotent on the outbox
+dedupe key, the park is conditional, and the event and the park commit in ONE
+transaction.
+
+**The tenancy properties are unchanged and were re-checked.** Only the
+enumeration is cross-tenant (F-07). Every read and write the producer then
+performs — including the re-read that refuses to produce for a rule disabled or
+deleted since the enumeration — happens inside `withWorkspace`, under that
+tenant's own RLS, and the engine still re-resolves the rule creator's live
+permissions and BrandScope before any action and still stops an external one for
+a human.
+
+**One thing the populated-upgrade rehearsal caught before it shipped.** The
+migration's backfill is an `UPDATE` on a table that is `ENABLE + FORCE`, and the
+migrator role is NOBYPASSRLS like every other role here — so it did not fail, it
+reported `UPDATE 0` and committed. A no-op that looks like a success is worse
+than an error. The migration now lifts FORCE for the duration of its own
+transaction and restores it, exactly as the F-80/F-83 migration does, and a `DO`
+block refuses to commit unless the catalogue shows the table ENABLED and FORCED
+again. `ALTER TABLE` holds an ACCESS EXCLUSIVE lock to COMMIT so no other session
+can observe the lifted state, no policy and no GRANT is touched, and the upgrade
+suite now asserts the backfill happened, that FORCE is back, and that the
+application role's isolation is exactly as it was.
+
+The adjacent audit of every bounded recurring Phase 7 enumeration found one more
+instance of the class: `sweepAnalytics` ordered by a NULLABLE `nextAttemptAt`,
+and PostgreSQL sorts NULLs LAST under `ASC` — so a cursor that had never been
+attempted, which is a connection somebody had just authorised, sorted behind
+every cursor that had. It now orders `nulls: 'first'` with `id` as a total
+tie-break. `#dispatchAutomationEvents` and `#expireAutomationProposals` operate on
+rows that RETIRE and already order oldest-first over a durable column, and the
+publishing and retention sweeps predate Phase 7 and retire their rows too; none
+of them carries the defect.
+
+## 34. Phase 7 remediation, round 5 — the decoder that turned invalid into wider
+
+A fifth review of the green branch found one residual defect, in the last place
+between a customer's form and the engine that had not been made to fail closed.
+
+### 34.1 Invalid input must never broaden what a rule does
+
+`conditionsFrom` dropped an unrecognised `conditionField` and returned `[]`. That
+reads like defensive tidiness and is the opposite: **a request that meant a
+CONDITIONAL rule created an UNCONDITIONAL one.** A rule written as "notify me
+when an APPROVED post goes out" was stored as "notify me when ANY post goes
+out" — enabled, listed, and firing on everything, with nothing anywhere saying
+the condition had been dropped. Conditional to unconditional is the one
+direction a decoder must never move a rule in, and a silent fallback takes it
+every time.
+
+**D-183** refuses it, and separates three inputs that had been two. The entry
+PRESENT and exactly empty is "no condition" — the picker always renders and its
+option carries `value=""`, so that is a choice somebody made. The entry ABSENT is
+a request that never went through the screen, and `String(formData.get(…) ?? '')`
+read it as the same choice: the identical widening, in the last shape left for
+it. Whitespace is not folded into the empty string either, or the same
+unconditional rule arrives one character along. The lookup is
+`Object.hasOwn` rather than a truthiness or `undefined` test — `['__proto__']`
+returns `Object.prototype` and `['toString']` a function, so an `undefined`
+check admits three names that are not fields and then reads a value kind off the
+prototype.
+
+### 34.2 `Number('')` is `0`, and zero is a valid answer
+
+The same class, reached by arithmetic. A blank threshold became "when this
+metric crosses zero"; a blank hour became "at midnight"; a blank platform count
+became "more than zero platforms". Every one of those is a rule somebody could
+have written, and none of them is the rule they were writing — which is exactly
+what makes the coercion hard to notice from either side of the screen.
+
+**D-184** requires a present, finite number and a present, non-empty string, and
+removes the invented defaults (`?? 0` for the hour, `?? 'above'` for the
+direction). The two real product defaults stay and stay in the registry schema:
+an untouched set of weekday checkboxes means every day, and an absent window
+means `.default(7)`, reached by omitting the key rather than repeating the
+number in the decoder. A window that is present and blank is refused.
+
+### 34.3 What did not change
+
+The engine is still the independent validator. `conditionRejection` decides
+POLICY — whether a field is produced by the chosen trigger, whether an operator
+can answer it, whether the value is of the right kind — on create and on update,
+and the decoder does not duplicate any of it. A decoder that enforced policy too
+would be a second copy, and two copies drift; this one narrows a request into a
+well-formed one or refuses it, and nothing more.
+
+The decoders moved to `apps/dashboard/src/server/automation-form.ts` so they can
+be asserted directly. A `'use server'` module may only export async server
+actions, so while they lived in `actions.ts` the only way to reach them was
+through a browser — and a browser can only ever demonstrate that the screen
+behaves. Every case here is a request the screen cannot produce: a stale tab, a
+replayed submission, a hand-made POST. The isolation suite then asserts the
+consequence that matters: a refused decode leaves the database exactly as it
+found it, and no rule on the probe brand carries an empty condition list it was
+never asked for.
+
+## 35. Phase 7 remediation, round 6 — two components of one identity that disagreed
+
+A sixth review found no new authorization or tenancy defect. It found something
+quieter and, for a customer, worse: **a real threshold crossing that the platform
+dropped in silence.**
+
+### 35.1 The outbox and the engine meant different things by "the same event"
+
+The producer identifies a threshold event by the rule's **arming cycle** —
+`METRIC_THRESHOLD_CROSSED:<rule>:<cycle>` — because that is exactly what makes a
+second crossing a second event (D-177). The engine identified a **run** by
+`(rule, trigger, refId, bucket)`, and for a non-timed trigger the bucket is the
+constant `'event'` on the reasoning that the reference IS the identity (P7-R5).
+
+That reasoning holds for a content item, a calendar slot and a publish job. It
+does **not** hold for a metric observation, because ingestion is
+
+```sql
+INSERT … ON CONFLICT ("workspaceId", "observationKey") DO UPDATE SET value = …
+```
+
+— so a provider revising yesterday's figure changes the **same row** while its id
+stays put. Below the line; revised above (a crossing, cycle 0); revised below
+(the rule re-arms, cycle 1); revised above again (a second, genuine crossing).
+The outbox wrote two events, correctly. The engine saw the same refId and the
+same `'event'` bucket, derived one run key, and treated the second crossing as a
+redelivery of the first.
+
+**Nothing failed, nothing was logged, and nobody was told.** The customer's rule
+simply did not fire the second time.
+
+### 35.2 The event now carries its own identity
+
+**D-185**: `dedupeKey` travels as `EvaluateAutomationPayload.eventKey` →
+`TriggerEvent.eventKey` → the run key's discriminator, resolved in the order
+`occurrence ?? eventKey ?? runBucketFor(…)`. The payload field is **required**,
+so a producer cannot forget it; the dedupe key is used rather than the row id
+because it is the identity the producer _chose_ rather than the one the database
+happened to mint.
+
+**The reference did not move and is still in the key.** It is provenance — the
+reading the crossing was seen in — and both runs still name it. It is only no
+longer asked to be an identity it cannot carry.
+
+**Neither other producer changes an equivalence class.** A timed event still
+prefers its carried occurrence, which is what keeps a message that sits past the
+hour boundary from running the same schedule twice (P7-R5). A domain event's
+dedupe key is `<trigger>:<refId>` — both already components of the run key — so
+the same reference still collides with itself and two references still differ.
+
+The idempotency contract is unchanged in every direction that mattered before,
+and repaired in the one that did not hold: a redelivery of the same outbox event
+is one run, a new arming cycle is a new run, and two legitimate crossings that
+share a `MetricObservation` id now produce two runs.
+
+### 35.3 What an upgrade does to messages and runs that already exist
+
+The run key's **value** changes for a domain event, because the discriminator it
+hashes moves from the constant `'event'` to `<trigger>:<refId>`. Its equivalence
+class does not, so nothing is newly de-duplicated or newly split; only already
+recorded `AutomationRun.idempotencyKey` values are no longer the values the same
+event would produce today.
+
+A message that was **already on the queue** when the upgrade landed carries no
+`eventKey`, because the field did not exist when it was enqueued — the queue
+holds the payload as it was written, and the worker routes on `kind` rather than
+re-parsing. `undefined` falls through the `??` chain to `runBucketFor(…)`, which
+is precisely the key that message would have produced before the upgrade, so an
+in-flight delivery still converges on the run it already created rather than
+duplicating it. The next event the producer writes carries the field, and there
+is no window in which a threshold crossing is dropped.
+
+## 36. Phase 7 remediation, round 7 — a state transition that committed without its event
+
+A seventh review found no new authorization or tenancy defect, and the same shape
+of failure as round 6 by a different route: **a real threshold crossing the
+platform consumed and never acted on.**
+
+### 36.1 The order of two statements was the whole defect
+
+`evaluateThresholdRule` claimed a crossing with a compare-and-swap and only then
+looked up the `MetricObservation` it wanted to cite as provenance:
+
+```
+CAS  thresholdBreached := true          -- the claim
+SELECT … FROM metric_observation …      -- the provenance
+if not found: return 'no_observation'
+```
+
+That last line is a **normal return, not a throw**, so the surrounding
+`withWorkspace` transaction committed the claim — and the scheduler's fair-work
+park with it — with no `AutomationEvent` to go with it. On the next sweep the
+rule was already marked breached, so the transition computed `steady` and the
+producer did nothing. The crossing was gone: no event, no run, no error, no log
+line, and nothing in the rule's own row to say that anything had been lost.
+
+**The race is reachable rather than theoretical.** Analytics retention prunes
+`MetricObservation` rows, and `withWorkspace` is one transaction at READ
+COMMITTED rather than a repeatable-read snapshot — so a prune that commits
+between the metric-window read and the provenance lookup is visible to the
+lookup. The window can answer "past the line" from rows that are gone one
+statement later.
+
+### 36.2 The invariant is now structural, not handled
+
+**D-186**: provenance is resolved **before** the claim. Every step that can
+decline now happens before anything is committed, and between the claim and
+`recordRuleAutomationEvent` there is no branch, no return and no second query —
+only the write the claim exists to authorise. So:
+
+> **There is never a committed FIRE transition without its `AutomationEvent`.**
+
+Either both rows are in the transaction or neither is: the recorder writes the
+row, finds its `dedupeKey` already present — the event exists either way — or
+throws, and a throw rolls the claim back with it.
+
+**A miss is now free.** The remembered side is untouched and the arming cycle has
+not moved, so the rule is still armed and the next sweep evaluates the same
+crossing again. Nothing is consumed by a failure to describe it.
+
+**The compare-and-swap is unchanged and still the arbiter.** Two schedulers may
+both read provenance; only one can move the state, and the loser returns having
+written nothing. Reading provenance a statement earlier also makes it marginally
+_more_ faithful — it is now taken closer to the window read that decided the
+crossing, rather than after it.

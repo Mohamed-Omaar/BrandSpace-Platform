@@ -27,6 +27,14 @@ export {
   type PublishJobsPayload,
   type PublishSocialPostPayload,
   type VerifySocialPostPayload,
+  // Phase 7 — analytics ingestion and automation evaluation.
+  BACKFILL_ANALYTICS,
+  EVALUATE_AUTOMATION,
+  INGEST_ANALYTICS,
+  type AnalyticsIngestPayload,
+  type BackfillAnalyticsPayload,
+  type EvaluateAutomationPayload,
+  type IngestAnalyticsPayload,
 } from './payloads';
 export {
   closeQueues,

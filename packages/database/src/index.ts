@@ -1,4 +1,5 @@
 export * from './audit';
+export * from './automation-events';
 export * from './client';
 export * from './env-file';
 export * from './platform';

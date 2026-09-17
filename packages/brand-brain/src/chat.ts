@@ -6,7 +6,12 @@ import {
   type BrandKnowledgeArea,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import {
+  assertBrandInScope,
+  brandIdQueryFilter,
+  type Clock,
+  systemClock,
+} from '@brandspace/shared';
 import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
 import { BrandBrainRetriever, fenceUntrusted, type Citation } from './retrieval';
 import { conversationNotFound } from './errors';
@@ -129,8 +134,27 @@ export class BrandBrainChatService {
      * bill a second time. Checked before anything else because every step after
      * this point costs something.
      */
+    /*
+     * AND THE LOOKUP IS BOUND TO THE BRAND, THE SCOPE AND THE PERSON.
+     *
+     * It matched on the KEY ALONE, and the key is chosen by the CLIENT — so a
+     * member who guessed or observed another member's key was handed that
+     * member's conversation turn: what they asked, and what the brand's own
+     * knowledge answered. The same defect class the Phase 7 review found in
+     * three of its services (P7-R2). An idempotency key de-duplicates; it does
+     * not authorize.
+     *
+     * THE PERSON IS REACHED THROUGH THE CONVERSATION, which is what carries
+     * `startedByUserId`; a relation filter becomes an `EXISTS` in SQL, so it is
+     * still a predicate and no foreign row is read and discarded.
+     */
     const existing = await this.#db.brandBrainMessage.findFirst({
-      where: { idempotencyKey: input.idempotencyKey, role: 'user' },
+      where: {
+        idempotencyKey: input.idempotencyKey,
+        role: 'user',
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.actorBrandScope }),
+        conversation: { is: { startedByUserId: input.actorUserId } },
+      },
     });
     if (existing) {
       const replay = await this.#replayTurn(existing);

@@ -311,4 +311,118 @@ export class ContentLibraryService {
     });
     return updated;
   }
+
+  /**
+   * THE CONTENT ITEM AN EXTERNAL ACTION MAY ACT ON — or a 404 (P7-R3).
+   *
+   * WHAT IT REPLACES. Both publish ports — the Copilot's and the confirmed
+   * automation's — built a calendar with `actorBrandScope: []` under a comment
+   * saying the caller had already been authorized. Empty means UNRESTRICTED on
+   * this platform, so that literal did not "re-check anyway": it turned the
+   * calendar's own brand check OFF, on the single action in the product that
+   * leaves the platform and cannot be undone.
+   *
+   * AND NOTHING BOUND THE TWO IDS. A confirmed step carried a `brandId` the
+   * caller was allowed and a `contentItemId` that could belong to a different
+   * brand, and no code anywhere compared them. Here both are predicates:
+   *
+   *   - the item's own `brandId` must equal the brand the step named, and
+   *   - that brand must be inside the caller's LIVE BrandScope,
+   *
+   * intersected by `brandIdQueryFilter` so neither can replace the other.
+   *
+   * IT IS MEANT TO BE CALLED FIRST. A refusal here happens before a slot, a
+   * publish job, a queue entry or a provider request exists — there is nothing
+   * half-done to unwind, which is the only acceptable shape for a fail-closed
+   * check on an irreversible action.
+   */
+  async requireItemForBrand(input: {
+    contentItemId: string;
+    brandId: string;
+    /** The caller's LIVE BrandScope. Empty is unrestricted (Phase 2B rule). */
+    brandScope: readonly string[];
+  }): Promise<ContentItem> {
+    const item = await this.db.contentItem.findFirst({
+      where: {
+        id: input.contentItemId,
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
+      },
+    });
+    // OUT OF SCOPE, ANOTHER BRAND'S, AND NEVER EXISTED ARE ONE ANSWER.
+    if (!item) throw contentItemNotFound();
+    return item;
+  }
+
+  /**
+   * ARCHIVE A DRAFT AS A COMPENSATION — the content domain's own answer to
+   * "put that back", rather than each caller writing its own UPDATE.
+   *
+   * IT EXISTS BECAUSE THE COPILOT'S UNDO WAS WRITING RAW PRISMA (P7-R4). It read
+   * `{ id, workspaceId }` and updated `{ id }`, with no BrandScope anywhere —
+   * so a member whose scope was narrowed AFTER the plan ran could still reach
+   * back through the undo button and archive content they were no longer
+   * allowed to see. An undo is a mutation and is authorized like one; putting
+   * the mutation here is what stops the next compensation forgetting.
+   *
+   * THE SCOPE IS A PREDICATE ON BOTH STATEMENTS (D-132). The read finds nothing
+   * out of scope, and the write is a CONDITIONAL `updateMany` carrying the same
+   * predicate plus the required status — so even if the row changed between the
+   * two, the update affects zero rows rather than archiving something that had
+   * meanwhile been approved.
+   *
+   * IT RETURNS AN OUTCOME RATHER THAN THROWING. A compensation that cannot be
+   * applied is a refusal with a reason the customer is shown, not an error that
+   * abandons the other steps of the same undo.
+   */
+  async archiveItem(input: {
+    contentItemId: string;
+    /** The brand the plan ran against, when it had one. Binds item to plan. */
+    brandId?: string | null | undefined;
+    /** The caller's LIVE BrandScope. Empty is unrestricted (Phase 2B rule). */
+    brandScope?: readonly string[] | null | undefined;
+    actorUserId: string;
+    /** Statuses from which archiving is still an undo rather than a change. */
+    requireStatusIn: readonly string[];
+    reason: string;
+    now: Date;
+  }): Promise<{ outcome: 'ARCHIVED' | 'ALREADY_ARCHIVED' | 'NOT_FOUND' | 'STATUS_CHANGED' }> {
+    const scoped = brandIdQueryFilter({
+      brandId: input.brandId ?? undefined,
+      brandScope: input.brandScope,
+    });
+
+    const item = await this.db.contentItem.findFirst({
+      where: { id: input.contentItemId, ...scoped },
+      select: { id: true, status: true, brandId: true, deletedAt: true },
+    });
+    // OUT OF SCOPE AND NEVER EXISTED ARE THE SAME ANSWER, as everywhere else.
+    if (!item) return { outcome: 'NOT_FOUND' };
+    if (item.deletedAt) return { outcome: 'ALREADY_ARCHIVED' };
+    if (!input.requireStatusIn.includes(item.status)) return { outcome: 'STATUS_CHANGED' };
+
+    /*
+     * THE EXACT STATUS THAT WAS OBSERVED, not the allowed set — a tighter
+     * precondition than the one that was asked for, and free. If anything moved
+     * the row between the read and this write, the update affects zero rows.
+     */
+    const affected = await this.db.contentItem.updateMany({
+      where: { id: input.contentItemId, deletedAt: null, status: item.status, ...scoped },
+      data: { status: 'ARCHIVED', deletedAt: input.now },
+    });
+    // SOMEBODY MOVED IT BETWEEN THE READ AND THE WRITE.
+    if (affected.count === 0) return { outcome: 'STATUS_CHANGED' };
+
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'content.archived',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'ContentItem',
+      resourceId: input.contentItemId,
+      brandId: item.brandId,
+      reason: input.reason,
+      before: { status: item.status },
+      after: { status: 'ARCHIVED' },
+    });
+    return { outcome: 'ARCHIVED' };
+  }
 }

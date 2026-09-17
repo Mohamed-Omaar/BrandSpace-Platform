@@ -272,6 +272,25 @@ describe('the notification catalogue is closed and fully translated', () => {
         'publishing.connection_needs_reauth',
         'publishing.failed',
         'publishing.published',
+        /*
+         * Phase 7 — Analytics & Copilot. Three, and each one exists because
+         * somebody has to DO something:
+         *
+         *   - an anomaly is a finding a person should look at,
+         *   - an automation waiting on a human confirmation is blocked until
+         *     one arrives, and an unnoticed confirmation request is an
+         *     automation that silently never ran,
+         *   - an automation blocked by authorization means a rule somebody
+         *     wrote has stopped working and nothing else would say so.
+         *
+         * There is deliberately NO "analytics refreshed" template: a successful
+         * routine pull is not news, and notifying on it is how an inbox stops
+         * being read.
+         */
+        'analytics.anomaly_detected',
+        'automation.blocked',
+        'automation.confirmation_required',
+        'brand_brain.learning_proposed',
       ].sort(),
     );
   });

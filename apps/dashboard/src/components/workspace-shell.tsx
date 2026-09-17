@@ -13,6 +13,9 @@ import {
   ListIcon,
   ImageIcon,
   PencilIcon,
+  PulseIcon,
+  RouteIcon,
+  SlidersIcon,
   LanguageSwitcher,
   SendIcon,
   SettingsIcon,
@@ -29,6 +32,7 @@ import {
   tdStyle,
   thStyle,
   type ShellNavSection,
+  type Tone,
   type WorkspaceOption,
   initialsFrom,
 } from '@brandspace/ui';
@@ -115,6 +119,45 @@ const NAV: readonly {
     // `SendIcon` reused rather than a new glyph drawn: publishing IS sending,
     // and §4.2 rule 4 puts reuse ahead of creation.
     icon: <SendIcon size={20} />,
+  },
+  /*
+   * Phase 7. Each gated on the permission its route requires, exactly as the
+   * Phase 6 entry is: offering a link that answers 404 is the dead link §20
+   * forbids, and the route's own refusal is the control.
+   *
+   * A Viewer (read-only) holds `workspace.read` and nothing else (D-62, D-130),
+   * so none of these four ever appears for them — and typing the path answers
+   * 404.
+   */
+  {
+    href: '/analytics',
+    key: 'nav.analytics',
+    permission: 'analytics.read',
+    /*
+     * EXISTING GLYPHS, NOT NEW ONES. §4.2 rule 4 puts reuse ahead of creation,
+     * and each of these four already means the right thing: a pulse is
+     * performance over time, a route is a plan, the spark is the Copilot's own
+     * mark everywhere else in the product, and sliders are rules somebody set.
+     */
+    icon: <PulseIcon size={20} />,
+  },
+  {
+    href: '/strategy',
+    key: 'nav.strategy',
+    permission: 'strategy.read',
+    icon: <RouteIcon size={20} />,
+  },
+  {
+    href: '/copilot',
+    key: 'nav.copilot',
+    permission: 'copilot.use',
+    icon: <SparkIcon size={20} />,
+  },
+  {
+    href: '/automations',
+    key: 'nav.automations',
+    permission: 'automation.read',
+    icon: <SlidersIcon size={20} />,
   },
   {
     href: '/activity',
@@ -353,7 +396,14 @@ export function CustomerBanner({
   tone,
   children,
 }: {
-  tone: 'success' | 'error';
+  /*
+   * Phase 7 widens this to the design system's full `Tone`. Analytics needs a
+   * `warning` for the two honesty notices — figures that came from a mock
+   * source, and figures older than the configured freshness window — and
+   * neither is a success or an error: the screen is working exactly as
+   * intended, and the reader still has to be told.
+   */
+  tone: Tone;
   children: ReactNode;
 }) {
   return <Banner tone={tone}>{children}</Banner>;

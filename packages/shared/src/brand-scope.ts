@@ -138,3 +138,52 @@ export function brandIdQueryFilter(input: {
   if (scope.brandId) clauses.push(scope);
   return { AND: clauses };
 }
+
+/**
+ * THE SAME INTERSECTION, FOR THE `brand` TABLE'S OWN `id`.
+ *
+ * `brandIdQueryFilter()` combines a caller's `brandId` with their scope on a
+ * CHILD row; this one does it on the brand row itself, which is what an
+ * ADMISSION query needs — "does a brand with this id exist in this workspace
+ * AND is this member allowed to act on it?", asked as one query rather than as
+ * a read followed by a check.
+ *
+ * IT EXISTS FOR THE REASON ITS SIBLING DOES. The obvious composition,
+ *
+ *     where: { workspaceId, id: brandId, ...brandScopeFilter(scope) }
+ *
+ * sets `id` twice and the LATER key wins, so a non-empty scope REPLACES the
+ * requested brand with "any brand in scope" — an admission check that admits
+ * the wrong brand. An `AND` cannot be written that way.
+ *
+ * A REFUSAL IS AN EMPTY RESULT, not an error, so the caller raises the same
+ * 404-shaped miss for an out-of-scope brand as for one that never existed
+ * (CLAUDE.md §2.1).
+ */
+export function brandQueryFilter(input: {
+  brandId?: string | undefined;
+  brandScope?: readonly string[] | null | undefined;
+}): { AND: { id?: string | { in: string[] } }[] } {
+  const clauses: { id?: string | { in: string[] } }[] = [];
+  if (input.brandId) clauses.push({ id: input.brandId });
+  const scope = brandScopeFilter(input.brandScope);
+  if (scope.id) clauses.push(scope);
+  return { AND: clauses };
+}
+
+/**
+ * The `where` fragment for a NULLABLE brand reference read under a scope.
+ *
+ * A Copilot session, and anything else whose `brandId` may legitimately be
+ * null, cannot use `brandIdScopeFilter()` directly: `{ brandId: { in: [A] } }`
+ * excludes the general, brand-less rows a restricted member is perfectly
+ * entitled to. The rule is "no brand, or a brand in scope".
+ *
+ * An empty scope still means UNRESTRICTED and contributes no clause.
+ */
+export function nullableBrandIdScopeFilter(brandScope: readonly string[] | null | undefined): {
+  OR?: { brandId: null | { in: string[] } }[];
+} {
+  if (!brandScope || brandScope.length === 0) return {};
+  return { OR: [{ brandId: null }, { brandId: { in: [...brandScope] } }] };
+}

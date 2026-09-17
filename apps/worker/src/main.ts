@@ -5,6 +5,7 @@ import {
   QUEUE_DEFINITIONS,
   QUEUE_NAMES,
   queueUrl,
+  type AnalyticsIngestPayload,
   type MediaProcessingPayload,
   type PublishJobsPayload,
 } from '@brandspace/jobs';
@@ -12,6 +13,8 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { processAssetJob } from './processors/assets';
 import { processIngestionJob } from './processors/ingestion';
 import { processPublishJob, processVerifyJob } from './processors/publishing';
+import { processAnalyticsBackfillJob, processAnalyticsIngestJob } from './processors/analytics';
+import { processAutomationJob } from './processors/automation';
 
 /**
  * Worker entrypoint.
@@ -191,6 +194,75 @@ async function main(): Promise<void> {
     log.info('job completed', { queue: 'publish-jobs', jobId: job.id });
   });
 
+  /*
+   * PHASE 7 — THE ANALYTICS QUEUE, AND WHY IT IS A THIRD WORKER.
+   *
+   * It is network work against somebody else's platform, like publishing — but
+   * it is also the work that must NEVER delay publishing. A backfill walking
+   * ninety days of a busy account would hold a publish slot for minutes if the
+   * two shared a worker, and a post that went out late because a chart was being
+   * refreshed is a customer failed by an architectural decision. Three workers,
+   * three concurrency budgets.
+   *
+   * BULLMQ'S OWN RETRY IS DELIBERATELY NOT USED FOR THE DOMAIN here either.
+   * `attempts` stays at the queue default for transient transport failures, but
+   * the cursor's `nextAttemptAt` is what schedules the real retry: the backoff
+   * depends on configuration and on the failure class, and a queue-level retry
+   * would ignore both and hammer a rate-limited platform.
+   *
+   * THE AUTOMATION EVALUATION SHARES THIS QUEUE rather than taking a fourth. Both
+   * are bounded database work that must not sit on a request path, both want the
+   * same modest concurrency, and the `kind` discriminant routes them apart — the
+   * same reasoning that put asset processing and Brand Brain ingestion together.
+   */
+  const analyticsDefinition = QUEUE_DEFINITIONS['analytics-ingest'];
+  const analyticsWorker = new Worker(
+    'analytics-ingest',
+    async (job: Job): Promise<void> => {
+      const payload = job.data as AnalyticsIngestPayload;
+      switch (payload.kind) {
+        case 'analytics.ingest':
+          await processAnalyticsIngestJob(payload);
+          return;
+        case 'analytics.backfill':
+          /*
+           * A DIFFERENT PROCESSOR, NOT A FLAG. The backfill walks backwards and
+           * is bounded by a horizon the scheduled pull does not have; two kinds
+           * means neither behaviour is reachable from the other's message.
+           */
+          await processAnalyticsBackfillJob(payload);
+          return;
+        case 'automation.evaluate':
+          await processAutomationJob(payload);
+          return;
+        default: {
+          const unroutable: never = payload;
+          throw new Error(`Unroutable analytics job: ${JSON.stringify(unroutable)}`);
+        }
+      }
+    },
+    {
+      connection: connection(),
+      concurrency: analyticsDefinition.concurrency,
+      // A pull that has run this long is stuck, not slow: every adapter call is
+      // bounded well inside it.
+      lockDuration: 2 * 60_000,
+    },
+  );
+
+  analyticsWorker.on('failed', (job, error) => {
+    log.error('job failed', {
+      queue: 'analytics-ingest',
+      jobId: job?.id,
+      attempts: job?.attemptsMade,
+      ...internalErrorFields(error),
+    });
+  });
+
+  analyticsWorker.on('completed', (job) => {
+    log.info('job completed', { queue: 'analytics-ingest', jobId: job.id });
+  });
+
   const shutdown = async (signal: string): Promise<void> => {
     // GRACEFUL, so a document mid-parse finishes rather than being abandoned
     // half-written. BullMQ waits for active jobs before resolving.
@@ -198,7 +270,7 @@ async function main(): Promise<void> {
     // BOTH WORKERS, and a publish mid-flight matters more than a parse: the
     // request may already be at the platform, so abandoning it is how a job
     // that succeeded gets recorded as one that never ran.
-    await Promise.all([worker.close(), publishWorker.close()]);
+    await Promise.all([worker.close(), publishWorker.close(), analyticsWorker.close()]);
     process.exit(0);
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));

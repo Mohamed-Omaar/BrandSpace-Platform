@@ -1441,3 +1441,229 @@ A job is stale when `status = 'PUBLISHING'` and `claimedAt` is older than
 nothing else**: recovery moves it to `VERIFICATION_PENDING` and asks the provider, or leaves it for a
 person where the provider cannot be asked. The move is a conditional UPDATE, so a worker that turns
 out to be alive and settles a moment later simply wins — its real outcome lands on top of the guess.
+
+---
+
+## 18. Phase 7 — Analytics and Copilot
+
+Twelve tenant-owned tables and one column on an existing one. Every table carries a non-null
+`workspaceId`, has `ENABLE + FORCE` row-level security with a `tenant_isolation` policy naming only
+`brandspace_app`, and reaches every tenant-owned parent through a COMPOSITE key on
+`(workspaceId, <parent id>)` — D-112, with no exceptions in this phase either. Every column-scoped
+`SET NULL` names its own column (D-114), so a vanished parent never nulls the tenant key.
+
+| Table                        | Tenant key | Brand       | Notes                                                                                                                            |
+| ---------------------------- | ---------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `metric_observation`         | NOT NULL   | NOT NULL    | One row per measurement. `(workspaceId, observationKey)` unique — the identity of the MEASUREMENT, not of the fetch (D-145)      |
+| `analytics_ingestion_cursor` | NOT NULL   | NOT NULL    | Durable progress per (connection, subject type, granularity). Carries the lease, the backoff and the freshness                   |
+| `analytics_ingestion_run`    | NOT NULL   | NOT NULL    | Operations evidence. **Terminal once** by trigger, and **not tenant-deletable** by privilege                                     |
+| `campaign`                   | NOT NULL   | NOT NULL    | No budget, no currency, no attribution — deliberately narrower than §4.3 anticipated (D-155). `version` is optimistic locking    |
+| `insight`                    | NOT NULL   | NOT NULL    | Generated prose and its lifecycle. `(workspaceId, idempotencyKey)` unique, so a retry replays rather than regenerates            |
+| `insight_evidence`           | NOT NULL   | NOT NULL    | The measurements the prose rests on. **Append-only** by trigger and **not tenant-deletable** by privilege (D-148)                |
+| `copilot_session`            | NOT NULL   | nullable    | One person's conversation. Brand is optional: "what happened last week" names no brand                                           |
+| `copilot_message`            | NOT NULL   | via session | `body` is nullable and a purge is STAMPED, so a purged turn is visibly purged rather than silently blank                         |
+| `copilot_action_plan`        | NOT NULL   | nullable    | `confirmationTokenHash` unique PLATFORM-wide. **Frozen once confirmed** by trigger                                               |
+| `copilot_tool_call`          | NOT NULL   | via plan    | `(workspaceId, idempotencyKey)` unique — the key is DERIVED from the plan, ordinal, tool and arguments, so a retry cannot re-run |
+| `automation_rule`            | NOT NULL   | NOT NULL    | Closed trigger and action enums. Stores no authority — see §18.2                                                                 |
+| `automation_run`             | NOT NULL   | NOT NULL    | `(workspaceId, idempotencyKey)` unique on an hour bucket. `confirmationTokenHash` unique PLATFORM-wide, single-use by trigger    |
+
+`content_item` gained one nullable column, `campaignId`, with a composite foreign key and a
+column-scoped `ON DELETE SET NULL ("campaignId")`. `brand_knowledge_candidate` gained `sourceKind`,
+`insightId` and `conflictsWithItemId`, and its `sourceDocumentId` became nullable — a learning inferred
+from performance has no source document, and a CHECK requires exactly one provenance to be present.
+
+### 18.1 The constraints that carry a rule
+
+Each of these encodes an invariant rather than a format, and each closes a way a future call site could
+make the data lie:
+
+- `metric_observation_value_sign` — a COUNT and a duration cannot be negative; a DELTA can, because
+  losing followers is a real measurement. A provider returning `-5` impressions is a parsing bug, and
+  this is where it stops.
+- `metric_observation_ratio_bounds` — a rate is parts per mille and cannot exceed 1000.
+- `metric_observation_account_has_no_post` — an account-level reading may not point at our content rows.
+- `insight_evidence_metric_is_measured` — **the anti-fabrication constraint.** A `METRIC` or
+  `METRIC_COMPARISON` evidence row must carry a metric key, a value, a unit and a window. An evidence row
+  with a label and no measurement would be a citation pointing at nothing, which is exactly the shape a
+  fabricated one takes.
+- `insight_evidence_comparison_has_two_sides` — a comparison must have something to compare with.
+- `copilot_plan_external_requires_confirmation` — **CLAUDE.md §2.5 as a database constraint.** A plan
+  whose strictest step leaves the platform or destroys something may not exist with
+  `requiresConfirmation` false. No screen, no payload and no refactor can produce one.
+- `copilot_plan_execution_follows_confirmation` — a plan that has not been confirmed has not started.
+- `copilot_plan_confirmation_is_attributable` — "confirmed by nobody" is the state a replay would leave.
+- `automation_rule_external_requires_confirmation` — the same §2.5 rule reached by the other door: an
+  automation is not a way around the Copilot's confirmation boundary.
+- `copilot_message_purge_is_recorded` — a purged body carries its purge stamp, and a body that is still
+  there has none.
+
+### 18.2 Triggers, and why each one is a trigger
+
+- `insight_evidence_no_update` — evidence is what a customer is shown INSTEAD of trusting the model's
+  sentence. A record that can be edited afterwards is not evidence.
+- `analytics_run_completes_once` — a run leaves `RUNNING` exactly once, into a terminal status with its
+  counters and its finish time. Its identity may never move.
+- `copilot_plan_frozen_once_confirmed` — the steps and the hash of a CONFIRMED plan cannot change. This
+  closes the attack the plan hash alone does not: change the plan and KEEP the confirmation.
+- `automation_run_confirmation_single_use` — a confirmed run may not be re-confirmed, and may not be
+  RE-AIMED at a different action or resource. `resourceId` holds what a human agreed to; what the
+  confirmed action PRODUCED goes in `actionResult`, so the two can never be confused.
+
+### 18.3 Privileges, where a policy is not enough
+
+`DELETE` is revoked from `brandspace_app` on `insight_evidence` and `analytics_ingestion_run`. RLS would
+merely scope a delete to the tenant's own rows; the point here is that the tenant role may not delete
+these rows AT ALL. Pruning them past their retention window is a platform operation, for the same reason
+`publish_attempt` and `ai_usage_ledger` already carry: a record somebody can erase is not a record.
+
+### 18.4 Retention
+
+Three windows, two owners, and both are declared in `AI_OUTPUT_RETENTION_REGISTRY`:
+
+| Artefact                                        | Window                                     | Owner                   | What happens                                                                                         |
+| ----------------------------------------------- | ------------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `metric_observation`, `analytics_ingestion_run` | `analytics.retention.*`, narrowed per plan | `@brandspace/analytics` | DELETED                                                                                              |
+| `insight` + evidence                            | `analytics.retention.insightRetentionDays` | `@brandspace/analytics` | DELETED (evidence by cascade)                                                                        |
+| `copilot_message.body`, plans, sessions         | `copilot.conversation.retentionDays`       | `@brandspace/copilot`   | Body NULLED and stamped; an unconfirmed plan EXPIRES and surrenders its token; a session is ARCHIVED |
+
+A Copilot message ROW survives its body, because the shape of the conversation and its links to plans,
+tool calls and audit events must outlive the words — an audit event pointing at a row that no longer
+exists is a dangling reference in a security record. `audit_event`, `credit_transaction`,
+`ai_usage_ledger` and `ai_request` are never touched by either pass.
+
+### 18.5 Phase 7 remediation — `insight.sourceInsightId`
+
+One nullable column, one composite foreign key, one index; migration
+`20260916230000_phase_7_remediation_strategy_provenance`.
+
+| Column            | Type   | Notes                                                                             |
+| ----------------- | ------ | --------------------------------------------------------------------------------- |
+| `sourceInsightId` | `UUID` | The insight this one was generated FROM. Today: a `MONTHLY_PLAN` → its `STRATEGY` |
+
+**Why it exists.** "Grounded in the accepted strategy" lived entirely in a prompt: the generated plan
+stored no link, so a reader could not tell which strategy it followed from and nothing could detect a plan
+still being shown after its strategy was superseded (D-166).
+
+**The key is COMPOSITE (D-112) and SELF-REFERENTIAL.** `FOREIGN KEY ("workspaceId", "sourceInsightId")
+REFERENCES "insight"("workspaceId", "id")`. A plain `sourceInsightId -> insight(id)` would resolve another
+workspace's insight — PostgreSQL evaluates referential integrity as the table owner with RLS bypassed —
+and "inserted" versus "violates foreign key" would answer "does that insight exist?" across the tenant
+boundary.
+
+**`ON DELETE SET NULL` NAMES ITS COLUMN (D-114):** `ON DELETE SET NULL ("sourceInsightId")`. A bare SET
+NULL on a composite key nulls every referencing column, `workspaceId` included, and `workspaceId` is NOT
+NULL — the delete would fail outright. `SET NULL` rather than cascade because a plan outlives the proposal
+it came from: deleting the strategy must not delete the month's work.
+
+No RLS change: `insight` already carries the tenant policy, and a new column on an existing table inherits
+it.
+
+### 18.6 Phase 7 remediation round 2 — `automation_event`, and five narrowed idempotency keys
+
+**`automation_event` is the automation outbox.** One row per domain event worth
+evaluating rules against, written inside the transaction that caused it — so an
+event commits with the approval, the scheduling or the publish, or not at all. No
+domain package imports the queue; the reconciliation sweep dispatches what is
+waiting, and `deliveredAt` is the only field that retires a row.
+
+Three CHECK constraints carry rules that would otherwise be conventions:
+
+| Constraint                                     | What it refuses                                                                                                                                                                                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_event_ref_matches_trigger`         | A producer naming the wrong kind of row for its trigger — a `POST_PUBLISHED` event carrying a `ContentItem` reference would aim three content-shaped actions at a publish job's id.                                                 |
+| `automation_event_occurrence_is_timed`         | An occurrence on anything but `SCHEDULED_TIME`. The occurrence IS a timed run's bucket, and one on an event identified by its reference would silently re-bucket it.                                                                |
+| `automation_event_rule_addressed_when_derived` | A schedule or a threshold event that names no rule. Both are computed FROM one rule's configuration, and delivering one to a rule that configured a different hour or number fires a rule whose own settings say it should not run. |
+
+It carries `ENABLE + FORCE` row-level security, a `tenant_isolation` policy naming
+only `brandspace_app`, and a composite `(workspaceId, brandId)` foreign key to
+`brand` (D-112), like every other tenant-owned table.
+
+**Five idempotency uniques were narrowed to match their services' replay identity**
+(D-170), because round 1 narrowed the lookups and left the constraints saying
+something wider:
+
+| Table                 | Unique index                                                      |
+| --------------------- | ----------------------------------------------------------------- |
+| `copilot_action_plan` | `(workspaceId, sessionId, idempotencyKey)`                        |
+| `content_item`        | `(workspaceId, brandId, createdByUserId, idempotencyKey)`         |
+| `campaign`            | `(workspaceId, brandId, createdByUserId, idempotencyKey)`         |
+| `insight`             | `(workspaceId, brandId, type, generatedByUserId, idempotencyKey)` |
+| `brand_brain_message` | `(workspaceId, conversationId, idempotencyKey)`                   |
+
+The two F-84 upload paths are deliberately untouched: their lookups have not been
+narrowed, so their constraints and their services still agree.
+
+### 18.7 Phase 7 remediation round 3 — threshold memory and a proposal's ending
+
+**`automation_rule` remembers which side its metric is on.** Three columns, and
+the nullable one carries the load:
+
+| Column                 | Meaning                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `thresholdBreached`    | `null` = never evaluated, and that is NOT `false`. The first evaluation records the side and fires nothing, because a rule created while the metric is already past the line has not seen anything cross since somebody asked for it.                                    |
+| `thresholdCycle`       | The identity of the current ARMING. It advances when the metric returns to the non-triggered side, and the outbox's dedupe key is built from it — so every sweep inside one arming writes one event between them, and the next genuine crossing writes exactly one more. |
+| `thresholdEvaluatedAt` | When the side was last established, for an operator reading the row.                                                                                                                                                                                                     |
+
+`automation_rule_threshold_cycle_non_negative` keeps the cycle counting forwards.
+
+**`AutomationRunStatus` gained `EXPIRED`,** distinct from `CANCELLED`: cancelled
+is a decision somebody made, expired is one nobody made. A proposal whose
+confirmation window closes moves there, its digest is cleared, and the screen
+stops offering a Confirm control for something that can no longer be confirmed
+and whose content is by then days stale.
+
+Neither is a new table, and both are runtime state on a row that already carried
+`lastRunAt`, `lastRunStatus` and `runCount`.
+
+### 18.8 Phase 7 remediation round 4 — the rule-derived producers' fair-work cursor
+
+**`automation_rule` carries its own place in a queue.**
+
+| Column             | Meaning                                                                                                                                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nextEvaluationAt` | **NOT NULL**, default `now()`. When the scheduler should next look at this rule. The two rule-derived producers select `lte now()`, order by it ascending with `id` as a total tie-break, and park every rule they visit in the same transaction that writes its event. |
+| `lastEvaluatedAt`  | Advisory. When a sweep last actually looked, for an operator reading the row.                                                                                                                                                                                           |
+
+One index, and it is the only cross-tenant one on the table:
+`("triggerType", "enabled", "nextEvaluationAt")`. The sweep asks a
+platform-wide question, so it cannot lead with `workspaceId`; that is the
+enumeration half of F-07, and every row the sweep then reads or writes inside a
+workspace still goes through `withWorkspace` under that tenant's own RLS.
+
+**Why a cursor at all.** An outbox row RETIRES — `deliveredAt` removes it from
+its own query — so `take: batch` there is honest pagination through shrinking
+work. **An evaluated rule does not retire.** It is enabled before the sweep and
+enabled after it, so the identical query on the next minute was free to return
+the identical subset, and past `batch` rules the ones outside it were never
+evaluated at all. For `METRIC_THRESHOLD_CROSSED` that is a memory that never
+advances; for `SCHEDULED_TIME` it is worse than lateness, because the trigger's
+whole meaning is "in the customer's own hour" and an hour nobody looked at is an
+occurrence missed permanently and silently.
+
+**Why NOT NULL.** `ORDER BY … ASC` puts NULLs LAST in PostgreSQL. A nullable
+cursor would have sent every rule that had never been evaluated — which is every
+newly created rule — to the back of the very queue that exists to reach it. The
+migration backfills existing rows from `createdAt`, so they enter in creation
+order rather than all sharing one instant.
+
+**The backfill lifts FORCE for one transaction, and proves it put it back.**
+`automation_rule` is `ENABLE + FORCE` and the MIGRATOR role is NOBYPASSRLS like
+every other role (docs/SECURITY.md §2.2), so a plain `UPDATE` in a migration does
+not fail — it reports `UPDATE 0` and commits, and the backfill would have shipped
+doing nothing. The migration therefore uses PostgreSQL's own prescribed remedy,
+the same shape as the F-80/F-83 migration: `NO FORCE` for the duration of the
+transaction, the `UPDATE`, `FORCE` again, and a `DO` block that refuses to commit
+unless the catalogue shows the table `ENABLED` and `FORCED`. `ALTER TABLE` holds
+an ACCESS EXCLUSIVE lock to COMMIT, so no other session can observe the lifted
+state; `ENABLE ROW LEVEL SECURITY` is untouched, no policy is touched, and the
+application and platform roles are unaffected throughout. The upgrade suite
+applies the file against rules that already exist and asserts both halves.
+
+**The bound this buys.** Every enabled rule reaches the front within
+`ceil(rules / batch)` passes, and no rule can hold the front, because visiting
+it is what moves it back. A timed rule parks to its real next occurrence, half
+an hour early so a daylight-saving shift cannot push the wake past the window,
+capped at one hour so nothing is invisible for longer than the occurrence it is
+waiting for. With a minutely cadence that gives `batch × 60` timed rules an
+hour — 12,000 at the default batch of 200, past which the batch, not the
+ordering, is what needs raising.

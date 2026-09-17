@@ -89,3 +89,14 @@ export {
   unsupportedByProvider,
 } from './errors';
 export type { FailureBehaviour } from './errors';
+
+/*
+ * Phase 7 — the SHARED provider request budget.
+ *
+ * Exported from here rather than from the analytics package because a
+ * platform's rate limit belongs to our relationship with that platform, not to
+ * whichever feature happens to be talking to it. Analytics ingestion imports it
+ * so a backfill cannot spend the allowance a scheduled post needs.
+ */
+export { ProviderRateLimiter } from './rate-limits';
+export type { ProviderBudget, RateLimitDecision, RateLimitPriority } from './rate-limits';

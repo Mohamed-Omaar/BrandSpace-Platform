@@ -48,6 +48,21 @@ export type {
   SocialOAuthState,
   PublishJob,
   PublishAttempt,
+  // Phase 7 — Analytics, Intelligence, Copilot and Automations. Every one is a
+  // tenant-owned row a domain package has to be able to SAY without inventing a
+  // parallel shape that would drift from the schema on the first migration.
+  MetricObservation,
+  AnalyticsIngestionCursor,
+  AnalyticsIngestionRun,
+  Campaign,
+  Insight,
+  InsightEvidence,
+  CopilotSession,
+  CopilotMessage,
+  CopilotActionPlan,
+  CopilotToolCall,
+  AutomationRule,
+  AutomationRun,
 } from '@prisma/client';
 
 export type {
@@ -84,4 +99,26 @@ export type {
   PublishJobStatus,
   PublishFailureClass,
   PublishAttemptOutcome,
+  // Phase 7.
+  MetricSubjectType,
+  MetricGranularity,
+  MetricUnit,
+  MetricSourceKind,
+  AnalyticsFreshness,
+  AnalyticsRunKind,
+  AnalyticsRunStatus,
+  InsightType,
+  InsightStatus,
+  InsightBasis,
+  EvidenceKind,
+  CampaignObjective,
+  CampaignStatus,
+  CopilotActionClass,
+  CopilotPlanStatus,
+  CopilotToolCallStatus,
+  CopilotUndoStatus,
+  CopilotMessageRole,
+  AutomationTrigger,
+  AutomationActionType,
+  AutomationRunStatus,
 } from '@prisma/client';

@@ -62,6 +62,77 @@ const ALLOWED_IMPORTS = {
     'jobs',
   ],
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
+  /*
+   * Phase 7 — the measurement half.
+   *
+   * It reaches `social-connectors` for ONE thing: the shared provider request
+   * budget. A platform's rate limit belongs to our relationship with that
+   * platform rather than to whichever feature is talking to it, so the budget
+   * lives with the package that owns the relationship and analytics draws on it
+   * — which is what stops a backfill spending the allowance a scheduled post
+   * needs.
+   *
+   * NOT `secrets`, and NOT `vault`: a customer's social token is resolved by the
+   * caller and handed in already decrypted (F-07, D-136). Nothing here can open
+   * a credential.
+   *
+   * NOT `brand-brain` and NOT `content`: reasoning about the numbers is
+   * `intelligence`'s job, and an import nobody needs is a dependency somebody
+   * later uses.
+   */
+  analytics: [
+    'shared',
+    'database',
+    'config',
+    'entitlements',
+    'ai-gateway',
+    'jobs',
+    'social-connectors',
+  ],
+  /*
+   * Phase 7 — the reasoning half: strategy, monthly plans, content gaps and the
+   * Brand Brain write-back D-64 left open.
+   *
+   * It imports `brand-brain` because an inferred learning re-enters the brand
+   * through THAT module's existing governance — a second approval system would
+   * be a second answer to "who decides what is true about this brand".
+   */
+  intelligence: [
+    'shared',
+    'database',
+    'config',
+    'entitlements',
+    'ai-gateway',
+    'brand-brain',
+    'analytics',
+  ],
+  /*
+   * Phase 7 — the Copilot.
+   *
+   * IT IS AN ORCHESTRATOR OVER DOMAIN SERVICES, NOT A DATABASE SHORTCUT, and this
+   * list is where that is enforced: it imports the domains whose tools it
+   * exposes, each of which performs its own authorization. There is no path by
+   * which a Copilot tool reaches a table a domain service does not already own.
+   */
+  copilot: [
+    'shared',
+    'database',
+    'config',
+    'entitlements',
+    'ai-gateway',
+    'brand-brain',
+    'analytics',
+    'intelligence',
+    'content',
+  ],
+  /*
+   * Phase 7 — the automation engine.
+   *
+   * NOT `ai-gateway`: no automation action in this phase spends AI credits, and
+   * the import that does not exist is the one that cannot be used to add one
+   * without a deliberate change to this matrix.
+   */
+  automation: ['shared', 'database', 'config', 'entitlements', 'jobs'],
 };
 
 const ALL_PACKAGES = Object.keys(ALLOWED_IMPORTS);
@@ -214,6 +285,15 @@ export default tseslint.config(
       '**/.next/**',
       '**/coverage/**',
       '**/generated/**',
+      /*
+       * PLAYWRIGHT'S OWN OUTPUT. Both are gitignored and neither is source: the
+       * report bundles minified vendor JavaScript, which ESLint dutifully reports
+       * as hundreds of `no-undef` and `eqeqeq` errors the moment anybody runs the
+       * E2E suite before `pnpm verify`. Since `verify:all` runs verify and then
+       * the suite, a SECOND run of it failed on the first run's artefacts.
+       */
+      '**/playwright-report/**',
+      '**/test-results/**',
       '**/*.d.ts',
       'packages/database/prisma/migrations/**',
       // The owner-approved visual reference, vendored VERBATIM. It is evidence

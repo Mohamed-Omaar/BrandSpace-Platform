@@ -357,9 +357,23 @@ describe('the F-80 migration as an upgrade from current main', () => {
 
     migratorUrl = urlFor('migrator', database);
 
-    // CURRENT MAIN: everything except the migration under test.
+    /*
+     * THE STATE THIS MIGRATION UPGRADES FROM: everything BEFORE it, and nothing
+     * after.
+     *
+     * "Everything except the one under test" was the same set while F-80 was the
+     * newest migration, and stopped being so the moment a later migration
+     * existed. It matters because a LATER migration may legitimately depend on
+     * a constraint F-80 adds — Phase 7's `insight_evidence_knowledge_fkey`
+     * references `brand_knowledge_item(workspaceId, id)`, which is F-80's own
+     * composite unique — so applying it first fails on a dependency that is not
+     * missing in any deployment, only in the test's artificial ordering.
+     *
+     * No deployment ever applies migrations out of order, so the upgrade path
+     * this test exists to prove is the one that stops here.
+     */
     for (const name of migrationNames()) {
-      if (name === F80_MIGRATION) continue;
+      if (name >= F80_MIGRATION) break;
       applyMigration(migratorUrl, name);
     }
 

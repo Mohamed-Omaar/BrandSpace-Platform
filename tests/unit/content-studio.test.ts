@@ -203,7 +203,7 @@ describe('D-117 — the retention registry', () => {
     }
   });
 
-  it('both features that persist output today are registered', () => {
+  it('every feature that persists output today is registered', () => {
     /*
      * THE FAILURE MODE THIS GUARDS IS SILENT. A future feature that persists
      * generated output and forgets to declare an owner leaves customer content
@@ -211,6 +211,9 @@ describe('D-117 — the retention registry', () => {
      * system would notice. This list is what makes that a build failure.
      */
     expect(AI_OUTPUT_RETENTION_REGISTRY.map((e) => e.featureKey).sort()).toEqual([
+      'ai.copilot',
+      'analytics',
+      'analytics.insights',
       'brand-brain.chat',
       'content-studio',
     ]);

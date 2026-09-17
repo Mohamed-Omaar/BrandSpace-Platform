@@ -177,10 +177,27 @@ export class ContentStudioService extends ContentLibraryService {
     this.#assertBrief(input.brief);
     const platforms = this.#assertPlatforms(input.platformKeys);
 
-    // AC-11.2's idempotency half: a retried request returns the first draft and
-    // makes no second gateway call, so a lost response cannot bill twice.
+    /*
+     * AC-11.2's idempotency half: a retried request returns the first draft and
+     * makes no second gateway call, so a lost response cannot bill twice.
+     *
+     * AND THE LOOKUP IS BOUND TO THE CALLER, THE BRAND AND THEIR SCOPE.
+     *
+     * It matched on the KEY ALONE, and the key is chosen by the CLIENT — so a
+     * member who guessed or observed another member's key was handed that
+     * member's draft: its title, its body, its citations. The same defect class
+     * the Phase 7 review found in three services (P7-R2), reached from here by
+     * the Copilot's `content.draft` tool, which makes it a path a MODEL can be
+     * talked into naming a key on.
+     *
+     * An idempotency key is a de-duplication token. It is not a credential.
+     */
     const replay = await this.db.contentItem.findFirst({
-      where: { idempotencyKey: input.idempotencyKey },
+      where: {
+        idempotencyKey: input.idempotencyKey,
+        createdByUserId: input.actorUserId,
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.actorBrandScope }),
+      },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
     });
     if (replay) {
