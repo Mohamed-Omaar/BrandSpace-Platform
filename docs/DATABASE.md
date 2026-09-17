@@ -1531,7 +1531,7 @@ tool calls and audit events must outlive the words — an audit event pointing a
 exists is a dangling reference in a security record. `audit_event`, `credit_transaction`,
 `ai_usage_ledger` and `ai_request` are never touched by either pass.
 
-### 18.4 Phase 7 remediation — `insight.sourceInsightId`
+### 18.5 Phase 7 remediation — `insight.sourceInsightId`
 
 One nullable column, one composite foreign key, one index; migration
 `20260916230000_phase_7_remediation_strategy_provenance`.
@@ -1558,7 +1558,7 @@ it came from: deleting the strategy must not delete the month's work.
 No RLS change: `insight` already carries the tenant policy, and a new column on an existing table inherits
 it.
 
-### 18.5 Phase 7 remediation round 2 — `automation_event`, and five narrowed idempotency keys
+### 18.6 Phase 7 remediation round 2 — `automation_event`, and five narrowed idempotency keys
 
 **`automation_event` is the automation outbox.** One row per domain event worth
 evaluating rules against, written inside the transaction that caused it — so an
@@ -1593,7 +1593,7 @@ something wider:
 The two F-84 upload paths are deliberately untouched: their lookups have not been
 narrowed, so their constraints and their services still agree.
 
-### 18.6 Phase 7 remediation round 3 — threshold memory and a proposal's ending
+### 18.7 Phase 7 remediation round 3 — threshold memory and a proposal's ending
 
 **`automation_rule` remembers which side its metric is on.** Three columns, and
 the nullable one carries the load:
@@ -1615,7 +1615,7 @@ and whose content is by then days stale.
 Neither is a new table, and both are runtime state on a row that already carried
 `lastRunAt`, `lastRunStatus` and `runCount`.
 
-### 18.7 Phase 7 remediation round 4 — the rule-derived producers' fair-work cursor
+### 18.8 Phase 7 remediation round 4 — the rule-derived producers' fair-work cursor
 
 **`automation_rule` carries its own place in a queue.**
 

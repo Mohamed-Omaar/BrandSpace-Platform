@@ -2505,7 +2505,7 @@ and a closed enum is now enforced server-side rather than merely offered.
 batch` of every enabled matching rule. Unlike a delivered outbox row an evaluated
 rule stays eligible for the identical query, so past `batch` rules the database
 could return the same subset for ever. **D-182** replaces both with a durable
-fair-work cursor (docs/DATABASE.md §18.7): bounded per pass, fair across passes,
+fair-work cursor (docs/DATABASE.md §18.8): bounded per pass, fair across passes,
 and race-safe between instances because production is idempotent on the outbox
 dedupe key, the park is conditional, and the event and the park commit in ONE
 transaction.
