@@ -128,6 +128,21 @@ export function conditionFieldUnknown(field: string): AppError {
 }
 
 /**
+ * THE REQUEST DID NOT CARRY A CONDITION FIELD AT ALL (R5).
+ *
+ * DISTINCT FROM AN UNKNOWN ONE, AND FROM AN EMPTY ONE, because the three are
+ * three different requests. The picker always renders, and its "no condition"
+ * option carries `value=""` — so a form that went through the screen ALWAYS
+ * carries the entry. Present and empty is somebody choosing no condition;
+ * ABSENT is a request that never went through the screen, and reading it as the
+ * same choice hands a stale, truncated or hand-made payload an unconditional
+ * rule nobody asked for.
+ */
+export function conditionFieldMissing(): AppError {
+  return new AppError('VALIDATION_FAILED', 'That request did not say which condition to apply.');
+}
+
+/**
  * A TRIGGER PARAMETER WAS MISSING, BLANK OR UNREADABLE (R5).
  *
  * `Number('')` is `0`, and zero is a perfectly valid threshold, hour and day of

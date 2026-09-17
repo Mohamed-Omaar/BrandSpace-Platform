@@ -2556,9 +2556,13 @@ the condition had been dropped. Conditional to unconditional is the one
 direction a decoder must never move a rule in, and a silent fallback takes it
 every time.
 
-**D-183** refuses it. Only the exact empty string means "no condition", because
-that is the value the picker's own option carries; whitespace is not folded into
-it, or the same unconditional rule arrives one character along. The lookup is
+**D-183** refuses it, and separates three inputs that had been two. The entry
+PRESENT and exactly empty is "no condition" — the picker always renders and its
+option carries `value=""`, so that is a choice somebody made. The entry ABSENT is
+a request that never went through the screen, and `String(formData.get(…) ?? '')`
+read it as the same choice: the identical widening, in the last shape left for
+it. Whitespace is not folded into the empty string either, or the same
+unconditional rule arrives one character along. The lookup is
 `Object.hasOwn` rather than a truthiness or `undefined` test — `['__proto__']`
 returns `Object.prototype` and `['toString']` a function, so an `undefined`
 check admits three names that are not fields and then reads a value kind off the

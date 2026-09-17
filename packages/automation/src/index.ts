@@ -85,6 +85,7 @@ export {
   automationConfirmationRejected,
   automationRuleNotFound,
   automationRunNotFound,
+  conditionFieldMissing,
   conditionFieldNotProduced,
   conditionFieldUnknown,
   conditionOperatorNotAllowed,

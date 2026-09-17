@@ -47,10 +47,28 @@ function refusal(decode: () => unknown): string {
 // ---------------------------------------------------------------------------
 
 describe('R5: an unknown condition field is refused, never dropped', () => {
-  it('an EMPTY field is intentionally no condition, and stays that way', () => {
-    // The picker offers "no condition" as an option, so this is an answer.
+  it('a PRESENT and empty field is intentionally no condition, and stays that way', () => {
+    // The picker always renders, and its "no condition" option carries
+    // `value=""` — so this is the one input that is an ANSWER rather than a gap.
     expect(conditionsFrom(form({ conditionField: '' }))).toEqual([]);
-    expect(conditionsFrom(form({}))).toEqual([]);
+    expect(conditionsFrom(form({ conditionField: '', conditionOperator: 'equals' }))).toEqual([]);
+  });
+
+  it('but a MISSING field is refused, because absent is not a choice', () => {
+    /*
+     * `String(formData.get(...) ?? '')` COLLAPSED THE TWO, and they are not the
+     * same request. A form the screen rendered always carries the entry; a
+     * request without it never went through the screen — stale, truncated or
+     * hand-made — and reading it as "no condition" hands it the unconditional
+     * rule an unknown field used to get. The same defect, in the last shape
+     * left for it.
+     */
+    expect(refusal(() => conditionsFrom(form({})))).toBe('VALIDATION_FAILED');
+    expect(
+      refusal(() =>
+        conditionsFrom(form({ conditionOperator: 'equals', conditionValue: 'APPROVED' })),
+      ),
+    ).toBe('VALIDATION_FAILED');
   });
 
   it('a NON-EMPTY unknown field is refused, and never becomes []', () => {

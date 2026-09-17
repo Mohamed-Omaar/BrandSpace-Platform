@@ -1,6 +1,7 @@
 import {
   CONDITION_FIELD_CONTRACTS,
   CONDITION_OPERATORS,
+  conditionFieldMissing,
   conditionFieldUnknown,
   conditionOperatorNotAllowed,
   conditionValueInvalid,
@@ -177,17 +178,29 @@ export function triggerConfigFrom(
  *               different rule.
  */
 export function conditionsFrom(formData: FormData): readonly AutomationCondition[] {
-  const name = String(formData.get('conditionField') ?? '');
   /*
-   * INTENTIONALLY NO CONDITION, and EXACTLY the empty string. The picker's
-   * "no condition" option carries `value=""`, so that is the one input that may
-   * yield an unconditional rule.
+   * MISSING IS NOT EMPTY, AND ONLY EMPTY IS AN ANSWER.
+   *
+   * `String(formData.get(...) ?? '')` collapses the two, and they are not the
+   * same request. A form the picker rendered ALWAYS carries the entry, because
+   * the "no condition" option carries `value=""` — so a request with the entry
+   * present and empty is a person choosing no condition, and a request with the
+   * entry ABSENT is one that never went through the screen at all. Folding the
+   * second into the first hands a stale, truncated or hand-made payload the
+   * unconditional rule an unknown field used to get, which is this round's
+   * defect surviving in the one shape still left for it.
+   */
+  const entry = formData.get('conditionField');
+  if (entry === null) throw conditionFieldMissing();
+
+  const name = String(entry);
+  /*
+   * INTENTIONALLY NO CONDITION, and EXACTLY the empty string.
    *
    * NOT TRIMMED FIRST, deliberately. Trimming would fold `'   '` into `''` and
-   * hand a whitespace payload the same unconditional rule an unknown field used
-   * to get — the identical defect, one character along. Anything that is not
-   * the empty string goes through the contract lookup and is refused if it is
-   * not a field.
+   * hand a whitespace payload that same unconditional rule — the identical
+   * defect, one character along. Anything that is not the empty string goes
+   * through the contract lookup and is refused if it is not a field.
    */
   if (name === '') return [];
 

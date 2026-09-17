@@ -151,12 +151,26 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
    * EVERY ONE OF THESE IS A REQUEST THE SCREEN CANNOT PRODUCE — a stale tab, a
    * replayed submission, a hand-made POST. The assertion is the same for all of
    * them: `VALIDATION_FAILED`, and not one new row.
+   *
+   * THE TRIGGER-CONFIG CASES STILL CARRY `conditionField: ''`, so each one is
+   * refused for the reason it names rather than for a second one it happens to
+   * share.
    */
   const malformed: readonly {
     readonly why: string;
     readonly triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED';
     readonly entries: Record<string, string | readonly string[]>;
   }[] = [
+    {
+      why: 'no condition field at all — absent is not a choice',
+      triggerType: 'CONTENT_APPROVED',
+      entries: { conditionOperator: 'equals', conditionValue: 'APPROVED' },
+    },
+    {
+      why: 'a request carrying nothing whatsoever',
+      triggerType: 'CONTENT_APPROVED',
+      entries: {},
+    },
     {
       why: 'a condition field that does not exist',
       triggerType: 'CONTENT_APPROVED',
@@ -165,6 +179,11 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
         conditionOperator: 'equals',
         conditionValue: 'APPROVED',
       },
+    },
+    {
+      why: 'a condition field of whitespace',
+      triggerType: 'CONTENT_APPROVED',
+      entries: { conditionField: '   ', conditionOperator: 'equals', conditionValue: 'x' },
     },
     {
       why: 'a condition field inherited from Object.prototype',
@@ -198,6 +217,7 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
       why: 'a threshold left blank',
       triggerType: 'METRIC_THRESHOLD_CROSSED',
       entries: {
+        conditionField: '',
         metricKey: 'followers',
         direction: 'above',
         threshold: '',
@@ -208,6 +228,7 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
       why: 'a window that is present and blank',
       triggerType: 'METRIC_THRESHOLD_CROSSED',
       entries: {
+        conditionField: '',
         metricKey: 'followers',
         direction: 'above',
         threshold: '100',
@@ -217,27 +238,56 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
     {
       why: 'a metric key left blank',
       triggerType: 'METRIC_THRESHOLD_CROSSED',
-      entries: { metricKey: '', direction: 'above', threshold: '100', windowDays: '7' },
+      entries: {
+        conditionField: '',
+        metricKey: '',
+        direction: 'above',
+        threshold: '100',
+        windowDays: '7',
+      },
     },
     {
       why: 'an hour the form never carried',
       triggerType: 'SCHEDULED_TIME',
-      entries: {},
+      entries: { conditionField: '' },
     },
     {
       why: 'an hour left blank',
       triggerType: 'SCHEDULED_TIME',
-      entries: { hourLocal: '' },
+      entries: { conditionField: '', hourLocal: '' },
     },
     {
       why: 'a weekday that is not a day',
       triggerType: 'SCHEDULED_TIME',
-      entries: { hourLocal: '9', daysOfWeek: ['1', 'monday'] },
+      entries: { conditionField: '', hourLocal: '9', daysOfWeek: ['1', 'monday'] },
     },
   ];
 
-  it('refuses every malformed payload, and creates nothing for any of them', async () => {
+  it('refuses every malformed payload — nothing is created, and nothing is widened', async () => {
+    /*
+     * A LEGITIMATE CONDITIONAL RULE FIRST, so the invariant at the end has
+     * something to be true OF. "No rule on this brand is unconditional" over an
+     * empty table is vacuous, and a vacuous assertion is worse than none: it
+     * passes against the defect as happily as against the fix.
+     */
+    const anchor = `r5 anchor ${randomUUID()}`;
+    expect(
+      await submit(
+        'CONTENT_APPROVED',
+        {
+          conditionField: 'content.status',
+          conditionOperator: 'in',
+          conditionValue: ['APPROVED'],
+        },
+        anchor,
+      ),
+    ).toBe('OK');
+
     const before = await rules();
+    expect(before.length).toBe(1);
+    expect(before[0]?.conditions).toEqual([
+      { field: 'content.status', operator: 'in', value: ['APPROVED'] },
+    ]);
 
     for (const testCase of malformed) {
       const outcome = await submit(testCase.triggerType, testCase.entries);
@@ -247,26 +297,25 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
       });
     }
 
-    // THE ASSERTION THAT MATTERS. A refusal that still wrote a row would be the
-    // same defect wearing an error message.
-    expect(await rules()).toEqual(before);
-  }, 60_000);
+    // NOTHING WAS CREATED. A refusal that still wrote a row would be the same
+    // defect wearing an error message.
+    const after = await rules();
+    expect(after).toEqual(before);
 
-  it('and NO refused payload ever produced an unconditional rule', async () => {
     /*
-     * THE DEFECT, STATED AS AN INVARIANT. `if (!contract) return []` turned a
-     * request that meant "…when the status is APPROVED" into "…on every
-     * approval", stored and enabled. So the check is not merely that the count
-     * did not move: it is that no rule on this brand carries an EMPTY condition
-     * list it was never asked for.
+     * AND NOTHING IS UNCONDITIONAL. This is the defect stated as an invariant
+     * rather than as a count: `if (!contract) return []` and `?? ''` both
+     * turned a request that meant "…when the status is APPROVED" into "…on
+     * every approval", and both would have left a row here with an empty
+     * condition list nobody asked for.
      */
-    for (const rule of await rules()) {
+    for (const rule of after) {
       expect({ name: rule.name, conditions: rule.conditions }).not.toEqual({
         name: rule.name,
         conditions: [],
       });
     }
-  });
+  }, 90_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -276,9 +325,14 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
 describe('R5: an ordinary submission still creates exactly the rule it describes', () => {
   it('a scheduled rule stores the hour and days the customer chose', async () => {
     const name = `r5 scheduled ${randomUUID()}`;
-    expect(await submit('SCHEDULED_TIME', { hourLocal: '9', daysOfWeek: ['1', '3'] }, name)).toBe(
-      'OK',
-    );
+    expect(
+      await submit(
+        'SCHEDULED_TIME',
+        // THE PICKER ALWAYS RENDERS, so a real submission always carries it.
+        { conditionField: '', hourLocal: '9', daysOfWeek: ['1', '3'] },
+        name,
+      ),
+    ).toBe('OK');
 
     const stored = (await rules()).find((rule) => rule.name === name);
     expect(stored?.triggerConfig).toEqual({ hourLocal: 9, daysOfWeek: [1, 3] });
@@ -294,7 +348,7 @@ describe('R5: an ordinary submission still creates exactly the rule it describes
     expect(
       await submit(
         'METRIC_THRESHOLD_CROSSED',
-        { metricKey: 'followers', direction: 'below', threshold: '500' },
+        { conditionField: '', metricKey: 'followers', direction: 'below', threshold: '500' },
         name,
       ),
     ).toBe('OK');
