@@ -2673,3 +2673,57 @@ is precisely the key that message would have produced before the upgrade, so an
 in-flight delivery still converges on the run it already created rather than
 duplicating it. The next event the producer writes carries the field, and there
 is no window in which a threshold crossing is dropped.
+
+## 36. Phase 7 remediation, round 7 — a state transition that committed without its event
+
+A seventh review found no new authorization or tenancy defect, and the same shape
+of failure as round 6 by a different route: **a real threshold crossing the
+platform consumed and never acted on.**
+
+### 36.1 The order of two statements was the whole defect
+
+`evaluateThresholdRule` claimed a crossing with a compare-and-swap and only then
+looked up the `MetricObservation` it wanted to cite as provenance:
+
+```
+CAS  thresholdBreached := true          -- the claim
+SELECT … FROM metric_observation …      -- the provenance
+if not found: return 'no_observation'
+```
+
+That last line is a **normal return, not a throw**, so the surrounding
+`withWorkspace` transaction committed the claim — and the scheduler's fair-work
+park with it — with no `AutomationEvent` to go with it. On the next sweep the
+rule was already marked breached, so the transition computed `steady` and the
+producer did nothing. The crossing was gone: no event, no run, no error, no log
+line, and nothing in the rule's own row to say that anything had been lost.
+
+**The race is reachable rather than theoretical.** Analytics retention prunes
+`MetricObservation` rows, and `withWorkspace` is one transaction at READ
+COMMITTED rather than a repeatable-read snapshot — so a prune that commits
+between the metric-window read and the provenance lookup is visible to the
+lookup. The window can answer "past the line" from rows that are gone one
+statement later.
+
+### 36.2 The invariant is now structural, not handled
+
+**D-186**: provenance is resolved **before** the claim. Every step that can
+decline now happens before anything is committed, and between the claim and
+`recordRuleAutomationEvent` there is no branch, no return and no second query —
+only the write the claim exists to authorise. So:
+
+> **There is never a committed FIRE transition without its `AutomationEvent`.**
+
+Either both rows are in the transaction or neither is: the recorder writes the
+row, finds its `dedupeKey` already present — the event exists either way — or
+throws, and a throw rolls the claim back with it.
+
+**A miss is now free.** The remembered side is untouched and the arming cycle has
+not moved, so the rule is still armed and the next sweep evaluates the same
+crossing again. Nothing is consumed by a failure to describe it.
+
+**The compare-and-swap is unchanged and still the arbiter.** Two schedulers may
+both read provenance; only one can move the state, and the loser returns having
+written nothing. Reading provenance a statement earlier also makes it marginally
+_more_ faithful — it is now taken closer to the window read that decided the
+crossing, rather than after it.

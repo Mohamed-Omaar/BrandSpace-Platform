@@ -16,8 +16,8 @@ import {
  * the sweep the only way to test it was to re-implement it in the test, which
  * tests the copy rather than the code.
  *
- * THE WHOLE EDGE RULE IS THE FIVE LINES BELOW, and every one of them is a
- * decision the previous version got wrong:
+ * THE WHOLE EDGE RULE IS THE SIX LINES BELOW, and every one of them is a
+ * decision some previous version got wrong:
  *
  *   - AN UNMEASURED WINDOW CHANGES NOTHING. Missing is never zero; a brand with
  *     no readings has not fallen below anything.
@@ -30,8 +30,11 @@ import {
  *     until the next reading arrived.
  *   - GOING BACK RE-ARMS, by advancing the cycle — which is what makes the next
  *     crossing a different event rather than a duplicate of the last one.
- *   - THE STATE MOVES FIRST, under a compare-and-swap, so two schedulers racing
- *     one crossing produce one winner.
+ *   - THE CLAIM IS A COMPARE-AND-SWAP, so two schedulers racing one crossing
+ *     produce one winner.
+ *   - AND NOTHING THAT CAN FAIL HAPPENS BETWEEN THE CLAIM AND THE EVENT. A
+ *     claimed fire that committed without its event would consume the crossing
+ *     for ever; see the fire path below.
  */
 export type ThresholdOutcome =
   | 'unmeasured'
@@ -95,14 +98,35 @@ export async function evaluateThresholdRule(input: {
     return 'rearmed';
   }
 
-  const claimed = await moveState(input.db, input.workspaceId, input.rule, {
-    breached: true,
-    cycle: input.rule.thresholdCycle,
-    now: input.now,
-  });
-  if (!claimed) return 'lost_race';
-
   /*
+   * PROVENANCE IS RESOLVED BEFORE THE CLAIM, AND THAT ORDER IS THE WHOLE POINT.
+   *
+   * THE DEFECT IT FIXES. This lookup used to run AFTER the compare-and-swap, and
+   * a miss returned `'no_observation'` — a NORMAL return, so the surrounding
+   * `withWorkspace` transaction COMMITTED `thresholdBreached = true` with no
+   * `AutomationEvent` to go with it. On the next sweep the rule was already
+   * marked breached, so the transition was `steady`, and a real crossing had
+   * been permanently consumed. Nothing failed and nothing was logged.
+   *
+   * THE RACE IS REACHABLE. Analytics retention prunes `MetricObservation` rows,
+   * and `withWorkspace` is one transaction at READ COMMITTED rather than a
+   * repeatable-read snapshot, so a pruning commit landing between the metric
+   * window read and this lookup is visible to it. The window can therefore
+   * answer "past the line" from rows that are gone by the time provenance is
+   * asked for.
+   *
+   * SO THE ORDER IS INVERTED RATHER THAN THE FAILURE HANDLED. Every step that
+   * can decline now happens BEFORE anything is committed: a miss here returns
+   * with the remembered side untouched, so the rule is still armed, the cycle
+   * has not moved, and the next sweep evaluates the same crossing again. After
+   * the claim there is no branch, no return and no second query — only the
+   * write that the claim exists to authorise. A committed fire therefore cannot
+   * exist without its event: either both are in the transaction or neither is.
+   *
+   * THE CAS IS UNCHANGED AND STILL THE ARBITER. Two schedulers may both read
+   * provenance; only one can move the state, and the loser returns having
+   * written nothing.
+   *
    * THE REFERENCE IS THE READING THE CROSSING WAS SEEN IN — provenance, so a
    * person can look at what the engine looked at. The IDENTITY is the rule and
    * its arming cycle, which is what the outbox de-duplicates on.
@@ -114,6 +138,16 @@ export async function evaluateThresholdRule(input: {
   });
   if (!observation) return 'no_observation';
 
+  const claimed = await moveState(input.db, input.workspaceId, input.rule, {
+    breached: true,
+    cycle: input.rule.thresholdCycle,
+    now: input.now,
+  });
+  if (!claimed) return 'lost_race';
+
+  // NOTHING BETWEEN THE CLAIM AND THE EVENT. `recordRuleAutomationEvent` either
+  // writes the row, finds its `dedupeKey` already present — the event exists
+  // either way — or throws, and a throw rolls the claim back with it.
   await recordRuleAutomationEvent(input.db, input.workspaceId, {
     triggerType: 'METRIC_THRESHOLD_CROSSED',
     brandId: input.rule.brandId,
