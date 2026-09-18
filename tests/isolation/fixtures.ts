@@ -1589,3 +1589,49 @@ export async function createIsolationFixtures(
   await prisma.$disconnect();
   return { a, b, platformUserId: platformUser.id, platformAuditEventId };
 }
+
+/**
+ * Drop a throwaway migration-upgrade database, tolerating the close race that
+ * `WITH (FORCE)` cannot resolve.
+ *
+ * WHY THIS IS NOT A ONE-LINER. `DROP DATABASE … WITH (FORCE)` calls
+ * `pg_terminate_backend` on every remaining backend, and the upgrade suites open
+ * connections as THREE roles — the migrator, the app and the platform. `end()`
+ * resolves when the CLIENT has sent its close; the SERVER may not have reaped
+ * the backend yet, and `brandspace_migrator` is not a superuser and is not a
+ * member of `pg_signal_backend`, so it may not terminate a backend belonging to
+ * `brandspace_app`. The drop then fails with "permission denied to terminate
+ * process" — a TEARDOWN race that fails the suite after every one of its
+ * assertions has passed.
+ *
+ * DELIBERATELY NOT "GRANT pg_signal_backend TO brandspace_migrator". The
+ * migrator is NOBYPASSRLS and least-privileged on purpose (F-01), and widening
+ * it to make a teardown convenient is the kind of trade this repository does not
+ * make.
+ *
+ * SO: RETRY BRIEFLY, then drop without FORCE. Nothing is holding the database
+ * open — every client has been asked to close — so a few hundred milliseconds
+ * is all it takes. If it still will not go, the suite does NOT fail: the name
+ * carries a random suffix, the next run's CREATE is unaffected, and a green
+ * suite must not turn red over a cleanup detail that proves nothing about the
+ * migration under test.
+ *
+ * `phase7-migration-upgrade` already did this; `f80-migration-upgrade` did not,
+ * and failed exactly this way. One copy now, so the next suite inherits the fix
+ * instead of rediscovering the race.
+ */
+export async function dropThrowawayDatabase(
+  client: { query(sql: string): Promise<unknown> },
+  name: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  // Best effort, without FORCE: by now every backend should have gone.
+  await client.query(`DROP DATABASE IF EXISTS "${name}"`).catch(() => undefined);
+}
