@@ -335,6 +335,20 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   AutomationEvent: 'automation_event',
   EmailMessage: 'email_message',
   EntitlementCatalogueSnapshot: 'entitlement_catalogue_snapshot',
+  // Phase 9 — Commerce & Onboarding.
+  BillingProfile: 'billing_profile',
+  CheckoutSession: 'checkout_session',
+  Invoice: 'invoice',
+  InvoiceLine: 'invoice_line',
+  CreditNote: 'credit_note',
+  CreditNoteLine: 'credit_note_line',
+  PaymentAttempt: 'payment_attempt',
+  CreditPackPurchase: 'credit_pack_purchase',
+  BillingEvent: 'billing_event',
+  InvoiceNumberSequence: 'invoice_number_sequence',
+  EmailVerificationToken: 'email_verification_token',
+  UserLegalAcceptance: 'user_legal_acceptance',
+  UserMfaRecoveryCode: 'user_mfa_recovery_code',
 };
 
 export function isTenantOwned(model: string): model is TenantModel {

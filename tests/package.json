@@ -25,6 +25,7 @@
     "@brandspace/jobs": "workspace:*",
     "@brandspace/notifications": "workspace:*",
     "@brandspace/observability": "workspace:*",
+    "@brandspace/onboarding": "workspace:*",
     "@brandspace/providers": "workspace:*",
     "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",

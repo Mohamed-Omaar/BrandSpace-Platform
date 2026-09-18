@@ -963,6 +963,9 @@ importers:
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../packages/observability
+      '@brandspace/onboarding':
+        specifier: workspace:*
+        version: link:../packages/onboarding
       '@brandspace/providers':
         specifier: workspace:*
         version: link:../packages/providers

@@ -248,17 +248,29 @@ export class SignupService {
         data: { userId: user.id, tokenHash: hashToken(token), expiresAt, ip: input.ip ?? null },
       });
 
-      await tx.auditEvent.create({
-        data: {
-          workspaceId: null,
-          actorType: 'USER',
-          actorId: user.id,
-          action: 'customer.signup.started',
-          severity: 'NOTICE',
-          outcome: 'SUCCESS',
-          ip: input.ip ?? null,
-          userAgent: input.userAgent ?? null,
-        },
+      /*
+       * `createMany`, NOT `create`. Prisma's `create` issues INSERT … RETURNING,
+       * and the tenant policy's USING clause deliberately hides platform-scope
+       * events (`workspaceId IS NULL`) from every tenant — so the row is written
+       * and the RETURNING then fails, reported as "new row violates row-level
+       * security policy" for a write that was actually allowed. The same trap
+       * `CustomerAuthService` and the outbox already document; repeated here
+       * because the day somebody switches this back is the day signup starts
+       * failing on a line that looks like bookkeeping.
+       */
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            workspaceId: null,
+            actorType: 'USER',
+            actorId: user.id,
+            action: 'customer.signup.started',
+            severity: 'NOTICE',
+            outcome: 'SUCCESS',
+            ip: input.ip ?? null,
+            userAgent: input.userAgent ?? null,
+          },
+        ],
       });
     });
 
@@ -442,15 +454,18 @@ export class SignupService {
       await tx.userMfaRecoveryCode.createMany({
         data: codes.map((value) => ({ userId, codeHash: hashRecoveryCode(value) })),
       });
-      await tx.auditEvent.create({
-        data: {
-          workspaceId: null,
-          actorType: 'USER',
-          actorId: userId,
-          action: 'customer.mfa.enrolled',
-          severity: 'NOTICE',
-          outcome: 'SUCCESS',
-        },
+      // `createMany` for the reason given in `signUp` above.
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            workspaceId: null,
+            actorType: 'USER',
+            actorId: userId,
+            action: 'customer.mfa.enrolled',
+            severity: 'NOTICE',
+            outcome: 'SUCCESS',
+          },
+        ],
       });
     });
 
@@ -504,15 +519,17 @@ export class SignupService {
         data: { mfaEnabled: false, mfaSecretMaterial: Prisma.DbNull, mfaEnrolledAt: null },
       });
       await tx.userMfaRecoveryCode.deleteMany({ where: { userId } });
-      await tx.auditEvent.create({
-        data: {
-          workspaceId: null,
-          actorType: 'USER',
-          actorId: userId,
-          action: 'customer.mfa.disabled',
-          severity: 'WARNING',
-          outcome: 'SUCCESS',
-        },
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            workspaceId: null,
+            actorType: 'USER',
+            actorId: userId,
+            action: 'customer.mfa.disabled',
+            severity: 'WARNING',
+            outcome: 'SUCCESS',
+          },
+        ],
       });
     });
   }
@@ -561,16 +578,18 @@ export class SignupService {
     ip: string | undefined,
     severity: 'INFO' | 'NOTICE' | 'WARNING' = 'INFO',
   ): Promise<void> {
-    await this.#prisma.auditEvent.create({
-      data: {
-        workspaceId: null,
-        actorType: 'USER',
-        actorId: userId,
-        action,
-        severity,
-        outcome: 'SUCCESS',
-        ip: ip ?? null,
-      },
+    await this.#prisma.auditEvent.createMany({
+      data: [
+        {
+          workspaceId: null,
+          actorType: 'USER',
+          actorId: userId,
+          action,
+          severity,
+          outcome: 'SUCCESS',
+          ip: ip ?? null,
+        },
+      ],
     });
   }
 }
