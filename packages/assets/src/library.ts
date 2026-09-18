@@ -58,6 +58,18 @@ export interface BrowseAssetsInput {
   readonly actor: AssetActor;
   /** `undefined` means every brand the actor may see; `null` means workspace-level only. */
   readonly brandId?: string | null | undefined;
+  /**
+   * With a brand named, also return the workspace-level (shared) assets.
+   *
+   * THE DEFAULT VIEW OF A BRAND IS NOT JUST ITS OWN FILES. The logo pack, the
+   * fonts and the stock every brand draws on live at `brandId = null`, and a
+   * brand view that hid them would send people to "All assets" to find the
+   * things they use most — or, worse, to upload a second copy. It changes
+   * nothing about authorization: `brandId` is still checked against the actor's
+   * scope, and shared assets are workspace-level and already visible to any
+   * member who may read assets at all.
+   */
+  readonly includeShared?: boolean | undefined;
   readonly folderId?: string | null | undefined;
   readonly kinds?: readonly AssetKind[] | undefined;
   readonly statuses?: readonly AssetStatus[] | undefined;
@@ -106,7 +118,7 @@ export class AssetLibraryService {
 
     const where: Prisma.AssetWhereInput = {
       deletedAt: null,
-      ...this.#brandFilter(input.actor, input.brandId),
+      ...this.#brandFilter(input.actor, input.brandId, input.includeShared === true),
     };
     if (input.folderId !== undefined) where.folderId = input.folderId;
     if (input.kinds && input.kinds.length > 0) where.kind = { in: [...input.kinds] };
@@ -542,8 +554,18 @@ export class AssetLibraryService {
   #brandFilter(
     actor: AssetActor,
     brandId: string | null | undefined,
-  ): { brandId?: string | null; OR?: Array<{ brandId: { in: string[] } | null }> } {
-    if (brandId !== undefined) return { brandId };
+    includeShared = false,
+  ): {
+    brandId?: string | null;
+    OR?: Array<{ brandId: { in: string[] } | null } | { brandId: string | null }>;
+  } {
+    if (brandId !== undefined) {
+      // ONE BRAND PLUS THE SHARED SHELF, when the caller asked for it. Still an
+      // `OR` rather than an `in`, for the reason below: Prisma's `in` cannot
+      // carry null and the shared rows are exactly the null ones.
+      if (brandId !== null && includeShared) return { OR: [{ brandId }, { brandId: null }] };
+      return { brandId };
+    }
     if (actor.brandScope.length === 0) return {};
     /*
      * AN `OR` RATHER THAN `in: [...scope, null]`, because Prisma's `in` does not

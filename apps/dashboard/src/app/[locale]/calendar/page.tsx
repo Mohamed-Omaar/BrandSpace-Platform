@@ -1,9 +1,17 @@
 import { formatLocalTime, partsInZone } from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
-import type { CalendarDay, PostRecord, SocialPlatform } from '@brandspace/ui';
+import type {
+  ApprovalStatus,
+  CalendarDay,
+  PostRecord,
+  PostStatus,
+  SocialPlatform,
+} from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { mediaForVariants } from '../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CalendarView, type SchedulableDraft, type SlotDetail } from './calendar-view';
@@ -63,6 +71,46 @@ const KNOWN_PLATFORMS: readonly SocialPlatform[] = [
   'tiktok',
 ];
 
+/**
+ * THE SLOT'S OWN STATE, NOT AN ASSUMPTION ABOUT IT (AC-29.2).
+ *
+ * This screen used to render every slot as `SCHEDULED` with a comment saying
+ * the publishing states "will be used in Phase 6". Phase 6 shipped, and the
+ * comment stopped being true: a planner looking at last week saw a month of
+ * posts marked scheduled, several of which had already gone out and one of
+ * which had failed.
+ *
+ * `PLANNED` MAPS TO `DRAFT`, because that is what it means — on the calendar
+ * and not yet cleared to go — and the card draws its draft watermark for it.
+ * `CANCELLED` never reaches here: `listSlots` excludes it.
+ */
+const SLOT_STATUS: Record<string, PostStatus> = {
+  PLANNED: 'DRAFT',
+  SCHEDULED: 'SCHEDULED',
+  PUBLISHING: 'PUBLISHING',
+  PUBLISHED: 'PUBLISHED',
+  PARTIALLY_PUBLISHED: 'PARTIALLY_PUBLISHED',
+  FAILED: 'FAILED',
+};
+
+/**
+ * THE REVIEW STATE, FROM THE APPROVAL ROW.
+ *
+ * NO ROW MEANS `NOT_REQUIRED`, and the distinction matters: a brand that does
+ * not require approval before scheduling produces content with no approval at
+ * all, and rendering that as "needs approval" would invent a queue nobody is
+ * waiting in. `REJECTED` and `CANCELLED` both mean the reviewer did not let it
+ * through, which for a planner reads as changes requested — the post is not
+ * cleared, and the detail is on the item.
+ */
+const APPROVAL_STATE: Record<string, ApprovalStatus> = {
+  PENDING: 'NEEDS_APPROVAL',
+  APPROVED: 'APPROVED',
+  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+  REJECTED: 'CHANGES_REQUESTED',
+  CANCELLED: 'NOT_REQUIRED',
+};
+
 export default async function CalendarPage({
   params,
   searchParams,
@@ -106,20 +154,59 @@ export default async function CalendarPage({
     });
 
     /*
-     * DRAFTS THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
+     * CONTENT THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
      * An item with no variant has no caption to publish, and the service
      * refuses it — so offering it in the picker would be offering a choice that
      * fails. The list is what the service would accept, computed the same way.
+     *
+     * DRAFT **AND APPROVED**, which is what `SCHEDULABLE_FROM` says. The picker
+     * offered drafts only, and that made the approval workflow a dead end: with
+     * a brand's `requireApprovalBeforeScheduling` switched on, a DRAFT is
+     * refused by the gate and an APPROVED post was never offered — so nothing
+     * at all could be scheduled, and the one status the gate exists to admit
+     * was the one status the screen hid. `SCHEDULED` is deliberately absent: it
+     * is already on the calendar, and rescheduling has its own control.
      */
     const schedulable = (
-      await library.listItems({ status: 'DRAFT', limit: 200, brandScope: workspace.brandScope })
+      await library.listItems({
+        statuses: ['DRAFT', 'APPROVED'],
+        limit: 200,
+        brandScope: workspace.brandScope,
+      })
     ).filter((item) => item.variants.length > 0);
 
-    const [quotaLimit, counter] = await Promise.all([
+    /*
+     * PHASE 8 — THE REST OF WHAT A PLANNER IS LOOKING AT (AC-29.2).
+     *
+     * A month grid that shows only a title and a time is a list of reminders.
+     * The three facts a planner actually scans for are which campaign a post
+     * belongs to, whether a reviewer has cleared it, and whether it went out —
+     * and all three already exist in the canonical models. NOTHING HERE
+     * DUPLICATES POST STATE: the slot carries the publishing status, the
+     * `Approval` row carries the review, and `ContentItem.campaignId` carries
+     * the campaign. This page joins them; it stores nothing.
+     */
+    const approvals = await services.approvals();
+    const campaignService = services.campaigns();
+    const [quotaLimit, counter, approvalStates, campaigns] = await Promise.all([
       services.entitlements.limit(workspace.workspaceId, QUOTA_FEATURES.scheduledPostsPerMonth),
       services.db.usageCounter.findFirst({
         where: { featureKey: QUOTA_FEATURES.scheduledPostsPerMonth },
         orderBy: { periodStart: 'desc' },
+      }),
+      approvals.latestForItems({
+        itemIds: visible.map((view) => view.item.id),
+        brandScope: workspace.brandScope,
+      }),
+      /*
+       * ARCHIVED CAMPAIGNS INCLUDED, deliberately. A post scheduled under a
+       * campaign that has since been archived still belongs to it, and showing
+       * the chip without a name would be a worse answer than the name.
+       */
+      campaignService.list({
+        brandScope: workspace.brandScope,
+        includeArchived: true,
+        take: 200,
       }),
     ]);
 
@@ -133,11 +220,51 @@ export default async function CalendarPage({
       quotaUsed: counter?.usedValue ?? 0,
       weekStartsOn: policy.calendar.weekStartsOn,
       now,
+      approvalStates,
+      campaignNames: new Map(campaigns.map((campaign) => [campaign.id, campaign.name])),
     };
   });
 
-  const { timezone, year, month, visible, schedulable, quotaLimit, quotaUsed, weekStartsOn, now } =
-    data;
+  const {
+    timezone,
+    year,
+    month,
+    visible,
+    schedulable,
+    quotaLimit,
+    quotaUsed,
+    weekStartsOn,
+    now,
+    approvalStates,
+    campaignNames,
+  } = data;
+
+  /*
+   * THE COVER PICTURE OF EACH SCHEDULED POST (AC-29.2).
+   *
+   * ONE ASSET PER SLOT, not all of them: a calendar chip is thirty pixels
+   * square, and minting a per-viewer download grant for every image in a
+   * carousel — for every post in a month — would issue capabilities nothing on
+   * this screen can show. The FIRST asset of the FIRST variant is the post's
+   * cover, which is the same convention the publish pipeline uses.
+   *
+   * Grants are issued through the same download service the Asset Library and
+   * the composer use, which re-checks `assets.read`, the workspace and the
+   * member's BrandScope. An id it will not resolve is simply absent, and the
+   * chip falls back to its abstract tile rather than showing a broken frame.
+   */
+  const coverOf = new Map<string, string>();
+  for (const view of visible) {
+    const cover = view.variants.flatMap((variant) => variant.assetIds)[0];
+    if (cover) coverOf.set(view.slot.id, cover);
+  }
+  const coverMedia = await mediaForVariants({
+    workspaceId: workspace.workspaceId,
+    userId: customer.userId,
+    permissionKeys: workspace.permissionKeys,
+    brandScope: workspace.brandScope,
+    assetIds: [...coverOf.values()],
+  });
 
   /*
    * THE GRID, BUILT IN THE WORKSPACE'S ZONE.
@@ -178,6 +305,18 @@ export default async function CalendarPage({
     const local = formatLocalTime(view.slot.scheduledAtUtc, timezone);
     const day = local.slice(0, 10);
     const channels = view.slot.platformKeys;
+    const mediaIds = [...new Set(view.variants.flatMap((variant) => variant.assetIds))];
+    const coverId = coverOf.get(view.slot.id);
+    const cover = coverId ? coverMedia.get(coverId) : undefined;
+    const campaignName = view.item.campaignId
+      ? (campaignNames.get(view.item.campaignId) ?? null)
+      : null;
+    const approvalRow = approvalStates.get(view.item.id);
+    const approval: ApprovalStatus = approvalRow
+      ? (APPROVAL_STATE[approvalRow] ?? 'NOT_REQUIRED')
+      : 'NOT_REQUIRED';
+    const status = SLOT_STATUS[view.slot.status] ?? 'SCHEDULED';
+
     const record: PostRecord = {
       id: view.slot.id,
       caption: view.item.title,
@@ -185,15 +324,19 @@ export default async function CalendarPage({
       platforms: channels.filter((key): key is SocialPlatform =>
         (KNOWN_PLATFORMS as readonly string[]).includes(key),
       ),
-      accountName: view.item.title,
-      // Every slot this phase can create is SCHEDULED. `PostStatus` carries
-      // publishing states the pipeline will use in Phase 6; none is reachable
-      // here, so none is rendered.
-      status: 'SCHEDULED',
-      approval: 'NOT_REQUIRED',
+      // The campaign the post belongs to, when it belongs to one. A planner
+      // reads a month by campaign far more often than by anything else.
+      accountName: campaignName ?? view.item.title,
+      status,
+      approval,
       whenLabel: timeFormatter.format(view.slot.scheduledAtUtc),
       mediaSeed: (view.slot.id.charCodeAt(0) % 6) as 0 | 1 | 2 | 3 | 4 | 5,
-      mediaAlt: view.item.title,
+      // The picture's own name when there is one, so a screen-reader user hears
+      // what the post is illustrated with rather than the title twice.
+      mediaAlt: cover?.name ?? view.item.title,
+      ...(cover?.previewToken ? { mediaSrc: `/${locale}/assets/file/${cover.previewToken}` } : {}),
+      ...(mediaIds.length > 1 ? { mediaCount: mediaIds.length } : {}),
+      ...(cover?.kind === 'VIDEO' ? { isVideo: true } : {}),
     };
     byDay.set(day, [...(byDay.get(day) ?? []), record]);
     slotDetails.push({
@@ -203,6 +346,14 @@ export default async function CalendarPage({
       date: day,
       time: local.slice(11, 16),
       channels,
+      campaignName,
+      statusLabel: translate(`content.status.${status}` as MessageKey),
+      // Null when there is no approval row at all — "not required" is the
+      // absence of a review, not a state to display beside one.
+      approvalLabel: approvalRow
+        ? translate(`approvals.status.${approvalRow}` as MessageKey)
+        : null,
+      mediaCount: mediaIds.length,
     });
   }
 
@@ -241,8 +392,11 @@ export default async function CalendarPage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
+  const brandContext = await brandContextFor(workspace, '/calendar');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={translate('calendar.title')}
       description={translate('calendar.subtitle')}
@@ -289,22 +443,37 @@ export default async function CalendarPage({
           emptyPeriodBody: translate('calendar.emptyBody'),
           openLabel: translate('calendar.openPost'),
           selectLabel: translate('calendar.select'),
+          /*
+           * PHASE 8 — REAL NAMES FOR REAL STATES.
+           *
+           * Every one of these but `DRAFT` used to read "Goes out", and every
+           * approval label read "Mock target — nothing publishes yet". That
+           * was honest while a slot could only ever be scheduled and nothing
+           * published; it stopped being honest the moment this page started
+           * rendering the slot's own status, because a chip's ACCESSIBLE NAME
+           * states its status in words (WCAG 1.4.1) — so a published post
+           * announced itself as "goes out" to a screen-reader user.
+           */
           statusLabels: {
             DRAFT: translate('content.status.DRAFT'),
-            SCHEDULED: translate('calendar.scheduledFor'),
-            PUBLISHING: translate('calendar.scheduledFor'),
-            PUBLISHED: translate('calendar.scheduledFor'),
-            FAILED: translate('calendar.scheduledFor'),
+            SCHEDULED: translate('content.status.SCHEDULED'),
+            PUBLISHING: translate('content.status.PUBLISHING'),
+            PUBLISHED: translate('content.status.PUBLISHED'),
+            PARTIALLY_PUBLISHED: translate('content.status.PARTIALLY_PUBLISHED'),
+            FAILED: translate('content.status.FAILED'),
           },
           approvalLabels: {
-            NOT_REQUIRED: translate('calendar.mockTarget'),
-            NEEDS_APPROVAL: translate('calendar.mockTarget'),
-            APPROVED: translate('calendar.mockTarget'),
-            CHANGES_REQUESTED: translate('calendar.mockTarget'),
+            // `NOT_REQUIRED` is never rendered — the card omits the badge — but
+            // the record must be total, and an empty string would be a badge
+            // with no name if that ever changed.
+            NOT_REQUIRED: translate('approvals.notRequired'),
+            NEEDS_APPROVAL: translate('approvals.status.PENDING'),
+            APPROVED: translate('approvals.status.APPROVED'),
+            CHANGES_REQUESTED: translate('approvals.status.CHANGES_REQUESTED'),
           },
           platformNames: {
             instagram: translate('content.platform.instagram'),
-            facebook: translate('content.platform.instagram'),
+            facebook: translate('content.platform.facebook'),
             linkedin: translate('content.platform.linkedin'),
             x: translate('content.platform.x'),
             tiktok: translate('content.platform.tiktok'),
@@ -341,6 +510,10 @@ const CALENDAR_KEYS = [
   'calendar.openInStudio',
   'calendar.mockTarget',
   'calendar.channels',
+  'calendar.campaign',
+  'calendar.publishState',
+  'calendar.approvalState',
+  'calendar.media',
   'calendar.scheduledFor',
   'common.close',
 ] as const satisfies readonly MessageKey[];

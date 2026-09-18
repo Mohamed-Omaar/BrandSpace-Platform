@@ -138,6 +138,27 @@ async function main(): Promise<void> {
         // same on the tenth run as on the first.
         await db.metricObservation.deleteMany({ where: { sourceVersion: SOURCE_VERSION } });
 
+        /*
+         * AND THE SAME RULE FOR THE AUTOMATION RULES THE SUITE AUTHORS.
+         *
+         * Seven of them are created per run — one per trigger and condition
+         * shape the authoring form offers — and nothing removed them, so the
+         * fixture brand accumulated seven more every time. `maxRulesPerBrand`
+         * is twenty by configuration, so the third run in a row hit the
+         * ceiling and every authoring test failed with a limit refusal that
+         * had nothing to do with what it was testing.
+         *
+         * THE CEILING IS NOT THE BUG — it is the product working. The bug was
+         * a fixture that grew without bound, and the fix is the one the
+         * observations above already use.
+         *
+         * SCOPED TO THE `E2E ` PREFIX the suite names its own rules with, so a
+         * rule a developer created by hand in the same workspace survives. The
+         * runs and events beneath them go with them: both carry
+         * `onDelete: Cascade` on the composite key.
+         */
+        await db.automationRule.deleteMany({ where: { name: { startsWith: 'E2E ' } } });
+
         const rows: {
           metricKey: string;
           values: readonly number[];

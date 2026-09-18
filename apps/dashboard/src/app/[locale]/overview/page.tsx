@@ -18,6 +18,7 @@ import {
 } from '@brandspace/ui';
 import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { activityService, notificationService } from '../../../server/approvals-context';
@@ -195,8 +196,11 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const primaryHref = maySeeMembers ? `/${locale}/members` : `/${locale}/settings`;
   const primaryLabel = maySeeMembers ? t('overview.hero.primary') : t('nav.settings');
 
+  const brandContext = await brandContextFor(workspace, '/overview');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/overview"
       heading={t('overview.greeting')}

@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useMemo, useState } from 'react';
+import { MediaPicker, type MediaOptionView, type MediaPickerLabels } from './media-picker';
+import { VariantPreview, previewLabels } from './variant-preview';
 
 /**
  * The composer — a MECHANICAL PORT of the approved demo's `composer()`
@@ -38,6 +40,8 @@ export interface ComposerPlatform {
   readonly label: string;
   readonly maxBodyChars: number;
   readonly maxHashtags: number;
+  /** PHASE 8 — media items this platform accepts. Zero means no picker. */
+  readonly maxMediaItems: number;
 }
 
 export interface ComposerVariant {
@@ -48,6 +52,8 @@ export interface ComposerVariant {
   readonly hashtags: readonly string[];
   readonly characterCount: number;
   readonly validationState: 'VALID' | 'WARNINGS' | 'INVALID';
+  /** PHASE 8 — the media attached to this variant, in the author's order. */
+  readonly assetIds: readonly string[];
 }
 
 export interface ComposerDraft {
@@ -57,6 +63,8 @@ export interface ComposerDraft {
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
+  /** PHASE 8 — the campaign this draft is filed under, when it is. */
+  readonly campaignId: string | null;
   readonly arabicDialect: string | null;
   readonly insufficientKnowledge: boolean;
   readonly citations: readonly { readonly label: string }[];
@@ -67,19 +75,96 @@ export interface ComposerViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
   readonly brands: readonly { id: string; name: string }[];
+  /**
+   * The globally selected brand, or null when the rail is on "All brands".
+   *
+   * NEW CONTENT TAKES THE GLOBAL SELECTION (D-190); an EXISTING draft takes its
+   * own stored `brandId` and nothing can reinterpret it, because the global
+   * context is a filter over what you are looking at and never a re-parenting
+   * of what already exists.
+   */
+  readonly defaultBrandId: string | null;
   readonly platforms: readonly ComposerPlatform[];
+  /**
+   * PHASE 8 — the media this draft's brand may use (AC-27.2).
+   *
+   * Resolved SERVER-SIDE from the one Asset Library, already narrowed to the
+   * brand plus the shared shelf and to READY/CLEAN rows, each with its own
+   * expiring preview grant. An option this list does not carry cannot be
+   * offered, and the save path re-resolves every id anyway.
+   */
+  readonly mediaOptions: readonly MediaOptionView[];
   readonly contentTypes: readonly string[];
   readonly maxBriefChars: number;
   readonly maxVariants: number;
   readonly draft: ComposerDraft | null;
-  readonly can: { create: boolean; edit: boolean; submit: boolean; archive: boolean };
+  /**
+   * PHASE 8 — the campaigns this draft could be filed under (AC-26.3).
+   *
+   * ALREADY NARROWED TO THE DRAFT'S OWN BRAND and to the member's BrandScope by
+   * the server: a list this component filtered would be a list it had already
+   * been handed, and the action re-checks both halves anyway.
+   */
+  readonly campaigns: readonly { id: string; name: string }[];
+  readonly can: {
+    create: boolean;
+    edit: boolean;
+    submit: boolean;
+    archive: boolean;
+    manageCampaigns: boolean;
+    uploadMedia: boolean;
+  };
   readonly tools: readonly string[];
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
+    setCampaign(formData: FormData): Promise<void>;
+    uploadMedia(formData: FormData): Promise<void>;
   };
+}
+
+/**
+ * The media picker's labels, built from the same dictionary the rest of the
+ * composer uses so a missing key is a compile error rather than a blank chip.
+ */
+function mediaLabels(t: Record<string, string>): MediaPickerLabels {
+  return {
+    legend: t['content.media.legend'] ?? '',
+    none: t['content.media.none'] ?? '',
+    empty: t['content.media.empty'] ?? '',
+    shared: t['assets.filter.shared'] ?? '',
+    video: t['content.media.video'] ?? '',
+    atLimit: t['content.media.atLimit'] ?? '',
+    uploadHint: t['content.media.uploadHint'] ?? '',
+    selectedCount: (selected, max) =>
+      (t['content.media.selected'] ?? '')
+        .replace('{selected}', String(selected))
+        .replace('{max}', String(max)),
+  };
+}
+
+/**
+ * The approval state the preview should show, derived from the item's status.
+ *
+ * ONE SOURCE. The preview has its own four-value vocabulary and the content
+ * item has its own five; mapping in one place keeps the badge under the post
+ * from disagreeing with the status shown above it.
+ */
+function approvalStateOf(
+  status: ComposerDraft['status'],
+): 'NOT_REQUIRED' | 'NEEDS_APPROVAL' | 'APPROVED' | 'CHANGES_REQUESTED' {
+  switch (status) {
+    case 'IN_REVIEW':
+      return 'NEEDS_APPROVAL';
+    case 'APPROVED':
+      return 'APPROVED';
+    case 'CHANGES_REQUESTED':
+      return 'CHANGES_REQUESTED';
+    default:
+      return 'NOT_REQUIRED';
+  }
 }
 
 /** The customer-safe codes the proxy and the API can return. */
@@ -93,11 +178,14 @@ export function ComposerView({
   locale,
   t,
   brands,
+  defaultBrandId,
   platforms,
   contentTypes,
   maxBriefChars,
   maxVariants,
   draft,
+  campaigns,
+  mediaOptions,
   can,
   tools,
   actions,
@@ -105,7 +193,30 @@ export function ComposerView({
   const router = useRouter();
   const fieldId = useId();
 
-  const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
+  /*
+   * NOT `brands[0]`. That was the silent first-brand guess wearing client state:
+   * a composer opened in a four-brand workspace generated against whichever
+   * brand sorted first, and the person writing the brief never saw a choice.
+   *
+   * A draft's own brand wins, then the rail's selection, then nothing — and
+   * "nothing" disables generation rather than picking, because `canGenerate`
+   * below already requires a non-empty brand.
+   */
+  const [brandId, setBrandId] = useState(draft?.brandId ?? defaultBrandId ?? '');
+
+  /*
+   * WHOSE POST THE PREVIEW SHOWS. The brand is the account identity a reader
+   * recognises; a real connected handle belongs to the calendar, where an
+   * actual account is chosen. Naming a connection here would claim the post is
+   * going somewhere it has not yet been assigned.
+   *
+   * THE PREVIEW'S STATUS IS ALWAYS `DRAFT`, and that is not a placeholder: the
+   * composer only shows content that has not been scheduled. SCHEDULED and
+   * PUBLISHED belong to the calendar and the pipeline, neither reachable from
+   * this screen, so claiming one would be a lie about where the post is.
+   */
+  const brandName = brands.find((brand) => brand.id === brandId)?.name ?? '';
+  const brandHandle = brandName === '' ? '' : `@${brandName.replace(/\s+/g, '').toLowerCase()}`;
   const [selected, setSelected] = useState<string[]>(() =>
     platforms[0] ? [platforms[0].key] : [],
   );
@@ -265,10 +376,109 @@ export function ComposerView({
         </div>
       ) : null}
 
+      {/*
+        PHASE 8 — WHICH CAMPAIGN THIS POST BELONGS TO (AC-26.3).
+
+        ONLY FOR AN EXISTING DRAFT, because a campaign is filed against a row and
+        there is no row until the draft exists. It is a plain form posting a
+        server action rather than client state: the campaign is a fact about the
+        item, and a control that changed it without a round trip would be a
+        second place where "which campaign?" is answered.
+
+        `campaigns` is already narrowed to this draft's own brand, so the list
+        can never offer another brand's campaign — and the action re-checks the
+        member's BrandScope against both the item and the campaign anyway.
+      */}
+      {draft && can.manageCampaigns ? (
+        <form
+          action={actions.setCampaign}
+          className="cs-notice info"
+          data-testid="content-campaign-form"
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="itemId" value={draft.id} />
+          <div className="cs-field">
+            <label htmlFor={`${fieldId}-campaign`}>{t['campaigns.composerLabel']}</label>
+            <select
+              id={`${fieldId}-campaign`}
+              name="campaignId"
+              defaultValue={draft.campaignId ?? ''}
+              data-testid="content-campaign"
+            >
+              <option value="">{t['campaigns.composerNone']}</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="cs-ghost-button cs-compact"
+            data-testid="content-campaign-save"
+          >
+            {t['content.composer.saveEdit']}
+          </button>
+        </form>
+      ) : null}
+
+      {/*
+        PHASE 8 — ADDING A PICTURE WITHOUT LEAVING THE DRAFT (AC-27.1).
+
+        A FORM OF ITS OWN, ABOVE THE COMPOSER, and both halves of that are
+        forced. Its own, because the picker lives inside each variant's `<form>`
+        and a nested form is invalid markup browsers repair unpredictably.
+        Above, because a file belongs to the DRAFT rather than to one platform's
+        caption — uploading it once and ticking it on three variants is the
+        shape of the work.
+
+        IT UPLOADS INTO THE ONE LIBRARY. Same permission, same brand, same scan.
+        The file becomes selectable in every picker below once the scanner
+        clears it, which is why the hint says so rather than implying it is
+        instantly usable.
+      */}
+      {draft && can.uploadMedia ? (
+        <form
+          action={actions.uploadMedia}
+          className="cs-notice info"
+          data-testid="composer-upload-form"
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="itemId" value={draft.id} />
+          <div className="cs-field">
+            <label htmlFor={`${fieldId}-media-upload`}>{t['content.media.uploadLabel']}</label>
+            <input
+              id={`${fieldId}-media-upload`}
+              type="file"
+              name="file"
+              required
+              accept="image/*,video/*"
+              data-testid="composer-upload-file"
+            />
+          </div>
+          <p className="cs-hint">{t['content.media.uploadNotice']}</p>
+          <button
+            type="submit"
+            className="cs-ghost-button cs-compact"
+            data-testid="composer-upload-submit"
+          >
+            {t['content.media.uploadSubmit']}
+          </button>
+        </form>
+      ) : null}
+
       <div className="cs-composer">
         {/* ---------------------------------------------- the editor --- */}
         <section className="cs-surface-card">
-          {brands.length > 1 ? (
+          {/*
+            THE LOCAL PICKER SURVIVES ONLY WHERE THE GLOBAL ONE CANNOT ANSWER:
+            a NEW item composed while the rail is on "All brands". With a brand
+            selected, or while editing a draft that already has one, this would
+            be a second control setting the same thing — which is exactly how
+            the rail and the page came to disagree (D-190).
+          */}
+          {draft === null && defaultBrandId === null && brands.length > 1 ? (
             <div className="cs-field">
               <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
               <select
@@ -481,6 +691,50 @@ export function ComposerView({
                         />
                       </>
                     ) : null}
+
+                    {/*
+                      PHASE 8 — MEDIA, INSIDE THE VARIANT'S OWN FORM (AC-27.3).
+
+                      Per VARIANT rather than per item, because the platforms
+                      differ: an Instagram carousel and an X post with one image
+                      are the same idea rendered two ways, and a single
+                      item-level list could satisfy neither ceiling.
+                    */}
+                    <MediaPicker
+                      locale={locale}
+                      options={mediaOptions}
+                      selected={variant.assetIds}
+                      maxItems={platform?.maxMediaItems ?? 0}
+                      disabled={!can.edit}
+                      labels={mediaLabels(t)}
+                      testId={`content-media-${variant.platformKey}`}
+                    />
+
+                    {/*
+                      PHASE 8 — WHAT THIS WILL LOOK LIKE (AC-27.4).
+
+                      The component is the approved `SocialPostPreview` that has
+                      shipped in `packages/ui` since Phase 2C and until now has
+                      only ever been fed fixtures in the showcase. It gets the
+                      real caption, the real hashtags and the real media here.
+                      A platform the preview does not know renders nothing at
+                      all rather than borrowing another platform's frame.
+                    */}
+                    <VariantPreview
+                      locale={locale}
+                      platformKey={variant.platformKey}
+                      body={variant.body}
+                      hashtags={variant.hashtags}
+                      media={variant.assetIds
+                        .map((id) => mediaOptions.find((option) => option.id === id))
+                        .filter((option): option is MediaOptionView => option !== undefined)}
+                      accountName={brandName}
+                      accountHandle={brandHandle}
+                      status="DRAFT"
+                      approval={approvalStateOf(draft.status)}
+                      labels={previewLabels(t)}
+                      testId={`content-preview-${variant.platformKey}`}
+                    />
 
                     {can.edit ? (
                       <div className="cs-channel-row">

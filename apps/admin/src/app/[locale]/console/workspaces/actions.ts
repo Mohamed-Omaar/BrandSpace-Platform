@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { withSpan } from '@brandspace/observability';
 import {
   currentEnvironment,
@@ -61,6 +61,27 @@ function failure(
   return destination({ error: toPublicErrorCode(error), ref: correlationId });
 }
 
+/**
+ * A field the create form renders and a real submission always carries.
+ *
+ * REFUSED RATHER THAN DEFAULTED. A blank country is not a country, and the one
+ * thing this must never do is invent one — the whole point of D-194 is that the
+ * platform stops answering a question only the customer can answer.
+ */
+function requiredField(formData: FormData, name: string): string {
+  const value = String(formData.get(name) ?? '').trim();
+  if (value === '') throw new AppError('VALIDATION_FAILED', `A ${name} is required.`);
+  return value;
+}
+
+function requiredLocale(formData: FormData): 'AR' | 'EN' {
+  const value = requiredField(formData, 'defaultLocale');
+  if (value !== 'AR' && value !== 'EN') {
+    throw new AppError('VALIDATION_FAILED', 'A default locale is required.');
+  }
+  return value;
+}
+
 export async function createWorkspaceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   let destination: string;
@@ -74,10 +95,15 @@ export async function createWorkspaceAction(formData: FormData): Promise<void> {
         ownerEmail: String(formData.get('ownerEmail') ?? ''),
         ownerName: String(formData.get('ownerName') ?? '') || undefined,
         type: String(formData.get('type') ?? '') || undefined,
-        country: String(formData.get('country') ?? '') || undefined,
-        defaultLocale: (String(formData.get('defaultLocale') ?? 'AR') as 'AR' | 'EN') || undefined,
-        timezone: String(formData.get('timezone') ?? '') || undefined,
-        currency: String(formData.get('currency') ?? '') || undefined,
+        /*
+         * ASKED FOR, NOT ASSUMED (D-194). Each is refused when the operator left
+         * it blank rather than quietly becoming a Saudi value, which is what
+         * `|| undefined` used to mean once the service had a fallback behind it.
+         */
+        country: requiredField(formData, 'country'),
+        defaultLocale: requiredLocale(formData),
+        timezone: requiredField(formData, 'timezone'),
+        currency: requiredField(formData, 'currency'),
         planKey: String(formData.get('planKey') ?? '') || undefined,
         trialDays: Number(formData.get('trialDays') ?? 0) || undefined,
       }),

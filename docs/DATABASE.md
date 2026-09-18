@@ -430,6 +430,16 @@ reference, so the array is validated in the service rather than by the database.
 rather than left to be discovered: it is the one place in these tables where referential
 integrity is the application's job, and a reader should not have to infer that from its absence.
 
+**PHASE 8 NAMES WHERE THAT JOB IS DONE (D-199).** `publishableAssetWhere()` in
+`packages/assets/src/publishable.ts` IS the tenant boundary for this column, and there is exactly
+one of it: the Content Studio applies it when an author attaches a picture and the publish pipeline
+applies it again just before a payload reaches a provider. Two implementations would mean one of
+them admitting what the other refuses — a post that can never go out, or a refusal that is theatre.
+Admissible means this workspace, this brand OR the workspace-shared shelf (`brandId IS NULL`),
+inside the caller's BrandScope as a query predicate (D-132), `READY` and `CLEAN`, and of a kind a
+post can carry. The scope clause is deliberately not the ordinary one: restricting `brandId` to the
+scope would hide the shared shelf, which a scoped member must still be able to use.
+
 **`workspace.aiContentRetentionDays`** is the D-117 control. `NULL` means "follow the
 subscription" (D-116); a value means the customer asked for something shorter. It is bounded by
 the CHECK `workspace_ai_content_retention_days_positive` (`> 0`), so "delete on write" is not

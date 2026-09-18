@@ -8,6 +8,7 @@ import {
 import { brandIdQueryFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
+import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
 
 /**
@@ -70,6 +71,29 @@ export class ContentLibraryService {
      */
     brandScope?: readonly string[] | null | undefined;
     status?: ContentItem['status'] | undefined;
+    /**
+     * SEVERAL STATUSES, when one is not the question being asked.
+     *
+     * The Calendar's picker needs "everything a slot could be created from",
+     * which the scheduling service defines as DRAFT or APPROVED — a single
+     * status cannot express it, and filtering a page AFTER the database
+     * truncated it would filter a list that had already lost rows.
+     *
+     * Ignored when `status` is given: one predicate, never two.
+     */
+    statuses?: readonly ContentItem['status'][] | undefined;
+    /**
+     * PHASE 8 — the campaign this content is filed under (AC-26.3).
+     *
+     * IN THE QUERY, for the same reason the brand scope is: a caller filtering
+     * after this returned would be filtering a page the database had already
+     * truncated, and a campaign whose content is older than the most recent
+     * fifty drafts would read as empty. The campaign id itself is NOT trusted
+     * here — it is a filter, not an authorization — and the brand scope above
+     * still decides which rows exist at all, so naming another workspace's
+     * campaign returns nothing rather than anything.
+     */
+    campaignId?: string | undefined;
     search?: string | undefined;
     limit?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
@@ -78,7 +102,12 @@ export class ContentLibraryService {
         deletedAt: null,
         // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
         ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
-        ...(input.status ? { status: input.status } : {}),
+        ...(input.status
+          ? { status: input.status }
+          : input.statuses && input.statuses.length > 0
+            ? { status: { in: [...input.statuses] } }
+            : {}),
+        ...(input.campaignId ? { campaignId: input.campaignId } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
          *
@@ -147,12 +176,26 @@ export class ContentLibraryService {
     return item;
   }
 
-  /** Save a customer's own edit. No gateway, no credits — they wrote it. */
+  /**
+   * Save a customer's own edit. No gateway, no credits — they wrote it.
+   *
+   * PHASE 8 — MEDIA TRAVELS WITH THE EDIT (AC-27.3). `assetIds` is OPTIONAL and
+   * the distinction matters: ABSENT leaves the variant's media exactly as it
+   * was, and an EMPTY ARRAY clears it. A caller that meant "do not touch the
+   * media" and a caller that meant "remove the media" are different callers,
+   * and a single `?? []` would have silently turned the first into the second
+   * every time a caption was saved (D-184).
+   *
+   * Every id goes through `ContentMediaResolver`, which is the only place the
+   * tenant boundary for `assetIds` exists — the column is a uuid array and
+   * cannot carry a composite foreign key.
+   */
   async editVariant(input: {
     variantId: string;
     body: string;
     hashtags?: readonly string[];
     firstComment?: string | null;
+    assetIds?: readonly string[] | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
@@ -173,10 +216,31 @@ export class ContentLibraryService {
       firstComment: input.firstComment ?? null,
     });
 
+    /*
+     * RESOLVED BEFORE THE WRITE, so an inadmissible asset refuses the whole
+     * edit rather than saving the caption and dropping the picture. A partial
+     * save is the shape of bug that makes somebody publish a post they did not
+     * review.
+     */
+    const media =
+      input.assetIds === undefined
+        ? undefined
+        : await new ContentMediaResolver({
+            db: this.db,
+            workspaceId: this.workspaceId,
+          }).resolveForPlatform({
+            assetIds: input.assetIds,
+            brandId: variant.brandId,
+            brandScope: input.actorBrandScope,
+            platformKey: variant.platformKey,
+            policy: this.policy,
+          });
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
         firstComment: input.firstComment ?? null,
         origin: variant.origin === 'HUMAN' ? 'HUMAN' : 'AI_ASSISTED',
@@ -196,16 +260,27 @@ export class ContentLibraryService {
       resourceType: 'ContentVariant',
       resourceId: variant.id,
       brandId: variant.brandId,
-      after: { characterCount: validation.characterCount, validationState: validation.state },
+      after: {
+        characterCount: validation.characterCount,
+        validationState: validation.state,
+        ...(media === undefined ? {} : { mediaCount: media.length }),
+      },
     });
 
     /*
      * PHASE 5B-3 — AN EDIT REVOKES AN APPROVAL.
      *
-     * An approval is a judgement about particular words. Once those words
-     * change, the record still says "approved" while nobody has read what it now
-     * approves — and with the calendar gate on, that difference is the whole
-     * control. So an edit to an APPROVED item returns it to DRAFT, audibly.
+     * An approval is a judgement about a particular post. Once that post
+     * changes, the record still says "approved" while nobody has read what it
+     * now approves — and with the calendar gate on, that difference is the
+     * whole control. So an edit to an APPROVED item returns it to DRAFT,
+     * audibly.
+     *
+     * PHASE 8 MADE THAT SENTENCE WIDER WITHOUT CHANGING A LINE OF IT. A post
+     * is now words AND pictures, and this runs on every edit — so swapping the
+     * image on an approved post revokes the approval exactly as rewriting the
+     * caption does. A reviewer who approved one photograph must not find a
+     * different one published under their verdict.
      *
      * A SCHEDULED item is not touched here, and cannot be: `transition()`
      * refuses to move it and the calendar owns that edge. Editing the caption of

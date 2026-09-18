@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
-import { AbstractMedia, MediaChip, MediaStateOverlay, MediaThumb } from './media';
+import {
+  AbstractMedia,
+  AssetMedia,
+  AssetThumb,
+  MediaChip,
+  MediaStateOverlay,
+  MediaThumb,
+} from './media';
 import { StatusBadge, statusTone } from './data';
 import { CalendarIcon } from './icons';
 import type { ApprovalStatus, PostStatus, SocialPlatform } from './social-post-types';
@@ -48,6 +55,40 @@ export interface PostRecord {
   readonly mediaAlt: string;
   readonly mediaCount?: number;
   readonly isVideo?: boolean;
+  /**
+   * PHASE 8 — THE POST'S REAL FIRST PICTURE, when it has one (AC-29.2).
+   *
+   * An opaque, expiring download grant issued for this viewer, exactly as the
+   * composer and the approval queue use. When it is absent the card falls back
+   * to `mediaSeed`'s abstract artwork, which is what a text-only post and every
+   * design-system fixture want.
+   *
+   * WHY A FALLBACK AND NOT A GREY BOX: a post genuinely without media is not a
+   * failure to load one, and the two must not look alike.
+   */
+  readonly mediaSrc?: string | null;
+}
+
+/**
+ * The post's artwork: its own picture when it has one, the abstract tile when
+ * it does not. Every surface below renders media through these two, so a
+ * calendar chip, a list row and a card never disagree about what a post looks
+ * like.
+ */
+function PostArt({ post }: { readonly post: PostRecord }) {
+  return post.mediaSrc ? (
+    <AssetMedia src={post.mediaSrc} alt={post.mediaAlt} />
+  ) : (
+    <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
+  );
+}
+
+function PostThumb({ post, size }: { readonly post: PostRecord; readonly size: string }) {
+  return post.mediaSrc ? (
+    <AssetThumb src={post.mediaSrc} alt={post.mediaAlt} size={size} />
+  ) : (
+    <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size={size} />
+  );
 }
 
 /**
@@ -194,7 +235,7 @@ export function PostGridCard({
             four cards a third taller than the demo's and changed the page's
             whole rhythm. */}
         <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
-          <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
+          <PostArt post={post} />
           {post.isVideo ? <MediaChip placement="start-end">▶</MediaChip> : null}
           {post.mediaCount && post.mediaCount > 1 ? (
             <MediaChip placement="start-end">{`1/${post.mediaCount}`}</MediaChip>
@@ -320,7 +361,7 @@ export function PostListRow({
         testId={`open-post-${post.id}`}
         inline
       >
-        <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="3rem" />
+        <PostThumb post={post} size="3rem" />
         <div style={{ minInlineSize: 0, flex: 1, display: 'grid', gap: spacingTokens['3xs'] }}>
           <p
             dir={post.captionDirection}
@@ -390,7 +431,7 @@ export function CalendarPostChip({
 }) {
   const body = (
     <>
-      <MediaThumb seed={post.mediaSeed} alt={post.mediaAlt} size="1.875rem" />
+      <PostThumb post={post} size="1.875rem" />
       {/*
         THE TITLE LEADS. `.calendar-post b { font-size: 8px }` carries the post,
         `.calendar-post small { font-size: 7px; color: var(--muted) }` carries

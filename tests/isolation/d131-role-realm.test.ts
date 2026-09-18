@@ -93,6 +93,7 @@ async function foreignCustomRoleId(): Promise<string> {
 async function freshUserId(): Promise<string> {
   const user = await app.user.create({
     data: {
+      timezone: 'UTC',
       email: `d131-${randomUUID()}@example.test`,
       name: 'D-131 probe',
       status: 'ACTIVE',

@@ -3,11 +3,15 @@ import { CONTENT_TOOLS } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
+import { listMediaOptions } from '../../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
   cancelReviewAction,
+  setContentCampaignAction,
+  uploadComposerMediaAction,
   saveVariantAction,
   submitForReviewAction,
   transitionItemAction,
@@ -67,7 +71,7 @@ export default async function ComposePage({
     }),
   );
 
-  const { policy, draft, openApprovalId } = await inContentStudio(
+  const { policy, draft, openApprovalId, campaigns } = await inContentStudio(
     workspace.workspaceId,
     async (services) => {
       const resolved = await services.policy();
@@ -78,18 +82,40 @@ export default async function ComposePage({
        * (docs/SECURITY.md §4.2).
        */
       if (itemId === undefined) {
-        return { policy: resolved, draft: null, openApprovalId: null as string | null };
+        return {
+          policy: resolved,
+          draft: null,
+          openApprovalId: null as string | null,
+          campaigns: [] as readonly { id: string; name: string }[],
+        };
       }
       const item = await (
         await services.library()
       )
         .getItem(itemId, workspace.brandScope)
         .catch(() => null);
-      if (!item) return { policy: resolved, draft: null as null, openApprovalId: null };
+      if (!item) {
+        return { policy: resolved, draft: null as null, openApprovalId: null, campaigns: [] };
+      }
       // Phase 5B-3 — the open cycle, so the composer can offer "withdraw" only
       // when there is in fact something to withdraw.
       const open = await (await services.approvals()).openForItem(item.id);
-      return { policy: resolved, draft: item, openApprovalId: open?.id ?? null };
+      /*
+       * THE CAMPAIGNS THIS DRAFT COULD BE FILED UNDER — this brand's, and only
+       * ones this member may act on. Narrowed HERE rather than in the browser,
+       * so another brand's campaign is never sent to the page at all.
+       */
+      const campaigns = await services.campaigns().list({
+        brandId: item.brandId,
+        brandScope: workspace.brandScope,
+        take: 100,
+      });
+      return {
+        policy: resolved,
+        draft: item,
+        openApprovalId: open?.id ?? null,
+        campaigns: campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name })),
+      };
     },
   );
 
@@ -104,6 +130,7 @@ export default async function ComposePage({
     label: translateOptional(translate, platform.labelKey) ?? platform.key,
     maxBodyChars: platform.maxBodyChars,
     maxHashtags: platform.maxHashtags,
+    maxMediaItems: platform.maxMediaItems,
   }));
 
   const composerDraft: ComposerDraft | null = draft
@@ -113,6 +140,7 @@ export default async function ComposePage({
         status: draft.status as ComposerDraft['status'],
         openApprovalId,
         brandId: draft.brandId,
+        campaignId: draft.campaignId,
         arabicDialect: draft.arabicDialect,
         insufficientKnowledge: draft.insufficientKnowledge,
         /*
@@ -131,9 +159,28 @@ export default async function ComposePage({
           hashtags: variant.hashtags,
           characterCount: variant.characterCount,
           validationState: variant.validationState as 'VALID' | 'WARNINGS' | 'INVALID',
+          assetIds: variant.assetIds,
         })),
       }
     : null;
+
+  /*
+   * PHASE 8 — THE MEDIA THIS DRAFT'S BRAND MAY USE (AC-27.2).
+   *
+   * Loaded only for an EXISTING draft, because media attaches to a variant and
+   * there are no variants until the draft exists. Narrowed server-side to the
+   * brand plus the workspace-shared shelf, so an option the member may not use
+   * is never sent to the page — and re-resolved on save regardless.
+   */
+  const mediaOptions = composerDraft
+    ? await listMediaOptions({
+        workspaceId: workspace.workspaceId,
+        brandId: composerDraft.brandId,
+        userId: customer.userId,
+        permissionKeys: workspace.permissionKeys,
+        brandScope: workspace.brandScope,
+      })
+    : [];
 
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
@@ -141,8 +188,11 @@ export default async function ComposePage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
+  const brandContext = await brandContextFor(workspace, '/content');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={translate('content.composer.title')}
       description={translate('content.subtitle')}
@@ -158,23 +208,30 @@ export default async function ComposePage({
         locale={locale}
         t={dictionaryFor(translate)}
         brands={brands}
+        defaultBrandId={defaultBrandFor(brandContext)}
         platforms={platforms}
         contentTypes={CONTENT_TYPES}
         maxBriefChars={policy.generation.maxBriefChars}
         maxVariants={policy.generation.maxVariantsPerRequest}
         draft={composerDraft}
+        campaigns={campaigns}
+        mediaOptions={mediaOptions}
         tools={CONTENT_TOOLS}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
           edit: workspace.permissionKeys.includes('content.edit'),
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
+          manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
+          uploadMedia: workspace.permissionKeys.includes('assets.upload'),
         }}
         actions={{
           save: saveVariantAction,
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
           cancelReview: cancelReviewAction,
+          setCampaign: setContentCampaignAction,
+          uploadMedia: uploadComposerMediaAction,
         }}
       />
     </WorkspaceShell>
@@ -207,6 +264,67 @@ function translateOptional(
 }
 
 const COMPOSER_KEYS = [
+  // Phase 8 — the campaign control on an existing draft (AC-26.3).
+  'campaigns.composerLabel',
+  'campaigns.composerNone',
+  /*
+   * Phase 8 — THE MEDIA PICKER'S OWN VOCABULARY (AC-27.1, AC-27.2).
+   *
+   * Missing from this list when the picker shipped, so every label it asked the
+   * dictionary for came back undefined and fell through to `''`: a fieldset
+   * with a nameless legend, a count that said nothing, and an empty state with
+   * no sentence in it. The component was right and the list was short — which
+   * is precisely why the list exists rather than the component reaching for the
+   * translator itself.
+   */
+  'content.media.legend',
+  'content.media.none',
+  'content.media.empty',
+  'content.media.video',
+  'content.media.atLimit',
+  'content.media.selected',
+  'content.media.uploadHint',
+  'content.media.uploadLabel',
+  'content.media.uploadSubmit',
+  'content.media.uploadNotice',
+  'assets.filter.shared',
+  /*
+   * Phase 8 — THE LIVE SOCIAL PREVIEW'S VOCABULARY (AC-27.4).
+   *
+   * Twenty-six keys, every one of them missing when the preview shipped, so
+   * the component that shows an author what their post will look like rendered
+   * with every status, platform, format and control label blank. Same class of
+   * defect as the picker's above, and the same fix: the key list is the
+   * contract, so the contract has to name them.
+   */
+  'content.status.DRAFT',
+  'content.status.IN_REVIEW',
+  'content.status.CHANGES_REQUESTED',
+  'content.status.APPROVED',
+  'content.status.SCHEDULED',
+  'content.status.PUBLISHING',
+  'content.status.PUBLISHED',
+  'content.status.PARTIALLY_PUBLISHED',
+  'content.status.FAILED',
+  'content.platform.instagram',
+  'content.platform.facebook',
+  'content.platform.linkedin',
+  'content.platform.x',
+  'content.platform.tiktok',
+  'content.format.feed',
+  'content.format.story',
+  'content.format.reel',
+  'content.format.video',
+  'content.preview.showMore',
+  'content.preview.showLess',
+  'content.preview.missingMedia',
+  'content.preview.loadingMedia',
+  'content.preview.carousel',
+  'content.preview.notice',
+  'content.preview.aspect',
+  'content.preview.actions',
+  // And the composer's own withdraw control, blank for the same reason.
+  'content.composer.withdraw',
   'content.composer.eyebrow',
   'content.composer.title',
   'content.composer.back',

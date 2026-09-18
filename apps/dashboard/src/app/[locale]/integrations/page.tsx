@@ -1,8 +1,14 @@
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { callSocialApi, inSocial } from '../../../server/social-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -240,11 +246,37 @@ export default async function IntegrationsPage({
    * is never stored and never rendered, because it routinely echoes the caption
    * that was rejected.
    */
-  const failureMessage = (failureClass: string | null): string | null => {
+  const failureMessage = (
+    failureClass: string | null,
+    failureCode: string | null,
+  ): string | null => {
     if (!failureClass) return null;
-    const key = `publishing.failure.${failureClass.toLowerCase()}` as MessageKey;
-    const message = t(key);
-    return message === key ? t('publishing.failure.unknown') : message;
+
+    /*
+     * PHASE 8 — OUR OWN CODE FIRST, when there is a sentence for it.
+     *
+     * The class alone was misleading for every PRE-FLIGHT refusal, and media
+     * made that visible. A post whose picture had been quarantined failed with
+     * class `CONTENT_REJECTED`, which reads "the platform rejected this
+     * content" — and the platform was never called. The customer would go and
+     * edit a caption nothing is wrong with.
+     *
+     * `failureCode` is stable and OURS, which is exactly why it can carry a
+     * sentence: it is never a provider string. Where a code has no sentence the
+     * class's own sentence stands, which is the right answer for a genuine
+     * provider refusal — `mock.content_rejected` is a provider saying no, and
+     * "the platform rejected this content" is exactly what happened.
+     *
+     * THE MISS IS `undefined`, NOT THE KEY — which is why `optionalMessage`
+     * exists rather than a `=== key` comparison here. See its own comment: the
+     * comparison never matches, so the fallback never runs and `undefined` is
+     * returned as the sentence, which React renders as nothing at all.
+     */
+    return (
+      (failureCode ? optionalMessage(locale, `publishing.code.${failureCode}`) : null) ??
+      optionalMessage(locale, `publishing.failure.${failureClass.toLowerCase()}`) ??
+      t('publishing.failure.unknown')
+    );
   };
 
   const publishRows: readonly PublishRow[] = jobs.map((job) => ({
@@ -259,14 +291,17 @@ export default async function IntegrationsPage({
     attemptCount: job.attemptCount,
     maxAttempts: job.maxAttempts,
     nextAttemptAtLabel: stamp(job.nextAttemptAt),
-    failureMessage: failureMessage(job.failureClass),
+    failureMessage: failureMessage(job.failureClass, job.failureCode),
     needsReconnect: job.needsReconnect,
     canCancel: job.canCancel,
     canRetry: job.canRetry,
   }));
 
+  const brandContext = await brandContextFor(session.workspace, '/integrations');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('integrations.title')}
       description={t('integrations.subtitle')}

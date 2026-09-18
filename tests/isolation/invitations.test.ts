@@ -259,7 +259,7 @@ describe('an invitation can be accepted exactly once', () => {
     const email = uniqueEmail('once');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
 
     const accepted = await invitations.accept(issued.token, user.id);
@@ -274,7 +274,7 @@ describe('an invitation can be accepted exactly once', () => {
     const email = uniqueEmail('race');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
 
     const results = await Promise.allSettled([
@@ -312,7 +312,7 @@ describe('redemption works on the TENANT role, which is the one that performs it
     const email = uniqueEmail('tenant-accept');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
 
     const accepted = await tenantInvitations.accept(issued.token, user.id);
@@ -376,7 +376,7 @@ describe('redemption works on the TENANT role, which is the one that performs it
     const email = uniqueEmail('tenant-spent');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     await tenantInvitations.accept(issued.token, user.id);
 
@@ -395,7 +395,12 @@ describe('redemption works on the TENANT role, which is the one that performs it
   it('the WRONG recipient is refused on the tenant role too, with the same wording', async () => {
     const issued = await issueTo(uniqueEmail('tenant-wrong'));
     const someoneElse = await platform.user.create({
-      data: { email: uniqueEmail('tenant-other'), status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: {
+        email: uniqueEmail('tenant-other'),
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        timezone: 'UTC',
+      },
     });
     await expect(tenantInvitations.accept(issued.token, someoneElse.id)).rejects.toThrow(FAILURE);
   });
@@ -404,7 +409,7 @@ describe('redemption works on the TENANT role, which is the one that performs it
     const email = uniqueEmail('tenant-race');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
 
     const results = await Promise.allSettled([
@@ -494,7 +499,7 @@ describe('unusable invitations all fail the same way', () => {
     const email = uniqueEmail('expired');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     await platform.invitation.update({
       where: { id: issued.invitationId },
@@ -509,7 +514,7 @@ describe('unusable invitations all fail the same way', () => {
     const email = uniqueEmail('revoked');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     await invitations.revoke(
       fixtures.a.workspaceId,
@@ -523,7 +528,12 @@ describe('unusable invitations all fail the same way', () => {
 
   it('a token that was never issued', async () => {
     const user = await platform.user.create({
-      data: { email: uniqueEmail('nobody'), status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: {
+        email: uniqueEmail('nobody'),
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        timezone: 'UTC',
+      },
     });
     await expect(invitations.accept('not-a-real-token', user.id)).rejects.toThrow(FAILURE);
   });
@@ -532,7 +542,12 @@ describe('unusable invitations all fail the same way', () => {
     const invitedEmail = uniqueEmail('invited');
     const issued = await issueTo(invitedEmail);
     const someoneElse = await platform.user.create({
-      data: { email: uniqueEmail('someone-else'), status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: {
+        email: uniqueEmail('someone-else'),
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        timezone: 'UTC',
+      },
     });
 
     await expect(invitations.accept(issued.token, someoneElse.id)).rejects.toThrow(FAILURE);
@@ -548,7 +563,7 @@ describe('unusable invitations all fail the same way', () => {
     const email = uniqueEmail('suspended-ws');
     const issued = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     await platform.workspace.update({
       where: { id: fixtures.a.workspaceId },
@@ -569,7 +584,7 @@ describe('resend supersedes rather than reuses', () => {
     const email = uniqueEmail('resend');
     const first = await issueTo(email);
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
 
     const second = await invitations.resend(
@@ -821,6 +836,7 @@ describe('onboarding a brand-new invitee', () => {
     const email = uniqueEmail('established');
     const existing = await platform.user.create({
       data: {
+        timezone: 'UTC',
         email,
         status: 'ACTIVE',
         emailVerifiedAt: new Date(),
@@ -977,10 +993,14 @@ describe('membership rules', () => {
     }> {
       const suffix = randomUUID();
       const founder = await platform.user.create({
-        data: { email: `founder-${suffix}@example.local`, status: 'ACTIVE' },
+        data: { email: `founder-${suffix}@example.local`, status: 'ACTIVE', timezone: 'UTC' },
       });
       const workspace = await platform.workspace.create({
         data: {
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'UTC',
+          currency: 'USD',
           id: suffix,
           workspaceId: suffix,
           slug: `owners-${suffix.slice(0, 12)}`,
@@ -996,7 +1016,11 @@ describe('membership rules', () => {
           i === 0
             ? founder
             : await platform.user.create({
-                data: { email: `co-owner-${i}-${suffix}@example.local`, status: 'ACTIVE' },
+                data: {
+                  email: `co-owner-${i}-${suffix}@example.local`,
+                  status: 'ACTIVE',
+                  timezone: 'UTC',
+                },
               });
         const membership = await platform.membership.create({
           data: {
@@ -1119,7 +1143,7 @@ describe('membership rules', () => {
     // The single-step escalation to the authority the role was denied.
     const email = uniqueEmail('victim');
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     const membership = await platform.membership.create({
       data: {
@@ -1169,7 +1193,7 @@ describe('membership rules', () => {
   it('an ADMIN may not assign a role at or above its own level', async () => {
     const email = uniqueEmail('level');
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     const membership = await platform.membership.create({
       data: {
@@ -1217,7 +1241,7 @@ describe('membership rules', () => {
   it('an owner CAN appoint a second owner, and then remove the first', async () => {
     const email = uniqueEmail('second-owner');
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     const membership = await platform.membership.create({
       data: {
@@ -1264,7 +1288,7 @@ describe('membership rules', () => {
   it('removing a member revokes their sessions in THAT workspace', async () => {
     const email = uniqueEmail('revoke-on-remove');
     const user = await platform.user.create({
-      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date() },
+      data: { email, status: 'ACTIVE', emailVerifiedAt: new Date(), timezone: 'UTC' },
     });
     const membership = await platform.membership.create({
       data: {

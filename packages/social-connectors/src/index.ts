@@ -17,6 +17,7 @@ export type {
   ConnectionHealth,
   PublishFailure,
   PublishOutcome,
+  PublishMedia,
   PublishRequest,
   PublishSuccess,
   PublishTarget,
@@ -69,6 +70,7 @@ export type {
   ExecuteResult,
   MaterialiseResult,
   PublishApprovalGate,
+  PublishMediaPort,
   PublishNotifier,
   PublishPipelineOptions,
 } from './publishing';

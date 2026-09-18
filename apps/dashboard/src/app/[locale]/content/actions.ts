@@ -1,12 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { uploadIntoLibrary } from '../../../server/asset-upload';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
 
@@ -88,11 +89,27 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
       .map((tag) => tag.replace(/^#/, '').trim())
       .filter((tag) => tag.length > 0);
 
+    /*
+     * PHASE 8 — MEDIA, AND THE DIFFERENCE BETWEEN "leave it" AND "remove it".
+     *
+     * `mediaPresent` is a hidden field the picker always submits. WITHOUT it
+     * this submission is not about media and the variant's media is untouched;
+     * WITH it, whatever `assetIds` arrived is the new list — including none,
+     * which is how an author removes the last picture. Reading `getAll` alone
+     * would make "I unchecked everything" and "this form has no picker"
+     * indistinguishable, and the second would silently win (D-184).
+     */
+    const mediaPresent = formData.get('mediaPresent') !== null;
+    const assetIds = mediaPresent
+      ? formData.getAll('assetIds').map((value) => String(value))
+      : undefined;
+
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
       (await library()).editVariant({
         variantId,
         body,
         hashtags,
+        ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
       }),
     );
@@ -102,6 +119,127 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
+}
+
+/**
+ * PHASE 8 — FILE A DRAFT UNDER A CAMPAIGN, OR TAKE IT OUT OF ONE (AC-26.3).
+ *
+ * A SEPARATE ACTION FROM SAVING A VARIANT, because it is a different fact about
+ * a different row: a campaign belongs to the ITEM, a caption to the variant, and
+ * one form writing both would make "save this caption" quietly re-file the post.
+ *
+ * `campaigns.manage` RATHER THAN `content.edit`. Linking content to a campaign
+ * changes what that campaign reports, so it is a campaign decision made from the
+ * content screen — not a content decision. `CampaignService.setContentCampaign`
+ * re-checks the member's BrandScope against BOTH the item and the campaign, so
+ * neither half can be borrowed from another brand, and writes the audit event.
+ *
+ * AN EMPTY VALUE MEANS "no campaign", which is a real instruction and not a
+ * missing field — the control always submits, and `''` unlinks.
+ */
+export async function setContentCampaignAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const raw = formData.get('campaignId');
+    if (raw === null) notFound();
+    const campaignId = String(raw).trim();
+
+    await inContentStudio(session.workspace.workspaceId, async (services) =>
+      services.campaigns().setContentCampaign({
+        contentItemId: itemId,
+        campaignId: campaignId === '' ? null : campaignId,
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+        },
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CAMPAIGN_LINKED' });
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * UPLOADING A PICTURE WITHOUT LEAVING THE DRAFT — Phase 8 (AC-27.1).
+ *
+ * WHY IT IS HERE RATHER THAN A LINK TO THE ASSET LIBRARY. The composer offered
+ * one, and a link is a different product: an author part-way through a caption
+ * had to navigate away, find the upload control, choose a brand and a folder,
+ * and come back to a page that had forgotten what they were doing. "Media can
+ * be uploaded during content creation" is not satisfied by a way to leave.
+ *
+ * IT IS THE SAME LIBRARY, THROUGH THE SAME PATH. `uploadIntoLibrary` is the one
+ * implementation the Asset Library screen uses — the same `assets.upload`
+ * permission, the same actor carrying this member's BrandScope, the same
+ * signature check, checksum key, quota and quarantine, and the same background
+ * dispatch. NO SECOND LIBRARY AND NO SHORTCUT: the file lands as an ordinary
+ * asset, PENDING its scan, and becomes selectable when the scanner clears it.
+ *
+ * THE BRAND IS THE DRAFT'S OWN, not a field on the form. A picture uploaded
+ * while writing for one brand belongs to that brand, and letting a form name a
+ * different one would be a brand chosen by a POST body.
+ */
+export async function uploadComposerMediaAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'assets.upload');
+    const file = formData.get('file');
+    if (!(file instanceof File) || file.size === 0)
+      throw new AppError('VALIDATION_FAILED', 'No file.');
+
+    /*
+     * THE DRAFT SAYS WHICH BRAND. Read through the tenant-scoped client and the
+     * member's own scope, so an item id from another brand is a miss rather
+     * than a brand this upload would be filed under.
+     */
+    const item = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const library = await services.library();
+      return library.getItem(itemId, session.workspace.brandScope);
+    });
+
+    await uploadIntoLibrary({
+      workspaceId: session.workspace.workspaceId,
+      actor: {
+        userId: session.customer.userId,
+        permissionKeys: session.workspace.permissionKeys,
+        brandScope: session.workspace.brandScope,
+      },
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      brandId: item.brandId,
+      // The library's root. A composer that also asked for a folder would be
+      // asking an author mid-sentence to file something.
+      folderId: null,
+    });
+
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'ASSET_UPLOADED' });
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    destination = failure(locale, error, 'uploadComposerMedia', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/** Next.js signals `notFound()` and `redirect()` by throwing; this is that. */
+function isRedirectError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'digest' in error &&
+    typeof (error as { digest?: unknown }).digest === 'string' &&
+    ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
+      (error as { digest: string }).digest === 'NEXT_HTTP_ERROR_FALLBACK;404')
+  );
 }
 
 /**

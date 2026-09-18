@@ -5,7 +5,9 @@ import {
 } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { mediaForVariants } from '../../../server/media-picker';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
@@ -241,6 +243,23 @@ export default async function ApprovalsPage({
     mayOpenInStudio: maySeeContent,
   }));
 
+  /*
+   * PHASE 8 — THE MEDIA THE REVIEWER IS APPROVING (AC-29.1).
+   *
+   * Loaded only for the item actually being reviewed, not for the whole queue:
+   * a queue is a list of decisions to make and a review is the decision, and
+   * minting a preview grant per row would issue capabilities nobody asked for.
+   */
+  const reviewMedia = review
+    ? await mediaForVariants({
+        workspaceId: workspace.workspaceId,
+        userId: customer.userId,
+        permissionKeys: workspace.permissionKeys,
+        brandScope: workspace.brandScope,
+        assetIds: review.variants.flatMap((variant) => [...variant.assetIds]),
+      })
+    : new Map<string, { id: string; name: string; kind: string; previewToken: string | null }>();
+
   const reviewView: ReviewSubjectView | null = review
     ? {
         approvalId: review.approvalId,
@@ -256,12 +275,24 @@ export default async function ApprovalsPage({
           platformKey: v.platformKey,
           body: v.body,
           hashtags: [...v.hashtags],
+          /*
+           * IN THE AUTHOR'S ORDER, and only what could be resolved: an asset
+           * that has since been deleted or quarantined simply does not appear,
+           * which is the honest rendering — the publish pipeline would refuse
+           * it too, and showing a broken tile would suggest otherwise.
+           */
+          media: [...v.assetIds]
+            .map((id) => reviewMedia.get(id))
+            .filter((item): item is NonNullable<typeof item> => item !== undefined),
         })),
       }
     : null;
 
+  const brandContext = await brandContextFor(workspace, '/approvals');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       activePath="/approvals"
       heading={t('approvals.title')}

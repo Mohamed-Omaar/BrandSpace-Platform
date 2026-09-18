@@ -53,6 +53,14 @@ export interface SlotDetail {
   readonly date: string;
   readonly time: string;
   readonly channels: readonly string[];
+  /** Phase 8 — the campaign the post belongs to, when it belongs to one. */
+  readonly campaignName: string | null;
+  /** The slot's own publishing state, already translated. */
+  readonly statusLabel: string;
+  /** The latest review's state, or `null` when nobody has been asked. */
+  readonly approvalLabel: string | null;
+  /** How many pictures the post carries across its variants. */
+  readonly mediaCount: number;
 }
 
 export interface CalendarViewProps {
@@ -266,9 +274,46 @@ export function CalendarView({
       >
         {openSlot ? (
           <div style={{ display: 'grid', gap: spacingTokens.md }}>
-            <p style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary, margin: 0 }}>
-              {t['calendar.channels']}: {openSlot.channels.join(' · ')}
-            </p>
+            {/*
+              WHAT THE POST ACTUALLY IS, before what can be done to it.
+              A definition list rather than a sentence, because a reader
+              scanning for one fact — did it go out? — should not have to read
+              the other three. Every row is omitted when it has no value: a
+              post in no campaign has no campaign row, which is the honest
+              rendering of "none" (D-184).
+            */}
+            <dl
+              data-testid="calendar-slot-facts"
+              style={{ margin: 0, display: 'grid', gap: spacingTokens['2xs'] }}
+            >
+              <SlotFact term={t['calendar.channels'] ?? ''} value={openSlot.channels.join(' · ')} />
+              {openSlot.campaignName ? (
+                <SlotFact
+                  term={t['calendar.campaign'] ?? ''}
+                  value={openSlot.campaignName}
+                  testId="calendar-slot-campaign"
+                />
+              ) : null}
+              <SlotFact
+                term={t['calendar.publishState'] ?? ''}
+                value={openSlot.statusLabel}
+                testId="calendar-slot-status"
+              />
+              {openSlot.approvalLabel ? (
+                <SlotFact
+                  term={t['calendar.approvalState'] ?? ''}
+                  value={openSlot.approvalLabel}
+                  testId="calendar-slot-approval"
+                />
+              ) : null}
+              {openSlot.mediaCount > 0 ? (
+                <SlotFact
+                  term={t['calendar.media'] ?? ''}
+                  value={String(openSlot.mediaCount)}
+                  testId="calendar-slot-media"
+                />
+              ) : null}
+            </dl>
 
             {canSchedule ? (
               <form action={actions.reschedule} style={{ display: 'grid', gap: spacingTokens.md }}>
@@ -339,6 +384,31 @@ export function CalendarView({
           </div>
         ) : null}
       </Dialog>
+    </div>
+  );
+}
+
+/** One `term: value` row in the slot dialog's fact list. */
+function SlotFact({
+  term,
+  value,
+  testId,
+}: {
+  readonly term: string;
+  readonly value: string;
+  readonly testId?: string;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+      <dt style={{ ...typographyTokens.caption, color: colorTokens.textMuted, margin: 0 }}>
+        {term}
+      </dt>
+      <dd
+        data-testid={testId}
+        style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary, margin: 0 }}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

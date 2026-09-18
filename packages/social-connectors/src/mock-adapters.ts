@@ -221,6 +221,15 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
     return { healthy: !unhealthy, failureClass: unhealthy ? 'AUTH_EXPIRED' : null };
   }
 
+  /**
+   * How many media items the most recent successful publish carried.
+   *
+   * A MOCK'S OBSERVABILITY SURFACE, not a product feature: it lets a test
+   * assert that the pipeline actually handed the adapter the media, which is
+   * the one thing a publish result cannot tell you.
+   */
+  lastPublishedMediaCount = 0;
+
   async publish(input: {
     request: PublishRequest;
     credentials: AdapterCredentials;
@@ -266,6 +275,40 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
       };
     }
 
+    /*
+     * PHASE 8 — THE MEDIA CHECKS A REAL PROVIDER WOULD MAKE (AC-29.5).
+     *
+     * Checked HERE as well as in the pipeline, for the same reason the caption
+     * length is: the adapter is the last thing between us and a platform, and
+     * a mock that accepted anything would let a pipeline bug reach a real
+     * provider unnoticed the day one is registered.
+     *
+     * A REAL PROVIDER WOULD ALSO REFUSE BYTES IT CANNOT READ, so a media item
+     * with none is a rejection rather than a silently text-only post.
+     */
+    if (input.request.media.length > this.capabilities.maxMediaItems) {
+      return {
+        ok: false,
+        failureClass: 'UNSUPPORTED',
+        failureCode: 'mock.too_many_media',
+        providerStatusCode: 400,
+        providerErrorCode: 'MOCK_TOO_MANY_MEDIA',
+        safeSummary: SAFE_SUMMARIES.UNSUPPORTED,
+      };
+    }
+    for (const item of input.request.media) {
+      if (item.bytes.byteLength === 0) {
+        return {
+          ok: false,
+          failureClass: 'CONTENT_REJECTED',
+          failureCode: 'mock.media_empty',
+          providerStatusCode: 400,
+          providerErrorCode: 'MOCK_MEDIA_EMPTY',
+          safeSummary: SAFE_SUMMARIES.CONTENT_REJECTED,
+        };
+      }
+    }
+
     const externalPostId = deterministicId(
       'mock-post',
       this.provider,
@@ -276,6 +319,12 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
       // the behaviour they claim to.
       input.request.idempotencyKey,
     );
+    /*
+     * RECORDED SO A TEST CAN SEE WHAT THE PROVIDER WAS GIVEN. A mock's job is
+     * to make the contract observable; without this, "the adapter received the
+     * media" would be a claim nothing could check (AC-29.5).
+     */
+    this.lastPublishedMediaCount = input.request.media.length;
     return {
       ok: true,
       externalPostId,

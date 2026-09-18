@@ -61,6 +61,22 @@ export interface TextRequest {
   readonly temperature?: number;
   /** Untrusted context, inserted as clearly delimited data (§10.3). */
   readonly untrustedContext?: readonly string[];
+  /**
+   * WHAT KIND OF WORK THIS IS — the platform's own task key, never a customer
+   * string.
+   *
+   * WHY AN ADAPTER MAY KNOW IT. A real provider adapter routinely varies by
+   * task: a system prompt, a response-format hint, a JSON-mode flag. Passing
+   * the task is how that becomes possible without each adapter guessing from
+   * the prompt text.
+   *
+   * IT IS NOT AN INSTRUCTION CHANNEL. The key comes from the CLOSED registry in
+   * `tasks.ts`, is chosen by the routing rule rather than by any request body,
+   * and nothing a customer writes can change it.
+   *
+   * OPTIONAL, so an adapter that does not care never has to look.
+   */
+  readonly taskKey?: string;
 }
 
 export interface TextResult {
@@ -77,9 +93,42 @@ export interface ImageRequest {
   readonly size: string;
 }
 
+/** One generated image, as the provider handed it back. */
+export interface GeneratedImage {
+  /**
+   * An OPAQUE reference — a provider url, a mock scheme, an id. Recorded on the
+   * request row so an image can be traced to the call that made it. It is never
+   * treated as a fetchable url by the gateway, which fetches nothing.
+   */
+  readonly ref: string;
+  /**
+   * The bytes, base64-encoded, WHEN the provider returned them inline.
+   *
+   * PHASE 8. Real image APIs return either a url or base64 (`b64_json`), and
+   * the product needs bytes: a generated image becomes an ordinary Asset in the
+   * one library, which means somebody has to hold the file. The GATEWAY still
+   * persists nothing — it hands these to its caller in memory and forgets them,
+   * exactly as it hands back generated text. A provider that returns a url
+   * leaves this absent and the caller fetches it itself, outside this package,
+   * where an outbound request is allowed to live.
+   */
+  readonly base64?: string | undefined;
+  /** The type the bytes actually are, when they are present. */
+  readonly mimeType?: string | undefined;
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+}
+
 export interface ImageResult {
-  /** Opaque references. The gateway does not persist image bytes. */
+  /**
+   * Opaque references. The gateway does not persist image bytes.
+   *
+   * KEPT ALONGSIDE `images` rather than replaced by it, because it is what the
+   * request row records and what every existing caller reads.
+   */
   readonly imageRefs: readonly string[];
+  /** The same images, with whatever the provider returned inline. */
+  readonly images?: readonly GeneratedImage[] | undefined;
   readonly usage: UsageUnits;
   readonly modelKey: string;
 }

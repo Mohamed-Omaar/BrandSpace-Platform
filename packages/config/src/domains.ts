@@ -613,6 +613,21 @@ const contentStudioSchema = z.object({
         maxBodyChars: z.number().int().positive(),
         maxHashtags: z.number().int().min(0),
         allowsFirstComment: z.boolean().default(false),
+        /**
+         * PHASE 8 — how many media items this platform accepts on one post.
+         *
+         * AN OPERATOR'S FACT, like every other number beside it (CLAUDE.md
+         * §2.2): platforms change their carousel limits and a product that
+         * hard-coded ten would be wrong the week one of them changed. ZERO is a
+         * legal value and means "this platform takes no media from us", which
+         * the composer reads as "do not offer a picker here".
+         *
+         * THE PUBLISHING POLICY HAS ITS OWN `maxMediaItems`, and that is the one
+         * the publish preflight enforces against the provider. This one governs
+         * AUTHORING, so a composer can refuse an eleventh image before the
+         * author has written a caption for it.
+         */
+        maxMediaItems: z.number().int().min(0).max(20).default(10),
       }),
     )
     .min(1)
@@ -623,6 +638,7 @@ const contentStudioSchema = z.object({
         maxBodyChars: 2_200,
         maxHashtags: 30,
         allowsFirstComment: true,
+        maxMediaItems: 10,
       },
       {
         key: 'linkedin',
@@ -630,6 +646,7 @@ const contentStudioSchema = z.object({
         maxBodyChars: 3_000,
         maxHashtags: 10,
         allowsFirstComment: false,
+        maxMediaItems: 9,
       },
       {
         key: 'x',
@@ -637,6 +654,7 @@ const contentStudioSchema = z.object({
         maxBodyChars: 280,
         maxHashtags: 5,
         allowsFirstComment: false,
+        maxMediaItems: 4,
       },
       {
         key: 'tiktok',
@@ -644,6 +662,7 @@ const contentStudioSchema = z.object({
         maxBodyChars: 2_200,
         maxHashtags: 20,
         allowsFirstComment: false,
+        maxMediaItems: 1,
       },
     ]),
 

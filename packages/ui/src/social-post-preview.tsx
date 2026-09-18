@@ -12,7 +12,14 @@ import {
 import { AlertIcon, CalendarIcon, ImageIcon, PlayIcon } from './icons';
 import { StatusBadge, statusTone } from './data';
 import { Skeleton } from './feedback';
-import { AbstractMedia, Avatar, CarouselDots, MediaChip, MediaStateOverlay } from './media';
+import {
+  AbstractMedia,
+  AssetMedia,
+  Avatar,
+  CarouselDots,
+  MediaChip,
+  MediaStateOverlay,
+} from './media';
 import {
   CAPTION_CLAMP,
   PLATFORM_ACCENT,
@@ -212,7 +219,15 @@ function MediaFrame({
 
   return (
     <div style={frame} data-testid="preview-media">
-      <AbstractMedia seed={media.seed ?? 0} alt={media.alt} />
+      {/*
+        THE CUSTOMER'S OWN PICTURE WHERE THERE IS ONE, and the design system's
+        artwork where there is not. Same frame, same aspect, same overlays.
+      */}
+      {media.src ? (
+        <AssetMedia src={media.src} alt={media.alt} testId="preview-media-asset" />
+      ) : (
+        <AbstractMedia seed={media.seed ?? 0} alt={media.alt} />
+      )}
       {media.kind === 'video' ? (
         <>
           <span

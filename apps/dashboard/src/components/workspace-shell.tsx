@@ -10,6 +10,8 @@ import {
   CreditIcon,
   HomeIcon,
   CalendarIcon,
+  FlagIcon,
+  LayersIcon,
   ListIcon,
   ImageIcon,
   PencilIcon,
@@ -23,6 +25,7 @@ import {
   SparkIcon,
   TeamIcon,
   WorkspaceSwitcher,
+  BrandSwitcher,
   Banner,
   StateMessage,
   buttonStyle,
@@ -37,6 +40,8 @@ import {
   initialsFrom,
 } from '@brandspace/ui';
 import { translator, type MessageKey } from '../i18n/messages';
+import type { BrandContext } from '../server/brand-context';
+import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction } from '../app/[locale]/(auth)/actions';
 
@@ -72,6 +77,24 @@ const NAV: readonly {
     permission: 'content.read',
     icon: <PencilIcon size={20} />,
   },
+  /*
+   * PHASE 8 — CAMPAIGNS. The entry appears now because the SCREEN exists now
+   * (D-188): the area has been on the fixed inventory since the contract was
+   * written, and adding a link before its route was real would have been the
+   * dead link §20 forbids. Gated on `campaigns.read`, matching the route.
+   *
+   * It reads between Content and Calendar because that is where it sits in the
+   * work: you plan a campaign, write content into it, then schedule that
+   * content.
+   */
+  {
+    href: '/campaigns',
+    key: 'nav.campaigns',
+    permission: 'campaigns.read',
+    // `FlagIcon` reused rather than a new glyph drawn (§4.2 rule 4): a campaign
+    // is a marker planted on a period of work, which is what a flag is.
+    icon: <FlagIcon size={20} />,
+  },
   {
     href: '/calendar',
     key: 'nav.calendar',
@@ -83,6 +106,22 @@ const NAV: readonly {
     key: 'nav.assets',
     permission: 'assets.read',
     icon: <ImageIcon size={20} />,
+  },
+  /*
+   * PHASE 8 — THE AI CREATIVE STUDIO. The entry appears now because the SCREEN
+   * exists now (D-188). Gated on `assets.upload`, matching its route exactly:
+   * a generation writes a file into the library, so a member who may only read
+   * the library has nothing to do there.
+   *
+   * It reads after Assets because that is where its output goes.
+   */
+  {
+    href: '/creative',
+    key: 'nav.creative',
+    permission: 'assets.upload',
+    // `SparkIcon` reused rather than a new glyph drawn (§4.2 rule 4): it is the
+    // product's mark for "a model did this", and it is what Brand Brain wears.
+    icon: <SparkIcon size={20} />,
   },
   /*
    * Phase 5B-3. `/approvals` is gated on `content.read`, matching the route.
@@ -147,6 +186,25 @@ const NAV: readonly {
     permission: 'strategy.read',
     icon: <RouteIcon size={20} />,
   },
+  /*
+   * PHASE 8 — MARKETING INTELLIGENCE. On the fixed inventory since D-188 and
+   * linked now because its screen exists now. Gated on `strategy.read`,
+   * matching the route exactly.
+   *
+   * It reads between Strategy and the Copilot because that is where it sits in
+   * the work: the numbers say what happened, intelligence says what that means
+   * and what the brand should remember, strategy says what to do about it.
+   *
+   * `LayersIcon` reused rather than a new glyph drawn (§4.2 rule 4): the whole
+   * area is one thing laid over another — what this brand declared, against
+   * what it actually published.
+   */
+  {
+    href: '/intelligence',
+    key: 'nav.intelligence',
+    permission: 'strategy.read',
+    icon: <LayersIcon size={20} />,
+  },
   {
     href: '/copilot',
     key: 'nav.copilot',
@@ -182,6 +240,29 @@ const NAV: readonly {
   },
 ];
 
+/**
+ * The two lines the brand card shows, for each of the four resolutions.
+ *
+ * THE CARD NEVER LIES ABOUT WHICH BRAND YOU ARE ON. "No brand selected" is a
+ * state the reader can see and act on; the alternative — showing a brand name
+ * nobody chose — is the silent guess this whole phase exists to remove.
+ */
+function brandTrigger(
+  context: BrandContext,
+  t: (key: MessageKey) => string,
+): { name: string; caption: string } {
+  switch (context.resolution.kind) {
+    case 'brand':
+      return { name: context.resolution.brand.name, caption: t('brand.selectedCaption') };
+    case 'all':
+      return { name: t('brand.allBrands'), caption: t('brand.allBrandsCaption') };
+    case 'unselected':
+      return { name: t('brand.noneSelected'), caption: t('brand.noneSelectedCaption') };
+    case 'empty':
+      return { name: t('brand.noBrands'), caption: t('brand.noBrandsCaption') };
+  }
+}
+
 export function WorkspaceShell({
   locale,
   heading,
@@ -195,6 +276,7 @@ export function WorkspaceShell({
   customerName,
   permissionKeys,
   availableWorkspaces = [],
+  brandContext,
   children,
 }: {
   locale: string;
@@ -232,6 +314,15 @@ export function WorkspaceShell({
     roleName: string;
     current: boolean;
   }>;
+  /**
+   * The resolved global brand context (D-190).
+   *
+   * OPTIONAL, and that is deliberate rather than lax: the sign-in, workspace
+   * chooser and no-workspace screens render this shell without a workspace to
+   * resolve brands in. A page that HAS a workspace passes it, and the selector
+   * appears; a page that does not simply has no second card.
+   */
+  brandContext?: BrandContext | undefined;
   children: ReactNode;
 }) {
   const t = translator(locale);
@@ -254,6 +345,20 @@ export function WorkspaceShell({
     },
   ];
 
+  /*
+   * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.
+   *
+   * `/settings/brand` calls `requireWorkspace(locale, 'brand.read')` and answers
+   * 404 without it, so offering the row to a member who does not hold it is a
+   * link to a dead end — and a dead end that looks like a permissions bug to
+   * the person who clicks it.
+   *
+   * DEAD-LINK PREVENTION ONLY. The route authorizes independently and nothing
+   * here is load-bearing for security: typing the URL still fails, identically
+   * to a route that does not exist (CLAUDE.md §2.1).
+   */
+  const mayReadBrandProfile = permissionKeys.includes('brand.read');
+
   const workspaceOptions: readonly WorkspaceOption[] = availableWorkspaces.map((workspace) => ({
     id: workspace.id,
     name: workspace.name,
@@ -274,14 +379,61 @@ export function WorkspaceShell({
         expandSidebar: t('nav.expand'),
       }}
       headerStart={
-        <WorkspaceSwitcher
-          label={t('ws.switcherLabel')}
-          current={{ name: workspaceName, roleName }}
-          options={workspaceOptions}
-          manageHref={`/${locale}/workspaces`}
-          manageLabel={t('nav.switch')}
-          manageTestId="switch-workspace"
-        />
+        /*
+         * TWO CARDS, ONE STACK — the workspace, then the brand inside it.
+         *
+         * THE BRAND CARD SITS WHERE THE WORKSPACE CARD ALREADY IS, which is the
+         * rail rather than the top bar. The phase brief describes the Workspace
+         * Selector as being "in the top bar"; in the implemented product it is
+         * `headerStart`, the rail's identity block (D-59), and the top bar
+         * carries search, notifications, language and create. Putting the brand
+         * selector in the top bar would have separated it from the thing it is
+         * scoped BY and introduced the second navigation system the brief
+         * forbids, so the stronger instruction — "beside the Workspace
+         * Selector" — decides, and the conflict is recorded in
+         * docs/UI-FIDELITY-CONTRACT.md §6.
+         *
+         * The order is containment: a brand lives inside a workspace, so it
+         * reads underneath it. Same card, same tile, same two lines.
+         */
+        <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+          <WorkspaceSwitcher
+            label={t('ws.switcherLabel')}
+            current={{ name: workspaceName, roleName }}
+            options={workspaceOptions}
+            manageHref={`/${locale}/workspaces`}
+            manageLabel={t('nav.switch')}
+            manageTestId="switch-workspace"
+          />
+          {brandContext ? (
+            <BrandSwitcher
+              label={t('brand.switcherLabel')}
+              current={brandTrigger(brandContext, t)}
+              options={brandContext.brands.map((brand) => ({
+                id: brand.id,
+                name: brand.name,
+                current: brandContext.selectedValue === brand.id,
+              }))}
+              action={selectBrandAction}
+              hiddenFields={{ locale, next: `/${locale}${activePath ?? '/overview'}` }}
+              {...(brandContext.aggregateAllowed
+                ? {
+                    allOption: {
+                      label: t('brand.allBrands'),
+                      current: brandContext.resolution.kind === 'all',
+                    },
+                  }
+                : {})}
+              emptyLabel={t('brand.emptyMenu')}
+              {...(brandContext.resolution.kind === 'brand' && mayReadBrandProfile
+                ? {
+                    manageHref: `/${locale}/settings/brand?brand=${brandContext.resolution.brand.id}`,
+                    manageLabel: t('brand.profile'),
+                  }
+                : {})}
+            />
+          ) : null}
+        </div>
       }
       headerEnd={
         /*

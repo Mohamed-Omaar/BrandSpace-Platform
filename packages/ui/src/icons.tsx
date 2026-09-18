@@ -365,6 +365,23 @@ export function ImageIcon(props: IconProps) {
   );
 }
 
+/**
+ * A TAG — the Brand Selector's glyph.
+ *
+ * Drawn in the same 24-unit box, the same stroke and the same joinery as every
+ * other icon in this file, because §4.2 rule 5 forbids a second icon style and a
+ * borrowed glyph is exactly how one starts. A tag rather than a swatch or a
+ * palette: a brand here is an IDENTITY APPLIED TO WORK, not a colour.
+ */
+export function TagIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M11.2 3.5H19a1.5 1.5 0 0 1 1.5 1.5v7.8a2 2 0 0 1-.6 1.4l-6.7 6.7a1.5 1.5 0 0 1-2.1 0l-7-7a1.5 1.5 0 0 1 0-2.1l6.7-6.7a2 2 0 0 1 1.4-.6Z" />
+      <circle cx="16" cy="8" r="1.4" />
+    </Icon>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <Icon {...props}>

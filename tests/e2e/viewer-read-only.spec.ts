@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
-import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { useBrand } from './brand';
+import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 
 /**
  * D-62 — Viewer (read-only) is READ-ONLY, end to end in a real browser.
@@ -135,6 +136,43 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     await expect(page.locator('a[href$="/en/integrations"]')).toHaveCount(0);
+  });
+
+  /*
+   * PHASE 8 — THE BRAND SELECTOR OFFERS NO ROW THIS MEMBER CANNOT FOLLOW.
+   *
+   * `/settings/brand` requires `brand.read`, which a Viewer does not hold, so
+   * the profile row must not appear inside the selector. The REFUSAL is still
+   * the control — the route is asserted 404 below — and this is about not
+   * showing somebody a door that is painted on.
+   */
+  test('PHASE 8: the brand selector offers a Viewer no Brand Profile row', async ({ page }) => {
+    const loaded = credentials();
+    /*
+     * A BRAND IS SELECTED FIRST, ON PURPOSE. The row only ever renders for a
+     * RESOLVED brand, so without this the assertion would pass for the wrong
+     * reason — "all brands" hides it whatever the permissions say. With a brand
+     * resolved, the permission check is the only thing left holding it back.
+     */
+    await useBrand(page, loaded.customer.workspaceId, brandFixtures(loaded).primaryBrandId);
+    await signInAsViewer(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+
+    const rail = page.getByTestId('sidebar');
+    await expect(rail.getByTestId('brand-switcher')).toBeVisible();
+    await expect(rail.getByTestId('active-brand')).toHaveText(
+      brandFixtures(loaded).primaryBrandName,
+    );
+    await rail.getByTestId('brand-switcher').click();
+    await expect(rail.getByTestId('manage-brand')).toHaveCount(0);
+  });
+
+  test('PHASE 8: Brand Profile and workspace settings are closed to a Viewer', async ({ page }) => {
+    await signInAsViewer(page);
+    for (const path of ['en/settings/brand', 'ar/settings/brand', 'en/settings']) {
+      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
+      expect(response?.status(), path).toBe(404);
+    }
   });
 
   test('the navigation does not offer Approvals — but the refusal is the control', async ({

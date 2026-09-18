@@ -96,6 +96,37 @@ interface SocialConnectorAdapter {
 `content_rejected` · `media_invalid` · `duplicate_content` · `target_unavailable` · `platform_unavailable` ·
 `timeout` · `unknown`. Retry, re-auth prompts, and user messaging derive from this class.
 
+### 2.1a What a publish request carries, and what it does not (Phase 8, D-200)
+
+`PublishRequest.media` is a list of items, each with an asset id, a MIME type, a size, dimensions, a
+file name and **the bytes**. It carries no storage key and no signed URL, because an adapter that
+could reach into the Asset Library on its own would be a place tenant isolation could fail; an
+adapter is a translator to one provider's API and gets a buffer.
+
+**THE PIPELINE RESOLVES THE MEDIA, IN A PRE-FLIGHT, BEFORE ANY ADAPTER IS CALLED.** It checks three
+things in order, and each refusal fails the job with a stable code rather than publishing a post
+with fewer pictures than its author attached:
+
+| Refusal                       | When                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `preflight.too_many_media`    | more items than the provider's ACTIVATED `maxMediaItems` — refused, never truncated       |
+| `preflight.media_rejected`    | an asset is not admissible under `publishableAssetWhere()` (D-199), or its bytes are gone |
+| `preflight.media_unavailable` | the caller was wired with NO media port at all                                            |
+
+The last is load-bearing rather than defensive. A pipeline built without a resolver cannot publish
+media, so a variant carrying assets is REFUSED — publishing the caption alone would be worse than
+not publishing, and silently dropping media because the wiring forgot a port is the failure this
+phase closes.
+
+Those codes carry their own localized sentences on the publishing history screen. Resolving a
+pre-flight refusal from the failure CLASS alone told a customer "the platform rejected this content"
+when no platform had been called, and sent them to edit a caption nothing was wrong with.
+
+**THE MOCK ADAPTER MAKES THE CONTRACT OBSERVABLE.** It re-checks the ceiling and refuses an item with
+no bytes — the checks a real provider would make, in the last place before a platform — and records
+how many items the request carried, so a test can assert that the pipeline actually handed them over
+rather than only that the job succeeded.
+
 ### 2.2 Capability declaration (per platform, configuration)
 
 | Capability      | Description                                                       |

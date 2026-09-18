@@ -12,6 +12,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import {
   CustomerCard,
@@ -51,8 +52,11 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
    */
   const roles = ROLE_DEFINITIONS.filter((role) => role.realm === 'workspace');
 
+  const brandContext = await brandContextFor(workspace, '/permissions');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('perms.title')}
       workspaceName={workspace.workspaceName}

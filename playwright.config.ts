@@ -299,7 +299,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -309,7 +309,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -443,6 +443,25 @@ export default defineConfig({
        * that measures overflow, which is more honest than inferring layout from
        * which project happened to run.
        */
+      name: 'brand-context',
+      testMatch: /brand-context\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 8 — the global Brand Context and Brand Profile.
+       *
+       * ITS OWN SERIAL PROJECT, for the reason approvals has one: it edits a
+       * brand's profile and puts it back, and two workers doing that at once
+       * would each see the other's intermediate state. It also changes the
+       * stored brand SELECTION, which is a cookie every other authenticated
+       * suite in the same browser context would then inherit.
+       */
       name: 'approvals',
       testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
       fullyParallel: false,
@@ -492,6 +511,54 @@ export default defineConfig({
        */
       name: 'social-publishing',
       testMatch: /social-publishing\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 8 — the whole-product exit journey, in its own SERIAL project.
+       *
+       * It signs in and walks thirteen screens in the SHARED customer
+       * workspace, and it fixes the stored brand SELECTION to do it. Run in the
+       * two viewport projects it would walk that workspace twice at once while
+       * every other suite is mutating it, and the brand cookie it sets is one
+       * any concurrent authenticated suite in the same browser context would
+       * inherit — the same reason `brand-context` has its own project.
+       *
+       * It sets its own phone viewport for the one test that measures overflow
+       * and runs axe in both directions itself, so the viewport projects would
+       * add nothing but interference.
+       */
+      name: 'phase8-journey',
+      testMatch: /phase8-journey\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 8 — the FUNCTIONAL journey, and the adaptation regression.
+       *
+       * SERIAL, AND SEPARATE FROM THE REACHABILITY SUITE, for two reasons. They
+       * spend real credits from the shared development grant and write real
+       * campaigns, drafts, assets, approvals, slots and publish jobs into the
+       * shared workspace, so two browsers running them at once would each be
+       * asserting on the other's rows. And keeping them out of `phase8-journey`
+       * means a failure there still says "a screen is unreachable" while a
+       * failure here says "the flow broke", which are different reports.
+       *
+       * Both set their own viewport where they need one and neither is a
+       * layout test, so the two viewport projects would add only interference.
+       */
+      name: 'phase8-flow',
+      testMatch: /(phase8-flow|phase8-creative-adaptation)\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

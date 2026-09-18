@@ -271,6 +271,102 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
   );
 
   /**
+   * MARKETING INTELLIGENCE — content-gap analysis (AC-30.1).
+   *
+   * THE SAME SHAPE AS `strategy.generate` AND A DIFFERENT QUESTION. Strategy
+   * asks what this brand should do; this asks what it SAID IT WOULD DO AND HAS
+   * NOT — pillars it declared and has not published against, platforms it is
+   * connected to and has not posted on, a cadence it set and has not kept.
+   * Every one of those is a fact about rows that are not there, checkable
+   * against this workspace's own data.
+   *
+   * IT IS NOT A TRENDS FEED, and the separate route is part of saying so: the
+   * product has no external market source (D-18, D-19 approved none), the
+   * insight records its basis as `BRAND_CONTEXT` or `CONTENT_HISTORY`, and the
+   * screen states it. A single "intelligence" endpoint that sometimes returned
+   * a strategy would blur the one distinction a customer needs.
+   *
+   * `strategy.manage` RATHER THAN `strategy.read`, because it spends credits —
+   * the same rule every generating route in this file follows.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/intelligence/content-gap',
+    {
+      scope: 'workspace',
+      permission: STRATEGY_MANAGE,
+      rateLimit: 'ai.generate',
+      idempotent: true,
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, STRATEGY_MANAGE);
+      if (!caller) return;
+
+      const parsed = strategySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
+      const body = parsed.data;
+      if (!(await brandIsVisible(caller, body.brandId))) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+      }
+
+      try {
+        const facts = await workspaceFacts(caller.workspaceId);
+        const contentPolicy = await resolveContentPolicy(
+          configurationService(),
+          currentEnvironment(),
+        );
+        const now = systemClock.now();
+        const period = periodFromDays(body.periodDays, now);
+
+        const result = await withWorkspace(
+          caller.workspaceId,
+          async (db) => {
+            const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+            const queries = new AnalyticsQueryService({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+            });
+            const strategy = new StrategyService({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              queries,
+              gateway: gateway(),
+              denialSink: insightDenialSink(caller.workspaceId),
+            });
+            return strategy.analyseContentGaps({
+              brandId: body.brandId,
+              period,
+              objective: body.objective,
+              idempotencyKey: body.idempotencyKey,
+              actorUserId: caller.userId,
+              planKey: facts.planKey,
+              actorBrandScope: caller.brandScope,
+              expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
+            });
+          },
+          { prisma: getPrisma() },
+        );
+
+        return reply.send({
+          insightId: result.insight?.id ?? null,
+          insufficientGrounding: result.insufficientGrounding,
+          evidenceCount: result.evidence.length,
+          creditsChargedMilli: result.creditsChargedMilli.toString(),
+          replayed: result.replayed,
+        });
+      } catch (error: unknown) {
+        return fail(reply, 'content gap', error);
+      }
+    },
+  );
+
+  /**
    * Accept or dismiss a proposal.
    *
    * THE ONLY PATH TO `ACCEPTED`, and it takes `strategy.manage` rather than

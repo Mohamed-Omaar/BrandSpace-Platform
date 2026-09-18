@@ -1,5 +1,6 @@
 import { colorTokens, scrollContainerStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import {
   CustomerCard,
@@ -89,8 +90,11 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     (decision) => !decision.enabled && !decision.featureKey.startsWith('limit.'),
   );
 
+  const brandContext = await brandContextFor(workspace, '/plan');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('plan.title')}
       workspaceName={workspace.workspaceName}

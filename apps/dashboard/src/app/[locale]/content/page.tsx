@@ -1,6 +1,7 @@
 import { brandScopeFilter } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -74,11 +75,21 @@ export default async function ContentPage({
     }),
   );
 
+  const brandContext = await brandContextFor(workspace, '/content', brandFilter ?? null);
+
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
-  // A `brand` in the URL that is not one of the member's own is IGNORED rather
-  // than refused: the filter narrows a list the member may already see, so an
-  // unknown value is a stale link, not an attempt at anything.
-  const effectiveBrand = brandFilter && brandNames.has(brandFilter) ? brandFilter : undefined;
+  /*
+   * THE GLOBAL CONTEXT DECIDES THE FILTER (D-190, D-192).
+   *
+   * `/content` is a BRAND-OR-ALL route: with a brand selected the library is
+   * that brand's, and with the rail on "All brands" it is everything this
+   * member may see — which is what it always showed, so the aggregate is the
+   * unchanged behaviour rather than a new one. `?brand=` still wins for this
+   * request, so existing links keep working; an id that is not one of the
+   * member's own resolves to no selection rather than being refused, because a
+   * stale link is a broken link and not an attempt at anything.
+   */
+  const effectiveBrand = brandFilterFor(brandContext);
 
   const { cards, counts } = await inContentStudio(workspace.workspaceId, async (services) => {
     const library = await services.library();
@@ -139,6 +150,7 @@ export default async function ContentPage({
 
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={translate('content.title')}
       description={translate('content.subtitle')}

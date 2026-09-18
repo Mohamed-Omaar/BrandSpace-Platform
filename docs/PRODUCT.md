@@ -155,27 +155,70 @@ Marketing surface: fast, SEO-strong, bilingual, CMS-driven where content changes
 Each module is listed with purpose, key objects, and the permissions that gate it. Scope column shows whether
 the module operates at **W** (workspace) or **B** (brand) level.
 
-| #   | Module                     | Scope | Purpose                                                                                                                                                   | Key entities                                |
-| --- | -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 1   | **Command Center**         | W     | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas                                                         | aggregates all                              |
-| 2   | **Brand Center**           | B     | Brand identity: name, logos, palettes, typography, voice, boilerplate, guidelines                                                                         | `Brand`, `Asset`                            |
-| 3   | **Brand Brain**            | B     | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors)                                             | `BrandKnowledge`                            |
-| 4   | **AI Strategy**            | B     | Generate and maintain marketing strategy, pillars, monthly plans, channel mix                                                                             | `Insight`, `Campaign`                       |
-| 5   | **Campaigns**              | B     | Campaign objects with goals, dates, budget, channels, content set, status                                                                                 | `Campaign`, `ContentItem`                   |
-| 6   | **Social Calendar**        | B     | Month/week/day/list views of scheduled and published content; drag to reschedule                                                                          | `CalendarSlot`, `ContentItem`, `PublishJob` |
-| 7   | **AI Content Studio**      | B     | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual                                                                    | `ContentItem`, `ContentVariant`             |
-| 8   | **AI Creative Studio**     | B     | Generate and adapt images on-brand; templated resizing per platform. **Video and voice are excluded from the MVP (D-16)** — video is a Phase 7+ candidate | `Asset`                                     |
-| 9   | **Social Media Hub**       | W/B   | Connect accounts, view connection health, per-platform rules, inbox of publish results                                                                    | `SocialConnection`, `PublishJob`            |
-| 10  | **AI Copilot**             | W/B   | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions                                                   | `AIRequest`, action plans                   |
-| 11  | **Marketing Intelligence** | B     | Competitive and market context, content gap analysis, trend suggestions                                                                                   | `Insight`                                   |
-| 12  | **Smart Analytics**        | B     | Performance metrics with AI narrative explanation and recommendations                                                                                     | `MetricSnapshot`, `Insight`                 |
-| 13  | **Asset Library**          | W/B   | Central media library: folders, tags, versions, rights/expiry, usage tracking                                                                             | `Asset`                                     |
-| 14  | **Team and Approvals**     | W     | Members, roles, invitations, approval workflows and queues, comments                                                                                      | `Membership`, `Approval`, `Comment`         |
-| 15  | **Automations**            | W/B   | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot")                                                                    | `AutomationRule`, `AutomationRun`           |
-| 16  | **Notifications**          | W     | In-app notification center + channel preferences                                                                                                          | `Notification`                              |
-| 17  | **Activity Log**           | W     | Human-readable, filterable history of workspace activity                                                                                                  | `AuditEvent`                                |
-| 18  | **Settings**               | W     | Workspace profile, locale/timezone, brands, security, integrations, data controls                                                                         | `Workspace`                                 |
-| 19  | **Billing and Usage**      | W     | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade                                                                              | `Subscription`, `Invoice`, `CreditWallet`   |
+| #   | Module                     | Scope | Purpose                                                                                                                                                                                                                                       | Key entities                                |
+| --- | -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| 1   | **Command Center**         | W     | Daily home: what needs approval, what publishes today, alerts, credit balance, performance deltas                                                                                                                                             | aggregates all                              |
+| 2   | **Brand Profile**          | B     | Canonical brand identity: name, industry, description, website, locales, palette, typography, and the CANONICAL identity assets (logos) referenced into the one Asset Library. **Reached contextually, not from the primary sidebar (D-189)** | `Brand`, `Asset`                            |
+| 3   | **Brand Brain**            | B     | Structured brand knowledge + documents used to ground AI (audience, offers, tone, do/don't, FAQ, competitors)                                                                                                                                 | `BrandKnowledge`                            |
+| 4   | **AI Strategy**            | B     | Generate and maintain marketing strategy, pillars, monthly plans, channel mix                                                                                                                                                                 | `Insight`, `Campaign`                       |
+| 5   | **Campaigns**              | B     | Campaign objects with goals, dates, budget, channels, content set, status                                                                                                                                                                     | `Campaign`, `ContentItem`                   |
+| 6   | **Social Calendar**        | B     | Month/week/day/list views of scheduled and published content; drag to reschedule                                                                                                                                                              | `CalendarSlot`, `ContentItem`, `PublishJob` |
+| 7   | **AI Content Studio**      | B     | Generate and edit captions, hooks, threads, articles, variants per platform, bilingual                                                                                                                                                        | `ContentItem`, `ContentVariant`             |
+| 8   | **AI Creative Studio**     | B     | Generate and adapt images on-brand; templated resizing per platform. **Video and voice are excluded from the MVP (D-16)** — video is a Phase 7+ candidate                                                                                     | `Asset`                                     |
+| 9   | **Social Media Hub**       | W/B   | Connect accounts, view connection health, per-platform rules, inbox of publish results                                                                                                                                                        | `SocialConnection`, `PublishJob`            |
+| 10  | **AI Copilot**             | W/B   | Permission-aware assistant that can read Brand Brain, explain data, and propose/execute allowed actions                                                                                                                                       | `AIRequest`, action plans                   |
+| 11  | **Marketing Intelligence** | B     | Competitive and market context, content gap analysis, trend suggestions                                                                                                                                                                       | `Insight`                                   |
+| 12  | **Smart Analytics**        | B     | Performance metrics with AI narrative explanation and recommendations                                                                                                                                                                         | `MetricSnapshot`, `Insight`                 |
+| 13  | **Asset Library**          | W/B   | Central media library: folders, tags, versions, rights/expiry, usage tracking                                                                                                                                                                 | `Asset`                                     |
+| 14  | **Team and Approvals**     | W     | Members, roles, invitations, approval workflows and queues, comments                                                                                                                                                                          | `Membership`, `Approval`, `Comment`         |
+| 15  | **Automations**            | W/B   | Rule builder: trigger → condition → action (e.g. "on approval, schedule to best slot")                                                                                                                                                        | `AutomationRule`, `AutomationRun`           |
+| 16  | **Notifications**          | W     | In-app notification center + channel preferences                                                                                                                                                                                              | `Notification`                              |
+| 17  | **Activity Log**           | W     | Human-readable, filterable history of workspace activity                                                                                                                                                                                      | `AuditEvent`                                |
+| 18  | **Settings**               | W     | Workspace profile, locale/timezone, brands, security, integrations, data controls                                                                                                                                                             | `Workspace`                                 |
+| 19  | **Billing and Usage**      | W     | Plan, invoices, payment method, AI credit balance and usage, limits, upgrade                                                                                                                                                                  | `Subscription`, `Invoice`, `CreditWallet`   |
+
+### 5.0 The final navigation inventory, and what each area is scoped to
+
+**FIXED IN PHASE 8 (D-188).** The authenticated customer product consists of exactly these
+functional areas. Anything not on this list is not a customer-facing area of the MVP.
+
+Command Center · Brand Brain · Assets · AI Strategy · Campaigns · AI Content Studio ·
+AI Creative Studio · Calendar · Approvals · Social Accounts · Analytics · Marketing Intelligence ·
+Copilot · Automations · Team · Activity · Settings · Billing & Usage
+
+**BRAND PROFILE IS NOT ONE OF THEM (D-189).** It is not a primary sidebar module. A brand's canonical
+identity is reached _contextually_ — from the global Brand Selector, and from Settings — because it
+is configuration for the brand you are already working in rather than a place you go to work.
+
+**A LINK THAT GOES NOWHERE IS NOT NAVIGATION.** An area on this list appears in the sidebar only once
+its screen exists; adding a placeholder entry for one that does not is the dead link
+`docs/UI-FIDELITY-CONTRACT.md` §20 forbids.
+
+**ALL EIGHTEEN ARE LINKED.** Campaigns, the AI Creative Studio and Marketing Intelligence were the
+last three unlinked areas, and their screens landed in the Phase 8 workstreams that built them. The
+rule still holds in both directions, and is now a test rather than a promise:
+`tests/unit/phase8-navigation.test.ts` walks the rail and requires every entry to have a `page.tsx`
+and a declared brand scope, and requires each of the eighteen areas below to be on it.
+`tests/e2e/phase8-journey.spec.ts` then opens them.
+
+**BRAND PROFILE IS REACHED FROM TWO PLACES, BOTH PERMISSION-GATED.** The global Brand Selector offers
+it when a brand is resolved AND the member holds `brand.read`; the Settings section navigation offers
+it under the same permission. A row a member cannot follow is not shown — and the route authorizes
+independently regardless, answering 404 exactly as a route that does not exist would (D-197).
+
+### 5.0.1 One sidebar, two selectors
+
+The customer does **not** get a duplicated sidebar per brand, and no page invents its own brand
+picker. The shell carries a **global Workspace Selector** and a **global Brand Selector**; the
+sidebar itself is stable, and the selected brand changes what brand-scoped pages are about (D-190).
+
+Every route declares exactly one scope, in one place (D-192):
+
+| Scope                   | Meaning                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| **Workspace**           | The brand selection is irrelevant to the page and is not read                                  |
+| **Brand**               | The page needs exactly ONE brand and says so; it never silently picks the workspace's first    |
+| **Brand or All Brands** | An aggregate is semantically meaningful, and "All Brands" means the brands THIS MEMBER may see |
 
 ### 5.1 Module detail notes
 

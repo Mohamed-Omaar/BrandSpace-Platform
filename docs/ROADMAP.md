@@ -646,42 +646,275 @@ What shipped:
 | **Arbitrary-code or webhook automations**      | Customer-controlled egress from a multi-tenant platform. The action registry is closed and its closure is a database constraint, not a convention (D-154).                                                                                                |
 | **Any silent external Copilot action**         | CLAUDE.md §2.5, enforced as a CHECK constraint rather than a service rule: a plan whose strictest step leaves the platform cannot exist with confirmation switched off.                                                                                   |
 | **A cross-workspace "AI memory"**              | Every learning, insight, plan and run is tenant-owned, brand-scoped and RLS-constrained. There is no store that spans workspaces.                                                                                                                         |
-| **Anything from Phase 8**                      | No billing provider, no checkout, no invoices, no subscription lifecycle, no payment webhooks, no dunning, no launch hardening. No deployment, infrastructure, DNS or staging secret was touched.                                                         |
+| **Anything from Phase 9 or Phase 10**          | No billing provider, no checkout, no invoices, no subscription lifecycle, no payment webhooks, no dunning, no launch hardening. No deployment, infrastructure, DNS or staging secret was touched.                                                         |
 
 ---
 
-## Phase 8 — Billing and Launch
+## The final delivery roadmap — three remaining phases
 
-**Goal:** take real money and open the doors.
+**The remaining MVP delivery is fixed to exactly three top-level phases.** No further top-level
+phase may be added, and no original MVP product scope may be deferred out of them, without an owner
+decision recorded in `docs/DECISIONS.md` (D-187).
+
+| Phase                               | What it closes                                                                                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Phase 8 — Product Completion**    | The whole customer product: brand context, campaigns, media, creative generation, publishing, intelligence |
+| **Phase 9 — Commerce & Onboarding** | A stranger can sign up, configure their own workspace, and pay                                             |
+| **Phase 10 — Production Launch**    | Real providers, production infrastructure, the public site, the launch bar                                 |
+
+The previous "Phase 8 — Billing and Launch" is superseded: its billing half is Phase 9, its public
+website and launch-readiness half is Phase 10, and the product work neither of them ever covered is
+Phase 8.
+
+**PHASE 8 IS AN UMBRELLA PHASE AND IS DELIVERED IN SEVERAL WORKSTREAMS** (D-195); how those
+workstreams are split across pull requests is an implementation detail, not part of the phase. Campaigns, the AI Creative Studio and the media workflow are **inside Phase 8** and remain
+mandatory; they are not deferred to Phase 9 or Phase 10 and never were. **There is no Phase 11.**
+
+---
+
+## Phase 8 — Product Completion
+
+**Goal:** the customer-facing product is one whole, coherent system — a customer can go from a brand
+identity to a published post and back to a learning, without leaving the product to do any of it.
+
+**PHASE 8 IS AN UMBRELLA PHASE, DELIVERED IN SEVERAL WORKSTREAMS.** It is not finished when the
+first workstream lands. **PR structure is an implementation detail** — a workstream may be its own
+pull request or several may travel together, and neither splits Phase 8 into sub-phases. The phase
+closes only when every workstream below is delivered and the exit journey at the end of this section
+runs end to end.
+
+### Workstream 1 — Product coherence _(delivered)_
+
+1. **Final delivery contract** — the workspace/brand model, the navigation inventory and the
+   three-phase roadmap recorded in the repository as authoritative (D-187 … D-189).
+2. **Global Workspace/Brand context** — one server-authoritative Brand Context for the authenticated
+   dashboard: a Brand Selector beside the Workspace Selector, deterministic persistence, and the end
+   of every page-level brand picker that answered the question differently (D-190, D-191).
+3. **Route scope classification** — every dashboard route declared Workspace-scoped, Brand-scoped or
+   Brand-or-All-Brands in ONE place, rather than decided again in each page (D-192).
+4. **Brand Profile** — the canonical identity of a brand (name, industry, description, website,
+   locales, palette, typography) and its canonical identity ASSETS, referenced into the one Asset
+   Library rather than copied into a second one (D-193).
+5. **Asset Library context** — All Assets / Shared / per-Brand, over the single workspace library.
+6. **Removal of product-wide country defaults** — country, locale, timezone and currency become
+   explicit inputs rather than assumptions baked into the schema (D-194).
+
+Exit criteria for this workstream:
+
+- [x] The shell carries a Workspace Selector and a Brand Selector, and the sidebar does not duplicate per brand
+- [x] No brand-required screen silently selects the workspace's first brand
+- [x] A selected brand from another workspace can never survive a workspace switch
+- [x] "All Brands" means the brands the CURRENT MEMBER may access, never every brand in the workspace
+- [x] Brand Profile reads and writes canonical identity, and its canonical asset references cannot
+      point outside the workspace or outside the member's brand scope
+- [x] The Asset Library offers All / Shared / per-Brand over one library, permission-safe
+- [x] Creating a workspace requires an explicit country, locale, timezone and currency; existing
+      stored values are untouched
+
+### Workstream 2 — Campaigns _(delivered)_
+
+The customer-facing Campaigns module. The `Campaign` domain exists from Phase 7 as an automation and
+analytics dimension; this is the product surface a customer actually works in.
+
+1. Campaigns UI in the customer dashboard, and its sidebar entry.
+2. Create, read, update and archive a campaign.
+3. Objective, brief, start and end dates, channels/platforms.
+4. Campaign status and lifecycle.
+5. Campaign ↔ content linkage, and the campaign content view.
+6. Campaign performance UX, built on the Phase 7 analytics foundations rather than a second
+   analytics stack.
+
+Exit criteria:
+
+- [x] A customer creates a campaign with an objective, a brief, dates and channels, and works in it
+- [x] Content is linked to a campaign and the campaign shows its own content
+- [x] Campaign performance reads from the existing analytics layer, brand- and workspace-scoped
+- [x] The campaign lifecycle is explicit, audited, and cannot be moved by an unauthorised member
+
+### Workstream 3 — Media in the AI Content Studio _(delivered)_
+
+1. Upload media DURING content creation.
+2. Choose an existing asset from the one Asset Library — shared assets and the selected brand's
+   assets alike.
+3. Attach media to content and to platform variants where the platform makes that meaningful.
+4. Media-aware content editing.
+5. Media-aware social previews.
+
+Exit criteria:
+
+- [x] A draft carries media, chosen or uploaded, without a second library being invented
+- [x] A variant's media respects the platform's own constraints
+- [x] The preview shows what will actually be published
+- [x] Nothing lets a brand attach an asset outside its workspace or outside the member's brand scope
+
+### Workstream 4 — AI Creative Studio _(delivered)_
+
+1. The customer-facing AI Creative Studio.
+2. On-brand image generation, using Brand Profile identity inputs and Brand Brain context where
+   appropriate.
+3. Output format and platform selection; adaptation and resizing for supported platform formats.
+4. Generated media saved into the ONE Asset Library.
+5. Generated media selectable inside the Content Studio.
+
+Exit criteria:
+
+- [x] A customer generates an on-brand image and it lands in the Asset Library as an ordinary asset
+- [x] Generation is metered through the AI Gateway and the credit ledger like every other AI action
+- [x] A generated image is selectable in the Content Studio with no export/import step
+- [x] Nothing stamps a logo automatically; identity inputs inform generation, they do not overlay it
+
+### Workstream 5 — The media workflow, end to end _(delivered)_
+
+1. Media-aware Approvals.
+2. Media-aware Calendar.
+3. A media-aware publishing contract.
+4. Provider abstraction extended to carry media payloads.
+5. Mock/dev adapters sufficient to prove the whole workflow inside Phase 8.
+
+Exit criteria:
+
+- [x] A post with media moves through approval, scheduling and publishing without losing its media
+- [x] The publishing contract carries media, and the mock adapter proves the path end to end
+- [x] A failed media publish is reported honestly and is safe to retry
+
+### Workstream 6 — Marketing Intelligence and final product polish _(delivered)_
+
+1. The final customer-facing Marketing Intelligence surface and its integration.
+2. Final navigation integration — every area in the fixed inventory reachable, none of them a
+   placeholder link.
+3. Final Product Completion UX polish.
+
+Exit criteria:
+
+- [x] Marketing Intelligence is a real customer surface, not an internal concept
+- [x] The eighteen-area navigation inventory is complete and every entry leads somewhere real
+- [x] The product reads as one system in both languages and both directions
+
+### The Phase 8 exit journey
+
+**Phase 8 is not complete until this runs end to end:**
+
+Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign →
+AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar →
+Publish through the provider abstraction → Analytics → Marketing Intelligence →
+accepted learning fed back into Brand Brain.
+
+**Real production providers are NOT required to close Phase 8.** Mock and development adapters may
+prove the product behaviour. Real provider credentials, real social platforms and production
+deployment are Phase 10.
+
+**THE JOURNEY RUNS.** `tests/e2e/phase8-journey.spec.ts` walks it: thirteen screens, in order, in
+one shell with one brand context, in both languages and both directions, at phone width, clean under
+axe. Every stop answers under 400 and is the page that was asked for — not a redirect to the
+overview, which is the thing that would make such a suite pass for free.
+
+**WHAT WALKING IT FOUND, recorded because a green suite that found nothing proves nothing.** The
+Brand Selector vanished on Brand Brain and Analytics the moment a brand was chosen — both screens
+render the shell twice and passed the context to the "no brand" branch only. The Content Studio's
+media picker, its live social preview and one composer control read twenty-seven message keys their
+page never sent, so every label rendered as an empty string with no test and no log to say so. And
+the end-to-end automations fixture grew seven rules per run against a configured ceiling of twenty,
+so the third consecutive run failed for a reason that had nothing to do with what it tested. All
+three are fixed, and each has a guard: a shell/context count, a dictionary-coverage sweep, and a
+seed that resets what it creates.
+
+### Not in Phase 8
+
+Payments, checkout, invoices and subscriptions · self-service signup and onboarding · real AI
+provider adapters · real Meta / LinkedIn / TikTok / X providers · production deployment, production
+object storage or the virus-scanner decision. Those are Phase 9 and Phase 10, which are already
+fixed. **Campaigns, the AI Creative Studio and the media workflow are NOT on this list — they are
+Phase 8 scope and remain mandatory.**
+
+---
+
+## Phase 9 — Commerce & Onboarding
+
+**Goal:** a stranger can create an account, configure their own workspace, and pay for it.
 
 ### Scope
 
-1. **Payment provider adapter** — hosted checkout and portal, subscriptions, one-time charges, refunds.
-   **[Owner decision D-21: provider(s) and markets]**
-2. **Subscription lifecycle** — trials, upgrades with proration, downgrades with impact checks,
-   cancellation, dunning, grace periods, suspension.
-3. **Invoices** — generation, numbering, tax handling, bilingual PDFs, credit notes.
-4. **Billing webhooks** — verified, idempotent, ordered, reconciled.
-5. **Customer billing portal** and **platform billing reports**.
-6. **Credit purchase** — packs, add-ons, overage.
-7. **Public website** — all 15 pages, CMS-driven, bilingual, SEO complete, config-driven pricing page,
-   status page.
-8. **Launch readiness** — performance budgets met, penetration test completed and findings resolved,
-   restore drill passed, load test passed, legal documents published, support processes documented,
-   monitoring and alerting verified, incident runbooks written.
+**Onboarding**
+
+1. Self-service sign up, email verification, and customer MFA according to policy.
+2. Workspace creation with an EXPLICIT country, locale, timezone and currency — the question Phase 8
+   stopped answering on the customer's behalf (D-194).
+3. First brand creation, guided Brand Profile setup, guided Brand Brain setup.
+4. Social account connection during onboarding.
+5. Team invitation during onboarding.
+6. The Public/Landing Website → Sign Up → Checkout → Dashboard journey, whole.
+
+**Commerce**
+
+7. Plan selection and checkout. **[Owner decision D-21: payment provider(s) and markets]**
+8. Subscription creation, upgrade, downgrade, cancellation.
+9. Payment failures, dunning, grace periods, suspension and recovery.
+10. Invoices — generation, numbering, tax handling, bilingual PDFs, credit notes.
+11. Billing webhooks — verified, idempotent, ordered, reconciled.
+12. The final customer Billing & Usage UX.
+13. Credit packs and credit top-ups.
+
+### The AI credit rule — prepaid, never postpaid
+
+**BrandSpace AI usage is prepaid and entitlement-controlled. There is no postpaid AI overage, and
+Phase 9 must not define one.** When usable credits reach zero, AI execution STOPS. The customer may
+top up or upgrade; nothing runs on credit the customer has not bought. The platform owner pays the
+upstream AI provider, and the customer consumes BrandSpace credits under the AI Gateway and ledger
+rules already built in Phase 4 (D-25, D-26).
 
 ### Exit criteria
 
+- [ ] A stranger signs up, verifies their email, chooses their own country/locale/timezone/currency,
+      creates a brand, and lands in a working workspace
 - [ ] A customer subscribes, is charged, receives an invoice, and gets the right entitlements
 - [ ] Payment failure moves through dunning to suspension and recovers correctly
 - [ ] Upgrade and downgrade behave exactly as specified, including credit handling
+- [ ] Reaching zero usable credits STOPS AI execution and offers top-up or upgrade — never overage
 - [ ] Webhook replays change nothing; spoofed webhooks are rejected
+
+---
+
+## Phase 10 — Production Launch
+
+**Goal:** the finished product is productionised, the public site is live, and the doors open.
+
+### Scope
+
+**Real providers**
+
+1. Real AI text provider and real AI image provider.
+2. Approved real Meta/Instagram, LinkedIn, TikTok and X providers.
+3. Real social analytics ingestion.
+
+**Production infrastructure**
+
+4. Production object storage; production malware/virus scanner; production email provider.
+5. Production payment provider configuration and credentials.
+6. Production PostgreSQL, Redis, workers and queues.
+7. Staging and production environments, domains, SSL, secrets management.
+8. Backups and verified restore; monitoring, alerts and incident readiness.
+
+**The launch bar**
+
+9. Public website — all 15 pages, CMS-driven, bilingual, SEO complete, config-driven pricing page,
+   status page.
+10. Rate limiting and security hardening; penetration/security review with high-severity findings
+    resolved.
+11. Performance and load testing against the published budgets.
+12. Final production E2E acceptance and the final full Product Delivery Audit.
+
+### Exit criteria
+
+- [ ] Every provider in use is real, credentialed through the vault, and proven against its contract
 - [ ] Public site scores ≥ 95 Lighthouse on performance, accessibility, best practices, and SEO in both locales
 - [ ] Penetration test findings of high severity are resolved
 - [ ] A production restore drill has been completed and timed
 - [ ] Status page, legal pages, and support workflows are live
+- [ ] The final Product Delivery Audit passes
 
 **Launch.**
+
+**There is no Phase 11.**
 
 ---
 
@@ -763,7 +996,7 @@ no mail transport exists in this platform, and a CHECK constraint pins every row
 
 | Not built                                                  | Why                                                                                                                                                                                                                                                     |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Email, SMS, push and Slack delivery**                    | ROADMAP scope item 8 says "in-app + email", but no mail transport exists anywhere in the platform. A `channel` accepting `EMAIL` would be a row claiming a delivery that never happened. Phase 8 launch hardening (D-123)                               |
+| **Email, SMS, push and Slack delivery**                    | ROADMAP scope item 8 says "in-app + email", but no mail transport exists anywhere in the platform. A `channel` accepting `EMAIL` would be a row claiming a delivery that never happened. Phase 10 launch hardening (D-123)                              |
 | **Threaded comments, mentions, anchored review notes**     | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own — threads, `@mentions`, a position in the text, resolution. The approval's request and decision notes carry the review's context; the rest belongs with the surface it is for |
 | **Multi-step approval chains, role assignment, due dates** | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten — the rule §4.4b applied to `campaignId`                                                                           |
 | **Notification channel preferences**                       | A preferences screen for channels the product cannot deliver on would be a promise it does not keep. It arrives with the transports                                                                                                                     |

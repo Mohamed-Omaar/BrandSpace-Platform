@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dropThrowawayDatabase } from './fixtures';
 
 /**
  * F-80 — THE MIGRATION ITSELF, AS AN UPGRADE.
@@ -391,7 +392,7 @@ describe('the F-80 migration as an upgrade from current main', () => {
     await platform?.end();
     await migrator?.end();
     if (admin) {
-      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await dropThrowawayDatabase(admin, database);
       await admin.end();
     }
   }, 60_000);
@@ -874,7 +875,7 @@ describe('a migrations-only database matches the Prisma schema', () => {
 
   afterAll(async () => {
     if (admin) {
-      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
+      await dropThrowawayDatabase(admin, database);
       await admin.end();
     }
   }, 60_000);

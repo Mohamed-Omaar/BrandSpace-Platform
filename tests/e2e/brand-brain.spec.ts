@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
-import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { useBrand } from './brand';
+import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 
 function credentials(): E2eAdminCredentials {
   try {
@@ -36,7 +37,15 @@ async function signIn(page: Page, email: string, password: string, locale = 'en'
 }
 
 async function openBrandBrain(page: Page, locale = 'en'): Promise<void> {
-  const { customer } = credentials();
+  const loaded = credentials();
+  const { customer } = loaded;
+  /*
+   * THE BRAND THIS SUITE MEANS, said out loud (D-191). Brand Brain is about one
+   * brand's identity and no longer picks one for the visitor, so the suite
+   * names the brand the seeds built — rather than relying, as it used to, on
+   * whichever row the page happened to find first.
+   */
+  await useBrand(page, customer.workspaceId, brandFixtures(loaded).primaryBrandId);
   await signIn(page, customer.email, customer.password, locale);
   await page.click(`[data-testid="choose-workspace-${customer.workspaceSlug}"]`);
   await page.waitForURL(new RegExp(`/${locale}/overview$`));

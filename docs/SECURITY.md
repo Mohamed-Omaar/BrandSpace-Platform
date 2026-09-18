@@ -1504,7 +1504,7 @@ the same outcome as an id that never existed.
 
 | Not done                                               | Why                                                                                                                                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 8 launch hardening (D-123)                                                         |
+| External notification delivery                         | No mail, SMS or push transport exists in the platform. Phase 10 launch hardening (D-123)                                                        |
 | Multi-step approval chains, role assignment, due dates | A workflow builder, not a review. `assignedToRoleId`, `dueAt` and `stepIndex` are not created rather than created and left unwritten            |
 | Threaded comments with mentions and anchors            | `docs/DATABASE.md` §4.8's `Comment` is a collaboration surface of its own. The approval's request and decision notes carry the review's context |
 | Weakening the audit trail for the UI                   | The screen was shaped to the append-only record, not the reverse                                                                                |
@@ -1808,7 +1808,7 @@ Recorded because a clean result is a result:
   feature expansion this milestone is not.
 - **`RolePermission`** carries no tenant key of its own and inherits the role's,
   so it raises no cross-tenant question and was deliberately left alone.
-- **Phase 8 retention** remains the recorded launch dependency (D-116, D-117).
+- **Phase 10 retention** remains the recorded launch dependency (D-116, D-117).
   This milestone did not build a retention engine.
 
 ### 27.6 The review of the audit — four things the first pass got wrong
@@ -2727,3 +2727,103 @@ both read provenance; only one can move the state, and the loser returns having
 written nothing. Reading provenance a statement earlier also makes it marginally
 _more_ faithful — it is now taken closer to the window read that decided the
 crossing, rather than after it.
+
+---
+
+## 37. Phase 8 — media, the Creative Studio and Marketing Intelligence
+
+Phase 8 added three surfaces that touch tenant data in ways the earlier phases
+did not, and one of them has no foreign key to lean on. Each is recorded here
+with the boundary that holds it.
+
+### 37.1 The media boundary is a predicate, because it cannot be a key
+
+`content_variant.assetIds` is a `uuid[]`. PostgreSQL has no array-element
+reference, so the composite workspace-scoped foreign key every other tenant
+reference uses (D-112) cannot reach it. **`publishableAssetWhere()` IS the
+boundary** (D-199), and the decision that matters is that there is exactly one
+of it: the Content Studio applies it when an author attaches a picture, and the
+publish pipeline applies it again immediately before a payload reaches a
+provider. Two copies would mean the Studio admitting something publishing later
+refused — a post that can never go out — or publishing admitting something the
+Studio refused, which makes the refusal theatre.
+
+Admissible is: **this workspace** (RLS and the scoped client; a foreign id
+returns no row at all) · **this brand, or the workspace-SHARED shelf** ·
+**inside the caller's BrandScope, as a query predicate** (D-132) · **`READY` and
+`CLEAN`** · **a kind a post can carry**. Every refusal is `NOT_FOUND`, identical
+to a genuine miss, so a publish attempt cannot be used to ask whether an asset
+exists in another workspace.
+
+The scope clause is deliberately not the ordinary one. Restricting `brandId` to
+the scope would hide the shared shelf, whose `brandId` is null, from exactly the
+members who are most restricted — so the clause admits the shelf explicitly, and
+an empty scope stays UNRESTRICTED per D-132.
+
+### 37.2 An adapter is given bytes, never a way to fetch them
+
+`PublishRequest.media` carries the bytes. It carries no storage key and no
+signed URL, because an adapter that could reach into the Asset Library would be
+a place tenant isolation could fail, and there is one adapter per platform. The
+pipeline resolves media through a PORT — `packages/social-connectors` depends on
+neither the Asset Library nor the object store — and a caller wired with no port
+cannot publish media at all: a variant carrying assets is REFUSED rather than
+sent as a caption alone (D-200).
+
+**The worker resolves with an EMPTY BrandScope, and that is correct rather than
+a shortcut.** It is publishing something a member already composed, approved and
+scheduled; there is no member in the room. The brand clause still confines it to
+the job's own brand plus the shared shelf, which is the boundary that remains
+meaningful once no human actor exists.
+
+### 37.3 A pre-flight refusal must not be reported as a platform refusal
+
+Publishing history resolved its sentence from the failure CLASS alone, so every
+pre-flight refusal read as something the platform had said. A post whose picture
+had been quarantined reported "the platform rejected this content" — when no
+platform had been called, and the customer would go and edit a caption nothing
+was wrong with. The stable `failureCode` is ours by construction (it is never a
+provider string), so it now carries its own localized sentence; the class still
+answers for a genuine provider refusal. Nothing about what is STORED changed: a
+provider's own message is still never persisted and never rendered, because it
+routinely echoes the content that was rejected.
+
+### 37.4 Marketing Intelligence reads, and the learning loop only proposes
+
+The content-gap route spends credits, so it takes `strategy.manage` rather than
+`strategy.read` — the same rule every generating route follows. Scope is checked
+before the replay lookup (the F-74 ordering), so an out-of-scope brand is refused
+before anything is read and before any model is paid for; the refusal is
+indistinguishable from a fabricated brand id.
+
+**The write-back into Brand Brain proposes and never writes.** Every learning
+lands as a PENDING candidate in the existing review queue with its provenance and
+evidence (D-150); a human accepting it there is what closes the loop. The control
+is gated on `brand_brain.review` rather than on `strategy.manage`, because the
+person asking for an inference to be drawn is the person who will have to judge
+it. An insight outside the caller's scope proposes nothing, and answers exactly
+as an insight that never existed does.
+
+### 37.5 Two classes of silent defect, now guarded
+
+Neither is a vulnerability, and both are recorded because they were invisible to
+every green suite:
+
+- **A dictionary key a page does not send renders as an empty string** (D-202).
+  A page builds `Record<string, string>` from an explicit key list — a
+  translator function cannot cross the server/client boundary — so an omitted
+  key is well-typed and blank. Twenty-seven of them shipped. A unit test now
+  reads every view's `t['…']` lookups and requires the key to be in its page.
+- **A shell rendered twice must be handed its context twice** (D-202). Brand
+  Brain and Analytics passed the brand context to their "no brand selected"
+  branch only, so the Brand Selector vanished the moment a brand was chosen. A
+  unit test counts shells against contexts.
+- **A translation compared against its key never matches** (D-202). Where the
+  key is built from a database value — an audit entry's actor type, a
+  notification's template key, a publish job's failure code — three screens
+  detected the miss with `translated === key`. `translator` returns
+  `dictionary[key]`, so a miss is `undefined`: the fallback never ran and
+  `undefined` was rendered as nothing, which for the publishing history meant a
+  failed post reporting no failure at all. `optionalMessage()` answers
+  `string | null` and is now the only way to ask for a key the type system
+  cannot know.

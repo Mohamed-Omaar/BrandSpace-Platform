@@ -29,7 +29,22 @@ export type {
   TextRequest,
   TextResult,
   UsageUnits,
+  GeneratedImage,
 } from './adapter';
+
+/**
+ * The development image encoder, exported so a fixture can make a REAL picture.
+ *
+ * WHY A TEST NEEDS IT. The Asset Library checks a file's own signature before
+ * storing it and refuses a duplicate checksum, both correctly — so a fixture
+ * cannot hand it a fake buffer and cannot hand it the same buffer twice. This
+ * is the one PNG encoder in the repository that is dependency-free and seeded,
+ * which makes it exactly the right thing for a run-unique upload.
+ *
+ * IT REMAINS A DEVELOPMENT DOUBLE. Nothing in the product calls it outside the
+ * mock adapter.
+ */
+export { deterministicPng } from './adapters/deterministic-image';
 
 export { MockProviderAdapter } from './adapters/mock';
 export type { MockAdapterOptions, MockCall, MockDirective } from './adapters/mock';

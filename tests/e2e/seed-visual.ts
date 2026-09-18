@@ -172,6 +172,10 @@ async function main(): Promise<void> {
         ownerEmail: OWNER_EMAIL,
         ownerName: 'Visual Fixture Owner',
         defaultLocale: 'EN',
+        // EXPLICIT (D-194), for the reason the admin seed gives.
+        country: 'US',
+        timezone: 'UTC',
+        currency: 'USD',
       });
     }
     const workspace = await platform.workspace.findUniqueOrThrow({

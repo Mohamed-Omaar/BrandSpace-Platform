@@ -1,7 +1,8 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
 import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandScopeFilter, inBrandBrain } from '../../../server/brand-brain-context';
+import { requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { statusMessage } from '../../../i18n/messages';
@@ -51,25 +52,25 @@ export default async function BrandBrainPage({
   const can = (key: string) => permissions.includes(key);
 
   /*
-   * THE MEMBER'S OWN BRANDS, not the workspace's.
+   * THE BRAND THIS SCREEN IS ABOUT, CHOSEN RATHER THAN GUESSED (D-190).
    *
-   * `brandScopeFilter` contributes nothing when the scope is empty — which it
-   * is for every membership today — and restricts the query when it is not.
-   * Filtering here rather than refusing afterwards matters: a member restricted
-   * to one brand must land on THEIR brand, not on the workspace's oldest one
-   * followed by a 404 (docs/SECURITY.md §4.2, F-74).
+   * THIS IS THE SCREEN THE SILENT GUESS LIVED ON. It used to take the
+   * workspace's OLDEST brand — `findFirst` ordered by `createdAt` — so a member
+   * with four brands arrived already editing one of them, with nothing on the
+   * page saying which, and an upload or a knowledge edit landed wherever that
+   * query happened to point.
+   *
+   * The scope is still applied IN THE QUERY (D-132, F-74); what changed is that
+   * a member with several brands is now ASKED. `requiredBrand` returns null for
+   * every shape but "exactly one brand is selected", so the no-brand branch
+   * below cannot be skipped by accident.
    */
-  const brand = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    db.brand.findFirst({
-      where: {
-        deletedAt: null,
-        status: { in: ['ACTIVE', 'DRAFT'] },
-        ...brandScopeFilter(workspace.brandScope),
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true },
-    }),
+  const brandContext = await brandContextFor(
+    workspace,
+    '/brand-brain',
+    typeof query['brand'] === 'string' ? query['brand'] : null,
   );
+  const brand = requiredBrand(brandContext);
 
   const status = typeof query['ok'] === 'string' ? (query['ok'] as string) : null;
   const error = typeof query['error'] === 'string' ? (query['error'] as string) : null;
@@ -91,8 +92,17 @@ export default async function BrandBrainPage({
   // NO BRAND YET. A real, expected state for a new workspace — not an error,
   // and not an empty dashboard that leaves the customer guessing what to do.
   if (!brand) {
+    /*
+     * TWO DIFFERENT ABSENCES, AND THE READER IS TOLD WHICH. "This workspace has
+     * no brand yet" is an invitation to create one; "you have several and have
+     * not said which" is a request to choose. Showing the create form for the
+     * second would offer to solve a problem the reader does not have.
+     */
+    const unselected = brandContext.resolution.kind === 'unselected';
+
     return (
       <WorkspaceShell
+        brandContext={brandContext}
         locale={locale}
         heading={t('bb.title')}
         description={t('bb.heroBody')}
@@ -114,9 +124,13 @@ export default async function BrandBrainPage({
             justifyItems: 'start',
           }}
         >
-          <h2 style={{ margin: 0, ...typographyTokens.h2 }}>{t('bb.noBrand')}</h2>
-          <p style={{ margin: 0, color: colorTokens.textMuted }}>{t('bb.noBrandBody')}</p>
-          {can('brand.manage') ? (
+          <h2 style={{ margin: 0, ...typographyTokens.h2 }}>
+            {unselected ? t('brand.chooseTitle') : t('bb.noBrand')}
+          </h2>
+          <p style={{ margin: 0, color: colorTokens.textMuted }}>
+            {unselected ? t('brand.chooseBody') : t('bb.noBrandBody')}
+          </p>
+          {!unselected && can('brand.manage') ? (
             <form action={createBrandAction} style={{ display: 'flex', gap: spacingTokens.sm }}>
               <input type="hidden" name="locale" value={locale} />
               <input
@@ -311,6 +325,16 @@ export default async function BrandBrainPage({
 
   return (
     <WorkspaceShell
+      /*
+       * THE BRAND CONTEXT, ON THE PATH THAT HAS ONE.
+       *
+       * It was passed on this page's no-brand branch and dropped here, so the
+       * two screens most about a brand lost the Brand Selector from the rail
+       * the MOMENT a brand was actually chosen — a reader could pick a brand
+       * and then have no way to change it without leaving the page. One shell,
+       * one selector, on every route (D-190).
+       */
+      brandContext={brandContext}
       locale={locale}
       heading={t('bb.title')}
       activePath="/brand-brain"

@@ -211,6 +211,20 @@ be unique, and cost fields must be present before a model can be activated.
 > D-16 governs customer-facing **generation** modalities. `moderation.check` and `brand.retrieve` are
 > internal plumbing — the gateway's own moderation step and Brand Brain retrieval — and are unaffected.
 
+> **PHASE 8 GAVE `image.generate` ITS CUSTOMER SURFACE.** The AI Creative Studio is the only place a
+> customer reaches it, and it changes nothing about the rules above: the same reserve → execute →
+> settle, the same idempotency key, the same ledger. Three things about it are worth stating because
+> each was a decision rather than an omission:
+>
+> - **IMAGE ONLY. NO VIDEO AND NO VOICE.** D-16 still holds and `resolveRoute` still refuses both.
+> - **THE OUTPUT IS NOT PERSISTED BY THE GATEWAY** (`persistOutput: false`, D-78). An image's bytes
+>   belong in the Asset Library, which owns files, versions, scanning and retention. THE CONSEQUENCE
+>   IS LOAD-BEARING: a gateway REPLAY therefore carries no bytes, so the Creative Studio looks for the
+>   asset its own idempotency key already produced BEFORE asking the gateway, and again after a
+>   replay. Without that, retrying a generation reported a failure for work that had succeeded.
+> - **NOTHING NAMES A MODEL, A PROVIDER OR A PROMPT ON THE CUSTOMER SURFACE** — a source guard asserts
+>   it across the whole dashboard, not just the Studio (AC-28.8).
+
 ### 5.2 Routing rule
 
 ```yaml

@@ -30,6 +30,40 @@ export const messages = {
     'nav.expand': 'توسيع الشريط الجانبي',
     'nav.language': 'تغيير اللغة',
     'ws.switcherLabel': 'مساحات العمل',
+    'brand.switcherLabel': 'العلامات التجارية',
+    'brand.allBrands': 'كل العلامات التجارية',
+    'brand.allBrandsCaption': 'كل ما يمكنك الوصول إليه',
+    'brand.selectedCaption': 'العلامة التجارية النشطة',
+    'brand.noneSelected': 'لم تُحدَّد علامة تجارية',
+    'brand.noneSelectedCaption': 'اختر واحدة للمتابعة',
+    'brand.noBrands': 'لا توجد علامة تجارية',
+    'brand.noBrandsCaption': 'أنشئ واحدة للبدء',
+    'brand.emptyMenu': 'لا توجد علامات تجارية متاحة لك',
+    'brand.chooseTitle': 'اختر علامة تجارية',
+    'brand.chooseBody':
+      'تحتاج هذه الصفحة إلى علامة تجارية واحدة. اخترها من محدِّد العلامة التجارية في الشريط الجانبي.',
+    'brand.emptyTitle': 'لا توجد علامة تجارية بعد',
+    'brand.emptyBody': 'أنشئ علامة تجارية لتبدأ العمل في هذه المساحة.',
+    'brand.profile': 'ملف العلامة التجارية',
+    'brandProfile.subtitle': 'الهوية الأساسية لهذه العلامة التجارية.',
+    'brandProfile.name': 'اسم العلامة التجارية',
+    'brandProfile.industry': 'القطاع',
+    'brandProfile.website': 'الموقع الإلكتروني',
+    'brandProfile.description': 'الوصف',
+    'brandProfile.defaultLocale': 'اللغة الافتراضية',
+    'brandProfile.supportedLocales': 'اللغات المدعومة',
+    'brandProfile.localeAr': 'العربية',
+    'brandProfile.localeEn': 'الإنجليزية',
+    'brandProfile.headingFont': 'خط العناوين',
+    'brandProfile.bodyFont': 'خط النص',
+    'brandProfile.palette': 'لوحة الألوان',
+    'brandProfile.paletteHint': 'ألوان بصيغة #RRGGBB مفصولة بفواصل.',
+    'brandProfile.primaryLogo': 'الشعار الأساسي',
+    'brandProfile.secondaryLogo': 'الشعار البديل',
+    'brandProfile.logoHint': 'يُختار من مكتبة الملفات: ملفات هذه العلامة أو الملفات المشتركة.',
+    'brandProfile.noLogo': 'بدون شعار',
+    'brandProfile.noAssets': 'لا توجد صور جاهزة في المكتبة لهذه العلامة بعد.',
+    'brandProfile.save': 'حفظ ملف العلامة',
     'page.eyebrow': 'مساحة العمل',
     'overview.greeting': 'الرئيسية',
     'overview.hero.eyebrow': 'مساحة العمل',
@@ -170,6 +204,9 @@ export const messages = {
       'صورك ومقاطعك وملفاتك وأصول علامتك المعتمدة في مكان واحد — منظّمة بالمجلدات والوسوم، ومفحوصة قبل أن تصبح قابلة للاستخدام.',
     'assets.search': 'ابحث بالاسم',
     'assets.filter.kind': 'النوع',
+    'assets.filter.context': 'النطاق',
+    'assets.filter.allAssets': 'كل الملفات',
+    'assets.filter.shared': 'مشتركة',
     'assets.filter.status': 'الحالة',
     'assets.filter.tag': 'الوسم',
     'assets.filter.all': 'الكل',
@@ -534,6 +571,10 @@ export const messages = {
     'calendar.scheduledFor': 'موعد النشر',
     'calendar.mockTarget': 'وجهة تجريبية — لا يوجد نشر فعلي بعد',
     'calendar.channels': 'القنوات',
+    'calendar.campaign': 'الحملة',
+    'calendar.publishState': 'حالة النشر',
+    'calendar.approvalState': 'حالة الموافقة',
+    'calendar.media': 'عدد الوسائط',
 
     // --- المرحلة 5B-3: الموافقات وسجل النشاط والإشعارات ---
     'nav.approvals': 'الموافقات',
@@ -616,6 +657,20 @@ export const messages = {
     'publishing.failure.not_connected': 'الحساب غير متصل.',
     'publishing.failure.unsupported': 'المنصة لا تدعم هذا الإجراء.',
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
+    /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
+    'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.preflight.no_credential': 'لا يوجد إذن صالح لهذا الحساب. أعد ربطه.',
+    'publishing.code.preflight.variant_missing': 'لم يعد لهذا المنشور نص على هذه المنصة.',
+    'publishing.code.preflight.too_many_media':
+      'عدد الوسائط أكبر مما تقبله هذه المنصة. احذف بعضها ثم أعد المحاولة. لم يُرسل شيء.',
+    'publishing.code.preflight.media_unavailable':
+      'تعذّر تجهيز الوسائط للنشر. لم يُرسل شيء، ويمكن إعادة المحاولة بأمان.',
+    'publishing.code.preflight.media_rejected':
+      'إحدى الوسائط المرفقة لم تعد صالحة للنشر — محذوفة أو قيد الفحص أو من علامة أخرى. لم يُرسل شيء.',
+    'publishing.code.verify.not_published':
+      'تحقّقنا من المنصة ولم نجد المنشور. لم يُنشر شيء مرتين.',
+    'publishing.code.recovery.claim_expired':
+      'انقطعت محاولة سابقة. أُعيدت المهمة إلى الانتظار بأمان.',
     'nav.notifications': 'الإشعارات',
 
     'content.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -651,6 +706,7 @@ export const messages = {
     'approvals.decideTitle': 'قرار المراجعة',
     'approvals.history': 'سجل المراجعات',
     'approvals.historyEmpty': 'لم يمر هذا المحتوى بأي مراجعة بعد.',
+    'approvals.notRequired': 'لا تحتاج موافقة',
     'approvals.status.PENDING': 'بانتظار المراجعة',
     'approvals.status.APPROVED': 'معتمَد',
     'approvals.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -720,6 +776,7 @@ export const messages = {
     // --- Phase 7 — Analytics, Insights, Strategy, Copilot, Automations ---
     'nav.analytics': 'التحليلات',
     'nav.strategy': 'الاستراتيجية',
+    'nav.intelligence': 'ذكاء التسويق',
     'nav.copilot': 'المساعد',
     'nav.automations': 'الأتمتة',
     'analytics.title': 'التحليلات',
@@ -805,6 +862,23 @@ export const messages = {
     'insights.proposeLearnings': 'اقترح دروسًا لعقل العلامة',
     'insights.proposeLearningsHint':
       'تُضاف كمقترحات بانتظار مراجعة بشرية، ولا تُكتب في عقل العلامة مباشرة.',
+    'insights.type.CONTENT_GAP': 'فجوة محتوى',
+    'insights.type.OPPORTUNITY': 'فرصة',
+    'insights.type.ANALYTICS_EXPLANATION': 'شرح أداء',
+    'insights.type.ANOMALY': 'انحراف ملحوظ',
+    'insights.type.RECOMMENDATION': 'توصية',
+    'insights.type.STRATEGY': 'استراتيجية',
+    'insights.type.MONTHLY_PLAN': 'خطة شهرية',
+    'intelligence.title': 'ذكاء التسويق',
+    'intelligence.subtitle': 'ما أعلنته علامتك وما نشرته فعلًا — والفارق بينهما.',
+    'intelligence.analyse': 'حلّل فجوات المحتوى',
+    'intelligence.focusLabel': 'على ماذا تريد التركيز؟',
+    'intelligence.focusPlaceholder': 'مثال: حضورنا على لينكدإن هذا الربع',
+    'intelligence.basisNotice':
+      'يستهلك رصيد ذكاء اصطناعي. يستند إلى محاور علامتك المعتمدة وحساباتها الموصولة وسجل نشرها — ولا يوجد مصدر خارجي.',
+    'intelligence.empty': 'لا توجد نتائج بعد.',
+    'intelligence.emptyBody':
+      'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
     'strategy.title': 'الاستراتيجية',
     'strategy.subtitle': 'مقترحات مبنية على معرفة علامتك وأدائها المقاس.',
     'strategy.generate': 'اقترح استراتيجية',
@@ -987,6 +1061,109 @@ export const messages = {
     'overview.metric.engagement': 'التفاعلات (٢٨ يومًا)',
     'overview.metric.engagementHint': 'من القياسات المخزّنة',
     'overview.analyticsSeeAll': 'عرض التحليلات',
+    'nav.campaigns': 'الحملات',
+    'campaigns.subtitle': 'خطّط عملك التسويقي في حملات، واربط المحتوى بها لتقيس أثرها.',
+    'campaigns.new': 'حملة جديدة',
+    'campaigns.emptyTitle': 'لا توجد حملات بعد',
+    'campaigns.emptyBody':
+      'الحملة تجمع منشوراتك حول هدف واحد وفترة زمنية واحدة، فتصبح نتائجها قابلة للقراءة.',
+    'campaigns.chooseBrandTitle': 'اختر علامة تجارية',
+    'campaigns.chooseBrandBody': 'الحملة تخصّ علامة تجارية واحدة. اختر واحدة من المبدّل في الأعلى.',
+    'campaigns.name': 'اسم الحملة',
+    'campaigns.nameHint': 'اسم يعرفه فريقك، لا يظهر للجمهور.',
+    'campaigns.objective': 'الهدف',
+    'campaigns.brief': 'الموجز',
+    'campaigns.briefHint': 'ما الذي تريد تحقيقه، ولمن؟ يُكتب باللغتين.',
+    'campaigns.briefAr': 'الموجز بالعربية',
+    'campaigns.briefEn': 'الموجز بالإنجليزية',
+    'campaigns.description': 'ملاحظات داخلية',
+    'campaigns.startDate': 'تاريخ البداية',
+    'campaigns.endDate': 'تاريخ النهاية',
+    'campaigns.channels': 'القنوات',
+    'campaigns.channelsHint': 'المنصات التي تنوي النشر عليها. يمكن تغييرها لاحقًا.',
+    'campaigns.status': 'الحالة',
+    'campaigns.create': 'إنشاء الحملة',
+    'campaigns.save': 'حفظ التغييرات',
+    'campaigns.archive': 'أرشفة الحملة',
+    'campaigns.archiveHint': 'تختفي الحملة من القوائم النشطة. لا يُحذف أي محتوى.',
+    'campaigns.back': 'كل الحملات',
+    'campaigns.contentCount': 'عناصر المحتوى',
+    'campaigns.contentTitle': 'محتوى هذه الحملة',
+    'campaigns.contentEmpty': 'لم يُربط أي محتوى بهذه الحملة بعد.',
+    'campaigns.contentEmptyAction': 'اكتب منشورًا',
+    'campaigns.dates': 'الفترة',
+    'campaigns.noDates': 'بلا تواريخ محددة',
+    'campaigns.noChannels': 'بلا قنوات محددة',
+    'campaigns.performance': 'الأداء',
+    'campaigns.performanceEmpty':
+      'لا توجد قياسات لهذه الحملة بعد. تظهر الأرقام بعد نشر محتواها وورود بياناته.',
+    'campaigns.performanceSample': 'هذه الأرقام من بيانات تجريبية.',
+    'campaigns.detailsTitle': 'تفاصيل الحملة',
+    'campaigns.filterStatus': 'الحالة',
+    'campaigns.filterAll': 'الكل',
+    'campaigns.showArchived': 'إظهار المؤرشفة',
+    'campaigns.hideArchived': 'إخفاء المؤرشفة',
+    'campaigns.composerLabel': 'الحملة',
+    'campaigns.composerNone': 'بلا حملة',
+    'campaigns.notFound': 'لم يُعثر على الحملة',
+    'campaigns.notFoundBody': 'قد تكون مؤرشفة، أو خارج نطاق علاماتك التجارية.',
+    'content.media.legend': 'الوسائط',
+    'content.media.none': 'بلا وسائط',
+    'content.media.empty': 'لا توجد صور أو مقاطع جاهزة لهذه العلامة بعد.',
+    'content.media.video': 'فيديو',
+    'content.media.selected': '{selected} من {max} مختارة',
+    'content.media.atLimit': 'بلغت الحد لهذه المنصة',
+    'content.media.uploadHint': 'ارفع ملفًا إلى مكتبة الوسائط',
+    'content.media.uploadLabel': 'أضف صورة أو فيديو',
+    'content.media.uploadSubmit': 'ارفع',
+    'content.media.uploadNotice':
+      'يُحفظ الملف في مكتبة الوسائط نفسها، ويصبح قابلًا للاختيار بعد اجتياز الفحص.',
+    'content.preview.title': 'المعاينة',
+    'content.preview.notice': 'معاينة تقريبية للمنتج، وليست نسخة مطابقة لواجهة المنصة.',
+    'content.preview.missingMedia': 'بلا وسائط',
+    'content.preview.loadingMedia': 'جارٍ التحميل',
+    'content.preview.showMore': 'المزيد',
+    'content.preview.showLess': 'أقل',
+    'content.preview.actions': 'إجراءات المنشور (للعرض فقط)',
+    'content.preview.carousel': '{count} صور',
+    'content.preview.aspect': 'نسبة {aspect}',
+    'content.platform.facebook': 'فيسبوك',
+    'content.format.feed': 'منشور',
+    'content.format.story': 'ستوري',
+    'content.format.reel': 'ريل',
+    'content.format.video': 'فيديو',
+    'nav.creative': 'استوديو التصميم بالذكاء الاصطناعي',
+    'creative.title': 'استوديو التصميم بالذكاء الاصطناعي',
+    'creative.subtitle': 'أنشئ صورًا على هوية علامتك، واحفظها في مكتبة الوسائط نفسها.',
+    'creative.brief': 'صف الصورة',
+    'creative.briefHint':
+      'ما الذي تريد رؤيته؟ تُستخدم هوية علامتك — الألوان والوصف والنبرة — لتوجيه النتيجة.',
+    'creative.briefPlaceholder': 'مثال: خلفية مجردة دافئة لإعلان عن ميزة جديدة',
+    'creative.format': 'المقاس',
+    'creative.formatHint': 'يحدد أبعاد الصورة والمنصات التي تناسبها.',
+    'creative.generate': 'أنشئ الصورة',
+    'creative.generating': 'جارٍ الإنشاء…',
+    'creative.cost': 'التكلفة المتوقعة',
+    'creative.costUnit': 'رصيد',
+    'creative.result': 'النتيجة',
+    'creative.resultEmpty': 'لم تُنشئ صورة بعد. اكتب وصفًا واختر مقاسًا.',
+    'creative.saved': 'حُفظت الصورة في مكتبة الوسائط.',
+    'creative.openInLibrary': 'افتحها في المكتبة',
+    'creative.useInContent': 'استخدمها في منشور',
+    'creative.regenerate': 'أنشئ نسخة أخرى',
+    'creative.adapt': 'اضبطها لمقاس آخر',
+    'creative.adaptHint': 'تُنشأ صورة جديدة مُركّبة لذلك المقاس، لا قصّ للصورة الحالية.',
+    'creative.noBrandTitle': 'اختر علامة تجارية',
+    'creative.noBrandBody': 'الصورة تُنشأ على هوية علامة واحدة. اخترها من المبدّل في الأعلى.',
+    'creative.noLogoNotice': 'لا يُضاف شعار العلامة تلقائيًا إلى الصور المُنشأة.',
+    'creative.generatedBadge': 'أُنشئت بالذكاء الاصطناعي',
+    'creative.scanning': 'الصورة محفوظة ويجري فحصها. ستظهر المعاينة بعد اكتمال الفحص.',
+    'creative.format.square': 'مربّع للمنشورات',
+    'creative.format.portrait': 'طولي للمنشورات',
+    'creative.format.story': 'ستوري بملء الشاشة',
+    'creative.format.landscape': 'عرضي',
+    'creative.failed': 'تعذّر إنشاء الصورة. حاول مرة أخرى.',
+    'creative.insufficientCredits': 'لا يوجد رصيد كافٍ لإنشاء صورة.',
   },
   en: {
     'app.title': 'BrandSpace',
@@ -1012,6 +1189,41 @@ export const messages = {
     'nav.expand': 'Expand sidebar',
     'nav.language': 'Change language',
     'ws.switcherLabel': 'Workspaces',
+    'brand.switcherLabel': 'Brands',
+    'brand.allBrands': 'All brands',
+    'brand.allBrandsCaption': 'Everything you can access',
+    'brand.selectedCaption': 'Active brand',
+    'brand.noneSelected': 'No brand selected',
+    'brand.noneSelectedCaption': 'Choose one to continue',
+    'brand.noBrands': 'No brand',
+    'brand.noBrandsCaption': 'Create one to begin',
+    'brand.emptyMenu': 'No brands are available to you',
+    'brand.chooseTitle': 'Choose a brand',
+    'brand.chooseBody':
+      'This page is about exactly one brand. Pick one from the brand selector in the sidebar.',
+    'brand.emptyTitle': 'No brand yet',
+    'brand.emptyBody': 'Create a brand to start working in this workspace.',
+    'brand.profile': 'Brand profile',
+    'brandProfile.subtitle': 'The canonical identity of this brand.',
+    'brandProfile.name': 'Brand name',
+    'brandProfile.industry': 'Industry',
+    'brandProfile.website': 'Website',
+    'brandProfile.description': 'Description',
+    'brandProfile.defaultLocale': 'Default language',
+    'brandProfile.supportedLocales': 'Supported languages',
+    'brandProfile.localeAr': 'Arabic',
+    'brandProfile.localeEn': 'English',
+    'brandProfile.headingFont': 'Heading font',
+    'brandProfile.bodyFont': 'Body font',
+    'brandProfile.palette': 'Colour palette',
+    'brandProfile.paletteHint': 'Hex colours, separated by commas.',
+    'brandProfile.primaryLogo': 'Primary logo',
+    'brandProfile.secondaryLogo': 'Alternate logo',
+    'brandProfile.logoHint':
+      'Chosen from the Asset Library: this brand\u2019s files or the shared ones.',
+    'brandProfile.noLogo': 'No logo',
+    'brandProfile.noAssets': 'No ready images in the library for this brand yet.',
+    'brandProfile.save': 'Save brand profile',
     'page.eyebrow': 'Workspace',
     'overview.greeting': 'Home',
     'overview.hero.eyebrow': 'Workspace',
@@ -1154,6 +1366,9 @@ export const messages = {
       'Your photography, video, files and approved brand assets in one place — organised by folder and tag, and scanned before anything becomes usable.',
     'assets.search': 'Search by name',
     'assets.filter.kind': 'Type',
+    'assets.filter.context': 'Scope',
+    'assets.filter.allAssets': 'All assets',
+    'assets.filter.shared': 'Shared',
     'assets.filter.status': 'Status',
     'assets.filter.tag': 'Tag',
     'assets.filter.all': 'All',
@@ -1524,6 +1739,10 @@ export const messages = {
     'calendar.scheduledFor': 'Goes out',
     'calendar.mockTarget': 'Mock target — nothing publishes yet',
     'calendar.channels': 'Channels',
+    'calendar.campaign': 'Campaign',
+    'calendar.publishState': 'Publishing state',
+    'calendar.approvalState': 'Review state',
+    'calendar.media': 'Media items',
 
     // --- Phase 5B-3: Approvals, Activity Log, Notifications ---
     'nav.approvals': 'Approvals',
@@ -1612,6 +1831,23 @@ export const messages = {
     'publishing.failure.not_connected': 'The account is not connected.',
     'publishing.failure.unsupported': 'The platform does not support this action.',
     'publishing.failure.unknown': 'The platform returned an unexpected response.',
+    /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
+    'publishing.code.preflight.not_connected':
+      'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.preflight.no_credential':
+      'There is no valid access for this account. Reconnect it.',
+    'publishing.code.preflight.variant_missing':
+      'This post no longer has any text for this platform.',
+    'publishing.code.preflight.too_many_media':
+      'More media than this platform accepts. Remove some and try again — nothing was sent.',
+    'publishing.code.preflight.media_unavailable':
+      'The media could not be prepared for publishing. Nothing was sent, and this is safe to retry.',
+    'publishing.code.preflight.media_rejected':
+      'One of the attached files can no longer be published — it was deleted, is still being scanned, or belongs to another brand. Nothing was sent.',
+    'publishing.code.verify.not_published':
+      'We checked with the platform and the post is not there. Nothing was published twice.',
+    'publishing.code.recovery.claim_expired':
+      'An earlier attempt was interrupted. The job was safely returned to the queue.',
     'nav.notifications': 'Notifications',
 
     'content.status.CHANGES_REQUESTED': 'Changes requested',
@@ -1647,6 +1883,7 @@ export const messages = {
     'approvals.decideTitle': 'Review decision',
     'approvals.history': 'Review history',
     'approvals.historyEmpty': 'This content has not been through review yet.',
+    'approvals.notRequired': 'No approval needed',
     'approvals.status.PENDING': 'Waiting for review',
     'approvals.status.APPROVED': 'Approved',
     'approvals.status.CHANGES_REQUESTED': 'Changes requested',
@@ -1718,6 +1955,7 @@ export const messages = {
     // --- Phase 7 — Analytics, Insights, Strategy, Copilot, Automations ---
     'nav.analytics': 'Analytics',
     'nav.strategy': 'Strategy',
+    'nav.intelligence': 'Marketing Intelligence',
     'nav.copilot': 'Copilot',
     'nav.automations': 'Automations',
     'analytics.title': 'Analytics',
@@ -1806,6 +2044,24 @@ export const messages = {
     'insights.proposeLearnings': 'Propose learnings for Brand Brain',
     'insights.proposeLearningsHint':
       'Added as proposals for human review. Nothing is written into Brand Brain directly.',
+    'insights.type.CONTENT_GAP': 'Content gap',
+    'insights.type.OPPORTUNITY': 'Opportunity',
+    'insights.type.ANALYTICS_EXPLANATION': 'Performance explanation',
+    'insights.type.ANOMALY': 'Notable change',
+    'insights.type.RECOMMENDATION': 'Recommendation',
+    'insights.type.STRATEGY': 'Strategy',
+    'insights.type.MONTHLY_PLAN': 'Monthly plan',
+    'intelligence.title': 'Marketing Intelligence',
+    'intelligence.subtitle':
+      'What your brand said it would do, what it has published, and the gap.',
+    'intelligence.analyse': 'Analyse content gaps',
+    'intelligence.focusLabel': 'What should this look at?',
+    'intelligence.focusPlaceholder': 'For example: our LinkedIn presence this quarter',
+    'intelligence.basisNotice':
+      'Spends AI credits. It rests on your approved pillars, your connected accounts and what this brand has actually published — there is no outside source.',
+    'intelligence.empty': 'Nothing here yet.',
+    'intelligence.emptyBody':
+      'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',
     'strategy.title': 'Strategy',
     'strategy.subtitle':
       "Proposals grounded in your brand's own knowledge and its measured performance.",
@@ -1995,6 +2251,115 @@ export const messages = {
     'overview.metric.engagement': 'Engagements (28 days)',
     'overview.metric.engagementHint': 'From stored measurements',
     'overview.analyticsSeeAll': 'View analytics',
+    'nav.campaigns': 'Campaigns',
+    'campaigns.subtitle':
+      'Plan your marketing in campaigns, and link content to them so you can measure what worked.',
+    'campaigns.new': 'New campaign',
+    'campaigns.emptyTitle': 'No campaigns yet',
+    'campaigns.emptyBody':
+      'A campaign gathers your posts around one objective and one period, so their results can be read together.',
+    'campaigns.chooseBrandTitle': 'Choose a brand',
+    'campaigns.chooseBrandBody':
+      'A campaign belongs to one brand. Choose one from the selector above.',
+    'campaigns.name': 'Campaign name',
+    'campaigns.nameHint': 'A name your team will recognise. It is never shown to an audience.',
+    'campaigns.objective': 'Objective',
+    'campaigns.brief': 'Brief',
+    'campaigns.briefHint':
+      'What are you trying to achieve, and for whom? Written in both languages.',
+    'campaigns.briefAr': 'Brief (Arabic)',
+    'campaigns.briefEn': 'Brief (English)',
+    'campaigns.description': 'Internal notes',
+    'campaigns.startDate': 'Start date',
+    'campaigns.endDate': 'End date',
+    'campaigns.channels': 'Channels',
+    'campaigns.channelsHint': 'The platforms you intend to publish on. You can change these later.',
+    'campaigns.status': 'Status',
+    'campaigns.create': 'Create campaign',
+    'campaigns.save': 'Save changes',
+    'campaigns.archive': 'Archive campaign',
+    'campaigns.archiveHint': 'The campaign leaves the active lists. No content is deleted.',
+    'campaigns.back': 'All campaigns',
+    'campaigns.contentCount': 'Content items',
+    'campaigns.contentTitle': 'Content in this campaign',
+    'campaigns.contentEmpty': 'No content is linked to this campaign yet.',
+    'campaigns.contentEmptyAction': 'Write a post',
+    'campaigns.dates': 'Period',
+    'campaigns.noDates': 'No dates set',
+    'campaigns.noChannels': 'No channels set',
+    'campaigns.performance': 'Performance',
+    'campaigns.performanceEmpty':
+      'No measurements for this campaign yet. Figures appear once its content is published and its data arrives.',
+    'campaigns.performanceSample': 'These figures come from sample data.',
+    'campaigns.detailsTitle': 'Campaign details',
+    'campaigns.filterStatus': 'Status',
+    'campaigns.filterAll': 'All',
+    'campaigns.showArchived': 'Show archived',
+    'campaigns.hideArchived': 'Hide archived',
+    'campaigns.composerLabel': 'Campaign',
+    'campaigns.composerNone': 'No campaign',
+    'campaigns.notFound': 'Campaign not found',
+    'campaigns.notFoundBody': 'It may be archived, or outside the brands you can access.',
+    'content.media.legend': 'Media',
+    'content.media.none': 'No media',
+    'content.media.empty': 'No ready images or video for this brand yet.',
+    'content.media.video': 'Video',
+    'content.media.selected': '{selected} of {max} selected',
+    'content.media.atLimit': "At this platform's limit",
+    'content.media.uploadHint': 'Upload one to the media library',
+    'content.media.uploadLabel': 'Add a picture or video',
+    'content.media.uploadSubmit': 'Upload',
+    'content.media.uploadNotice':
+      'It is saved to the same media library, and becomes selectable once it passes the scan.',
+    'content.preview.title': 'Preview',
+    'content.preview.notice':
+      "An approximate product preview, not a copy of the platform's own interface.",
+    'content.preview.missingMedia': 'No media',
+    'content.preview.loadingMedia': 'Loading',
+    'content.preview.showMore': 'more',
+    'content.preview.showLess': 'less',
+    'content.preview.actions': 'Post actions (illustrative)',
+    'content.preview.carousel': '{count} images',
+    'content.preview.aspect': '{aspect} ratio',
+    'content.platform.facebook': 'Facebook',
+    'content.format.feed': 'Feed',
+    'content.format.story': 'Story',
+    'content.format.reel': 'Reel',
+    'content.format.video': 'Video',
+    'nav.creative': 'AI Creative Studio',
+    'creative.title': 'AI Creative Studio',
+    'creative.subtitle': 'Generate on-brand images, and keep them in the same media library.',
+    'creative.brief': 'Describe the image',
+    'creative.briefHint':
+      "What should it show? Your brand's identity — palette, description and tone — guides the result.",
+    'creative.briefPlaceholder': 'For example: a warm abstract backdrop for a feature announcement',
+    'creative.format': 'Format',
+    'creative.formatHint': "Decides the image's dimensions and which platforms it suits.",
+    'creative.generate': 'Generate image',
+    'creative.generating': 'Generating…',
+    'creative.cost': 'Estimated cost',
+    'creative.costUnit': 'credits',
+    'creative.result': 'Result',
+    'creative.resultEmpty': 'Nothing generated yet. Write a description and choose a format.',
+    'creative.saved': 'The image is saved in the media library.',
+    'creative.openInLibrary': 'Open in the library',
+    'creative.useInContent': 'Use it in a post',
+    'creative.regenerate': 'Generate another',
+    'creative.adapt': 'Adapt to another format',
+    'creative.adaptHint': 'A new image composed for that shape, not a crop of this one.',
+    'creative.noBrandTitle': 'Choose a brand',
+    'creative.noBrandBody':
+      "An image is generated on one brand's identity. Choose one from the selector above.",
+    'creative.noLogoNotice': 'A brand logo is never added to a generated image automatically.',
+    'creative.generatedBadge': 'AI generated',
+    'creative.scanning':
+      'The image is saved and is being scanned. The preview appears once the scan clears it.',
+    'creative.format.square': 'Square feed post',
+    'creative.format.portrait': 'Portrait feed post',
+    'creative.format.story': 'Full-screen story',
+    'creative.format.landscape': 'Landscape post',
+    'creative.failed': 'The image could not be generated. Try again.',
+    'creative.insufficientCredits': 'There are not enough credits to generate an image.',
   },
 } as const;
 
@@ -2006,6 +2371,33 @@ export function translator(locale: string) {
 }
 
 /**
+ * A message for a key that MIGHT NOT EXIST, or `null`.
+ *
+ * WHY THIS EXISTS, AND WHAT IT REPLACES. Three screens render a label built
+ * from a value the DATABASE supplies — an audit entry's actor type, a
+ * notification's template key, a publish job's failure code — so the key is
+ * only known at runtime and may have no translation. Each of them asked
+ * `translator` and tested `translated === key` to detect the miss.
+ *
+ * THAT TEST IS ALWAYS FALSE. `translator` returns `dictionary[key]`, so a miss
+ * is `undefined` rather than the key — the comparison never matches, the
+ * fallback never runs, and `undefined` is returned as the sentence. React
+ * renders nothing, so a failed publish reported no failure at all and an
+ * unrecognised notification showed an empty headline. The bug was invisible for
+ * exactly as long as every key happened to exist.
+ *
+ * `MessageKey` DELIBERATELY NOT REQUIRED: the whole point is a key the type
+ * system cannot know. The narrowing is done here, once, instead of at three
+ * call sites that each got it wrong.
+ */
+export function optionalMessage(locale: string, key: string): string | null {
+  const dictionary: Record<string, string | undefined> =
+    locale === 'ar' ? messages.ar : messages.en;
+  const value = dictionary[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
  * Fixed, bilingual text for the CODES a server action puts in the URL.
  *
  * Same construction as the Control Center (R-05): the client receives a code
@@ -2013,6 +2405,23 @@ export function translator(locale: string) {
  * reach the address bar, the browser history or an access log.
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
+  // Phase 8 — Campaigns.
+  CAMPAIGN_LINKED: {
+    en: 'The post was filed under that campaign.',
+    ar: 'تم ربط المنشور بالحملة.',
+  },
+  CAMPAIGN_CREATED: {
+    en: 'The campaign was created.',
+    ar: 'تم إنشاء الحملة.',
+  },
+  CAMPAIGN_SAVED: {
+    en: 'The campaign was saved.',
+    ar: 'تم حفظ الحملة.',
+  },
+  CAMPAIGN_ARCHIVED: {
+    en: 'The campaign was archived. Nothing was deleted.',
+    ar: 'تمت أرشفة الحملة. لم يُحذف أي شيء.',
+  },
   // Phase 6 — Social Publishing.
   ACCOUNT_DISCONNECTED: {
     en: 'The account was disconnected.',
@@ -2102,6 +2511,7 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
+  BRAND_PROFILE_SAVED: { en: 'Brand profile saved.', ar: 'تم حفظ ملف العلامة التجارية.' },
   CONTENT_SCHEDULED: {
     en: 'Added to the calendar.',
     ar: 'تمت الإضافة إلى التقويم.',
@@ -2164,6 +2574,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   INSIGHT_ACCEPTED: { en: 'Accepted.', ar: 'تم الاعتماد.' },
   INSIGHT_DISMISSED: { en: 'Dismissed.', ar: 'تم الاستبعاد.' },
+  /* Phase 8 — Marketing Intelligence. */
+  GAPS_ANALYSED: {
+    en: 'Analysis ready. It rests on what this brand declared and what it has published.',
+    ar: 'التحليل جاهز. يستند إلى ما أعلنته هذه العلامة وما نشرته فعلًا.',
+  },
   LEARNINGS_PROPOSED: {
     en: 'Learnings proposed. They wait in the Brand Brain review queue.',
     ar: 'تم اقتراح دروس. تنتظر في قائمة مراجعة عقل العلامة.',

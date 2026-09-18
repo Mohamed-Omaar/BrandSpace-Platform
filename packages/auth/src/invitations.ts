@@ -235,6 +235,26 @@ export interface InvitationServiceOptions {
   readonly clock?: Clock;
 }
 
+/**
+ * The timezone of the workspace a new account is being created inside.
+ *
+ * READ INSIDE THE CALLER'S TRANSACTION, so it sees the same snapshot every
+ * other statement in the acceptance does.
+ */
+async function workspaceTimezone(
+  tx: { workspace: { findUnique(args: unknown): Promise<{ timezone: string } | null> } },
+  workspaceId: string,
+): Promise<string> {
+  const workspace = (await tx.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { timezone: true },
+  } as unknown)) as { timezone: string } | null;
+  // A workspace that is not there is not a state this path can reach — the
+  // invitation was just resolved from it — so this is a belt-and-braces value
+  // rather than an expected branch, and UTC is the only neutral answer.
+  return workspace?.timezone ?? 'UTC';
+}
+
 export class InvitationService {
   readonly #prisma: PrismaClient;
   readonly #clock: Clock;
@@ -731,6 +751,18 @@ export class InvitationService {
               passwordHash,
               status: 'ACTIVE',
               emailVerifiedAt: now,
+              /*
+               * THE ZONE COMES FROM THE WORKSPACE THEY ARE JOINING (D-194).
+               *
+               * The column no longer carries `Asia/Riyadh`, and there is no
+               * honest platform-wide answer to "where is this person?" at the
+               * moment they accept an invitation. The workspace's own zone is
+               * the best available fact — it is where the team they are joining
+               * works — and it is a stored value somebody chose rather than a
+               * guess about the world. They can change it; nothing here claims
+               * to know better than they do.
+               */
+              timezone: await workspaceTimezone(tx, found.workspaceId),
             },
           });
 

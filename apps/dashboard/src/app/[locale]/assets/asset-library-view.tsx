@@ -115,6 +115,18 @@ export interface AssetLibraryViewProps {
     readonly status?: string;
     readonly tag?: string;
     readonly folder?: string;
+    /**
+     * WHICH SLICE OF THE ONE LIBRARY IS SHOWN (D-193).
+     *
+     * `undefined` is every asset this member may see, `'shared'` is the
+     * workspace-level shelf (`brandId = null`), and a brand id is that brand
+     * PLUS the shared shelf — because the fonts and the logo pack are what a
+     * brand view is mostly for, and hiding them would push people to upload a
+     * second copy.
+     *
+     * There is ONE library. This is a filter over it, not a second one.
+     */
+    readonly scope?: string;
     readonly sort: string;
   };
   readonly can: {
@@ -213,6 +225,7 @@ function filterHref(
     status: filters.status,
     tag: filters.tag,
     folder: filters.folder,
+    scope: filters.scope,
     sort: filters.sort,
     ...change,
   };
@@ -304,8 +317,27 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           {filters.status ? <input type="hidden" name="status" value={filters.status} /> : null}
           {filters.tag ? <input type="hidden" name="tag" value={filters.tag} /> : null}
           {filters.folder ? <input type="hidden" name="folder" value={filters.folder} /> : null}
+          {filters.scope ? <input type="hidden" name="scope" value={filters.scope} /> : null}
           <input type="hidden" name="sort" value={filters.sort} />
         </form>
+
+        {/*
+          ALL ASSETS · SHARED · EACH ACCESSIBLE BRAND — in the `FilterGroup` the
+          kind, status and sort filters beside it already use. A tab strip here
+          would be a second navigation pattern for a filter, which §4.2 rule 5
+          rules out, and the brands offered are the ones the rail offers because
+          both come from the same scoped list.
+        */}
+        <FilterGroup
+          label={t('assets.filter.context')}
+          allLabel={t('assets.filter.allAssets')}
+          current={filters.scope}
+          options={[
+            { value: 'shared', label: t('assets.filter.shared') },
+            ...props.brands.map((brand) => ({ value: brand.id, label: brand.name })),
+          ]}
+          hrefFor={(value) => filterHref(props.locale, filters, { scope: value })}
+        />
 
         <FilterGroup
           label={t('assets.filter.kind')}

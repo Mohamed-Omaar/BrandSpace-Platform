@@ -56,6 +56,34 @@ const MODEL_KEY = 'mock-fast';
 const TASK_KEY = 'copilot.chat';
 
 /**
+ * The AI Creative Studio's model and task — Phase 8.
+ *
+ * A SEPARATE MODEL, because the modality is different and a model declares
+ * exactly one. Routing is per-task by design, so the Studio gets its own rule,
+ * its own cost basis and its own credit price — an operator has to be able to
+ * serve images from a different model than captions, and a seed that collapsed
+ * the two would make that distinction untestable.
+ *
+ * `image.generate` IS MVP-APPROVED (D-16); `video.generate` and
+ * `voice.synthesize` are not, and nothing here activates either.
+ */
+const IMAGE_MODEL_KEY = 'mock-image';
+const IMAGE_TASK_KEY = 'image.generate';
+
+/**
+ * The reasoning tasks the Phase 8 journey passes through.
+ *
+ * ALL THREE SHARE THE TEXT MODEL and get their own rule, because routing is
+ * per-task by design: an operator has to be able to serve a strategy from a
+ * different model than a caption, and a seed that collapsed them would make
+ * that distinction untestable. Without a rule the gateway raises a routing
+ * error and the screen shows an INTERNAL failure — which is right in production
+ * (an operator has not finished configuring the platform) and useless in a run
+ * that is meant to prove the path.
+ */
+const REASONING_TASK_KEYS = ['strategy.generate', 'plan.monthly', 'analytics.explain'] as const;
+
+/**
  * The Content Studio's task.
  *
  * A SECOND TASK RATHER THAN A REUSE OF `copilot.chat`, because routing is
@@ -182,6 +210,30 @@ const PAYLOADS = {
         costCurrency: 'USD',
         qualityBenchmarkRef: null,
       },
+      {
+        key: IMAGE_MODEL_KEY,
+        providerKey: PROVIDER_KEY,
+        displayName: 'Mock image (development only)',
+        modality: 'image',
+        qualityTier: 'balanced',
+        /*
+         * `beta` FOR THE SAME REASON THE TEXT MODEL IS. D-17's gate is on
+         * `available`, which is the status that puts customer traffic on a
+         * model; this one is a deterministic PNG encoder and will never pass an
+         * Arabic marketing benchmark because there is nothing to benchmark.
+         * Claiming general availability would be a false record in the
+         * platform's own quality evidence.
+         */
+        status: 'beta',
+        disableSwitch: false,
+        // Priced per image rather than per token, because that is the unit the
+        // work comes in. No vendor's rates are implied; there is no vendor.
+        inputCostPerUnitMicroMinor: 0,
+        outputCostPerUnitMicroMinor: 40_000,
+        costUnit: 'image',
+        costCurrency: 'USD',
+        qualityBenchmarkRef: null,
+      },
     ],
   },
   'ai.routing': {
@@ -244,6 +296,60 @@ const PAYLOADS = {
         moderateInput: false,
         moderationModelKey: null,
       },
+      ...REASONING_TASK_KEYS.map((taskKey) => ({
+        taskKey,
+        scope: 'global' as const,
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 20_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.4,
+          maxOutputTokens: 900,
+          promptTemplateVersion: 1,
+          // D-78 again: the insight row owns the document, with its own
+          // retention. The gateway is not a second content store.
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none' as const, initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      })),
+      {
+        taskKey: IMAGE_TASK_KEY,
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: IMAGE_MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 30_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.4,
+          maxOutputTokens: 256,
+          promptTemplateVersion: 1,
+          /*
+           * OFF, and D-78 a third time — with a consequence the other two do
+           * not have. The ASSET LIBRARY owns the generated image: its bytes,
+           * its versions, its virus scan and its retention. Asking the gateway
+           * to keep a copy would make it a second media store.
+           *
+           * SO A GATEWAY REPLAY CARRIES NO BYTES, which is why the Creative
+           * Studio looks for the asset its own idempotency key already produced
+           * BEFORE asking the gateway, and again after a replay.
+           */
+          persistOutput: false,
+          outputRetentionDays: null,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
     ],
   },
   /*
@@ -265,7 +371,36 @@ const PAYLOADS = {
    * projection exists and the dashboard exercises the path production takes
    * rather than the "nothing activated yet" fallback.
    */
-  content: {},
+  content: {
+    /*
+     * TWO OPERATOR SETTINGS THE END-TO-END FLOW NEEDS, both legal values of
+     * the shipped schema rather than a relaxation of any rule.
+     *
+     * `minLeadMinutes: 0` lets the functional journey schedule a post for NOW
+     * and watch the pipeline pick it up. The default of five minutes is a
+     * sensible product default and a five-minute wait inside a browser test;
+     * zero is what a customer who wants to publish immediately would set, and
+     * the schema allows it (`min(0)`).
+     *
+     * Everything else stays the schema's own.
+     */
+    calendar: { minLeadMinutes: 0 },
+  },
+  /*
+   * THE MAINTENANCE CADENCE, TIGHTENED FOR A TEST RUN — an operator's number
+   * (CLAUDE.md §2.2), not a constant, and five seconds is the schema's own
+   * floor rather than a value invented here.
+   *
+   * WHY IT MATTERS. Dispatch is an optimisation and the reconciliation sweep is
+   * the correctness path: a scheduled slot becomes a publish job when the sweep
+   * notices it is due. At the default thirty seconds the functional journey
+   * would spend most of its time waiting for a timer; at five it waits for the
+   * product. NOTHING ABOUT THE PATH CHANGES — the same sweep, the same claim,
+   * the same job.
+   */
+  operations: {
+    maintenance: { ingestionReconcileSeconds: 5 },
+  },
   'ai.credit-rules': {
     costs: [
       {
@@ -281,6 +416,23 @@ const PAYLOADS = {
         baseMilliCredits: 250,
         perUnitMilliCredits: 90,
         unit: '1k_tokens',
+      },
+      ...REASONING_TASK_KEYS.map((taskKey) => ({
+        taskKey,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 300,
+        perUnitMilliCredits: 90,
+        unit: '1k_tokens' as const,
+      })),
+      {
+        // Priced per IMAGE, flat: the unit of work is the picture, and a
+        // per-token price for something with no tokens would be arithmetic
+        // dressed up as a policy.
+        taskKey: IMAGE_TASK_KEY,
+        modelKey: IMAGE_MODEL_KEY,
+        baseMilliCredits: 400,
+        perUnitMilliCredits: 0,
+        unit: 'image',
       },
     ],
   },
@@ -395,6 +547,8 @@ async function main(): Promise<void> {
 
     console.log('\n✔ mock AI configuration active');
     console.log(`  ${TASK_KEY} → ${MODEL_KEY} (provider "${PROVIDER_KEY}", no credential)`);
+    console.log(`  ${CONTENT_TASK_KEY} → ${MODEL_KEY}`);
+    console.log(`  ${IMAGE_TASK_KEY} → ${IMAGE_MODEL_KEY}`);
   } finally {
     await prisma.$disconnect();
   }

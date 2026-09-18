@@ -47,6 +47,7 @@ const CONTENT_POLICY: ContentPolicy = {
       maxBodyChars: 2_200,
       maxHashtags: 30,
       allowsFirstComment: true,
+      maxMediaItems: 10,
     },
   ],
   generation: {
@@ -103,7 +104,13 @@ async function member(input: {
 }): Promise<string> {
   const email = `recipient-${randomUUID()}@example.test`;
   const user = await platform.user.create({
-    data: { email, name: `Member ${input.roleKey}`, status: 'ACTIVE', locale: 'EN' },
+    data: {
+      email,
+      name: `Member ${input.roleKey}`,
+      status: 'ACTIVE',
+      locale: 'EN',
+      timezone: 'UTC',
+    },
   });
   const role = await platform.role.findFirstOrThrow({
     where: { key: input.roleKey, realm: 'WORKSPACE' },

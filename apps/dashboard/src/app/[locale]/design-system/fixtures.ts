@@ -62,6 +62,7 @@ function statusLabels(ar: boolean): Record<PostStatus, string> {
     SCHEDULED: ar ? 'مجدول' : 'Scheduled',
     PUBLISHING: ar ? 'قيد النشر' : 'Publishing',
     PUBLISHED: ar ? 'منشور' : 'Published',
+    PARTIALLY_PUBLISHED: ar ? 'منشور جزئيًا' : 'Partially published',
     FAILED: ar ? 'فشل' : 'Failed',
   };
 }

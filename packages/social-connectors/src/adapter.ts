@@ -64,11 +64,47 @@ export interface PublishTarget {
   readonly targetKind: string;
 }
 
+/**
+ * ONE MEDIA ITEM ON A PUBLISH REQUEST (AC-29.3).
+ *
+ * WHAT THE ADAPTER IS GIVEN, AND WHAT IT IS NOT. It gets an identity, a type,
+ * a size, dimensions and the BYTES. It does NOT get a storage key, a signed
+ * url or anything it could use to reach into the library on its own: an
+ * adapter is a translator to one provider's API, and handing it a way to fetch
+ * a tenant's files would make every adapter a place tenant isolation could
+ * fail.
+ *
+ * THE BYTES ARE RESOLVED BY THE PIPELINE, after it has checked that the asset
+ * belongs to this workspace, this brand and this member's scope, that it is
+ * READY and CLEAN, and that the provider accepts its type — all before an
+ * adapter is called at all.
+ */
+export interface PublishMedia {
+  /** The asset's id, so a provider error can be traced back to a file. */
+  readonly assetId: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly width: number | null;
+  readonly height: number | null;
+  /** The file name to present to the provider. Never a path. */
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+}
+
 export interface PublishRequest {
   readonly externalAccountId: string;
   readonly body: string;
   readonly hashtags: readonly string[];
   readonly firstComment: string | null;
+  /**
+   * PHASE 8 — the media to publish with this post, in the author's order.
+   *
+   * EMPTY IS NORMAL: a text post is the commonest thing this product sends. An
+   * adapter whose provider cannot accept media at all should refuse a
+   * non-empty list rather than dropping it — but it will not have to, because
+   * the pipeline checks the capability first and never builds the request.
+   */
+  readonly media: readonly PublishMedia[];
   /**
    * Passed through to providers that accept a client-side idempotency token, so
    * a duplicate request is de-duplicated at the far end too rather than only at

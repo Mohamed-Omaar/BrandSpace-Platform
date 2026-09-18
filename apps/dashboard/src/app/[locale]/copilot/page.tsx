@@ -1,6 +1,7 @@
 import { Stack, spacingTokens } from '@brandspace/ui';
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { brandContextFor } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CopilotView } from './copilot-view';
@@ -43,8 +44,11 @@ export default async function CopilotPage({ params }: { params: Promise<{ locale
 
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
 
+  const brandContext = await brandContextFor(session.workspace, '/copilot');
+
   return (
     <WorkspaceShell
+      brandContext={brandContext}
       locale={locale}
       heading={t('copilot.title')}
       description={t('copilot.subtitle')}

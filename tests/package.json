@@ -17,6 +17,7 @@
     "@brandspace/config": "workspace:*",
     "@brandspace/content": "workspace:*",
     "@brandspace/copilot": "workspace:*",
+    "@brandspace/creative": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/intelligence": "workspace:*",
