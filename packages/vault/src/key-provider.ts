@@ -170,6 +170,22 @@ export const SOCIAL_TOKEN_DOMAIN: KeyDomain = {
 };
 
 /**
+ * Phase 9: a customer's own MFA seed, held on their identity row.
+ *
+ * A THIRD DOMAIN RATHER THAN A REUSED ONE. The customer application must be able
+ * to verify a TOTP code at sign-in, so whatever key seals that seed is reachable
+ * from the customer surface. Sealing it with the platform KEK would put every
+ * platform provider credential within reach of the login path, and sealing it
+ * with the social KEK would do the same for every customer's OAuth token. The
+ * blast radius of this key is one thing: authenticator seeds.
+ */
+export const CUSTOMER_MFA_DOMAIN: KeyDomain = {
+  kmsVar: 'CUSTOMER_MFA_VAULT_KMS_KEY_ARN',
+  kekVar: 'CUSTOMER_MFA_VAULT_KEK',
+  label: 'Customer MFA encryption',
+};
+
+/**
  * Build the provider for the current environment and key domain.
  *
  * FAILS CLOSED: with no KEK there is no provider, so the caller refuses to start

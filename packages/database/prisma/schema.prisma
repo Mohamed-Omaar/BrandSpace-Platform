@@ -171,7 +171,7 @@ enum SubscriptionStatus {
   PAUSED
   CANCELLED
   EXPIRED
-  /*
+  /**
    * PHASE 9 ADDITIONS. Each names a state the lifecycle genuinely reaches and
    * that the customer's own screen has to be able to say out loud (§45).
    */
@@ -270,9 +270,15 @@ model User {
   timezone        String
   status          UserStatus @default(PENDING)
 
-  // MFA. The secret itself lives in the vault; only its reference is stored here.
-  mfaEnabled   Boolean @default(false)
-  mfaSecretRef String?
+  // MFA. `mfaSecretRef` is the PLATFORM Secret Service reference, used where a
+  // platform actor enrolled the account. A CUSTOMER has no platform actor to
+  // enrol them, so their TOTP seed is sealed with the customer MFA key domain
+  // and the envelope is kept here (D-206). Only the envelope: the seed itself is
+  // never stored, logged or returned, and the two paths never share a key.
+  mfaEnabled        Boolean   @default(false)
+  mfaSecretRef      String?
+  mfaSecretMaterial Json?
+  mfaEnrolledAt     DateTime? @db.Timestamptz(6)
 
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(6)
@@ -898,6 +904,11 @@ model CustomerSession {
   revokedAt         DateTime? @db.Timestamptz(6)
   revokedReason     String?
 
+  /// Phase 9. Null on an MFA-enrolled account means the session has presented a
+  /// password and nothing else, and it resolves to NOTHING until the second
+  /// factor is verified. Accounts without MFA ignore this column entirely.
+  mfaVerifiedAt DateTime? @db.Timestamptz(6)
+
   ip        String?
   userAgent String?
 
@@ -1248,10 +1259,10 @@ model WorkspaceSubscription {
 
   /// When collection first failed. The dunning schedule is measured from here,
   /// so a later failure in the same episode does not restart the clock.
-  pastDueSince DateTime? @db.Timestamptz(6)
+  pastDueSince      DateTime? @db.Timestamptz(6)
   /// When full access stops if nothing is collected. From `commerce.dunning`.
-  graceEndsAt  DateTime? @db.Timestamptz(6)
-  suspendedAt  DateTime? @db.Timestamptz(6)
+  graceEndsAt       DateTime? @db.Timestamptz(6)
+  suspendedAt       DateTime? @db.Timestamptz(6)
   /// Set when the customer asks, cleared if they resume before it takes effect.
   cancelRequestedAt DateTime? @db.Timestamptz(6)
 
@@ -1775,7 +1786,7 @@ model Brand {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  primaryLogoAsset Asset? @relation("BrandPrimaryLogo", fields: [workspaceId, primaryLogoAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_primary_logo_fkey")
+  primaryLogoAsset   Asset? @relation("BrandPrimaryLogo", fields: [workspaceId, primaryLogoAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_primary_logo_fkey")
   secondaryLogoAsset Asset? @relation("BrandSecondaryLogo", fields: [workspaceId, secondaryLogoAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_secondary_logo_fkey")
 
   knowledgeItems    BrandKnowledgeItem[]
@@ -2509,17 +2520,17 @@ model Asset {
   /// sweep, not by the request that pressed the button.
   deletedAt  DateTime? @db.Timestamptz(6)
 
-  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  brand     Brand?       @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_brand_fkey")
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand?    @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "asset_brand_fkey")
 
   /// The brands that name this asset as a canonical logo (D-193). Back-relations
   /// only; the reference lives on `brand`.
-  primaryLogoOf   Brand[] @relation("BrandPrimaryLogo")
-  secondaryLogoOf Brand[] @relation("BrandSecondaryLogo")
+  primaryLogoOf   Brand[]      @relation("BrandPrimaryLogo")
+  secondaryLogoOf Brand[]      @relation("BrandSecondaryLogo")
   /// COMPOSITE, for the reason spelled out on AssetFolder.parent: a plain key
   /// would let a tenant file its own asset under another tenant folder, and
   /// would answer "does this folder id exist anywhere" for free.
-  folder    AssetFolder? @relation(fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "asset_folder_fkey")
+  folder          AssetFolder? @relation(fields: [workspaceId, folderId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "asset_folder_fkey")
 
   versions       AssetVersion[]
   derivatives    AssetDerivative[]
@@ -5117,7 +5128,7 @@ model BillingProfile {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   checkoutSessions CheckoutSession[]
   invoices         Invoice[]
 
@@ -5179,8 +5190,8 @@ model CheckoutSession {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  billingProfile BillingProfile       @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade, map: "checkout_session_profile_fkey")
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingProfile BillingProfile      @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade, map: "checkout_session_profile_fkey")
   invoice        Invoice?
   purchase       CreditPackPurchase?
   attempts       PaymentAttempt[]
@@ -5221,10 +5232,10 @@ model Invoice {
   /// Credited back by credit notes. `total - credited` is what stands.
   creditedMinor   BigInt @default(0)
 
-  taxMode           InvoiceTaxMode @default(NONE)
-  taxRateBasisPoints Int           @default(0)
+  taxMode            InvoiceTaxMode @default(NONE)
+  taxRateBasisPoints Int            @default(0)
   /// The market's policy key at issue, so the rule can be explained later.
-  taxPolicyKey      String?
+  taxPolicyKey       String?
 
   periodStart DateTime? @db.Timestamptz(6)
   periodEnd   DateTime? @db.Timestamptz(6)
@@ -5307,7 +5318,7 @@ model CreditNote {
   workspaceId String @db.Uuid
   invoiceId   String @db.Uuid
 
-  number String? @unique
+  number String?          @unique
   status CreditNoteStatus @default(DRAFT)
 
   /// THE SAME CURRENCY AS ITS INVOICE, enforced by a CHECK against the parent.
@@ -5471,12 +5482,12 @@ model CreditPackPurchase {
 model BillingEvent {
   id String @id @default(uuid()) @db.Uuid
 
-  providerKey String
+  providerKey     String
   /// The provider's own event id. THE IDEMPOTENCY KEY: a replay of a delivered
   /// event collides here and changes nothing (§28).
   externalEventId String
 
-  eventType String
+  eventType  String
   /// The provider's own timestamp. Ordering is compared against this, so an
   /// out-of-order delivery is recognised as stale rather than applied.
   occurredAt DateTime @db.Timestamptz(6)
@@ -5489,11 +5500,11 @@ model BillingEvent {
   /// means we never receive any.
   payload Json
 
-  status       BillingEventStatus @default(RECEIVED)
+  status              BillingEventStatus @default(RECEIVED)
   /// Resolved from a TRUSTED stored relationship, or null.
-  resolvedWorkspaceId String?     @db.Uuid
+  resolvedWorkspaceId String?            @db.Uuid
   failureReason       String?
-  attempts            Int         @default(0)
+  attempts            Int                @default(0)
 
   receivedAt  DateTime  @default(now()) @db.Timestamptz(6)
   processedAt DateTime? @db.Timestamptz(6)

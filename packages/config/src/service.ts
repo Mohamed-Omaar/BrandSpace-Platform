@@ -162,6 +162,22 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
    * which is on this list.
    */
   'commerce',
+  /*
+   * Phase 9. The rules of joining, which the signup and onboarding screens
+   * STATE as they ask: whether signup is open at all, the password floor the
+   * form validates against, how long a verification link lasts, which legal
+   * documents must be accepted and at which version, and the first-run
+   * checklist the customer works through.
+   *
+   * Projected because the alternative is a second copy in the form. A password
+   * minimum restated in a component is a minimum the owner cannot actually
+   * change, and a terms version restated there is one nobody re-asks about when
+   * it is republished.
+   *
+   * IT CARRIES NO COUNTRY, LOCALE, TIMEZONE OR CURRENCY (D-194), so projecting
+   * it cannot reintroduce a product-wide default by the back door.
+   */
+  'onboarding',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';

@@ -1,5 +1,5 @@
 {
-  "name": "@brandspace/auth",
+  "name": "@brandspace/onboarding",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,12 +13,11 @@
     "build": "tsc --emitDeclarationOnly --declarationDir dist"
   },
   "dependencies": {
+    "@brandspace/billing": "workspace:*",
+    "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
-    "@brandspace/secrets": "workspace:*",
-    "@brandspace/shared": "workspace:*",
-    "@brandspace/vault": "workspace:*",
-    "@node-rs/argon2": "2.2.0",
-    "otpauth": "9.5.1"
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

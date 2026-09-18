@@ -22,6 +22,14 @@ export type EmailTemplateKey =
   | 'workspace.invitation'
   | 'workspace.invitation.resent'
   | 'auth.password_reset'
+  /*
+   * Phase 9. The two signup templates, and the pair is the point: an address
+   * that is FREE gets a verification link, one that is TAKEN gets a notice. The
+   * caller cannot tell which was sent, so neither can an attacker enumerating
+   * addresses (§10).
+   */
+  | 'auth.email_verification'
+  | 'auth.signup.exists'
   | 'workspace.suspended';
 
 export interface EmailMessageInput {

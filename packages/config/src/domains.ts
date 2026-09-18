@@ -1851,6 +1851,97 @@ const commerceSchema = z.object({
     .default({}),
 });
 
+// --- Onboarding (Phase 9) ----------------------------------------------------
+/*
+ * THE RULES OF JOINING — what a new account must provide, prove and accept.
+ *
+ * WHY THESE ARE SETTINGS AND NOT CODE. Whether signup is open, how long a
+ * verification link lives, how strong a password must be, which legal documents
+ * must be accepted and at which version, and whether a customer may enrol a
+ * second factor are all owner decisions that change without a deployment
+ * (CLAUDE.md §2.2). A minimum password length written as a constant is a policy
+ * nobody can change; written here it is one an owner can raise on a Tuesday.
+ *
+ * WHAT IS DELIBERATELY ABSENT. No country, no locale, no timezone and no
+ * currency (D-194). Onboarding ASKS for all four; it does not carry a default
+ * for any of them, and a field here would be exactly the silent assumption that
+ * decision removed.
+ */
+const onboardingSchema = z.object({
+  signup: z
+    .object({
+      /** Closed means invitation only. The public form says so rather than failing. */
+      open: z.boolean().default(true),
+      /*
+       * A FLOOR, NOT A COMPOSITION RULE. Length is the property that actually
+       * resists guessing; forced symbol classes mostly produce `Password1!`.
+       */
+      minPasswordLength: z.number().int().min(10).max(128).default(12),
+      /** How long a verification link is good for. */
+      verificationTtlMinutes: z.number().int().min(15).max(10_080).default(1_440),
+      /** How often a customer may ask for another one. */
+      verificationResendCooldownSeconds: z.number().int().min(30).max(3_600).default(120),
+      /** How many links may be issued to one address in an hour. */
+      verificationsPerHour: z.number().int().min(1).max(20).default(5),
+    })
+    .default({}),
+
+  /*
+   * THE DOCUMENTS A PERSON MUST ACCEPT, AND AT WHICH VERSION.
+   *
+   * VERSIONED, because "they agreed to the terms" is not a fact unless it says
+   * WHICH terms. Publishing a new version makes the acceptance stale by
+   * construction rather than by anyone remembering to re-ask.
+   */
+  legalDocuments: z
+    .array(
+      z.object({
+        key: z.string().min(1).max(64),
+        title: localizedText,
+        version: z.string().min(1).max(32),
+        url: localizedText.nullable().default(null),
+        required: z.boolean().default(true),
+      }),
+    )
+    .default([]),
+
+  mfa: z
+    .object({
+      /** Customers may enrol a second factor. Platform roles always must (D-27). */
+      customerEnrolmentEnabled: z.boolean().default(true),
+      /** When true, a customer without MFA is asked to enrol before continuing. */
+      requiredForCustomers: z.boolean().default(false),
+      recoveryCodeCount: z.number().int().min(4).max(20).default(10),
+    })
+    .default({}),
+
+  /*
+   * THE FIRST-RUN CHECKLIST.
+   *
+   * KEYS, NOT COPY AND NOT ROUTES. Each step is identified by a key the
+   * application knows how to render; the order and which steps are required are
+   * the owner's. A step nobody can skip is a product decision, and it belongs
+   * here rather than in a component.
+   */
+  steps: z
+    .array(
+      z.object({
+        key: z.enum([
+          'workspace',
+          'brand',
+          'brand_profile',
+          'brand_brain',
+          'social',
+          'team',
+          'plan',
+        ]),
+        required: z.boolean().default(true),
+        sortOrder: z.number().int().min(0).default(0),
+      }),
+    )
+    .default([]),
+});
+
 const operationsSchema = z.object({
   maintenanceMode: z
     .object({
@@ -1960,6 +2051,11 @@ export const CONFIG_DOMAINS = {
   // routing, dunning and the invoice's legal identity. It names no payment
   // provider (D-204) and carries NO default currency (D-194).
   commerce: { schema: commerceSchema, schemaVersion: 1 },
+  // Phase 9. The rules of joining: whether signup is open, the password floor,
+  // how long a verification link lives, which legal documents must be accepted
+  // and at which version, customer MFA, and the first-run checklist. It carries
+  // no country, locale, timezone or currency default (D-194).
+  onboarding: { schema: onboardingSchema, schemaVersion: 1 },
 } as const;
 
 export type ConfigDomain = keyof typeof CONFIG_DOMAINS;
