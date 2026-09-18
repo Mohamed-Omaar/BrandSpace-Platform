@@ -112,6 +112,7 @@ export interface ComposerViewProps {
     submit: boolean;
     archive: boolean;
     manageCampaigns: boolean;
+    uploadMedia: boolean;
   };
   readonly tools: readonly string[];
   readonly actions: {
@@ -120,6 +121,7 @@ export interface ComposerViewProps {
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
+    uploadMedia(formData: FormData): Promise<void>;
   };
 }
 
@@ -417,6 +419,51 @@ export function ComposerView({
             data-testid="content-campaign-save"
           >
             {t['content.composer.saveEdit']}
+          </button>
+        </form>
+      ) : null}
+
+      {/*
+        PHASE 8 — ADDING A PICTURE WITHOUT LEAVING THE DRAFT (AC-27.1).
+
+        A FORM OF ITS OWN, ABOVE THE COMPOSER, and both halves of that are
+        forced. Its own, because the picker lives inside each variant's `<form>`
+        and a nested form is invalid markup browsers repair unpredictably.
+        Above, because a file belongs to the DRAFT rather than to one platform's
+        caption — uploading it once and ticking it on three variants is the
+        shape of the work.
+
+        IT UPLOADS INTO THE ONE LIBRARY. Same permission, same brand, same scan.
+        The file becomes selectable in every picker below once the scanner
+        clears it, which is why the hint says so rather than implying it is
+        instantly usable.
+      */}
+      {draft && can.uploadMedia ? (
+        <form
+          action={actions.uploadMedia}
+          className="cs-notice info"
+          data-testid="composer-upload-form"
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="itemId" value={draft.id} />
+          <div className="cs-field">
+            <label htmlFor={`${fieldId}-media-upload`}>{t['content.media.uploadLabel']}</label>
+            <input
+              id={`${fieldId}-media-upload`}
+              type="file"
+              name="file"
+              required
+              accept="image/*,video/*"
+              data-testid="composer-upload-file"
+            />
+          </div>
+          <p className="cs-hint">{t['content.media.uploadNotice']}</p>
+          <button
+            type="submit"
+            className="cs-ghost-button cs-compact"
+            data-testid="composer-upload-submit"
+          >
+            {t['content.media.uploadSubmit']}
           </button>
         </form>
       ) : null}

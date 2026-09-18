@@ -657,6 +657,20 @@ export const messages = {
     'publishing.failure.not_connected': 'الحساب غير متصل.',
     'publishing.failure.unsupported': 'المنصة لا تدعم هذا الإجراء.',
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
+    /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
+    'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.preflight.no_credential': 'لا يوجد إذن صالح لهذا الحساب. أعد ربطه.',
+    'publishing.code.preflight.variant_missing': 'لم يعد لهذا المنشور نص على هذه المنصة.',
+    'publishing.code.preflight.too_many_media':
+      'عدد الوسائط أكبر مما تقبله هذه المنصة. احذف بعضها ثم أعد المحاولة. لم يُرسل شيء.',
+    'publishing.code.preflight.media_unavailable':
+      'تعذّر تجهيز الوسائط للنشر. لم يُرسل شيء، ويمكن إعادة المحاولة بأمان.',
+    'publishing.code.preflight.media_rejected':
+      'إحدى الوسائط المرفقة لم تعد صالحة للنشر — محذوفة أو قيد الفحص أو من علامة أخرى. لم يُرسل شيء.',
+    'publishing.code.verify.not_published':
+      'تحقّقنا من المنصة ولم نجد المنشور. لم يُنشر شيء مرتين.',
+    'publishing.code.recovery.claim_expired':
+      'انقطعت محاولة سابقة. أُعيدت المهمة إلى الانتظار بأمان.',
     'nav.notifications': 'الإشعارات',
 
     'content.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -1100,6 +1114,10 @@ export const messages = {
     'content.media.selected': '{selected} من {max} مختارة',
     'content.media.atLimit': 'بلغت الحد لهذه المنصة',
     'content.media.uploadHint': 'ارفع ملفًا إلى مكتبة الوسائط',
+    'content.media.uploadLabel': 'أضف صورة أو فيديو',
+    'content.media.uploadSubmit': 'ارفع',
+    'content.media.uploadNotice':
+      'يُحفظ الملف في مكتبة الوسائط نفسها، ويصبح قابلًا للاختيار بعد اجتياز الفحص.',
     'content.preview.title': 'المعاينة',
     'content.preview.notice': 'معاينة تقريبية للمنتج، وليست نسخة مطابقة لواجهة المنصة.',
     'content.preview.missingMedia': 'بلا وسائط',
@@ -1812,6 +1830,23 @@ export const messages = {
     'publishing.failure.not_connected': 'The account is not connected.',
     'publishing.failure.unsupported': 'The platform does not support this action.',
     'publishing.failure.unknown': 'The platform returned an unexpected response.',
+    /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
+    'publishing.code.preflight.not_connected':
+      'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.preflight.no_credential':
+      'There is no valid access for this account. Reconnect it.',
+    'publishing.code.preflight.variant_missing':
+      'This post no longer has any text for this platform.',
+    'publishing.code.preflight.too_many_media':
+      'More media than this platform accepts. Remove some and try again — nothing was sent.',
+    'publishing.code.preflight.media_unavailable':
+      'The media could not be prepared for publishing. Nothing was sent, and this is safe to retry.',
+    'publishing.code.preflight.media_rejected':
+      'One of the attached files can no longer be published — it was deleted, is still being scanned, or belongs to another brand. Nothing was sent.',
+    'publishing.code.verify.not_published':
+      'We checked with the platform and the post is not there. Nothing was published twice.',
+    'publishing.code.recovery.claim_expired':
+      'An earlier attempt was interrupted. The job was safely returned to the queue.',
     'nav.notifications': 'Notifications',
 
     'content.status.CHANGES_REQUESTED': 'Changes requested',
@@ -2271,6 +2306,10 @@ export const messages = {
     'content.media.selected': '{selected} of {max} selected',
     'content.media.atLimit': "At this platform's limit",
     'content.media.uploadHint': 'Upload one to the media library',
+    'content.media.uploadLabel': 'Add a picture or video',
+    'content.media.uploadSubmit': 'Upload',
+    'content.media.uploadNotice':
+      'It is saved to the same media library, and becomes selectable once it passes the scan.',
     'content.preview.title': 'Preview',
     'content.preview.notice':
       "An approximate product preview, not a copy of the platform's own interface.",

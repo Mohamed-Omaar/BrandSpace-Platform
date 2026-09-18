@@ -241,8 +241,32 @@ export default async function IntegrationsPage({
    * is never stored and never rendered, because it routinely echoes the caption
    * that was rejected.
    */
-  const failureMessage = (failureClass: string | null): string | null => {
+  const failureMessage = (
+    failureClass: string | null,
+    failureCode: string | null,
+  ): string | null => {
     if (!failureClass) return null;
+
+    /*
+     * PHASE 8 — OUR OWN CODE FIRST, when there is a sentence for it.
+     *
+     * The class alone was misleading for every PRE-FLIGHT refusal, and media
+     * made that visible. A post whose picture had been quarantined failed with
+     * class `CONTENT_REJECTED`, which reads "the platform rejected this
+     * content" — and the platform was never called. The customer would go and
+     * edit a caption nothing is wrong with.
+     *
+     * `failureCode` is stable and OURS, which is exactly why it can carry a
+     * sentence: it is never a provider string. Where a code has no sentence the
+     * class's own sentence stands, which is the right answer for a genuine
+     * provider refusal.
+     */
+    if (failureCode) {
+      const codeKey = `publishing.code.${failureCode}` as MessageKey;
+      const codeMessage = t(codeKey);
+      if (codeMessage !== codeKey) return codeMessage;
+    }
+
     const key = `publishing.failure.${failureClass.toLowerCase()}` as MessageKey;
     const message = t(key);
     return message === key ? t('publishing.failure.unknown') : message;
@@ -260,7 +284,7 @@ export default async function IntegrationsPage({
     attemptCount: job.attemptCount,
     maxAttempts: job.maxAttempts,
     nextAttemptAtLabel: stamp(job.nextAttemptAt),
-    failureMessage: failureMessage(job.failureClass),
+    failureMessage: failureMessage(job.failureClass, job.failureCode),
     needsReconnect: job.needsReconnect,
     canCancel: job.canCancel,
     canRetry: job.canRetry,

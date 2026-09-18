@@ -11,6 +11,7 @@ import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace
 import {
   cancelReviewAction,
   setContentCampaignAction,
+  uploadComposerMediaAction,
   saveVariantAction,
   submitForReviewAction,
   transitionItemAction,
@@ -222,6 +223,7 @@ export default async function ComposePage({
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
           manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
+          uploadMedia: workspace.permissionKeys.includes('assets.upload'),
         }}
         actions={{
           save: saveVariantAction,
@@ -229,6 +231,7 @@ export default async function ComposePage({
           submitForReview: submitForReviewAction,
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
+          uploadMedia: uploadComposerMediaAction,
         }}
       />
     </WorkspaceShell>
@@ -264,6 +267,64 @@ const COMPOSER_KEYS = [
   // Phase 8 — the campaign control on an existing draft (AC-26.3).
   'campaigns.composerLabel',
   'campaigns.composerNone',
+  /*
+   * Phase 8 — THE MEDIA PICKER'S OWN VOCABULARY (AC-27.1, AC-27.2).
+   *
+   * Missing from this list when the picker shipped, so every label it asked the
+   * dictionary for came back undefined and fell through to `''`: a fieldset
+   * with a nameless legend, a count that said nothing, and an empty state with
+   * no sentence in it. The component was right and the list was short — which
+   * is precisely why the list exists rather than the component reaching for the
+   * translator itself.
+   */
+  'content.media.legend',
+  'content.media.none',
+  'content.media.empty',
+  'content.media.video',
+  'content.media.atLimit',
+  'content.media.selected',
+  'content.media.uploadHint',
+  'content.media.uploadLabel',
+  'content.media.uploadSubmit',
+  'content.media.uploadNotice',
+  'assets.filter.shared',
+  /*
+   * Phase 8 — THE LIVE SOCIAL PREVIEW'S VOCABULARY (AC-27.4).
+   *
+   * Twenty-six keys, every one of them missing when the preview shipped, so
+   * the component that shows an author what their post will look like rendered
+   * with every status, platform, format and control label blank. Same class of
+   * defect as the picker's above, and the same fix: the key list is the
+   * contract, so the contract has to name them.
+   */
+  'content.status.DRAFT',
+  'content.status.IN_REVIEW',
+  'content.status.CHANGES_REQUESTED',
+  'content.status.APPROVED',
+  'content.status.SCHEDULED',
+  'content.status.PUBLISHING',
+  'content.status.PUBLISHED',
+  'content.status.PARTIALLY_PUBLISHED',
+  'content.status.FAILED',
+  'content.platform.instagram',
+  'content.platform.facebook',
+  'content.platform.linkedin',
+  'content.platform.x',
+  'content.platform.tiktok',
+  'content.format.feed',
+  'content.format.story',
+  'content.format.reel',
+  'content.format.video',
+  'content.preview.showMore',
+  'content.preview.showLess',
+  'content.preview.missingMedia',
+  'content.preview.loadingMedia',
+  'content.preview.carousel',
+  'content.preview.notice',
+  'content.preview.aspect',
+  'content.preview.actions',
+  // And the composer's own withdraw control, blank for the same reason.
+  'content.composer.withdraw',
   'content.composer.eyebrow',
   'content.composer.title',
   'content.composer.back',

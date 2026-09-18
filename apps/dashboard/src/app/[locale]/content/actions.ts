@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { uploadIntoLibrary } from '../../../server/asset-upload';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
 
@@ -160,6 +161,70 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * UPLOADING A PICTURE WITHOUT LEAVING THE DRAFT — Phase 8 (AC-27.1).
+ *
+ * WHY IT IS HERE RATHER THAN A LINK TO THE ASSET LIBRARY. The composer offered
+ * one, and a link is a different product: an author part-way through a caption
+ * had to navigate away, find the upload control, choose a brand and a folder,
+ * and come back to a page that had forgotten what they were doing. "Media can
+ * be uploaded during content creation" is not satisfied by a way to leave.
+ *
+ * IT IS THE SAME LIBRARY, THROUGH THE SAME PATH. `uploadIntoLibrary` is the one
+ * implementation the Asset Library screen uses — the same `assets.upload`
+ * permission, the same actor carrying this member's BrandScope, the same
+ * signature check, checksum key, quota and quarantine, and the same background
+ * dispatch. NO SECOND LIBRARY AND NO SHORTCUT: the file lands as an ordinary
+ * asset, PENDING its scan, and becomes selectable when the scanner clears it.
+ *
+ * THE BRAND IS THE DRAFT'S OWN, not a field on the form. A picture uploaded
+ * while writing for one brand belongs to that brand, and letting a form name a
+ * different one would be a brand chosen by a POST body.
+ */
+export async function uploadComposerMediaAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'assets.upload');
+    const file = formData.get('file');
+    if (!(file instanceof File) || file.size === 0)
+      throw new AppError('VALIDATION_FAILED', 'No file.');
+
+    /*
+     * THE DRAFT SAYS WHICH BRAND. Read through the tenant-scoped client and the
+     * member's own scope, so an item id from another brand is a miss rather
+     * than a brand this upload would be filed under.
+     */
+    const item = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const library = await services.library();
+      return library.getItem(itemId, session.workspace.brandScope);
+    });
+
+    await uploadIntoLibrary({
+      workspaceId: session.workspace.workspaceId,
+      actor: {
+        userId: session.customer.userId,
+        permissionKeys: session.workspace.permissionKeys,
+        brandScope: session.workspace.brandScope,
+      },
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      brandId: item.brandId,
+      // The library's root. A composer that also asked for a folder would be
+      // asking an author mid-sentence to file something.
+      folderId: null,
+    });
+
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'ASSET_UPLOADED' });
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    destination = failure(locale, error, 'uploadComposerMedia', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);

@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { checksumOf } from '@brandspace/storage';
 import type { AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
@@ -14,6 +13,7 @@ import {
 } from '@brandspace/jobs';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inAssetLibrary } from '../../../server/assets-context';
+import { uploadIntoLibrary } from '../../../server/asset-upload';
 
 const log = createLogger({ context: { component: 'dashboard.assets' } });
 
@@ -83,88 +83,23 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0) throw new Error('no file');
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const brandId = optionalId(formData, 'brandId');
-    const folderId = optionalId(formData, 'folderId');
-
     /*
-     * THE IDEMPOTENCY KEY IS THE CONTENT, not the file's name and size.
+     * THE UPLOAD ITSELF LIVES IN `server/asset-upload.ts` (AC-27.1).
      *
-     * `<name>-<size>` answers a different question than the one it is asked:
-     * two DIFFERENT photographs saved as `hero.png` at the same byte count
-     * collide and the second is silently discarded as a replay, while the same
-     * photograph renamed produces a second upload rather than replaying. A
-     * checksum over the bytes, scoped to the workspace, the brand and the
-     * folder, answers "is this the same request?" correctly — the same file to
-     * the same place is a replay, and anything else is a new upload. The same
-     * lesson the Brand Brain upload key learned.
+     * It moved there when the Content Studio gained a reason to do the same
+     * thing: an author attaching a picture mid-draft should not have to leave.
+     * Two screens, one library, and therefore ONE upload path — a second copy
+     * is how the signature check, the checksum key, the quarantine or the
+     * dispatch ends up enforced on one screen and not the other.
      */
-    const checksum = await checksumOf(bytes);
-    const idempotencyKey = `ui:${session.workspace.workspaceId}:${brandId ?? 'ws'}:${
-      folderId ?? 'root'
-    }:${checksum}`;
-
-    const job = await inAssetLibrary(session.workspace.workspaceId, async ({ upload }) => {
-      const service = await upload();
-      const session_ = await service.initiate({
-        brandId,
-        folderId,
-        fileName: file.name,
-        /*
-         * THE BROWSER'S TYPE, and it is trusted for exactly one thing: whether
-         * this workspace may upload this KIND of file. It decides no parser and
-         * no pipeline — the file's own SIGNATURE has to agree before anything
-         * is stored (docs/SECURITY.md §11.2).
-         */
-        mimeType: file.type || 'application/octet-stream',
-        sizeBytes: bytes.byteLength,
-        idempotencyKey,
-        actor: assetActor(session),
-      });
-      const completed = await service.complete({
-        sessionId: session_.session.id,
-        bytes,
-        actor: assetActor(session),
-      });
-      return completed.job;
+    await uploadIntoLibrary({
+      workspaceId: session.workspace.workspaceId,
+      actor: assetActor(session),
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      brandId: optionalId(formData, 'brandId'),
+      folderId: optionalId(formData, 'folderId'),
     });
-
-    if (job) {
-      const dispatch = await enqueue('media-processing', PROCESS_ASSET, {
-        kind: PROCESS_ASSET,
-        workspaceId: session.workspace.workspaceId,
-        requestedByUserId: session.customer.userId,
-        // The job row's id IS the natural key for this work. A second dispatch
-        // of the same row is refused by BullMQ rather than scanned twice.
-        idempotencyKey: `asset-${job.id}`,
-        processingJobId: job.id,
-      } satisfies ProcessAssetPayload);
-
-      if (!dispatch.dispatched) {
-        if (!mayProcessInline()) {
-          /*
-           * PRODUCTION DOES NOT PROCESS INLINE. The row is already durable, so
-           * the reconciliation sweep will pick it up: the upload succeeded, the
-           * file reads PROCESSING, and the outage is the operator's to fix
-           * rather than the customer's to notice as a hung page. It also means
-           * an unscanned file stays quarantined rather than being rushed
-           * through on a request thread.
-           */
-          log.error('could not dispatch asset processing; leaving it for the sweep', {
-            workspaceId: session.workspace.workspaceId,
-            jobId: job.id,
-          });
-        } else {
-          log.warn('no queue configured; processing this upload inline (non-production only)', {
-            jobId: job.id,
-          });
-          await inAssetLibrary(session.workspace.workspaceId, async ({ processing }) => {
-            const service = await processing();
-            await service.process(job.id);
-          });
-        }
-      }
-    }
 
     destination = pageUrl(locale, { ok: 'ASSET_UPLOADED' });
   } catch (error: unknown) {
