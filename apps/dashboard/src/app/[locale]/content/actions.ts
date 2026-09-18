@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
@@ -102,6 +102,63 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
+}
+
+/**
+ * PHASE 8 — FILE A DRAFT UNDER A CAMPAIGN, OR TAKE IT OUT OF ONE (AC-26.3).
+ *
+ * A SEPARATE ACTION FROM SAVING A VARIANT, because it is a different fact about
+ * a different row: a campaign belongs to the ITEM, a caption to the variant, and
+ * one form writing both would make "save this caption" quietly re-file the post.
+ *
+ * `campaigns.manage` RATHER THAN `content.edit`. Linking content to a campaign
+ * changes what that campaign reports, so it is a campaign decision made from the
+ * content screen — not a content decision. `CampaignService.setContentCampaign`
+ * re-checks the member's BrandScope against BOTH the item and the campaign, so
+ * neither half can be borrowed from another brand, and writes the audit event.
+ *
+ * AN EMPTY VALUE MEANS "no campaign", which is a real instruction and not a
+ * missing field — the control always submits, and `''` unlinks.
+ */
+export async function setContentCampaignAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const raw = formData.get('campaignId');
+    if (raw === null) notFound();
+    const campaignId = String(raw).trim();
+
+    await inContentStudio(session.workspace.workspaceId, async (services) =>
+      services.campaigns().setContentCampaign({
+        contentItemId: itemId,
+        campaignId: campaignId === '' ? null : campaignId,
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+        },
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CAMPAIGN_LINKED' });
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/** Next.js signals `notFound()` and `redirect()` by throwing; this is that. */
+function isRedirectError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'digest' in error &&
+    typeof (error as { digest?: unknown }).digest === 'string' &&
+    ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
+      (error as { digest: string }).digest === 'NEXT_HTTP_ERROR_FALLBACK;404')
+  );
 }
 
 /**

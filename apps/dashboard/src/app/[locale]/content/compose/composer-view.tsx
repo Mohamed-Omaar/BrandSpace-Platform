@@ -57,6 +57,8 @@ export interface ComposerDraft {
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
+  /** PHASE 8 — the campaign this draft is filed under, when it is. */
+  readonly campaignId: string | null;
   readonly arabicDialect: string | null;
   readonly insufficientKnowledge: boolean;
   readonly citations: readonly { readonly label: string }[];
@@ -81,13 +83,28 @@ export interface ComposerViewProps {
   readonly maxBriefChars: number;
   readonly maxVariants: number;
   readonly draft: ComposerDraft | null;
-  readonly can: { create: boolean; edit: boolean; submit: boolean; archive: boolean };
+  /**
+   * PHASE 8 — the campaigns this draft could be filed under (AC-26.3).
+   *
+   * ALREADY NARROWED TO THE DRAFT'S OWN BRAND and to the member's BrandScope by
+   * the server: a list this component filtered would be a list it had already
+   * been handed, and the action re-checks both halves anyway.
+   */
+  readonly campaigns: readonly { id: string; name: string }[];
+  readonly can: {
+    create: boolean;
+    edit: boolean;
+    submit: boolean;
+    archive: boolean;
+    manageCampaigns: boolean;
+  };
   readonly tools: readonly string[];
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
+    setCampaign(formData: FormData): Promise<void>;
   };
 }
 
@@ -108,6 +125,7 @@ export function ComposerView({
   maxBriefChars,
   maxVariants,
   draft,
+  campaigns,
   can,
   tools,
   actions,
@@ -282,6 +300,53 @@ export function ComposerView({
           <b>{t['content.insufficient']}</b>
           <p>{t['content.insufficientBody']}</p>
         </div>
+      ) : null}
+
+      {/*
+        PHASE 8 — WHICH CAMPAIGN THIS POST BELONGS TO (AC-26.3).
+
+        ONLY FOR AN EXISTING DRAFT, because a campaign is filed against a row and
+        there is no row until the draft exists. It is a plain form posting a
+        server action rather than client state: the campaign is a fact about the
+        item, and a control that changed it without a round trip would be a
+        second place where "which campaign?" is answered.
+
+        `campaigns` is already narrowed to this draft's own brand, so the list
+        can never offer another brand's campaign — and the action re-checks the
+        member's BrandScope against both the item and the campaign anyway.
+      */}
+      {draft && can.manageCampaigns ? (
+        <form
+          action={actions.setCampaign}
+          className="cs-notice info"
+          data-testid="content-campaign-form"
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="itemId" value={draft.id} />
+          <div className="cs-field">
+            <label htmlFor={`${fieldId}-campaign`}>{t['campaigns.composerLabel']}</label>
+            <select
+              id={`${fieldId}-campaign`}
+              name="campaignId"
+              defaultValue={draft.campaignId ?? ''}
+              data-testid="content-campaign"
+            >
+              <option value="">{t['campaigns.composerNone']}</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="cs-ghost-button cs-compact"
+            data-testid="content-campaign-save"
+          >
+            {t['content.composer.saveEdit']}
+          </button>
+        </form>
       ) : null}
 
       <div className="cs-composer">

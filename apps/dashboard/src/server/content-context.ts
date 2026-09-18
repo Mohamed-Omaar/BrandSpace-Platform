@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  CampaignService,
   ContentApprovalService,
   ContentCalendarService,
   ContentLibraryService,
@@ -77,6 +78,16 @@ export interface ContentServices extends ScopedServices {
    * it cannot disagree about a brand's rules.
    */
   approvals(): Promise<ContentApprovalService>;
+  /**
+   * PHASE 8 — Campaigns, the customer surface over the Phase 7 domain.
+   *
+   * SYNCHRONOUS, unlike its neighbours, because a campaign is not governed by
+   * the content POLICY: its objectives and statuses are database enums and its
+   * channels are validated against the policy by the SCREEN that offers them,
+   * not by the service. Nothing here crosses a network to be constructed, so
+   * making it a promise would only be symmetry for its own sake.
+   */
+  campaigns(): CampaignService;
 }
 
 export async function inContentStudio<T>(
@@ -142,6 +153,7 @@ export async function inContentStudio<T>(
       ...scoped,
       policy,
       approvals,
+      campaigns: () => new CampaignService({ db: scoped.db, workspaceId }),
       library: async () =>
         new ContentLibraryService({ db: scoped.db, workspaceId, policy: await policy() }),
       calendar: async () => {

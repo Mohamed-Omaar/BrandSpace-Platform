@@ -70,6 +70,18 @@ export class ContentLibraryService {
      */
     brandScope?: readonly string[] | null | undefined;
     status?: ContentItem['status'] | undefined;
+    /**
+     * PHASE 8 — the campaign this content is filed under (AC-26.3).
+     *
+     * IN THE QUERY, for the same reason the brand scope is: a caller filtering
+     * after this returned would be filtering a page the database had already
+     * truncated, and a campaign whose content is older than the most recent
+     * fifty drafts would read as empty. The campaign id itself is NOT trusted
+     * here — it is a filter, not an authorization — and the brand scope above
+     * still decides which rows exist at all, so naming another workspace's
+     * campaign returns nothing rather than anything.
+     */
+    campaignId?: string | undefined;
     search?: string | undefined;
     limit?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
@@ -79,6 +91,7 @@ export class ContentLibraryService {
         // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
         ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
         ...(input.status ? { status: input.status } : {}),
+        ...(input.campaignId ? { campaignId: input.campaignId } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
          *

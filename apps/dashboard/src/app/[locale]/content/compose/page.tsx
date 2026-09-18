@@ -9,6 +9,7 @@ import { statusMessage, translator, type MessageKey } from '../../../../i18n/mes
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
   cancelReviewAction,
+  setContentCampaignAction,
   saveVariantAction,
   submitForReviewAction,
   transitionItemAction,
@@ -68,7 +69,7 @@ export default async function ComposePage({
     }),
   );
 
-  const { policy, draft, openApprovalId } = await inContentStudio(
+  const { policy, draft, openApprovalId, campaigns } = await inContentStudio(
     workspace.workspaceId,
     async (services) => {
       const resolved = await services.policy();
@@ -79,18 +80,40 @@ export default async function ComposePage({
        * (docs/SECURITY.md §4.2).
        */
       if (itemId === undefined) {
-        return { policy: resolved, draft: null, openApprovalId: null as string | null };
+        return {
+          policy: resolved,
+          draft: null,
+          openApprovalId: null as string | null,
+          campaigns: [] as readonly { id: string; name: string }[],
+        };
       }
       const item = await (
         await services.library()
       )
         .getItem(itemId, workspace.brandScope)
         .catch(() => null);
-      if (!item) return { policy: resolved, draft: null as null, openApprovalId: null };
+      if (!item) {
+        return { policy: resolved, draft: null as null, openApprovalId: null, campaigns: [] };
+      }
       // Phase 5B-3 — the open cycle, so the composer can offer "withdraw" only
       // when there is in fact something to withdraw.
       const open = await (await services.approvals()).openForItem(item.id);
-      return { policy: resolved, draft: item, openApprovalId: open?.id ?? null };
+      /*
+       * THE CAMPAIGNS THIS DRAFT COULD BE FILED UNDER — this brand's, and only
+       * ones this member may act on. Narrowed HERE rather than in the browser,
+       * so another brand's campaign is never sent to the page at all.
+       */
+      const campaigns = await services.campaigns().list({
+        brandId: item.brandId,
+        brandScope: workspace.brandScope,
+        take: 100,
+      });
+      return {
+        policy: resolved,
+        draft: item,
+        openApprovalId: open?.id ?? null,
+        campaigns: campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name })),
+      };
     },
   );
 
@@ -114,6 +137,7 @@ export default async function ComposePage({
         status: draft.status as ComposerDraft['status'],
         openApprovalId,
         brandId: draft.brandId,
+        campaignId: draft.campaignId,
         arabicDialect: draft.arabicDialect,
         insufficientKnowledge: draft.insufficientKnowledge,
         /*
@@ -168,18 +192,21 @@ export default async function ComposePage({
         maxBriefChars={policy.generation.maxBriefChars}
         maxVariants={policy.generation.maxVariantsPerRequest}
         draft={composerDraft}
+        campaigns={campaigns}
         tools={CONTENT_TOOLS}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
           edit: workspace.permissionKeys.includes('content.edit'),
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
+          manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
         }}
         actions={{
           save: saveVariantAction,
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
           cancelReview: cancelReviewAction,
+          setCampaign: setContentCampaignAction,
         }}
       />
     </WorkspaceShell>
@@ -212,6 +239,9 @@ function translateOptional(
 }
 
 const COMPOSER_KEYS = [
+  // Phase 8 — the campaign control on an existing draft (AC-26.3).
+  'campaigns.composerLabel',
+  'campaigns.composerNone',
   'content.composer.eyebrow',
   'content.composer.title',
   'content.composer.back',

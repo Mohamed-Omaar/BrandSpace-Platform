@@ -10,6 +10,7 @@ import {
   CreditIcon,
   HomeIcon,
   CalendarIcon,
+  FlagIcon,
   ListIcon,
   ImageIcon,
   PencilIcon,
@@ -74,6 +75,24 @@ const NAV: readonly {
     key: 'nav.content',
     permission: 'content.read',
     icon: <PencilIcon size={20} />,
+  },
+  /*
+   * PHASE 8 — CAMPAIGNS. The entry appears now because the SCREEN exists now
+   * (D-188): the area has been on the fixed inventory since the contract was
+   * written, and adding a link before its route was real would have been the
+   * dead link §20 forbids. Gated on `campaigns.read`, matching the route.
+   *
+   * It reads between Content and Calendar because that is where it sits in the
+   * work: you plan a campaign, write content into it, then schedule that
+   * content.
+   */
+  {
+    href: '/campaigns',
+    key: 'nav.campaigns',
+    permission: 'campaigns.read',
+    // `FlagIcon` reused rather than a new glyph drawn (§4.2 rule 4): a campaign
+    // is a marker planted on a period of work, which is what a flag is.
+    icon: <FlagIcon size={20} />,
   },
   {
     href: '/calendar',

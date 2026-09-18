@@ -70,6 +70,14 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * brand is part of the session's identity rather than a filter over it.
    */
   '/copilot': 'brand',
+  /*
+   * CREATING A CAMPAIGN is a creation surface about exactly one brand, so it
+   * asks rather than filing the campaign under whichever brand sorted first.
+   * The LIST below is brand-or-all, and a campaign's own detail page reads the
+   * brand stored on the campaign — global context never reinterprets which
+   * brand an existing object belongs to (D-190).
+   */
+  '/campaigns/new': 'brand',
 
   // --- Brand or All Brands: aggregation is meaningful -----------------------
   /*
@@ -84,6 +92,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
   '/approvals': 'brand-or-all',
   '/integrations': 'brand-or-all',
   '/automations': 'brand-or-all',
+  /*
+   * THE CAMPAIGN LIST aggregates honestly: a multi-brand owner planning a
+   * quarter wants every campaign in front of them, and a brand on the rail
+   * narrows it.
+   */
+  '/campaigns': 'brand-or-all',
 };
 
 /**
