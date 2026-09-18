@@ -1,8 +1,10 @@
 /**
- * Payment provider abstraction, subscriptions, invoices — docs/BILLING-AND-CREDITS.md.
+ * Payment provider abstraction, subscriptions, invoices, credits commerce —
+ * docs/BILLING-AND-CREDITS.md.
  *
- * PHASE 8. Placeholder in Phase 1 to establish the module boundary only.
- * D-05: the Saudi legal entity, tax registration and invoicing details must be
- * resolved before this package accepts production payments.
+ * PHASE 9. The domain model is OURS; a payment provider is a replaceable
+ * adapter that moves money and holds the PCI scope. Nothing in this package
+ * names a production provider: D-204 leaves that choice to the owner, and the
+ * only adapter shipped here is the deterministic development one.
  */
-export const BILLING_PACKAGE_PHASE = 8 as const;
+export * from './commerce';

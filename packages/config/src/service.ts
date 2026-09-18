@@ -144,6 +144,24 @@ const CUSTOMER_VISIBLE_DOMAINS = new Set([
    * and action registries are closed sets in code and are not configuration.
    */
   'automations',
+  /*
+   * Phase 9. The COMMERCIAL GEOGRAPHY the customer's own screens ask about and
+   * state: which currencies their country offers (onboarding asks and will not
+   * choose for them — D-194), which plans are sellable in their market, what
+   * their tax identifier is called and whether it is required, the credit packs
+   * they may buy and the price of each in their own currency, and the invoice's
+   * legal identity as it will be printed.
+   *
+   * Projected for the same reason `plans` is: the alternative is restating a
+   * price, a tax rate or a currency's scale in the dashboard, and a restated
+   * commercial value is a second commercial value (CLAUDE.md §2.2).
+   *
+   * NO CREDENTIAL IS PROJECTED, and none is in the document: `providerRouting`
+   * carries an ADAPTER KEY, while the provider's settings live in
+   * `integrations.payment` and its secrets in the Secret Service — neither of
+   * which is on this list.
+   */
+  'commerce',
 ]);
 
 export const CONFIG_READ_PERMISSION = 'platform.configuration.read';
@@ -171,7 +189,15 @@ export interface ConfigVersionSummary {
 /** Domains where activation is a financial change and needs dual control. */
 // Phase 3 adds `credits`: expiry and rollover decide how much of a customer's
 // balance survives a cycle, which is the same class of decision as a price.
-const DUAL_CONTROL_DOMAINS = new Set<ConfigDomain>(['plans', 'ai.credit-rules', 'credits']);
+// Phase 9 adds `commerce`: it carries credit-pack prices, tax rates and the
+// markets a plan may be sold in, every one of which is a financial change of
+// exactly the same class as a plan price.
+const DUAL_CONTROL_DOMAINS = new Set<ConfigDomain>([
+  'plans',
+  'ai.credit-rules',
+  'credits',
+  'commerce',
+]);
 
 function checksum(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');

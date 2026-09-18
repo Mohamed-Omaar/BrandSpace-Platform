@@ -1675,6 +1675,176 @@ const websiteSchema = z.object({
     .default([]),
 });
 
+// --- Commerce (Phase 9) ------------------------------------------------------
+/*
+ * THE COMMERCIAL GEOGRAPHY OF THE PRODUCT — currencies, markets, tax policies,
+ * credit packs, dunning and the invoice's legal identity.
+ *
+ * WHY IT IS ONE DOMAIN. Every value here answers "what do we sell, where, in
+ * what money, under whose tax rules" — an owner's commercial decision, not an
+ * engineer's (CLAUDE.md §2.2). Splitting it would mean a plan could be sellable
+ * in a market whose currency had been retired, because the two documents would
+ * activate independently.
+ *
+ * WHAT IS DELIBERATELY ABSENT. No payment provider is named, no percentage is
+ * presented as a universal tax, and NO CURRENCY IS A DEFAULT. There is no
+ * `defaultCurrency` field anywhere in this schema: a workspace's currency is
+ * chosen explicitly during onboarding and stored on the workspace (D-194), and
+ * a field here would be exactly the silent assumption that decision removed.
+ */
+const commerceCurrencySchema = z.object({
+  code: z.string().length(3),
+  name: localizedText,
+  /**
+   * How many decimal digits this currency's minor unit has.
+   *
+   * NOT ASSUMED TO BE 2. KWD, BHD and OMR are three-digit currencies, and code
+   * that assumed two would be wrong about the price in three of the seven
+   * launch markets. `Money` reads this and refuses to combine amounts whose
+   * scales disagree.
+   */
+  minorUnitDigits: z.number().int().min(0).max(4),
+  status: z.enum(['active', 'inactive']).default('inactive'),
+  sortOrder: z.number().int().nonnegative().default(0),
+});
+
+const commerceTaxPolicySchema = z.object({
+  key: z.string().min(1),
+  name: localizedText,
+  /**
+   * `none` — nothing is added and no tax line is written.
+   * `exclusive` — tax is added on top of the subtotal.
+   * `inclusive` — the price already contains the tax, which is shown separately.
+   *
+   * NO JURISDICTION IS NAMED and no rate is a default. A percentage in source
+   * would be this file deciding a country's tax law (§32 of the Phase 9 brief),
+   * and the platform sells in several.
+   */
+  mode: z.enum(['none', 'exclusive', 'inclusive']).default('none'),
+  /** Basis points — 1500 is 15%. Integer, because a tax total is not a float. */
+  rateBasisPoints: z.number().int().min(0).max(100_000).default(0),
+  /** What the customer's own tax identifier is CALLED here, if one is collected. */
+  taxIdLabel: localizedText.nullable().default(null),
+  taxIdRequired: z.boolean().default(false),
+  /** Printed on the invoice under the totals. Owner text, never generated. */
+  invoiceNote: localizedText.nullable().default(null),
+});
+
+const commerceMarketSchema = z.object({
+  /** ISO 3166-1 alpha-2. */
+  country: z.string().length(2),
+  name: localizedText,
+  /**
+   * The currencies a customer in this country may CHOOSE from.
+   *
+   * A list, never a single value: the country may narrow what is offered, but
+   * it must not pick for the customer (§4 of the Phase 9 brief). An onboarding
+   * screen shows these and requires an explicit selection.
+   */
+  currencies: z.array(z.string().length(3)).default([]),
+  /**
+   * Which plans are sellable here. `null` means every active plan.
+   *
+   * THIS IS HOW A PLAN IS AVAILABLE IN ONE MARKET AND NOT ANOTHER, and it is
+   * configuration precisely so the answer is not a conditional inside a React
+   * component (§33).
+   */
+  planKeys: z.array(z.string().min(1)).nullable().default(null),
+  taxPolicyKey: z.string().min(1).nullable().default(null),
+  status: z.enum(['active', 'inactive']).default('inactive'),
+});
+
+const commerceCreditPackSchema = z.object({
+  key: z.string().min(1),
+  name: localizedText,
+  description: localizedText.nullable().default(null),
+  /** Whole credits granted by one purchase. */
+  credits: z.number().int().positive(),
+  prices: z
+    .array(
+      z.object({
+        currency: z.string().length(3),
+        amountMinor: z.number().int().nonnegative(),
+      }),
+    )
+    .default([]),
+  /** `null` means every market. Otherwise the ISO-2 countries it is sold in. */
+  countries: z.array(z.string().length(2)).nullable().default(null),
+  /**
+   * D-12: purchased packs expire after twelve months. Kept configurable and
+   * nullable — `null` is a non-expiring pack, which the decision allows.
+   */
+  expiryDays: z.number().int().positive().nullable().default(365),
+  status: z.enum(['draft', 'active', 'retired']).default('draft'),
+  sortOrder: z.number().int().nonnegative().default(0),
+});
+
+const commerceSchema = z.object({
+  currencies: z.array(commerceCurrencySchema).default([]),
+  markets: z.array(commerceMarketSchema).default([]),
+  taxPolicies: z.array(commerceTaxPolicySchema).default([]),
+  creditPacks: z.array(commerceCreditPackSchema).default([]),
+
+  /**
+   * Which payment provider serves which market.
+   *
+   * The ADAPTER KEY only. Credentials live in the Secret Service and the
+   * provider's own settings live in `integrations.payment`; a key here is a
+   * routing decision (docs/BILLING-AND-CREDITS.md §1.1). D-204 leaves the
+   * production vendor unchosen, so the only key this resolves to before Phase
+   * 10 is the development adapter.
+   */
+  providerRouting: z
+    .array(
+      z.object({
+        providerKey: z.string().min(1),
+        countries: z.array(z.string().length(2)).nullable().default(null),
+        currencies: z.array(z.string().length(3)).nullable().default(null),
+        priority: z.number().int().nonnegative().default(0),
+      }),
+    )
+    .default([]),
+
+  checkout: z
+    .object({
+      /** How long a hosted session stays usable before it must be re-created. */
+      sessionTtlMinutes: z.number().int().min(5).max(1_440).default(60),
+      /**
+       * Whether a returning browser may be shown "payment received".
+       *
+       * ALWAYS FALSE AND NOT MEANT TO BE CHANGED — the redirect is a navigation
+       * event, not money (§22). It is a field so the refusal is visible in the
+       * document an operator reads, rather than an unstated assumption.
+       */
+      trustBrowserRedirect: z.literal(false).default(false),
+    })
+    .default({}),
+
+  dunning: z
+    .object({
+      /** Days after the failure on which a retry is attempted. */
+      retryOffsetDays: z.array(z.number().int().min(0).max(90)).default([1, 3, 5, 7]),
+      /** How long full access continues after the first failure. */
+      graceDays: z.number().int().min(0).max(90).default(7),
+      /** Days suspended before the subscription is cancelled outright. */
+      cancelAfterSuspendedDays: z.number().int().min(1).max(365).default(30),
+    })
+    .default({}),
+
+  invoice: z
+    .object({
+      /** Prefix for the human-readable number — `BS` gives `BS-2026-000001`. */
+      numberPrefix: z.string().min(1).max(8).default('BS'),
+      numberPadding: z.number().int().min(4).max(12).default(6),
+      /** The seller. Owner text: the legal entity is D-05 and still open. */
+      legalName: localizedText.nullable().default(null),
+      address: localizedText.nullable().default(null),
+      taxRegistrationNumber: z.string().min(1).nullable().default(null),
+      footerNote: localizedText.nullable().default(null),
+    })
+    .default({}),
+});
+
 const operationsSchema = z.object({
   maintenanceMode: z
     .object({
@@ -1778,6 +1948,12 @@ export const CONFIG_DOMAINS = {
   templates: { schema: templatesSchema, schemaVersion: 1 },
   website: { schema: websiteSchema, schemaVersion: 1 },
   operations: { schema: operationsSchema, schemaVersion: 1 },
+  // Phase 9. The commercial geography: the currency catalogue with each
+  // currency's own minor-unit scale, the markets that decide which currencies
+  // and plans a country is offered, tax policies, credit packs, provider
+  // routing, dunning and the invoice's legal identity. It names no payment
+  // provider (D-204) and carries NO default currency (D-194).
+  commerce: { schema: commerceSchema, schemaVersion: 1 },
 } as const;
 
 export type ConfigDomain = keyof typeof CONFIG_DOMAINS;
