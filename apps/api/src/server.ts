@@ -7,6 +7,11 @@ import { registerHealthRoutes } from './routes/health';
 import { registerSocialRoutes } from './routes/social';
 import { registerAnalyticsRoutes } from './routes/analytics';
 import { registerAutomationRoutes } from './routes/automation';
+import { registerCommerceRoutes } from './routes/commerce';
+import { registerBillingWebhookRoutes } from './routes/billing-webhook';
+import { registerBillingHostedPageRoutes } from './routes/billing-hosted-page';
+import { registerAccountRoutes } from './routes/account';
+import { registerOnboardingRoutes } from './routes/onboarding';
 import { registerCopilotRoutes } from './routes/copilot';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
@@ -50,6 +55,21 @@ export async function buildServer() {
   registerAnalyticsRoutes(app);
   registerCopilotRoutes(app);
   registerAutomationRoutes(app);
+
+  /*
+   * Phase 9. Commerce, signup and onboarding are here for the same reason every
+   * phase since Phase 5: they read the PLATFORM-owned commercial catalogue, call
+   * a payment adapter, or create a workspace — and F-07 keeps all three out of
+   * the customer dashboard.
+   *
+   * THE WEBHOOK IS REGISTERED AS ITS OWN PLUGIN so its raw-body parser applies
+   * to that route and to nothing else. See routes/billing-webhook.ts.
+   */
+  registerAccountRoutes(app);
+  registerOnboardingRoutes(app);
+  registerCommerceRoutes(app);
+  await registerBillingWebhookRoutes(app);
+  registerBillingHostedPageRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

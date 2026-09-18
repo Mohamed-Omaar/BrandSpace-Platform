@@ -24,7 +24,7 @@
 import type { MessageKey } from '../i18n/messages';
 
 /** The Settings-section destinations, in the order they are shown. */
-export type SettingsNavKey = 'settings' | 'brand' | 'members' | 'permissions' | 'plan';
+export type SettingsNavKey = 'settings' | 'brand' | 'members' | 'permissions' | 'plan' | 'billing';
 
 export interface SettingsNavEntry {
   readonly key: SettingsNavKey;
@@ -58,6 +58,7 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    */
   { key: 'permissions', path: '/permissions', labelKey: 'perms.title', permission: null },
   { key: 'plan', path: '/plan', labelKey: 'nav.plan', permission: 'billing.read' },
+  { key: 'billing', path: '/billing', labelKey: 'nav.billing', permission: 'billing.read' },
 ];
 
 /**

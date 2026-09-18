@@ -232,6 +232,24 @@ const NAV: readonly {
   { href: '/members', key: 'nav.members', permission: 'member.read', icon: <TeamIcon size={20} /> },
   { href: '/permissions', key: 'perms.title', permission: null, icon: <ShieldIcon size={20} /> },
   { href: '/plan', key: 'nav.plan', permission: 'billing.read', icon: <CreditIcon size={20} /> },
+  /*
+   * Phase 9. SEPARATE FROM "Plan & usage", which answers "what am I entitled
+   * to". This answers "what do I owe, what have I bought, and what did I pay" —
+   * two different questions, and collapsing them would bury the invoices under
+   * an entitlement table.
+   */
+  {
+    href: '/billing',
+    key: 'nav.billing',
+    permission: 'billing.read',
+    icon: <CreditIcon size={20} />,
+  },
+  {
+    href: '/onboarding',
+    key: 'nav.onboarding',
+    permission: null,
+    icon: <ListIcon size={20} />,
+  },
   {
     href: '/settings',
     key: 'nav.settings',

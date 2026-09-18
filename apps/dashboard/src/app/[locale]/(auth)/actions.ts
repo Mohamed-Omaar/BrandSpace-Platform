@@ -16,7 +16,10 @@ import {
   inWorkspace,
 } from '../../../server/customer-context';
 import { getPrisma } from '@brandspace/database';
-import { InvitationService } from '@brandspace/auth';
+import { InvitationService, OutboxEmailProvider, SignupService } from '@brandspace/auth';
+import { TenantOnboardingPolicySource, type OnboardingPolicy } from '@brandspace/onboarding';
+import { withoutTenantContext } from '@brandspace/database';
+import { currentEnvironment } from '../../../server/customer-context';
 
 const log = createLogger({ context: { component: 'dashboard.auth' } });
 
@@ -34,6 +37,34 @@ const log = createLogger({ context: { component: 'dashboard.auth' } });
  *      SameSite and TTL from the platform cookie, and set on a path that the
  *      Control Center does not serve.
  */
+
+/**
+ * The signup and MFA service, built per action.
+ *
+ * THE VERIFICATION LINK IS COMPOSED HERE, from the deployment's own base URL,
+ * and handed to the outbox as a link that is delivered and never stored. The
+ * service never learns a URL shape, and the outbox never holds a usable token.
+ */
+function signupService(locale: string): SignupService {
+  const prisma = getPrisma();
+  return new SignupService({
+    prisma,
+    email: new OutboxEmailProvider(prisma),
+    verificationLink: (token) => `/${locale}/verify?token=${encodeURIComponent(token)}`,
+  });
+}
+
+/**
+ * The activated `onboarding` rules, read through the customer-visible
+ * projection with NO workspace context — because signing up precedes every
+ * workspace, and `configuration_version` is platform-owned besides.
+ */
+async function readOnboardingPolicy(): Promise<OnboardingPolicy> {
+  return withoutTenantContext(
+    async (db) => new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
+    { prisma: getPrisma() },
+  );
+}
 
 function signInUrl(locale: string, params: Record<string, string> = {}): string {
   const search = new URLSearchParams(params).toString();
@@ -60,9 +91,19 @@ export async function signInAction(formData: FormData): Promise<void> {
       maxAge: CUSTOMER_REALM.sessionTtlSeconds,
     });
 
-    // Only a relative in-app path is honoured, so `?next=` cannot be turned
-    // into an open redirect to another origin (docs/SECURITY.md §9).
-    destination = next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/workspaces`;
+    /*
+     * AN MFA-ENROLLED ACCOUNT IS NOT SIGNED IN YET (Phase 9 §11). The cookie is
+     * set because the second step needs the session it completes, and that
+     * session resolves to NOTHING until a code is presented — so landing
+     * anywhere but the challenge would simply bounce back to sign-in.
+     */
+    if (session.mfaRequired) {
+      destination = `/${locale}/mfa`;
+    } else {
+      // Only a relative in-app path is honoured, so `?next=` cannot be turned
+      // into an open redirect to another origin (docs/SECURITY.md §9).
+      destination = next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/workspaces`;
+    }
   } catch (error: unknown) {
     const correlationId = randomUUID();
     log.warn('customer sign-in failed', { correlationId, ...internalErrorFields(error) });
@@ -285,4 +326,92 @@ function isRedirectError(error: unknown): boolean {
     typeof (error as { digest?: unknown }).digest === 'string' &&
     (error as { digest: string }).digest.startsWith('NEXT_REDIRECT')
   );
+}
+
+/**
+ * Self-service signup — Phase 9 §10.
+ *
+ * ONE DESTINATION FOR EVERY OUTCOME that depends on whether the address exists.
+ * A free address gets a verification link; a taken one gets a "you already have
+ * an account" notice; both land here, on the "check your email" page. The only
+ * failures that redirect back to the form are properties of the REQUEST — a
+ * short password, an unaccepted document, a malformed address — which reveal
+ * nothing about who has an account.
+ */
+export async function signUpAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const email = String(formData.get('email') ?? '');
+  let destination: string;
+
+  try {
+    const policy = await readOnboardingPolicy();
+    const accepted = policy.legalDocuments
+      .filter((document) => document.required)
+      .filter((document) => formData.get(`accept:${document.key}`) === 'on')
+      .map((document) => ({ key: document.key, version: document.version }));
+
+    await signupService(locale).signUp(policy, {
+      email,
+      password: String(formData.get('password') ?? ''),
+      name: String(formData.get('name') ?? ''),
+      locale: locale === 'ar' ? 'AR' : 'EN',
+      // D-194: no fallback. The form supplies it, and an empty value is refused
+      // by the service rather than replaced.
+      timezone: String(formData.get('timezone') ?? ''),
+      acceptedDocuments: accepted,
+    });
+    destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('signup failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/sign-up?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+  }
+  redirect(destination);
+}
+
+/** Ask for another verification link. Rate-limited and silent about the result. */
+export async function resendVerificationAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const email = String(formData.get('email') ?? '');
+  try {
+    const policy = await readOnboardingPolicy();
+    await signupService(locale).resendVerification(policy, email);
+  } catch (error: unknown) {
+    log.warn('verification resend failed', {
+      correlationId: randomUUID(),
+      ...internalErrorFields(error),
+    });
+  }
+  redirect(`/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`);
+}
+
+/**
+ * Present a second factor for a session that owes one.
+ *
+ * The session already exists and still grants nothing until this succeeds, so a
+ * failure simply returns to the same page — there is nothing to revoke.
+ */
+export async function verifyMfaAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  const store = await cookies();
+  const token = store.get(CUSTOMER_REALM.cookieName)?.value;
+  if (!token) redirect(signInUrl(locale));
+
+  let destination: string;
+  try {
+    const service = signupService(locale);
+    await getCustomerAuth().completeMfa({
+      token: token!,
+      code: String(formData.get('code') ?? ''),
+      verify: (userId, code) => service.verifyMfa(userId, code),
+    });
+    destination = `/${locale}/workspaces`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('customer mfa failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/mfa?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+  }
+  redirect(destination);
 }

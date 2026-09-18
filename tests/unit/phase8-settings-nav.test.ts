@@ -67,6 +67,7 @@ describe('P8: the settings nav offers only what the member can open', () => {
       '/ar/members',
       '/ar/permissions',
       '/ar/plan',
+      '/ar/billing',
     ]);
   });
 
@@ -120,6 +121,7 @@ describe('P8: the settings nav permission column matches the routes themselves',
     '/members': 'apps/dashboard/src/app/[locale]/members/page.tsx',
     '/permissions': 'apps/dashboard/src/app/[locale]/permissions/page.tsx',
     '/plan': 'apps/dashboard/src/app/[locale]/plan/page.tsx',
+    '/billing': 'apps/dashboard/src/app/[locale]/billing/page.tsx',
   };
 
   it.each(SETTINGS_NAV_ROUTES.map((route) => [route.path, route.permission] as const))(
