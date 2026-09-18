@@ -922,57 +922,57 @@ Phase 8 does not close until every criterion below passes and the exit journey i
 | AC-25.3 | The migration preserves every existing stored value exactly                                                 | `phase8-migration-upgrade` |
 | AC-25.4 | The Arabic dialect default remains MSA                                                                      | `phase8-locale-defaults`   |
 
-### AC-26 Campaigns (Phase 8 — workstream 2, PENDING)
+### AC-26 Campaigns (Phase 8 — workstream 2, settled)
 
-| ID      | Criterion                                                                                                                  | Settled by |
-| ------- | -------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| AC-26.1 | A customer creates a campaign with an objective, a brief, start and end dates, and channels/platforms                      | _pending_  |
-| AC-26.2 | A campaign can be read, updated and archived; the status lifecycle is explicit and every transition writes an `AuditEvent` | _pending_  |
-| AC-26.3 | Content is linked to a campaign, and the campaign's content view lists exactly its own linked content                      | _pending_  |
-| AC-26.4 | Campaign performance is computed from the Phase 7 analytics layer — no second analytics stack                              | _pending_  |
-| AC-26.5 | Every campaign read and write is workspace-scoped and BrandScope-enforced; a foreign campaign id answers 404               | _pending_  |
-| AC-26.6 | The Campaigns sidebar entry appears only with the screen, and is gated on the permission its route requires                | _pending_  |
+| ID      | Criterion                                                                                                                  | Settled by              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| AC-26.1 | A customer creates a campaign with an objective, a brief, start and end dates, and channels/platforms                      | `phase8-campaign-form`  |
+| AC-26.2 | A campaign can be read, updated and archived; the status lifecycle is explicit and every transition writes an `AuditEvent` | `phase8-campaigns`      |
+| AC-26.3 | Content is linked to a campaign, and the campaign's content view lists exactly its own linked content                      | `phase8-campaigns`      |
+| AC-26.4 | Campaign performance is computed from the Phase 7 analytics layer — no second analytics stack                              | `phase8-surface-guards` |
+| AC-26.5 | Every campaign read and write is workspace-scoped and BrandScope-enforced; a foreign campaign id answers 404               | `phase8-campaigns`      |
+| AC-26.6 | The Campaigns sidebar entry appears only with the screen, and is gated on the permission its route requires                | `phase8-navigation`     |
 
-### AC-27 Media in the AI Content Studio (Phase 8 — workstream 3, PENDING)
+### AC-27 Media in the AI Content Studio (Phase 8 — workstream 3, settled)
 
-| ID      | Criterion                                                                                                              | Settled by |
-| ------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- |
-| AC-27.1 | Media can be uploaded during content creation, into the ONE Asset Library — no second library is created               | _pending_  |
-| AC-27.2 | An existing asset can be chosen: shared assets and the selected brand's assets, and nothing outside the member's scope | _pending_  |
-| AC-27.3 | Media attaches to content and to platform variants where the platform makes that meaningful                            | _pending_  |
-| AC-27.4 | Content editing is media-aware, and the social preview shows what will actually be published                           | _pending_  |
-| AC-27.5 | A variant's media respects that platform's own constraints, and a violation is refused with a stated reason            | _pending_  |
+| ID      | Criterion                                                                                                              | Settled by                        |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| AC-27.1 | Media can be uploaded during content creation, into the ONE Asset Library — no second library is created               | `phase8-dictionary-coverage`, E2E |
+| AC-27.2 | An existing asset can be chosen: shared assets and the selected brand's assets, and nothing outside the member's scope | `phase8-content-media`            |
+| AC-27.3 | Media attaches to content and to platform variants where the platform makes that meaningful                            | `phase8-content-media`            |
+| AC-27.4 | Content editing is media-aware, and the social preview shows what will actually be published                           | `phase8-dictionary-coverage`, E2E |
+| AC-27.5 | A variant's media respects that platform's own constraints, and a violation is refused with a stated reason            | `phase8-content-media`            |
 
-### AC-28 AI Creative Studio (Phase 8 — workstream 4, PENDING)
+### AC-28 AI Creative Studio (Phase 8 — workstream 4, settled)
 
-| ID      | Criterion                                                                                                            | Settled by |
-| ------- | -------------------------------------------------------------------------------------------------------------------- | ---------- |
-| AC-28.1 | A customer generates an on-brand image using Brand Profile identity inputs and Brand Brain context where appropriate | _pending_  |
-| AC-28.2 | Output format and platform are selectable, and supported platform formats are adapted/resized                        | _pending_  |
-| AC-28.3 | Generated media is saved into the ONE Asset Library as an ordinary asset, with provenance recorded                   | _pending_  |
-| AC-28.4 | Generated media is selectable inside the Content Studio with no export/import step                                   | _pending_  |
-| AC-28.5 | Generation is priced, reserved, confirmed and settled through the AI Gateway ledger like every other AI action       | _pending_  |
-| AC-28.6 | A failed generation deducts nothing, and a retry never deducts twice                                                 | _pending_  |
-| AC-28.7 | No logo is stamped onto a generated visual automatically (D-193)                                                     | _pending_  |
-| AC-28.8 | No model, provider or prompt is named anywhere in the customer surface                                               | _pending_  |
+| ID      | Criterion                                                                                                            | Settled by               |
+| ------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| AC-28.1 | A customer generates an on-brand image using Brand Profile identity inputs and Brand Brain context where appropriate | `phase8-creative-studio` |
+| AC-28.2 | Output format and platform are selectable, and supported platform formats are adapted/resized                        | `phase8-creative-studio` |
+| AC-28.3 | Generated media is saved into the ONE Asset Library as an ordinary asset, with provenance recorded                   | `phase8-creative-studio` |
+| AC-28.4 | Generated media is selectable inside the Content Studio with no export/import step                                   | `phase8-content-media`   |
+| AC-28.5 | Generation is priced, reserved, confirmed and settled through the AI Gateway ledger like every other AI action       | `phase8-creative-studio` |
+| AC-28.6 | A failed generation deducts nothing, and a retry never deducts twice                                                 | `phase8-creative-studio` |
+| AC-28.7 | No logo is stamped onto a generated visual automatically (D-193)                                                     | `phase8-creative-studio` |
+| AC-28.8 | No model, provider or prompt is named anywhere in the customer surface                                               | `phase8-surface-guards`  |
 
-### AC-29 The media workflow, end to end (Phase 8 — workstream 5, PENDING)
+### AC-29 The media workflow, end to end (Phase 8 — workstream 5, settled)
 
-| ID      | Criterion                                                                                                     | Settled by |
-| ------- | ------------------------------------------------------------------------------------------------------------- | ---------- |
-| AC-29.1 | Approvals are media-aware: a reviewer sees the media they are approving                                       | _pending_  |
-| AC-29.2 | The Calendar is media-aware                                                                                   | _pending_  |
-| AC-29.3 | The publishing contract carries media payloads, and the provider abstraction accepts them                     | _pending_  |
-| AC-29.4 | A post with media moves through approval, scheduling and publishing without losing its media                  | _pending_  |
-| AC-29.5 | Mock/development adapters prove the whole path end to end; no real provider credential is required            | _pending_  |
-| AC-29.6 | A failed media publish is reported honestly in the reader's language and is safe to retry without duplicating | _pending_  |
+| ID      | Criterion                                                                                                     | Settled by                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| AC-29.1 | Approvals are media-aware: a reviewer sees the media they are approving                                       | `phase8-publish-media`, E2E                          |
+| AC-29.2 | The Calendar is media-aware                                                                                   | `phase8-publish-media`, E2E                          |
+| AC-29.3 | The publishing contract carries media payloads, and the provider abstraction accepts them                     | `phase8-publish-media`                               |
+| AC-29.4 | A post with media moves through approval, scheduling and publishing without losing its media                  | `phase8-publish-media`                               |
+| AC-29.5 | Mock/development adapters prove the whole path end to end; no real provider credential is required            | `phase8-publish-media`                               |
+| AC-29.6 | A failed media publish is reported honestly in the reader's language and is safe to retry without duplicating | `phase8-publish-media`, `phase8-dictionary-coverage` |
 
-### AC-30 Marketing Intelligence, navigation and the Phase 8 exit journey (Phase 8 — workstream 6, PENDING)
+### AC-30 Marketing Intelligence, navigation and the Phase 8 exit journey (Phase 8 — workstream 6, settled)
 
-| ID      | Criterion                                                                                                                                                                                                                                                                                  | Settled by |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| AC-30.1 | Marketing Intelligence is a real customer-facing surface, integrated with the shell and the brand context                                                                                                                                                                                  | _pending_  |
-| AC-30.2 | Every one of the eighteen navigation areas is reachable, and no entry is a placeholder link (D-188)                                                                                                                                                                                        | _pending_  |
-| AC-30.3 | The product reads as one system in `ar` and `en`, RTL and LTR, at phone width, at WCAG 2.2 AA                                                                                                                                                                                              | _pending_  |
-| AC-30.4 | **The exit journey runs end to end:** Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign → AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar → Publish → Analytics → Marketing Intelligence → learning into Brand Brain | _pending_  |
-| AC-30.5 | The whole journey is workspace-isolated and BrandScope-enforced at every step                                                                                                                                                                                                              | _pending_  |
+| ID      | Criterion                                                                                                                                                                                                                                                                                  | Settled by                                                        |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| AC-30.1 | Marketing Intelligence is a real customer-facing surface, integrated with the shell and the brand context                                                                                                                                                                                  | `phase8-intelligence`, E2E                                        |
+| AC-30.2 | Every one of the eighteen navigation areas is reachable, and no entry is a placeholder link (D-188)                                                                                                                                                                                        | `phase8-navigation`, E2E                                          |
+| AC-30.3 | The product reads as one system in `ar` and `en`, RTL and LTR, at phone width, at WCAG 2.2 AA                                                                                                                                                                                              | `phase8-journey` E2E                                              |
+| AC-30.4 | **The exit journey runs end to end:** Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign → AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar → Publish → Analytics → Marketing Intelligence → learning into Brand Brain | `phase8-journey` E2E                                              |
+| AC-30.5 | The whole journey is workspace-isolated and BrandScope-enforced at every step                                                                                                                                                                                                              | `phase8-intelligence`, `phase8-publish-media`, `phase8-campaigns` |

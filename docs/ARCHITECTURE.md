@@ -298,7 +298,21 @@ packages/ui · packages/database · packages/auth · packages/ai-gateway
 packages/social-connectors · packages/entitlements · packages/billing
 packages/config · packages/shared
 packages/secrets · packages/observability · packages/providers   (added in Phase 2A)
+packages/creative                                                (added in Phase 8)
 ```
+
+> **Phase 8 added `packages/creative` (D-193, AC-28).** It holds the AI Creative Studio's service and
+> its format catalogue and NOTHING ELSE — no provider, no encoder, no storage driver. It asks the AI
+> Gateway for an image and asks the Asset Library to keep it, which is why it can exist beside both
+> without either learning about the other: there is no second library, no second ledger and no second
+> route to a model.
+>
+> **Phase 8 also gave `packages/assets` a second consumer.** `publishableAssetWhere()` is the ONE
+> predicate deciding what media a post may carry (D-199), and `packages/content` and the publish
+> pipeline both go through it — `content_variant.assetIds` is a `uuid[]`, so the composite foreign key
+> D-112 relies on cannot reach it and the predicate IS the tenant boundary. `packages/social-connectors`
+> takes the resolved bytes through a PORT rather than depending on the Asset Library, so no connector's
+> package graph pulls in the media subsystem and no adapter can reach a tenant's files (D-200).
 
 ### 4.1 Dependency rules (lint-enforced)
 

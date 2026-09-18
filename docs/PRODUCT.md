@@ -191,14 +191,15 @@ identity is reached _contextually_ — from the global Brand Selector, and from 
 is configuration for the brand you are already working in rather than a place you go to work.
 
 **A LINK THAT GOES NOWHERE IS NOT NAVIGATION.** An area on this list appears in the sidebar only once
-its screen exists. Campaigns and AI Creative Studio are on the list and are NOT linked yet; adding a
-placeholder entry for either would be the dead link `docs/UI-FIDELITY-CONTRACT.md` §20 forbids.
+its screen exists; adding a placeholder entry for one that does not is the dead link
+`docs/UI-FIDELITY-CONTRACT.md` §20 forbids.
 
-**BEING UNLINKED IS NOT BEING OUT OF SCOPE.** Campaigns, the AI Creative Studio, media inside the AI
-Content Studio, the media-aware publishing workflow and Marketing Intelligence are **mandatory Phase
-8 deliverables** (D-195), not Phase 9 or Phase 10 work. They are unlinked today because their screens
-do not exist yet, and they get their sidebar entries in the Phase 8 workstreams that build them. The
-same rule applies in reverse: no entry may be added before its screen is real.
+**ALL EIGHTEEN ARE LINKED.** Campaigns, the AI Creative Studio and Marketing Intelligence were the
+last three unlinked areas, and their screens landed in the Phase 8 workstreams that built them. The
+rule still holds in both directions, and is now a test rather than a promise:
+`tests/unit/phase8-navigation.test.ts` walks the rail and requires every entry to have a `page.tsx`
+and a declared brand scope, and requires each of the eighteen areas below to be on it.
+`tests/e2e/phase8-journey.spec.ts` then opens them.
 
 **BRAND PROFILE IS REACHED FROM TWO PLACES, BOTH PERMISSION-GATED.** The global Brand Selector offers
 it when a brand is resolved AND the member holds `brand.read`; the Settings section navigation offers

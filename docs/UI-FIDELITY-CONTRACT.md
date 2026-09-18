@@ -242,6 +242,10 @@ take it on trust.
 | `/[locale]/automations`    | Module 15 in `docs/PRODUCT.md`, and absent from the demo altogether                                                                                                                                                                                                                                                                                                                                                                    | `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell. The rule editor is a plain GET/POST form over the CLOSED trigger, action and CONDITION registries, so every control is a `select` over a fixed option list rather than free text; a condition's operator list, value control and closed values are all derived from `CONDITION_FIELD_CONTRACTS` (D-180), and `in`/`not_in` use a `multiple` select so the browser posts a real list | D-154    |
 | `/[locale]/settings/brand` | **Brand Profile.** The demo has no brand-identity route at all — `#customer/brand` is not in `app-1.js`'s navigation, not in `meta` and not in `page()`'s router. It is also not a new KIND of screen: it is a settings form for one brand                                                                                                                                                                                             | `packages/ui`'s `SettingsSplit`, `Card`, `Field`, `StateMessage` and the input, button, spacing and typography tokens — the SAME composition `/[locale]/settings` already uses, deliberately, so a reader moving between workspace settings and brand settings meets one page design rather than two. The only addition is a row of colour swatches, each carrying its hex in a `title` and a visually-hidden span so the colour is never the only way to read the value                        | D-193    |
 
+| `/[locale]/campaigns`, `/campaigns/new`, `/campaigns/[campaignId]` | The demo's `#customer/campaigns` route is `simpleFeaturePage('campaigns')` — the "Future product preview" placeholder with three identical cards. There is no campaign list, no campaign form and no campaign detail design in the Landing repository at the pinned commit | `packages/ui`'s `Card`, `SectionHeader`, `DataTable`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell. The list is the `DataTable` the members and activity routes already use; the form is the `Field`/`SettingsSplit` composition the settings routes use; the detail page's performance row is the SAME four-across metric row as the Command Center and Analytics. Nothing new was drawn | D-195 |
+| `/[locale]/creative` | **AI Creative Studio.** The demo's `#customer/studio` route is `simpleFeaturePage('studio')` — the placeholder again. `DesignStudio` exists in `packages/ui` as a ported demo COMPONENT, but it is a layout canvas rather than a generation screen, and this route is neither a second port of it nor a redesign of it | `packages/ui`'s `Card`, `SectionHeader`, `Field`, `StateMessage`, `Button`, `AssetMedia` and the tokens; the shared shell. The format picker is a `select` over the closed `CREATIVE_FORMATS` catalogue, the quote line is caption typography, and the result is the same square `aspect-ratio: 1 / 1` frame the post card uses — so a generated image is framed exactly as a published one | D-195 |
+| `/[locale]/intelligence` | **Marketing Intelligence.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router | `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell — deliberately the SAME composition, in the same order and with the same spacing, as `/[locale]/strategy`, so a reader moving between Analytics, Intelligence and Strategy is reading one product rather than three. The evidence list is the identical markup `/strategy` renders its evidence with | D-198 |
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
@@ -309,6 +313,29 @@ workspace card, because:
    phone without a desktop-only control being invented for it.
 
 The order is containment: a brand lives inside a workspace, so it reads underneath it.
+
+### 6.6 Phase 8 — media inside surfaces that already existed
+
+Three ported or extended screens learned to show a real picture, and none of them was redesigned to
+do it. The rule followed in every case: **the frame stays, the fill changes.**
+
+- **`AssetMedia` and `AssetThumb`** (`packages/ui/src/media.tsx`) fill exactly the boxes
+  `AbstractMedia` and `MediaThumb` fill — same size, same radius, same overflow — with a customer's
+  bytes instead of a gradient. The abstract artwork is not replaced and is not deprecated: it is what
+  a text-only post and every design-system fixture want, and a post genuinely without media must not
+  look like a post whose media failed to load.
+- **The post card, list row, calendar chip and detail drawer** each render through one pair of
+  helpers, so no two of them can disagree about what a post looks like. `PostRecord.mediaSrc` is an
+  opaque, expiring, per-viewer download grant — never a storage key and never a signed URL in a
+  column.
+- **`PostStatus` gained `PARTIALLY_PUBLISHED`** (D-201). This is a design-system CHANGE rather than
+  an extension, and it earns that: the Calendar now reads the canonical slot, a post that went out on
+  one platform and failed on another is neither published nor failed, and a card's accessible name
+  states its status in words — so picking one of the two would announce the wrong thing as fact.
+- **A plain `<img>` is used deliberately.** `packages/ui` is the design system and has no framework
+  dependency; a Next.js image component here would make the package unusable outside that framework
+  and would try to optimise a same-origin, short-lived, per-viewer grant, which is not a static asset
+  and must not be cached by an optimiser.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 

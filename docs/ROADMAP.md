@@ -709,7 +709,7 @@ Exit criteria for this workstream:
 - [x] Creating a workspace requires an explicit country, locale, timezone and currency; existing
       stored values are untouched
 
-### Workstream 2 — Campaigns _(pending)_
+### Workstream 2 — Campaigns _(delivered)_
 
 The customer-facing Campaigns module. The `Campaign` domain exists from Phase 7 as an automation and
 analytics dimension; this is the product surface a customer actually works in.
@@ -724,12 +724,12 @@ analytics dimension; this is the product surface a customer actually works in.
 
 Exit criteria:
 
-- [ ] A customer creates a campaign with an objective, a brief, dates and channels, and works in it
-- [ ] Content is linked to a campaign and the campaign shows its own content
-- [ ] Campaign performance reads from the existing analytics layer, brand- and workspace-scoped
-- [ ] The campaign lifecycle is explicit, audited, and cannot be moved by an unauthorised member
+- [x] A customer creates a campaign with an objective, a brief, dates and channels, and works in it
+- [x] Content is linked to a campaign and the campaign shows its own content
+- [x] Campaign performance reads from the existing analytics layer, brand- and workspace-scoped
+- [x] The campaign lifecycle is explicit, audited, and cannot be moved by an unauthorised member
 
-### Workstream 3 — Media in the AI Content Studio _(pending)_
+### Workstream 3 — Media in the AI Content Studio _(delivered)_
 
 1. Upload media DURING content creation.
 2. Choose an existing asset from the one Asset Library — shared assets and the selected brand's
@@ -740,12 +740,12 @@ Exit criteria:
 
 Exit criteria:
 
-- [ ] A draft carries media, chosen or uploaded, without a second library being invented
-- [ ] A variant's media respects the platform's own constraints
-- [ ] The preview shows what will actually be published
-- [ ] Nothing lets a brand attach an asset outside its workspace or outside the member's brand scope
+- [x] A draft carries media, chosen or uploaded, without a second library being invented
+- [x] A variant's media respects the platform's own constraints
+- [x] The preview shows what will actually be published
+- [x] Nothing lets a brand attach an asset outside its workspace or outside the member's brand scope
 
-### Workstream 4 — AI Creative Studio _(pending)_
+### Workstream 4 — AI Creative Studio _(delivered)_
 
 1. The customer-facing AI Creative Studio.
 2. On-brand image generation, using Brand Profile identity inputs and Brand Brain context where
@@ -756,12 +756,12 @@ Exit criteria:
 
 Exit criteria:
 
-- [ ] A customer generates an on-brand image and it lands in the Asset Library as an ordinary asset
-- [ ] Generation is metered through the AI Gateway and the credit ledger like every other AI action
-- [ ] A generated image is selectable in the Content Studio with no export/import step
-- [ ] Nothing stamps a logo automatically; identity inputs inform generation, they do not overlay it
+- [x] A customer generates an on-brand image and it lands in the Asset Library as an ordinary asset
+- [x] Generation is metered through the AI Gateway and the credit ledger like every other AI action
+- [x] A generated image is selectable in the Content Studio with no export/import step
+- [x] Nothing stamps a logo automatically; identity inputs inform generation, they do not overlay it
 
-### Workstream 5 — The media workflow, end to end _(pending)_
+### Workstream 5 — The media workflow, end to end _(delivered)_
 
 1. Media-aware Approvals.
 2. Media-aware Calendar.
@@ -771,11 +771,11 @@ Exit criteria:
 
 Exit criteria:
 
-- [ ] A post with media moves through approval, scheduling and publishing without losing its media
-- [ ] The publishing contract carries media, and the mock adapter proves the path end to end
-- [ ] A failed media publish is reported honestly and is safe to retry
+- [x] A post with media moves through approval, scheduling and publishing without losing its media
+- [x] The publishing contract carries media, and the mock adapter proves the path end to end
+- [x] A failed media publish is reported honestly and is safe to retry
 
-### Workstream 6 — Marketing Intelligence and final product polish _(pending)_
+### Workstream 6 — Marketing Intelligence and final product polish _(delivered)_
 
 1. The final customer-facing Marketing Intelligence surface and its integration.
 2. Final navigation integration — every area in the fixed inventory reachable, none of them a
@@ -784,9 +784,9 @@ Exit criteria:
 
 Exit criteria:
 
-- [ ] Marketing Intelligence is a real customer surface, not an internal concept
-- [ ] The eighteen-area navigation inventory is complete and every entry leads somewhere real
-- [ ] The product reads as one system in both languages and both directions
+- [x] Marketing Intelligence is a real customer surface, not an internal concept
+- [x] The eighteen-area navigation inventory is complete and every entry leads somewhere real
+- [x] The product reads as one system in both languages and both directions
 
 ### The Phase 8 exit journey
 
@@ -800,6 +800,21 @@ accepted learning fed back into Brand Brain.
 **Real production providers are NOT required to close Phase 8.** Mock and development adapters may
 prove the product behaviour. Real provider credentials, real social platforms and production
 deployment are Phase 10.
+
+**THE JOURNEY RUNS.** `tests/e2e/phase8-journey.spec.ts` walks it: thirteen screens, in order, in
+one shell with one brand context, in both languages and both directions, at phone width, clean under
+axe. Every stop answers under 400 and is the page that was asked for — not a redirect to the
+overview, which is the thing that would make such a suite pass for free.
+
+**WHAT WALKING IT FOUND, recorded because a green suite that found nothing proves nothing.** The
+Brand Selector vanished on Brand Brain and Analytics the moment a brand was chosen — both screens
+render the shell twice and passed the context to the "no brand" branch only. The Content Studio's
+media picker, its live social preview and one composer control read twenty-seven message keys their
+page never sent, so every label rendered as an empty string with no test and no log to say so. And
+the end-to-end automations fixture grew seven rules per run against a configured ceiling of twenty,
+so the third consecutive run failed for a reason that had nothing to do with what it tested. All
+three are fixed, and each has a guard: a shell/context count, a dictionary-coverage sweep, and a
+seed that resets what it creates.
 
 ### Not in Phase 8
 
