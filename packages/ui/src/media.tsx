@@ -112,6 +112,77 @@ export function AbstractMedia({
   );
 }
 
+/**
+ * A REAL asset's bytes, filling the same box `AbstractMedia` fills.
+ *
+ * PHASE 8. Everything above this line draws artwork in CSS because the design
+ * system must not depend on a network, a licence or a third party. A CUSTOMER's
+ * media is the opposite case: it is the whole point, and a preview that drew a
+ * gradient instead of the picture the author chose would be a preview of
+ * nothing.
+ *
+ * `src` IS AN OPAQUE, EXPIRING DOWNLOAD GRANT issued by the server for this
+ * viewer — never a storage key, never a signed URL from a column. The route
+ * that redeems it re-checks the session, the workspace and the expiry, so a
+ * token that leaks stops working rather than becoming a key to the library.
+ *
+ * `onError` IS NOT USED, DELIBERATELY. A grant that has expired while a page
+ * sat open should show the browser's own broken-image state rather than have
+ * this component invent a "media is gone" story it cannot verify; the caller
+ * renders `MediaStateOverlay` when it KNOWS the asset is unusable.
+ */
+export function AssetMedia({
+  src,
+  alt,
+  radius = '0',
+  fit = 'cover',
+  children,
+  testId,
+}: {
+  readonly src: string;
+  /** Empty marks it decorative, exactly as `AbstractMedia` does. */
+  readonly alt: string;
+  readonly radius?: string;
+  readonly fit?: 'cover' | 'contain';
+  readonly children?: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  return (
+    <div
+      data-testid={testId ?? 'asset-media'}
+      style={{
+        position: 'relative',
+        inlineSize: '100%',
+        blockSize: '100%',
+        borderRadius: radius,
+        overflow: 'hidden',
+        // A neutral bed, so a `contain` fit and a transparent PNG both read as
+        // deliberate rather than as a rendering fault.
+        background: colorTokens.surfaceMuted,
+      }}
+    >
+      {/*
+        A PLAIN `<img>`, DELIBERATELY. This package is the design system and has
+        no framework dependency; importing a Next.js image component here would
+        make `@brandspace/ui` unusable outside that framework and would try to
+        optimise a same-origin, short-lived, per-viewer grant — which is not a
+        static asset and must not be cached by an optimiser.
+      */}
+      <img
+        src={src}
+        alt={alt}
+        style={{
+          inlineSize: '100%',
+          blockSize: '100%',
+          objectFit: fit,
+          display: 'block',
+        }}
+      />
+      {children}
+    </div>
+  );
+}
+
 /** A small square thumbnail of the same artwork, for lists and calendars. */
 export function MediaThumb({
   seed = 0,
@@ -136,6 +207,38 @@ export function MediaThumb({
       }}
     >
       <AbstractMedia seed={seed} alt={alt} testId={testId} />
+    </span>
+  );
+}
+
+/**
+ * A small square thumbnail of a REAL asset, for lists, calendars and pickers.
+ *
+ * The `MediaThumb` above it, with the bytes instead of the gradient.
+ */
+export function AssetThumb({
+  src,
+  alt,
+  size = '2.5rem',
+  testId,
+}: {
+  readonly src: string;
+  readonly alt: string;
+  readonly size?: string;
+  readonly testId?: string | undefined;
+}) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        inlineSize: size,
+        blockSize: size,
+        flexShrink: 0,
+        borderRadius: radiusTokens.sm,
+        overflow: 'hidden',
+      }}
+    >
+      <AssetMedia src={src} alt={alt} testId={testId} />
     </span>
   );
 }

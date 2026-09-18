@@ -51,12 +51,25 @@ export type PreviewMedia =
       readonly seed?: 0 | 1 | 2 | 3 | 4 | 5;
       /** More than one image makes it a carousel. */
       readonly count?: number;
+      /**
+       * PHASE 8 — the REAL asset's bytes, as an opaque expiring grant.
+       *
+       * OPTIONAL, and the two cases are different products rather than two
+       * codepaths for one. Absent means the design system's own artwork, which
+       * is what the showcase and the visual tests want: deterministic, offline,
+       * identical on every run. Present means a customer's actual picture,
+       * which is what a composer preview must show — a gradient where the
+       * author put a photograph is a preview of nothing (AC-27.4).
+       */
+      readonly src?: string | undefined;
     }
   | {
       readonly kind: 'video';
       readonly alt: string;
       readonly seed?: 0 | 1 | 2 | 3 | 4 | 5;
       readonly durationLabel?: string | undefined;
+      /** A poster frame, when the product has one. See the note above. */
+      readonly src?: string | undefined;
     }
   | { readonly kind: 'loading' }
   | { readonly kind: 'missing' };

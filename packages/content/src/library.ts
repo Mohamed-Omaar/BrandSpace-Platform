@@ -8,6 +8,7 @@ import {
 import { brandIdQueryFilter } from '@brandspace/shared';
 import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
 import { findPlatform, type ContentPolicy } from './policy';
+import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
 
 /**
@@ -160,12 +161,26 @@ export class ContentLibraryService {
     return item;
   }
 
-  /** Save a customer's own edit. No gateway, no credits — they wrote it. */
+  /**
+   * Save a customer's own edit. No gateway, no credits — they wrote it.
+   *
+   * PHASE 8 — MEDIA TRAVELS WITH THE EDIT (AC-27.3). `assetIds` is OPTIONAL and
+   * the distinction matters: ABSENT leaves the variant's media exactly as it
+   * was, and an EMPTY ARRAY clears it. A caller that meant "do not touch the
+   * media" and a caller that meant "remove the media" are different callers,
+   * and a single `?? []` would have silently turned the first into the second
+   * every time a caption was saved (D-184).
+   *
+   * Every id goes through `ContentMediaResolver`, which is the only place the
+   * tenant boundary for `assetIds` exists — the column is a uuid array and
+   * cannot carry a composite foreign key.
+   */
   async editVariant(input: {
     variantId: string;
     body: string;
     hashtags?: readonly string[];
     firstComment?: string | null;
+    assetIds?: readonly string[] | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
@@ -186,10 +201,31 @@ export class ContentLibraryService {
       firstComment: input.firstComment ?? null,
     });
 
+    /*
+     * RESOLVED BEFORE THE WRITE, so an inadmissible asset refuses the whole
+     * edit rather than saving the caption and dropping the picture. A partial
+     * save is the shape of bug that makes somebody publish a post they did not
+     * review.
+     */
+    const media =
+      input.assetIds === undefined
+        ? undefined
+        : await new ContentMediaResolver({
+            db: this.db,
+            workspaceId: this.workspaceId,
+          }).resolveForPlatform({
+            assetIds: input.assetIds,
+            brandId: variant.brandId,
+            brandScope: input.actorBrandScope,
+            platformKey: variant.platformKey,
+            policy: this.policy,
+          });
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
         firstComment: input.firstComment ?? null,
         origin: variant.origin === 'HUMAN' ? 'HUMAN' : 'AI_ASSISTED',
@@ -209,7 +245,11 @@ export class ContentLibraryService {
       resourceType: 'ContentVariant',
       resourceId: variant.id,
       brandId: variant.brandId,
-      after: { characterCount: validation.characterCount, validationState: validation.state },
+      after: {
+        characterCount: validation.characterCount,
+        validationState: validation.state,
+        ...(media === undefined ? {} : { mediaCount: media.length }),
+      },
     });
 
     /*

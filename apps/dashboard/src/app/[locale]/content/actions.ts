@@ -88,11 +88,27 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
       .map((tag) => tag.replace(/^#/, '').trim())
       .filter((tag) => tag.length > 0);
 
+    /*
+     * PHASE 8 — MEDIA, AND THE DIFFERENCE BETWEEN "leave it" AND "remove it".
+     *
+     * `mediaPresent` is a hidden field the picker always submits. WITHOUT it
+     * this submission is not about media and the variant's media is untouched;
+     * WITH it, whatever `assetIds` arrived is the new list — including none,
+     * which is how an author removes the last picture. Reading `getAll` alone
+     * would make "I unchecked everything" and "this form has no picker"
+     * indistinguishable, and the second would silently win (D-184).
+     */
+    const mediaPresent = formData.get('mediaPresent') !== null;
+    const assetIds = mediaPresent
+      ? formData.getAll('assetIds').map((value) => String(value))
+      : undefined;
+
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
       (await library()).editVariant({
         variantId,
         body,
         hashtags,
+        ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
       }),
     );

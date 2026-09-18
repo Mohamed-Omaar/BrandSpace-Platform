@@ -5,6 +5,7 @@ import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
+import { listMediaOptions } from '../../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
@@ -128,6 +129,7 @@ export default async function ComposePage({
     label: translateOptional(translate, platform.labelKey) ?? platform.key,
     maxBodyChars: platform.maxBodyChars,
     maxHashtags: platform.maxHashtags,
+    maxMediaItems: platform.maxMediaItems,
   }));
 
   const composerDraft: ComposerDraft | null = draft
@@ -156,9 +158,28 @@ export default async function ComposePage({
           hashtags: variant.hashtags,
           characterCount: variant.characterCount,
           validationState: variant.validationState as 'VALID' | 'WARNINGS' | 'INVALID',
+          assetIds: variant.assetIds,
         })),
       }
     : null;
+
+  /*
+   * PHASE 8 — THE MEDIA THIS DRAFT'S BRAND MAY USE (AC-27.2).
+   *
+   * Loaded only for an EXISTING draft, because media attaches to a variant and
+   * there are no variants until the draft exists. Narrowed server-side to the
+   * brand plus the workspace-shared shelf, so an option the member may not use
+   * is never sent to the page — and re-resolved on save regardless.
+   */
+  const mediaOptions = composerDraft
+    ? await listMediaOptions({
+        workspaceId: workspace.workspaceId,
+        brandId: composerDraft.brandId,
+        userId: customer.userId,
+        permissionKeys: workspace.permissionKeys,
+        brandScope: workspace.brandScope,
+      })
+    : [];
 
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
@@ -193,6 +214,7 @@ export default async function ComposePage({
         maxVariants={policy.generation.maxVariantsPerRequest}
         draft={composerDraft}
         campaigns={campaigns}
+        mediaOptions={mediaOptions}
         tools={CONTENT_TOOLS}
         can={{
           create: workspace.permissionKeys.includes('content.create'),

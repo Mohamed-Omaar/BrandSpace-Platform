@@ -27,6 +27,8 @@ export const platformSchema = z.object({
   maxBodyChars: z.number().int().positive(),
   maxHashtags: z.number().int().min(0),
   allowsFirstComment: z.boolean(),
+  /** PHASE 8 — media items this platform accepts on one post. Zero is legal. */
+  maxMediaItems: z.number().int().min(0),
 });
 
 export const contentPolicySchema = z.object({

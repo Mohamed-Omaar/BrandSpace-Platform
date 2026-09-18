@@ -109,4 +109,17 @@ export {
  * rather than a lifecycle of its own.
  */
 export { CampaignService, campaignNotFound, campaignVersionConflict } from './campaigns';
+/*
+ * PHASE 8 — the media gate. Exported because BOTH the Studio and the publish
+ * preflight use it: `ContentVariant.assetIds` is a uuid array and cannot carry
+ * a composite foreign key, so the tenant boundary for media lives in this
+ * service and must be the same one in both places.
+ */
+export {
+  ContentMediaResolver,
+  PUBLISHABLE_ASSET_KINDS,
+  mediaNotFound,
+  tooManyMedia,
+} from './media';
+export type { MediaResolverOptions, ResolvedMedia } from './media';
 export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';
