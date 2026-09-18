@@ -19,8 +19,10 @@ const ALLOWED_IMPORTS = {
   vault: ['shared'],
   secrets: ['shared', 'database', 'vault'],
   config: ['shared', 'database'],
-  // auth needs secrets to resolve the TOTP seed at MFA verification.
-  auth: ['shared', 'database', 'secrets'],
+  // auth needs secrets to resolve a PLATFORM user's TOTP seed at MFA
+  // verification, and `vault` directly for a CUSTOMER's, which is sealed under
+  // its own key domain (D-206) and never goes near the platform credential path.
+  auth: ['shared', 'database', 'secrets', 'vault'],
   ui: ['shared'],
   // The object-storage boundary and the signed-download grant. `shared` only:
   // it is infrastructure, and a driver that could reach the database or a
@@ -61,7 +63,23 @@ const ALLOWED_IMPORTS = {
     'vault',
     'jobs',
   ],
+  /*
+   * Phase 9 — the commercial domain. It reaches `entitlements` for the plan
+   * catalogue and the credit ledger port, and `vault` for nothing at all: a
+   * payment provider's credentials belong to the Secret Service, and hosted
+   * checkout means no instrument ever reaches this package to be sealed.
+   */
   billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
+  /*
+   * Phase 9 — joining. It composes the commercial geography (`billing`), the
+   * plan catalogue and the ledger (`entitlements`) and the activated
+   * `onboarding` document (`config`) into workspace creation and the derived
+   * first-run state.
+   *
+   * NOT `auth`: onboarding runs AFTER authentication and takes a verified user
+   * id. An import would let a first-run screen mint a session.
+   */
+  onboarding: ['shared', 'database', 'config', 'entitlements', 'billing'],
   /*
    * Phase 7 — the measurement half.
    *

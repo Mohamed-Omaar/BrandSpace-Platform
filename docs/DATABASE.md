@@ -1677,3 +1677,88 @@ capped at one hour so nothing is invisible for longer than the occurrence it is
 waiting for. With a minutely cadence that gives `batch × 60` timed rules an
 hour — 12,000 at the default batch of 200, past which the batch, not the
 ordering, is what needs raising.
+
+---
+
+## 19. Phase 9 — Commerce & Onboarding
+
+Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.
+All carry RLS with `FORCE`, a policy, D-29 registration and isolation coverage.
+
+| Model                    | Ownership    | What it holds                                                  |
+| ------------------------ | ------------ | -------------------------------------------------------------- |
+| `BillingProfile`         | tenant       | Commercial identity; **the trusted provider-customer mapping** |
+| `CheckoutSession`        | tenant       | One hosted checkout, with the amount WE calculated             |
+| `Invoice`                | tenant       | Our own document; numbered at issue, immutable after           |
+| `InvoiceLine`            | tenant       | Explicit lines, localized in BOTH languages at write time      |
+| `CreditNote`             | tenant       | A correction. Never an edit of an invoice                      |
+| `CreditNoteLine`         | tenant       | What a credit note reverses                                    |
+| `PaymentAttempt`         | tenant       | The dunning trail; "we tried four times" as a queryable fact   |
+| `CreditPackPurchase`     | tenant       | One prepaid pack and the ONE ledger grant it produced          |
+| `BillingEvent`           | **platform** | The webhook inbox                                              |
+| `InvoiceNumberSequence`  | **platform** | The seller's gapless number series                             |
+| `EmailVerificationToken` | identity     | Single-use, expiring, stored only as a SHA-256 hash            |
+| `UserLegalAcceptance`    | identity     | Which version of which document, accepted when                 |
+| `UserMfaRecoveryCode`    | identity     | Hashes only; the plaintext is shown once and never stored      |
+
+### 19.1 Every monetary row stores its currency AND that currency's scale
+
+`1000` is `10.00` SAR and `1.000` KWD. Three of the seven launch currencies are three-digit, so a
+scale read from the live catalogue at render time would silently re-denominate an issued invoice the
+moment an owner corrected a typo. Amounts are `BIGINT`; no floating-point value reaches the database
+(D-207).
+
+### 19.2 The constraints that carry a rule
+
+| Constraint                      | What it makes impossible                                          |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `checkout_session_one_subject`  | A checkout for both a plan and a pack, or for neither             |
+| `checkout_session_amounts_sane` | A total that is not `amount + tax`                                |
+| `invoice_totals_sane`           | A total that is not `subtotal − discount + tax`                   |
+| `invoice_issued_has_number`     | An issued invoice with no number, or a number with no issue date  |
+| `invoice_credited_within_total` | Crediting back more than was invoiced                             |
+| `credit_pack_purchase_sane`     | **A COMPLETED purchase that does not name the grant it produced** |
+| `*_scale_sane`                  | A currency scale outside 0–6                                      |
+| `user_mfa_enrolment_coherent`   | An account flagged for MFA with no enrolment material             |
+
+The pack constraint is the one worth naming twice: it is what makes "paid once, granted once" a
+database property rather than a worker's good intentions (D-196).
+
+### 19.3 Why the webhook inbox is platform-owned
+
+An event arrives **before anyone knows whose it is**. The workspace is DERIVED by looking the
+provider customer id up in `billing_profile` — a mapping we wrote — and never read from the event
+body. A row that cannot be resolved is kept as `UNRESOLVED` rather than guessed at or dropped. The
+tenant role has no privilege on `billing_event` at all: one workspace being able to COUNT another's
+payment events would be a disclosure in itself (D-208).
+
+### 19.4 Invoice numbering is a locked counter, not a sequence
+
+`app.allocate_invoice_number(prefix, year, padding)` advances `invoice_number_sequence` under a row
+lock inside the caller's own transaction. A sequence is not transactional: a rolled-back issue would
+leave a permanent gap in an accounting series that several of the markets this platform sells in
+expect to be gapless.
+
+It is an ORDINARY function — not `SECURITY DEFINER` — and only `brandspace_platform` holds EXECUTE.
+That was a finding rather than a preference: `FORCE ROW LEVEL SECURITY` binds a definer too, so the
+first version was refused by the very policy protecting the counter, and the D-29 gate then correctly
+refused a second policy naming another role. Issuing an invoice is a SYSTEM act in response to an
+authoritative provider event, never a customer action (D-209).
+
+### 19.5 Two composite-key notes
+
+- Four new foreign keys use the D-114 column-scoped `ON DELETE SET NULL ("column")` form. A plain
+  composite `SET NULL` fails at runtime because `workspaceId` is `NOT NULL`.
+- `checkout_session.workspaceId` and `invoice.workspaceId` reference `billing_profile.workspaceId` —
+  single-column keys between tenant-owned tables, which the D-112 gate otherwise forbids. They are
+  safe for exactly the reason the `workspace` anchor is: the child's value is pinned to the caller's
+  own workspace by RLS, so the only fact the key can reveal is one about that workspace, and there is
+  no id an attacker can vary. The gate now recognises `workspaceId -> workspaceId` as a shape rather
+  than needing a named exemption; every other single-column key still does.
+
+### 19.6 Customer MFA on the identity row
+
+`user.mfaSecretMaterial` holds the AEAD envelope for a customer's TOTP seed — ciphertext, iv, auth
+tag, wrapped data key and the authenticated context that binds it to that one user. The seed itself
+is never stored: the plaintext exists only in the QR code shown once at enrolment. It is sealed under
+`CUSTOMER_MFA_VAULT_KEK`, a third key domain, for the reasons in D-206.

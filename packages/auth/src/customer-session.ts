@@ -80,6 +80,13 @@ export interface CustomerSessionToken {
   readonly token: string;
   readonly sessionId: string;
   readonly expiresAt: Date;
+  /**
+   * Phase 9. True when this session has presented a password and nothing else.
+   * It resolves to NOTHING until `completeMfa` succeeds, so a caller that
+   * ignores this flag gets a session that does not work rather than one that
+   * works without a second factor.
+   */
+  readonly mfaRequired: boolean;
 }
 
 /** What a resolved customer session grants. Workspace scope is separate. */
@@ -169,7 +176,62 @@ export class CustomerAuthService {
       data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: this.#clock.now() },
     });
 
-    return this.#createSession(user.id, input.ip, input.userAgent);
+    return this.#createSession(user.id, input.ip, input.userAgent, user.mfaEnabled);
+  }
+
+  /**
+   * Present the second factor for a session that owes one.
+   *
+   * THE SESSION ALREADY EXISTS AND STILL GRANTS NOTHING. Keeping it lets the
+   * second step be a separate request without holding the password anywhere,
+   * and `resolve()` refuses it meanwhile — so a caller that forgets to call
+   * this does not get a partly-authenticated session, it gets none.
+   *
+   * A WRONG CODE COUNTS AS A FAILED ATTEMPT. The second factor is six digits;
+   * without a limit here, holding the password reduces the account to a million
+   * guesses.
+   */
+  async completeMfa(input: {
+    readonly token: string;
+    readonly verify: (userId: string, code: string) => Promise<boolean>;
+    readonly code: string;
+    readonly ip?: string | undefined;
+  }): Promise<void> {
+    const session = await this.#prisma.customerSession.findUnique({
+      where: { tokenHash: hashSessionToken(input.token) },
+      select: { id: true, userId: true, revokedAt: true, expiresAt: true, mfaVerifiedAt: true },
+    });
+    const now = this.#clock.now();
+    if (!session || session.revokedAt || session.expiresAt <= now) {
+      // Identical to a wrong code. A revoked session must not be detectable.
+      throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    }
+    if (session.mfaVerifiedAt) return;
+
+    const user = await this.#prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { lockedUntil: true },
+    });
+    if (this.#isLocked(user?.lockedUntil ?? null)) {
+      await this.#audit(session.userId, 'customer.mfa.locked', input.ip);
+      throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    }
+
+    const ok = await input.verify(session.userId, input.code);
+    if (!ok) {
+      await this.#countFailure(session.userId, 'customer.mfa.failed', input.ip);
+      throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    }
+
+    await this.#prisma.customerSession.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: now, lastSeenAt: now },
+    });
+    await this.#prisma.user.update({
+      where: { id: session.userId },
+      data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now },
+    });
+    await this.#audit(session.userId, 'customer.mfa.verified', input.ip);
   }
 
   /**
@@ -191,6 +253,13 @@ export class CustomerAuthService {
     if (session.expiresAt <= now) return null;
     if (session.absoluteExpiresAt <= now) return null;
     if (session.user.status !== 'ACTIVE' || session.user.deletedAt !== null) return null;
+    /*
+     * AN UNVERIFIED SECOND FACTOR GRANTS NOTHING (Phase 9 §11). Checked against
+     * the USER's current enrolment rather than a flag copied onto the session,
+     * so switching MFA on takes effect for sessions that already exist instead
+     * of at the next sign-in.
+     */
+    if (session.user.mfaEnabled && !session.mfaVerifiedAt) return null;
 
     // A workspace selected earlier is only still valid while the membership is,
     // and while the workspace is still operable. Re-derived here rather than
@@ -382,12 +451,15 @@ export class CustomerAuthService {
   ): Promise<CustomerSessionToken> {
     const user = await this.#prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, status: true, deletedAt: true },
+      select: { id: true, status: true, deletedAt: true, mfaEnabled: true },
     });
     if (!user || user.deletedAt !== null || user.status !== 'ACTIVE') {
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
-    return this.#createSession(user.id, ip, userAgent);
+    // MFA APPLIES HERE TOO. This path is reached after an invitation or a
+    // completed reset; skipping the second factor on either would make them a
+    // way around it.
+    return this.#createSession(user.id, ip, userAgent, user.mfaEnabled);
   }
 
   // --- Password reset ------------------------------------------------------
@@ -569,6 +641,7 @@ export class CustomerAuthService {
     userId: string,
     ip?: string,
     userAgent?: string,
+    mfaRequired = false,
   ): Promise<CustomerSessionToken> {
     const token = mintToken();
     const now = this.#clock.now();
@@ -578,11 +651,15 @@ export class CustomerAuthService {
         tokenHash: hashSessionToken(token),
         expiresAt: this.#slidingExpiry(now),
         absoluteExpiresAt: new Date(now.getTime() + CUSTOMER_REALM.absoluteTtlSeconds * 1000),
+        // An account WITHOUT MFA is marked verified on creation, so the column
+        // never has to be read together with the enrolment flag to know whether
+        // a session is usable.
+        mfaVerifiedAt: mfaRequired ? null : now,
         ip: ip ?? null,
         userAgent: userAgent ?? null,
       },
     });
-    return { token, sessionId: session.id, expiresAt: session.expiresAt };
+    return { token, sessionId: session.id, expiresAt: session.expiresAt, mfaRequired };
   }
 
   #slidingExpiry(now: Date): Date {

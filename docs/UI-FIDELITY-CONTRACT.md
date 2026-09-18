@@ -246,6 +246,10 @@ take it on trust.
 | `/[locale]/creative` | **AI Creative Studio.** The demo's `#customer/studio` route is `simpleFeaturePage('studio')` — the placeholder again. `DesignStudio` exists in `packages/ui` as a ported demo COMPONENT, but it is a layout canvas rather than a generation screen, and this route is neither a second port of it nor a redesign of it | `packages/ui`'s `Card`, `SectionHeader`, `Field`, `StateMessage`, `Button`, `AssetMedia` and the tokens; the shared shell. The format picker is a `select` over the closed `CREATIVE_FORMATS` catalogue, the quote line is caption typography, and the result is the same square `aspect-ratio: 1 / 1` frame the post card uses — so a generated image is framed exactly as a published one | D-195 |
 | `/[locale]/intelligence` | **Marketing Intelligence.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router | `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell — deliberately the SAME composition, in the same order and with the same spacing, as `/[locale]/strategy`, so a reader moving between Analytics, Intelligence and Strategy is reading one product rather than three. The evidence list is the identical markup `/strategy` renders its evidence with | D-198 |
 
+| `/[locale]/billing`, `/billing/invoices/[invoiceId]`, `/billing/checkout/[outcome]` | **Billing & Usage.** The demo's `#customer/billing` route is `simpleFeaturePage('billing')` — the "Future product preview" placeholder with three identical cards. There is no plan grid, no invoice table, no invoice document and no checkout return state in the Landing repository at the pinned commit | `packages/ui`'s `Card`, `SectionHeader`, `Banner`, `StateMessage`, `DataTable`, `Field`, `Button` and the tokens; the shared shell. The subscription/credits pair is the SAME `bs-split-main` composition `/[locale]/plan` already uses, deliberately, so a reader moving between "what am I entitled to" and "what do I owe" meets one page design. The plan and pack grids are the auto-fit card grid the Campaigns list uses; the invoice list is the `DataTable` the members and activity routes use; the invoice document is the `Card` + definition-list composition the settings routes use. Nothing new was drawn, and no amount is rendered anywhere except through `formatMoney`, which takes the number of decimals from the currency itself | D-204, D-205 |
+| `/[locale]/onboarding`, `/onboarding/workspace` | **The first-run checklist and workspace creation.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. Signing up is the one journey a product demo has no reason to draw | `Card`, `SectionHeader`, `Field`, `Button` and the tokens; the shared shell for the checklist, and `AuthCard` — the existing sign-in/reset composition — for creation, because creating a first workspace happens before there is a workspace for the shell to be about. The checklist rows are the same list geometry `/[locale]/plan`'s usage list uses, with the same hairline separators | D-210 |
+| `/[locale]/sign-up`, `/sign-up/sent`, `/verify`, `/mfa` | **Signup, verification and the second factor.** The demo has a marketing site and a signed-in product; it has no account-creation flow at all | `AuthCard`, `Field`, `Banner` and the auth control styles — the IDENTICAL composition `/sign-in` and `/reset` already use, in the same order. A reader arriving from the marketing site meets the same card they will meet again at every later sign-in | D-206 |
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
@@ -336,6 +340,20 @@ do it. The rule followed in every case: **the frame stays, the fill changes.**
   dependency; a Next.js image component here would make the package unusable outside that framework
   and would try to optimise a same-origin, short-lived, per-viewer grant, which is not a static asset
   and must not be cached by an optimiser.
+
+### 6.7 Phase 9 — the one screen that is deliberately NOT ours
+
+The development payment provider's hosted page (`apps/api`, `/billing/checkout/:id`) is **unbranded
+on purpose**, and that is a fidelity decision rather than an omission.
+
+In the story it is telling it is somebody ELSE's site: a real hosted checkout lives on the provider's
+domain, and that separation is the whole PCI argument. Dressing it in BrandSpace's design system
+would teach the team — and every screenshot, and every reviewer — that the payment page is ours, when
+the entire point is that it is not. It uses system fonts, no tokens and no `packages/ui` component,
+and it is not registered at all when `APP_ENV=production`.
+
+It is listed here rather than left unexplained because a reader scanning for unstyled surfaces would
+otherwise find it and reasonably file a bug.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 

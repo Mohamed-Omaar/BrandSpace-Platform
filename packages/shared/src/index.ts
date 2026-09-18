@@ -4,6 +4,7 @@ export * from './env';
 export * from './errors';
 export * from './file-signature';
 export * from './logger';
+export * from './money';
 export * from './permissions';
 export * from './public-error';
 export * from './redaction';

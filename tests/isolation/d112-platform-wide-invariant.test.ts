@@ -81,6 +81,31 @@ const EXEMPT_RELATIONSHIPS: Record<string, string> = {
 /** The one parent a single-column key may always point at. */
 const TENANT_ANCHOR = 'workspace';
 
+/**
+ * The one SHAPE a single-column key may always have, whatever it points at.
+ *
+ * `workspaceId -> workspaceId` IS THE TENANT KEY ON BOTH SIDES, so it is safe
+ * for exactly the reason the anchor above is, and the reasoning is worth
+ * spelling out because it is the only structural widening this gate has:
+ *
+ *   The child's `workspaceId` is constrained by RLS to the caller's own
+ *   workspace on every write. The key then asks whether a parent row exists
+ *   with THAT SAME workspace id. So the only fact it can reveal is one about
+ *   the caller's own workspace — "do I have a billing profile yet" — which the
+ *   caller may read directly anyway. There is no id here an attacker can vary:
+ *   substituting somebody else's workspace id is refused by the policy long
+ *   before the key is consulted.
+ *
+ *   Contrast `membership.roleId -> role`, which is exempted BY NAME above: a
+ *   role id is arbitrary and attacker-chosen, so the key really does resolve a
+ *   row belonging to somebody else and really is an existence oracle.
+ *
+ * The distinction is whether the child column is the TENANT KEY or an ordinary
+ * reference. Only the former is general; everything else still needs a named,
+ * reviewed exemption.
+ */
+const TENANT_KEY_COLUMN = 'workspaceId';
+
 describe('D-112 holds across every tenant-owned table, not just Brand Brain', () => {
   it('the registry and the database agree on which tables exist', async () => {
     const tables = tenantTables();
@@ -114,9 +139,18 @@ describe('D-112 holds across every tenant-owned table, not just Brand Brain', ()
           AND child.relname  = ANY($1::text[])
           AND parent.relname = ANY($1::text[])
           AND parent.relname <> $2
+          -- The tenant key on both sides. See TENANT_KEY_COLUMN above.
+          AND NOT (
+            (SELECT ca.attname FROM pg_attribute ca
+              WHERE ca.attrelid = c.conrelid AND ca.attnum = c.conkey[1]) = $3
+            AND
+            (SELECT pa.attname FROM pg_attribute pa
+              WHERE pa.attrelid = c.confrelid AND pa.attnum = c.confkey[1]) = $3
+          )
         ORDER BY 1, 2`,
       tables,
       TENANT_ANCHOR,
+      TENANT_KEY_COLUMN,
     );
 
     const keyOf = (o: { child: string; constraint: string; parent: string }) =>

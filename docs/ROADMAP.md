@@ -864,13 +864,48 @@ rules already built in Phase 4 (D-25, D-26).
 
 ### Exit criteria
 
-- [ ] A stranger signs up, verifies their email, chooses their own country/locale/timezone/currency,
+- [x] A stranger signs up, verifies their email, chooses their own country/locale/timezone/currency,
       creates a brand, and lands in a working workspace
-- [ ] A customer subscribes, is charged, receives an invoice, and gets the right entitlements
-- [ ] Payment failure moves through dunning to suspension and recovers correctly
-- [ ] Upgrade and downgrade behave exactly as specified, including credit handling
-- [ ] Reaching zero usable credits STOPS AI execution and offers top-up or upgrade — never overage
-- [ ] Webhook replays change nothing; spoofed webhooks are rejected
+- [x] A customer subscribes, is charged, receives an invoice, and gets the right entitlements
+- [x] Payment failure moves through dunning to suspension and recovers correctly
+- [x] Upgrade and downgrade behave exactly as specified, including credit handling
+- [x] Reaching zero usable credits STOPS AI execution and offers top-up or upgrade — never overage
+- [x] Webhook replays change nothing; spoofed webhooks are rejected
+
+### What Phase 9 delivered, and the one thing it deliberately did not
+
+**NO PRODUCTION PAYMENT PROVIDER IS NAMED ANYWHERE (D-204).** D-21 is the owner's decision and this
+phase did not take it. What shipped instead is the complete provider-agnostic architecture and one
+deterministic DEVELOPMENT adapter, which exercises the same code path a real provider will: a hosted
+page the customer is sent to, a signed server-to-server event, ordering by the provider's own
+timestamp, and a reconciliation that believes none of it until the signature verifies. Adding a
+production provider is a registration in one map plus one adapter file.
+
+**The contract has no method that could accept a card** — not one that refuses an instrument, one
+that does not exist — which is the only durable way to guarantee PCI scope never arrives inside
+BrandSpace. Phase 10 chooses the vendor, configures its credentials through the Secret Service, and
+turns the development adapter off.
+
+| Delivered                                    | Where                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Exact money, per-currency scale              | `packages/shared/src/money.ts` — integer minor units, refuses cross-currency arithmetic  |
+| Commercial geography                         | `commerce` configuration domain; markets, currencies, tax policies, packs, routing       |
+| Rules of joining                             | `onboarding` configuration domain; signup, legal documents, MFA, the first-run checklist |
+| Provider contract + dev adapter              | `packages/billing` — capabilities declared, hosted-only, signed events                   |
+| Checkout, invoices, credit notes, dunning    | `packages/billing` — server-priced, numbered from a locked counter                       |
+| Webhook authority                            | `BillingReconciler` — verify, record, resolve, order, compare, apply                     |
+| Signup, verification, customer MFA           | `packages/auth` — enumeration-safe, single-use tokens, its own key domain (D-206)        |
+| Workspace creation, derived onboarding state | `packages/onboarding` — four explicit answers, one trial ever                            |
+| Commerce UI and Billing & Usage              | `apps/dashboard/[locale]/billing`, `/onboarding`, `(auth)/sign-up`                       |
+
+### Deferred to Phase 10, deliberately
+
+- **The payment provider itself** (D-21), its credentials and its production configuration.
+- **Bilingual invoice PDFs as a rendered document.** The invoice page IS bilingual and prints to PDF
+  through the browser from the same markup, which is one document rather than two that can disagree.
+  A server-rendered PDF is a vendor and a font-licensing decision, and belongs with the provider.
+- **Tax filing and reporting exports.** The tax a customer is charged is applied from configured
+  policy and recorded on the invoice; what an accountant exports from it is a Phase 10 report.
 
 ---
 

@@ -427,3 +427,116 @@ configuration, set by the owner. It is an internal reporting construct — custo
 | Downgrade guard     | Downgrade with resources over the new limit is blocked until resolved                      |
 | Isolation           | Workspace A can never read or affect B's wallet, ledger, or invoices                       |
 | Immutability        | Any attempt to update or delete a ledger row or issued invoice fails at the database level |
+
+---
+
+## Part III — What Phase 9 Implemented
+
+> This part records what the code actually does, so a reader comparing the specification above with
+> the repository is never guessing which parts are built. Everything here is implemented, tested
+> against real PostgreSQL, and walked end to end in a browser.
+
+### 16. Money is exact, and carries its own scale
+
+`packages/shared/src/money.ts` is the only representation of an amount in the product.
+
+- **Integer minor units, held as `bigint`.** No floating-point value is ever the canonical form of
+  money, and no `number` reaches the database (§6 of the Phase 9 brief, D-207).
+- **The SCALE travels with the amount.** `1000` is `10.00` SAR and `1.000` KWD, and three of the
+  seven launch currencies are three-digit. Every monetary row therefore stores `currency` AND
+  `currencyScale`, because a scale re-read from the live catalogue would silently re-denominate an
+  invoice issued last year the moment an owner corrected a typo.
+- **`Money` refuses to combine two amounts whose currency or scale differ.** Cross-currency
+  arithmetic becomes a thrown error at the line that caused it rather than a wrong total three
+  screens away.
+- **Nothing converts.** There is no rate anywhere in `packages/billing`. A plan with no price in the
+  customer's currency is UNAVAILABLE and reports which of the two reasons applies.
+
+### 17. The commercial geography is configuration
+
+The `commerce` domain carries currencies (each with its own `minorUnitDigits`), markets, tax
+policies, credit packs, provider routing, dunning and the invoice's legal identity. The `onboarding`
+domain carries the rules of joining. **Neither holds a default country, locale, timezone or
+currency** (D-194) — onboarding asks for all four, and a field here would be exactly the assumption
+that decision removed.
+
+A market may NARROW which currencies a country is offered. It never picks one.
+
+### 18. The provider contract (D-204)
+
+```
+PaymentProviderAdapter
+  capabilities()                → declared, never assumed equal
+  ensureCustomer()              → the trusted workspace ↔ provider-customer mapping
+  createCheckoutSession()       → hosted. There is no non-hosted alternative.
+  createBillingPortalSession()
+  updateSubscription() / cancelSubscription() / resumeSubscription()
+  refund()                      → idempotent on the caller's key
+  verifyWebhook(raw, headers)   → over the RAW bytes, before parsing
+  parseWebhook(raw)             → into OUR vocabulary
+```
+
+**No method accepts a payment instrument, and none can be added without changing this contract.**
+That absence is the PCI argument: hosted checkout means no card number ever reaches BrandSpace, and
+the only durable way to guarantee it is to have nowhere to put one.
+
+The only adapter shipped is the DEVELOPMENT one. It is not a stub that returns success — it issues a
+signed event that must be delivered, verified and reconciled, so the honest path is the only path
+that works.
+
+### 19. Checkout: the price is ours, the confirmation is the provider's
+
+1. A request names a plan key and an interval, or a pack key. **It carries no amount, and there is no
+   field it could carry one in.**
+2. The price is resolved server-side from the activated catalogue, taxed by the market's configured
+   policy, and written onto our own `checkout_session` row.
+3. The provider is called and returns a URL. The row is `PENDING`.
+4. The customer pays on the provider's page. **Nothing in BrandSpace marks anything paid.**
+5. A signed event arrives, is verified over the raw body, recorded, resolved, ordered and compared
+   against the amount we wrote down. Only then is anything paid (D-205).
+
+`commerce.checkout.trustBrowserRedirect` is typed `z.literal(false)` so this cannot be configured
+away. The landing page reports reconciled state, which for a moment after a genuine payment is
+legitimately "confirming your payment".
+
+### 20. Webhook authority (D-208)
+
+| Outcome      | When                                         | Effect                                |
+| ------------ | -------------------------------------------- | ------------------------------------- |
+| _(refused)_  | signature does not verify                    | **nothing is written**                |
+| `PROCESSED`  | verified, resolved, in order, amount matches | applied                               |
+| `DUPLICATE`  | the provider's event id was already recorded | nothing; original outcome kept        |
+| `STALE`      | older than the state it describes            | recorded, not applied                 |
+| `UNRESOLVED` | no trusted mapping ties it to a workspace    | recorded, visible, applied to nothing |
+| `FAILED`     | amount or currency does not match our row    | CRITICAL audit; not applied           |
+
+The inbox is **platform-owned**: an event arrives before anyone knows whose it is, and one workspace
+being able to count another's payment events would be a disclosure in itself.
+
+### 21. Invoices and credit notes
+
+- **Numbered at ISSUE, never at creation**, from a locked counter table rather than a sequence, so a
+  discarded draft burns no number and a rolled-back issue returns its own (D-209).
+- **Immutable once issued.** A correction is a credit note — a second document — and the invoice's
+  `creditedMinor` rises under a CHECK that refuses more than the invoice total.
+- **Line descriptions are written in BOTH languages at issue time**, so a PDF in either language is
+  produced from the row rather than re-derived from a catalogue that has moved on.
+- **Snapshots freeze the agreed terms and the printed parties**, so a price change or a moved office
+  does not rewrite a document already issued.
+
+### 22. Dunning
+
+Measured from the FIRST failure, never from the last attempt, so a worker that runs late or twice can
+neither extend nor shorten a customer's grace period. The escalation ends at SUSPENDED: **access is
+withdrawn, the data is retained, and export stays available.** The audit event says so in as many
+words so it cannot be misread later as a deletion. A provider's decline message never reaches our
+rows — failure codes are a closed vocabulary, and anything unrecognised becomes `payment_failed`.
+
+### 23. Credits stay prepaid (D-196)
+
+The bridge from a settled purchase to the ledger is **one function wide**: "grant these credits,
+once, inside the transaction I am already in". Billing cannot reserve, settle, expire or read the
+wallet, and there is no method that could extend credit — which is the architectural form of "no
+postpaid overage". A completed pack purchase **cannot exist without naming the one grant it
+produced**, enforced by a CHECK constraint, so "paid once, granted once" is a database property
+rather than a worker's good intentions.

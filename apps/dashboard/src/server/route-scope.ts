@@ -33,6 +33,16 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
   '/members': 'workspace',
   '/permissions': 'workspace',
   '/plan': 'workspace',
+  /*
+   * Phase 9. Billing is a WORKSPACE fact, not a brand one. A workspace has one
+   * subscription, one currency and one set of invoices however many brands it
+   * holds, so scoping this to a brand would be inventing a distinction the
+   * commercial model does not have.
+   */
+  '/billing': 'workspace',
+  // Phase 9. The first-run checklist is a workspace-wide view of what has been
+  // set up; it points at brand screens rather than being one.
+  '/onboarding': 'workspace',
   '/settings': 'workspace',
   '/workspaces': 'workspace',
   '/no-workspace': 'workspace',

@@ -117,6 +117,9 @@ importers:
       '@brandspace/automation':
         specifier: workspace:*
         version: link:../../packages/automation
+      '@brandspace/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -144,6 +147,9 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@brandspace/onboarding':
+        specifier: workspace:*
+        version: link:../../packages/onboarding
       '@brandspace/secrets':
         specifier: workspace:*
         version: link:../../packages/secrets
@@ -193,6 +199,9 @@ importers:
       '@brandspace/automation':
         specifier: workspace:*
         version: link:../../packages/automation
+      '@brandspace/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
@@ -220,6 +229,9 @@ importers:
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@brandspace/onboarding':
+        specifier: workspace:*
+        version: link:../../packages/onboarding
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -434,6 +446,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/vault':
+        specifier: workspace:*
+        version: link:../vault
       '@node-rs/argon2':
         specifier: 2.2.0
         version: 2.2.0
@@ -484,6 +499,9 @@ importers:
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
+      '@brandspace/vault':
+        specifier: workspace:*
+        version: link:../vault
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -761,6 +779,28 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/onboarding:
+    dependencies:
+      '@brandspace/billing':
+        specifier: workspace:*
+        version: link:../billing
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/providers:
     dependencies:
       '@brandspace/config':
@@ -887,6 +927,9 @@ importers:
       '@brandspace/automation':
         specifier: workspace:*
         version: link:../packages/automation
+      '@brandspace/billing':
+        specifier: workspace:*
+        version: link:../packages/billing
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../packages/brand-brain
@@ -920,6 +963,9 @@ importers:
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../packages/observability
+      '@brandspace/onboarding':
+        specifier: workspace:*
+        version: link:../packages/onboarding
       '@brandspace/providers':
         specifier: workspace:*
         version: link:../packages/providers

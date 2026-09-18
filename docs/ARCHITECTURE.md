@@ -887,3 +887,61 @@ cross-tenant questions no single tenant can ask.
 It also gained the timer for `sweepPublishing`, which Phase 6 wrote and left reachable only from
 `runOnce` — so the publishing reconciliation sweep had never actually run on a schedule. Found while
 wiring the analytics sweep beside it.
+
+---
+
+## Phase 9 — Commerce & Onboarding
+
+### One new package, and a reason it is not two
+
+`packages/onboarding` is the only addition. It composes the commercial geography (`billing`), the plan
+catalogue and the ledger (`entitlements`) and the activated `onboarding` document (`config`) into
+workspace creation and the derived first-run state.
+
+It does NOT import `auth`, and the boundary matrix enforces it: onboarding runs AFTER authentication
+and takes a verified user id. An import would let a first-run screen mint a session.
+
+`packages/billing` was already declared in CLAUDE.md §3 and is now inhabited: the provider contract,
+one development adapter, the commerce resolver, checkout, invoices, credit notes, dunning, the
+subscription lifecycle and the reconciler.
+
+| Package               | What Phase 9 added, and why here                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/shared`     | `Money` — integer minor units carrying their own scale, refusing cross-currency arithmetic. In `shared` because the database package, the UI and every service speak it. |
+| `packages/config`     | The `commerce` and `onboarding` domains, both projected to the customer-visible snapshot.                                                                                |
+| `packages/billing`    | The payment provider contract, the development adapter, checkout, invoicing, credit notes, dunning, the subscription lifecycle and the webhook reconciler.               |
+| `packages/onboarding` | Customer workspace creation with four explicit answers, and onboarding state derived from the workspace's own rows.                                                      |
+| `packages/auth`       | Signup, email verification and customer MFA. In `auth` because CLAUDE.md §3 defines the package as _"Sessions, MFA, invitations, platform vs customer realms"_.          |
+| `packages/vault`      | `CUSTOMER_MFA_DOMAIN` — a third key domain, for the reasons in D-206.                                                                                                    |
+| `apps/api`            | The commerce routes, the webhook receiver, the development hosted page and the account/onboarding routes.                                                                |
+| `apps/dashboard`      | Billing & Usage, invoice detail, the checkout landing states, signup, verification, the MFA challenge and the first-run checklist.                                       |
+
+### Why the commercial surface is in `apps/api` and not the dashboard
+
+The same seam every phase since Phase 5 has used. Opening a checkout reads the PLATFORM-owned
+commercial catalogue and calls a payment adapter; receiving a webhook needs the platform connection
+because an event arrives before anyone knows whose it is, and invoice numbering is refused to the
+tenant role outright. F-07 keeps all of that out of tenant-facing apps.
+
+The dashboard reads what it can read on the TENANT identity — the projection, its own subscription,
+its own invoices — and proxies every action to `apps/api`, forwarding exactly one credential: the
+customer's session cookie as a bearer token. The upstream path is a constant at each call site, never
+a value from the request, because a proxy whose target came out of a dynamic segment would let a
+browser aim that credential at any route the API exposes.
+
+### Two encapsulated Fastify plugins, and why encapsulation matters here
+
+The webhook route installs a RAW-BODY parser and the development hosted page installs a
+form-encoded one. Both are registered as encapsulated plugins so each parser applies to its own
+routes and nothing else — installed on the root instance, either would replace JSON parsing for the
+whole API and every other handler would start receiving the wrong type. The webhook's parser is
+load-bearing for correctness, not convenience: verifying a re-serialized document verifies a
+different document from the one that was signed.
+
+### The development provider's page is a different origin on purpose
+
+A real hosted checkout is a page on the PROVIDER's domain. The development one is served by
+`apps/api` rather than the dashboard so the redirect out, the signed server-to-server event and the
+return are all exercised across an origin boundary rather than simulated inside one process. It is
+not registered at all when `APP_ENV=production` — the route does not exist rather than existing and
+refusing.

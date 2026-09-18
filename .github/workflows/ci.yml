@@ -221,6 +221,19 @@ jobs:
           # Throwaway credentials for an ephemeral CI container. No production
           # secret is used in CI.
           SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
+          # Phase 9 — a THIRD key domain for a customer's own MFA seed (D-206).
+          # The sign-in path must be able to verify a TOTP code, so this key is
+          # reachable from the login surface; under either key above that would
+          # put platform credentials, or every customer token, in reach of a
+          # login request.
+          CUSTOMER_MFA_VAULT_KEK=ci-only-customer-mfa-kek-4444444444444444
+          # Phase 9 — NOT a payment credential, and there is none in this
+          # repository to be one (D-204). It signs and verifies the loopback
+          # billing events the DEVELOPMENT adapter produces, so a forged one is
+          # refused exactly as a real provider's would be. Required rather than
+          # defaulted: the provider registry fails closed without it, which is
+          # how the first CI run found this line missing.
+          BILLING_DEV_WEBHOOK_SECRET=ci-only-billing-webhook-secret-55555555
           PUBLIC_API_BASE_URL=http://127.0.0.1:3002
           # Phase 6 — where the OAuth callback sends the browser back (D-141).
           PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
@@ -331,6 +344,19 @@ jobs:
           # Throwaway credentials for an ephemeral CI container. No production
           # secret is used in CI.
           SOCIAL_TOKEN_VAULT_KEK=ci-only-social-token-kek-33333333333333333
+          # Phase 9 — a THIRD key domain for a customer's own MFA seed (D-206).
+          # The sign-in path must be able to verify a TOTP code, so this key is
+          # reachable from the login surface; under either key above that would
+          # put platform credentials, or every customer token, in reach of a
+          # login request.
+          CUSTOMER_MFA_VAULT_KEK=ci-only-customer-mfa-kek-4444444444444444
+          # Phase 9 — NOT a payment credential, and there is none in this
+          # repository to be one (D-204). It signs and verifies the loopback
+          # billing events the DEVELOPMENT adapter produces, so a forged one is
+          # refused exactly as a real provider's would be. Required rather than
+          # defaulted: the provider registry fails closed without it, which is
+          # how the first CI run found this line missing.
+          BILLING_DEV_WEBHOOK_SECRET=ci-only-billing-webhook-secret-55555555
           PUBLIC_API_BASE_URL=http://127.0.0.1:3002
           # Phase 6 — where the OAuth callback sends the browser back (D-141).
           PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001

@@ -2827,3 +2827,91 @@ every green suite:
   failed post reporting no failure at all. `optionalMessage()` answers
   `string | null` and is now the only way to ask for a key the type system
   cannot know.
+
+---
+
+## 38. Phase 9 — commerce, signup and the second factor
+
+### 38.1 The webhook is authenticated by a signature, not by a session
+
+A payment provider has no session, so `/v1/billing/webhook/:provider` is `scope: 'public'` in the
+route contract. What protects it is the SIGNATURE, and the order of operations is the property:
+
+1. **Verify over the RAW bytes, before parsing.** Parsing first and verifying the re-serialized
+   result verifies a different document from the one that was signed — a well-worn way to accept a
+   forgery that happens to round-trip. The route installs a raw-body parser as an ENCAPSULATED
+   plugin so it applies to that route and to nothing else.
+2. **A failed verification writes NOTHING AT ALL.** Not a row, not an audit event, not a counter.
+   "We log every rejected delivery" is how a table becomes an attacker's storage.
+3. **The timestamp is inside the signed string**, so a captured delivery cannot be replayed forever:
+   the signature stays valid and the timestamp expires. Idempotency makes a replay a no-op; this
+   makes an old one not arrive at all.
+4. **Comparison is constant-time.** Comparing signatures with `===` leaks their prefix through
+   timing.
+
+### 38.2 Nothing marks a payment except reconciliation
+
+`commerce.checkout.trustBrowserRedirect` is typed `z.literal(false)` — it exists so the rule is
+visible in the document an owner reads, and it cannot be switched on by an operator, a migration or a
+seed. The customer-visible consequence is stated rather than hidden: for a moment after a genuine
+payment the event has not arrived, and the landing page says "confirming your payment" (D-205).
+
+### 38.3 A webhook never names its own workspace
+
+`NormalizedBillingEvent` has **no `workspaceId` field**, so there is nothing downstream for a future
+maintainer to reach for. The workspace is resolved through `billing_profile`, `checkout_session`,
+`workspace_subscription` or `invoice` — all mappings BrandSpace created. An event matching none is
+`UNRESOLVED`: kept, visible, applied to nothing.
+
+Once resolved, every lookup is PAIRED: a checkout is found by `(workspaceId, id)`, never by the id
+alone. The workspace came from a mapping we wrote; the id came from the event. Pairing them means a
+forged id belonging to another tenant resolves to nothing — indistinguishable from an id that never
+existed.
+
+### 38.4 The amount is compared against the one we wrote down
+
+A provider event whose amount or currency does not match the `checkout_session` row is a CRITICAL
+audit event and a refusal, not a payment. This is the entire reason the price is resolved
+server-side and written down BEFORE the provider is called: without the earlier write there is
+nothing to compare against, and "the provider said 1 riyal" becomes the only available truth.
+
+### 38.5 Signup does not reveal who has an account
+
+Every outcome that depends on whether an address exists returns the same acknowledgement after the
+same work. A free address is emailed a verification link; a taken one is emailed a "you already have
+an account" notice. The person who owns the inbox finds out; the person guessing does not. The
+validations that DO fail loudly — a short password, an unaccepted document, a malformed address — are
+properties of the REQUEST rather than of the account.
+
+Verification tokens are single-use, claimed by a conditional UPDATE so two simultaneous clicks race
+and exactly one wins, and stored only as a SHA-256 hash. Verifying makes a PENDING account ACTIVE and
+leaves a SUSPENDED one alone: a link in somebody's inbox must not overturn an administrative
+decision.
+
+### 38.6 Customer MFA, and the one key the dashboard now holds
+
+The second factor is presented at SIGN-IN, which is a dashboard server action — so whatever key seals
+an authenticator seed must be reachable from the login surface. `CUSTOMER_MFA_VAULT_KEK` is a THIRD
+key domain for that reason (D-206): under the platform KEK the login path would reach every provider
+credential, and under the social KEK every customer's OAuth token.
+
+The dashboard still holds no `DATABASE_PLATFORM_URL`, no `SECRET_VAULT_KEK` and no
+`SOCIAL_TOKEN_VAULT_KEK`, so F-07 is unchanged. One key, one blast radius, and that radius is
+authenticator seeds.
+
+Four further properties, each asserted rather than described:
+
+- The seed is never stored in clear; only the envelope is, and the envelope's authenticated context
+  names its owner, so material copied onto another row fails to decrypt.
+- Enrolment does not switch MFA on until a live code proves the authenticator holds the seed —
+  otherwise a mistyped scan locks the customer out of their own account.
+- A session for an MFA-enrolled account resolves to NOTHING until a code is presented, checked
+  against the user's CURRENT enrolment rather than a flag copied onto the session.
+- Disabling MFA requires a working code. A stolen session must not be enough to remove the protection
+  that session was supposed to be behind.
+
+### 38.7 Suspension withdraws access and retains data
+
+The dunning escalation ends at SUSPENDED. Nothing in the billing path deletes a customer resource, at
+any point, under any configuration — and the audit event records `dataRetained: true` explicitly so
+it cannot be misread later as a deletion. Export remains available throughout.

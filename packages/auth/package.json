@@ -16,6 +16,7 @@
     "@brandspace/database": "workspace:*",
     "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
+    "@brandspace/vault": "workspace:*",
     "@node-rs/argon2": "2.2.0",
     "otpauth": "9.5.1"
   },

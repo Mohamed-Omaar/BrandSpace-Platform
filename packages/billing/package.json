@@ -16,7 +16,8 @@
     "@brandspace/shared": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/config": "workspace:*",
-    "@brandspace/entitlements": "workspace:*"
+    "@brandspace/entitlements": "workspace:*",
+    "@brandspace/vault": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"
