@@ -13,7 +13,13 @@ import { CreditLedgerService } from '@brandspace/entitlements';
 import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { brandInScope, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import {
+  brandInScope,
+  createLogger,
+  currentEnvironment,
+  internalErrorFields,
+  isAppError,
+} from '@brandspace/shared';
 import { route } from '../route-contract';
 
 /**
@@ -53,13 +59,6 @@ function configurationService(): ConfigurationService {
   return cachedConfiguration;
 }
 
-function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
-
 /**
  * Build the gateway once per process.
  *
@@ -75,7 +74,23 @@ function gateway(): AiGateway {
   const platform = getPlatformClient();
   const environment = currentEnvironment();
   const adapters = new Map<string, AiProviderAdapter>([
-    ['mock', new MockProviderAdapter({ answerFromContext: environment !== 'PRODUCTION' })],
+    /*
+     * PHASE 10 §11 — NO ADAPTER AT ALL IN PRODUCTION, rather than a mock with
+     * its context-answering turned off.
+     *
+     * With no adapter registered, routing still resolves and the pipeline still
+     * reserves, but the chain finds nothing to call and the request fails with
+     * MODEL_UNAVAILABLE — which releases the reservation, charges nothing, and
+     * shows the customer "this is temporarily unavailable". That is the honest
+     * outcome when no AI provider has been configured. Serving invented text
+     * that looks like a model wrote it is the outcome this replaces.
+     *
+     * `MockProviderAdapter` also refuses to be constructed in production, so
+     * this is the second of two locks rather than the only one.
+     */
+    ...(environment === 'PRODUCTION'
+      ? []
+      : ([['mock', new MockProviderAdapter({ answerFromContext: true })]] as const)),
   ]);
 
   cachedGateway = new AiGateway({

@@ -12,6 +12,7 @@ import {
   LayersIcon,
   LifebuoyIcon,
   ListIcon,
+  PlugIcon,
   PulseIcon,
   RouteIcon,
   SlidersIcon,
@@ -127,6 +128,18 @@ const NAV_SECTIONS: ReadonlyArray<{
     titleAr: 'الذكاء الاصطناعي والتكاملات',
     titleEn: 'AI & integrations',
     items: [
+      {
+        /*
+         * Phase 10 — the Integrations Hub, FIRST in this section deliberately.
+         * It is the one screen that answers "what is this platform connected
+         * to"; the three below it are the detailed views of one slice each.
+         */
+        href: '/integrations',
+        key: 'nav.integrations',
+        titleKey: 'page.integrations',
+        permission: 'platform.configuration.read',
+        icon: <PlugIcon size={20} />,
+      },
       {
         href: '/providers',
         key: 'nav.providers',

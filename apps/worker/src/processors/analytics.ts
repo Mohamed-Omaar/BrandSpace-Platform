@@ -1,4 +1,3 @@
-import type { Environment } from '@brandspace/config';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
   AnalyticsIngestionService,
@@ -9,7 +8,7 @@ import {
 } from '@brandspace/analytics';
 import type { BackfillAnalyticsPayload, IngestAnalyticsPayload } from '@brandspace/jobs';
 import { ProviderRateLimiter, SocialTokenVault } from '@brandspace/social-connectors';
-import { createLogger, systemClock } from '@brandspace/shared';
+import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
 
 /**
  * Pull one connection's analytics.
@@ -38,15 +37,6 @@ import { createLogger, systemClock } from '@brandspace/shared';
  */
 
 const log = createLogger({ context: { component: 'worker.analytics' } });
-
-function currentEnvironment(): Environment {
-  // APP_ENV, not NODE_ENV: every built app has NODE_ENV=production, including
-  // the one an end-to-end run serves (D-97).
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
 
 /**
  * ONE LIMITER FOR THE PROCESS.

@@ -3,10 +3,9 @@ import {
   createVirusScanner,
   TenantAssetPolicySource,
 } from '@brandspace/assets';
-import type { Environment } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
-import { createLogger } from '@brandspace/shared';
+import { createLogger, currentEnvironment } from '@brandspace/shared';
 import type { ProcessAssetPayload } from '@brandspace/jobs';
 
 /**
@@ -35,13 +34,6 @@ export function objectStore(): ObjectStore {
   // the one an end-to-end run serves. See createObjectStore and D-97.
   sharedStore ??= createObjectStore({ appEnv: process.env['APP_ENV'] ?? 'development' });
   return sharedStore;
-}
-
-function currentEnvironment(): Environment {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
 }
 
 export async function processAssetJob(payload: ProcessAssetPayload): Promise<void> {

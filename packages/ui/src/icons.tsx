@@ -181,6 +181,23 @@ export function RouteIcon(props: IconProps) {
   );
 }
 
+/**
+ * Integrations — a plug, because that is what an owner is doing here.
+ *
+ * Drawn in the same 24-grid, 1.5-stroke, round-cap language as every icon in
+ * this file. A new visual treatment for one nav item is how an icon set starts
+ * to look like two.
+ */
+export function PlugIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 3v5M15 3v5" />
+      <path d="M6.5 8h11v2.5a5.5 5.5 0 0 1-5.5 5.5v0a5.5 5.5 0 0 1-5.5-5.5z" />
+      <path d="M12 16v5" />
+    </Icon>
+  );
+}
+
 export function ListIcon(props: IconProps) {
   return (
     <Icon {...props}>

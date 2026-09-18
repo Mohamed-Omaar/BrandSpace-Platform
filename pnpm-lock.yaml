@@ -53,6 +53,9 @@ importers:
       '@brandspace/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@brandspace/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -62,12 +65,12 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@brandspace/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@brandspace/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@brandspace/providers':
-        specifier: workspace:*
-        version: link:../../packages/providers
       '@brandspace/secrets':
         specifier: workspace:*
         version: link:../../packages/secrets
@@ -147,6 +150,9 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@brandspace/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@brandspace/onboarding':
         specifier: workspace:*
         version: link:../../packages/onboarding
@@ -823,19 +829,6 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  packages/providers:
-    dependencies:
-      '@brandspace/config':
-        specifier: workspace:*
-        version: link:../config
-      '@brandspace/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-
   packages/secrets:
     dependencies:
       '@brandspace/database':
@@ -876,9 +869,6 @@ importers:
       '@brandspace/jobs':
         specifier: workspace:*
         version: link:../jobs
-      '@brandspace/providers':
-        specifier: workspace:*
-        version: link:../providers
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
@@ -991,9 +981,6 @@ importers:
       '@brandspace/onboarding':
         specifier: workspace:*
         version: link:../packages/onboarding
-      '@brandspace/providers':
-        specifier: workspace:*
-        version: link:../packages/providers
       '@brandspace/secrets':
         specifier: workspace:*
         version: link:../packages/secrets

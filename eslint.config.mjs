@@ -32,7 +32,6 @@ const ALLOWED_IMPORTS = {
   // be able to import this without pulling the database or the domain packages
   // in, and the payloads are pointers rather than data (payloads.ts).
   jobs: ['shared'],
-  providers: ['shared', 'config'],
   /*
    * Phase 10 — the Integrations Hub. It reads CONFIGURATION, joins it with
    * MASKED secret metadata, and records health checks through the platform
@@ -46,7 +45,7 @@ const ALLOWED_IMPORTS = {
    */
   integrations: ['shared', 'database', 'config', 'secrets'],
   entitlements: ['shared', 'database', 'config'],
-  'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  'ai-gateway': ['shared', 'database', 'config', 'entitlements'],
   // Brand Brain reads configuration, enforces entitlements, and routes every
   // AI operation through the gateway rather than touching a provider itself.
   'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway', 'storage'],
@@ -66,22 +65,14 @@ const ALLOWED_IMPORTS = {
   // Approvals — "is this item cleared to go?" — and takes it through a narrow
   // interface the caller injects, exactly as the calendar takes `ApprovalGate`.
   // A package dependency would have bought the same answer and a cycle risk.
-  'social-connectors': [
-    'shared',
-    'database',
-    'config',
-    'entitlements',
-    'providers',
-    'vault',
-    'jobs',
-  ],
+  'social-connectors': ['shared', 'database', 'config', 'entitlements', 'vault', 'jobs'],
   /*
    * Phase 9 — the commercial domain. It reaches `entitlements` for the plan
    * catalogue and the credit ledger port, and `vault` for nothing at all: a
    * payment provider's credentials belong to the Secret Service, and hosted
    * checkout means no instrument ever reaches this package to be sealed.
    */
-  billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
+  billing: ['shared', 'database', 'config', 'entitlements'],
   /*
    * Phase 9 — joining. It composes the commercial geography (`billing`), the
    * plan catalogue and the ledger (`entitlements`) and the activated

@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 // The client TYPE comes from @brandspace/database, the only package permitted
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
-import { redact, systemClock, type Clock } from '@brandspace/shared';
+import {
+  assertNotProduction,
+  isProduction,
+  redact,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 
 /**
  * Outbound email — an INTERFACE, not a vendor.
@@ -64,6 +70,20 @@ export class OutboxEmailProvider implements EmailProvider {
   readonly #clock: Clock;
 
   constructor(prisma: PrismaClient, clock: Clock = systemClock) {
+    /*
+     * PHASE 10 §14 — NO FALSE "SENT" STATE IN PRODUCTION.
+     *
+     * This provider writes `status: 'SENT'` and delivers nothing, which is
+     * exactly right for development and a lie in production: a customer who
+     * never receives a verification link cannot finish signing up, and the
+     * outbox row says the mail went out. Refusing at construction makes a
+     * deployment with no email provider fail at start-up instead of silently
+     * swallowing every verification, reset and billing notice.
+     */
+    assertNotProduction(
+      'The outbox email provider',
+      'Configure a transactional email provider in Platform Admin > Integrations before deploying to production.',
+    );
     this.#prisma = prisma;
     this.#clock = clock;
   }
@@ -118,8 +138,9 @@ export class UnconfiguredEmailProvider implements EmailProvider {
 
   async send(): Promise<{ readonly messageId: string }> {
     throw new Error(
-      `Email provider "${this.key}" has no implementation. ` +
-        'Choose a provider in Platform Admin, or leave it as the outbox (D-41).',
+      `Email provider "${this.key}" has no implementation, so nothing was sent. ` +
+        'Configure a transactional email provider in Platform Admin > Integrations. ' +
+        'Outside production the outbox provider records messages instead (D-41).',
     );
   }
 }
@@ -127,15 +148,26 @@ export class UnconfiguredEmailProvider implements EmailProvider {
 /**
  * Build the provider named by configuration.
  *
- * Unknown or unset names resolve to the outbox rather than to a vendor: an
- * accidental production send is worse than an obvious missing one.
+ * OUTSIDE PRODUCTION, an unknown or unset name resolves to the outbox rather
+ * than to a vendor: an accidental production send is worse than an obvious
+ * missing one.
+ *
+ * IN PRODUCTION THE DEFAULT IS REVERSED (Phase 10 §14). There is nothing safe
+ * to fall back to: the outbox would report every message as sent and deliver
+ * none, so an unconfigured production deployment gets a provider that REFUSES,
+ * loudly, at the call site. Signup then fails with an error an operator can
+ * see, instead of succeeding into a mailbox that never receives anything.
  */
 export function createEmailProvider(
   prisma: PrismaClient,
   providerKey?: string,
   clock: Clock = systemClock,
 ): EmailProvider {
-  if (!providerKey || providerKey === 'outbox' || providerKey === 'mock') {
+  const wantsOutbox = !providerKey || providerKey === 'outbox' || providerKey === 'mock';
+  if (wantsOutbox && isProduction()) {
+    return new UnconfiguredEmailProvider(providerKey ?? 'outbox');
+  }
+  if (wantsOutbox) {
     return new OutboxEmailProvider(prisma, clock);
   }
   return new UnconfiguredEmailProvider(providerKey);

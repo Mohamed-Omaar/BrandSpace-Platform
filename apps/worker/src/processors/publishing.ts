@@ -1,4 +1,3 @@
-import type { Environment } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { PublishMediaResolver } from '@brandspace/assets';
 import { objectStore } from './assets';
@@ -10,7 +9,7 @@ import {
   SocialTokenVault,
   TenantPublishingPolicySource,
 } from '@brandspace/social-connectors';
-import { createLogger } from '@brandspace/shared';
+import { createLogger, currentEnvironment } from '@brandspace/shared';
 import { publishNotifier } from './publish-notifier';
 
 /**
@@ -42,15 +41,6 @@ import { publishNotifier } from './publish-notifier';
  */
 
 const log = createLogger({ context: { component: 'worker.social.publishing' } });
-
-function currentEnvironment(): Environment {
-  // APP_ENV, not NODE_ENV: every built app has NODE_ENV=production, including
-  // the one an end-to-end run serves (D-97).
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
 
 /*
  * NO APPLICATION RESOLVER IS BUILT HERE, AND THAT IS THE POINT.

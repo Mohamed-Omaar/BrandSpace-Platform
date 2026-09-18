@@ -230,7 +230,12 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
       'ينتج مخرجات قابلة للتكرار دون اتصال لبناء المنتج واختباره بلا مزود. لا يمكن تفعيله في الإنتاج.',
   },
   {
-    providerKey: 'development',
+    /*
+     * The adapter's own key, verbatim (`DEVELOPMENT_PROVIDER_KEY` in
+     * `@brandspace/billing`). A registry entry whose key did not match the
+     * adapter it describes would show an operator a row that tests nothing.
+     */
+    providerKey: 'development-mock',
     displayNameEn: 'Development payment provider',
     displayNameAr: 'مزود دفع للتطوير',
     category: 'payment',

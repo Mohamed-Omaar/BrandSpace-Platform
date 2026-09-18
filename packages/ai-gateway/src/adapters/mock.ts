@@ -1,3 +1,4 @@
+import { assertNotProduction } from '@brandspace/shared';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -406,6 +407,25 @@ export class MockProviderAdapter implements AiProviderAdapter {
   #calls: MockCall[] = [];
 
   constructor(options: MockAdapterOptions = {}) {
+    /*
+     * PHASE 10 §11 — THE MOCK CANNOT EXIST IN PRODUCTION.
+     *
+     * Not "is not registered in production" — cannot be CONSTRUCTED there.
+     * Registration was already conditional in three separate files, which is
+     * three places for somebody to add a fourth and get it wrong. Refusing at
+     * the constructor means a deployment that reached for a mock fails at
+     * start-up with this component named, rather than coming up healthy and
+     * serving invented marketing copy to a paying customer as if a model had
+     * written it.
+     *
+     * Tests and development are unaffected: `APP_ENV` is not `production` there
+     * (D-97 — `NODE_ENV` is `production` in every built app, including the one
+     * the E2E suite serves, which is why the gate is not on that).
+     */
+    assertNotProduction(
+      'The deterministic AI provider',
+      'Configure a real AI provider in Platform Admin > Integrations before deploying to production.',
+    );
     this.#seed = options.seed ?? 'brandspace-mock';
     this.#latencyMs = options.latencyMs ?? 0;
     this.#flaggedPhrases = options.flaggedPhrases ?? [];

@@ -25,6 +25,7 @@ import {
   TenantCatalogueSource,
   UsageService,
 } from '@brandspace/entitlements';
+import { currentEnvironment } from '@brandspace/shared';
 
 /**
  * Server-only customer context.
@@ -130,13 +131,6 @@ export function getUnscopedEmailProvider(): EmailProvider {
   return new OutboxEmailProvider(prisma());
 }
 
-export function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
-
 /**
  * Resolve the signed-in customer, or null.
  *
@@ -219,3 +213,10 @@ export function membershipActor(session: WorkspaceSession): {
     permissionKeys: session.workspace.permissionKeys,
   };
 }
+
+/**
+ * Re-exported from `@brandspace/shared` so every caller in this app keeps its
+ * existing import. The DEFINITION moved: it used to live here, and in eleven
+ * other files, each a private copy of the same four lines (Phase 10 §18).
+ */
+export { currentEnvironment };

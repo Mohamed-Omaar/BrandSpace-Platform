@@ -6,9 +6,8 @@ import {
   defaultExtractors,
   type ObjectStore,
 } from '@brandspace/brand-brain';
-import type { Environment } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
-import { createLogger } from '@brandspace/shared';
+import { createLogger, currentEnvironment } from '@brandspace/shared';
 import type { IngestSourceDocumentPayload } from '@brandspace/jobs';
 
 /**
@@ -38,13 +37,6 @@ function objectStore(): ObjectStore {
   // the one an end-to-end run serves. See createObjectStore.
   sharedStore ??= createObjectStore({ appEnv: process.env['APP_ENV'] ?? 'development' });
   return sharedStore;
-}
-
-function currentEnvironment(): Environment {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
 }
 
 export async function processIngestionJob(payload: IngestSourceDocumentPayload): Promise<void> {

@@ -11,6 +11,7 @@ import {
   tasksWithInconsistentModality,
   type CapabilityRouting,
   type ModelFeatureDeclaration,
+  type ModelFeatureRequirements,
   type RegisteredModel,
   type RoutingRule,
 } from '@brandspace/ai-gateway';
@@ -99,21 +100,29 @@ describe('the capability vocabulary', () => {
      * keeps the copy honest; without it, adding a capability in one place would
      * silently make it unconfigurable in the other.
      */
+    // Each capability narrows `requires` to its own literal shape, so the
+    // fields are read through a widened view rather than off the union.
+    const FLAG_NAMES: Readonly<Record<keyof ModelFeatureRequirements, string>> = {
+      vision: 'supportsVision',
+      structuredOutput: 'supportsStructuredOutput',
+      toolUse: 'supportsToolUse',
+      audioInput: 'supportsAudioInput',
+      audioOutput: 'supportsAudioOutput',
+      embeddings: 'supportsEmbeddings',
+    };
     const fromSource = Object.fromEntries(
-      AI_CAPABILITIES.map((capability) => [
-        capability.key,
-        {
-          executionModality: capability.executionModality,
-          requires: [
-            capability.requires.vision ? 'supportsVision' : null,
-            capability.requires.structuredOutput ? 'supportsStructuredOutput' : null,
-            capability.requires.toolUse ? 'supportsToolUse' : null,
-            capability.requires.audioInput ? 'supportsAudioInput' : null,
-            capability.requires.audioOutput ? 'supportsAudioOutput' : null,
-            capability.requires.embeddings ? 'supportsEmbeddings' : null,
-          ].filter((flag): flag is string => flag !== null),
-        },
-      ]),
+      AI_CAPABILITIES.map((capability) => {
+        const requires = capability.requires as ModelFeatureRequirements;
+        return [
+          capability.key,
+          {
+            executionModality: capability.executionModality,
+            requires: (Object.keys(FLAG_NAMES) as (keyof ModelFeatureRequirements)[])
+              .filter((flag) => requires[flag] === true)
+              .map((flag) => FLAG_NAMES[flag]),
+          },
+        ];
+      }),
     );
     expect(AI_CAPABILITY_REQUIREMENTS).toEqual(fromSource);
   });
