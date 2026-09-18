@@ -762,6 +762,7 @@ export const messages = {
     // --- Phase 7 — Analytics, Insights, Strategy, Copilot, Automations ---
     'nav.analytics': 'التحليلات',
     'nav.strategy': 'الاستراتيجية',
+    'nav.intelligence': 'ذكاء التسويق',
     'nav.copilot': 'المساعد',
     'nav.automations': 'الأتمتة',
     'analytics.title': 'التحليلات',
@@ -847,6 +848,23 @@ export const messages = {
     'insights.proposeLearnings': 'اقترح دروسًا لعقل العلامة',
     'insights.proposeLearningsHint':
       'تُضاف كمقترحات بانتظار مراجعة بشرية، ولا تُكتب في عقل العلامة مباشرة.',
+    'insights.type.CONTENT_GAP': 'فجوة محتوى',
+    'insights.type.OPPORTUNITY': 'فرصة',
+    'insights.type.ANALYTICS_EXPLANATION': 'شرح أداء',
+    'insights.type.ANOMALY': 'انحراف ملحوظ',
+    'insights.type.RECOMMENDATION': 'توصية',
+    'insights.type.STRATEGY': 'استراتيجية',
+    'insights.type.MONTHLY_PLAN': 'خطة شهرية',
+    'intelligence.title': 'ذكاء التسويق',
+    'intelligence.subtitle': 'ما أعلنته علامتك وما نشرته فعلًا — والفارق بينهما.',
+    'intelligence.analyse': 'حلّل فجوات المحتوى',
+    'intelligence.focusLabel': 'على ماذا تريد التركيز؟',
+    'intelligence.focusPlaceholder': 'مثال: حضورنا على لينكدإن هذا الربع',
+    'intelligence.basisNotice':
+      'يستهلك رصيد ذكاء اصطناعي. يستند إلى محاور علامتك المعتمدة وحساباتها الموصولة وسجل نشرها — ولا يوجد مصدر خارجي.',
+    'intelligence.empty': 'لا توجد نتائج بعد.',
+    'intelligence.emptyBody':
+      'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
     'strategy.title': 'الاستراتيجية',
     'strategy.subtitle': 'مقترحات مبنية على معرفة علامتك وأدائها المقاس.',
     'strategy.generate': 'اقترح استراتيجية',
@@ -1901,6 +1919,7 @@ export const messages = {
     // --- Phase 7 — Analytics, Insights, Strategy, Copilot, Automations ---
     'nav.analytics': 'Analytics',
     'nav.strategy': 'Strategy',
+    'nav.intelligence': 'Marketing Intelligence',
     'nav.copilot': 'Copilot',
     'nav.automations': 'Automations',
     'analytics.title': 'Analytics',
@@ -1989,6 +2008,23 @@ export const messages = {
     'insights.proposeLearnings': 'Propose learnings for Brand Brain',
     'insights.proposeLearningsHint':
       'Added as proposals for human review. Nothing is written into Brand Brain directly.',
+    'insights.type.CONTENT_GAP': 'Content gap',
+    'insights.type.OPPORTUNITY': 'Opportunity',
+    'insights.type.ANALYTICS_EXPLANATION': 'Performance explanation',
+    'insights.type.ANOMALY': 'Notable change',
+    'insights.type.RECOMMENDATION': 'Recommendation',
+    'insights.type.STRATEGY': 'Strategy',
+    'insights.type.MONTHLY_PLAN': 'Monthly plan',
+    'intelligence.title': 'Marketing Intelligence',
+    'intelligence.subtitle': "What your brand said it would do, what it has published, and the gap.",
+    'intelligence.analyse': 'Analyse content gaps',
+    'intelligence.focusLabel': 'What should this look at?',
+    'intelligence.focusPlaceholder': 'For example: our LinkedIn presence this quarter',
+    'intelligence.basisNotice':
+      'Spends AI credits. It rests on your approved pillars, your connected accounts and what this brand has actually published — there is no outside source.',
+    'intelligence.empty': 'Nothing here yet.',
+    'intelligence.emptyBody':
+      'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',
     'strategy.title': 'Strategy',
     'strategy.subtitle':
       "Proposals grounded in your brand's own knowledge and its measured performance.",
@@ -2468,6 +2504,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   INSIGHT_ACCEPTED: { en: 'Accepted.', ar: 'تم الاعتماد.' },
   INSIGHT_DISMISSED: { en: 'Dismissed.', ar: 'تم الاستبعاد.' },
+  /* Phase 8 — Marketing Intelligence. */
+  GAPS_ANALYSED: {
+    en: 'Analysis ready. It rests on what this brand declared and what it has published.',
+    ar: 'التحليل جاهز. يستند إلى ما أعلنته هذه العلامة وما نشرته فعلًا.',
+  },
   LEARNINGS_PROPOSED: {
     en: 'Learnings proposed. They wait in the Brand Brain review queue.',
     ar: 'تم اقتراح دروس. تنتظر في قائمة مراجعة عقل العلامة.',

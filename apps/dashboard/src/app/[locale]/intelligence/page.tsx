@@ -15,32 +15,53 @@ import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { generateStrategyAction, proposeLearningsAction, reviewInsightAction } from './actions';
+import {
+  analyseContentGapsAction,
+  proposeLearningsAction,
+  reviewIntelligenceAction,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * AI STRATEGY AND MARKETING INTELLIGENCE.
+ * MARKETING INTELLIGENCE — Phase 8, workstream 6 (AC-30.1, AC-30.4).
  *
- * A PROPOSAL IS A PROPOSAL UNTIL A PERSON ACCEPTS IT, and this screen says so in
- * a banner above every generated document rather than leaving the customer to
- * infer it from a status badge. Nothing in the product acts on a strategy that
- * has not been through the accept action below.
+ * WHAT THIS AREA IS, AND WHY IT IS NOT ANALYTICS AND NOT STRATEGY. Analytics is
+ * the numbers. Strategy is the plan. This is the space between them: what the
+ * numbers and the brand's own declarations MEAN, and what the brand should
+ * therefore remember. Those were three questions answered on two screens until
+ * now — `/strategy` listed every insight the workspace had ever produced beside
+ * its strategy proposals, which made "what did we learn" and "what shall we do"
+ * the same list.
  *
- * IT STATES WHAT EVERY SUGGESTION RESTS ON. BrandSpace has no external trend or
- * competitor provider (D-18, D-19 approved none), so each insight renders its
- * `basis` — this brand's own performance, its approved knowledge, or its content
- * history — and the page says plainly that there is no outside source. A product
- * that let a customer assume otherwise would be implying a market feed it does
- * not have.
+ * IT HAS NO EXTERNAL SOURCE, AND SAYS SO ABOVE EVERYTHING. BrandSpace has no
+ * competitor feed and no trends provider (D-18, D-19 approved none), so content
+ * gap analysis rests on ABSENCE EVIDENCE: pillars this brand declared in its own
+ * Brand Brain and has not published against, platforms it connected and has not
+ * posted on, a cadence it set and has not kept. Every one of those is a fact
+ * about rows that are not there, checkable against this workspace's own data.
+ * A screen that let a customer assume otherwise would be implying a market feed
+ * the product does not have.
  *
  * THE EVIDENCE IS RENDERED FROM THE STORED ROWS, never from the model's prose.
- * Every figure below comes out of `insight_evidence`, which is written from the
- * analytics query before any model call — so a number on this screen is a number
- * a provider reported, and the model's sentences sit beside it rather than
- * containing it.
+ * Every figure below comes out of `insight_evidence`, written from the analytics
+ * query BEFORE any model call — so a number here is a number a provider
+ * reported, and the model's sentences sit beside it rather than containing it.
+ *
+ * IT CLOSES THE PHASE 8 EXIT JOURNEY. The last step of that journey is accepted
+ * learning going back into Brand Brain, and the control for it is on this page:
+ * it proposes PENDING candidates into the existing Brand Brain review queue,
+ * with provenance and evidence, and writes nothing into the brand (D-150). A
+ * human accepting them there is what closes the loop.
+ *
+ * DESIGN-SYSTEM EXTENSION, NOT A DEMO PORT (CLAUDE.md §4.2). There is no
+ * approved reference for this screen. It is composed from the same `Card`,
+ * `SectionHeader`, `StatusBadge`, `StateMessage` and form controls the Strategy
+ * and Analytics screens already use, in the same order and with the same
+ * spacing — deliberately, so a reader moving between the three areas is reading
+ * one product. Nothing new was drawn.
  */
-export default async function StrategyPage({
+export default async function IntelligencePage({
   params,
   searchParams,
 }: {
@@ -58,15 +79,9 @@ export default async function StrategyPage({
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
 
-  /*
-   * THE GLOBAL BRAND CONTEXT (D-190). A strategy is generated FROM one brand's
-   * memories and accepted AGAINST that brand, so the screen still needs exactly
-   * one — it just no longer picks it, and no longer keeps its own list beside
-   * the rail's.
-   */
   const brandContext = await brandContextFor(
     session.workspace,
-    '/strategy',
+    '/intelligence',
     typeof query['brand'] === 'string' ? query['brand'] : null,
   );
   const brand = requiredBrand(brandContext);
@@ -78,38 +93,43 @@ export default async function StrategyPage({
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
 
   /*
-   * PHASE 8 — THIS SCREEN'S OWN SUBJECT, declared rather than "everything
-   * recent". It used to list every insight the brand had ever produced, which
-   * put performance explanations, anomalies and content gaps in the same list
-   * as strategy proposals — one list answering both "what did we learn" and
-   * "what shall we do". The findings now live in Marketing Intelligence and
-   * this screen keeps the plans.
+   * WHAT BELONGS TO THIS AREA, DECLARED RATHER THAN "everything recent".
+   *
+   * Content gaps and opportunities are what this screen commissions; the
+   * explanations, anomalies and recommendations analytics produced are what it
+   * INTERPRETS. Strategies and monthly plans are `/strategy`'s subject and are
+   * deliberately absent — a plan is not a finding.
+   *
+   * THE SCOPE IS IN THE QUERY (D-132). `brandScope` intersects the selected
+   * brand rather than filtering a wider read afterwards, so an out-of-scope
+   * brand returns nothing rather than being fetched and dropped.
    */
-  const insights = brand
-    ? await inAnalytics(workspace.workspaceId, async (services) =>
-        services.db.insight.findMany({
-          where: {
-            workspaceId: workspace.workspaceId,
-            brandId: brand.id,
-            type: { in: ['STRATEGY', 'MONTHLY_PLAN'] },
-            ...(workspace.brandScope.length > 0
-              ? { brandId: { in: [...workspace.brandScope] } }
-              : {}),
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-          include: { evidence: { orderBy: { ordinal: 'asc' }, take: 8 } },
-        }),
-      )
-    : [];
+  const insights =
+    brand &&
+    (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id))
+      ? await inAnalytics(workspace.workspaceId, async (services) =>
+          services.db.insight.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              brandId: brand.id,
+              type: {
+                in: ['CONTENT_GAP', 'OPPORTUNITY', 'ANALYTICS_EXPLANATION', 'ANOMALY', 'RECOMMENDATION'],
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            include: { evidence: { orderBy: { ordinal: 'asc' }, take: 8 } },
+          }),
+        )
+      : [];
 
   return (
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('strategy.title')}
-      description={t('strategy.subtitle')}
-      activePath="/strategy"
+      heading={t('intelligence.title')}
+      description={t('intelligence.subtitle')}
+      activePath="/intelligence"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={session.customer.name ?? session.customer.email}
@@ -124,9 +144,9 @@ export default async function StrategyPage({
         ) : null}
 
         {/*
-         * THE HONESTY LINE, above everything. It is not a disclaimer in small
-         * print: it is the answer to the question a customer will ask of any
-         * recommendation — "compared with what?"
+         * THE HONESTY LINE, above everything, exactly as on `/strategy`. It is
+         * not small print: it is the answer to the question a customer will ask
+         * of any finding here — "compared with what?"
          */}
         <CustomerBanner tone="info">{t('insights.noExternalData')}</CustomerBanner>
 
@@ -139,13 +159,13 @@ export default async function StrategyPage({
         ) : (
           <>
             {mayManage ? (
-              <Card title={t('strategy.generate')}>
-                <form action={generateStrategyAction} data-testid="strategy-form">
+              <Card title={t('intelligence.analyse')}>
+                <form action={analyseContentGapsAction} data-testid="content-gap-form">
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="brandId" value={brand.id} />
                   <label style={{ display: 'grid', gap: '0.25rem' }}>
                     <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                      {t('strategy.objectiveLabel')}
+                      {t('intelligence.focusLabel')}
                     </span>
                     <input
                       name="objective"
@@ -153,29 +173,35 @@ export default async function StrategyPage({
                       maxLength={400}
                       className="bs-control"
                       style={inputStyle()}
-                      placeholder={t('strategy.objectivePlaceholder')}
+                      placeholder={t('intelligence.focusPlaceholder')}
                     />
                   </label>
                   <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                    {t('strategy.proposalNotice')}
+                    {t('intelligence.basisNotice')}
                   </p>
                   <button type="submit" style={buttonStyle('brand', 'sm')}>
-                    {t('strategy.generate')}
+                    {t('intelligence.analyse')}
                   </button>
                 </form>
               </Card>
             ) : null}
 
             {insights.length === 0 ? (
-              <StateMessage kind="empty" title={t('strategy.empty')} />
+              <StateMessage
+                kind="empty"
+                title={t('intelligence.empty')}
+                description={t('intelligence.emptyBody')}
+              />
             ) : (
               insights.map((insight) => (
-                <Card key={insight.id} testId={`insight-${insight.id}`}>
+                <Card key={insight.id} testId={`intelligence-${insight.id}`}>
                   <SectionHeader
                     title={localized(insight.title, locale)}
-                    description={`${t('insights.basis')}: ${t(
-                      `insights.basis.${insight.basis}` as MessageKey,
-                    )} · ${stamp.format(insight.createdAt)}`}
+                    description={`${t(`insights.type.${insight.type}` as MessageKey)} · ${t(
+                      'insights.basis',
+                    )}: ${t(`insights.basis.${insight.basis}` as MessageKey)} · ${stamp.format(
+                      insight.createdAt,
+                    )}`}
                     actions={
                       <StatusBadge
                         tone={insight.status === 'ACCEPTED' ? 'success' : 'neutral'}
@@ -185,10 +211,10 @@ export default async function StrategyPage({
                   />
 
                   {/*
-                   * THE EVIDENCE, AS A LIST OF MEASUREMENTS. Rendered from the
-                   * stored rows: each line is a metric, a value and a window a
-                   * customer can check against the analytics screen. The model's
-                   * prose never supplies a figure here.
+                   * THE EVIDENCE, AS A LIST OF MEASUREMENTS. Each line is a
+                   * metric, a value and a window a customer can check against
+                   * the analytics screen. The model's prose never supplies a
+                   * figure here.
                    */}
                   <SectionHeader title={t('insights.evidence')} />
                   <ul
@@ -199,7 +225,7 @@ export default async function StrategyPage({
                       display: 'grid',
                       gap: '0.25rem',
                     }}
-                    data-testid="insight-evidence"
+                    data-testid="intelligence-evidence"
                   >
                     {insight.evidence.map((row) => (
                       <li
@@ -225,7 +251,7 @@ export default async function StrategyPage({
 
                   {mayManage && insight.status !== 'ACCEPTED' ? (
                     <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-                      <form action={reviewInsightAction}>
+                      <form action={reviewIntelligenceAction}>
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="insightId" value={insight.id} />
                         <input type="hidden" name="decision" value="accept" />
@@ -233,7 +259,7 @@ export default async function StrategyPage({
                           {t('insights.accept')}
                         </button>
                       </form>
-                      <form action={reviewInsightAction}>
+                      <form action={reviewIntelligenceAction}>
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="insightId" value={insight.id} />
                         <input type="hidden" name="decision" value="dismiss" />
@@ -241,25 +267,34 @@ export default async function StrategyPage({
                           {t('insights.dismiss')}
                         </button>
                       </form>
-                      {mayReview ? (
-                        <form action={proposeLearningsAction}>
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="insightId" value={insight.id} />
-                          <button
-                            type="submit"
-                            style={buttonStyle('neutral', 'sm')}
-                            data-testid="propose-learnings"
-                          >
-                            {t('insights.proposeLearnings')}
-                          </button>
-                        </form>
-                      ) : null}
                     </div>
                   ) : null}
+
+                  {/*
+                   * THE LAST STEP OF THE EXIT JOURNEY. Offered whatever the
+                   * insight's own review state, because a finding somebody has
+                   * already accepted is exactly the one worth remembering — and
+                   * gated on `brand_brain.review` rather than `strategy.manage`,
+                   * because the person asking for the inference is the person
+                   * who will have to judge it in the queue.
+                   */}
                   {mayReview ? (
-                    <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                      {t('insights.proposeLearningsHint')}
-                    </p>
+                    <div style={{ display: 'grid', gap: spacingTokens['2xs'] }}>
+                      <form action={proposeLearningsAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="insightId" value={insight.id} />
+                        <button
+                          type="submit"
+                          style={buttonStyle('neutral', 'sm')}
+                          data-testid="propose-learnings"
+                        >
+                          {t('insights.proposeLearnings')}
+                        </button>
+                      </form>
+                      <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                        {t('insights.proposeLearningsHint')}
+                      </p>
+                    </div>
                   ) : null}
                 </Card>
               ))

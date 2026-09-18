@@ -85,6 +85,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * choose.
    */
   '/creative': 'brand',
+  /*
+   * MARKETING INTELLIGENCE asks what ONE brand said it would do and has not.
+   * The question only has an answer for a brand that declared pillars, connected
+   * accounts and set a cadence — averaged across brands it is not a question.
+   */
+  '/intelligence': 'brand',
 
   // --- Brand or All Brands: aggregation is meaningful -----------------------
   /*

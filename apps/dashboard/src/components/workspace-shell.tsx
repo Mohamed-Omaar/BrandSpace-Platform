@@ -11,6 +11,7 @@ import {
   HomeIcon,
   CalendarIcon,
   FlagIcon,
+  LayersIcon,
   ListIcon,
   ImageIcon,
   PencilIcon,
@@ -184,6 +185,25 @@ const NAV: readonly {
     key: 'nav.strategy',
     permission: 'strategy.read',
     icon: <RouteIcon size={20} />,
+  },
+  /*
+   * PHASE 8 — MARKETING INTELLIGENCE. On the fixed inventory since D-188 and
+   * linked now because its screen exists now. Gated on `strategy.read`,
+   * matching the route exactly.
+   *
+   * It reads between Strategy and the Copilot because that is where it sits in
+   * the work: the numbers say what happened, intelligence says what that means
+   * and what the brand should remember, strategy says what to do about it.
+   *
+   * `LayersIcon` reused rather than a new glyph drawn (§4.2 rule 4): the whole
+   * area is one thing laid over another — what this brand declared, against
+   * what it actually published.
+   */
+  {
+    href: '/intelligence',
+    key: 'nav.intelligence',
+    permission: 'strategy.read',
+    icon: <LayersIcon size={20} />,
   },
   {
     href: '/copilot',

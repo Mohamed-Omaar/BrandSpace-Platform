@@ -473,7 +473,14 @@ export default async function AnalyticsPage({
               >
                 {data.insights.map((insight) => (
                   <li key={insight.id} style={{ ...typographyTokens.bodySm }}>
-                    <Link href={`/${locale}/strategy?insight=${insight.id}`}>
+                    {/*
+                      TO MARKETING INTELLIGENCE, which is where an explanation,
+                      an anomaly or a recommendation is read in full with its
+                      evidence. It pointed at `/strategy` while that screen
+                      listed every insight; since Phase 8 that screen carries
+                      plans and this one's findings belong next door.
+                    */}
+                    <Link href={`/${locale}/intelligence?insight=${insight.id}`}>
                       {t(`insights.status.${insight.status}` as MessageKey)} ·{' '}
                       {t(`insights.basis.${insight.basis}` as MessageKey)} ·{' '}
                       {stamp.format(insight.createdAt)}

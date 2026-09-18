@@ -6,10 +6,10 @@ import { PublishMediaResolver, publishableAssetWhere } from '@brandspace/assets'
 import { InMemoryObjectStore } from '@brandspace/storage';
 import {
   createConnectorRegistry,
-  MockSocialConnectorAdapter,
   parsePublishingPolicy,
   PublishPipelineService,
   type ConnectorRegistry,
+  type MockSocialConnectorAdapter,
   type PublishApprovalGate,
   type PublishingPolicy,
 } from '@brandspace/social-connectors';
