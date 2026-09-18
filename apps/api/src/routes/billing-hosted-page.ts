@@ -40,7 +40,7 @@ const log = createLogger({ context: { component: 'api.billing-hosted' } });
 
 const sessionParamSchema = z.object({ providerSessionId: z.string().min(1).max(128) });
 
-export function registerBillingHostedPageRoutes(app: FastifyInstance): void {
+export async function registerBillingHostedPageRoutes(app: FastifyInstance): Promise<void> {
   if (currentEnvironment() === 'PRODUCTION') {
     // The route is never registered. A production deployment has no mock
     // checkout page at any URL.
@@ -48,124 +48,141 @@ export function registerBillingHostedPageRoutes(app: FastifyInstance): void {
     return;
   }
 
-  /** Render what is being bought. The amount comes from our row, never the URL. */
-  route(
-    app,
-    'GET',
-    '/billing/checkout/:providerSessionId',
-    { scope: 'public' },
-    async (req, reply) => {
-      const params = sessionParamSchema.safeParse(req.params);
-      if (!params.success) return reply.code(404).send();
-      const session = await loadSession(params.data.providerSessionId);
-      if (!session) return reply.code(404).type('text/html').send(notFoundPage());
-
-      const total = Money.ofMinor(session.currency, session.totalMinor, session.currencyScale);
-      const tax = Money.ofMinor(session.currency, session.taxMinor, session.currencyScale);
-      const subtotal = Money.ofMinor(session.currency, session.amountMinor, session.currencyScale);
-
-      return reply.type('text/html; charset=utf-8').send(
-        checkoutPage({
-          providerSessionId: params.data.providerSessionId,
-          description:
-            session.purpose === 'SUBSCRIPTION'
-              ? (session.planKey ?? 'Subscription')
-              : (session.packKey ?? 'Credit pack'),
-          subtotal: subtotal.toDecimalString(),
-          tax: tax.toDecimalString(),
-          total: total.toDecimalString(),
-          currency: total.currency,
-          pending: session.status !== 'PENDING',
-        }),
-      );
-    },
-  );
-
-  /**
-   * "Pay".
-   *
-   * Emits a SIGNED event to our own webhook endpoint over loopback HTTP —
-   * through the same door a real provider uses, verified the same way, with no
-   * in-process shortcut. A shortcut here would leave the verification path
-   * untested on the one flow that matters most.
+  /*
+   * AN ENCAPSULATED PLUGIN, so the form parser below applies here and nowhere
+   * else. The two buttons are ordinary HTML `<form method="post">` submissions —
+   * which is deliberate: a provider's page works without JavaScript, and so does
+   * this one — and a browser sends those as `application/x-www-form-urlencoded`,
+   * which the API otherwise refuses with a 415. The routes read NOTHING from the
+   * body; what they act on is the provider session id in the path.
    */
-  route(
-    app,
-    'POST',
-    '/billing/checkout/:providerSessionId/pay',
-    { scope: 'public', idempotent: true },
-    async (req, reply) => {
-      const params = sessionParamSchema.safeParse(req.params);
-      if (!params.success) return reply.code(404).send();
-      const session = await loadSession(params.data.providerSessionId);
-      if (!session) return reply.code(404).send();
+  await app.register(async (scoped: FastifyInstance) => {
+    scoped.addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string' },
+      (_req, _body, done) => {
+        // Accepted and discarded. Nothing here is read from a browser body.
+        done(null, {});
+      },
+    );
 
-      const adapter = providerFor(DEVELOPMENT_PROVIDER_KEY);
-      if (!(adapter instanceof DevelopmentPaymentProvider)) {
-        return reply.code(404).send();
-      }
+    /** Render what is being bought. The amount comes from our row, never the URL. */
+    route(
+      scoped,
+      'GET',
+      '/billing/checkout/:providerSessionId',
+      { scope: 'public' },
+      async (req, reply) => {
+        const params = sessionParamSchema.safeParse(req.params);
+        if (!params.success) return reply.code(404).send();
+        const session = await loadSession(params.data.providerSessionId);
+        if (!session) return reply.code(404).type('text/html').send(notFoundPage());
 
-      const profile = await getPlatformClient().billingProfile.findFirst({
-        where: { workspaceId: session.workspaceId },
-        select: { providerCustomerId: true },
-      });
+        const total = Money.ofMinor(session.currency, session.totalMinor, session.currencyScale);
+        const tax = Money.ofMinor(session.currency, session.taxMinor, session.currencyScale);
+        const subtotal = Money.ofMinor(
+          session.currency,
+          session.amountMinor,
+          session.currencyScale,
+        );
 
-      const delivery = signedDelivery(
-        adapter,
-        paidCheckoutEvent({
-          eventId: `evt_${randomUUID()}`,
-          checkoutSessionId: session.id,
-          providerSessionId: params.data.providerSessionId,
-          providerCustomerId: profile?.providerCustomerId ?? '',
-          amount: Money.ofMinor(session.currency, session.totalMinor, session.currencyScale),
-        }),
-      );
+        return reply.type('text/html; charset=utf-8').send(
+          checkoutPage({
+            providerSessionId: params.data.providerSessionId,
+            description:
+              session.purpose === 'SUBSCRIPTION'
+                ? (session.planKey ?? 'Subscription')
+                : (session.packKey ?? 'Credit pack'),
+            subtotal: subtotal.toDecimalString(),
+            tax: tax.toDecimalString(),
+            total: total.toDecimalString(),
+            currency: total.currency,
+            pending: session.status !== 'PENDING',
+          }),
+        );
+      },
+    );
 
-      const response = await app.inject({
-        method: 'POST',
-        url: `/v1/billing/webhook/${DEVELOPMENT_PROVIDER_KEY}`,
-        headers: delivery.headers,
-        payload: delivery.body,
-      });
+    /**
+     * "Pay".
+     *
+     * Emits a SIGNED event to our own webhook endpoint over loopback HTTP —
+     * through the same door a real provider uses, verified the same way, with no
+     * in-process shortcut. A shortcut here would leave the verification path
+     * untested on the one flow that matters most.
+     */
+    route(
+      scoped,
+      'POST',
+      '/billing/checkout/:providerSessionId/pay',
+      { scope: 'public', idempotent: true },
+      async (req, reply) => {
+        const params = sessionParamSchema.safeParse(req.params);
+        if (!params.success) return reply.code(404).send();
+        const session = await loadSession(params.data.providerSessionId);
+        if (!session) return reply.code(404).send();
 
-      if (response.statusCode !== 200) {
-        log.error('development payment event was refused', { status: response.statusCode });
-      }
+        const adapter = providerFor(DEVELOPMENT_PROVIDER_KEY);
+        if (!(adapter instanceof DevelopmentPaymentProvider)) {
+          return reply.code(404).send();
+        }
 
-      // The redirect carries NO claim about the outcome. The landing page asks
-      // the status endpoint, which answers from reconciled state.
-      return reply
-        .code(303)
-        .header('location', session.returnUrl ?? '/')
-        .send();
-    },
-  );
-
-  /** "Cancel". Records the abandonment; nothing else changes. */
-  route(
-    app,
-    'POST',
-    '/billing/checkout/:providerSessionId/cancel',
-    { scope: 'public', idempotent: true },
-    async (req, reply) => {
-      const params = sessionParamSchema.safeParse(req.params);
-      if (!params.success) return reply.code(404).send();
-      const session = await loadSession(params.data.providerSessionId);
-      if (!session) return reply.code(404).send();
-      try {
-        await getPlatformClient().checkoutSession.updateMany({
-          where: { id: session.id, status: 'PENDING' },
-          data: { status: 'CANCELLED', cancelledAt: systemClock.now() },
+        const profile = await getPlatformClient().billingProfile.findFirst({
+          where: { workspaceId: session.workspaceId },
+          select: { providerCustomerId: true },
         });
-      } catch (error: unknown) {
-        log.error('could not record checkout cancellation', internalErrorFields(error));
-      }
-      return reply
-        .code(303)
-        .header('location', session.returnUrl ?? '/')
-        .send();
-    },
-  );
+
+        const delivery = signedDelivery(
+          adapter,
+          paidCheckoutEvent({
+            eventId: `evt_${randomUUID()}`,
+            checkoutSessionId: session.id,
+            providerSessionId: params.data.providerSessionId,
+            providerCustomerId: profile?.providerCustomerId ?? '',
+            amount: Money.ofMinor(session.currency, session.totalMinor, session.currencyScale),
+          }),
+        );
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/v1/billing/webhook/${DEVELOPMENT_PROVIDER_KEY}`,
+          headers: delivery.headers,
+          payload: delivery.body,
+        });
+
+        if (response.statusCode !== 200) {
+          log.error('development payment event was refused', { status: response.statusCode });
+        }
+
+        // The redirect carries NO claim about the outcome — only WHICH checkout
+        // it was. The landing page answers from reconciled state.
+        return reply.code(303).header('location', returnTo(session.returnUrl, session.id)).send();
+      },
+    );
+
+    /** "Cancel". Records the abandonment; nothing else changes. */
+    route(
+      scoped,
+      'POST',
+      '/billing/checkout/:providerSessionId/cancel',
+      { scope: 'public', idempotent: true },
+      async (req, reply) => {
+        const params = sessionParamSchema.safeParse(req.params);
+        if (!params.success) return reply.code(404).send();
+        const session = await loadSession(params.data.providerSessionId);
+        if (!session) return reply.code(404).send();
+        try {
+          await getPlatformClient().checkoutSession.updateMany({
+            where: { id: session.id, status: 'PENDING' },
+            data: { status: 'CANCELLED', cancelledAt: systemClock.now() },
+          });
+        } catch (error: unknown) {
+          log.error('could not record checkout cancellation', internalErrorFields(error));
+        }
+        return reply.code(303).header('location', returnTo(session.returnUrl, session.id)).send();
+      },
+    );
+  });
 }
 
 /**
@@ -194,6 +211,19 @@ async function loadSession(providerSessionId: string) {
       returnUrl: true,
     },
   });
+}
+
+/**
+ * Where the browser goes back to, carrying WHICH checkout it was.
+ *
+ * A provider appends its own reference here; ours is our own checkout id, which
+ * is not an authorization boundary — the landing page looks it up inside the
+ * caller's workspace, so an id from another tenant resolves to nothing.
+ */
+function returnTo(base: string | null, checkoutSessionId: string): string {
+  if (!base) return '/';
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}session=${encodeURIComponent(checkoutSessionId)}`;
 }
 
 function escapeHtml(value: string): string {

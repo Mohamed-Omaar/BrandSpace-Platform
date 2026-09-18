@@ -628,3 +628,52 @@ its own: it waits, tells the workspace, and a permitted person confirms that exa
 
 There is no way to make an automation call a URL, run code, or send email: the list of things a rule can
 do is fixed.
+
+---
+
+## 13. Phase 9 as shipped — how a stranger becomes a customer
+
+### The journey, in the order it happens
+
+1. **Sign up.** Name, email, password, timezone and the current version of each required legal
+   document. The form states the rules it enforces — whether signup is open, the password floor, which
+   documents and at which version — and reads every one of them from activated configuration.
+2. **Check your email.** The same page appears whether the address was free or already taken. The
+   address gets a verification link or a "you already have an account" notice; the person filling the
+   form learns nothing either way.
+3. **Verify.** One click, once. An expired link, a used link and an invented link are
+   indistinguishable.
+4. **Sign in**, and present a second factor if the account has one enrolled.
+5. **Create the workspace.** Four questions, none preselected: country, interface language, timezone
+   and billing currency. The country NARROWS which currencies are offered; the customer still picks.
+   A trial starts, with its credits, once and only once.
+6. **The first-run checklist.** Derived from the workspace's own data, so it is right whether the
+   customer follows it or does the steps from their own screens.
+7. **Choose a plan.** Priced in the currency they chose, with each plan's availability stated
+   honestly. An upgrade is paid for now; a downgrade waits for the period already paid for.
+8. **Pay on the provider's page.** BrandSpace has no card field anywhere.
+9. **Come back.** The landing page reports what reconciliation has established — which for a moment
+   is legitimately "confirming your payment".
+10. **The invoice.** Numbered, bilingual, printable, and never edited afterwards.
+
+### What a customer can see and do about money
+
+| Screen                                 | What it answers                                              |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `/[locale]/plan`                       | What am I entitled to — features, limits, this cycle's usage |
+| `/[locale]/billing`                    | What do I owe, what have I bought, what did I pay            |
+| `/[locale]/billing/invoices/[id]`      | One invoice exactly as issued, in either language, printable |
+| `/[locale]/billing/checkout/[outcome]` | Did that payment actually go through                         |
+| `/[locale]/onboarding`                 | What is left to set up                                       |
+
+The two billing screens are deliberately separate. "What am I entitled to" and "what do I owe" are
+different questions, and collapsing them buries the invoices under an entitlement table.
+
+### What the product will not do, stated where a customer can read it
+
+- **Credits are prepaid.** At zero, AI stops. There is no overdraft and no later bill (D-196).
+- **Nothing is converted.** A plan with no price in your currency says so rather than inventing one.
+- **Cancelling is not deleting.** Access runs to the end of the period you paid for; your data stays
+  and export remains available.
+- **A suspension withdraws access and keeps everything.** The words are on the screen, because that
+  is the moment a customer most needs to be told what is NOT happening.

@@ -49,16 +49,26 @@ import {
 const READ = 'billing.read';
 const MANAGE = 'billing.manage';
 
+/**
+ * `locale` IS A NAVIGATION DETAIL, and the only thing it decides is which
+ * localized route the provider sends the browser back to. It is not a
+ * commercial input: it changes no price, no market and no tax, and the schemas
+ * below still carry no field that could.
+ */
+const localeSchema = z.enum(['ar', 'en']).default('en');
+
 const openSubscriptionSchema = z.object({
   planKey: z.string().min(1).max(64),
   billingInterval: z.enum(['MONTH', 'YEAR']),
   /** The caller's own key, so a double-submitted form opens ONE session. */
   idempotencyKey: z.string().min(8).max(128).optional(),
+  locale: localeSchema,
 });
 
 const openPackSchema = z.object({
   packKey: z.string().min(1).max(64),
   idempotencyKey: z.string().min(8).max(128).optional(),
+  locale: localeSchema,
 });
 
 const planChangeSchema = z.object({
@@ -248,8 +258,8 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
               billingInterval: parsed.data.billingInterval,
               planVersionId: catalogue.versionId,
               idempotencyKey: parsed.data.idempotencyKey ?? randomUUID(),
-              successUrl: returnUrl('success'),
-              cancelUrl: returnUrl('cancelled'),
+              successUrl: returnUrl('success', parsed.data.locale),
+              cancelUrl: returnUrl('cancelled', parsed.data.locale),
               actorUserId: caller.userId,
             }),
           { prisma: getPrisma() },
@@ -284,8 +294,8 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
               policy,
               packKey: parsed.data.packKey,
               idempotencyKey: parsed.data.idempotencyKey ?? randomUUID(),
-              successUrl: returnUrl('success'),
-              cancelUrl: returnUrl('cancelled'),
+              successUrl: returnUrl('success', parsed.data.locale),
+              cancelUrl: returnUrl('cancelled', parsed.data.locale),
               actorUserId: caller.userId,
             }),
           { prisma: getPrisma() },
@@ -711,7 +721,7 @@ function checkoutJson(view: {
  * asks the status endpoint, which answers from reconciled state. Built from the
  * environment so a new deployment is a variable rather than a code change.
  */
-function returnUrl(outcome: 'success' | 'cancelled'): string {
+function returnUrl(outcome: 'success' | 'cancelled', locale: 'ar' | 'en'): string {
   const base = process.env['PUBLIC_DASHBOARD_BASE_URL'];
   if (!base) {
     throw new AppError(
@@ -719,7 +729,10 @@ function returnUrl(outcome: 'success' | 'cancelled'): string {
       'PUBLIC_DASHBOARD_BASE_URL is required to build a checkout return URL.',
     );
   }
-  return `${base.replace(/\/+$/, '')}/billing/checkout/${outcome}`;
+  // The checkout id is appended by whoever redirects, so the landing page can
+  // ask the status endpoint about the RIGHT session. It is our own id and is
+  // still only usable inside the workspace that owns it.
+  return `${base.replace(/\/+$/, '')}/${locale}/billing/checkout/${outcome}`;
 }
 
 /** Exposed so the hosted development page can resolve its own adapter. */

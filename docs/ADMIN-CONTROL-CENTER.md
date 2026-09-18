@@ -660,3 +660,64 @@ members, activity), which is what §3.3 calls "audit-safe support context".
 
 Conditional authorities in §4.4 (support resend, goodwill credits within a cap, billing-manager suspension
 for non-payment) are **ungranted** until their conditions exist — F-14.
+
+---
+
+## 21. Implementation Status — Phase 9
+
+Phase 9 adds no new Control Center MODULE. It adds two configuration domains that the existing
+Configuration Management module (§12) already knows how to draft, validate, activate and roll back,
+and one thing an operator must understand about each.
+
+### `commerce` — the commercial geography
+
+Currencies (each with its own minor-unit digits), markets, tax policies, credit packs, provider
+routing, dunning and the invoice's legal identity.
+
+**It is under DUAL CONTROL**, alongside `plans`, `ai.credit-rules` and `credits`: activating it
+changes what customers are charged.
+
+Three things an operator needs to know:
+
+- **There is no default currency field, and adding one would be a product regression** (D-194). A
+  market NARROWS which currencies a country is offered; the customer still chooses.
+- **A plan with no price in a currency is UNAVAILABLE in that currency.** Nothing converts. The
+  customer is told which of the two reasons applies, so the fix is visible: add the price.
+- **`checkout.trustBrowserRedirect` is a literal `false`.** It is in the document so the rule is
+  visible, and it cannot be switched on (D-205).
+
+### `onboarding` — the rules of joining
+
+Whether signup is open, the password floor, the verification link's lifetime and resend limits, which
+legal documents must be accepted and at which VERSION, customer MFA, and the first-run checklist.
+
+**Publishing a new document version makes every earlier acceptance stale by construction.** That is
+the point of storing the version beside the key: "they agreed to the terms" is not a fact unless it
+says which terms.
+
+### What an operator can see about a customer's commerce
+
+Through the existing Workspaces module (§4) and the Platform Audit Log (§13):
+
+- The workspace's subscription, its pinned price and the configuration version it came from.
+- Its invoices, credit notes and payment attempts.
+- Every commercial action as an `AuditEvent`: `billing.checkout.opened`, `billing.invoice.issued`,
+  `billing.invoice.paid`, `billing.credit-note.issued`, `billing.payment.failed`,
+  `billing.subscription.suspended`, and — the one worth watching for —
+  `billing.reconcile.amount-mismatch`, which is CRITICAL and means a provider reported an amount that
+  was not the amount we priced.
+
+### The webhook inbox
+
+`billing_event` is platform-owned and the tenant role has no access to it at all. An operator reading
+it sees every delivery with its outcome: `PROCESSED`, `DUPLICATE`, `STALE`, `UNRESOLVED` or `FAILED`.
+
+**`UNRESOLVED` is the row to watch.** It means a provider sent an event that could not be tied to any
+workspace through a relationship BrandSpace wrote — a misconfiguration made visible rather than money
+silently lost.
+
+### No payment provider is configured, and that is deliberate
+
+`integrations.payment` exists and is empty. D-204 leaves the choice to the owner; the only adapter
+registered is the development one, and it is refused in production. Phase 10 selects the vendor,
+stores its credentials through the Secret Service, and adds it to `commerce.providerRouting`.

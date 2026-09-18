@@ -984,3 +984,105 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-30.3 | The product reads as one system in `ar` and `en`, RTL and LTR, at phone width, at WCAG 2.2 AA                                                                                                                                                                                              | `phase8-journey` E2E                                              |
 | AC-30.4 | **The exit journey runs end to end:** Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign → AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar → Publish → Analytics → Marketing Intelligence → learning into Brand Brain | `phase8-flow` E2E (functional), `phase8-journey` E2E (coherence)  |
 | AC-30.5 | The whole journey is workspace-isolated and BrandScope-enforced at every step                                                                                                                                                                                                              | `phase8-intelligence`, `phase8-publish-media`, `phase8-campaigns` |
+
+---
+
+## 26. Phase 9 Acceptance Criteria — Commerce & Onboarding
+
+> Every row below is settled by a named suite. `phase9-commerce` and `phase9-account` run against
+> REAL PostgreSQL; `phase9-commerce.spec` drives a real browser across two origins.
+
+### AC-31 Money and multi-currency (Phase 9, settled)
+
+| ID      | Criterion                                                                                                      | Settled by                              |
+| ------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| AC-31.1 | No floating-point value is the canonical representation of money; amounts are integer minor units              | `money-and-currency`, `phase9-commerce` |
+| AC-31.2 | Every monetary row carries its currency AND that currency's own scale; three-digit currencies stay three-digit | `phase9-commerce`                       |
+| AC-31.3 | Two amounts in different currencies, or at different scales, cannot be added, compared or netted               | `money-and-currency`                    |
+| AC-31.4 | All seven launch currencies price from configuration; none is a default, and none is derived from another      | `money-and-currency`                    |
+| AC-31.5 | A plan with no price in the customer's currency is UNAVAILABLE with a stated reason — never converted          | `money-and-currency`, `phase9-commerce` |
+
+### AC-32 The provider-agnostic commercial architecture (Phase 9, settled)
+
+| ID      | Criterion                                                                                                     | Settled by             |
+| ------- | ------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| AC-32.1 | No production payment provider is named, configured or credentialed anywhere in the repository (D-204)        | `billing-provider`     |
+| AC-32.2 | The adapter contract has no method that could accept a card, a CVC or a payment instrument                    | `billing-provider`     |
+| AC-32.3 | Provider capabilities are declared and read, never assumed equal                                              | `billing-provider`     |
+| AC-32.4 | Every commercial workflow is proven end to end through a deterministic development adapter                    | `phase9-commerce`, E2E |
+| AC-32.5 | Provider references are stored separately from canonical billing state and are never authorization boundaries | `commerce-tenancy`     |
+
+### AC-33 Checkout, reconciliation and webhook authority (Phase 9, settled)
+
+| ID      | Criterion                                                                                     | Settled by             |
+| ------- | --------------------------------------------------------------------------------------------- | ---------------------- |
+| AC-33.1 | A request never carries an amount; the price is resolved server-side and written down first   | `phase9-commerce`, E2E |
+| AC-33.2 | A browser redirect never marks anything paid; only a verified event does                      | `phase9-commerce`, E2E |
+| AC-33.3 | The signature is verified over the RAW body, before parsing                                   | `billing-provider`     |
+| AC-33.4 | A delivery that fails verification writes nothing at all                                      | `phase9-commerce`      |
+| AC-33.5 | A replayed event is a duplicate that changes nothing and does not overwrite the first outcome | `phase9-commerce`      |
+| AC-33.6 | An event older than the state it describes is recorded and NOT applied                        | `phase9-commerce`      |
+| AC-33.7 | An event that matches no trusted mapping is UNRESOLVED, never guessed at or dropped           | `phase9-commerce`      |
+| AC-33.8 | A provider amount that does not match ours is a CRITICAL audit and a refusal                  | `phase9-commerce`      |
+| AC-33.9 | A captured delivery replayed hours later is refused by the timestamp inside the signed string | `billing-provider`     |
+
+### AC-34 Invoices, credit notes and dunning (Phase 9, settled)
+
+| ID      | Criterion                                                                                         | Settled by                            |
+| ------- | ------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| AC-34.1 | An issued invoice has a number from the seller's own series; a draft that is discarded burns none | `phase9-commerce`                     |
+| AC-34.2 | Twenty simultaneous issues get twenty distinct numbers; a rolled-back issue returns its number    | `phase9-commerce`, `commerce-tenancy` |
+| AC-34.3 | An issued invoice is never edited; a correction is a credit note                                  | `phase9-commerce`                     |
+| AC-34.4 | A credit note cannot exceed its invoice, and is refused identically on a retry with a new amount  | `phase9-commerce`                     |
+| AC-34.5 | Invoice lines carry BOTH languages, written at issue time                                         | `phase9-commerce`, E2E                |
+| AC-34.6 | Tax is applied from the market's configured policy; no jurisdiction is named in code              | `billing-provider`                    |
+| AC-34.7 | The dunning clock starts at the first failure and is not restarted by later failures              | `phase9-commerce`                     |
+| AC-34.8 | A provider's decline message never reaches our rows                                               | `phase9-commerce`                     |
+| AC-34.9 | Suspension withdraws access and retains data; nothing in the billing path deletes anything        | `phase9-commerce`                     |
+
+### AC-35 Signup, verification and customer MFA (Phase 9, settled)
+
+| ID      | Criterion                                                                                     | Settled by            |
+| ------- | --------------------------------------------------------------------------------------------- | --------------------- |
+| AC-35.1 | Signup returns an identical result for a free address and a taken one                         | `phase9-account`      |
+| AC-35.2 | An unverified account cannot sign in                                                          | `phase9-account`      |
+| AC-35.3 | A verification link works once; expired, used and invented links are indistinguishable        | `phase9-account`      |
+| AC-35.4 | Verifying an address does not reactivate a suspended account                                  | `phase9-account`      |
+| AC-35.5 | The legal acceptance records WHICH version was accepted, and a stale version is refused       | `phase9-account`      |
+| AC-35.6 | The password floor comes from configuration, not from a constant                              | `phase9-account`, E2E |
+| AC-35.7 | An MFA seed is never stored in clear, and material copied to another account fails to decrypt | `phase9-account`      |
+| AC-35.8 | An MFA-enrolled session resolves to nothing until a code is presented                         | `phase9-account`      |
+| AC-35.9 | A recovery code is spent exactly once; disabling MFA requires a working code                  | `phase9-account`      |
+
+### AC-36 Onboarding and the acquisition journey (Phase 9, settled)
+
+| ID      | Criterion                                                                                                                                                      | Settled by                                    |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| AC-36.1 | Country, locale, timezone and currency are all asked for explicitly; nothing is preselected (D-194)                                                            | `phase9-commerce`, E2E                        |
+| AC-36.2 | A country the platform does not sell in, and a currency a market does not offer, are both refused honestly                                                     | `phase9-commerce`                             |
+| AC-36.3 | A workspace gets one trial, ever, with its credits granted in the same transaction                                                                             | `phase9-commerce`                             |
+| AC-36.4 | An owner whose email is unverified cannot create a workspace                                                                                                   | `phase9-commerce`                             |
+| AC-36.5 | Onboarding progress is DERIVED from the data; a step completed elsewhere is complete (D-210)                                                                   | E2E                                           |
+| AC-36.6 | **The acquisition journey runs end to end:** sign up → verify → sign in → create workspace → billing → hosted checkout → signed event → numbered, paid invoice | `phase9-commerce.spec` E2E                    |
+| AC-36.7 | Abandoning checkout charges nothing and says so; the workspace stays on its trial                                                                              | `phase9-commerce.spec` E2E                    |
+| AC-36.8 | A prepaid pack raises the balance by exactly the pack, once                                                                                                    | `phase9-commerce.spec` E2E, `phase9-commerce` |
+| AC-36.9 | The commercial screens work in `ar` and `en`, RTL and LTR, at WCAG 2.2 AA with zero axe violations                                                             | `phase9-commerce.spec` E2E                    |
+
+### AC-37 Prepaid credits stay prepaid (Phase 9, settled)
+
+| ID      | Criterion                                                                                        | Settled by                                |
+| ------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| AC-37.1 | There is no code path that can extend credit; the ledger bridge is one grant-only function       | `phase9-commerce`                         |
+| AC-37.2 | A completed pack purchase cannot exist without naming the grant it produced (a CHECK constraint) | `phase9-commerce`, `commerce-tenancy`     |
+| AC-37.3 | Two events about the same purchase grant credits once                                            | `phase9-commerce`                         |
+| AC-37.4 | Reaching zero stops AI execution; the balance never goes negative                                | `credit-protocol`, `entitlements-credits` |
+
+### AC-38 Tenant isolation over commercial data (Phase 9, settled)
+
+| ID      | Criterion                                                                                                  | Settled by                      |
+| ------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| AC-38.1 | A workspace cannot read, count, search, enumerate or mutate another's billing data                         | `commerce-tenancy`              |
+| AC-38.2 | Holding another tenant's provider session id, provider customer id or invoice NUMBER resolves nothing      | `commerce-tenancy`              |
+| AC-38.3 | A real id from another workspace and a fabricated id fail identically                                      | `commerce-tenancy`              |
+| AC-38.4 | The tenant role has no access to the webhook inbox or the invoice-number counter at all                    | `commerce-tenancy`              |
+| AC-38.5 | Every new tenant-owned model carries `workspaceId`, RLS with FORCE, a policy, D-29 registration and a test | `isolation-gate`, `rls-raw-sql` |

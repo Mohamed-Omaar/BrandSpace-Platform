@@ -156,23 +156,40 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
           // Phase 6 adds the SOCIAL token key and the public base URL the OAuth
           // callback is built from — neither of which the dashboard or the
           // worker gets from here, because each reads its own.
+          //
+          // Phase 9 adds the DEVELOPMENT billing signing secret — not a payment
+          // credential, and there is none in this repository to be one (D-204) —
+          // and the customer MFA key, because the API enrols a second factor.
           [
             'DATABASE_PLATFORM_URL',
             'CUSTOMER_SESSION_SECRET',
             'SECRET_VAULT_KEK',
             'SOCIAL_TOKEN_VAULT_KEK',
+            'CUSTOMER_MFA_VAULT_KEK',
+            'BILLING_DEV_WEBHOOK_SECRET',
           ]
         : app === 'worker'
           ? // Phase 6: the publish worker decrypts a CUSTOMER token and nothing
             // else. It gets the SOCIAL key and NOT `SECRET_VAULT_KEK` — the
             // separation D-136 exists for, enforced here as well as in code.
             ['CUSTOMER_SESSION_SECRET', 'SOCIAL_TOKEN_VAULT_KEK']
-          : // THE DASHBOARD GETS NO KEY MATERIAL AT ALL, and that is deliberate
-            // rather than an omission: reading a connection never decrypts
-            // anything, and every path that does decrypt runs in apps/api or
-            // the worker. A key the process closest to a browser bundle does
-            // not hold is a key that cannot leak from it.
-            ['CUSTOMER_SESSION_SECRET'];
+          : /*
+             * THE DASHBOARD HOLDS EXACTLY ONE KEY, AND ONLY FROM PHASE 9.
+             *
+             * It used to hold none, deliberately: reading a connection never
+             * decrypts anything, and every path that did ran in apps/api or the
+             * worker. Customer MFA changes that and could not avoid it — the
+             * second factor is presented at SIGN-IN, which is a dashboard server
+             * action, so whatever key seals an authenticator seed has to be
+             * reachable from the login surface (D-206).
+             *
+             * WHAT IT STILL DOES NOT HOLD is the whole point: no
+             * `DATABASE_PLATFORM_URL`, no `SECRET_VAULT_KEK`, no
+             * `SOCIAL_TOKEN_VAULT_KEK`. The customer MFA domain is separate
+             * precisely so that granting it here grants nothing else — one key,
+             * one blast radius, and that radius is authenticator seeds.
+             */
+            ['CUSTOMER_SESSION_SECRET', 'CUSTOMER_MFA_VAULT_KEK'];
 
   /*
    * COPIED ONLY IF THIS FUNCTION HAS NOT ALREADY SET IT.

@@ -195,7 +195,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         >
           {snapshot.plans.map((plan) => {
             const availability = snapshot.availability.find((a) => a.planKey === plan.key);
-            const isCurrent = subscription?.planKey === plan.key;
+            /*
+             * "CURRENT" MEANS PAID FOR, not merely assigned.
+             *
+             * A trial runs ON a plan, so treating that as current left a
+             * trialing customer looking at "Your current plan" with no way to
+             * pay for it — the conversion the whole trial exists to produce.
+             * Found by the end-to-end journey, which could not buy anything.
+             */
+            const isCurrent =
+              subscription?.planKey === plan.key && subscription.status !== 'TRIALING';
             const isDowngrade = plan.tier < currentTier;
             return (
               <section
@@ -252,6 +261,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                     />
                   ) : (
                     <BuyPlanButton
+                      locale={locale}
                       planKey={plan.key}
                       billingInterval="MONTH"
                       label={t('billing.choosePlan')}
@@ -306,6 +316,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 ) : null}
                 {mayManage ? (
                   <BuyPackButton
+                    locale={locale}
                     packKey={offer.pack.key}
                     label={t('billing.packBuy')}
                     busyLabel={t('billing.checkoutOpening')}

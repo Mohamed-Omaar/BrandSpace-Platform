@@ -69,7 +69,7 @@ export async function buildServer() {
   registerOnboardingRoutes(app);
   registerCommerceRoutes(app);
   await registerBillingWebhookRoutes(app);
-  registerBillingHostedPageRoutes(app);
+  await registerBillingHostedPageRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

@@ -35,6 +35,7 @@ function idempotencyKey(): string {
 }
 
 export function BuyPlanButton({
+  locale,
   planKey,
   billingInterval,
   label,
@@ -44,6 +45,7 @@ export function BuyPlanButton({
   disabled,
   testId,
 }: {
+  locale: string;
   planKey: string;
   billingInterval: 'MONTH' | 'YEAR';
   label: string;
@@ -68,6 +70,8 @@ export function BuyPlanButton({
             planKey,
             billingInterval,
             idempotencyKey: idempotencyKey(),
+            // Navigation only: which localized route the provider returns to.
+            locale: locale === 'ar' ? 'ar' : 'en',
           }).catch(() => null);
           const payload = (await response?.json().catch(() => null)) as {
             redirectUrl?: string;
@@ -88,12 +92,14 @@ export function BuyPlanButton({
 }
 
 export function BuyPackButton({
+  locale,
   packKey,
   label,
   busyLabel,
   failedLabel,
   testId,
 }: {
+  locale: string;
   packKey: string;
   label: string;
   busyLabel: string;
@@ -113,6 +119,7 @@ export function BuyPackButton({
           const response = await post('/api/commerce/checkout/pack', {
             packKey,
             idempotencyKey: idempotencyKey(),
+            locale: locale === 'ar' ? 'ar' : 'en',
           }).catch(() => null);
           const payload = (await response?.json().catch(() => null)) as {
             redirectUrl?: string;

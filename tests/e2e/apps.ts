@@ -29,6 +29,15 @@ export const APPS: readonly AppUnderTest[] = [
 
 export const DASHBOARD_BASE_URL = 'http://127.0.0.1:3101';
 export const ADMIN_BASE_URL = 'http://127.0.0.1:3102';
+/**
+ * The API service — the Phase 9 journey leaves the dashboard for it.
+ *
+ * The development payment provider's hosted page is served here, which is the
+ * point: a real hosted checkout is a page on somebody ELSE's origin, and the
+ * journey has to cross that boundary for the redirect, the signed event and the
+ * return to be exercised rather than simulated.
+ */
+export const API_BASE_URL = 'http://127.0.0.1:3103';
 
 export const LOCALES = [
   { code: 'ar', dir: 'rtl', lang: 'ar-SA' },
