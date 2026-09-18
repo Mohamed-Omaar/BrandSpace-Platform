@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROUTE_SCOPES, scopeForPath } from '../../apps/dashboard/src/server/route-scope';
@@ -105,4 +105,41 @@ describe('the fixed eighteen-area inventory is reachable', () => {
   it('does NOT put Brand Profile on the rail (D-189)', () => {
     expect(hrefs).not.toContain('/settings/brand');
   });
+});
+
+describe('one shell, one brand selector, on every route (D-190)', () => {
+  /*
+   * WHY THIS IS HERE. `/analytics` and `/brand-brain` each rendered the shell
+   * TWICE — once for "no brand selected" and once for the real page — and
+   * passed the brand context to the first only. So the two screens most about
+   * a brand dropped the Brand Selector from the rail the MOMENT a brand was
+   * chosen: a reader could pick a brand and then have no way to change it
+   * without leaving the page.
+   *
+   * COUNTING IS THE CHECK, and it is deliberately crude: every `<WorkspaceShell`
+   * in a page must be matched by a `brandContext={brandContext}`. A page that
+   * renders the shell twice has to supply it twice, which is exactly the rule
+   * the defect broke.
+   */
+  const pages: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (entry === 'page.tsx') pages.push(full);
+    }
+  };
+  walk(APP_DIR);
+
+  for (const page of pages) {
+    const source = readFileSync(page, 'utf8');
+    const shells = source.split('<WorkspaceShell').length - 1;
+    if (shells === 0) continue;
+    const relative = page.slice(page.indexOf('[locale]'));
+
+    it(`${relative} passes the brand context to every shell it renders`, () => {
+      const passed = source.split('brandContext={brandContext}').length - 1;
+      expect(passed).toBe(shells);
+    });
+  }
 });

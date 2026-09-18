@@ -248,6 +248,16 @@ export default async function AnalyticsPage({
 
   return (
     <WorkspaceShell
+      /*
+       * THE BRAND CONTEXT, ON THE PATH THAT HAS ONE.
+       *
+       * It was passed on this page's no-brand branch and dropped here, so the
+       * two screens most about a brand lost the Brand Selector from the rail
+       * the MOMENT a brand was actually chosen — a reader could pick a brand
+       * and then have no way to change it without leaving the page. One shell,
+       * one selector, on every route (D-190).
+       */
+      brandContext={brandContext}
       locale={locale}
       heading={t('analytics.title')}
       description={t('analytics.subtitle')}

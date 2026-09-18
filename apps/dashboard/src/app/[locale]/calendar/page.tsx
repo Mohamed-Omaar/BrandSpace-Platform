@@ -1,7 +1,13 @@
 import { formatLocalTime, partsInZone } from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
-import type { ApprovalStatus, CalendarDay, PostRecord, PostStatus, SocialPlatform } from '@brandspace/ui';
+import type {
+  ApprovalStatus,
+  CalendarDay,
+  PostRecord,
+  PostStatus,
+  SocialPlatform,
+} from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -316,9 +322,7 @@ export default async function CalendarPage({
       // The picture's own name when there is one, so a screen-reader user hears
       // what the post is illustrated with rather than the title twice.
       mediaAlt: cover?.name ?? view.item.title,
-      ...(cover?.previewToken
-        ? { mediaSrc: `/${locale}/assets/file/${cover.previewToken}` }
-        : {}),
+      ...(cover?.previewToken ? { mediaSrc: `/${locale}/assets/file/${cover.previewToken}` } : {}),
       ...(mediaIds.length > 1 ? { mediaCount: mediaIds.length } : {}),
       ...(cover?.kind === 'VIDEO' ? { isVideo: true } : {}),
     };
@@ -334,7 +338,9 @@ export default async function CalendarPage({
       statusLabel: translate(`content.status.${status}` as MessageKey),
       // Null when there is no approval row at all — "not required" is the
       // absence of a review, not a state to display beside one.
-      approvalLabel: approvalRow ? translate(`approvals.status.${approvalRow}` as MessageKey) : null,
+      approvalLabel: approvalRow
+        ? translate(`approvals.status.${approvalRow}` as MessageKey)
+        : null,
       mediaCount: mediaIds.length,
     });
   }

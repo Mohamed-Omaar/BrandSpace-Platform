@@ -299,7 +299,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -309,7 +309,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -511,6 +511,30 @@ export default defineConfig({
        */
       name: 'social-publishing',
       testMatch: /social-publishing\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 8 — the whole-product exit journey, in its own SERIAL project.
+       *
+       * It signs in and walks thirteen screens in the SHARED customer
+       * workspace, and it fixes the stored brand SELECTION to do it. Run in the
+       * two viewport projects it would walk that workspace twice at once while
+       * every other suite is mutating it, and the brand cookie it sets is one
+       * any concurrent authenticated suite in the same browser context would
+       * inherit — the same reason `brand-context` has its own project.
+       *
+       * It sets its own phone viewport for the one test that measures overflow
+       * and runs axe in both directions itself, so the viewport projects would
+       * add nothing but interference.
+       */
+      name: 'phase8-journey',
+      testMatch: /phase8-journey\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

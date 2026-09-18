@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
-import { AnalyticsQueryService, createAnalyticsRegistry, parseAnalyticsPolicy } from '@brandspace/analytics';
+import {
+  AnalyticsQueryService,
+  createAnalyticsRegistry,
+  parseAnalyticsPolicy,
+} from '@brandspace/analytics';
 import { defaultPayload } from '@brandspace/config';
 import { BrandKnowledgeService } from '@brandspace/brand-brain';
 import { LearningWriteBackService, StrategyService } from '@brandspace/intelligence';

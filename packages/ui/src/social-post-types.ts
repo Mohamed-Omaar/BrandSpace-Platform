@@ -37,12 +37,7 @@ export type PostAspect = '1:1' | '4:5' | '16:9' | '9:16';
  * (`CalendarSlotStatus.PARTIALLY_PUBLISHED`), so it exists here.
  */
 export type PostStatus =
-  | 'DRAFT'
-  | 'SCHEDULED'
-  | 'PUBLISHING'
-  | 'PUBLISHED'
-  | 'PARTIALLY_PUBLISHED'
-  | 'FAILED';
+  'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'PARTIALLY_PUBLISHED' | 'FAILED';
 
 /** Approval, which is independent of publishing status. */
 export type ApprovalStatus = 'NOT_REQUIRED' | 'NEEDS_APPROVAL' | 'APPROVED' | 'CHANGES_REQUESTED';

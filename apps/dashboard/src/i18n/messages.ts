@@ -2016,7 +2016,8 @@ export const messages = {
     'insights.type.STRATEGY': 'Strategy',
     'insights.type.MONTHLY_PLAN': 'Monthly plan',
     'intelligence.title': 'Marketing Intelligence',
-    'intelligence.subtitle': "What your brand said it would do, what it has published, and the gap.",
+    'intelligence.subtitle':
+      'What your brand said it would do, what it has published, and the gap.',
     'intelligence.analyse': 'Analyse content gaps',
     'intelligence.focusLabel': 'What should this look at?',
     'intelligence.focusPlaceholder': 'For example: our LinkedIn presence this quarter',

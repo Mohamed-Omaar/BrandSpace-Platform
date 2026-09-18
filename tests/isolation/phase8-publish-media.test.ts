@@ -457,7 +457,9 @@ describe('nothing is silently dropped', () => {
     // The caption alone would be a post nobody wrote. A missing port is our
     // own bug, and it fails loudly rather than shipping half a post.
     expect(result.status).toBe('FAILED');
-    expect(await readJob(jobId).then((job) => job?.failureCode)).toBe('preflight.media_unavailable');
+    expect(await readJob(jobId).then((job) => job?.failureCode)).toBe(
+      'preflight.media_unavailable',
+    );
     expect(linkedInMock().lastPublishedMediaCount).toBe(-1);
   });
 

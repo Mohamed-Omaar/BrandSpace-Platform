@@ -105,15 +105,20 @@ export default async function IntelligencePage({
    * brand returns nothing rather than being fetched and dropped.
    */
   const insights =
-    brand &&
-    (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id))
+    brand && (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id))
       ? await inAnalytics(workspace.workspaceId, async (services) =>
           services.db.insight.findMany({
             where: {
               workspaceId: workspace.workspaceId,
               brandId: brand.id,
               type: {
-                in: ['CONTENT_GAP', 'OPPORTUNITY', 'ANALYTICS_EXPLANATION', 'ANOMALY', 'RECOMMENDATION'],
+                in: [
+                  'CONTENT_GAP',
+                  'OPPORTUNITY',
+                  'ANALYTICS_EXPLANATION',
+                  'ANOMALY',
+                  'RECOMMENDATION',
+                ],
               },
             },
             orderBy: { createdAt: 'desc' },
