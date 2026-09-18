@@ -33,6 +33,18 @@ const ALLOWED_IMPORTS = {
   // in, and the payloads are pointers rather than data (payloads.ts).
   jobs: ['shared'],
   providers: ['shared', 'config'],
+  /*
+   * Phase 10 — the Integrations Hub. It reads CONFIGURATION, joins it with
+   * MASKED secret metadata, and records health checks through the platform
+   * database client.
+   *
+   * NOT `ai-gateway`, `billing`, `social-connectors` or `storage`, and that
+   * absence is the design. Testing a connection means running an adapter, and
+   * an import of all four would put this package at the centre of the graph and
+   * let a Control Center screen reach a customer OAuth token. The caller
+   * injects an `IntegrationTester` instead.
+   */
+  integrations: ['shared', 'database', 'config', 'secrets'],
   entitlements: ['shared', 'database', 'config'],
   'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
   // Brand Brain reads configuration, enforces entitlements, and routes every
@@ -215,8 +227,23 @@ function packageBoundary(pkg) {
           paths: pkg === 'database' ? [] : DB_ACCESS_PATHS,
           patterns: [
             PLATFORM_POOL_PATTERN,
-            // Only auth may reach the Secret Service among packages.
-            ...(pkg === 'auth' || pkg === 'secrets' ? [] : [SECRETS_PATTERN]),
+            /*
+             * Only `auth` and `integrations` may reach the Secret Service
+             * among packages.
+             *
+             * `integrations` needs it for MASKED METADATA ONLY — a hint, a
+             * fingerprint, a rotation date — which is what the Control Center
+             * shows beside each provider. It calls `listSecrets`, which
+             * requires a platform actor and returns no value; there is no
+             * `resolveSecret` call in the package and no code path that could
+             * make one. The import is still restricted rather than open,
+             * because the package that can name the Secret Service is one edit
+             * away from decrypting with it, and this list is where that edit
+             * gets noticed.
+             */
+            ...(pkg === 'auth' || pkg === 'secrets' || pkg === 'integrations'
+              ? []
+              : [SECRETS_PATTERN]),
             // No package outside database may open a platform-scoped client.
             ...(pkg === 'database' ? [] : [PLATFORM_CLIENT_PATTERN]),
             ...[...forbiddenPackages, ...forbiddenApps].map((name) => ({

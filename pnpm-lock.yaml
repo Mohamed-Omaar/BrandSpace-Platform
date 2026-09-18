@@ -694,6 +694,28 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/integrations:
+    dependencies:
+      '@brandspace/config':
+        specifier: workspace:*
+        version: link:../config
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/secrets':
+        specifier: workspace:*
+        version: link:../secrets
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/intelligence:
     dependencies:
       '@brandspace/ai-gateway':
@@ -951,6 +973,9 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../packages/entitlements
+      '@brandspace/integrations':
+        specifier: workspace:*
+        version: link:../packages/integrations
       '@brandspace/intelligence':
         specifier: workspace:*
         version: link:../packages/intelligence

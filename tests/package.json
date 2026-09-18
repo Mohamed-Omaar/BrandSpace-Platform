@@ -21,6 +21,7 @@
     "@brandspace/creative": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
+    "@brandspace/integrations": "workspace:*",
     "@brandspace/intelligence": "workspace:*",
     "@brandspace/jobs": "workspace:*",
     "@brandspace/notifications": "workspace:*",

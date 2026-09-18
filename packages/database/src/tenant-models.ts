@@ -226,6 +226,11 @@ export const PLATFORM_OWNED_MODELS = [
   // quote-matching regex, so one would silently swallow the names below.)
   'BillingEvent',
   'InvoiceNumberSequence',
+  // Phase 10. What happened the last time BrandSpace talked to a provider.
+  // It names a platform credential reference and whether it works, which is
+  // this platform own operational state: one workspace being able to count
+  // our provider failures would be a disclosure in itself.
+  'IntegrationHealthCheck',
 ] as const;
 
 /**
@@ -346,6 +351,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   CreditPackPurchase: 'credit_pack_purchase',
   BillingEvent: 'billing_event',
   InvoiceNumberSequence: 'invoice_number_sequence',
+  IntegrationHealthCheck: 'integration_health_check',
   EmailVerificationToken: 'email_verification_token',
   UserLegalAcceptance: 'user_legal_acceptance',
   UserMfaRecoveryCode: 'user_mfa_recovery_code',

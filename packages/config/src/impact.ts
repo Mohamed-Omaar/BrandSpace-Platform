@@ -65,6 +65,8 @@ const COLLECTIONS: Partial<Record<ConfigDomain, { field: string; key: string; la
   'ai.providers': { field: 'providers', key: 'key', label: 'provider' },
   'ai.models': { field: 'models', key: 'key', label: 'model' },
   'ai.routing': { field: 'rules', key: 'taskKey', label: 'routing rule' },
+  // Phase 10. One route per capability, so the capability IS the key.
+  'ai.capability-routing': { field: 'routes', key: 'capability', label: 'capability route' },
   'ai.credit-rules': { field: 'costs', key: 'taskKey', label: 'credit cost' },
   plans: { field: 'plans', key: 'key', label: 'plan' },
   'feature-flags': { field: 'flags', key: 'featureKey', label: 'feature flag' },
@@ -97,6 +99,12 @@ function severityFor(
     return 'high';
   }
   if (domain === 'feature-flags' && after && after['killSwitch'] === true) return 'high';
+  /*
+   * Phase 10. Switching a capability off takes a product feature away from
+   * every customer at once — the same blast radius as a kill switch, and it
+   * deserves the same typed confirmation rather than a click-through.
+   */
+  if (domain === 'ai.capability-routing' && after && after['enabled'] === false) return 'high';
   return 'notice';
 }
 

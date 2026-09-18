@@ -342,6 +342,7 @@ model PlatformUser {
   configVersionsAuthored  ConfigurationVersion[]    @relation("ConfigAuthor")
   configVersionsActivated ConfigurationVersion[]    @relation("ConfigActivator")
   secretsCreated          SecretRecord[]            @relation("SecretAuthor")
+  integrationChecks       IntegrationHealthCheck[]
 
   @@index([status])
   @@map("platform_user")
@@ -5612,4 +5613,72 @@ model UserMfaRecoveryCode {
   @@unique([userId, codeHash])
   @@index([userId, usedAt])
   @@map("user_mfa_recovery_code")
+}
+
+// ============================================================================
+// PHASE 10 — INTEGRATIONS
+// ============================================================================
+
+enum IntegrationCheckOutcome {
+  /// The provider answered and the answer was good.
+  OK
+  /// The provider answered and refused, or answered wrongly.
+  FAILED
+  /// Nothing was attempted: configuration is incomplete.
+  NOT_CONFIGURED
+  /// The attempt was refused before it left BrandSpace — a development
+  /// provider in production, an adapter that does not exist.
+  REFUSED
+}
+
+/// PLATFORM-OWNED. What happened the last time we talked to a provider.
+///
+/// WHY THIS IS A TABLE AND NOT CONFIGURATION. Which provider is configured, with
+/// which settings and which credential references, is CONFIGURATION — versioned,
+/// validated, activatable and rollback-able, and it stays in the configuration
+/// service where Phase 2A put it. What this table holds is the opposite kind of
+/// fact: an OBSERVATION. "The credential worked at 14:02" is not a setting
+/// somebody chose, it is something that happened, and versioning it alongside
+/// the settings would make every health check a configuration change.
+///
+/// So: the Integrations Hub reads the settings from configuration and the status
+/// from here, and neither is a second copy of the other (§2).
+///
+/// THE TENANT ROLE HAS NO ACCESS. A row names a platform credential reference
+/// and whether it works, which is BrandSpace's own operational state. One
+/// workspace being able to count our provider failures would be a disclosure in
+/// itself, so the policy admits only `brandspace_platform`.
+///
+/// NO SECRET IS IN HERE. `message` is written by the adapter for an operator to
+/// read and is required to be free of credentials and raw provider errors; the
+/// redaction layer runs over it as well, because a rule enforced only by a
+/// comment is enforced by nobody.
+model IntegrationHealthCheck {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The registry category — `ai`, `payment`, `email`, `storage`, `social`,
+  /// `observability`. A plain string rather than an enum because the registry
+  /// in `@brandspace/integrations` owns that vocabulary and a migration should
+  /// not be needed to add a category.
+  category    String
+  providerKey String
+  environment DeploymentEnvironment
+
+  outcome   IntegrationCheckOutcome
+  latencyMs Int?
+  /// Operator-facing, safe to display. Never a credential, never a raw error.
+  message   String
+
+  /// Which platform user asked, or null when a readiness probe did.
+  requestedByPlatformUserId String? @db.Uuid
+
+  checkedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  requestedBy PlatformUser? @relation(fields: [requestedByPlatformUserId], references: [id], onDelete: SetNull)
+
+  /// The Hub asks one question constantly: "what is the latest result for this
+  /// provider in this environment?" This index is that question.
+  @@index([category, providerKey, environment, checkedAt(sort: Desc)])
+  @@index([checkedAt])
+  @@map("integration_health_check")
 }
