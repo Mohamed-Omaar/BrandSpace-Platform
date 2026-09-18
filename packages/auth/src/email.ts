@@ -136,7 +136,13 @@ export class UnconfiguredEmailProvider implements EmailProvider {
     this.key = key;
   }
 
-  async send(): Promise<{ readonly messageId: string }> {
+  /*
+   * IT TAKES THE MESSAGE AND DISCARDS IT, rather than declaring no parameters.
+   * TypeScript accepts the narrower signature against the interface, but a
+   * caller holding the CONCRETE type — a test proving the refusal, most
+   * obviously — then cannot pass the message it is refusing to send.
+   */
+  async send(_message: EmailMessageInput): Promise<{ readonly messageId: string }> {
     throw new Error(
       `Email provider "${this.key}" has no implementation, so nothing was sent. ` +
         'Configure a transactional email provider in Platform Admin > Integrations. ' +

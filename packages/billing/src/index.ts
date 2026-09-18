@@ -18,3 +18,30 @@ export * from './credit-notes';
 export * from './reconcile';
 export * from './credits-port';
 export * from './subscriptions';
+
+/* Phase 10 — the invoice as a document, and the accounting export (§23, §24). */
+export {
+  documentLines,
+  invoiceDocumentFrom,
+  invoiceFilename,
+  renderRefusal,
+} from './invoice-document';
+export type {
+  DocumentLine,
+  DocumentLocale,
+  DocumentParty,
+  InvoiceDocument,
+  InvoiceDocumentRenderer,
+  InvoiceSnapshots,
+  RenderedDocument,
+} from './invoice-document';
+
+export { DeterministicPdfRenderer } from './invoice-pdf';
+
+export {
+  ACCOUNTING_COLUMNS,
+  accountingCsv,
+  accountingJson,
+  accountingRows,
+} from './accounting-export';
+export type { AccountingExportQuery, AccountingRow, AccountingRowKind } from './accounting-export';

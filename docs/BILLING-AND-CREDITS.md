@@ -540,3 +540,82 @@ wallet, and there is no method that could extend credit — which is the archite
 postpaid overage". A completed pack purchase **cannot exist without naming the one grant it
 produced**, enforced by a CHECK constraint, so "paid once, granted once" is a database property
 rather than a worker's good intentions.
+
+---
+
+# Part IV — Phase 10: the invoice as a document, and the accounting export
+
+## 24. The document model
+
+`InvoiceDocument` is the canonical, renderer-independent shape of an issued invoice: the parties as they
+were printed, the lines as they were described, the amounts at the scale they were stored. The print
+page, the PDF and the accounting export all read it, so the three cannot disagree about what a customer
+was charged.
+
+**Built from the row and its snapshots, never from the live catalogue.** A price change, a moved office
+or a renamed plan does not alter a document that was already issued. Descriptions were written in BOTH
+languages at issue time, so either locale renders without re-deriving anything.
+
+**The scale comes from the row (D-207).** `1000` is `10.00` SAR and `1.000` KWD, and three of the seven
+launch currencies are three-digit — so re-reading the scale from the live catalogue would silently
+re-denominate an invoice issued last year the moment an owner corrected a typo.
+
+## 25. Why the bilingual document is HTML and the PDF is English only
+
+Setting Arabic in a PDF requires two things this repository cannot decide (D-216):
+
+1. **A licensed Arabic-capable font to embed.** Every PDF containing Arabic carries a subset of a font,
+   and which font a company may embed in documents it sends to customers is a licensing decision with a
+   cost. It is the owner's.
+2. **A shaping engine.** Arabic is cursive and contextual — a letter takes a different glyph depending
+   on its neighbours — and bidirectional text is reordered before it is drawn. Hand-rolling that is how
+   invoices end up with disconnected letters in the wrong order.
+
+So Phase 10 ships:
+
+- **`/[locale]/billing/invoices/[id]/document`** — a standalone, print-optimised route with no
+  application chrome, at A4 proportions, with its own `@page` rules. It sets **both languages and both
+  directions correctly**, because every browser already has a licensed font and a shaping engine. It is
+  the same markup on screen and in the PDF a customer prints, so the two cannot drift.
+- **`DeterministicPdfRenderer`** — a complete, dependency-free PDF 1.7 writer using Helvetica, one of
+  the fourteen fonts every reader provides. It emits a real file with a real cross-reference table, and
+  a test asserts the offsets actually point at objects.
+- **An explicit refusal for Arabic.** `supportedLocales` is `['en']`, and an Arabic request returns 409
+  with a sentence saying where to get the Arabic version. A PDF full of empty rectangles looks like a
+  document until somebody opens it, which is worse than an honest refusal.
+
+**What the owner must decide** to change this: which Arabic font may be embedded, and whether the
+production engine is a headless browser or a shaping-capable PDF library.
+
+## 26. The accounting export
+
+`GET /api/billing/export?from=YYYY-MM-DD&to=YYYY-MM-DD&format=csv|json`, behind `billing.read`.
+
+**Three row kinds** — `INVOICE`, `CREDIT_NOTE` and `PAYMENT` — built from the canonical billing record.
+A credit note exports as a **negative**, because that is what it does to the ledger; exporting it as a
+positive and expecting the reader to infer the sign from `kind` is how a period reconciles to twice
+what was actually billed.
+
+**Every amount twice.** `totalMinor` is the exact integer the platform stores; `total` is the same value
+written at the currency's own scale. A spreadsheet reads the decimal and a ledger reads the integer, and
+neither has to guess whether this currency has two decimal places or three.
+
+**No jurisdiction's tax law is encoded as universal.** There is no VAT return here and no government
+envelope. What an invoice was taxed AT, under WHICH policy, and with which party tax numbers, was
+recorded when it was issued; the export carries those as explicit columns — `sellerTaxId`, `buyerTaxId`,
+`taxPolicyKey`, `taxRatePercent` — that a market which does not use them leaves empty. Turning them into
+a particular government's form is an integration against that government's API, and belongs with that
+country's decision.
+
+**Details that matter to the reader**, each for a specific reason:
+
+- **Every CSV field is quoted**, not only the ones that look dangerous. A legal name containing a comma
+  is ordinary, and a conditional rule is one missed case from an export that shifts every column right.
+- **CRLF line endings**, which RFC 4180 specifies and several accounting packages require.
+- **A UTF-8 BOM**, because several spreadsheet applications open a CSV without one in the system's
+  legacy encoding — turning every Arabic legal name into mojibake, on a file whose purpose is to be
+  opened in one of them.
+- **The tax rate as a decimal string** rather than a float. `0.15000000000000002` in an accounting
+  export is the kind of thing a filing agent rejects.
+- **The period is required and bounded** to 400 days. An unbounded export of a commercial record is a
+  query nobody bounded.

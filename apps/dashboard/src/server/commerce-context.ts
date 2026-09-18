@@ -16,6 +16,13 @@ import {
 } from '@brandspace/billing';
 import { CreditNoteService } from '@brandspace/billing';
 import {
+  accountingRows,
+  invoiceDocumentFrom,
+  type AccountingExportQuery,
+  type AccountingRow,
+  type InvoiceDocument,
+} from '@brandspace/billing';
+import {
   TenantCatalogueSource,
   readPlanCatalogue,
   type PlanDetail,
@@ -113,6 +120,50 @@ export async function invoiceDetailFor(workspaceId: string, invoiceId: string) {
     const notes = await new CreditNoteService().list(db, workspaceId, invoiceId);
     return { ...detail, creditNotes: notes };
   });
+}
+
+/**
+ * The invoice as a DOCUMENT — Phase 10 §23.
+ *
+ * Built from the row and the snapshots taken when it was issued, so the print
+ * page, a PDF and the accounting export all read one canonical shape and cannot
+ * disagree about what the customer was charged. An invoice belonging to another
+ * workspace resolves to null, shaped exactly like an id that never existed.
+ */
+export async function invoiceDocumentFor(
+  workspaceId: string,
+  invoiceId: string,
+): Promise<InvoiceDocument | null> {
+  return inWorkspace(workspaceId, async ({ db }) => {
+    const detail = await new InvoiceService().get(db, workspaceId, invoiceId);
+    if (!detail) return null;
+    const row = await db.invoice.findFirst({
+      where: { workspaceId, id: invoiceId },
+      select: { partiesSnapshot: true, dueAt: true, taxPolicyKey: true },
+    });
+    return invoiceDocumentFrom({
+      invoice: detail.invoice,
+      lines: detail.lines,
+      snapshots: (row?.partiesSnapshot ?? {}) as { parties?: never },
+      dueAt: row?.dueAt ?? null,
+      taxPolicyKey: row?.taxPolicyKey ?? null,
+    });
+  });
+}
+
+/**
+ * The accounting export for a period — Phase 10 §24.
+ *
+ * Tenant-scoped through and through: every query names the workspace and runs
+ * on the tenant client, so RLS refuses another workspace's rows even if a
+ * predicate were ever dropped. An accounting export is precisely the document a
+ * competitor would most like to read.
+ */
+export async function accountingExportFor(
+  workspaceId: string,
+  query: AccountingExportQuery,
+): Promise<readonly AccountingRow[]> {
+  return inWorkspace(workspaceId, async ({ db }) => accountingRows(db, workspaceId, query));
 }
 
 /** One checkout's reconciled state — what the landing page reports (§22). */

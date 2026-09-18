@@ -909,47 +909,105 @@ turns the development adapter off.
 
 ---
 
-## Phase 10 — Production Launch
+## Phase 10 — Final Platform Completion & Production Readiness
 
-**Goal:** the finished product is productionised, the public site is live, and the doors open.
+**Goal:** finish the BrandSpace PLATFORM. Not activate a single external provider.
+
+### What this phase means, and what it deliberately does not
+
+Phase 10 is the last top-level product-development phase. Its job is to leave the software complete,
+production-safe and ready to accept real integrations — so that connecting AI, social and payments
+afterwards is **operational work rather than another phase of building**.
+
+**It activates nothing.** No AI provider, no social developer application, no payment vendor, no
+production credential. Every external system BrandSpace can talk to today is a development double,
+and the Integrations Hub says so on every row rather than in a footnote.
 
 ### Scope
 
-**Real providers**
+**The Integrations Hub** — one owner-only place for every external system: categories, environments,
+declared capabilities, masked credential status, connection status, verification history, Test
+Connection, activate and disable. Generated from a registry, so adding a provider is an entry plus an
+adapter and no screen changes (D-214).
 
-1. Real AI text provider and real AI image provider.
-2. Approved real Meta/Instagram, LinkedIn, TikTok and X providers.
-3. Real social analytics ingestion.
+**AI capabilities, catalogue and routing** — product code asks for a CAPABILITY, not a vendor. Models
+declare which capabilities they can serve and the feature flags that back the declaration up; routing
+refuses any model that fails the comparison, primary and fallback alike. Economy, Balanced, Premium
+and Custom profiles RANK the owner's catalogue rather than naming vendors (D-211, D-212).
 
-**Production infrastructure**
+**Production fails closed** — five development doubles now refuse rather than degrade quietly, the
+environment contract is validated at start-up instead of only in a unit test, and an unconfigured
+production AI request releases its reservation and charges nothing (D-215).
 
-4. Production object storage; production malware/virus scanner; production email provider.
-5. Production payment provider configuration and credentials.
-6. Production PostgreSQL, Redis, workers and queues.
-7. Staging and production environments, domains, SSL, secrets management.
-8. Backups and verified restore; monitoring, alerts and incident readiness.
+**Health, readiness and observability** — liveness that touches nothing external, readiness that
+probes for real, and a distinction between a required dependency being down and one capability being
+degraded (D-217).
 
-**The launch bar**
+**Security hardening** — a Content-Security-Policy with a per-request nonce on all three apps, HSTS in
+production, `no-store` on everything behind a session.
 
-9. Public website — all 15 pages, CMS-driven, bilingual, SEO complete, config-driven pricing page,
-   status page.
-10. Rate limiting and security hardening; penetration/security review with high-severity findings
-    resolved.
-11. Performance and load testing against the published budgets.
-12. Final production E2E acceptance and the final full Product Delivery Audit.
+**The invoice as a document, and the accounting export** — a printable bilingual document built from
+the stored row, a deterministic server-rendered PDF for the Latin path, and machine-readable
+accounting rows that encode no jurisdiction's tax law as universal (D-216).
+
+**Operations** — `docs/OPERATIONS.md`: backup expectations and verification, the restore procedure,
+queue recovery, the forward-fix migration policy, secret and KEK rotation, and incident-response
+basics — each marked as platform capability, deployment responsibility or owner decision.
 
 ### Exit criteria
 
-- [ ] Every provider in use is real, credentialed through the vault, and proven against its contract
-- [ ] Public site scores ≥ 95 Lighthouse on performance, accessibility, best practices, and SEO in both locales
-- [ ] Penetration test findings of high severity are resolved
-- [ ] A production restore drill has been completed and timed
-- [ ] Status page, legal pages, and support workflows are live
-- [ ] The final Product Delivery Audit passes
+- [x] No customer or admin flow is a placeholder, a fake success or a dead link
+- [x] The Integrations Hub exists, is generated from a registry, and lists no provider without an adapter
+- [x] Credentials are configurable, masked, rotatable and never readable again
+- [x] AI capability routing, the model catalogue and all four routing profiles work, and no fallback can violate a capability
+- [x] The existing AI Gateway accounting remains authoritative; nothing bypasses it
+- [x] No development adapter can run in production, and production fails closed when a required provider is missing
+- [x] Readiness distinguishes "cannot serve" from "one capability is degraded"
+- [x] Security headers, session cache policy and the production configuration contract are enforced and tested
+- [x] The invoice document and the accounting export are complete as far as provider-neutral implementation permits
+- [x] Operational documentation distinguishes platform capability from deployment responsibility
+- [x] Full local verification passes, and CI passes on the final head
 
-**Launch.**
+**The platform is complete. There is no Phase 11.**
 
-**There is no Phase 11.**
+---
+
+## After Phase 10 — external provider activation
+
+**This is operational integration work, not a development phase.** It is written here so the order is
+recorded, and it is deliberately NOT a roadmap phase: none of it changes the product, and all of it is
+configuration entered from the Control Center.
+
+### First — AI
+
+Enter provider credentials in **Integrations**, then fill the model catalogue and assign capability
+routes for inexpensive work, normal content, complex reasoning, images, vision, embeddings, and audio
+and moderation where used. Then measure real cost, latency, quality and credit settlement against the
+margin the ledger records.
+
+**What is already true:** the gateway, the router, the catalogue, the ledger, the budgets and the
+screens. **What the owner supplies:** the vendor, the key and the prices.
+
+### Second — Social
+
+Create developer applications with each platform, enter the app id, secret, redirect URI and webhook
+secret in **Integrations**, then exercise OAuth, account discovery, publishing, media publishing,
+analytics ingestion, token refresh, expiry and revocation.
+
+**What is already true:** the connector abstraction, the OAuth flow, the publish pipeline, the token
+vault and the customer-facing Social Accounts experience. **What the owner supplies:** the developer
+applications, which require business verification and app review measured in weeks (D-18, D-19).
+
+### Third — Payments
+
+Choose the provider (D-21). If a BrandSpace adapter exists, enter credentials and configure it in
+**Integrations**. If not, implement the narrow adapter against the already-complete billing contract —
+which has no method that could accept a card (D-204) — and test in sandbox end to end before
+production.
+
+**What is already true:** hosted-checkout semantics, signed webhook reconciliation, the invoice series,
+credit notes, dunning, tax from configured policy, and every screen. **What the owner supplies:** the
+vendor and its credentials.
 
 ---
 

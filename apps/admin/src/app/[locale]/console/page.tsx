@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { CONFIG_DOMAIN_KEYS } from '@brandspace/config';
+import { evaluateHealth, tracingStatus } from '@brandspace/observability';
 import {
   Card,
   ContentGrid,
@@ -7,7 +8,6 @@ import {
   MetricCard,
   OverviewHero,
   Stack,
-  StateMessage,
   buttonStyle,
   colorTokens,
 } from '@brandspace/ui';
@@ -16,6 +16,7 @@ import { translator } from '../../../i18n/messages';
 import {
   currentEnvironment,
   getConfigService,
+  getIntegrationsService,
   getSecretService,
   getWorkspaceService,
   requirePageActor,
@@ -55,6 +56,27 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         )
       : [],
   ]);
+
+  /*
+   * PHASE 10 — the operational half of this screen.
+   *
+   * `evaluateHealth` is the SAME function `/health/ready` feeds, so the word on
+   * this card and the word an orchestrator reads cannot drift apart. The
+   * integration gaps come from the Hub's own computation for the same reason.
+   */
+  const tracing = tracingStatus();
+  const readiness = evaluateHealth([
+    { name: 'database', state: 'ok', required: true },
+    {
+      name: 'tracing',
+      state: tracing.exporting ? 'ok' : 'not_configured',
+      required: false,
+      capability: 'observability',
+    },
+  ]);
+  const integrationGaps = mayReadConfig
+    ? await getIntegrationsService().productionGaps(serviceActor(actor), environment)
+    : [];
 
   const activated = activeDomains.filter((d) => d.versions.some((v) => v.status === 'ACTIVE'));
   const drafts = activeDomains.flatMap((d) => d.versions.filter((v) => v.status === 'DRAFT'));
@@ -164,19 +186,51 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         </ContentGrid>
 
         {/*
-          Operational metrics — request volume, job queues, provider health —
-          need telemetry that no phase has wired to this screen. The card says
-          so instead of showing a chart with no data behind it.
+          PHASE 10 — REAL OPERATIONAL STATE, and the end of "a later phase".
+
+          This card used to say "operational indicators appear here once
+          telemetry is wired in a later phase". Phase 10 is that phase, so the
+          promise is replaced by the thing it promised: the same readiness
+          verdict `/health/ready` returns, and the integration categories that
+          are required in production with nobody serving them.
+
+          IT STILL SHOWS ONLY WHAT IT ACTUALLY KNOWS. Request volume and queue
+          depth need a metrics backend nobody has chosen (D-217), and an empty
+          chart would be the fake-success state this phase exists to remove.
+          What is here is computed, not decorative.
         */}
         <Card title={locale === 'ar' ? 'صحة المنصة' : 'Platform health'} testId="overview-health">
-          <StateMessage
-            title={locale === 'ar' ? 'لا توجد مقاييس بعد' : 'No metrics yet'}
-            description={
-              locale === 'ar'
-                ? 'ستظهر مؤشرات التشغيل هنا بعد ربط التتبّع في مرحلة لاحقة.'
-                : 'Operational indicators appear here once telemetry is wired in a later phase.'
-            }
-          />
+          <ContentGrid min="12rem" testId="overview-health-metrics">
+            <MetricCard
+              testId="health-readiness"
+              label={locale === 'ar' ? 'الجاهزية' : 'Readiness'}
+              value={readiness.status}
+              accent={readiness.status !== 'ready'}
+            />
+            <MetricCard
+              testId="health-degraded"
+              label={locale === 'ar' ? 'قدرات متأثرة' : 'Degraded capabilities'}
+              value={
+                readiness.degradedCapabilities.length === 0
+                  ? locale === 'ar'
+                    ? 'لا شيء'
+                    : 'None'
+                  : readiness.degradedCapabilities.join(', ')
+              }
+            />
+            <MetricCard
+              testId="health-integration-gaps"
+              label={locale === 'ar' ? 'تكاملات إنتاج ناقصة' : 'Production integration gaps'}
+              value={mayReadConfig ? String(integrationGaps.length) : undefined}
+              unavailable={!mayReadConfig}
+              unavailableLabel={
+                locale === 'ar'
+                  ? 'لا تملك صلاحية عرض هذه القيمة'
+                  : 'You do not have permission to see this'
+              }
+              accent={integrationGaps.length > 0}
+            />
+          </ContentGrid>
         </Card>
       </Stack>
     </>

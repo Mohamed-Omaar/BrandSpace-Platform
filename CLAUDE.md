@@ -55,7 +55,8 @@ owner** instead of proceeding.
 
 The following **must never** be hard-coded in application source, environment files, or seed constants:
 
-AI providers · AI model names · task-to-model routing · plan names · plan prices · plan limits ·
+AI providers · AI model names · task-to-model routing · AI capability routing and routing profiles ·
+plan names · plan prices · plan limits ·
 AI credit costs · feature availability · customer-specific behavior · social integration credentials ·
 notification templates · billing configuration · supported currencies · trial duration · usage limits ·
 default policies · marketing website copy where CMS control is appropriate.
@@ -65,6 +66,17 @@ activation, rollback, change history, and audit logging. See `docs/ARCHITECTURE.
 
 Code may contain a **fallback bootstrap configuration** only for local development, clearly marked, never
 used when `NODE_ENV=production`.
+
+**Phase 10 made that rule enforceable rather than stated.** Five development doubles — the
+deterministic AI provider, the outbox email provider, the filesystem object store, the development
+payment adapter and the mock social connectors — now REFUSE to be constructed or registered when
+`APP_ENV=production`, and `selectionRefusal()` in `@brandspace/integrations` is the one function every
+caller asks. `assertNotProduction()` in `@brandspace/shared` is how a new double joins them; adding one
+without it is the mistake this rule exists to prevent (D-215).
+
+**The deployment environment is `APP_ENV`, never `NODE_ENV`** (D-97). Every built Next.js app sets
+`NODE_ENV=production`, including the one the E2E suite serves, so a production guard keyed on it fires
+in development. `currentEnvironment()` lives in `@brandspace/shared` and is the only copy.
 
 ### 2.3 Secrets
 
@@ -273,4 +285,5 @@ A change is done when:
 | `docs/MVP-ACCEPTANCE-CRITERIA.md` | Testable acceptance criteria for the first vertical slice                                         |
 | `docs/DESIGN-SYSTEM.md`           | Design tokens, components, shell behaviour, RTL/LTR, preview and Copilot contracts                |
 | `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed               |
+| `docs/OPERATIONS.md`              | Backup, verification, restore, queue recovery, migration policy, rotation, incident response      |
 | `docs/UI-FIDELITY-CONTRACT.md`    | **Binding.** The demo as UI specification, the route-to-reference manifest, authorised deviations |

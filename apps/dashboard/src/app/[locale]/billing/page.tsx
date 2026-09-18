@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatMoney, type Money } from '@brandspace/shared';
+import { formatMoney, systemClock, type Money } from '@brandspace/shared';
 import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
@@ -57,6 +57,19 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
 
   const show = (value: Money): string => formatMoney(value, locale === 'ar' ? 'ar' : 'en');
   const day = (value: Date | null): string => (value ? value.toISOString().slice(0, 10) : '—');
+
+  /*
+   * A DEFAULT PERIOD OF THE LAST TWELVE MONTHS, which is the span an accountant
+   * asks for most often and which the route's ceiling allows in one file. It is
+   * only a default: both fields are editable and required.
+   */
+  const today = systemClock.now();
+  const defaultExportTo = today.toISOString().slice(0, 10);
+  const defaultExportFrom = new Date(
+    Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate() + 1),
+  )
+    .toISOString()
+    .slice(0, 10);
   const fill = (key: MessageKey, values: Record<string, string>): string =>
     Object.entries(values).reduce(
       (text, [name, value]) => text.replaceAll(`{${name}}`, value),
@@ -366,6 +379,61 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           </table>
         )}
         <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
+      </CustomerCard>
+
+      {/*
+        PHASE 10 §24 — THE ACCOUNTING EXPORT.
+
+        A PLAIN GET FORM, deliberately. The browser turns it into a download
+        with no JavaScript at all, which is what an accountant on a locked-down
+        machine actually gets to use. The period is required and bounded by the
+        route; a whole commercial record in one unbounded file is a query nobody
+        bounded.
+      */}
+      <CustomerCard title={t('billing.export')} testId="accounting-export-card">
+        <p style={mutedStyle}>{t('billing.exportNote')}</p>
+        <form
+          action="/api/billing/export"
+          method="get"
+          data-testid="accounting-export-form"
+          style={{
+            display: 'flex',
+            gap: spacingTokens.md,
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            marginBlockStart: spacingTokens.sm,
+          }}
+        >
+          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+            <label htmlFor="export-from" style={{ ...typographyTokens.caption }}>
+              {t('billing.exportFrom')}
+            </label>
+            <input
+              id="export-from"
+              name="from"
+              type="date"
+              required
+              defaultValue={defaultExportFrom}
+              data-testid="export-from"
+            />
+          </div>
+          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+            <label htmlFor="export-to" style={{ ...typographyTokens.caption }}>
+              {t('billing.exportTo')}
+            </label>
+            <input
+              id="export-to"
+              name="to"
+              type="date"
+              required
+              defaultValue={defaultExportTo}
+              data-testid="export-to"
+            />
+          </div>
+          <button type="submit" data-testid="export-submit">
+            {t('billing.exportSubmit')}
+          </button>
+        </form>
       </CustomerCard>
 
       {mayManage && subscription && !subscription.cancelAtPeriodEnd ? (

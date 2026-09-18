@@ -201,6 +201,38 @@ export async function requireWorkspace(
   return { customer, workspace, token };
 }
 
+/**
+ * The same resolution as `requireWorkspace`, for a ROUTE HANDLER.
+ *
+ * WHY IT CANNOT REUSE `requireWorkspace`. That function redirects, which is
+ * correct for a page and wrong for a fetch: a browser following a 307 to the
+ * sign-in HTML instead of receiving a 401 turns an expired session into a
+ * parse error. This returns null and lets the caller choose the status.
+ *
+ * EVERYTHING ELSE IS IDENTICAL, including the parts that matter: the workspace
+ * comes from the SESSION and never from the URL or a body, membership is
+ * re-verified on this request, and a missing permission resolves to null so the
+ * caller answers 404 rather than 403 (docs/SECURITY.md §2.3).
+ */
+export async function resolveApiWorkspace(
+  permissionKey?: string,
+): Promise<WorkspaceSession | null> {
+  const customer = await getCustomer().catch(() => null);
+  if (!customer) return null;
+  const token = (await getSessionToken()) ?? '';
+  const available = await getCustomerAuth()
+    .listWorkspaces(token)
+    .catch(() => null);
+  if (available === null || available.length === 0) return null;
+
+  const workspace = customer.activeWorkspaceId
+    ? available.find((w) => w.workspaceId === customer.activeWorkspaceId)
+    : undefined;
+  if (!workspace) return null;
+  if (permissionKey && !workspace.permissionKeys.includes(permissionKey)) return null;
+  return { customer, workspace, token };
+}
+
 /** The membership-service actor shape, built in one place so none is partial. */
 export function membershipActor(session: WorkspaceSession): {
   userId: string;

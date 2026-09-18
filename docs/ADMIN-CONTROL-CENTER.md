@@ -721,3 +721,72 @@ silently lost.
 `integrations.payment` exists and is empty. D-204 leaves the choice to the owner; the only adapter
 registered is the development one, and it is refused in production. Phase 10 selects the vendor,
 stores its credentials through the Secret Service, and adds it to `commerce.providerRouting`.
+
+---
+
+## 22. Phase 10 — the Integrations Hub
+
+### 22.1 What it replaced
+
+Before this screen, an owner configuring BrandSpace had to know that AI providers lived under
+`ai.providers`, social applications under `integrations.social-apps`, payments, email, storage and
+observability under four `integrations.*` domains, and every credential on a separate Secrets page.
+Six screens and a mental map. **Integrations** is the map.
+
+### 22.2 It is generated, not hand-written
+
+The screen is built from `INTEGRATION_DEFINITIONS` in `@brandspace/integrations`. Adding a provider is a
+registry entry plus its adapter; no page changes. That is also what makes §4's promise checkable rather
+than aspirational: **the Hub lists only providers BrandSpace has an adapter for**, so "configure and
+activate it from the Control Center" is true of every row it shows.
+
+**Every provider in the registry today is a development double, and every row says so.** That is the
+honest state of the platform at the end of Phase 10: the contracts, the routing, the accounting and the
+screens are finished, and no production vendor has been chosen. There is deliberately no generic
+arbitrary-HTTP provider — one would let an owner point payment webhooks at an unvalidated endpoint and
+call it compatibility.
+
+### 22.3 Per provider
+
+| Shown                          | Read from                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| Provider, adapter, environment | The registry                                                                    |
+| Enabled / disabled             | The category's configuration domain, active version                             |
+| Configuration completeness     | Required credentials and settings, compared against what is stored              |
+| Masked credential status       | The Secret Service — a hint, a fingerprint, a rotation date                     |
+| Connection status              | `integration_health_check`, newest first                                        |
+| Last success / last failure    | The same table                                                                  |
+| Declared capabilities          | The registry, because §4 says capabilities are declared and never assumed equal |
+| Verification history           | Every attempt, including refusals and never-attempted                           |
+
+**A credential is never readable again.** There is no reveal operation anywhere in this product — not
+hidden behind a permission, absent. An owner confirms "same key" from the fingerprint, which is what
+they actually need, and a database dump yields nothing.
+
+### 22.4 Testing is not activating
+
+**Test Connection** writes an `integration_health_check` row and changes nothing about what serves
+traffic. It uses minimal billable usage, reports a sentence rather than a credential or a raw provider
+error, and records the outcome — including the refusals and the attempts that never left the platform,
+because "we never tried" is an answer the next operator needs.
+
+**Activate / Disable** goes through `ConfigurationService` — draft, validate, activate — exactly like
+every other configuration change. That is not ceremony: it is what gives an activation an author, a
+change reason of at least eight characters, a validation pass, an audit event, a version history and a
+rollback. A second write path would have had none of those, and §3's requirement that integration
+changes obey the existing Platform Admin security model would have been a comment rather than a fact.
+
+**A development double cannot be activated in production.** The refusal lives in `selectionRefusal()`
+so every caller — the screen, the action, the readiness check — asks one function, and the screen shows
+the REASON rather than a disabled button, because a disabled button teaches nothing.
+
+### 22.5 Routing, catalogue and health
+
+- **Routing** shows the active profile and what each one does, every capability with the models
+  eligible to serve it, and — for each declared model — the verdict from the same function the router
+  uses, so an operator can see WHY a model is excluded rather than inferring it from a modality column.
+- **Health** shows the readiness verdict `evaluateHealth()` produces, which is the same one
+  `/health/ready` returns, plus the operator detail the public endpoint withholds.
+- **The console overview** carries readiness, the degraded capabilities and the count of production
+  integration gaps. It used to carry a card promising that "operational indicators appear here once
+  telemetry is wired in a later phase"; Phase 10 is that phase, so the promise is replaced by the thing.

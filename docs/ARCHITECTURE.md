@@ -483,7 +483,7 @@ The design above is unchanged; these are the concrete details a reader needs whe
 **Nineteen domains ship** (seventeen in Phase 2A, two added in Phase 3), named as they appear in
 `packages/config/src/domains.ts`:
 
-`ai.providers` · `ai.models` · `ai.model-capabilities` · `ai.routing` · `ai.credit-rules` · `plans` ·
+`ai.providers` · `ai.models` · `ai.routing` · `ai.capability-routing` · `ai.credit-rules` · `plans` ·
 `entitlements` · `feature-flags` · **`credits`** · **`beta-cohorts`** · `usage-limits` ·
 `integrations.email` · `integrations.storage` · `integrations.payment` · `integrations.observability` ·
 `integrations.social-apps` · `templates` · `website` · `operations`.
@@ -945,3 +945,68 @@ A real hosted checkout is a page on the PROVIDER's domain. The development one i
 return are all exercised across an origin boundary rather than simulated inside one process. It is
 not registered at all when `APP_ENV=production` — the route does not exist rather than existing and
 refusing.
+
+---
+
+## Phase 10 — platform completion
+
+### The Integrations Hub is a VIEW, not a store
+
+`packages/integrations` describes every external system BrandSpace can be connected to — category,
+supported environments, declared capabilities, credential fields, whether an adapter exists — and the
+Control Center's Integrations screen is generated from it. Adding a provider is an entry plus an
+adapter, and no screen changes.
+
+It **owns nothing**. It joins three sources that already existed and keeps them where they were:
+
+| Source                     | Holds                                                               | Why it stays there                                                                                  |
+| -------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| The configuration service  | Which provider is selected, its settings, its credential REFERENCES | Versioning, validation, activation, rollback and audit already live there                           |
+| The Secret Service         | Masked metadata — a hint, a fingerprint, a rotation date            | It is the only decrypt path, and the Hub never uses it                                              |
+| `integration_health_check` | What happened the last time we called a provider                    | An observation is not a setting; versioning it would make every health check a configuration change |
+
+**It imports no adapter, deliberately.** Reaching a provider means running one, and importing
+`ai-gateway`, `billing`, `social-connectors` and `storage` would put this package at the centre of the
+dependency graph — and let a Control Center screen reach a customer OAuth token. The caller injects an
+`IntegrationTester`, which `apps/admin` wires once in `src/server/integration-tester.ts`.
+
+**Boundary:** `integrations: ['shared', 'database', 'config', 'secrets']`. It is one of only three
+packages permitted to name the Secret Service, and a unit test asserts it never calls `resolveSecret`.
+
+### The AI capability layer sits BENEATH the task rules
+
+Resolution order, in full:
+
+```
+workspace task rule  ->  plan task rule  ->  global task rule  ->  capability route  ->  refuse
+```
+
+A task rule still wins outright, so every route written before Phase 10 resolves exactly as it did. The
+capability layer answers when nobody wrote one, and it never guesses: every model it considers has been
+DECLARED for the capability by an operator and has the feature flags the capability requires.
+
+`packages/config` carries a deliberate COPY of the capability requirement table, because the dependency
+runs `ai-gateway -> config` and activation must be able to refuse an impossible route. A unit test
+asserts the copy matches its source field for field — the same discipline the modality enum has had
+since Phase 4.
+
+### One question, one answer
+
+Phase 10 removed three duplications that had each become a place for the platform to disagree with
+itself:
+
+- **`currentEnvironment()`** existed twelve times, one private copy per file. The production rule is only
+  as strong as the weakest copy of the question it depends on; it now lives in `@brandspace/shared`.
+- **`ai.model-capabilities`** described the same models as `ai.models` in a second document nothing read.
+  Its fields moved into the catalogue and the domain is gone.
+- **`@brandspace/providers`** held Phase 2A provider contracts and fake adapters that nothing imported —
+  and the admin health page was listing those fakes as though they were the platform inventory. The
+  package is removed.
+
+### Health is evaluated in one place and rendered in two
+
+`evaluateHealth()` in `@brandspace/observability` decides what a set of probe answers means. `/health/ready`
+and the Control Center health screen both feed it, so an orchestrator and an operator cannot reach
+different verdicts. The public endpoint answers with a state per named check and no detail; the screen
+adds the database role, the collector host and the reason a category is unconfigured, behind a platform
+session.

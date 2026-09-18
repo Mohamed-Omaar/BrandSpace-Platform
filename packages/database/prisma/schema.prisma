@@ -5678,7 +5678,11 @@ model IntegrationHealthCheck {
 
   /// The Hub asks one question constantly: "what is the latest result for this
   /// provider in this environment?" This index is that question.
-  @@index([category, providerKey, environment, checkedAt(sort: Desc)])
+  /// NAMED EXPLICITLY, because the generated name would be truncated to
+  /// `integration_health_check_category_providerKey_environment_c_idx` and the
+  /// migration writes a readable one. A name that differs between the schema
+  /// and the migration is drift, and the drift check is how it was found.
+  @@index([category, providerKey, environment, checkedAt(sort: Desc)], map: "integration_health_check_lookup_idx")
   @@index([checkedAt])
   @@map("integration_health_check")
 }

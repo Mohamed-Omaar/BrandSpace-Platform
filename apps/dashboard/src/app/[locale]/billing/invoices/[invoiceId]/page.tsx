@@ -182,6 +182,32 @@ export default async function InvoicePage({
         </CustomerCard>
       ) : null}
 
+      {/*
+        PHASE 10 §23 — THE DOCUMENT, and the two ways to take it away.
+        `billing.invoicePrint` had existed as a translation key since Phase 9
+        with nothing rendering it: the document existed and there was no way to
+        reach it, which is precisely the unreachable-feature case §16 asks for.
+      */}
+      <CustomerCard title={t('billing.invoiceDocument')} testId="invoice-document-links">
+        <p style={mutedStyle}>{t('billing.invoiceDocumentNote')}</p>
+        <p style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap', margin: 0 }}>
+          <Link
+            href={`/${locale}/billing/invoices/${invoice.id}/document`}
+            data-testid="invoice-open-document"
+            style={{ ...typographyTokens.bodySm, color: colorTokens.brandPurple }}
+          >
+            {t('billing.invoicePrint')}
+          </Link>
+          <a
+            href={`/api/billing/invoices/${invoice.id}/pdf?locale=en`}
+            data-testid="invoice-download-pdf"
+            style={{ ...typographyTokens.bodySm, color: colorTokens.brandPurple }}
+          >
+            {t('billing.invoicePdf')}
+          </a>
+        </p>
+      </CustomerCard>
+
       <p>
         <Link
           href={`/${locale}/billing`}

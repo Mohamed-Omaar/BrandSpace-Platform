@@ -2915,3 +2915,102 @@ Four further properties, each asserted rather than described:
 The dunning escalation ends at SUSPENDED. Nothing in the billing path deletes a customer resource, at
 any point, under any configuration — and the audit event records `dataRetained: true` explicitly so
 it cannot be misread later as a deletion. Export remains available throughout.
+
+---
+
+## 39. Phase 10 — the headers, the contract, and what refuses in production
+
+### 39.1 Content-Security-Policy was the control this platform did not have
+
+`nosniff` and `X-Frame-Options` cover the two easiest attacks. Neither does anything about an injected
+script, which is the one that reads a session, exfiltrates a workspace or drives a server action as the
+signed-in user. Phase 10 adds a CSP to all three applications, with a **per-request nonce**.
+
+```
+default-src 'self'
+script-src 'self' 'nonce-<per request>' 'strict-dynamic'
+style-src 'self' 'unsafe-inline'
+style-src-attr 'unsafe-inline'
+img-src 'self' data: blob:
+connect-src 'self'
+object-src 'none'
+base-uri 'self'
+form-action 'self'
+frame-ancestors 'none'
+upgrade-insecure-requests
+```
+
+**It lives in middleware, not `next.config.mjs`.** The nonce has to be minted per request, and Next.js
+reads the CSP off the INCOMING request headers to stamp that nonce onto its own inline bootstrap
+scripts. A static `headers()` block would produce a policy that blocks the framework's own scripts.
+
+**`'strict-dynamic'` is why the nonce is worth having.** A script the nonce admits may load the chunks
+it needs, so the policy survives a bundle change rather than needing a new host in an allow-list every
+time a file moves.
+
+**`style-src` still carries `'unsafe-inline'`, and the reason is stated rather than hidden.** This
+product styles through React `style` objects, which become style ATTRIBUTES, and CSP has no nonce
+mechanism for those. `style-src-attr` scopes the allowance to attributes rather than blessing arbitrary
+`<style>` blocks. Removing it is a design-system rewrite, not a security fix, and claiming a stricter
+policy than the one actually sent would help nobody.
+
+**The three directives whose absence is the classic gap are all closed.** Without `object-src 'none'` a
+plugin vector stays open; without `base-uri 'self'` an injected `<base>` redirects every relative
+script; without `form-action 'self'` an injected form posts a customer's input to somebody else's
+server. None of the three is visible by reading the string, which is why a unit test asserts each one.
+
+**A test also loads a real page and requires no CSP console violation.** A policy that blocks the
+framework's bootstrap produces a page that renders and does nothing — and every header assertion would
+still pass.
+
+### 39.2 Nothing behind a session is cacheable
+
+`private, no-store, max-age=0, must-revalidate` on every dashboard and Control Center response. Both
+directives are needed because different things read each: a shared proxy obeys `private`, a browser's
+back/forward cache obeys `no-store`. The classic disclosure is sign out, press Back, and read the
+previous customer's invoices on a shared machine.
+
+`Strict-Transport-Security` is sent **in production only**. Over http it means nothing, and from a
+developer's machine it would pin `localhost` to https in their browser for two years.
+
+### 39.3 The environment contract is now actually run
+
+`parseEnv` and the schema behind it have been in this repository since Phase 1, and until Phase 10 the
+only thing that ever called them was a unit test. Every guarantee in that file — the two session realms
+differing, no placeholder secret, the platform pool being a different role — was asserted against a
+fixture and enforced nowhere.
+
+`validateStartupConfiguration()` runs as `apps/api` and `apps/worker` come up. **In production it
+throws and the process does not start; outside production it logs and continues**, because a developer
+with half an environment should get a readable warning and a running process.
+
+Production additionally requires:
+
+- **All three key domains present and DIFFERENT.** Sharing one collapses three blast radii into one, and
+  the whole point of D-136 and D-206 is that a leaked key unwraps one thing.
+- **No secret carrying a template or CI marker** — `REPLACE_WITH`, `change-me`, `ci-only`, `example`.
+  A value copied out of `.env.example` is not a secret, and finding that out at the first sign-in is
+  finding out too late.
+- **No `BILLING_DEV_WEBHOOK_SECRET`.** Its only consumer cannot run in production, so its presence means
+  a production environment was assembled by copying a development one — and the next thing copied might
+  not be harmless.
+- **https on the public URLs.**
+
+### 39.4 Five development doubles that refuse
+
+| Double                          | Refuses at            | What it prevents                                                   |
+| ------------------------------- | --------------------- | ------------------------------------------------------------------ |
+| The deterministic AI provider   | Its constructor       | Invented marketing copy served as though a model wrote it          |
+| The outbox email provider       | Its constructor       | `status: 'SENT'` for a verification link nobody will ever receive  |
+| The filesystem object store     | Its factory           | Uploads on local disk, lost the first time an instance is replaced |
+| The development payment adapter | Route registration    | A mock checkout page existing at any URL in production             |
+| The mock social connectors      | Registry construction | A post marked `PUBLISHED` with an external id pointing at nothing  |
+
+**Refusing at the CONSTRUCTOR rather than at registration is the point** for the first two. Registration
+was already conditional for the AI mock in three separate files, which is three places to add a fourth
+and get it wrong.
+
+**And an unconfigured AI request fails closed correctly**, which is the part a unit test cannot show:
+with no adapter registered, routing still resolves and the pipeline still reserves — then the chain
+finds nothing to call, the request fails, the reservation is released and no ledger row is written. A
+failed provider request never results in a deduction (CLAUDE.md §2.4), including this failure.

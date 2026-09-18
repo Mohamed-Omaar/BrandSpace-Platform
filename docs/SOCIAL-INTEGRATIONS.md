@@ -617,3 +617,37 @@ class even there: a `TIMEOUT` that exhausted its attempts is still a post that m
 `createMany({ skipDuplicates: true })` — `INSERT ... ON CONFLICT DO NOTHING`. The conflict is
 resolved inside PostgreSQL, the losing sweep inserts nothing and raises nothing, and `created` is the
 number of rows that actually landed rather than the number a non-atomic check predicted.
+
+---
+
+## 16. Phase 10 — where a developer application is configured
+
+### 16.1 Two different things, and they must not merge
+
+| Platform Integrations                                     | Workspace Social Accounts                                           |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| BrandSpace's OWN developer application with each platform | A customer's own Facebook, Instagram, TikTok, LinkedIn or X account |
+| Configured by the platform owner, once                    | Authorized by each customer, per workspace                          |
+| App id, client secret, redirect URI, webhook secret       | An OAuth token, sealed in the CUSTOMER token vault (D-136)          |
+| `integrations.social-apps`, platform-owned                | `social_connection`, tenant-owned and RLS-protected                 |
+| Platform Admin → Integrations → Social platforms          | Dashboard → Social Accounts                                         |
+
+**The customer's token never enters the platform integration record**, and the platform credential is
+never reachable from a tenant surface. They are different key domains for exactly this reason: the
+publish worker must unwrap a customer token and must never be able to unwrap a platform credential.
+
+### 16.2 What Phase 10 added, and what it did not
+
+**Added:** the developer application now has a first-class configuration home in the Integrations Hub,
+with a declared capability set, connection status, verification history and a copyable callback URL to
+paste into the platform's own console.
+
+**Not added, deliberately:** no real developer application is registered, and no real credential exists
+anywhere in this repository. Registration requires business verification and app review with each
+platform — an owner-driven process measured in weeks (D-18, D-19) — and it is the SECOND of the three
+post-completion activation stages, after AI and before payments.
+
+**Production still refuses the mock connectors.** `createConnectorRegistry` has never handed back a
+mock in a production environment, because a registry that did would accept publish jobs, mark them
+`PUBLISHED` and store an external id pointing at nothing. Phase 10 left that unchanged and put the same
+refusal in the Hub, so the screen and the pipeline agree.

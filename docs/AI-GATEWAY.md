@@ -788,3 +788,71 @@ Analytics ingestion consumes **no AI credits**. It is network and database work 
 charging for it would make a customer's bill depend on how often this product polls, which is our decision
 and not theirs. It shares the provider rate-limit budget with publishing and reserves headroom for it:
 a chart refreshing must never delay a post going out.
+
+---
+
+## 17. Phase 10 — capabilities, the catalogue and routing profiles
+
+### 17.1 A task is what the product wants; a capability is what a model must be able to do
+
+Until Phase 10 those were one vocabulary. The cost of that was two things at once: an operator
+configured models one FEATURE at a time, and routing could only check MODALITY — which cannot tell a
+vision model from a plain text model, because both are `text`.
+
+`AI_CAPABILITIES` names the missing noun. Each entry declares:
+
+| Field                 | Means                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `executionModality`   | Which adapter method serves it — the EXISTING modality vocabulary, unchanged       |
+| `inputModality`       | What the caller supplies                                                           |
+| `outputModality`      | What comes back                                                                    |
+| `requires`            | Feature flags a model MUST declare before it may serve this capability             |
+| `outputDominatesCost` | Whether output length or input length drives the bill, read by the Economy profile |
+
+The ten capabilities are `TEXT_LIGHT`, `CONTENT_STANDARD`, `REASONING_COMPLEX`, `IMAGE_GENERATION`,
+`VISION_ANALYSIS`, `EMBEDDINGS`, `SPEECH_TO_TEXT`, `TEXT_TO_SPEECH`, `VIDEO_GENERATION` and
+`MODERATION`. Several have no consuming task yet; the Control Center says which do, so an unrouted
+capability nothing calls does not read as a broken product.
+
+### 17.2 Two conditions, and both are required
+
+A model may serve a capability only when:
+
+1. **An operator DECLARED it** on the model in `ai.models`, and
+2. **The model's feature flags satisfy what the capability requires.**
+
+The first alone would let a tick box promote a text model to image generation. The second alone would
+route to any model that happened to carry the right flags, which is not the same as one an operator
+chose.
+
+**Checked twice, at activation and at request time.** Activation must check because discovering an
+impossible route on a customer request means the customer discovers it too; the router must check
+because a model can be disabled after a route was activated.
+
+**A fallback is held to exactly the same standard as a primary.** That is the rule Phase 10 exists to
+make enforceable: a text-only fallback quietly serving an image request is the failure a modality
+check does not catch.
+
+### 17.3 Profiles rank; they never admit
+
+Economy, Balanced and Premium are **ranking rules over the catalogue the owner entered**, never saved
+lists of model keys — a list of vendors in source is what CLAUDE.md §2.2 forbids.
+
+| Profile    | Orders by                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| `economy`  | Cheapest first, weighted toward whichever token price actually drives this capability's bill |
+| `premium`  | Highest quality tier first, price as the tie-break                                           |
+| `balanced` | Quality first when the capability DECLARES a requirement, cheapest otherwise                 |
+| `custom`   | No ranking. The route table is the answer, and a capability with no primary is unavailable   |
+
+Balanced's split comes from the capability's own `requires` rather than a hard-coded list of capability
+names, so a new capability that needs structured output is treated correctly the day it is added.
+
+**An explicit primary on a route overrides the strategy for that one capability**, under every profile.
+An override a ranking could outvote would not be one.
+
+### 17.4 Historical cost is never recalculated
+
+`ai_usage_ledger` stores the cost basis the request was charged under. The catalogue's
+`pricingEffectiveFrom` is the OPERATOR-FACING record of when the current rates were entered — a date a
+margin report that moves can point at — and is deliberately not an input to any calculation (D-213).
