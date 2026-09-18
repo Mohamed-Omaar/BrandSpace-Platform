@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AppError } from '@brandspace/shared';
 
 /**
  * THE INTEGRATIONS REGISTRY — Phase 10 §2 and §4.
@@ -151,6 +152,17 @@ export interface IntegrationField {
   readonly helpAr?: string;
   /** A URL the owner copies INTO the provider's own console (a callback). */
   readonly copyable?: boolean;
+  /**
+   * BrandSpace COMPUTES this value; the owner never types it.
+   *
+   * A callback or webhook URL is ours — it is where our own route lives — and
+   * an input for it is an invitation to point a payment webhook somewhere else.
+   * A generated field renders read-only and copyable, and `parseSettingsInput`
+   * below discards whatever a form submitted for it (Phase 10 correction §10).
+   */
+  readonly generated?: boolean;
+  /** How the value is validated. `url` refuses anything `new URL()` rejects. */
+  readonly kind?: 'text' | 'url';
 }
 
 /** What an integration can do, declared rather than assumed (§4). */
@@ -263,12 +275,30 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
     ],
     settingFields: [
       {
+        /*
+         * A REAL CONSTRUCTOR PARAMETER of `DevelopmentPaymentProvider`, not a
+         * field invented to give the form something to show. The adapter needs
+         * somewhere to host its checkout page, and before this correction that
+         * value was read from an environment variable while the Hub claimed to
+         * manage the provider.
+         */
+        key: 'hostedBaseUrl',
+        labelEn: 'Hosted checkout base URL',
+        labelAr: 'الرابط الأساسي لصفحة الدفع',
+        secret: false,
+        required: true,
+        kind: 'url',
+        helpEn: 'Where the provider hosts its checkout page. The customer is sent here to pay.',
+        helpAr: 'المكان الذي يستضيف فيه المزود صفحة الدفع. يُرسَل العميل إليه ليدفع.',
+      },
+      {
         key: 'webhookUrl',
         labelEn: 'Webhook URL',
         labelAr: 'رابط الويب هوك',
         secret: false,
         required: false,
         copyable: true,
+        generated: true,
         helpEn:
           'Give this to the provider. BrandSpace only ever believes a signed event sent here.',
         helpAr: 'أعطِ هذا الرابط للمزود. لا يصدّق BrandSpace إلا حدثًا موقَّعًا يصل إليه.',
@@ -398,4 +428,133 @@ export function settingsSchemaFor(definition: IntegrationDefinition) {
     shape[field.key] = field.required ? base.min(1) : base.optional();
   }
   return z.object(shape);
+}
+
+/**
+ * WHICH SECRET CATEGORY an integration's credentials belong to.
+ *
+ * The Secret Service classifies every secret, and a credential saved from the
+ * Hub must land in the same category an operator would have chosen by hand on
+ * the Secrets page — otherwise the two screens disagree about what exists.
+ */
+const SECRET_CATEGORY_BY_INTEGRATION: Readonly<Record<IntegrationCategory, string>> = {
+  ai: 'ai_provider',
+  social: 'social_oauth_app',
+  payment: 'payment_provider',
+  email: 'email_provider',
+  storage: 'object_storage',
+  observability: 'observability',
+};
+
+export function secretCategoryFor(category: IntegrationCategory): string {
+  return SECRET_CATEGORY_BY_INTEGRATION[category];
+}
+
+/**
+ * The stable reference a credential is stored under.
+ *
+ * DETERMINISTIC ON PURPOSE. Rotation has to find the secret the owner saved
+ * last time, and a random ref would leave the previous one orphaned in the
+ * vault while the configuration pointed at a new one — two secrets, one slot,
+ * and no way to tell which is live. The environment is part of the ref because
+ * the Secret Service is keyed on `(ref, environment)`: the same provider in
+ * staging and production is two secrets that must never be confused.
+ *
+ * Every component comes from the REGISTRY, never from a form.
+ */
+export function integrationSecretRef(
+  definition: IntegrationDefinition,
+  environment: IntegrationEnvironment,
+  fieldKey: string,
+): string {
+  return `integration/${definition.category}/${definition.providerKey}/${environment.toLowerCase()}/${fieldKey}`;
+}
+
+/** The setting fields an owner may actually type into. */
+export function editableSettingFields(
+  definition: IntegrationDefinition,
+): readonly IntegrationField[] {
+  return definition.settingFields.filter((field) => field.generated !== true);
+}
+
+export interface SettingsParseResult {
+  readonly settings: Readonly<Record<string, string>>;
+  /** Keys the form submitted that this provider does not declare. */
+  readonly ignored: readonly string[];
+}
+
+/**
+ * Turn whatever a form submitted into exactly the settings this provider declares.
+ *
+ * THE REGISTRY DECIDES, NOT THE FORM — the Phase 10 correction's §4 rule, made
+ * mechanical. The loop walks the DECLARED fields and reads each one out of the
+ * submission; it never walks the submission. So an extra key is not a
+ * vulnerability to be blocklisted, it is simply never looked at, and the
+ * `ignored` list exists so a caller can say so out loud rather than pretending
+ * it saved something it dropped.
+ *
+ * GENERATED FIELDS ARE NOT READ AT ALL. A webhook URL is ours; accepting one
+ * from a form is how a payment callback ends up pointing at somebody else.
+ */
+export function parseSettingsInput(
+  definition: IntegrationDefinition,
+  submitted: Readonly<Record<string, unknown>>,
+): SettingsParseResult {
+  const settings: Record<string, string> = {};
+  const declared = new Set(definition.settingFields.map((field) => field.key));
+
+  for (const field of editableSettingFields(definition)) {
+    const raw = submitted[field.key];
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (value === '') {
+      if (field.required) {
+        throw new AppError('VALIDATION_FAILED', `"${field.labelEn}" is required.`);
+      }
+      continue;
+    }
+    if (value.length > 2048) {
+      throw new AppError('VALIDATION_FAILED', `"${field.labelEn}" is too long.`);
+    }
+    if (field.kind === 'url' && !isHttpUrl(value)) {
+      throw new AppError('VALIDATION_FAILED', `"${field.labelEn}" must be an http(s) URL.`);
+    }
+    settings[field.key] = value;
+  }
+
+  const ignored = Object.keys(submitted).filter((key) => !declared.has(key));
+  return { settings, ignored };
+}
+
+/**
+ * Turn whatever a form submitted into the credential values to write.
+ *
+ * AN ABSENT FIELD IS "LEAVE IT ALONE", NOT "CLEAR IT". The form cannot
+ * pre-populate a secret — nothing in this product can read one back — so an
+ * empty box means the owner did not touch that credential, and treating it as a
+ * deletion would wipe a working key every time somebody edited a URL.
+ */
+export function parseCredentialInput(
+  definition: IntegrationDefinition,
+  submitted: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, string>> {
+  const values: Record<string, string> = {};
+  for (const field of definition.credentialFields) {
+    const raw = submitted[field.key];
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (value === '') continue;
+    if (value.length > 8192) {
+      throw new AppError('VALIDATION_FAILED', `"${field.labelEn}" is too long.`);
+    }
+    values[field.key] = value;
+  }
+  return values;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

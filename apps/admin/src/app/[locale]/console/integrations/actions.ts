@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
+  editableSettingFields,
   findIntegration,
   findIntegrationCategory,
   selectionRefusal,
@@ -13,6 +14,7 @@ import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '
 import { withSpan } from '@brandspace/observability';
 import {
   currentEnvironment,
+  generatedSettingsFor,
   getConfigService,
   getIntegrationsService,
   requirePlatformActor,
@@ -78,6 +80,74 @@ function target(formData: FormData): {
     throw new AppError('NOT_FOUND', 'Unknown integration.');
   }
   return { locale, category, providerKey, environment: currentEnvironment() };
+}
+
+/**
+ * Save this provider's settings and credentials from the Hub itself.
+ *
+ * THE CORRECTION THIS EXISTS FOR. Before it, an owner who wanted to connect a
+ * provider was told to go to the Configuration page to create its record and to
+ * the Secrets page to set its key, then come back. Neither of those pages knows
+ * what an integration is. This action is the one door, and everything behind it
+ * is unchanged: `IntegrationsService.saveConfiguration` writes secrets through
+ * the Secret Service and settings through the Configuration Service, and can
+ * change neither the provider's status nor which provider is active.
+ *
+ * TWO AUTHORITIES, BOTH REQUIRED, AND NEITHER WEAKENED FOR CONVENIENCE (§7).
+ * `platform.configuration.manage` is checked here for the configuration edit;
+ * `platform.secret.manage` AND verified MFA are checked inside the Secret
+ * Service for every credential written. A role that may edit configuration but
+ * not manage secrets can still save a URL and is still refused a key — which is
+ * the existing model working, not a new one.
+ */
+export async function saveIntegrationConfigurationAction(formData: FormData): Promise<void> {
+  const { locale, category, providerKey, environment } = target(formData);
+  let destination: string;
+
+  try {
+    const actor = await requirePlatformActor('platform.configuration.manage');
+    const definition = findIntegration(category, providerKey);
+    /* c8 ignore next -- `target` already refused an unknown pair. */
+    if (!definition) throw new AppError('NOT_FOUND', 'Unknown integration.');
+
+    /*
+     * READ ONLY THE DECLARED FIELDS OUT OF THE FORM. The registry decides what
+     * exists; an extra input in a crafted POST is never looked at, so there is
+     * no allow-list to keep in step with the form.
+     */
+    const settings: Record<string, string> = {};
+    for (const field of editableSettingFields(definition)) {
+      const value = formData.get(`setting.${field.key}`);
+      if (typeof value === 'string') settings[field.key] = value;
+    }
+    const credentials: Record<string, string> = {};
+    for (const field of definition.credentialFields) {
+      const value = formData.get(`credential.${field.key}`);
+      if (typeof value === 'string') credentials[field.key] = value;
+    }
+
+    await withSpan(
+      'integration.save',
+      { 'integration.category': category, 'integration.provider': providerKey },
+      async () =>
+        getIntegrationsService().saveConfiguration({
+          actor: serviceActor(actor),
+          category,
+          providerKey,
+          environment,
+          settings,
+          credentials,
+          generatedSettings: generatedSettingsFor(definition),
+          reason: String(formData.get('reason') ?? ''),
+        }),
+    );
+
+    destination = backTo(locale, category, providerKey, { ok: 'CONFIGURATION_SAVED' });
+  } catch (error: unknown) {
+    destination = failure(locale, category, providerKey, error);
+  }
+  revalidatePath(`/${locale}/console/integrations`);
+  redirect(destination);
 }
 
 export async function testIntegrationAction(formData: FormData): Promise<void> {
@@ -208,10 +278,17 @@ async function applyState(input: {
     const providers = (next['providers'] ?? []) as Record<string, unknown>[];
     const existing = providers.find((p) => p['key'] === input.providerKey);
     if (!existing) {
+      /*
+       * STILL A REFUSAL, BUT A DIFFERENT ONE, and the difference is the whole
+       * correction. It no longer sends the owner to another page: Save
+       * Configuration on this page creates the record. What it will not do is
+       * invent a record as a side effect of pressing Activate, because a
+       * provider activated with no base URL and no key is a provider that fails
+       * on its first real request.
+       */
       throw new AppError(
         'VALIDATION_FAILED',
-        'This provider has no record in ai.providers yet. Create it on the Configuration page first, ' +
-          'where its base URL and eligibility gates are entered.',
+        'Save this provider\u2019s settings and credentials first. Activating creates nothing.',
       );
     }
     existing['status'] = status;
@@ -221,8 +298,7 @@ async function applyState(input: {
     if (!existing) {
       throw new AppError(
         'VALIDATION_FAILED',
-        'This platform has no registered application yet. Add it on the Configuration page first, ' +
-          'where the app id, redirect URI and secret references are entered.',
+        'Save this platform\u2019s application details first. Activating creates nothing.',
       );
     }
     existing['status'] = status;

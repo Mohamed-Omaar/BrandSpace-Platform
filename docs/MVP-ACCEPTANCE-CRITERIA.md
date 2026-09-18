@@ -1109,6 +1109,23 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-39.5 | Activation is a configuration change with an author, a reason, validation, an audit event and a rollback                        | `phase10-platform`                              |
 | AC-39.6 | `integration_health_check` is platform-owned; the tenant role is refused a read, a count and a write                            | `phase10-integrations`                          |
 
+### AC-45 The Hub is the configuration surface, not only the inspection surface (Phase 10 correction, settled)
+
+| ID       | Criterion                                                                                                                              | Settled by                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| AC-45.1  | A provider with an adapter is configured entirely from its own page: enter settings and credentials, save, test, activate              | `phase10-platform`                                                            |
+| AC-45.2  | The form is generated from the registry's `settingFields` and `credentialFields`; a provider declaring neither gets no form            | `integrations-configuration`, `phase10-platform`                              |
+| AC-45.3  | Saving creates the provider's configuration record when none exists, so no visit to the Configuration page is required first           | `phase10-hub-configuration`, `integrations-configuration`                     |
+| AC-45.4  | Credentials are written through the existing Secret Service; the configuration document holds a stable reference and never a value     | `phase10-hub-configuration`                                                   |
+| AC-45.5  | A secret input is write-only and never pre-populated; an empty box leaves the stored credential untouched                              | `integrations-configuration`, `phase10-platform`                              |
+| AC-45.6  | Re-entering a credential rotates it against the same reference, and neither the old nor the new value is recoverable from the page     | `phase10-hub-configuration`, `phase10-platform`                               |
+| AC-45.7  | Save does not activate, and Test does not activate                                                                                     | `integrations-configuration`, `phase10-hub-configuration`, `phase10-platform` |
+| AC-45.8  | Test Connection resolves the saved configuration's references at the adapter boundary, never a process environment variable            | `phase10-hub-configuration`                                                   |
+| AC-45.9  | Undeclared fields and unknown provider keys are refused or never read; a generated field is never taken from a form                    | `integrations-configuration`, `phase10-hub-configuration`                     |
+| AC-45.10 | A credential write requires `platform.secret.manage` and verified MFA; the configuration edit requires `platform.configuration.manage` | `phase10-hub-configuration`                                                   |
+| AC-45.11 | Audit events record the slot, the reference and whether the write was a creation or a rotation — and never a value                     | `phase10-hub-configuration`                                                   |
+| AC-45.12 | The form renders in ar and en, RTL and LTR, with translated labels and no accessibility violation                                      | `phase10-platform`                                                            |
+
 ### AC-40 AI capabilities, catalogue and routing (Phase 10, settled)
 
 | ID      | Criterion                                                                                                           | Settled by                            |

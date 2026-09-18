@@ -208,7 +208,16 @@ test('5 · a campaign is created through the form and appears in the list', asyn
   const channels = page.getByTestId('campaign-channels').locator('input[type="checkbox"]');
   await channels.first().check();
   await page.getByTestId('campaign-submit').click();
-  await page.waitForLoadState('networkidle');
+
+  /*
+   * WAIT FOR THE REDIRECT THE ACTION PERFORMS, not for the network to go quiet.
+   * `networkidle` can observe an already-idle page and resolve before the server
+   * action's POST has even left the browser; the next `goto` then raced the
+   * write and listed the campaigns as they were a moment before this one
+   * existed. The action redirects to the new campaign, so that URL is the write
+   * having finished — a stronger signal, not a looser one.
+   */
+  await page.waitForURL(/\/en\/campaigns\/[0-9a-f-]{36}\?ok=CAMPAIGN_CREATED/);
 
   await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns`);
   const row = page.locator('[data-testid^="campaign-open-"]', { hasText: CAMPAIGN_NAME });

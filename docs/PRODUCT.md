@@ -697,8 +697,15 @@ which is the one a customer actually prints — is complete today.
 ### 14.2 For the platform owner
 
 **Integrations** is new, and it is the screen this product was missing: one place that answers "what is
-this platform connected to". Categories, environments, declared capabilities, masked credentials,
-connection status, verification history, Test Connection, activate and disable.
+this platform connected to" — and the place an owner connects one. Categories, environments, declared
+capabilities, masked credentials, connection status, verification history, and the three operations that
+are deliberately separate: **Save configuration**, **Test connection**, **Activate**.
+
+**Connecting a provider takes one screen.** The provider page renders a form from the fields its adapter
+declares, saves settings through the Configuration Service and credentials through the Secret Service,
+and creates the provider's configuration record if it does not exist yet. The generic Configuration and
+Secrets pages remain for inspection, advanced administration and recovery; neither is a required step
+(D-218).
 
 **Routing** now shows the capability layer: the active profile, every capability with the models
 eligible to serve it, and — for each declared model — WHY it is excluded when it is.

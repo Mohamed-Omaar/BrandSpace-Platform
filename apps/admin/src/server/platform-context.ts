@@ -25,7 +25,7 @@ import {
 } from '@brandspace/entitlements';
 import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
-import { IntegrationsService } from '@brandspace/integrations';
+import { IntegrationsService, type IntegrationDefinition } from '@brandspace/integrations';
 import { currentEnvironment } from '@brandspace/shared';
 
 /**
@@ -72,6 +72,29 @@ export function getIntegrationsService(): IntegrationsService {
     configuration: getConfigService(),
     secrets: getSecretService(),
   });
+}
+
+/**
+ * The setting values BrandSpace computes rather than asks for — correction §10.
+ *
+ * A WEBHOOK URL IS OURS. It is the address of a route in this product, so the
+ * owner's job is to copy it into the provider's console, not to type it into
+ * ours. Rendering it as an input would have been an invitation to point a
+ * payment callback at somebody else's host, and `saveConfiguration` filters this
+ * map by the registry's `generated` flag so a caller cannot smuggle an ordinary
+ * setting through it.
+ */
+export function generatedSettingsFor(
+  definition: IntegrationDefinition,
+): Readonly<Record<string, string>> {
+  const apiBaseUrl = (process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003').replace(
+    /\/+$/,
+    '',
+  );
+  if (definition.category === 'payment') {
+    return { webhookUrl: `${apiBaseUrl}/v1/billing/webhook/${definition.providerKey}` };
+  }
+  return {};
 }
 
 export function getPlatformAuth(): PlatformAuthService {

@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { findIntegration, findIntegrationCategory } from '@brandspace/integrations';
+import {
+  editableSettingFields,
+  findIntegration,
+  findIntegrationCategory,
+} from '@brandspace/integrations';
 import {
   SectionHeader,
   colorTokens,
@@ -16,11 +20,16 @@ import {
 } from '../../../../../../components/console-ui';
 import {
   currentEnvironment,
+  generatedSettingsFor,
   getIntegrationsService,
   requirePageActor,
   serviceActor,
 } from '../../../../../../server/platform-context';
-import { setIntegrationStateAction, testIntegrationAction } from '../../actions';
+import {
+  saveIntegrationConfigurationAction,
+  setIntegrationStateAction,
+  testIntegrationAction,
+} from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +81,10 @@ export default async function IntegrationDetailPage({
   const history = await service.history(category, providerKey, environment, 20);
 
   const mayActivate = actor.permissionKeys.includes('platform.configuration.activate');
+  const mayConfigure = actor.permissionKeys.includes('platform.configuration.manage');
+  const settingInputs = editableSettingFields(definition);
+  const generatedSettings = generatedSettingsFor(definition);
+  const configurableFields = settingInputs.length + definition.credentialFields.length;
   const notice = typeof query['ok'] === 'string' ? query['ok'] : null;
   const errorCode = typeof query['error'] === 'string' ? query['error'] : null;
 
@@ -267,15 +280,189 @@ export default async function IntegrationDetailPage({
           </DataTable>
         )}
         <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-          {isArabic ? 'تُدار القيم من ' : 'Values are managed on '}
+          {isArabic
+            ? 'تُحفظ القيم من هذه الصفحة عبر خدمة الأسرار نفسها، حيث الحفظ والتدوير والإلغاء مُدقّقة. '
+            : 'Values are saved from this page through the same Secret Service, where saving, rotation and revocation are audited. '}
           <Link href={`/${locale}/console/secrets`} style={{ color: colorTokens.brandPurple }}>
-            {isArabic ? 'صفحة الأسرار' : 'the Secrets page'}
+            {isArabic ? 'صفحة الأسرار' : 'The Secrets page'}
           </Link>
           {isArabic
-            ? '، حيث الحفظ والتدوير والإلغاء مُدقّقة.'
-            : ', where saving, rotation and revocation are audited.'}
+            ? ' تبقى للفحص والإدارة المتقدمة والاسترداد.'
+            : ' remains for inspection, advanced administration and recovery.'}
         </p>
       </div>
+
+      {/*
+        THE CONFIGURATION FORM — the Phase 10 correction.
+ 
+        GENERATED FROM THE REGISTRY, never written per provider. Every input
+        below exists because this provider's definition declares the field; a
+        provider that declares nothing gets no form, and a real adapter
+        registered next year gets its own form on the day it is registered
+        without anybody editing this file.
+ 
+        THE SECRET INPUTS ARE WRITE-ONLY. There is no `defaultValue` on any of
+        them and there could not be: nothing in this product can read a stored
+        secret back. An empty box means "leave this credential alone", which is
+        why editing a URL does not wipe a working key.
+      */}
+      {configurableFields > 0 ? (
+        <div style={{ marginBlockStart: spacingTokens.xl }} data-testid="integration-config">
+          <SectionHeader
+            title={isArabic ? 'الإعداد' : 'Configuration'}
+            description={
+              isArabic
+                ? 'تُحفظ الإعدادات في خدمة التهيئة وبيانات الاعتماد في خزنة الأسرار. الحفظ لا يُفعّل.'
+                : 'Settings go to the Configuration Service, credentials to the secret vault. Saving does not activate.'
+            }
+          />
+          {mayConfigure ? (
+            <form action={saveIntegrationConfigurationAction}>
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="category" value={category} />
+              <input type="hidden" name="providerKey" value={providerKey} />
+
+              {settingInputs.map((field) => (
+                <div
+                  key={field.key}
+                  style={{
+                    display: 'grid',
+                    gap: spacingTokens.xs,
+                    marginBlockEnd: spacingTokens.md,
+                  }}
+                >
+                  <label htmlFor={`setting-${field.key}`} style={typographyTokens.caption}>
+                    {isArabic ? field.labelAr : field.labelEn}
+                    {field.required ? ' *' : ''}
+                  </label>
+                  <input
+                    className="bs-control"
+                    id={`setting-${field.key}`}
+                    name={`setting.${field.key}`}
+                    type={field.kind === 'url' ? 'url' : 'text'}
+                    required={field.required}
+                    defaultValue={view.settings[field.key] ?? ''}
+                    style={inputStyle()}
+                    data-testid={`setting-${field.key}`}
+                  />
+                  {field.helpEn ? (
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                      {isArabic ? field.helpAr : field.helpEn}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+
+              {definition.credentialFields.map((field) => {
+                const status = view.credentials.find((c) => c.fieldKey === field.key);
+                return (
+                  <div
+                    key={field.key}
+                    style={{
+                      display: 'grid',
+                      gap: spacingTokens.xs,
+                      marginBlockEnd: spacingTokens.md,
+                    }}
+                  >
+                    <label htmlFor={`credential-${field.key}`} style={typographyTokens.caption}>
+                      {isArabic ? field.labelAr : field.labelEn}
+                      {field.required ? ' *' : ''}
+                    </label>
+                    <input
+                      className="bs-control"
+                      id={`credential-${field.key}`}
+                      name={`credential.${field.key}`}
+                      type="password"
+                      autoComplete="new-password"
+                      // NO defaultValue, and none is possible. A stored secret
+                      // cannot be read back by anything in this product.
+                      required={field.required && status?.present !== true}
+                      style={inputStyle()}
+                      data-testid={`credential-input-${field.key}`}
+                      placeholder={
+                        status?.present
+                          ? isArabic
+                            ? 'اتركه فارغًا للإبقاء على القيمة الحالية'
+                            : 'Leave blank to keep the current value'
+                          : isArabic
+                            ? 'أدخل القيمة'
+                            : 'Enter the value'
+                      }
+                    />
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                      {status?.present
+                        ? isArabic
+                          ? 'محفوظة بالفعل. إدخال قيمة جديدة يستبدلها ويُسجَّل كتدوير.'
+                          : 'Already saved. Entering a new value replaces it and is recorded as a rotation.'
+                        : isArabic
+                          ? field.helpAr
+                          : field.helpEn}
+                    </span>
+                  </div>
+                );
+              })}
+
+              <div
+                style={{ display: 'grid', gap: spacingTokens.xs, marginBlockEnd: spacingTokens.md }}
+              >
+                <label htmlFor="save-reason" style={typographyTokens.caption}>
+                  {isArabic ? 'سبب التغيير' : 'Change reason'}
+                </label>
+                <input
+                  className="bs-control"
+                  id="save-reason"
+                  name="reason"
+                  required
+                  minLength={8}
+                  style={inputStyle()}
+                  data-testid="save-reason"
+                  placeholder={
+                    isArabic ? 'لماذا يتغيّر هذا الآن؟' : 'Why is this changing, in a sentence?'
+                  }
+                />
+              </div>
+
+              <button type="submit" style={primaryButtonStyle()} data-testid="save-configuration">
+                {isArabic ? 'حفظ الإعداد' : 'Save configuration'}
+              </button>
+            </form>
+          ) : (
+            <p role="note" data-testid="configure-forbidden">
+              {isArabic
+                ? 'دورك لا يملك صلاحية تعديل التهيئة، لذا هذه الحقول للعرض فقط.'
+                : 'Your role may not edit configuration, so these fields are read-only here.'}
+            </p>
+          )}
+
+          {/*
+            WHAT BRANDSPACE GENERATES, shown read-only and copyable. A webhook
+            URL is the address of our own route: the owner's job is to paste it
+            into the provider's console, and an input for it would be a way to
+            point a payment callback somewhere else.
+          */}
+          {Object.keys(generatedSettings).length > 0 ? (
+            <DataTable
+              headers={[
+                isArabic ? 'قيمة مُولَّدة' : 'Generated value',
+                isArabic ? 'القيمة' : 'Value',
+              ]}
+            >
+              {definition.settingFields
+                .filter((field) => field.generated === true && generatedSettings[field.key])
+                .map((field) => (
+                  <tr key={field.key} data-testid={`generated-${field.key}`}>
+                    <Cell>{isArabic ? field.labelAr : field.labelEn}</Cell>
+                    <Cell>
+                      <code style={{ fontFamily: fontTokens.mono }}>
+                        {generatedSettings[field.key]}
+                      </code>
+                    </Cell>
+                  </tr>
+                ))}
+            </DataTable>
+          ) : null}
+        </div>
+      ) : null}
 
       <div style={{ marginBlockStart: spacingTokens.xl }}>
         <SectionHeader
@@ -381,6 +568,10 @@ export default async function IntegrationDetailPage({
 
 function noticeText(code: string, isArabic: boolean): string {
   switch (code) {
+    case 'CONFIGURATION_SAVED':
+      return isArabic
+        ? 'تم حفظ الإعداد. لم يُفعَّل شيء.'
+        : 'Configuration saved. Nothing was activated.';
     case 'CONNECTION_TESTED':
       return isArabic ? 'تم الفحص وسُجّلت النتيجة.' : 'Checked, and the result is recorded below.';
     case 'INTEGRATION_ACTIVATED':

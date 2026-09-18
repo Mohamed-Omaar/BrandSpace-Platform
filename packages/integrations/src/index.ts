@@ -9,13 +9,18 @@
  * belong to the packages that own their protocols.
  */
 export {
+  editableSettingFields,
   findIntegration,
   findIntegrationCategory,
   INTEGRATION_CATEGORIES,
   INTEGRATION_CATEGORY_DEFINITIONS,
   INTEGRATION_DEFINITIONS,
   INTEGRATION_ENVIRONMENTS,
+  integrationSecretRef,
   integrationsInCategory,
+  parseCredentialInput,
+  parseSettingsInput,
+  secretCategoryFor,
   selectionRefusal,
   settingsSchemaFor,
 } from './registry';
@@ -26,7 +31,11 @@ export type {
   IntegrationDefinition,
   IntegrationEnvironment,
   IntegrationField,
+  SettingsParseResult,
 } from './registry';
+
+export { applyProviderRecord } from './mapping';
+export type { IntegrationConfigDomain, ProviderRecordWrite } from './mapping';
 
 export { IntegrationsService } from './service';
 export type {

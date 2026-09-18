@@ -703,6 +703,18 @@ than silently succeeding.
   pretending to work — see F-09.
 - **Nothing is logged**: audit events for create, rotate, disable, enable and revoke carry the ref and the
   actor, never the value. The isolation suite searches every raw row of the database for the plaintext.
+- **A credential entered in the Integrations Hub takes exactly this path** (D-218). The Hub's form writes
+  through `SecretService.createSecret` for an empty slot and `rotateSecret` for one already set, against a
+  deterministic reference so a rotation finds the secret it is replacing rather than orphaning it. The
+  configuration document stores that reference and never the value; the secret input is write-only and is
+  never pre-populated, because there is nothing to pre-populate it from. The browser-level suite asserts
+  the plaintext appears nowhere in the rendered HTML — not only in the visible text, because a value
+  echoed into an input's `value` attribute is invisible to a reader and perfectly readable to anyone with
+  the page source.
+- **Test Connection resolves at the adapter boundary, not in the Hub** (D-219). `packages/integrations`
+  hands the tester the credential REFERENCES from configuration; the tester exchanges them for values one
+  line before constructing an adapter, which is the `resolveSecret()` seam described above. The Hub
+  package itself cannot decrypt anything, and a unit guard asserts it cannot even name the operation.
 
 ### 18.5 Telemetry
 

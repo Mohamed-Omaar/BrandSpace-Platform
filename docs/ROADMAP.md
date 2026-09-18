@@ -926,9 +926,12 @@ and the Integrations Hub says so on every row rather than in a footnote.
 ### Scope
 
 **The Integrations Hub** — one owner-only place for every external system: categories, environments,
-declared capabilities, masked credential status, connection status, verification history, Test
-Connection, activate and disable. Generated from a registry, so adding a provider is an entry plus an
-adapter and no screen changes (D-214).
+declared capabilities, masked credential status, connection status, verification history, Save
+configuration, Test Connection, activate and disable. Generated from a registry, so adding a provider is
+an entry plus an adapter and no screen changes (D-214), and the provider's own form is generated from the
+fields its adapter declares so setup never requires a detour to the Configuration or Secrets pages
+(D-218). Test Connection verifies the configuration the owner saved rather than a process environment
+variable (D-219).
 
 **AI capabilities, catalogue and routing** — product code asks for a CAPABILITY, not a vendor. Models
 declare which capabilities they can serve and the feature flags that back the declaration up; routing
@@ -958,6 +961,7 @@ basics — each marked as platform capability, deployment responsibility or owne
 
 - [x] No customer or admin flow is a placeholder, a fake success or a dead link
 - [x] The Integrations Hub exists, is generated from a registry, and lists no provider without an adapter
+- [x] A provider with an adapter is configured entirely from the Hub: settings, credentials, save, test, activate
 - [x] Credentials are configurable, masked, rotatable and never readable again
 - [x] AI capability routing, the model catalogue and all four routing profiles work, and no fallback can violate a capability
 - [x] The existing AI Gateway accounting remains authoritative; nothing bypasses it

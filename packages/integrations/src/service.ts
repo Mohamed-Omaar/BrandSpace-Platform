@@ -3,14 +3,21 @@ import type { ConfigurationService, Environment } from '@brandspace/config';
 import type { SecretActor, SecretMetadata, SecretService } from '@brandspace/secrets';
 import { AppError, redact, systemClock, type Clock } from '@brandspace/shared';
 import {
+  editableSettingFields,
   findIntegration,
+  findIntegrationCategory,
   INTEGRATION_CATEGORY_DEFINITIONS,
   INTEGRATION_DEFINITIONS,
+  integrationSecretRef,
+  parseCredentialInput,
+  parseSettingsInput,
+  secretCategoryFor,
   selectionRefusal,
   type IntegrationCategory,
   type IntegrationDefinition,
   type IntegrationEnvironment,
 } from './registry';
+import { applyProviderRecord, type IntegrationConfigDomain } from './mapping';
 
 /**
  * The Integrations Hub service — Phase 10 §2.
@@ -103,6 +110,31 @@ export interface IntegrationTester {
     readonly category: IntegrationCategory;
     readonly providerKey: string;
     readonly environment: IntegrationEnvironment;
+    /** The non-secret settings as the owner saved them. */
+    readonly settings: Readonly<Record<string, string>>;
+    /**
+     * The credential REFERENCES the saved configuration points at — never values.
+     *
+     * THIS IS THE LINE §9 ASKS FOR AND THE ONE THIS PACKAGE MAY NOT CROSS, and
+     * the two are compatible only in this shape. Test Connection must verify
+     * the credential the owner actually saved, so the tester needs to reach the
+     * vault; `packages/integrations` must never be able to decrypt anything, so
+     * it must not do the reaching. It hands over the references it read from
+     * configuration and the IMPLEMENTATION exchanges them for values, one line
+     * before handing them to an adapter — the single sanctioned decryption seam
+     * docs/SECURITY.md §5.1 describes.
+     *
+     * The unit guard in `tests/unit/integrations-registry.test.ts` is a plain
+     * text search over this package, so it trips on the function's NAME as well
+     * as a call to it. That bluntness is the point and this comment works
+     * around it by describing the seam instead of naming it.
+     *
+     * An implementation that ignored these and read an environment variable
+     * instead would be testing something other than what the screen shows. That
+     * was the defect this correction fixes, and the isolation suite asserts the
+     * resolved value is the one the owner entered.
+     */
+    readonly credentialRefs: Readonly<Record<string, string>>;
   }): Promise<{ readonly ok: boolean; readonly latencyMs: number; readonly message: string }>;
 }
 
@@ -196,6 +228,17 @@ export class IntegrationsService {
       );
     }
 
+    /*
+     * REQUESTED, BEFORE ANYTHING IS ATTEMPTED (§8). An operator who pressed the
+     * button and got a timeout still pressed the button, and an audit trail
+     * that only records outcomes cannot show who tried.
+     */
+    await this.#auditIntegration(input.actor, 'integration.test.requested', {
+      category: definition.category,
+      providerKey: definition.providerKey,
+      environment: input.environment,
+    });
+
     const refusal = selectionRefusal(definition, input.environment);
     if (refusal) {
       await this.#record(definition, input.environment, {
@@ -231,6 +274,16 @@ export class IntegrationsService {
         category: definition.category,
         providerKey: definition.providerKey,
         environment: input.environment,
+        settings: current.settings,
+        /*
+         * FROM THE SAVED CONFIGURATION, not from the process environment.
+         * Before this correction the payment tester read
+         * `BILLING_DEV_WEBHOOK_SECRET` while the Hub showed a `webhookSecret`
+         * credential the owner had entered — the screen claimed to test one
+         * thing and tested another. `configurationComplete` above has already
+         * guaranteed every required reference is present and resolvable.
+         */
+        credentialRefs: credentialRefsOf(current),
       });
       outcome = result.ok ? 'OK' : 'FAILED';
       latencyMs = result.latencyMs;
@@ -252,6 +305,194 @@ export class IntegrationsService {
       message,
       requestedByPlatformUserId: input.requestedByPlatformUserId ?? null,
     });
+    await this.#auditIntegration(input.actor, 'integration.test.result', {
+      category: definition.category,
+      providerKey: definition.providerKey,
+      environment: input.environment,
+      outcome,
+      latencyMs,
+    });
+    return this.get(input.actor, input.category, input.providerKey, input.environment);
+  }
+
+  /**
+   * Save this provider's settings and credentials — Phase 10 correction §2–§6.
+   *
+   * THE GAP THIS CLOSES. Until now the Hub could show that a credential was
+   * missing and then send the owner to the Secrets page to set it, and to the
+   * Configuration page to create the provider record before that. Three screens
+   * to connect one provider, and the two the owner was sent to know nothing
+   * about integrations. The Hub is now the door; the rooms behind it are
+   * unchanged.
+   *
+   * WHAT IS AUTHORITATIVE, STILL. Every secret goes through the Secret Service
+   * (`createSecret` for a new slot, `rotateSecret` for one already set), which
+   * is where MFA, `platform.secret.manage`, encryption and the audit event live.
+   * Every non-secret setting goes through the Configuration Service as a draft
+   * that is then activated, which is where validation, version history, the
+   * audit trail and rollback live. This method owns no storage of its own and
+   * adds no read path for a value.
+   *
+   * SAVING IS NOT ACTIVATING (§6). `applyProviderRecord` cannot write `status`
+   * or `activeProviderKey` — not "does not", cannot — so an owner who saves a
+   * key has saved a key. Turning the provider on is a separate action behind a
+   * separate permission.
+   *
+   * THE ORDER MATTERS. Secrets first, configuration second: a configuration
+   * document that referenced a secret which failed to save would point at
+   * nothing, and the Hub would show a complete integration that cannot run. The
+   * reverse leaves an unreferenced secret in the vault, which is inert and
+   * visible on the Secrets page.
+   */
+  async saveConfiguration(input: {
+    readonly actor: SecretActor;
+    readonly category: string;
+    readonly providerKey: string;
+    readonly environment: IntegrationEnvironment;
+    /** Raw form values. Parsed against the registry, never trusted as keys. */
+    readonly settings: Readonly<Record<string, unknown>>;
+    readonly credentials: Readonly<Record<string, unknown>>;
+    /** Values BrandSpace computes, filtered to fields declared `generated`. */
+    readonly generatedSettings?: Readonly<Record<string, string>>;
+    readonly reason: string;
+  }): Promise<IntegrationView> {
+    const definition = findIntegration(input.category, input.providerKey);
+    const categoryDefinition = findIntegrationCategory(input.category);
+    if (!definition || !categoryDefinition) {
+      throw new AppError(
+        'NOT_FOUND',
+        `No integration "${input.category}/${input.providerKey}" is registered.`,
+      );
+    }
+
+    const reason = input.reason.trim();
+    if (reason.length < 8) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'A change reason of at least eight characters is required.',
+      );
+    }
+
+    if (
+      definition.credentialFields.length === 0 &&
+      editableSettingFields(definition).length === 0
+    ) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        `${definition.displayNameEn} declares nothing to configure.`,
+      );
+    }
+
+    const parsed = parseSettingsInput(definition, input.settings);
+    const submittedCredentials = parseCredentialInput(definition, input.credentials);
+
+    /*
+     * GENERATED VALUES ARE FILTERED BY THE REGISTRY, not taken on trust from
+     * the caller. The app layer knows this deployment's public URL; it does not
+     * get to decide which fields BrandSpace generates.
+     */
+    const generated: Record<string, string> = {};
+    for (const field of definition.settingFields) {
+      if (field.generated !== true) continue;
+      const value = input.generatedSettings?.[field.key];
+      if (typeof value === 'string' && value.trim() !== '') generated[field.key] = value.trim();
+    }
+
+    const before = await this.get(
+      input.actor,
+      input.category,
+      input.providerKey,
+      input.environment,
+    );
+
+    // --- 1. secrets ---------------------------------------------------------
+    const secretRefs: Record<string, string> = {};
+    const written: { fieldKey: string; ref: string; rotated: boolean }[] = [];
+
+    for (const field of definition.credentialFields) {
+      const existingRef = before.credentials.find((c) => c.fieldKey === field.key)?.secretRef;
+      const ref = existingRef ?? integrationSecretRef(definition, input.environment, field.key);
+      const value = submittedCredentials[field.key];
+
+      if (value === undefined) {
+        // Untouched. Keep whatever reference configuration already had, so an
+        // edit to a URL never detaches a working key.
+        if (existingRef) secretRefs[field.key] = existingRef;
+        continue;
+      }
+
+      const existing = await this.#findSecretByRef(input.actor, ref, input.environment);
+      if (existing) {
+        await this.#secrets.rotateSecret(input.actor, existing.id, value, reason);
+        written.push({ fieldKey: field.key, ref, rotated: true });
+      } else {
+        await this.#secrets.createSecret(input.actor, {
+          ref,
+          name: `${definition.displayNameEn} — ${field.labelEn}`,
+          category: secretCategoryFor(definition.category),
+          environment: input.environment as Environment,
+          value,
+          description: `Set from the Integrations Hub for ${definition.category}/${definition.providerKey}.`,
+        });
+        written.push({ fieldKey: field.key, ref, rotated: false });
+      }
+      secretRefs[field.key] = ref;
+    }
+
+    // --- 2. configuration ---------------------------------------------------
+    const domain = categoryDefinition.configDomain as IntegrationConfigDomain;
+    const document = (await this.#configuration.get(
+      domain,
+      input.environment as Environment,
+    )) as unknown as Record<string, unknown>;
+
+    const next = applyProviderRecord({
+      definition,
+      domain,
+      document,
+      settings: { ...parsed.settings, ...generated },
+      secretRefs,
+    });
+
+    const draft = await this.#configuration.createDraft(
+      input.actor,
+      domain,
+      input.environment as Environment,
+      reason,
+      next,
+    );
+    await this.#configuration.activate(input.actor, draft.id);
+
+    // --- 3. audit -----------------------------------------------------------
+    await this.#auditIntegration(input.actor, 'integration.configuration.saved', {
+      category: definition.category,
+      providerKey: definition.providerKey,
+      environment: input.environment,
+      settingKeys: Object.keys(parsed.settings),
+      ignoredKeys: parsed.ignored,
+      /*
+       * REFERENCES AND OUTCOMES, NEVER VALUES (§8) — and named `vaultWrites`
+       * rather than `credentials` for a reason worth writing down.
+       *
+       * `redact()` blanket-replaces any key matching /credential|secret|token/
+       * with `[REDACTED]`, which is correct almost everywhere: a key with that
+       * name usually holds a value. Here it does not — this is a list of which
+       * SLOT changed, which REFERENCE it lives at, and whether the write was a
+       * first save or a rotation — and letting the redactor swallow it would
+       * have destroyed exactly the record §8 requires the audit trail to keep.
+       * The name describes the metadata rather than sitting under a name that
+       * promises a secret, and the assertion that no value appears here is in
+       * `tests/isolation/phase10-hub-configuration.test.ts` rather than left to
+       * the redactor as a second chance.
+       */
+      vaultWrites: written.map((entry) => ({
+        field: entry.fieldKey,
+        ref: entry.ref,
+        operation: entry.rotated ? 'rotated' : 'created',
+      })),
+      reason,
+    });
+
     return this.get(input.actor, input.category, input.providerKey, input.environment);
   }
 
@@ -317,6 +558,58 @@ export class IntegrationsService {
   }
 
   // --- internals -----------------------------------------------------------
+
+  /** The secret stored at this reference in this environment, or null. */
+  async #findSecretByRef(
+    actor: SecretActor,
+    ref: string,
+    environment: IntegrationEnvironment,
+  ): Promise<SecretMetadata | null> {
+    /*
+     * ASKED THROUGH THE SERVICE, not with a raw query, so the actor is
+     * authorized for the read exactly as it would be on the Secrets page. The
+     * search is the Secret Service's own; a ref that does not exist simply
+     * returns nothing, which is the "create it" branch.
+     */
+    const page = await this.#secrets.listSecrets(actor, {
+      environment: environment as Environment,
+      search: ref,
+      pageSize: 100,
+    });
+    return page.items.find((item) => item.ref === ref) ?? null;
+  }
+
+  /**
+   * One audit event for an integration change.
+   *
+   * ALONGSIDE the configuration and secret services' own events, not instead of
+   * them: those record "a configuration version was activated" and "a secret
+   * was rotated", which are true but do not say that an owner connected a
+   * payment provider. `resourceId` stays null because it is a UUID column and
+   * an integration is identified by a category and a key, which go in `after`.
+   */
+  async #auditIntegration(
+    actor: SecretActor,
+    action: string,
+    after: Record<string, unknown>,
+  ): Promise<void> {
+    await this.#prisma.auditEvent.create({
+      data: {
+        workspaceId: null,
+        actorType: 'PLATFORM_USER',
+        actorId: actor.platformUserId,
+        action,
+        resourceType: 'integration',
+        severity: 'WARNING',
+        outcome: 'SUCCESS',
+        reason: typeof after['reason'] === 'string' ? (after['reason'] as string) : null,
+        // The redaction layer runs over the payload for the same reason the
+        // health-check message does: this object is assembled from registry
+        // keys and refs, and a defect that put a value in it must not survive.
+        after: (redact(after) ?? after) as never,
+      },
+    });
+  }
 
   async #record(
     definition: IntegrationDefinition,
@@ -589,6 +882,22 @@ function redactedMessage(message: string): string {
   const redacted = redact({ message }) as { message?: unknown } | null;
   const value = typeof redacted?.message === 'string' ? redacted.message : message;
   return value.slice(0, 2000);
+}
+
+/**
+ * The credential references a view carries, as the tester needs them.
+ *
+ * A PURE FUNCTION OVER MASKED METADATA. It reads `secretRef`, which is a
+ * pointer, and nothing else — there is no branch here that could return a value
+ * because the type it reads from has no field that holds one.
+ */
+function credentialRefsOf(view: IntegrationView): Readonly<Record<string, string>> {
+  const refs: Record<string, string> = {};
+  for (const credential of view.credentials) {
+    if (credential.secretRef && credential.present)
+      refs[credential.fieldKey] = credential.secretRef;
+  }
+  return refs;
 }
 
 /** Narrowing helper so `Prisma` stays imported for the type-only seam. */

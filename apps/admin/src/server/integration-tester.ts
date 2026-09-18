@@ -1,10 +1,16 @@
 import 'server-only';
-import { DEVELOPMENT_PROVIDER_KEY, DevelopmentPaymentProvider } from '@brandspace/billing';
+import {
+  DEVELOPMENT_PROVIDER_KEY,
+  DEVELOPMENT_SIGNATURE_HEADER,
+  DEVELOPMENT_TIMESTAMP_HEADER,
+  DevelopmentPaymentProvider,
+} from '@brandspace/billing';
 import { MockProviderAdapter } from '@brandspace/ai-gateway';
 import { OutboxEmailProvider } from '@brandspace/auth';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { isProduction, systemClock } from '@brandspace/shared';
 import type { IntegrationTester } from '@brandspace/integrations';
+import { currentEnvironment, getSecretService } from './platform-context';
 
 /**
  * WHAT ACTUALLY TALKS TO A PROVIDER — Phase 10 §10.
@@ -27,11 +33,49 @@ import type { IntegrationTester } from '@brandspace/integrations';
  *   4. IT DOES NOT ACTIVATE ANYTHING. Activation is a configuration change with
  *      its own author, validation, audit trail and rollback. A button that
  *      quietly did both would make "I was only checking" impossible to mean.
+ *
+ * AND THE FIFTH RULE, ADDED BY THE PHASE 10 CORRECTION (§9): IT TESTS WHAT THE
+ * OWNER SAVED. Every value below comes from `input.settings` and
+ * `input.credentials`, which the Integrations Hub resolved from the
+ * configuration document and the vault moments earlier. Reading a credential
+ * out of `process.env` here — which is exactly what the payment branch used to
+ * do — meant the screen claimed to verify the key an owner had just entered
+ * while verifying a different one entirely. A green tick for an unverified
+ * configuration is worse than no button.
+ *
+ * THE RUNTIME IS A SEPARATE QUESTION, deliberately left alone. Phase 9's
+ * automated billing fixtures still sign their loopback events with
+ * `BILLING_DEV_WEBHOOK_SECRET` (`apps/api/src/routes/phase9-context.ts`), and
+ * redesigning that is not this correction's business. What changed is that the
+ * Hub no longer borrows it and calls it a test of the Hub's own configuration.
  */
 export function integrationTester(): IntegrationTester {
+  /**
+   * Exchange the saved references for values, here and nowhere else.
+   *
+   * THE HUB HANDS OVER POINTERS, THIS TURNS THEM INTO VALUES, and the values go
+   * straight into an adapter constructor below. They are never logged, never
+   * returned, never put in a message and never held: the closure ends and they
+   * are gone. `packages/integrations` cannot do this — a unit guard asserts it
+   * cannot even name the operation — which is what keeps the Hub incapable of
+   * decrypting anything while still testing what the owner actually saved.
+   */
+  const resolve = async (
+    refs: Readonly<Record<string, string>>,
+  ): Promise<Record<string, string>> => {
+    const secrets = getSecretService();
+    const environment = currentEnvironment();
+    const values: Record<string, string> = {};
+    for (const [field, ref] of Object.entries(refs)) {
+      values[field] = await secrets.resolveSecret(ref, environment);
+    }
+    return values;
+  };
+
   return {
     async test(input) {
       const startedAt = Date.now();
+      const credentials = await resolve(input.credentialRefs);
 
       /*
        * PRODUCTION CANNOT REACH ANY OF THESE. Every adapter below is a
@@ -54,8 +98,11 @@ export function integrationTester(): IntegrationTester {
           const adapter = new MockProviderAdapter();
           const result = await adapter.testConnection({
             environment: input.environment,
-            apiKey: null,
-            baseUrl: 'mock://local',
+            // Both from the saved configuration. The deterministic provider
+            // declares neither field, so both are absent today — and the day a
+            // real adapter declares them, this call already carries them.
+            apiKey: credentials['apiKey'] ?? null,
+            baseUrl: input.settings['baseUrl'] ?? 'mock://local',
             timeoutMs: 5_000,
             signal: AbortSignal.timeout(5_000),
             requestId: 'integration-test',
@@ -65,29 +112,50 @@ export function integrationTester(): IntegrationTester {
 
         case 'payment:development-mock': {
           /*
-           * The development payment adapter's own reachability check. It needs
-           * the webhook signing secret, so a missing one surfaces here as a
-           * failed test rather than as a 500 on a customer's first purchase.
+           * THE REGRESSION PATH §9 NAMES. The adapter is constructed from the
+           * credential the owner entered in the Hub and the base URL they
+           * saved — entered value, stored through the Secret Service,
+           * referenced by configuration, resolved server-side, used here.
+           *
+           * The guard below is unreachable in practice because
+           * `configurationComplete` already refused to call a tester when a
+           * required credential is missing. It stays because that guarantee
+           * lives in another file, and a signing test that silently signed with
+           * `undefined` would pass.
            */
-          const secret = process.env['BILLING_DEV_WEBHOOK_SECRET'];
-          if (!secret) {
+          const secret = credentials['webhookSecret'];
+          const hostedBaseUrl = input.settings['hostedBaseUrl'];
+          if (!secret || !hostedBaseUrl) {
             return {
               ok: false,
               latencyMs: Date.now() - startedAt,
               message:
-                'BILLING_DEV_WEBHOOK_SECRET is not set, so no event this adapter signs could be verified.',
+                'The saved configuration is missing the webhook signing secret or the hosted ' +
+                'checkout URL, so no event this adapter signs could be verified.',
             };
           }
-          const adapter = new DevelopmentPaymentProvider({
-            webhookSecret: secret,
-            hostedBaseUrl: process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003',
-          });
+          const adapter = new DevelopmentPaymentProvider({ webhookSecret: secret, hostedBaseUrl });
           const capabilities = adapter.capabilities();
+
+          /*
+           * A ROUND TRIP, NOT A CONSTRUCTOR CALL. The adapter signs a probe
+           * event with the saved secret and then verifies it, so the test fails
+           * if the stored credential is not the one doing the signing. Proving
+           * the object exists would have proven nothing about the key.
+           */
+          const body = Buffer.from(JSON.stringify({ probe: 'integration-test' }), 'utf8');
+          const timestampSeconds = Math.floor(Date.now() / 1000);
+          const verification = adapter.verifyWebhook(body, {
+            [DEVELOPMENT_TIMESTAMP_HEADER]: String(timestampSeconds),
+            [DEVELOPMENT_SIGNATURE_HEADER]: adapter.sign(body, timestampSeconds),
+          });
+          const verified = verification.valid;
           return {
-            ok: adapter.key === DEVELOPMENT_PROVIDER_KEY && capabilities.hostedCheckout,
+            ok: verified && adapter.key === DEVELOPMENT_PROVIDER_KEY && capabilities.hostedCheckout,
             latencyMs: Date.now() - startedAt,
-            message:
-              'Development payment adapter is loaded and signs events with the configured secret.',
+            message: verified
+              ? 'Signed a probe event with the saved webhook secret and verified it.'
+              : 'The saved webhook secret did not verify its own signature.',
           };
         }
 

@@ -381,6 +381,22 @@ with the masked-credential table using the console's existing mono-caption style
 fingerprint. The change-reason input is the existing `inputStyle()`; the activate and disable controls
 are `primaryButtonStyle()` and `secondaryButtonStyle()`.
 
+**The configuration form added by the Phase 10 correction is composed, not drawn.** Every control is
+the console's existing `inputStyle()` with `.bs-control`, laid out with the same label-above-field grid
+the Secrets and Configuration pages already use; the generated-values table is the same `DataTable`.
+Nothing new was created for it, which is why there is no new component to record here.
+
+**Three things about it are product decisions rather than visual ones**, recorded because a reader
+scanning the form will notice each and might reasonably file a bug:
+
+- **A secret input is always empty, including on a provider that has one saved.** It is not a rendering
+  oversight; nothing in this product can read a stored value back to pre-populate it. The field's help
+  text says so, and the placeholder says what an empty box means.
+- **A generated value renders as a read-only row, not an input.** A webhook URL is the address of one of
+  our own routes, so an input for it would be a way to redirect a payment callback.
+- **The form is generated from the registry.** A provider that declares no settings and no credentials —
+  which is every development double except the payment one — correctly shows no form at all.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 The Overview is the one 5B-3 screen with a REAL demo design behind it: `overview()` in

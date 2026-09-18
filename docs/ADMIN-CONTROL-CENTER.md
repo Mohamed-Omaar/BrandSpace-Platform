@@ -746,7 +746,44 @@ screens are finished, and no production vendor has been chosen. There is deliber
 arbitrary-HTTP provider — one would let an owner point payment webhooks at an unvalidated endpoint and
 call it compatibility.
 
-### 22.3 Per provider
+### 22.3 It is where an owner configures a provider, not only where they inspect one
+
+**When an adapter exists, ordinary provider setup happens entirely here:**
+
+> Platform Control Center → Integrations → the provider → enter settings and credentials → **Save
+> configuration** → **Test connection** → **Activate**
+
+The provider page renders its own form from the registry's `settingFields` and `credentialFields`, so a
+provider that declares a base URL and an API key gets inputs for exactly those and nothing else. Saving
+creates the provider's configuration record if it does not exist yet — an owner is never sent to the
+Configuration page to create one before they can begin.
+
+**The generic Configuration and Secrets pages remain**, and they remain useful: inspecting a document's
+version history, comparing environments, an advanced edit the Hub's form does not express, recovery when
+something is wrong. They are no longer a required step in connecting a provider.
+
+**Nothing moved underneath.** Settings are written through the Configuration Service — draft, validate,
+activate — so an integration change still has an author, a change reason, a validation pass, an audit
+event, a version history and a rollback. Credentials are written through the Secret Service, so they are
+encrypted with the same key domain, masked the same way, and audited the same way as one entered on the
+Secrets page. There is no second configuration system and no second secret store.
+
+**Write-only credential inputs.** A secret box is never pre-populated, because nothing in this product
+can read a stored value back. An empty box therefore means _leave this credential alone_ — which is why
+correcting a URL does not wipe a working key — and entering a value replaces it and is recorded as a
+rotation against the same stable reference.
+
+**Values BrandSpace generates are shown, not asked for.** A webhook or callback URL is the address of one
+of our own routes; it renders read-only and copyable. An input for it would be a way to point a payment
+callback at somebody else's host.
+
+**Two authorities, and neither is relaxed for the new screen.** `platform.configuration.manage` is
+required for the settings edit; `platform.secret.manage` _and_ verified MFA are required for every
+credential write, checked inside the Secret Service. Activation continues to require the stronger
+`platform.configuration.activate`. A role that may edit configuration but not manage secrets can save a
+URL and is still refused a key.
+
+### 22.4 Per provider
 
 | Shown                          | Read from                                                                       |
 | ------------------------------ | ------------------------------------------------------------------------------- |
@@ -763,12 +800,26 @@ call it compatibility.
 hidden behind a permission, absent. An owner confirms "same key" from the fingerprint, which is what
 they actually need, and a database dump yields nothing.
 
-### 22.4 Testing is not activating
+### 22.5 Saving is not testing, and testing is not activating
+
+**Save configuration** writes settings and credentials and stops there. A provider whose key was just
+saved is a provider with a key, not a provider serving traffic; `applyProviderRecord` is structurally
+incapable of writing `status` or `activeProviderKey`, so this is a property of the code rather than a
+discipline.
 
 **Test Connection** writes an `integration_health_check` row and changes nothing about what serves
 traffic. It uses minimal billable usage, reports a sentence rather than a credential or a raw provider
 error, and records the outcome — including the refusals and the attempts that never left the platform,
 because "we never tried" is an answer the next operator needs.
+
+**And it tests the configuration the owner actually saved.** The Hub hands the tester the settings from
+the configuration document and the credential REFERENCES it holds; the tester exchanges those references
+for values at the adapter boundary — the single sanctioned decryption seam — and constructs the adapter
+from them. `packages/integrations` cannot decrypt anything, and a unit guard asserts it cannot even name
+the operation. This closes a real defect: the payment tester used to read `BILLING_DEV_WEBHOOK_SECRET`
+from the process environment while the screen displayed a `webhookSecret` the owner had entered, so it
+reported success for a credential nobody had verified. Phase 9's automated billing fixtures still use
+that variable for their own loopback signing, which is a separate concern and deliberately unchanged.
 
 **Activate / Disable** goes through `ConfigurationService` — draft, validate, activate — exactly like
 every other configuration change. That is not ceremony: it is what gives an activation an author, a
@@ -780,7 +831,7 @@ changes obey the existing Platform Admin security model would have been a commen
 so every caller — the screen, the action, the readiness check — asks one function, and the screen shows
 the REASON rather than a disabled button, because a disabled button teaches nothing.
 
-### 22.5 Routing, catalogue and health
+### 22.6 Routing, catalogue and health
 
 - **Routing** shows the active profile and what each one does, every capability with the models
   eligible to serve it, and — for each declared model — the verdict from the same function the router
