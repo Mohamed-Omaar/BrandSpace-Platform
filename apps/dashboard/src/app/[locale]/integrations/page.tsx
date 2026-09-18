@@ -3,7 +3,12 @@ import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { callSocialApi, inSocial } from '../../../server/social-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -259,17 +264,19 @@ export default async function IntegrationsPage({
      * `failureCode` is stable and OURS, which is exactly why it can carry a
      * sentence: it is never a provider string. Where a code has no sentence the
      * class's own sentence stands, which is the right answer for a genuine
-     * provider refusal.
+     * provider refusal — `mock.content_rejected` is a provider saying no, and
+     * "the platform rejected this content" is exactly what happened.
+     *
+     * THE MISS IS `undefined`, NOT THE KEY — which is why `optionalMessage`
+     * exists rather than a `=== key` comparison here. See its own comment: the
+     * comparison never matches, so the fallback never runs and `undefined` is
+     * returned as the sentence, which React renders as nothing at all.
      */
-    if (failureCode) {
-      const codeKey = `publishing.code.${failureCode}` as MessageKey;
-      const codeMessage = t(codeKey);
-      if (codeMessage !== codeKey) return codeMessage;
-    }
-
-    const key = `publishing.failure.${failureClass.toLowerCase()}` as MessageKey;
-    const message = t(key);
-    return message === key ? t('publishing.failure.unknown') : message;
+    return (
+      (failureCode ? optionalMessage(locale, `publishing.code.${failureCode}`) : null) ??
+      optionalMessage(locale, `publishing.failure.${failureClass.toLowerCase()}`) ??
+      t('publishing.failure.unknown')
+    );
   };
 
   const publishRows: readonly PublishRow[] = jobs.map((job) => ({

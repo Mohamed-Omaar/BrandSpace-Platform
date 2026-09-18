@@ -255,10 +255,17 @@ export class ContentLibraryService {
     /*
      * PHASE 5B-3 — AN EDIT REVOKES AN APPROVAL.
      *
-     * An approval is a judgement about particular words. Once those words
-     * change, the record still says "approved" while nobody has read what it now
-     * approves — and with the calendar gate on, that difference is the whole
-     * control. So an edit to an APPROVED item returns it to DRAFT, audibly.
+     * An approval is a judgement about a particular post. Once that post
+     * changes, the record still says "approved" while nobody has read what it
+     * now approves — and with the calendar gate on, that difference is the
+     * whole control. So an edit to an APPROVED item returns it to DRAFT,
+     * audibly.
+     *
+     * PHASE 8 MADE THAT SENTENCE WIDER WITHOUT CHANGING A LINE OF IT. A post
+     * is now words AND pictures, and this runs on every edit — so swapping the
+     * image on an approved post revokes the approval exactly as rewriting the
+     * caption does. A reviewer who approved one photograph must not find a
+     * different one published under their verdict.
      *
      * A SCHEDULED item is not touched here, and cannot be: `transition()`
      * refuses to move it and the calendar owns that edge. Editing the caption of

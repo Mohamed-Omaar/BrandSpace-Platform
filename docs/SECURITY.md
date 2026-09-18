@@ -2818,3 +2818,12 @@ every green suite:
   Brain and Analytics passed the brand context to their "no brand selected"
   branch only, so the Brand Selector vanished the moment a brand was chosen. A
   unit test counts shells against contexts.
+- **A translation compared against its key never matches** (D-202). Where the
+  key is built from a database value — an audit entry's actor type, a
+  notification's template key, a publish job's failure code — three screens
+  detected the miss with `translated === key`. `translator` returns
+  `dictionary[key]`, so a miss is `undefined`: the fallback never ran and
+  `undefined` was rendered as nothing, which for the publishing history meant a
+  failed post reporting no failure at all. `optionalMessage()` answers
+  `string | null` and is now the only way to ask for a key the type system
+  cannot know.

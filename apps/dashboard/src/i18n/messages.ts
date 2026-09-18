@@ -2368,6 +2368,33 @@ export function translator(locale: string) {
 }
 
 /**
+ * A message for a key that MIGHT NOT EXIST, or `null`.
+ *
+ * WHY THIS EXISTS, AND WHAT IT REPLACES. Three screens render a label built
+ * from a value the DATABASE supplies — an audit entry's actor type, a
+ * notification's template key, a publish job's failure code — so the key is
+ * only known at runtime and may have no translation. Each of them asked
+ * `translator` and tested `translated === key` to detect the miss.
+ *
+ * THAT TEST IS ALWAYS FALSE. `translator` returns `dictionary[key]`, so a miss
+ * is `undefined` rather than the key — the comparison never matches, the
+ * fallback never runs, and `undefined` is returned as the sentence. React
+ * renders nothing, so a failed publish reported no failure at all and an
+ * unrecognised notification showed an empty headline. The bug was invisible for
+ * exactly as long as every key happened to exist.
+ *
+ * `MessageKey` DELIBERATELY NOT REQUIRED: the whole point is a key the type
+ * system cannot know. The narrowing is done here, once, instead of at three
+ * call sites that each got it wrong.
+ */
+export function optionalMessage(locale: string, key: string): string | null {
+  const dictionary: Record<string, string | undefined> =
+    locale === 'ar' ? messages.ar : messages.en;
+  const value = dictionary[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
  * Fixed, bilingual text for the CODES a server action puts in the URL.
  *
  * Same construction as the Control Center (R-05): the client receives a code

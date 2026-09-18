@@ -15,7 +15,7 @@ import {
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { activityService } from '../../../server/approvals-context';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -107,9 +107,9 @@ export default async function ActivityPage({
   const actorLabel = (entry: (typeof page.entries)[number]): string => {
     if (entry.actorId && entry.actorId === customer.userId) return t('activity.you');
     if (entry.actorId && actorNames.has(entry.actorId)) return actorNames.get(entry.actorId) ?? '—';
-    const key = `activity.actor.${entry.actorType}` as MessageKey;
-    const translated = t(key);
-    return translated === key ? entry.actorType : translated;
+    // The raw type when there is no translation for it — see `optionalMessage`
+    // for why `translated === key` was never the right test.
+    return optionalMessage(locale, `activity.actor.${entry.actorType}`) ?? entry.actorType;
   };
 
   const brandContext = await brandContextFor(workspace, '/activity');

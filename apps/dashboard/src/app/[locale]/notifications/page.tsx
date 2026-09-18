@@ -13,7 +13,7 @@ import {
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { notificationService } from '../../../server/approvals-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { markAllNotificationsReadAction, markNotificationReadAction } from './actions';
 
@@ -114,8 +114,17 @@ export default async function NotificationsPage({
           ) : (
             <ul style={listStyle} data-testid="notifications-list">
               {items.map((item) => {
-                const key = `notifications.template.${item.templateKey}` as MessageKey;
-                const headline = t(key);
+                /*
+                 * THE TEMPLATE KEY COMES FROM THE DATABASE, so a headline may
+                 * have no translation — and the raw key is a better answer
+                 * than nothing. `optionalMessage` is why: `t()` returns
+                 * `undefined` for a miss rather than the key, so the
+                 * `headline === key` test this used could never match and
+                 * `undefined` was rendered, leaving the row's title empty.
+                 */
+                const headline =
+                  optionalMessage(locale, `notifications.template.${item.templateKey}`) ??
+                  item.templateKey;
                 return (
                   <li
                     key={item.id}
@@ -124,9 +133,7 @@ export default async function NotificationsPage({
                     data-read={item.readAt ? 'true' : 'false'}
                   >
                     <div style={headRowStyle}>
-                      <strong style={headlineStyle}>
-                        {headline === key ? item.templateKey : headline}
-                      </strong>
+                      <strong style={headlineStyle}>{headline}</strong>
                       {item.readAt ? null : (
                         <StatusBadge label={t('notifications.unread')} tone="warning" dot />
                       )}

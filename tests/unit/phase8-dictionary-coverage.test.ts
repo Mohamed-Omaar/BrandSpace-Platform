@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { optionalMessage, translator } from '../../apps/dashboard/src/i18n/messages';
 
 /**
  * EVERY LABEL A SCREEN ASKS FOR IS A LABEL ITS PAGE SENDS — Phase 8.
@@ -70,4 +71,79 @@ describe('a view never asks for a label its page does not send', () => {
       });
     }
   }
+});
+
+describe('a key that might not exist is asked for correctly', () => {
+  /*
+   * THE DEFECT, WHICH APPEARED THREE TIMES INDEPENDENTLY. Some labels are built
+   * from a value the DATABASE supplies — an audit entry's actor type, a
+   * notification's template key, a publish job's failure code — so the key is
+   * only known at runtime and may have no translation. All three screens tested
+   * for the miss by comparing the result against the key.
+   *
+   * THAT TEST IS ALWAYS FALSE. `translator` returns `dictionary[key]`, so a
+   * miss is `undefined`, not the key: the comparison never matches, the
+   * fallback never runs, and `undefined` is rendered as nothing. A failed
+   * publish reported no failure; an unrecognised notification had no headline.
+   */
+  it('translator returns undefined for a key it does not have, NOT the key', () => {
+    const t = translator('en');
+    expect(t('publishing.code.nothing.like.this' as never)).toBeUndefined();
+  });
+
+  it('so `translated === key` can never detect a miss', () => {
+    const t = translator('en');
+    const key = 'publishing.code.nothing.like.this';
+    expect(t(key as never) === key).toBe(false);
+  });
+
+  it('optionalMessage answers null for a miss, in both languages', () => {
+    expect(optionalMessage('en', 'publishing.code.nothing.like.this')).toBeNull();
+    expect(optionalMessage('ar', 'publishing.code.nothing.like.this')).toBeNull();
+  });
+
+  it('and answers the real sentence for a key that exists', () => {
+    expect(optionalMessage('en', 'publishing.failure.content_rejected')).toBeTruthy();
+    expect(optionalMessage('ar', 'publishing.failure.content_rejected')).toBeTruthy();
+    expect(optionalMessage('en', 'publishing.failure.content_rejected')).not.toBe(
+      optionalMessage('ar', 'publishing.failure.content_rejected'),
+    );
+  });
+
+  it('NO SCREEN COMPARES A TRANSLATION AGAINST ITS KEY any more', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (entry.endsWith('.tsx') || entry.endsWith('.ts')) {
+          /*
+           * COMMENTS STRIPPED FIRST. Two of the files below EXPLAIN this
+           * defect, quoting the comparison in prose — and a guard that cannot
+           * tell an explanation from the code it warns about would forbid
+           * writing the explanation down.
+           */
+          const source = readFileSync(full, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(^|[^:])\/\/.*$/gm, '$1');
+          /*
+           * THE SHAPE, NOT THE WORD. A `k !== key` inside a checkbox filter is
+           * a different `key` entirely, so the pattern requires the LEFT side
+           * to be a translation: either `t(...)` directly, or one of the names
+           * a translation result is given before it is compared.
+           */
+          const misuse =
+            /\bt\([^)]*\)\s*(===|!==)\s*\w*[Kk]ey\b/.test(source) ||
+            /\b(translated|headline|codeMessage|sentence|label)\s*(===|!==)\s*\w*[Kk]ey\b/.test(
+              source,
+            );
+          if (misuse) {
+            offenders.push(full.slice(full.indexOf('apps/dashboard')));
+          }
+        }
+      }
+    };
+    walk(resolve(import.meta.dirname, '../../apps/dashboard/src'));
+    expect(offenders).toEqual([]);
+  });
 });

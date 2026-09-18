@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
-import { ContentMediaResolver, type ContentPolicy } from '@brandspace/content';
+import {
+  ContentLibraryService,
+  ContentMediaResolver,
+  type ContentPolicy,
+} from '@brandspace/content';
 import { defaultPayload } from '@brandspace/config';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
 
@@ -253,5 +257,96 @@ describe('AC-27.5: a platform ceiling is enforced before anything is written', (
     await expect(forPlatform([imageOfBrandOne], 'myspace')).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
+  });
+});
+
+describe('AC-29.1: changing the MEDIA revokes an approval, exactly as changing the words does', () => {
+  /*
+   * WHY THIS IS HERE RATHER THAN IN THE APPROVALS SUITE. `#revokeApprovalOnEdit`
+   * has run on every variant edit since Phase 5B-3, and its comment said an
+   * approval is "a judgement about particular words". Phase 8 made a post words
+   * AND pictures, so the sentence widened without a line of code changing —
+   * which is exactly the kind of property that is true today and silently
+   * untrue after the next refactor.
+   *
+   * THE STAKE IS NOT THEORETICAL. If swapping the image left the item APPROVED,
+   * a reviewer who cleared one photograph would find a different one published
+   * under their verdict, and the calendar's approval gate would let it through.
+   */
+  const libraryIn = (db: TenantScopedClient) =>
+    new ContentLibraryService({ db, workspaceId: fixtures.a.workspaceId, policy });
+
+  async function approvedFixtureItem(): Promise<{ itemId: string; variantId: string }> {
+    return inA(async (db) => {
+      const item = await db.contentItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: brandOne,
+          title: `Approved ${randomUUID().slice(0, 6)}`,
+          status: 'APPROVED',
+          createdByUserId: fixtures.a.userId,
+        },
+      });
+      const variant = await db.contentVariant.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: brandOne,
+          contentItemId: item.id,
+          platformKey: 'instagram',
+          locale: 'EN',
+          body: 'A caption a reviewer has read.',
+          assetIds: [imageOfBrandOne],
+        },
+      });
+      return { itemId: item.id, variantId: variant.id };
+    });
+  }
+
+  it('swapping the picture and leaving the words returns the item to DRAFT', async () => {
+    const { itemId, variantId } = await approvedFixtureItem();
+
+    await inA((db) =>
+      libraryIn(db).editVariant({
+        variantId,
+        // THE SAME WORDS. Only the picture changes, which is the whole point.
+        body: 'A caption a reviewer has read.',
+        assetIds: [secondImageOfBrandOne],
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+
+    const after = await inA((db) => db.contentItem.findFirst({ where: { id: itemId } }));
+    expect(after?.status).toBe('DRAFT');
+
+    const audit = await inA((db) =>
+      db.auditEvent.findFirst({
+        where: { resourceId: itemId, action: 'content.approval_revoked' },
+        orderBy: { occurredAt: 'desc' },
+      }),
+    );
+    expect(audit?.reason).toBe('edited_after_approval');
+  });
+
+  it('REMOVING the picture revokes it too — an empty list is a change, not a no-op', async () => {
+    const { itemId, variantId } = await approvedFixtureItem();
+
+    await inA((db) =>
+      libraryIn(db).editVariant({
+        variantId,
+        body: 'A caption a reviewer has read.',
+        // EMPTY, not absent (D-184). Absent means "leave the media alone"; this
+        // says "there is no media now", and a post stripped of its picture is
+        // not the post that was approved.
+        assetIds: [],
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+
+    const after = await inA((db) => db.contentItem.findFirst({ where: { id: itemId } }));
+    expect(after?.status).toBe('DRAFT');
+    const variant = await inA((db) => db.contentVariant.findFirst({ where: { id: variantId } }));
+    expect(variant?.assetIds).toEqual([]);
   });
 });
