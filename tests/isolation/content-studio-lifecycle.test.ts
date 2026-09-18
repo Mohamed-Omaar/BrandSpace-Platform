@@ -60,6 +60,7 @@ const CONTENT_POLICY: ContentPolicy = {
       maxBodyChars: 2_200,
       maxHashtags: 30,
       allowsFirstComment: true,
+      maxMediaItems: 10,
     },
     {
       key: 'linkedin',
@@ -67,6 +68,7 @@ const CONTENT_POLICY: ContentPolicy = {
       maxBodyChars: 3_000,
       maxHashtags: 10,
       allowsFirstComment: false,
+      maxMediaItems: 10,
     },
     {
       key: 'x',
@@ -74,6 +76,7 @@ const CONTENT_POLICY: ContentPolicy = {
       maxBodyChars: 280,
       maxHashtags: 5,
       allowsFirstComment: false,
+      maxMediaItems: 10,
     },
   ],
   generation: {

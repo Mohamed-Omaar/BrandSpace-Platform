@@ -47,6 +47,7 @@ const CONTENT_POLICY: ContentPolicy = {
       maxBodyChars: 2_200,
       maxHashtags: 30,
       allowsFirstComment: true,
+      maxMediaItems: 10,
     },
   ],
   generation: {

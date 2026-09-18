@@ -132,8 +132,11 @@ afterAll(async () => {
   await app?.$disconnect();
 });
 
-const resolve = (assetIds: readonly string[], brandId: string, brandScope: readonly string[] = []) =>
-  inA((db) => resolver(db).resolve({ assetIds, brandId, brandScope }));
+const resolve = (
+  assetIds: readonly string[],
+  brandId: string,
+  brandScope: readonly string[] = [],
+) => inA((db) => resolver(db).resolve({ assetIds, brandId, brandScope }));
 
 describe('AC-27.2: only admissible media can be attached', () => {
   it('accepts the brand own image', async () => {
