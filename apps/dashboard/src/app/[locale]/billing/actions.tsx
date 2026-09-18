@@ -86,7 +86,14 @@ export function BuyPlanButton({
       >
         {state === 'busy' ? busyLabel : label}
       </button>
-      <p style={noticeStyle}>{state === 'failed' ? failedLabel : redirectNotice}</p>
+      <p
+        style={noticeStyle}
+        {...(state === 'failed'
+          ? { role: 'alert' as const, 'data-testid': 'checkout-failed' }
+          : {})}
+      >
+        {state === 'failed' ? failedLabel : redirectNotice}
+      </p>
     </div>
   );
 }
@@ -133,7 +140,11 @@ export function BuyPackButton({
       >
         {state === 'busy' ? busyLabel : label}
       </button>
-      {state === 'failed' ? <p style={noticeStyle}>{failedLabel}</p> : null}
+      {state === 'failed' ? (
+        <p role="alert" data-testid="checkout-failed" style={noticeStyle}>
+          {failedLabel}
+        </p>
+      ) : null}
     </>
   );
 }

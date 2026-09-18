@@ -102,7 +102,41 @@ async function createWorkspace(
   await page.waitForURL(new RegExp(`/${locale}/onboarding$`), { timeout: 30_000 });
 }
 
-test.describe.configure({ mode: 'serial' });
+/**
+ * Press a buy button and follow it to the provider's page.
+ *
+ * WAITS FOR EITHER OUTCOME, deliberately. If the API refuses to open a checkout
+ * the button reports it IN PLACE and never navigates — and waiting only for the
+ * navigation turns that into a bare thirty-second timeout that names nothing.
+ * The first CI run failed exactly that way, on a missing environment variable,
+ * and the screen had been saying so the whole time.
+ */
+async function buyAndFollow(page: Page, testId: string): Promise<void> {
+  const failure = page.locator('[data-testid="checkout-failed"]');
+  await page.click(`[data-testid="${testId}"]`);
+  await Promise.race([
+    page.waitForURL(new RegExp(`^${API_BASE_URL}/billing/checkout/`), { timeout: 30_000 }),
+    failure.waitFor({ state: 'visible', timeout: 30_000 }),
+  ]).catch(() => undefined);
+
+  if (await failure.isVisible()) {
+    throw new Error(`Checkout did not open. The screen said: "${await failure.textContent()}"`);
+  }
+  await page.waitForURL(new RegExp(`^${API_BASE_URL}/billing/checkout/`), { timeout: 30_000 });
+}
+
+/*
+ * EVERY TEST SIGNS UP ITS OWN PERSON, and that is not waste.
+ *
+ * Sharing one verified account across the suite was tried and reverted: the
+ * workspace-creation route redirects a customer who is ALREADY a member, because
+ * it is the page for a FIRST workspace. That is the product being right, and
+ * loosening it so a test could reuse an account would be changing behaviour to
+ * suit a fixture.
+ *
+ * NOT `serial`, though. Nothing here depends on anything else here, and forcing
+ * four independent journeys onto one worker was a mistake in the first draft.
+ */
 
 test.describe('a stranger becomes a paying customer', () => {
   test('signs up, verifies, creates a workspace and reaches a numbered invoice', async ({
@@ -137,8 +171,7 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
 
     // --- Buy the plan. This LEAVES the dashboard.
-    await page.click('[data-testid="plan-buy-fixture-starter"]');
-    await page.waitForURL(new RegExp(`^${API_BASE_URL}/billing/checkout/`), { timeout: 30_000 });
+    await buyAndFollow(page, 'plan-buy-fixture-starter');
 
     // THE PROVIDER'S PAGE HAS NO CARD FIELD, because hosted checkout means no
     // instrument ever reaches BrandSpace. Asserted rather than assumed.
@@ -179,8 +212,7 @@ test.describe('a stranger becomes a paying customer', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
 
-    await page.click('[data-testid="pack-buy-fixture-pack-small"]');
-    await page.waitForURL(new RegExp(`^${API_BASE_URL}/billing/checkout/`), { timeout: 30_000 });
+    await buyAndFollow(page, 'pack-buy-fixture-pack-small');
     await page.click('[data-testid="dev-checkout-pay"]');
     await page.waitForURL(new RegExp(`${DASHBOARD_BASE_URL}/en/billing/checkout/success`), {
       timeout: 30_000,
@@ -199,8 +231,7 @@ test.describe('a stranger becomes a paying customer', () => {
     await createWorkspace(page, { country: 'SA', currency: 'SAR' });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
-    await page.click('[data-testid="plan-buy-fixture-starter"]');
-    await page.waitForURL(new RegExp(`^${API_BASE_URL}/billing/checkout/`), { timeout: 30_000 });
+    await buyAndFollow(page, 'plan-buy-fixture-starter');
     await page.click('[data-testid="dev-checkout-cancel"]');
 
     await page.waitForURL(new RegExp(`${DASHBOARD_BASE_URL}/en/billing/checkout/`), {
@@ -241,7 +272,7 @@ test.describe('the commercial screens work in both languages', () => {
   }) => {
     test.slow();
 
-    const customer = await signUpAndVerify(page, 'en');
+    const customer = await signUpAndVerify(page);
     await signIn(page, customer.email, 'en');
     await createWorkspace(page, { country: 'SA', currency: 'SAR' }, 'en');
 
