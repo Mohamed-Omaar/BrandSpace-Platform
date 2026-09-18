@@ -107,6 +107,22 @@ const NAV: readonly {
     icon: <ImageIcon size={20} />,
   },
   /*
+   * PHASE 8 — THE AI CREATIVE STUDIO. The entry appears now because the SCREEN
+   * exists now (D-188). Gated on `assets.upload`, matching its route exactly:
+   * a generation writes a file into the library, so a member who may only read
+   * the library has nothing to do there.
+   *
+   * It reads after Assets because that is where its output goes.
+   */
+  {
+    href: '/creative',
+    key: 'nav.creative',
+    permission: 'assets.upload',
+    // `SparkIcon` reused rather than a new glyph drawn (§4.2 rule 4): it is the
+    // product's mark for "a model did this", and it is what Brand Brain wears.
+    icon: <SparkIcon size={20} />,
+  },
+  /*
    * Phase 5B-3. `/approvals` is gated on `content.read`, matching the route.
    *
    * This was briefly `null` — visible to every member — so that D-121's

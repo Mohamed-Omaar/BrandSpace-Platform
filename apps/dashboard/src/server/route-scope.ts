@@ -78,6 +78,13 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * brand an existing object belongs to (D-190).
    */
   '/campaigns/new': 'brand',
+  /*
+   * THE AI CREATIVE STUDIO generates on ONE brand's identity — its palette, its
+   * description, its approved knowledge — so a studio that picked a brand for
+   * the author would produce something that looks like a brand they did not
+   * choose.
+   */
+  '/creative': 'brand',
 
   // --- Brand or All Brands: aggregation is meaningful -----------------------
   /*

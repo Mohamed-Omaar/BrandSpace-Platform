@@ -250,6 +250,24 @@ export class AssetUploadService {
     readonly sessionId: string;
     readonly bytes: Uint8Array;
     readonly actor: AssetActor;
+    /**
+     * PHASE 8 — WHERE THESE BYTES CAME FROM (AC-28.3).
+     *
+     * Defaults to `UPLOAD`, which is what every caller before the Creative
+     * Studio meant. A generated image is an ORDINARY asset in the ONE library —
+     * same table, same scanner, same quota, same download grants — and the only
+     * thing that distinguishes it is this column and the request id beside it,
+     * so a customer can always tell what a model made from what they made.
+     *
+     * DECLARED AT COMPLETION RATHER THAN AT INITIATION on purpose: the AI
+     * request that produced the file does not exist until the generation has
+     * run, and initiation happens before it. A replayed completion returns the
+     * first asset untouched, so provenance cannot be rewritten by a retry.
+     */
+    readonly provenance?:
+      | { readonly source: 'AI_GENERATED'; readonly aiRequestId: string }
+      | { readonly source: 'IMPORTED' }
+      | undefined;
   }): Promise<{ asset: Asset; job: AssetProcessingJob | null; replayed: boolean }> {
     assertPermission(input.actor, 'assets.upload');
 
@@ -350,7 +368,10 @@ export class AssetUploadService {
         sizeBytes: input.bytes.byteLength,
         storageKey: 'pending',
         checksumSha256: checksum,
-        source: 'UPLOAD',
+        source: input.provenance?.source ?? 'UPLOAD',
+        ...(input.provenance?.source === 'AI_GENERATED'
+          ? { aiRequestId: input.provenance.aiRequestId }
+          : {}),
         // QUARANTINED UNTIL PROVEN OTHERWISE. Both fields have to move before
         // anything can select or download this, and only the scanner moves the
         // first (docs/SECURITY.md §11.3).

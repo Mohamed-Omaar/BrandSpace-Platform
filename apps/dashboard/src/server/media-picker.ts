@@ -91,3 +91,37 @@ export async function listMediaOptions(input: {
     );
   });
 }
+
+/**
+ * A preview grant for ONE asset, for a screen that has just created it.
+ *
+ * SAME ISSUER, SAME CHECKS as the Asset Library's listing: the download service
+ * re-verifies `assets.read`, the workspace and the member's BrandScope, and
+ * refuses an asset that is not selectable. This is a convenience for the
+ * Creative Studio, never a shortcut past any of that.
+ *
+ * It returns the asset's NAME too, because the screen that shows the picture
+ * also has to label it, and a second round trip for a string is a second round
+ * trip.
+ */
+export async function issuePreviewToken(input: {
+  readonly workspaceId: string;
+  readonly assetId: string;
+  readonly userId: string;
+  readonly permissionKeys: readonly string[];
+  readonly brandScope: readonly string[];
+}): Promise<{ previewToken: string | null; name: string }> {
+  return inAssetLibrary(input.workspaceId, async (services) => {
+    const download = await services.download();
+    const issued = await download.grantFor({
+      assetId: input.assetId,
+      actor: {
+        userId: input.userId,
+        permissionKeys: input.permissionKeys,
+        brandScope: input.brandScope,
+      },
+      disposition: 'inline',
+    });
+    return { previewToken: issued.grant.token, name: issued.asset.name };
+  });
+}

@@ -13,6 +13,7 @@ import type {
   TextResult,
 } from '../adapter';
 import { AiProviderError, customerMessageFor, type AiFailureClass } from '../errors';
+import { deterministicPng } from './deterministic-image';
 
 /**
  * The Mock provider — docs/AI-GATEWAY.md §3.2.
@@ -292,12 +293,39 @@ export class MockProviderAdapter implements AiProviderAdapter {
 
     const bytes = digest([this.#seed, request.modelKey, request.prompt, request.size]);
     const fingerprint = bytes.toString('hex').slice(0, 16);
-    const imageRefs = Array.from(
-      { length: Math.max(1, request.count) },
-      (_unused, index) => `mock://image/${fingerprint}/${index}`,
-    );
 
-    return { imageRefs, modelKey: request.modelKey, usage: { imageCount: imageRefs.length } };
+    /*
+     * REAL BYTES, DETERMINISTICALLY DRAWN (Phase 8).
+     *
+     * The ref alone proved nothing: a Creative Studio that cannot store a file
+     * cannot show one, attach one to a post, or publish one, and half the
+     * product would have stayed untested until an image vendor was chosen
+     * (D-13, Phase 10). These are small abstract compositions in the brand
+     * palette, derived entirely from the fingerprint above — the same prompt at
+     * the same size always yields the same file, which is what makes a
+     * checksum, a screenshot and a duplicate test mean the same thing twice.
+     *
+     * Nothing here pretends to be a photograph, and every asset the Studio
+     * stores records that a provider generated it.
+     */
+    const images = Array.from({ length: Math.max(1, request.count) }, (_unused, index) => {
+      const ref = `mock://image/${fingerprint}/${index}`;
+      const drawn = deterministicPng(`${fingerprint}:${index}`, request.size);
+      return {
+        ref,
+        base64: Buffer.from(drawn.bytes).toString('base64'),
+        mimeType: drawn.mimeType,
+        width: drawn.width,
+        height: drawn.height,
+      };
+    });
+
+    return {
+      imageRefs: images.map((image) => image.ref),
+      images,
+      modelKey: request.modelKey,
+      usage: { imageCount: images.length },
+    };
   }
 
   async moderate(request: ModerationRequest, ctx: AdapterContext): Promise<ModerationResult> {

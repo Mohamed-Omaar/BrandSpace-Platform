@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from '@brandspace/database';
 import type { CreditLedgerService } from '@brandspace/entitlements';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 
-import type { AdapterContext, AdapterRegistry, UsageUnits } from './adapter';
+import type { AdapterContext, AdapterRegistry, GeneratedImage, UsageUnits } from './adapter';
 import {
   assessBudget,
   budgetRefusal,
@@ -159,6 +159,15 @@ export type AiOutput =
   | {
       readonly kind: 'image';
       readonly imageRefs: readonly string[];
+      /**
+       * PHASE 8 — the bytes, when the provider returned them inline.
+       *
+       * IN MEMORY AND NOT PERSISTED. `ai_request` records the REFS, which are
+       * opaque and small; the bytes travel to the caller and are forgotten.
+       * A generated image becomes an ordinary `Asset` in the one library, and
+       * the library is where files live — not here, and not twice.
+       */
+      readonly images?: readonly GeneratedImage[] | undefined;
     };
 
 /** The outcome of one stuck-request sweep. Mirrors the credit sweeper's shape. */
@@ -787,7 +796,14 @@ export class AiGateway {
         { modelKey, prompt: input.prompt, count: input.count, size: input.size },
         ctx,
       );
-      return { output: { kind: 'image', imageRefs: result.imageRefs }, usage: result.usage };
+      return {
+        output: {
+          kind: 'image',
+          imageRefs: result.imageRefs,
+          ...(result.images ? { images: result.images } : {}),
+        },
+        usage: result.usage,
+      };
     } catch (error) {
       // Everything a provider throws leaves this method as a classified error.
       // Downstream code decides from the CLASS and never from a provider string.

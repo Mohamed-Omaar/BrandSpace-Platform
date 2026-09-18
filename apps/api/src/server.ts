@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { registerBrandBrainRoutes } from './routes/brand-brain';
 import { registerContentRoutes } from './routes/content';
+import { registerCreativeRoutes } from './routes/creative';
 import { registerHealthRoutes } from './routes/health';
 import { registerSocialRoutes } from './routes/social';
 import { registerAnalyticsRoutes } from './routes/analytics';
@@ -37,6 +38,8 @@ export async function buildServer() {
   // of tenant-facing apps. See routes/brand-brain.ts for the full reasoning.
   registerBrandBrainRoutes(app);
   registerContentRoutes(app);
+  // Phase 8 — the AI Creative Studio (D-195, AC-28).
+  registerCreativeRoutes(app);
   registerSocialRoutes(app);
   /*
    * Phase 7. Each of these calls the AI Gateway or performs an external action

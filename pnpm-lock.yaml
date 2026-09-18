@@ -129,6 +129,9 @@ importers:
       '@brandspace/copilot':
         specifier: workspace:*
         version: link:../../packages/copilot
+      '@brandspace/creative':
+        specifier: workspace:*
+        version: link:../../packages/creative
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -199,6 +202,9 @@ importers:
       '@brandspace/content':
         specifier: workspace:*
         version: link:../../packages/content
+      '@brandspace/creative':
+        specifier: workspace:*
+        version: link:../../packages/creative
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -598,6 +604,25 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/creative:
+    dependencies:
+      '@brandspace/ai-gateway':
+        specifier: workspace:*
+        version: link:../ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../assets
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/database:
     dependencies:
       '@brandspace/auth':
@@ -871,6 +896,9 @@ importers:
       '@brandspace/copilot':
         specifier: workspace:*
         version: link:../packages/copilot
+      '@brandspace/creative':
+        specifier: workspace:*
+        version: link:../packages/creative
       '@brandspace/database':
         specifier: workspace:*
         version: link:../packages/database

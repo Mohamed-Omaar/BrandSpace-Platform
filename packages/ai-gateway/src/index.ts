@@ -29,6 +29,7 @@ export type {
   TextRequest,
   TextResult,
   UsageUnits,
+  GeneratedImage,
 } from './adapter';
 
 export { MockProviderAdapter } from './adapters/mock';
