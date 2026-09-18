@@ -13,6 +13,7 @@ import {
 import { requireWorkspace, inWorkspace } from '../../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
 import { paletteFrom, typographyFrom } from '../../../../server/brand-profile';
+import { settingsNavItems } from '../../../../server/settings-nav';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveBrandProfileAction } from './actions';
@@ -114,18 +115,17 @@ export default async function BrandProfilePage({
       })
     : null;
 
-  const nav = [
-    { href: `/${locale}/settings`, label: t('settings.title'), selected: false },
-    {
-      href: `/${locale}/settings/brand`,
-      label: t('brand.profile'),
-      selected: true,
-    },
-    ...(workspace.permissionKeys.includes('member.read')
-      ? [{ href: `/${locale}/members`, label: t('nav.members'), selected: false }]
-      : []),
-    { href: `/${locale}/permissions`, label: t('perms.title'), selected: false },
-  ];
+  /*
+   * EVERY ROW LEADS SOMEWHERE THIS MEMBER CAN GO. `/settings` requires
+   * `workspace.update` and this page requires only `brand.read`, so the two are
+   * genuinely separable — a brand manager who is not a workspace administrator
+   * belongs here and does not belong there. The shared table decides.
+   */
+  const nav = settingsNavItems({
+    locale,
+    permissionKeys: workspace.permissionKeys,
+    selected: 'brand',
+  }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }));
 
   const palette = paletteFrom(data?.brand.colorPalette);
   const fonts = typographyFrom(data?.brand.typography);

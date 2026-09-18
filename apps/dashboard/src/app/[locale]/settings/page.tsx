@@ -10,6 +10,7 @@ import {
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
+import { settingsNavItems } from '../../../server/settings-nav';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -88,16 +89,15 @@ export default async function SettingsPage({
       */}
       <SettingsSplit
         navLabel={t('settings.navLabel')}
-        items={[
-          { href: `/${locale}/settings`, label: t('settings.title'), selected: true },
-          ...(workspace.permissionKeys.includes('member.read')
-            ? [{ href: `/${locale}/members`, label: t('nav.members'), selected: false }]
-            : []),
-          { href: `/${locale}/permissions`, label: t('perms.title'), selected: false },
-          ...(workspace.permissionKeys.includes('billing.read')
-            ? [{ href: `/${locale}/plan`, label: t('nav.plan'), selected: false }]
-            : []),
-        ]}
+        items={settingsNavItems({
+          locale,
+          permissionKeys: workspace.permissionKeys,
+          selected: 'settings',
+        }).map((item) => ({
+          href: item.href,
+          label: t(item.labelKey),
+          selected: item.selected,
+        }))}
       >
         <Card testId="settings-card">
           {/*

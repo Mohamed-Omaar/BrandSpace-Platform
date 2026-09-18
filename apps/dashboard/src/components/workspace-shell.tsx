@@ -290,6 +290,20 @@ export function WorkspaceShell({
     },
   ];
 
+  /*
+   * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.
+   *
+   * `/settings/brand` calls `requireWorkspace(locale, 'brand.read')` and answers
+   * 404 without it, so offering the row to a member who does not hold it is a
+   * link to a dead end — and a dead end that looks like a permissions bug to
+   * the person who clicks it.
+   *
+   * DEAD-LINK PREVENTION ONLY. The route authorizes independently and nothing
+   * here is load-bearing for security: typing the URL still fails, identically
+   * to a route that does not exist (CLAUDE.md §2.1).
+   */
+  const mayReadBrandProfile = permissionKeys.includes('brand.read');
+
   const workspaceOptions: readonly WorkspaceOption[] = availableWorkspaces.map((workspace) => ({
     id: workspace.id,
     name: workspace.name,
@@ -356,7 +370,7 @@ export function WorkspaceShell({
                   }
                 : {})}
               emptyLabel={t('brand.emptyMenu')}
-              {...(brandContext.resolution.kind === 'brand'
+              {...(brandContext.resolution.kind === 'brand' && mayReadBrandProfile
                 ? {
                     manageHref: `/${locale}/settings/brand?brand=${brandContext.resolution.brand.id}`,
                     manageLabel: t('brand.profile'),

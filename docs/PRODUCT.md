@@ -194,6 +194,17 @@ is configuration for the brand you are already working in rather than a place yo
 its screen exists. Campaigns and AI Creative Studio are on the list and are NOT linked yet; adding a
 placeholder entry for either would be the dead link `docs/UI-FIDELITY-CONTRACT.md` §20 forbids.
 
+**BEING UNLINKED IS NOT BEING OUT OF SCOPE.** Campaigns, the AI Creative Studio, media inside the AI
+Content Studio, the media-aware publishing workflow and Marketing Intelligence are **mandatory Phase
+8 deliverables** (D-195), not Phase 9 or Phase 10 work. They are unlinked today because their screens
+do not exist yet, and they get their sidebar entries in the Phase 8 workstreams that build them. The
+same rule applies in reverse: no entry may be added before its screen is real.
+
+**BRAND PROFILE IS REACHED FROM TWO PLACES, BOTH PERMISSION-GATED.** The global Brand Selector offers
+it when a brand is resolved AND the member holds `brand.read`; the Settings section navigation offers
+it under the same permission. A row a member cannot follow is not shown — and the route authorizes
+independently regardless, answering 404 exactly as a route that does not exist would (D-197).
+
 ### 5.0.1 One sidebar, two selectors
 
 The customer does **not** get a duplicated sidebar per brand, and no page invents its own brand
