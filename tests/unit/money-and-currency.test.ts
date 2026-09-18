@@ -19,175 +19,18 @@ import {
   scalesOf,
   taxPolicyFor,
 } from '@brandspace/billing';
+import { CATALOGUE } from '../support/commerce-fixture';
 
 /**
  * Exact money and the multi-currency catalogue.
  *
- * EVERY NUMBER HERE IS A FIXTURE. None of it is approved commercial data: the
- * real catalogue is entered from Platform Admin and this file only proves the
- * SHAPE of the rules — that three-digit currencies are not two-digit ones, that
- * nothing converts, and that a missing price is reported rather than filled in.
+ * THE CATALOGUE LIVES IN `tests/support/commerce-fixture.ts` and is shared with
+ * the billing suite, so both reason about the same configured world. None of it
+ * is approved commercial data: the real catalogue is entered from Platform Admin
+ * and this file only proves the SHAPE of the rules — that three-digit currencies
+ * are not two-digit ones, that nothing converts, and that a missing price is
+ * reported rather than filled in.
  */
-
-const CATALOGUE = {
-  currencies: [
-    {
-      code: 'SAR',
-      name: { ar: 'ريال سعودي', en: 'Saudi Riyal' },
-      minorUnitDigits: 2,
-      status: 'active',
-      sortOrder: 1,
-    },
-    {
-      code: 'AED',
-      name: { ar: 'درهم إماراتي', en: 'UAE Dirham' },
-      minorUnitDigits: 2,
-      status: 'active',
-      sortOrder: 2,
-    },
-    {
-      code: 'KWD',
-      name: { ar: 'دينار كويتي', en: 'Kuwaiti Dinar' },
-      minorUnitDigits: 3,
-      status: 'active',
-      sortOrder: 3,
-    },
-    {
-      code: 'QAR',
-      name: { ar: 'ريال قطري', en: 'Qatari Riyal' },
-      minorUnitDigits: 2,
-      status: 'active',
-      sortOrder: 4,
-    },
-    {
-      code: 'BHD',
-      name: { ar: 'دينار بحريني', en: 'Bahraini Dinar' },
-      minorUnitDigits: 3,
-      status: 'active',
-      sortOrder: 5,
-    },
-    {
-      code: 'OMR',
-      name: { ar: 'ريال عماني', en: 'Omani Rial' },
-      minorUnitDigits: 3,
-      status: 'active',
-      sortOrder: 6,
-    },
-    {
-      code: 'USD',
-      name: { ar: 'دولار أمريكي', en: 'US Dollar' },
-      minorUnitDigits: 2,
-      status: 'active',
-      sortOrder: 7,
-    },
-    {
-      code: 'EUR',
-      name: { ar: 'يورو', en: 'Euro' },
-      minorUnitDigits: 2,
-      status: 'inactive',
-      sortOrder: 8,
-    },
-  ],
-  markets: [
-    {
-      country: 'SA',
-      name: { ar: 'السعودية', en: 'Saudi Arabia' },
-      currencies: ['SAR', 'USD'],
-      planKeys: null,
-      taxPolicyKey: 'standard-exclusive',
-      status: 'active',
-    },
-    {
-      country: 'AE',
-      name: { ar: 'الإمارات', en: 'United Arab Emirates' },
-      currencies: ['AED', 'USD'],
-      // AE is deliberately offered a NARROWER plan list than SA — the fixture
-      // for "available in one market, unavailable in another".
-      planKeys: ['fixture-starter'],
-      taxPolicyKey: 'standard-exclusive',
-      status: 'active',
-    },
-    {
-      country: 'KW',
-      name: { ar: 'الكويت', en: 'Kuwait' },
-      currencies: ['KWD', 'USD'],
-      planKeys: null,
-      taxPolicyKey: 'no-tax',
-      status: 'active',
-    },
-    {
-      country: 'BH',
-      name: { ar: 'البحرين', en: 'Bahrain' },
-      currencies: ['BHD'],
-      planKeys: null,
-      taxPolicyKey: null,
-      status: 'active',
-    },
-    {
-      country: 'OM',
-      name: { ar: 'عُمان', en: 'Oman' },
-      currencies: ['OMR'],
-      planKeys: null,
-      taxPolicyKey: null,
-      status: 'active',
-    },
-    {
-      country: 'QA',
-      name: { ar: 'قطر', en: 'Qatar' },
-      currencies: ['QAR'],
-      planKeys: null,
-      taxPolicyKey: null,
-      status: 'active',
-    },
-    {
-      country: 'US',
-      name: { ar: 'الولايات المتحدة', en: 'United States' },
-      currencies: ['USD'],
-      planKeys: null,
-      taxPolicyKey: 'no-tax',
-      status: 'active',
-    },
-  ],
-  taxPolicies: [
-    {
-      key: 'standard-exclusive',
-      name: { ar: 'ضريبة مضافة', en: 'Value added tax' },
-      mode: 'exclusive',
-      rateBasisPoints: 1500,
-      taxIdLabel: { ar: 'الرقم الضريبي', en: 'Tax registration number' },
-      taxIdRequired: false,
-      invoiceNote: null,
-    },
-    {
-      key: 'no-tax',
-      name: { ar: 'بدون ضريبة', en: 'No tax' },
-      mode: 'none',
-      rateBasisPoints: 0,
-      taxIdLabel: null,
-      taxIdRequired: false,
-      invoiceNote: null,
-    },
-  ],
-  creditPacks: [
-    {
-      key: 'fixture-pack-small',
-      name: { ar: 'حزمة صغيرة', en: 'Small pack' },
-      description: null,
-      credits: 500,
-      prices: [
-        { currency: 'SAR', amountMinor: 9900 },
-        { currency: 'KWD', amountMinor: 9900 },
-      ],
-      countries: null,
-      expiryDays: 365,
-      status: 'active',
-      sortOrder: 1,
-    },
-  ],
-  providerRouting: [
-    { providerKey: 'development-mock', countries: null, currencies: null, priority: 0 },
-  ],
-} as const;
 
 const POLICY = commercePolicyFrom(CATALOGUE as unknown as Record<string, unknown>);
 

@@ -5506,10 +5506,12 @@ model BillingEvent {
 
 /// PLATFORM-OWNED. The seller's invoice-number series.
 ///
-/// ONE ROW PER PREFIX AND YEAR, advanced by `app.allocate_invoice_number()` — a
-/// SECURITY DEFINER function, because the tenant role must be able to ISSUE an
-/// invoice without being able to read or rewrite the counter. The function takes
-/// a row lock, so two simultaneous issues get two different numbers (§30).
+/// ONE ROW PER PREFIX AND YEAR, advanced by `app.allocate_invoice_number()`,
+/// which only the platform role may execute. The tenant role has no privilege on
+/// this table and no EXECUTE on the function: issuing an invoice is a SYSTEM act
+/// in response to an authoritative provider event, never a customer action. The
+/// function takes a row lock inside the caller's transaction, so two simultaneous
+/// issues get two different numbers (§30).
 ///
 /// A DATABASE SEQUENCE WOULD NOT DO. Sequences are not transactional: a rolled
 /// back issue would leave a permanent gap in an accounting series that is

@@ -84,6 +84,7 @@ export interface DunningPolicy {
 
 export interface InvoiceIdentity {
   readonly numberPrefix: string;
+  readonly creditNotePrefix: string;
   readonly numberPadding: number;
   readonly legalName: LocalizedText | null;
   readonly address: LocalizedText | null;

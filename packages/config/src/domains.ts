@@ -1835,6 +1835,12 @@ const commerceSchema = z.object({
     .object({
       /** Prefix for the human-readable number — `BS` gives `BS-2026-000001`. */
       numberPrefix: z.string().min(1).max(8).default('BS'),
+      /*
+       * A SEPARATE SERIES FOR CREDIT NOTES. Sharing one counter would interleave
+       * corrections into the sales series and make it non-contiguous, which is
+       * exactly what a gapless series is required not to be.
+       */
+      creditNotePrefix: z.string().min(1).max(8).default('BSCN'),
       numberPadding: z.number().int().min(4).max(12).default(6),
       /** The seller. Owner text: the legal entity is D-05 and still open. */
       legalName: localizedText.nullable().default(null),
