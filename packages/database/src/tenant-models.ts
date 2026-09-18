@@ -123,6 +123,30 @@ export const STRICT_TENANT_MODELS = [
   'AutomationRule',
   'AutomationRun',
   'AutomationEvent',
+
+  // --- Phase 9: Commerce ---------------------------------------------------
+  // The money belonging to a workspace. Every row here is commercially
+  // sensitive in the plain sense: what this customer pays, what they were
+  // invoiced, what they bought and whether their card failed. The isolation bar
+  // is the same as everywhere else and is stated once more because the
+  // consequence differs: a leak here is not a preference, it is a competitor
+  // reading the revenue of another business.
+  //
+  // PROVIDER REFERENCES ARE NOT AUTHORIZATION BOUNDARIES. A provider session or
+  // customer id appearing in a request proves nothing; the workspace comes from
+  // the session, and a reference is only ever used to LOOK UP a row that the
+  // tenant predicate has already constrained.
+  //
+  // (No apostrophes in this block: readRegistryList parses it with a
+  // quote-matching regex, so one would silently swallow the names below.)
+  'BillingProfile',
+  'CheckoutSession',
+  'Invoice',
+  'InvoiceLine',
+  'CreditNote',
+  'CreditNoteLine',
+  'PaymentAttempt',
+  'CreditPackPurchase',
 ] as const;
 
 /**
@@ -151,6 +175,15 @@ export const IDENTITY_MODELS_WITH_POLICY = [
   // session or reset rows at all.
   'CustomerSession',
   'PasswordResetToken',
+  // Phase 9. A verification token, a recorded legal acceptance and an MFA
+  // recovery code all belong to a PERSON and exist before any workspace does —
+  // a stranger verifies their email before they have created one. They are
+  // reachable only from the authentication and onboarding paths, which run with
+  // no workspace context, so inside a workspace the tables are empty for the
+  // tenant role.
+  'EmailVerificationToken',
+  'UserLegalAcceptance',
+  'UserMfaRecoveryCode',
 ] as const;
 
 /**
@@ -176,6 +209,23 @@ export const PLATFORM_OWNED_MODELS = [
   'ConfigurationVersion',
   'SecretRecord',
   'SecretVersion',
+  // Phase 9. The webhook inbox and the invoice counter of the seller.
+  //
+  // `BillingEvent` is platform-owned because an event arrives BEFORE anyone
+  // knows whose it is: the workspace is derived by looking the provider
+  // customer id up in `billing_profile`, never read from the event body. One
+  // workspace counting the payment events of another would be a disclosure in
+  // itself, so the tenant role has no access at all.
+  //
+  // `InvoiceNumberSequence` is the accounting series of the seller, shared
+  // across every customer. The tenant role may ALLOCATE a number through
+  // `app.allocate_invoice_number()` — a SECURITY DEFINER function — and may not
+  // read or rewrite the counter.
+  //
+  // (No apostrophes in this block: readRegistryList parses it with a
+  // quote-matching regex, so one would silently swallow the names below.)
+  'BillingEvent',
+  'InvoiceNumberSequence',
 ] as const;
 
 /**

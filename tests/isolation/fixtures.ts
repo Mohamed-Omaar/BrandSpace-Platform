@@ -115,6 +115,33 @@ export interface TenantFixture {
   readonly automationRuleId: string;
   readonly automationRunId: string;
   readonly automationRunIdempotencyKey: string;
+  // --- Phase 9 (Commerce & Onboarding) ---
+  /** The commercial identity, carrying the provider reference a webhook resolves through. */
+  readonly billingProfileId: string;
+  readonly providerCustomerId: string;
+  /** A PENDING subscription checkout, with the amount the server calculated. */
+  readonly checkoutSessionId: string;
+  readonly checkoutIdempotencyKey: string;
+  readonly providerSessionId: string;
+  /** An ISSUED, PAID invoice with one line — a real commercial document. */
+  readonly invoiceId: string;
+  readonly invoiceNumber: string;
+  readonly invoiceLineId: string;
+  /** A credit note against that invoice, and its one line. */
+  readonly creditNoteId: string;
+  readonly creditNoteIdempotencyKey: string;
+  readonly creditNoteLineId: string;
+  /** One recorded collection attempt. */
+  readonly paymentAttemptId: string;
+  readonly paymentAttemptIdempotencyKey: string;
+  /** A COMPLETED pack purchase, naming the one grant it produced. */
+  readonly creditPackPurchaseId: string;
+  /** Identity-scoped rows: they exist before any workspace does. */
+  readonly emailVerificationTokenId: string;
+  readonly emailVerificationTokenHash: string;
+  readonly legalAcceptanceId: string;
+  readonly mfaRecoveryCodeId: string;
+  readonly mfaRecoveryCodeHash: string;
 }
 
 export interface IsolationFixtures {
@@ -1437,6 +1464,172 @@ async function createTenant(
         },
       });
 
+      /*
+       * PHASE 9 — the commercial rows.
+       *
+       * A REAL SHAPE, not a stub: an issued and paid invoice with a line, a
+       * credit note against it, a completed pack purchase naming its grant, and
+       * a provider customer reference. The isolation suite has to probe what
+       * the product actually stores, and a row that only satisfies a foreign
+       * key would not exercise the composite keys or the CHECK constraints.
+       */
+      const providerCustomerId = `cus_fixture_${slug}`;
+      const billingProfile = await db.billingProfile.create({
+        data: {
+          workspaceId: id,
+          billingEmail: `billing-${slug}@example.local`,
+          legalName: `Fixture Legal ${slug}`,
+          country: 'SA',
+          providerKey: 'development-mock',
+          providerCustomerId,
+        },
+      });
+
+      const checkoutKey = `fixture-checkout-${slug}`;
+      const providerSessionId = `cs_fixture_${slug}`;
+      const checkoutSession = await db.checkoutSession.create({
+        data: {
+          workspaceId: id,
+          purpose: 'SUBSCRIPTION',
+          status: 'PENDING',
+          planKey: 'fixture-plan',
+          billingInterval: 'MONTH',
+          currency: 'SAR',
+          currencyScale: 2,
+          amountMinor: 9900n,
+          taxMinor: 1485n,
+          totalMinor: 11385n,
+          providerKey: 'development-mock',
+          providerSessionId,
+          idempotencyKey: checkoutKey,
+          expiresAt: new Date(Date.now() + 3_600_000),
+          createdByUserId: user.id,
+        },
+      });
+
+      const invoiceNumber = `BSFX-${slug}`;
+      const invoice = await db.invoice.create({
+        data: {
+          workspaceId: id,
+          number: invoiceNumber,
+          status: 'PAID',
+          currency: 'SAR',
+          currencyScale: 2,
+          subtotalMinor: 9900n,
+          taxMinor: 1485n,
+          totalMinor: 11385n,
+          amountPaidMinor: 11385n,
+          taxMode: 'EXCLUSIVE',
+          taxRateBasisPoints: 1500,
+          issuedAt: new Date(),
+          paidAt: new Date(),
+          commercialSnapshot: { planKey: 'fixture-plan', interval: 'MONTH' },
+          partiesSnapshot: { seller: 'Fixture Seller', buyer: `Fixture ${slug}` },
+          providerKey: 'development-mock',
+        },
+      });
+
+      const invoiceLine = await db.invoiceLine.create({
+        data: {
+          workspaceId: id,
+          invoiceId: invoice.id,
+          kind: 'SUBSCRIPTION',
+          description: { ar: 'اشتراك تجريبي', en: 'Fixture subscription' },
+          quantity: 1,
+          unitAmountMinor: 9900n,
+          amountMinor: 9900n,
+          taxAmountMinor: 1485n,
+        },
+      });
+
+      const creditNoteKey = `fixture-credit-note-${slug}`;
+      const creditNote = await db.creditNote.create({
+        data: {
+          workspaceId: id,
+          invoiceId: invoice.id,
+          number: `BSCN-${slug}`,
+          status: 'ISSUED',
+          currency: 'SAR',
+          currencyScale: 2,
+          subtotalMinor: 1000n,
+          taxMinor: 150n,
+          totalMinor: 1150n,
+          reason: 'Fixture goodwill adjustment',
+          issuedAt: new Date(),
+          idempotencyKey: creditNoteKey,
+        },
+      });
+
+      const creditNoteLine = await db.creditNoteLine.create({
+        data: {
+          workspaceId: id,
+          creditNoteId: creditNote.id,
+          invoiceLineId: invoiceLine.id,
+          description: { ar: 'تسوية', en: 'Adjustment' },
+          amountMinor: 1000n,
+          taxAmountMinor: 150n,
+        },
+      });
+
+      const paymentAttemptKey = `fixture-payment-${slug}`;
+      const paymentAttempt = await db.paymentAttempt.create({
+        data: {
+          workspaceId: id,
+          invoiceId: invoice.id,
+          status: 'SUCCEEDED',
+          currency: 'SAR',
+          currencyScale: 2,
+          amountMinor: 11385n,
+          idempotencyKey: paymentAttemptKey,
+          settledAt: new Date(),
+        },
+      });
+
+      // The pack purchase points at the SAME grant the credit fixtures made, so
+      // the row is COMPLETED honestly rather than claiming a grant that is not
+      // there — the CHECK constraint would refuse it otherwise.
+      const creditPackPurchase = await db.creditPackPurchase.create({
+        data: {
+          workspaceId: id,
+          packKey: 'fixture-pack',
+          credits: 500,
+          currency: 'SAR',
+          currencyScale: 2,
+          amountMinor: 9900n,
+          status: 'COMPLETED',
+          creditGrantId: creditGrant.id,
+          completedAt: new Date(),
+        },
+      });
+
+      const verificationHash = crypto
+        .createHash('sha256')
+        .update(`fixture-verify-${slug}`)
+        .digest('hex');
+      const emailVerification = await db.emailVerificationToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: verificationHash,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+
+      const legalAcceptance = await db.userLegalAcceptance.create({
+        data: {
+          userId: user.id,
+          documentKey: 'terms-of-service',
+          version: 'fixture-2026-01',
+        },
+      });
+
+      const recoveryHash = crypto
+        .createHash('sha256')
+        .update(`fixture-recovery-${slug}`)
+        .digest('hex');
+      const mfaRecoveryCode = await db.userMfaRecoveryCode.create({
+        data: { userId: user.id, codeHash: recoveryHash },
+      });
+
       return {
         workspaceId: workspace.id,
         slug,
@@ -1518,6 +1711,25 @@ async function createTenant(
         automationRuleId: automationRule.id,
         automationRunId: automationRun.id,
         automationRunIdempotencyKey: automationRunKey,
+        billingProfileId: billingProfile.id,
+        providerCustomerId,
+        checkoutSessionId: checkoutSession.id,
+        checkoutIdempotencyKey: checkoutKey,
+        providerSessionId,
+        invoiceId: invoice.id,
+        invoiceNumber,
+        invoiceLineId: invoiceLine.id,
+        creditNoteId: creditNote.id,
+        creditNoteIdempotencyKey: creditNoteKey,
+        creditNoteLineId: creditNoteLine.id,
+        paymentAttemptId: paymentAttempt.id,
+        paymentAttemptIdempotencyKey: paymentAttemptKey,
+        creditPackPurchaseId: creditPackPurchase.id,
+        emailVerificationTokenId: emailVerification.id,
+        emailVerificationTokenHash: verificationHash,
+        legalAcceptanceId: legalAcceptance.id,
+        mfaRecoveryCodeId: mfaRecoveryCode.id,
+        mfaRecoveryCodeHash: recoveryHash,
       };
     },
     { prisma, bootstrap: true },

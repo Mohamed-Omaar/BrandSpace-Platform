@@ -171,6 +171,19 @@ enum SubscriptionStatus {
   PAUSED
   CANCELLED
   EXPIRED
+  /*
+   * PHASE 9 ADDITIONS. Each names a state the lifecycle genuinely reaches and
+   * that the customer's own screen has to be able to say out loud (§45).
+   */
+  /// A checkout was opened and NOTHING authoritative has come back yet.
+  ///
+  /// THE STATE THAT KEEPS THE PRODUCT HONEST. A browser landing on a success
+  /// URL does not leave this state — only a verified provider event does
+  /// (§22), so "paid" is never displayed on the strength of a redirect.
+  CHECKOUT_PENDING
+  /// Payment has failed, the dunning window has elapsed, and paid capability is
+  /// withdrawn. DATA IS RETAINED (§40); this is reversible by recovery.
+  SUSPENDED
 }
 
 enum BillingInterval {
@@ -277,6 +290,11 @@ model User {
   passwordResets      PasswordResetToken[]
   invitationsSent     Invitation[]         @relation("InvitationInviter")
   invitationsAccepted Invitation[]         @relation("InvitationAcceptor")
+
+  /// Phase 9 — self-service signup, verified identity and customer MFA.
+  emailVerifications EmailVerificationToken[]
+  legalAcceptances   UserLegalAcceptance[]
+  mfaRecoveryCodes   UserMfaRecoveryCode[]
 
   @@index([status])
   @@map("user")
@@ -478,6 +496,16 @@ model Workspace {
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
   automationEvents          AutomationEvent[]
+
+  /// Phase 9 — Commerce.
+  billingProfile      BillingProfile?
+  checkoutSessions    CheckoutSession[]
+  invoices            Invoice[]
+  invoiceLines        InvoiceLine[]
+  creditNotes         CreditNote[]
+  creditNoteLines     CreditNoteLine[]
+  paymentAttempts     PaymentAttempt[]
+  creditPackPurchases CreditPackPurchase[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1206,12 +1234,44 @@ model WorkspaceSubscription {
   cancelAtPeriodEnd Boolean   @default(false)
   cancelledAt       DateTime? @db.Timestamptz(6)
 
+  // --- Phase 9: the provider reference and the dunning clock ----------------
+
+  /// The adapter serving this subscription, and the provider's own id for it.
+  /// REFERENCES, never authority: entitlements resolve from the row above, so a
+  /// provider outage cannot remove a paying customer's access
+  /// (docs/BILLING-AND-CREDITS.md §1.1).
+  providerKey            String?
+  providerSubscriptionId String?
+
+  /// The checkout that is currently trying to pay for this subscription.
+  pendingCheckoutSessionId String? @db.Uuid
+
+  /// When collection first failed. The dunning schedule is measured from here,
+  /// so a later failure in the same episode does not restart the clock.
+  pastDueSince DateTime? @db.Timestamptz(6)
+  /// When full access stops if nothing is collected. From `commerce.dunning`.
+  graceEndsAt  DateTime? @db.Timestamptz(6)
+  suspendedAt  DateTime? @db.Timestamptz(6)
+  /// Set when the customer asks, cleared if they resume before it takes effect.
+  cancelRequestedAt DateTime? @db.Timestamptz(6)
+
+  /// The provider event that last moved this row, and when the provider says it
+  /// happened. AN OUT-OF-ORDER DELIVERY IS RECOGNISED BY COMPARING AGAINST
+  /// THIS: an event older than the state it describes is recorded and NOT
+  /// applied (§28), rather than winding a subscription backwards.
+  lastEventAt        DateTime? @db.Timestamptz(6)
+  lastBillingEventId String?   @db.Uuid
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  /// The reverse lookup a webhook uses for a subscription-scoped event, for the
+  /// same reason `billing_profile` carries one: the mapping must be ours.
+  @@unique([providerKey, providerSubscriptionId])
   @@index([status, currentPeriodEnd])
+  @@index([status, graceEndsAt])
   @@index([planKey])
   @@map("workspace_subscription")
 }
@@ -4917,4 +4977,626 @@ model AutomationEvent {
   @@index([deliveredAt, createdAt])
   @@index([workspaceId, brandId, triggerType])
   @@map("automation_event")
+}
+
+// ===========================================================================
+// PHASE 9 — COMMERCE & ONBOARDING
+//
+// docs/BILLING-AND-CREDITS.md, docs/SECURITY.md §38.
+//
+// THE DOMAIN MODEL IS OURS. A payment provider moves money and holds the PCI
+// scope; it does not own our commercial truth. Every model below is a
+// BrandSpace record that happens to carry a provider REFERENCE, and no
+// entitlement, invoice total or credit grant is ever resolved by asking a
+// provider what it thinks. D-204 leaves the production vendor unchosen: nothing
+// here names one.
+//
+// EXACT MONEY, EVERYWHERE. Amounts are integer minor units in `BigInt`, and
+// every monetary row carries BOTH its ISO currency and that currency's
+// `minorUnitDigits` at the moment the row was written. The scale is stored
+// rather than looked up because a catalogue edit must not retroactively change
+// what an issued invoice says: 1000 is 10.00 SAR and 1.000 KWD, and an invoice
+// is a historical fact.
+// ===========================================================================
+
+/// Why a hosted checkout session was opened.
+enum CheckoutPurpose {
+  /// Starting or changing a paid subscription.
+  SUBSCRIPTION
+  /// A one-time prepaid credit pack (D-196 — never an overage settlement).
+  CREDIT_PACK
+}
+
+enum CheckoutSessionStatus {
+  /// Created with the provider; the customer has not finished.
+  PENDING
+  /// An authoritative provider event confirmed payment and it was reconciled.
+  COMPLETED
+  /// The customer abandoned it, or the provider reported a cancellation.
+  CANCELLED
+  /// Its window closed before anything authoritative arrived.
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  /// Being assembled. Has no number yet and is not a commercial document.
+  DRAFT
+  /// Issued and awaiting payment. Numbered, immutable.
+  OPEN
+  PAID
+  /// Cancelled before payment. Corrections after payment are credit notes.
+  VOID
+  UNCOLLECTIBLE
+}
+
+/// How tax was applied to an invoice, copied from the market's policy at issue.
+enum InvoiceTaxMode {
+  NONE
+  EXCLUSIVE
+  INCLUSIVE
+}
+
+enum InvoiceLineKind {
+  SUBSCRIPTION
+  CREDIT_PACK
+  PRORATION
+  SEAT
+  ADDON
+  DISCOUNT
+}
+
+enum CreditNoteStatus {
+  DRAFT
+  ISSUED
+  /// The money actually moved back through the provider.
+  REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum CreditPackPurchaseStatus {
+  /// Checkout opened; nothing has been granted and nothing has been charged.
+  PENDING
+  /// Paid AND reconciled AND granted. The only status that implies credits.
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+/// How far a received provider event has got.
+enum BillingEventStatus {
+  RECEIVED
+  PROCESSED
+  /// Applied earlier; this delivery changed nothing (§28 — replays are no-ops).
+  DUPLICATE
+  /// Older than the state it describes. Recorded, deliberately not applied.
+  STALE
+  /// Could not be tied to a workspace through a trusted stored relationship.
+  UNRESOLVED
+  FAILED
+}
+
+/// TENANT-OWNED. The workspace's commercial identity and its provider reference.
+///
+/// THE TRUSTED SIDE OF EVERY WEBHOOK. `providerKey` + `providerCustomerId` is
+/// the ONLY mapping from a provider's world back to a workspace, and it is
+/// written by us when we create the customer — never from event metadata. A
+/// webhook that names a workspace is not believed; it is looked up here
+/// (docs/SECURITY.md §38.3, §28 of the Phase 9 brief).
+model BillingProfile {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @unique @db.Uuid
+
+  /// The billing contact. Separate from the owner's login: finance is not always
+  /// the person who signed up.
+  billingEmail String
+  legalName    String?
+  /// What the market's tax policy calls it; the policy decides whether it is
+  /// required. Never validated against a jurisdiction rule in code (§32).
+  taxId        String?
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  region       String?
+  postalCode   String?
+  /// ISO 3166-1 alpha-2. Defaults to the workspace's own country at creation and
+  /// may then differ — a company can be billed somewhere it does not operate.
+  country      String  @db.Char(2)
+
+  /// The adapter that serves this workspace, resolved from `commerce`
+  /// providerRouting. NOT a credential and NOT a secret — see the schema note.
+  providerKey        String?
+  /// The provider's own id for this customer. Opaque to us.
+  providerCustomerId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  checkoutSessions CheckoutSession[]
+  invoices         Invoice[]
+
+  /// THE REVERSE LOOKUP A WEBHOOK USES. Unique so one provider customer can
+  /// never map to two workspaces, which would make the resolution ambiguous at
+  /// exactly the moment money is involved.
+  @@unique([providerKey, providerCustomerId])
+  @@unique([workspaceId, id], name: "billing_profile_workspace_scope")
+  @@map("billing_profile")
+}
+
+/// TENANT-OWNED. One hosted checkout, with the amount WE calculated.
+///
+/// THE AMOUNT IS NOT ACCEPTED FROM THE BROWSER. A request names a plan or a
+/// pack; the price is resolved server-side from activated configuration and
+/// written here before the provider is called. Reconciliation then compares the
+/// provider's amount against THIS row (§37), so a customer who edits a form
+/// cannot buy anything at a price the owner did not set.
+model CheckoutSession {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  purpose CheckoutPurpose
+  status  CheckoutSessionStatus @default(PENDING)
+
+  /// Exactly one of these is set, enforced by a CHECK.
+  planKey         String?
+  billingInterval BillingInterval?
+  packKey         String?
+
+  /// The agreed amount, in minor units of `currency` at `currencyScale`.
+  currency      String @db.Char(3)
+  currencyScale Int
+  amountMinor   BigInt
+  /// The tax the market's policy implies, computed at creation for display.
+  taxMinor      BigInt @default(0)
+  totalMinor    BigInt
+
+  /// Which `plans` / `commerce` versions the amount came from, so the agreed
+  /// terms can be proven later even after the catalogue moves on (§25).
+  planVersionId     String? @db.Uuid
+  commerceVersionId String? @db.Uuid
+
+  providerKey       String
+  /// The provider's session id. Opaque, and never an authorization boundary.
+  providerSessionId String?
+  /// Where the provider sends the browser back. Navigation only — never money.
+  returnUrl         String?
+
+  /// The caller's own key, so a double-submitted form opens ONE session.
+  idempotencyKey String
+
+  expiresAt   DateTime  @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+
+  createdByUserId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingProfile BillingProfile       @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade, map: "checkout_session_profile_fkey")
+  invoice        Invoice?
+  purchase       CreditPackPurchase?
+  attempts       PaymentAttempt[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([providerKey, providerSessionId])
+  @@unique([workspaceId, id], name: "checkout_session_workspace_scope")
+  @@index([workspaceId, status])
+  @@index([status, expiresAt])
+  @@map("checkout_session")
+}
+
+/// TENANT-OWNED. A BrandSpace invoice — our record, not a mirror of a provider's.
+///
+/// IMMUTABLE ONCE ISSUED. A correction is a credit note, never an edit
+/// (docs/BILLING-AND-CREDITS.md §4). The snapshots exist so an invoice from last
+/// year still renders exactly as it was agreed, however much the catalogue or
+/// the workspace's own details have changed since (§25).
+model Invoice {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// Allocated from a platform-owned sequence at ISSUE, never at creation, so a
+  /// draft that is discarded does not burn a number. Globally unique: it is the
+  /// seller's own accounting series.
+  number String? @unique
+
+  status InvoiceStatus @default(DRAFT)
+
+  currency      String @db.Char(3)
+  currencyScale Int
+
+  subtotalMinor   BigInt
+  discountMinor   BigInt @default(0)
+  taxMinor        BigInt @default(0)
+  totalMinor      BigInt
+  amountPaidMinor BigInt @default(0)
+  /// Credited back by credit notes. `total - credited` is what stands.
+  creditedMinor   BigInt @default(0)
+
+  taxMode           InvoiceTaxMode @default(NONE)
+  taxRateBasisPoints Int           @default(0)
+  /// The market's policy key at issue, so the rule can be explained later.
+  taxPolicyKey      String?
+
+  periodStart DateTime? @db.Timestamptz(6)
+  periodEnd   DateTime? @db.Timestamptz(6)
+
+  issuedAt DateTime? @db.Timestamptz(6)
+  dueAt    DateTime? @db.Timestamptz(6)
+  paidAt   DateTime? @db.Timestamptz(6)
+  voidedAt DateTime? @db.Timestamptz(6)
+
+  /// WHAT THE CUSTOMER AGREED TO, frozen. Plan key, pinned price, interval and
+  /// the configuration version it came from.
+  commercialSnapshot Json
+  /// Seller and buyer identity as printed. A later address change does not
+  /// rewrite an issued document.
+  partiesSnapshot    Json
+
+  providerKey       String?
+  providerInvoiceId String?
+  providerPaymentId String?
+
+  checkoutSessionId String? @unique @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace      Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  billingProfile BillingProfile      @relation(fields: [workspaceId], references: [workspaceId], onDelete: Cascade, map: "invoice_profile_fkey")
+  checkout       CheckoutSession?    @relation(fields: [workspaceId, checkoutSessionId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "invoice_checkout_fkey")
+  lines          InvoiceLine[]
+  creditNotes    CreditNote[]
+  purchase       CreditPackPurchase?
+  attempts       PaymentAttempt[]
+
+  @@unique([workspaceId, id], name: "invoice_workspace_scope")
+  /// Composite uniques for the workspace-scoped one-to-one relations. The plain
+  /// `@unique` above each column already forbids reuse; these are what let the
+  /// relation carry `workspaceId` so a foreign key can never cross a tenant
+  /// (D-112).
+  @@unique([workspaceId, checkoutSessionId])
+  @@index([workspaceId, status, issuedAt])
+  @@index([workspaceId, createdAt])
+  @@map("invoice")
+}
+
+/// TENANT-OWNED. One explicit line. Never a total the reader has to trust.
+model InvoiceLine {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  invoiceId   String @db.Uuid
+
+  kind InvoiceLineKind
+
+  /// Localized at WRITE time, in both languages, so the PDF can be produced in
+  /// either without re-deriving a description from a catalogue that has moved on.
+  description Json
+
+  quantity        Int    @default(1)
+  unitAmountMinor BigInt
+  amountMinor     BigInt
+  taxAmountMinor  BigInt @default(0)
+
+  /// Free-form provenance — plan key, pack key, proration window. Never a price.
+  metadata Json?
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoice   Invoice   @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "invoice_line_invoice_fkey")
+
+  @@unique([workspaceId, id], name: "invoice_line_workspace_scope")
+  @@index([workspaceId, invoiceId, sortOrder])
+  @@map("invoice_line")
+}
+
+/// TENANT-OWNED. A correction to an issued invoice. Never an edit of one.
+model CreditNote {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  invoiceId   String @db.Uuid
+
+  number String? @unique
+  status CreditNoteStatus @default(DRAFT)
+
+  /// THE SAME CURRENCY AS ITS INVOICE, enforced by a CHECK against the parent.
+  /// A credit note in another currency would be a conversion nobody agreed to.
+  currency      String @db.Char(3)
+  currencyScale Int
+
+  subtotalMinor BigInt
+  taxMinor      BigInt @default(0)
+  totalMinor    BigInt
+
+  /// Operator text. Required: a refund without a stated reason is not auditable.
+  reason String
+
+  issuedAt   DateTime? @db.Timestamptz(6)
+  refundedAt DateTime? @db.Timestamptz(6)
+
+  providerRefundId String?
+  /// One refund per logical request, however many times it is retried.
+  idempotencyKey   String
+
+  createdByUserId         String? @db.Uuid
+  createdByPlatformUserId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoice   Invoice          @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Restrict, onUpdate: NoAction, map: "credit_note_invoice_fkey")
+  lines     CreditNoteLine[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, id], name: "credit_note_workspace_scope")
+  @@index([workspaceId, invoiceId])
+  @@map("credit_note")
+}
+
+/// TENANT-OWNED. One line of a credit note, mirroring the invoice line it reverses.
+model CreditNoteLine {
+  id           String @id @default(uuid()) @db.Uuid
+  workspaceId  String @db.Uuid
+  creditNoteId String @db.Uuid
+
+  /// Which invoice line this reverses, when it reverses one specifically.
+  invoiceLineId String? @db.Uuid
+
+  description    Json
+  quantity       Int    @default(1)
+  amountMinor    BigInt
+  taxAmountMinor BigInt @default(0)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creditNote CreditNote @relation(fields: [workspaceId, creditNoteId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "credit_note_line_note_fkey")
+
+  @@unique([workspaceId, id], name: "credit_note_line_workspace_scope")
+  @@index([workspaceId, creditNoteId, sortOrder])
+  @@map("credit_note_line")
+}
+
+/// TENANT-OWNED. One attempt to collect money, successful or not.
+///
+/// THE DUNNING TRAIL. A failure here is what starts the retry schedule, and the
+/// attempt count is what the grace period is measured against — so "we tried
+/// four times" is a queryable fact rather than a worker's memory.
+model PaymentAttempt {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  invoiceId         String? @db.Uuid
+  checkoutSessionId String? @db.Uuid
+
+  status PaymentAttemptStatus @default(PENDING)
+
+  currency      String @db.Char(3)
+  currencyScale Int
+  amountMinor   BigInt
+
+  /// A stable provider-independent reason — `card_declined`, `expired`. Never a
+  /// raw provider message, which could carry PII into our logs.
+  failureCode   String?
+  attemptNumber Int     @default(1)
+
+  providerPaymentId String?
+  /// One attempt per logical retry, so a worker that runs twice charges once.
+  idempotencyKey    String
+
+  attemptedAt DateTime  @default(now()) @db.Timestamptz(6)
+  settledAt   DateTime? @db.Timestamptz(6)
+  /// When the dunning policy says to try again. Null once terminal.
+  nextRetryAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoice   Invoice?         @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "payment_attempt_invoice_fkey")
+  checkout  CheckoutSession? @relation(fields: [workspaceId, checkoutSessionId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "payment_attempt_checkout_fkey")
+
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, id], name: "payment_attempt_workspace_scope")
+  @@index([workspaceId, invoiceId])
+  @@index([status, nextRetryAt])
+  @@map("payment_attempt")
+}
+
+/// TENANT-OWNED. One prepaid credit-pack purchase and the ONE grant it made.
+///
+/// `creditGrantId` IS THE IDEMPOTENCY PROOF. A pack grants credits exactly once
+/// because this column is unique and is set in the same transaction as the
+/// ledger grant: a replayed webhook finds it already set and does nothing
+/// (§37). There is no path here that adds credits without a completed purchase,
+/// which is what "prepaid, never postpaid" means in the schema (D-196).
+model CreditPackPurchase {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  packKey String
+  /// Whole credits, copied from the pack at purchase so a catalogue edit cannot
+  /// change what was bought.
+  credits Int
+
+  currency      String @db.Char(3)
+  currencyScale Int
+  amountMinor   BigInt
+
+  status CreditPackPurchaseStatus @default(PENDING)
+
+  checkoutSessionId String? @unique @db.Uuid
+  invoiceId         String? @unique @db.Uuid
+  /// The single immutable ledger grant this purchase produced.
+  creditGrantId     String? @unique @db.Uuid
+
+  providerPaymentId String?
+
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  checkout  CheckoutSession? @relation(fields: [workspaceId, checkoutSessionId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "credit_pack_purchase_checkout_fkey")
+  invoice   Invoice?         @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "credit_pack_purchase_invoice_fkey")
+
+  @@unique([workspaceId, id], name: "credit_pack_purchase_workspace_scope")
+  @@unique([workspaceId, checkoutSessionId])
+  @@unique([workspaceId, invoiceId])
+  @@index([workspaceId, status])
+  @@map("credit_pack_purchase")
+}
+
+/// PLATFORM-OWNED. The webhook inbox — every provider event we have received.
+///
+/// WHY IT IS NOT TENANT-OWNED. An event arrives before we know whose it is. The
+/// workspace is DERIVED here, by looking `providerCustomerId` up in
+/// `billing_profile`; it is never read from the event body. A row that cannot
+/// be resolved is kept as `UNRESOLVED` rather than guessed at or dropped, so a
+/// misconfiguration is visible instead of silently losing money.
+///
+/// The tenant role has no access to this table at all: one workspace must not
+/// be able to count another's payment events.
+model BillingEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  providerKey String
+  /// The provider's own event id. THE IDEMPOTENCY KEY: a replay of a delivered
+  /// event collides here and changes nothing (§28).
+  externalEventId String
+
+  eventType String
+  /// The provider's own timestamp. Ordering is compared against this, so an
+  /// out-of-order delivery is recognised as stale rather than applied.
+  occurredAt DateTime @db.Timestamptz(6)
+
+  /// Verified BEFORE the body was parsed. A row can only exist if it was true.
+  signatureVerified Boolean @default(false)
+
+  /// The normalized event. Provider-shaped fields are not stored raw beyond
+  /// what reconciliation needs, and no card data can appear: hosted checkout
+  /// means we never receive any.
+  payload Json
+
+  status       BillingEventStatus @default(RECEIVED)
+  /// Resolved from a TRUSTED stored relationship, or null.
+  resolvedWorkspaceId String?     @db.Uuid
+  failureReason       String?
+  attempts            Int         @default(0)
+
+  receivedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt DateTime? @db.Timestamptz(6)
+
+  @@unique([providerKey, externalEventId])
+  @@index([status, receivedAt])
+  @@index([resolvedWorkspaceId, occurredAt])
+  @@map("billing_event")
+}
+
+/// PLATFORM-OWNED. The seller's invoice-number series.
+///
+/// ONE ROW PER PREFIX AND YEAR, advanced by `app.allocate_invoice_number()` — a
+/// SECURITY DEFINER function, because the tenant role must be able to ISSUE an
+/// invoice without being able to read or rewrite the counter. The function takes
+/// a row lock, so two simultaneous issues get two different numbers (§30).
+///
+/// A DATABASE SEQUENCE WOULD NOT DO. Sequences are not transactional: a rolled
+/// back issue would leave a permanent gap in an accounting series that is
+/// legally expected to be gapless in several of the markets this platform sells
+/// in.
+model InvoiceNumberSequence {
+  prefix String
+  year   Int
+
+  lastValue Int @default(0)
+
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@id([prefix, year])
+  @@map("invoice_number_sequence")
+}
+
+/// A single-use, expiring email verification token.
+///
+/// Modelled on `PasswordResetToken` and classified with it: it belongs to a
+/// global identity, not to a workspace — a person verifies their email BEFORE
+/// any workspace exists. Only the SHA-256 hash is stored; the raw token exists
+/// solely in the emailed link and is never logged, traced or persisted.
+model EmailVerificationToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  tokenHash String @unique
+
+  expiresAt DateTime  @db.Timestamptz(6)
+  /// Set by a conditional UPDATE, so a replayed link verifies nothing twice.
+  usedAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  ip String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("email_verification_token")
+}
+
+/// Which version of which legal document a person accepted, and when.
+///
+/// VERSIONED, because "they agreed to the terms" is not a fact unless it says
+/// WHICH terms. Kept per user rather than per workspace: the person accepts,
+/// not the company.
+model UserLegalAcceptance {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// `terms-of-service`, `privacy-policy`. A key, so documents are configuration.
+  documentKey String
+  /// The version string as published. Free text: a date, a semver, a hash.
+  version     String
+
+  acceptedAt DateTime @default(now()) @db.Timestamptz(6)
+  ip         String?
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentKey, version])
+  @@index([userId])
+  @@map("user_legal_acceptance")
+}
+
+/// A customer's MFA recovery code — the hash of one, used once.
+///
+/// The mirror of `PlatformMfaRecoveryCode` for the customer realm, and
+/// deliberately a separate table: the two realms never share a session, a
+/// credential or a recovery path (docs/SECURITY.md §3).
+model UserMfaRecoveryCode {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// SHA-256 of the code. The plaintext is shown once at enrolment and never
+  /// stored, logged or recoverable — the same rule as the TOTP secret itself.
+  codeHash String
+
+  usedAt    DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@index([userId, usedAt])
+  @@map("user_mfa_recovery_code")
 }
