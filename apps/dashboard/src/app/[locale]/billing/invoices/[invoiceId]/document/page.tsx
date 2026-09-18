@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { colorTokens } from '@brandspace/ui';
 import { formatMoney, type Money } from '@brandspace/shared';
 import type { DocumentLocale, InvoiceDocument } from '@brandspace/billing';
 import { requireWorkspace } from '../../../../../../server/customer-context';
@@ -54,8 +55,8 @@ export default async function InvoiceDocumentPage({
         minHeight: '297mm',
         margin: '0 auto',
         padding: '18mm',
-        background: '#FFFFFF',
-        color: '#111114',
+        background: colorTokens.surface,
+        color: colorTokens.textPrimary,
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif',
         fontSize: '11pt',
         lineHeight: 1.5,
@@ -70,13 +71,13 @@ export default async function InvoiceDocumentPage({
       <style>{`
         @page { size: A4; margin: 14mm; }
         @media print {
-          html, body { background: #FFFFFF; }
+          html, body { background: ${colorTokens.surface}; }
           [data-testid="invoice-document"] { padding: 0; margin: 0; max-width: none; }
           .no-print { display: none !important; }
         }
         .invoice-table { width: 100%; border-collapse: collapse; }
         .invoice-table th, .invoice-table td {
-          border-block-end: 1px solid #D8D8DE;
+          border-block-end: 1px solid ${colorTokens.documentRule};
           padding: 6pt 4pt;
           text-align: start;
           vertical-align: top;
@@ -97,20 +98,23 @@ export default async function InvoiceDocumentPage({
           <h1 style={{ fontSize: '18pt', margin: 0 }}>
             {ar ? 'فاتورة' : 'Invoice'} {document.number ?? ''}
           </h1>
-          <p style={{ margin: '2pt 0 0', color: '#55555F' }} data-testid="invoice-document-status">
+          <p
+            style={{ margin: '2pt 0 0', color: colorTokens.textSecondary }}
+            data-testid="invoice-document-status"
+          >
             {statusWord(document.status, ar)}
           </p>
         </div>
         <dl
           style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto auto', gap: '2pt 8pt' }}
         >
-          <dt style={{ color: '#55555F' }}>{ar ? 'تاريخ الإصدار' : 'Issued'}</dt>
+          <dt style={{ color: colorTokens.textSecondary }}>{ar ? 'تاريخ الإصدار' : 'Issued'}</dt>
           <dd style={{ margin: 0 }}>{day(document.issuedAt)}</dd>
-          <dt style={{ color: '#55555F' }}>{ar ? 'تاريخ الاستحقاق' : 'Due'}</dt>
+          <dt style={{ color: colorTokens.textSecondary }}>{ar ? 'تاريخ الاستحقاق' : 'Due'}</dt>
           <dd style={{ margin: 0 }}>{day(document.dueAt)}</dd>
           {document.periodStart && document.periodEnd ? (
             <>
-              <dt style={{ color: '#55555F' }}>{ar ? 'الفترة' : 'Period'}</dt>
+              <dt style={{ color: colorTokens.textSecondary }}>{ar ? 'الفترة' : 'Period'}</dt>
               <dd style={{ margin: 0 }}>
                 {day(document.periodStart)} — {day(document.periodEnd)}
               </dd>
@@ -174,15 +178,17 @@ export default async function InvoiceDocumentPage({
         }}
         data-testid="document-totals"
       >
-        <span style={{ color: '#55555F' }}>{ar ? 'المجموع الفرعي' : 'Subtotal'}</span>
+        <span style={{ color: colorTokens.textSecondary }}>
+          {ar ? 'المجموع الفرعي' : 'Subtotal'}
+        </span>
         <span style={{ textAlign: 'end' }}>{money(document.subtotal)}</span>
         {document.discount.isZero ? null : (
           <>
-            <span style={{ color: '#55555F' }}>{ar ? 'الخصم' : 'Discount'}</span>
+            <span style={{ color: colorTokens.textSecondary }}>{ar ? 'الخصم' : 'Discount'}</span>
             <span style={{ textAlign: 'end' }}>{money(document.discount)}</span>
           </>
         )}
-        <span style={{ color: '#55555F' }}>
+        <span style={{ color: colorTokens.textSecondary }}>
           {ar ? 'الضريبة' : 'Tax'}
           {document.taxRateBasisPoints > 0
             ? ` (${(document.taxRateBasisPoints / 100).toFixed(2)}%)`
@@ -195,21 +201,23 @@ export default async function InvoiceDocumentPage({
         </strong>
         {document.credited.isZero ? null : (
           <>
-            <span style={{ color: '#55555F' }}>{ar ? 'مبالغ دائنة' : 'Credited'}</span>
+            <span style={{ color: colorTokens.textSecondary }}>
+              {ar ? 'مبالغ دائنة' : 'Credited'}
+            </span>
             <span style={{ textAlign: 'end' }}>{money(document.credited)}</span>
           </>
         )}
       </section>
 
       {document.taxPolicyKey ? (
-        <p style={{ marginBlockStart: '8mm', color: '#55555F', fontSize: '9pt' }}>
+        <p style={{ marginBlockStart: '8mm', color: colorTokens.textSecondary, fontSize: '9pt' }}>
           {ar ? 'سياسة الضريبة' : 'Tax policy'}: {document.taxPolicyKey} · {document.taxMode}
         </p>
       ) : null}
 
       <p
         className="no-print"
-        style={{ marginBlockStart: '10mm', color: '#55555F', fontSize: '9pt' }}
+        style={{ marginBlockStart: '10mm', color: colorTokens.textSecondary, fontSize: '9pt' }}
       >
         {ar
           ? 'اطبع هذه الصفحة أو احفظها كـ PDF من متصفحك — وهي نفس المستند بالضبط.'
@@ -232,7 +240,14 @@ function Party({
 }) {
   return (
     <div data-testid={testId}>
-      <h2 style={{ fontSize: '10pt', color: '#55555F', margin: '0 0 3pt', fontWeight: 600 }}>
+      <h2
+        style={{
+          fontSize: '10pt',
+          color: colorTokens.textSecondary,
+          margin: '0 0 3pt',
+          fontWeight: 600,
+        }}
+      >
         {heading}
       </h2>
       <p style={{ margin: 0, fontWeight: 600 }}>
@@ -244,12 +259,12 @@ function Party({
         </p>
       ))}
       {party.taxId ? (
-        <p style={{ margin: '3pt 0 0', color: '#55555F' }}>
+        <p style={{ margin: '3pt 0 0', color: colorTokens.textSecondary }}>
           {ar ? 'الرقم الضريبي' : 'Tax ID'}: {party.taxId}
         </p>
       ) : null}
       {party.registrationNumber ? (
-        <p style={{ margin: 0, color: '#55555F' }}>
+        <p style={{ margin: 0, color: colorTokens.textSecondary }}>
           {ar ? 'السجل التجاري' : 'Registration'}: {party.registrationNumber}
         </p>
       ) : null}

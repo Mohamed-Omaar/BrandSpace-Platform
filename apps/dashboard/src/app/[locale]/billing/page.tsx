@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatMoney, systemClock, type Money } from '@brandspace/shared';
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -409,12 +409,14 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               {t('billing.exportFrom')}
             </label>
             <input
+              className="bs-control"
               id="export-from"
               name="from"
               type="date"
               required
               defaultValue={defaultExportFrom}
               data-testid="export-from"
+              style={inputStyle()}
             />
           </div>
           <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -422,12 +424,14 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               {t('billing.exportTo')}
             </label>
             <input
+              className="bs-control"
               id="export-to"
               name="to"
               type="date"
               required
               defaultValue={defaultExportTo}
               data-testid="export-to"
+              style={inputStyle()}
             />
           </div>
           <button type="submit" data-testid="export-submit">

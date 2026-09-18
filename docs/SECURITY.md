@@ -3014,3 +3014,42 @@ and get it wrong.
 with no adapter registered, routing still resolves and the pipeline still reserves — then the chain
 finds nothing to call, the request fails, the reservation is released and no ledger row is written. A
 failed provider request never results in a deduction (CLAUDE.md §2.4), including this failure.
+
+### 39.5 What may be logged, and what may never be
+
+**Phase 10 §20 asked for this to be written down rather than practised.** The redaction layer runs on
+every log sink and every error serializer (`@brandspace/observability`), and this is the contract it
+implements.
+
+**Never, under any circumstances:**
+
+| Never logged                                                    | Because                                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| API keys and provider secrets                                   | The whole point of the vault is that they exist in one place                    |
+| Passwords and password hashes                                   | A hash in a log is an offline cracking target with no rate limit                |
+| MFA secrets and recovery codes                                  | Either one defeats the second factor entirely                                   |
+| OAuth access and refresh tokens                                 | A customer's token is their account, and it is TENANT data                      |
+| Payment secrets and webhook signing keys                        | A signing key in a log lets anybody forge a paid invoice                        |
+| Complete `Authorization`, `Cookie` or `Set-Cookie` headers      | Each carries a live session                                                     |
+| Raw prompts and raw provider responses                          | The output-persistence policy forbids persisting them, and a log is persistence |
+| Customer content — post bodies, brand documents, uploaded files | It is the customer's, not ours                                                  |
+| A raw provider error, verbatim                                  | Providers echo request URLs, and request URLs carry credentials                 |
+
+**Routinely logged, and safe:**
+
+correlation and request ids · job ids and queue names · `workspaceId` (an opaque uuid, and the thing
+that makes a log line attributable at all) · `brandId` · the AI task key, capability and model key ·
+provider KEY, never its credential · a stable failure CODE from the closed taxonomy · latency ·
+counts and sizes · the deployment environment · a platform user id for an audited action.
+
+**Two rules that are easy to state and easy to break:**
+
+1. **`workspaceId` is logged; a workspace's CONTENT is not.** A log that helps an operator find one
+   tenant's failure is useful; one that lets them read that tenant's drafts is a second copy of the
+   product with no access control.
+2. **An error's `message` is for an operator, and an `AppError`'s public JSON is for a customer.** The
+   two are different strings on purpose (`AppError.toPublicJSON` omits the operator half), and
+   `internalErrorFields()` is the only approved way to put an exception into a log line.
+
+**Traces carry the same rule.** A span attribute is a log field with a different name: the secret
+actions record a ref, a category and an environment, and never a value.

@@ -1,60 +1,58 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
-import { securityHeaders } from '@brandspace/shared';
+/*
+ * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
+ *
+ * Middleware runs in the EDGE runtime, which has no `process.stdout`. Importing
+ * `@brandspace/shared` pulls its index, which pulls the logger, which writes to
+ * stdout at module scope — and the build fails with a Node API error pointing
+ * at a file this middleware never meant to use. The subpath reaches
+ * `security-headers.ts` and its one dependency (`deployment.ts`, which reads
+ * `process.env` and nothing else).
+ */
+import { securityHeaders } from '@brandspace/shared/security-headers';
 
 /**
- * PHASE 10 §21 — SECURITY HEADERS, WITH A PER-REQUEST NONCE.
+ * PHASE 10 §21 — SECURITY HEADERS ON THE PUBLIC WEBSITE.
  *
- * The four baseline headers used to live in `next.config.mjs`, one copy per
- * app. They move here because the fifth — Content-Security-Policy — cannot be
- * static: a nonce has to be minted per request, and Next.js reads the CSP off
- * the REQUEST headers to stamp that nonce onto its own inline bootstrap
- * scripts. A static `headers()` block would produce a policy that forbids the
- * framework's own scripts.
+ * NO NONCE HERE, AND THAT IS THE CORRECT ANSWER RATHER THAN A SHORTCUT. This
+ * site is statically rendered on purpose: it has a Lighthouse budget and an LCP
+ * target, and every page is prerendered at build time. A nonce has to be minted
+ * per request and stamped into the HTML, which prerendered markup cannot carry —
+ * and Next.js would opt the route into dynamic rendering to provide one,
+ * trading the performance commitment for a policy the page cannot use.
  *
- * CSP IS THE CONTROL THIS PLATFORM DID NOT HAVE. `nosniff` and
- * `X-Frame-Options` cover the two easiest attacks; a nonce with
- * `'strict-dynamic'` is what turns an injected `<script>` into nothing at all.
+ * WHAT IT COSTS, stated plainly: `script-src 'self' 'unsafe-inline'` refuses
+ * every cross-origin script — the vector that turns an injection into
+ * exfiltration — and does not stop an inline injection. That is acceptable HERE
+ * and nowhere else: this site has no session, no customer data and no
+ * authenticated action. The dashboard and the Control Center are dynamic and
+ * get the nonce policy.
+ *
+ * Found by an end-to-end run, not by reading: with a nonce policy the
+ * prerendered pages refused every one of the framework's own chunks and the
+ * site rendered without JavaScript at all.
  */
-function secured(request: NextRequest, redirectTo?: URL): NextResponse {
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  const headers = securityHeaders({ nonce });
-
-  /*
-   * THE REQUEST CARRIES THE POLICY TOO, and that is not redundant: Next.js
-   * looks for `Content-Security-Policy` on the INCOMING request, reads the
-   * nonce out of it, and applies it to the scripts it renders. Without this the
-   * page would be served under a policy that forbids its own bootstrap.
-   *
-   * A redirect has no body to nonce, so it only carries the response headers.
-   */
-  const response = redirectTo
-    ? NextResponse.redirect(redirectTo)
-    : (() => {
-        const forwarded = new Headers(request.headers);
-        forwarded.set('x-nonce', nonce);
-        forwarded.set('Content-Security-Policy', headers['Content-Security-Policy'] ?? '');
-        return NextResponse.next({ request: { headers: forwarded } });
-      })();
-
-  for (const [key, value] of Object.entries(headers)) response.headers.set(key, value);
+function secured(redirectTo?: URL): NextResponse {
+  const response = redirectTo ? NextResponse.redirect(redirectTo) : NextResponse.next();
+  for (const [key, value] of Object.entries(
+    securityHeaders({ nonce: null, rendering: 'static' }),
+  )) {
+    response.headers.set(key, value);
+  }
   return response;
 }
 
-/**
- * Redirects a locale-less path to the default locale (Arabic — D-03), so every
- * route resolves to an explicit locale and `dir`/`lang` are always unambiguous.
- */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasLocale = SUPPORTED_LOCALES.some(
     (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
   );
-  if (hasLocale) return secured(request);
+  if (hasLocale) return secured();
 
   const url = request.nextUrl.clone();
   url.pathname = `/${DEFAULT_LOCALE}${pathname === '/' ? '' : pathname}`;
-  return secured(request, url);
+  return secured(url);
 }
 
 export const config = {

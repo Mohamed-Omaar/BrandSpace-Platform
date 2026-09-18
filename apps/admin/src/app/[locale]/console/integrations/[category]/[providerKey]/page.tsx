@@ -91,6 +91,16 @@ export default async function IntegrationDetailPage({
         </Link>
       </p>
 
+      {/*
+        WHAT THIS PROVIDER ACTUALLY IS, in the body rather than only in the page
+        intro. An owner evaluating vendors reads the row they clicked into, and
+        "this is a development double" is the single most important sentence on
+        the page — it must not depend on having read the intro above the fold.
+      */}
+      <p data-testid="integration-note" style={{ marginBlockEnd: spacingTokens.lg }}>
+        {isArabic ? view.noteAr : view.noteEn}
+      </p>
+
       {notice ? (
         <p role="status" data-testid="integration-notice" style={{ color: colorTokens.success }}>
           {noticeText(notice, isArabic)}
@@ -128,19 +138,32 @@ export default async function IntegrationDetailPage({
         }
       />
       <DataTable headers={[isArabic ? 'البند' : 'Item', isArabic ? 'القيمة' : 'Value']}>
-        <tr data-testid="detail-enabled">
+        <tr>
           <Cell>{isArabic ? 'مفعّل' : 'Active'}</Cell>
-          <Cell>{view.enabled ? (isArabic ? 'نعم' : 'Yes') : isArabic ? 'لا' : 'No'}</Cell>
-        </tr>
-        <tr data-testid="detail-complete">
-          <Cell>{isArabic ? 'اكتمال الإعداد' : 'Configuration complete'}</Cell>
           <Cell>
-            {view.configurationComplete ? (isArabic ? 'نعم' : 'Yes') : isArabic ? 'لا' : 'No'}
+            {/*
+              THE TEST ID IS ON THE VALUE, not the row. A row's text is its
+              label AND its value, so an assertion against the row reads
+              "ActiveNo" and cannot distinguish a state change from a relabel.
+            */}
+            <span data-testid="detail-enabled">
+              {view.enabled ? (isArabic ? 'نعم' : 'Yes') : isArabic ? 'لا' : 'No'}
+            </span>
           </Cell>
         </tr>
-        <tr data-testid="detail-connection">
+        <tr>
+          <Cell>{isArabic ? 'اكتمال الإعداد' : 'Configuration complete'}</Cell>
+          <Cell>
+            <span data-testid="detail-complete">
+              {view.configurationComplete ? (isArabic ? 'نعم' : 'Yes') : isArabic ? 'لا' : 'No'}
+            </span>
+          </Cell>
+        </tr>
+        <tr>
           <Cell>{isArabic ? 'حالة الاتصال' : 'Connection'}</Cell>
-          <Cell>{view.connection}</Cell>
+          <Cell>
+            <span data-testid="detail-connection">{view.connection}</span>
+          </Cell>
         </tr>
         <tr data-testid="detail-last-success">
           <Cell>{isArabic ? 'آخر نجاح' : 'Last success'}</Cell>
@@ -152,7 +175,9 @@ export default async function IntegrationDetailPage({
         </tr>
         <tr>
           <Cell>{isArabic ? 'البيئات المدعومة' : 'Supported environments'}</Cell>
-          <Cell>{view.supportedEnvironments.join(', ')}</Cell>
+          <Cell>
+            <span data-testid="detail-environments">{view.supportedEnvironments.join(', ')}</span>
+          </Cell>
         </tr>
       </DataTable>
 
@@ -291,6 +316,7 @@ export default async function IntegrationDetailPage({
                 {isArabic ? 'سبب التغيير' : 'Change reason'}
               </label>
               <input
+                className="bs-control"
                 id="integration-reason"
                 name="reason"
                 required

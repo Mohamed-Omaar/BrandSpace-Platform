@@ -1489,6 +1489,17 @@ model AiRequest {
   /// the registry is CONFIGURATION, so there is no model table to point at.
   routingTaskKey     String?
   resolvedModelKey   String?
+  /// PHASE 10. Which CAPABILITY the task required, and — when the capability
+  /// layer answered rather than a task rule — which profile chose the chain.
+  ///
+  /// Recorded because §9 asks the usage record to explain a request, and after
+  /// Phase 10 "which model served this" is only half the answer: an operator
+  /// looking at a surprising bill needs to know whether a human wrote that
+  /// route or a ranking derived it. Null on rows written before Phase 10.
+  routingCapability  String?
+  /// `economy` / `balanced` / `premium` / `custom`, or null when a TASK rule
+  /// resolved and no profile was consulted.
+  routingProfile     String?
   /// Every model tried, in order, including the ones that failed. Fallback is
   /// invisible in reporting without it.
   ///

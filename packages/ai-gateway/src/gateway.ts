@@ -447,6 +447,10 @@ export class AiGateway {
           taskKey: request.taskKey,
           idempotencyKey: request.idempotencyKey,
           routingTaskKey: route.taskKey,
+          // Phase 10 — which capability constrained the choice, and which
+          // profile ranked it. Null profile means a TASK rule answered.
+          routingCapability: route.capability,
+          routingProfile: route.profile,
           resolvedModelKey: modelKey,
           attemptedModelKeys: [],
           status: 'PENDING',

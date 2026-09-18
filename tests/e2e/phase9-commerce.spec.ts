@@ -200,6 +200,77 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(page.locator('[data-testid="invoice-total"]')).toContainText('113.85');
     await expect(page.locator('[data-testid="invoice-tax"]')).toContainText('14.85');
     await expect(page.locator('[data-testid="invoice-status"]')).toHaveText('Paid');
+
+    /*
+     * --- PHASE 10: the DOCUMENT, which is what a customer sends an accountant.
+     *
+     * ASSERTED FROM THE JOURNEY THAT PRODUCED THE INVOICE, rather than against
+     * a fixture, because the whole point is that the document renders the row
+     * that was actually written — the same total, from the same snapshots, at
+     * the same scale.
+     */
+    const invoiceUrl = page.url();
+    await page.getByTestId('invoice-open-document').click();
+    await expect(page.getByTestId('invoice-document')).toBeVisible();
+    await expect(page.getByTestId('document-total')).toContainText('113.85');
+    // A document, not a screen: no application navigation anywhere on it.
+    await expect(page.locator('nav')).toHaveCount(0);
+    await expect(page.getByTestId('document-seller')).toBeVisible();
+    await expect(page.getByTestId('document-buyer')).toBeVisible();
+
+    // AND IN ARABIC, right-to-left, from the same data.
+    await page.goto(invoiceUrl.replace('/en/', '/ar/') + '/document');
+    const document = page.getByTestId('invoice-document');
+    await expect(document).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('document-total')).toContainText('113.85');
+
+    /*
+     * THE SERVER-RENDERED PDF IS ENGLISH ONLY, AND SAYS SO (D-216). Arabic
+     * needs a licensed font and a shaping engine; the refusal is 409 with a
+     * reason, not a page of empty rectangles that looks like a document.
+     *
+     * FETCHED FROM INSIDE THE PAGE, not through `page.request`. The customer
+     * session cookie is `Secure`, and Playwright's API request context will
+     * not send a Secure cookie over http — so a request made that way arrives
+     * unauthenticated and answers 401, which says nothing about the route. A
+     * `fetch` in the page is the browser making the request as the signed-in
+     * customer, which is what is actually under test.
+     */
+    const invoiceId = invoiceUrl.split('/').pop() as string;
+    const pdf = await page.evaluate(async (id: string) => {
+      const answer = async (locale: string) => {
+        const response = await fetch(`/api/billing/invoices/${id}/pdf?locale=${locale}`);
+        const head = response.ok
+          ? new TextDecoder('latin1').decode((await response.arrayBuffer()).slice(0, 8))
+          : '';
+        return { status: response.status, type: response.headers.get('content-type') ?? '', head };
+      };
+      return { en: await answer('en'), ar: await answer('ar') };
+    }, invoiceId);
+
+    expect(pdf.en.status).toBe(200);
+    expect(pdf.en.type).toContain('application/pdf');
+    expect(pdf.en.head).toBe('%PDF-1.7');
+    expect(pdf.ar.status).toBe(409);
+
+    // --- PHASE 10: the accounting export, from the same canonical record.
+    const csv = await page.evaluate(async () => {
+      /*
+       * A BOUNDED PERIOD, because the route requires one. An unbounded export
+       * of a commercial record is a query nobody bounded, and the ceiling is
+       * 400 days — so the window is the last thirty, which is where an invoice
+       * issued moments ago lives.
+       */
+      const day = (offsetDays: number) =>
+        new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+      const response = await fetch(`/api/billing/export?from=${day(-30)}&to=${day(1)}`);
+      return { status: response.status, text: await response.text() };
+    });
+    expect(csv.status).toBe(200);
+    expect(csv.text).toContain('"INVOICE"');
+    // The exact integer AND the scaled decimal, which is the point of both.
+    expect(csv.text).toContain('"11385"');
+    expect(csv.text).toContain('"113.85"');
   });
 
   test('buys a prepaid pack and the balance rises by exactly the pack', async ({ page }) => {

@@ -1,6 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
-import { AUTHENTICATED_CACHE_CONTROL, securityHeaders } from '@brandspace/shared';
+/*
+ * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
+ *
+ * Middleware runs in the EDGE runtime, which has no `process.stdout`. Importing
+ * `@brandspace/shared` pulls its index, which pulls the logger, which writes to
+ * stdout at module scope — and the build fails with a Node API error pointing
+ * at a file this middleware never meant to use. The subpath reaches
+ * `security-headers.ts` and its one dependency (`deployment.ts`, which reads
+ * `process.env` and nothing else).
+ */
+import { AUTHENTICATED_CACHE_CONTROL, securityHeaders } from '@brandspace/shared/security-headers';
 
 /**
  * PHASE 10 §21 — SECURITY HEADERS, WITH A PER-REQUEST NONCE.
@@ -18,7 +28,7 @@ import { AUTHENTICATED_CACHE_CONTROL, securityHeaders } from '@brandspace/shared
  */
 function secured(request: NextRequest, redirectTo?: URL): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  const headers = securityHeaders({ nonce });
+  const headers = securityHeaders({ nonce, rendering: 'dynamic' });
 
   /*
    * THE REQUEST CARRIES THE POLICY TOO, and that is not redundant: Next.js

@@ -49,19 +49,27 @@ test.describe('the Integrations Hub', () => {
 
     /*
      * THE HONEST ROW. An owner reading this page should finish it knowing that
-     * nothing here is a vendor. The refusal notice is the load-bearing part:
-     * a disabled button teaches nothing, a sentence teaches what to do next.
+     * nothing here is a vendor.
+     *
+     * ASSERTED ON THE NOTE, NOT ON A REFUSAL BANNER, and the distinction is the
+     * product being right: `selectionRefusal` is null in a DEVELOPMENT
+     * environment, because a development double is perfectly selectable there.
+     * The refusal banner appears in production, where this suite does not run.
+     * What must be true in every environment is that the page says what this
+     * provider is.
      */
-    await expect(page.getByTestId('integration-refusal')).toContainText(
-      /development double|never be activated in production/i,
+    await expect(page.getByTestId('integration-note')).toContainText(
+      /repeatable output offline|without a vendor/i,
     );
+    // And the environments row is the machine-readable half of the same fact.
+    await expect(page.getByTestId('detail-environments')).not.toContainText('PRODUCTION');
   });
 
   test('tests a connection, records the result, and activates nothing', async ({ page }) => {
     await signIn(page, 'en');
     await page.goto(`${ADMIN_BASE_URL}/en/console/integrations/email/outbox`);
 
-    const enabledBefore = await page.getByTestId('detail-enabled').innerText();
+    const enabledBefore = (await page.getByTestId('detail-enabled').innerText()).trim();
 
     await page.getByTestId('test-connection').click();
     await expect(page.getByTestId('integration-notice')).toBeVisible();

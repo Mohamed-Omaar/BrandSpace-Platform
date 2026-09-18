@@ -81,6 +81,43 @@ describe('the content security policy', () => {
   });
 });
 
+describe('the static policy, for a prerendered site', () => {
+  /*
+   * WHY THERE ARE TWO POLICIES AT ALL, and it is not a preference. A nonce is
+   * minted per request and stamped into the HTML; a page rendered at BUILD time
+   * carries none, `'strict-dynamic'` then disables host allow-listing, and the
+   * framework's own chunks are all refused. An end-to-end run found this: the
+   * public site rendered with no JavaScript whatsoever.
+   */
+  it('drops the nonce and strict-dynamic, and admits inline instead', () => {
+    const policy = directives(contentSecurityPolicy({ nonce: null, rendering: 'static' }));
+    expect(policy.get('script-src')).toBe("'self' 'unsafe-inline'");
+    expect(policy.get('script-src')).not.toContain('strict-dynamic');
+  });
+
+  it('still refuses every cross-origin script, which is the vector that matters', () => {
+    // It does not stop an inline injection, and that is the stated cost. It
+    // does stop the injection from shipping anything anywhere.
+    const policy = directives(contentSecurityPolicy({ nonce: null, rendering: 'static' }));
+    expect(policy.get('script-src')).not.toContain('http');
+    expect(policy.get('script-src')).not.toContain('*');
+  });
+
+  it('keeps every other directive exactly as strict', () => {
+    const staticPolicy = directives(contentSecurityPolicy({ nonce: null, rendering: 'static' }));
+    const dynamicPolicy = directives(contentSecurityPolicy({ nonce: NONCE }));
+    for (const directive of [
+      'object-src',
+      'base-uri',
+      'form-action',
+      'frame-ancestors',
+      'connect-src',
+    ]) {
+      expect(staticPolicy.get(directive), directive).toBe(dynamicPolicy.get(directive));
+    }
+  });
+});
+
 describe('the rest of the header set', () => {
   it('sends HSTS in production and never outside it', () => {
     /*

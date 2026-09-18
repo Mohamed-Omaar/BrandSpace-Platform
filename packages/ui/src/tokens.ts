@@ -191,6 +191,14 @@ export const colorTokens = {
    * than decorative.
    */
   borderStrong: '#818C9C',
+  /**
+   * A rule on a PRINTED page. The screen borders above are tuned for a lit
+   * display over `appBackground`; on paper, at print gamma, `border` all but
+   * disappears and a table stops having rows. This is the one edge weight that
+   * survives a laser printer and still reads as a hairline on screen, and it is
+   * used by the invoice document (Phase 10 §23) and nothing else.
+   */
+  documentRule: '#D8D8DE',
 
   /** Body text. 17.9:1 on white. */
   textPrimary: '#111114',

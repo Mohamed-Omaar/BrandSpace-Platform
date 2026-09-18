@@ -21,8 +21,30 @@ import { isProduction } from './deployment';
  */
 
 export interface SecurityHeaderOptions {
-  /** A fresh, unguessable value per request. Never reused across responses. */
-  readonly nonce: string;
+  /**
+   * A fresh, unguessable value per request. Never reused across responses.
+   *
+   * `null` selects the STATIC policy — see `rendering` below.
+   */
+  readonly nonce: string | null;
+  /**
+   * How the surface this policy protects is rendered.
+   *
+   * THIS IS NOT A STYLE CHOICE, and it took a failing end-to-end run to make
+   * that obvious. A nonce has to be minted per request and stamped into the
+   * HTML, which is impossible for a page that was rendered at BUILD time: the
+   * prerendered markup carries no nonce, `'strict-dynamic'` then disables
+   * host-based allow-listing, and every one of the framework's own chunks is
+   * refused. The public website is statically rendered on purpose — it has a
+   * Lighthouse budget to meet — and forcing it dynamic to gain a nonce would
+   * trade a real performance commitment for a policy it cannot use anyway.
+   *
+   * So `'dynamic'` (the dashboard and the Control Center, where every page is
+   * `force-dynamic` and every session lives) gets the nonce policy, and
+   * `'static'` gets a weaker one that actually works. The trade is stated
+   * rather than hidden: see `contentSecurityPolicy`.
+   */
+  readonly rendering?: 'dynamic' | 'static';
   /**
    * Origins the page legitimately calls. The dashboard talks to `apps/api`
    * through a same-origin proxy, so this is usually empty; a deployment that
@@ -51,9 +73,28 @@ export interface SecurityHeaderOptions {
  */
 export function contentSecurityPolicy(options: SecurityHeaderOptions): string {
   const connect = ["'self'", ...(options.connectOrigins ?? [])].join(' ');
+  const isStatic = options.rendering === 'static' || options.nonce === null;
+
+  /*
+   * THE STATIC POLICY IS WEAKER, AND SAYING SO IS THE POINT.
+   *
+   * `'self' 'unsafe-inline'` still refuses every CROSS-ORIGIN script, which is
+   * the vector that turns an injection into exfiltration. It does not stop an
+   * inline injection, and a nonce would — but a nonce cannot exist on a page
+   * rendered at build time, so the honest options are this or no policy at all.
+   *
+   * WHERE IT IS USED IS WHY IT IS ACCEPTABLE: the public marketing site. No
+   * session, no customer data, no authenticated action, nothing to steal. The
+   * two surfaces that hold a session get the nonce policy, and this comment
+   * exists so nobody later copies the weaker one to where it does not belong.
+   */
+  const scriptSrc = isStatic
+    ? "script-src 'self' 'unsafe-inline'"
+    : `script-src 'self' 'nonce-${options.nonce}' 'strict-dynamic'`;
+
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${options.nonce}' 'strict-dynamic'`,
+    scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
     // `data:` covers the inline SVG and generated images the product renders;
