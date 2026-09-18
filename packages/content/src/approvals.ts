@@ -179,6 +179,8 @@ export interface ReviewSubject {
     locale: string;
     body: string;
     hashtags: readonly string[];
+    /** PHASE 8 — the media the reviewer is approving (AC-29.1). */
+    assetIds: readonly string[];
   }[];
 }
 
@@ -878,7 +880,14 @@ export class ContentApprovalService {
         brand: { select: { name: true } },
         variants: {
           orderBy: { platformKey: 'asc' },
-          select: { id: true, platformKey: true, locale: true, body: true, hashtags: true },
+          select: {
+            id: true,
+            platformKey: true,
+            locale: true,
+            body: true,
+            hashtags: true,
+            assetIds: true,
+          },
         },
       },
     });
@@ -921,6 +930,7 @@ export class ContentApprovalService {
         // to read, which is the honest rendering of content that has expired.
         body: v.body ?? '',
         hashtags: v.hashtags,
+        assetIds: v.assetIds,
       })),
     };
   }
@@ -940,6 +950,50 @@ export class ContentApprovalService {
       where: { workspaceId: this.#workspaceId, contentItemId: item.id },
       orderBy: { cycle: 'asc' },
     });
+  }
+
+  /**
+   * THE LATEST APPROVAL STATE FOR MANY ITEMS AT ONCE — Phase 8 (AC-29.2).
+   *
+   * FOR A PLANNING SURFACE, not for a decision. The Calendar shows a month of
+   * scheduled posts and a planner has to see, without opening anything, which
+   * of them is still waiting on a reviewer. Asking per row would be a query per
+   * chip; asking here is one.
+   *
+   * THE LATEST CYCLE WINS, because a re-submission supersedes the round before
+   * it: an item whose cycle 1 was CHANGES_REQUESTED and whose cycle 2 is
+   * PENDING is waiting, not rejected.
+   *
+   * AN ITEM WITH NO ROW IS ABSENT FROM THE MAP, and that is meaningful: it has
+   * never been submitted, so its brand does not require approval or nobody has
+   * asked yet. The caller renders that as "not required" rather than inventing
+   * a state.
+   *
+   * SCOPED IN THE QUERY (D-132). An out-of-scope item contributes no row, so a
+   * member scoped to one brand cannot learn another brand's review state by
+   * passing its id.
+   */
+  async latestForItems(input: {
+    itemIds: readonly string[];
+    brandScope: readonly string[];
+  }): Promise<Map<string, ApprovalStatus>> {
+    const ids = [...new Set(input.itemIds)];
+    if (ids.length === 0) return new Map();
+    const rows = await this.#db.approval.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        contentItemId: { in: ids },
+        ...brandIdQueryFilter({ brandScope: input.brandScope }),
+      },
+      orderBy: { cycle: 'asc' },
+      select: { contentItemId: true, status: true },
+    });
+    const latest = new Map<string, ApprovalStatus>();
+    // Ascending cycle, so the last write for an id is its highest cycle.
+    for (const row of rows) {
+      if (row.contentItemId) latest.set(row.contentItemId, row.status);
+    }
+    return latest;
   }
 
   /** The open review for one item, when there is one. */

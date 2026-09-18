@@ -144,6 +144,7 @@ export function previewLabels(t: Record<string, string>): SocialPostPreviewLabel
       SCHEDULED: t['content.status.SCHEDULED'] ?? 'Scheduled',
       PUBLISHING: t['content.status.PUBLISHING'] ?? 'Publishing',
       PUBLISHED: t['content.status.PUBLISHED'] ?? 'Published',
+      PARTIALLY_PUBLISHED: t['content.status.PARTIALLY_PUBLISHED'] ?? 'Partially published',
       FAILED: t['content.status.FAILED'] ?? 'Failed',
     },
     approvalLabels: {

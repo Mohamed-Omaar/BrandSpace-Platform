@@ -27,8 +27,22 @@ export type PostAspect = '1:1' | '4:5' | '16:9' | '9:16';
  * `PUBLISHING` is a real intermediate state a calendar has to show — a post
  * handed to a platform and not yet confirmed — and omitting it would force a
  * screen to show either "scheduled" or "published" for a post that is neither.
+ *
+ * `PARTIALLY_PUBLISHED` is here for the same reason, added in Phase 8 when the
+ * Calendar began reading the canonical slot rather than assuming every slot was
+ * merely scheduled. A post that went out on Instagram and failed on LinkedIn is
+ * NEITHER published nor failed, and a card that picked one of the two would
+ * tell a planner their post is live when half of it is not — or that it failed
+ * when half of it is out and cannot be unsent. The state exists in the data
+ * (`CalendarSlotStatus.PARTIALLY_PUBLISHED`), so it exists here.
  */
-export type PostStatus = 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+export type PostStatus =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'PUBLISHING'
+  | 'PUBLISHED'
+  | 'PARTIALLY_PUBLISHED'
+  | 'FAILED';
 
 /** Approval, which is independent of publishing status. */
 export type ApprovalStatus = 'NOT_REQUIRED' | 'NEEDS_APPROVAL' | 'APPROVED' | 'CHANGES_REQUESTED';

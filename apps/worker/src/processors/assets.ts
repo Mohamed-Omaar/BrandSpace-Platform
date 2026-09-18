@@ -30,7 +30,7 @@ const log = createLogger({ context: { component: 'worker.assets.processing' } })
 
 let sharedStore: ObjectStore | null = null;
 
-function objectStore(): ObjectStore {
+export function objectStore(): ObjectStore {
   // APP_ENV, not NODE_ENV: every built app has NODE_ENV=production, including
   // the one an end-to-end run serves. See createObjectStore and D-97.
   sharedStore ??= createObjectStore({ appEnv: process.env['APP_ENV'] ?? 'development' });

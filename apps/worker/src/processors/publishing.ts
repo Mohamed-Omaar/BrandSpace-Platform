@@ -1,5 +1,7 @@
 import type { Environment } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
+import { PublishMediaResolver } from '@brandspace/assets';
+import { objectStore } from './assets';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
 import type { PublishSocialPostPayload, VerifySocialPostPayload } from '@brandspace/jobs';
 import {
@@ -97,6 +99,29 @@ async function withPipeline<T>(
         workspaceId,
         policy: contentPolicy,
       }),
+      /*
+       * PHASE 8 — HOW ASSET IDS BECOME BYTES (AC-29.3, AC-29.4).
+       *
+       * A PORT, because resolving media needs the Asset Library's rules AND the
+       * object store, and `packages/social-connectors` has neither. It runs on
+       * the SAME scoped client, so RLS applies, and it uses the same predicate
+       * the Content Studio used when the author attached the picture — so the
+       * screen and the pipeline cannot disagree about what is publishable.
+       *
+       * BrandScope IS EMPTY HERE, and that is correct rather than a shortcut:
+       * this is the WORKER, publishing something a member already composed,
+       * approved and scheduled, and there is no member in the room. The brand
+       * clause still confines it to the job's own brand plus the shared shelf,
+       * which is the boundary that matters at this point.
+       */
+      media: {
+        resolve: async ({ brandId, assetIds }) =>
+          new PublishMediaResolver({ db, workspaceId, store: objectStore() }).resolve({
+            brandId,
+            assetIds,
+            brandScope: [],
+          }),
+      },
       /*
        * THE INBOX ENTRY IS WRITTEN IN THE SAME TRANSACTION as the state change
        * it describes, because this whole processor runs inside one

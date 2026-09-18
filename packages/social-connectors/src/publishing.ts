@@ -8,7 +8,7 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
-import type { AdapterCredentials, PublishOutcome } from './adapter';
+import type { AdapterCredentials, PublishMedia, PublishOutcome } from './adapter';
 import {
   FAILURE_BEHAVIOUR,
   publishJobNotCancellable,
@@ -95,6 +95,28 @@ export interface PublishNotifier {
   }): Promise<void>;
 }
 
+/**
+ * HOW THE PIPELINE TURNS ASSET IDS INTO BYTES (AC-29.3).
+ *
+ * A PORT RATHER THAN A DEPENDENCY, deliberately. Resolving media needs the
+ * Asset Library's rules AND the object store, and this package has neither —
+ * importing them would make every connector's package graph include the whole
+ * media subsystem, and would put the tenant boundary for assets in two places.
+ * The wiring layer, which already holds both, supplies one implementation and
+ * the pipeline calls it.
+ *
+ * IT MUST THROW rather than return a short list. A resolver that silently
+ * dropped an inadmissible asset would publish a post the author never
+ * reviewed — the caption they wrote, with the picture missing. The pipeline
+ * maps a throw to `CONTENT_REJECTED` and the job fails honestly.
+ */
+export interface PublishMediaPort {
+  resolve(input: {
+    readonly brandId: string;
+    readonly assetIds: readonly string[];
+  }): Promise<readonly PublishMedia[]>;
+}
+
 export interface PublishPipelineOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -102,6 +124,13 @@ export interface PublishPipelineOptions {
   readonly registry: ConnectorRegistry;
   readonly vault: SocialTokenVault;
   readonly approvals: PublishApprovalGate;
+  /**
+   * PHASE 8. OPTIONAL, and its absence is load-bearing: a caller that supplies
+   * no resolver cannot publish media, so a variant carrying assets is REFUSED
+   * rather than published without them. Silently dropping media because the
+   * wiring forgot a port is exactly the failure this phase is closing.
+   */
+  readonly media?: PublishMediaPort | undefined;
   readonly notifier?: PublishNotifier | undefined;
   readonly clock?: Clock;
 }
@@ -163,6 +192,7 @@ export class PublishPipelineService {
   readonly #registry: ConnectorRegistry;
   readonly #vault: SocialTokenVault;
   readonly #approvals: PublishApprovalGate;
+  readonly #media: PublishMediaPort | undefined;
   readonly #notifier: PublishNotifier | undefined;
   readonly #clock: Clock;
 
@@ -173,6 +203,7 @@ export class PublishPipelineService {
     this.#registry = options.registry;
     this.#vault = options.vault;
     this.#approvals = options.approvals;
+    this.#media = options.media;
     this.#notifier = options.notifier;
     this.#clock = options.clock ?? systemClock;
   }
@@ -419,6 +450,44 @@ export class PublishPipelineService {
     });
     if (!variant) return this.#fail(job, 'CONTENT_REJECTED', 'preflight.variant_missing', null);
 
+    /*
+     * MEDIA IS RESOLVED BEFORE THE PROVIDER IS CALLED (AC-29.3), and every
+     * refusal happens here rather than inside an adapter:
+     *
+     *   - the PROVIDER'S CEILING, from the activated publishing policy. A
+     *     carousel of eleven where the platform takes ten is refused, not
+     *     truncated — a post missing its last picture is a post the author did
+     *     not approve.
+     *   - the ASSET ITSELF, by the port: this workspace, this brand or the
+     *     shared shelf, inside the member's scope, READY and CLEAN, of a type
+     *     a post can carry. The port throws; nothing is dropped.
+     *   - the WIRING: a variant with media and no resolver is refused, because
+     *     publishing the caption alone would be worse than not publishing.
+     */
+    const capabilities = capabilitiesFor(this.#policy, job.provider);
+    let media: readonly PublishMedia[] = [];
+    if (variant.assetIds.length > 0) {
+      if (variant.assetIds.length > capabilities.maxMediaItems) {
+        return this.#fail(job, 'UNSUPPORTED', 'preflight.too_many_media', null);
+      }
+      if (!this.#media) {
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_unavailable', null);
+      }
+      try {
+        media = await this.#media.resolve({
+          brandId: job.brandId,
+          assetIds: variant.assetIds,
+        });
+      } catch {
+        // The reason is the port's and is not a customer's to read as prose: a
+        // stable code goes on the job and the history screen translates it.
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null);
+      }
+      if (media.length !== variant.assetIds.length) {
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null);
+      }
+    }
+
     const adapter = this.#registry.get(job.provider);
     const attemptNumber = job.attemptCount + 1;
     const startedAt = this.#clock.now();
@@ -438,6 +507,7 @@ export class PublishPipelineService {
           body: variant.body ?? '',
           hashtags: variant.hashtags,
           firstComment: variant.firstComment,
+          media,
           idempotencyKey: job.idempotencyKey,
         },
       });

@@ -133,6 +133,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
       body: 'hello',
       hashtags: [],
       firstComment: null,
+      media: [],
       idempotencyKey: 'stable-key',
     };
     const first = await adapter.publish({ request, credentials });
@@ -150,6 +151,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
       body: 'hello',
       hashtags: [],
       firstComment: null,
+      media: [],
     };
     const a = await adapter.publish({
       request: { ...base, idempotencyKey: 'key-a' },
@@ -170,6 +172,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         body: 'x'.repeat(adapter.capabilities.maxBodyCharacters + 1),
         hashtags: [],
         firstComment: null,
+        media: [],
         idempotencyKey: 'too-long',
       },
       credentials,
@@ -192,6 +195,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         body: 'hello',
         hashtags: [],
         firstComment: 'a first comment',
+        media: [],
         idempotencyKey: 'first-comment',
       },
       credentials,
@@ -208,6 +212,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         body: 'a very specific caption nobody should see echoed back',
         hashtags: [],
         firstComment: null,
+        media: [],
         idempotencyKey: 'reject-content',
       },
       credentials,
@@ -229,6 +234,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
           body: 'hello',
           hashtags: [],
           firstComment: null,
+          media: [],
           idempotencyKey: 'rate-limit',
         },
         credentials,
@@ -339,6 +345,7 @@ describe('a directly constructed adapter behaves like a registered one', () => {
         body: 'hello',
         hashtags: [],
         firstComment: 'now supported',
+        media: [],
         idempotencyKey: 'first-comment-allowed',
       },
       credentials: { accessToken: 'mock', refreshToken: null },

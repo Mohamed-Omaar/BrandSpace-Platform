@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  AssetThumb,
   Card,
   CONTROL_CLASS,
   Field,
@@ -80,6 +81,20 @@ export interface ReviewSubjectView {
     readonly platformKey: string;
     readonly body: string;
     readonly hashtags: readonly string[];
+    /**
+     * PHASE 8 — THE MEDIA THIS REVIEWER IS APPROVING (AC-29.1).
+     *
+     * A reviewer who cannot see the picture is approving a caption, not a post.
+     * Each carries an expiring, per-viewer preview grant issued by the same
+     * download service the Asset Library uses — never a storage key, never a
+     * signed url from a column.
+     */
+    readonly media: readonly {
+      readonly id: string;
+      readonly name: string;
+      readonly kind: string;
+      readonly previewToken: string | null;
+    }[];
   }[];
 }
 
@@ -149,6 +164,40 @@ export function ApprovalsView({
                 <p style={bodyStyle}>{variant.body}</p>
                 {variant.hashtags.length > 0 ? (
                   <span style={metaStyle}>{variant.hashtags.map((h) => `#${h}`).join(' ')}</span>
+                ) : null}
+                {/*
+                  WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails are
+                  the media the publish pipeline will send — the same asset ids,
+                  in the same order — so a reviewer's decision is about the post
+                  rather than about its words.
+                */}
+                {variant.media.length > 0 ? (
+                  <ul
+                    style={{
+                      listStyle: 'none',
+                      margin: 0,
+                      padding: 0,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: spacingTokens.xs,
+                    }}
+                    data-testid={`approval-media-${variant.id}`}
+                  >
+                    {variant.media.map((item) => (
+                      <li key={item.id}>
+                        {item.previewToken ? (
+                          <AssetThumb
+                            src={`/${locale}/assets/file/${item.previewToken}`}
+                            alt={item.name}
+                            size="3.5rem"
+                            testId={`approval-media-thumb-${item.id}`}
+                          />
+                        ) : (
+                          <span style={metaStyle}>{item.name}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
               </li>
             ))}

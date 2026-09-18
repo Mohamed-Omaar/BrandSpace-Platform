@@ -125,3 +125,59 @@ export async function issuePreviewToken(input: {
     return { previewToken: issued.grant.token, name: issued.asset.name };
   });
 }
+
+/**
+ * Preview grants for a specific set of asset ids, keyed by id.
+ *
+ * FOR A SCREEN THAT ALREADY KNOWS WHAT IT IS SHOWING — an approval under
+ * review, a calendar entry — rather than one browsing a library. It issues the
+ * same expiring, per-viewer grants through the same download service, which
+ * re-checks the permission, the workspace and the member's BrandScope.
+ *
+ * AN ID THAT CANNOT BE RESOLVED IS SIMPLY ABSENT FROM THE MAP. A deleted or
+ * quarantined asset is not shown as a broken tile: the publish pipeline would
+ * refuse it too, and a broken tile would suggest the post is still whole.
+ */
+export async function mediaForVariants(input: {
+  readonly workspaceId: string;
+  readonly userId: string;
+  readonly permissionKeys: readonly string[];
+  readonly brandScope: readonly string[];
+  readonly assetIds: readonly string[];
+}): Promise<Map<string, MediaOption>> {
+  const unique = [...new Set(input.assetIds)];
+  if (unique.length === 0 || !input.permissionKeys.includes('assets.read')) {
+    return new Map();
+  }
+
+  return inAssetLibrary(input.workspaceId, async (services) => {
+    const library = await services.library();
+    const download = await services.download();
+    const actor = {
+      userId: input.userId,
+      permissionKeys: input.permissionKeys,
+      brandScope: input.brandScope,
+    };
+
+    const found = new Map<string, MediaOption>();
+    for (const assetId of unique) {
+      const asset = await library.get(assetId, actor).catch(() => null);
+      if (!asset || asset.status !== 'READY' || asset.scanStatus !== 'CLEAN') continue;
+      const token = await download
+        .grantFor({ assetId, actor, disposition: 'inline' })
+        .then((issued) => issued.grant.token)
+        .catch(() => null);
+      found.set(assetId, {
+        id: asset.id,
+        name: asset.name,
+        kind: asset.kind,
+        mimeType: asset.mimeType,
+        width: asset.width,
+        height: asset.height,
+        shared: asset.brandId === null,
+        previewToken: token,
+      });
+    }
+    return found;
+  });
+}

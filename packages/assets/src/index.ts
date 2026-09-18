@@ -65,3 +65,20 @@ export {
   findUnclaimedAssetJobs,
   type AssetMaintenanceOptions,
 } from './maintenance';
+
+/*
+ * PHASE 8 — the publishable-media predicate and resolver.
+ *
+ * EXPORTED BECAUSE TWO SUBSYSTEMS ASK THE SAME QUESTION: the Content Studio
+ * when an author attaches a picture, and the publish pipeline just before a
+ * payload reaches a provider. `ContentVariant.assetIds` is a uuid array and
+ * cannot carry a composite foreign key, so this predicate IS the tenant
+ * boundary for media, and there must be exactly one of it.
+ */
+export {
+  PUBLISHABLE_ASSET_KINDS,
+  PublishMediaResolver,
+  publishableAssetWhere,
+  publishableMediaNotFound,
+} from './publishable';
+export type { PublishMediaResolverOptions, ResolvedPublishMedia } from './publishable';

@@ -544,6 +544,9 @@ importers:
       '@brandspace/ai-gateway':
         specifier: workspace:*
         version: link:../ai-gateway
+      '@brandspace/assets':
+        specifier: workspace:*
+        version: link:../assets
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../brand-brain

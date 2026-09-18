@@ -115,11 +115,6 @@ export { CampaignService, campaignNotFound, campaignVersionConflict } from './ca
  * a composite foreign key, so the tenant boundary for media lives in this
  * service and must be the same one in both places.
  */
-export {
-  ContentMediaResolver,
-  PUBLISHABLE_ASSET_KINDS,
-  mediaNotFound,
-  tooManyMedia,
-} from './media';
+export { ContentMediaResolver, mediaNotFound, tooManyMedia } from './media';
 export type { MediaResolverOptions, ResolvedMedia } from './media';
 export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';

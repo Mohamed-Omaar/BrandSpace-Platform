@@ -342,6 +342,8 @@ export function statusTone(status: string): BadgeTone {
     case 'PENDING':
     case 'PAST_DUE':
     case 'SCHEDULED':
+    case 'PARTIALLY_PUBLISHED':
+      // Half out and half not is not a success and not yet a failure.
       return 'warning';
     case 'ARCHIVED':
     case 'DRAFT':

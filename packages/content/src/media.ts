@@ -1,5 +1,6 @@
 import { AppError, assertBrandInScope } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
+import { publishableAssetWhere, publishableMediaNotFound } from '@brandspace/assets';
 import type { ContentPolicy } from './policy';
 import { findPlatform } from './policy';
 
@@ -37,9 +38,6 @@ import { findPlatform } from './policy';
  * same answer a fabricated uuid gets (CLAUDE.md §2.1).
  */
 
-/** Kinds a social post can carry. A document is an asset and not a picture. */
-export const PUBLISHABLE_ASSET_KINDS = ['IMAGE', 'VIDEO'] as const;
-
 export interface ResolvedMedia {
   readonly id: string;
   readonly name: string;
@@ -50,10 +48,8 @@ export interface ResolvedMedia {
   readonly brandId: string | null;
 }
 
-export function mediaNotFound(): AppError {
-  // The SAME message a missing asset gets. See the note above on refusals.
-  return new AppError('NOT_FOUND', 'Asset not found.');
-}
+/** The SAME refusal the publish pipeline gives. One answer, one place. */
+export const mediaNotFound = publishableMediaNotFound;
 
 export function tooManyMedia(platformKey: string, max: number): AppError {
   return new AppError(
@@ -103,25 +99,20 @@ export class ContentMediaResolver {
       throw new AppError('VALIDATION_FAILED', 'The same asset was attached more than once.');
     }
 
+    /*
+     * THE SHARED PREDICATE (`@brandspace/assets`), not a second copy of it.
+     * The publish pipeline asks exactly this question just before a payload
+     * reaches a provider; if the two ever disagreed, an author could compose a
+     * post that could never go out, or publishing could send something the
+     * Studio had refused.
+     */
     const rows = await this.#db.asset.findMany({
-      where: {
-        id: { in: [...unique] },
+      where: publishableAssetWhere({
+        assetIds: [...unique],
         workspaceId: this.#workspaceId,
-        deletedAt: null,
-        status: 'READY',
-        scanStatus: 'CLEAN',
-        kind: { in: [...PUBLISHABLE_ASSET_KINDS] },
-        /*
-         * THE BRAND CLAUSE, IN THE QUERY. `OR` of "this brand" and "shared",
-         * intersected with the member's own scope — so an asset belonging to a
-         * brand the member cannot see is not read even when the target brand
-         * would otherwise admit it.
-         */
-        AND: [
-          { OR: [{ brandId: input.brandId }, { brandId: null }] },
-          assetScopeClause(input.brandScope),
-        ],
-      },
+        brandId: input.brandId,
+        brandScope: input.brandScope,
+      }),
       select: {
         id: true,
         name: true,
@@ -167,20 +158,3 @@ export class ContentMediaResolver {
     });
   }
 }
-
-/**
- * The BrandScope clause for an asset, which is NOT the ordinary one.
- *
- * `brandIdQueryFilter` restricts `brandId` to the scope — correct for a
- * brand-owned row, wrong for an asset, because a workspace-SHARED asset has
- * `brandId = null` and a scoped member must still be able to use the shared
- * shelf. This admits the scope plus null, and contributes nothing at all when
- * the scope is empty (unrestricted).
- */
-function assetScopeClause(brandScope: readonly string[]): Record<string, unknown> {
-  if (brandScope.length === 0) return {};
-  return { OR: [{ brandId: { in: [...brandScope] } }, { brandId: null }] };
-}
-
-/** Exported for the isolation suite, which asserts the clause directly. */
-export const __assetScopeClause = assetScopeClause;

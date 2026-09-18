@@ -11,7 +11,7 @@ import {
   typographyTokens,
   zIndexTokens,
 } from './tokens';
-import { AbstractMedia } from './media';
+import { AbstractMedia, AssetMedia } from './media';
 import { StatusBadge, statusTone } from './data';
 import { IconButton } from './primitives';
 import { CloseIcon } from './icons';
@@ -162,7 +162,13 @@ export function PostDetailDrawer({
             overflow: 'hidden',
           }}
         >
-          <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
+          {/* The post's own picture when it has one; the abstract tile when it
+              does not — the same rule every other post surface follows. */}
+          {post.mediaSrc ? (
+            <AssetMedia src={post.mediaSrc} alt={post.mediaAlt} />
+          ) : (
+            <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
+          )}
         </div>
 
         <p

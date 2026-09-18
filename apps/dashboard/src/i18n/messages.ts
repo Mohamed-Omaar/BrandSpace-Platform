@@ -571,6 +571,10 @@ export const messages = {
     'calendar.scheduledFor': 'موعد النشر',
     'calendar.mockTarget': 'وجهة تجريبية — لا يوجد نشر فعلي بعد',
     'calendar.channels': 'القنوات',
+    'calendar.campaign': 'الحملة',
+    'calendar.publishState': 'حالة النشر',
+    'calendar.approvalState': 'حالة الموافقة',
+    'calendar.media': 'عدد الوسائط',
 
     // --- المرحلة 5B-3: الموافقات وسجل النشاط والإشعارات ---
     'nav.approvals': 'الموافقات',
@@ -688,6 +692,7 @@ export const messages = {
     'approvals.decideTitle': 'قرار المراجعة',
     'approvals.history': 'سجل المراجعات',
     'approvals.historyEmpty': 'لم يمر هذا المحتوى بأي مراجعة بعد.',
+    'approvals.notRequired': 'لا تحتاج موافقة',
     'approvals.status.PENDING': 'بانتظار المراجعة',
     'approvals.status.APPROVED': 'معتمَد',
     'approvals.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -1697,6 +1702,10 @@ export const messages = {
     'calendar.scheduledFor': 'Goes out',
     'calendar.mockTarget': 'Mock target — nothing publishes yet',
     'calendar.channels': 'Channels',
+    'calendar.campaign': 'Campaign',
+    'calendar.publishState': 'Publishing state',
+    'calendar.approvalState': 'Review state',
+    'calendar.media': 'Media items',
 
     // --- Phase 5B-3: Approvals, Activity Log, Notifications ---
     'nav.approvals': 'Approvals',
@@ -1820,6 +1829,7 @@ export const messages = {
     'approvals.decideTitle': 'Review decision',
     'approvals.history': 'Review history',
     'approvals.historyEmpty': 'This content has not been through review yet.',
+    'approvals.notRequired': 'No approval needed',
     'approvals.status.PENDING': 'Waiting for review',
     'approvals.status.APPROVED': 'Approved',
     'approvals.status.CHANGES_REQUESTED': 'Changes requested',
