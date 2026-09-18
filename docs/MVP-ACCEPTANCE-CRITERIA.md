@@ -876,9 +876,17 @@ exercises is a sentence rather than a criterion.
 ## 25. Phase 8 Acceptance Criteria — Product Completion
 
 **Phase 8 is an umbrella phase delivered in several workstreams (D-195).** AC-22 … AC-25 belong to
-workstream 1 and are **settled**. AC-26 … AC-30 belong to workstreams 2 … 6 and are **PENDING** —
-they are recorded here so the phase's bar is written down before the work starts, not after it.
-Phase 8 does not close until every criterion below passes and the exit journey in AC-30 runs whole.
+workstream 1; AC-26 … AC-30 belong to workstreams 2 … 6. **All of them are now settled**, and each
+section below names the suite that settles it — this introduction is a summary of those sections and
+never a claim ahead of them.
+
+**AC-30.4 is settled by a FUNCTIONAL journey, not by reachability.** `phase8-journey` proves every
+area is reachable and coherent in both locales; `phase8-flow` drives the customer's own actions
+through the browser against the approved development/mock adapters — brand selection, Brand Profile,
+Brand Brain, strategy, a campaign, content filed under it, an uploaded picture, a generated image in
+the Creative Studio, that image in the Asset Library and in the social preview, submission, approval,
+scheduling, a real publish through the mock pipeline, its history, analytics, and a proposed learning
+arriving in the governed Brand Brain review queue. Reachability alone would not have settled it.
 
 ### AC-22 Global Brand Context (Phase 8 — workstream 1, settled)
 
@@ -974,5 +982,5 @@ Phase 8 does not close until every criterion below passes and the exit journey i
 | AC-30.1 | Marketing Intelligence is a real customer-facing surface, integrated with the shell and the brand context                                                                                                                                                                                  | `phase8-intelligence`, E2E                                        |
 | AC-30.2 | Every one of the eighteen navigation areas is reachable, and no entry is a placeholder link (D-188)                                                                                                                                                                                        | `phase8-navigation`, E2E                                          |
 | AC-30.3 | The product reads as one system in `ar` and `en`, RTL and LTR, at phone width, at WCAG 2.2 AA                                                                                                                                                                                              | `phase8-journey` E2E                                              |
-| AC-30.4 | **The exit journey runs end to end:** Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign → AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar → Publish → Analytics → Marketing Intelligence → learning into Brand Brain | `phase8-journey` E2E                                              |
+| AC-30.4 | **The exit journey runs end to end:** Workspace → Brand → Brand Profile → Brand Brain → Assets → AI Strategy → Campaign → AI Content Studio → media selection/upload → AI Creative Studio → Approval → Calendar → Publish → Analytics → Marketing Intelligence → learning into Brand Brain | `phase8-flow` E2E (functional), `phase8-journey` E2E (coherence)  |
 | AC-30.5 | The whole journey is workspace-isolated and BrandScope-enforced at every step                                                                                                                                                                                                              | `phase8-intelligence`, `phase8-publish-media`, `phase8-campaigns` |

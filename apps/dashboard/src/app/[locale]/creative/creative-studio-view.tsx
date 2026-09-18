@@ -72,6 +72,7 @@ export interface CreativeStudioLabels {
   readonly adaptHint: string;
   readonly noLogoNotice: string;
   readonly generatedBadge: string;
+  readonly scanning: string;
   readonly failed: string;
   readonly insufficientCredits: string;
 }
@@ -145,42 +146,80 @@ export function CreativeStudioView({
     [post],
   );
 
-  const generate = useCallback(async () => {
-    if (brief.trim() === '' || busy) return;
-    setBusy(true);
-    setFailure(null);
-    try {
-      const payload = await post('generate', {
-        brandId,
-        brief: brief.trim(),
-        formatKey,
-        /*
-         * ONE KEY PER ATTEMPT, generated in the browser and sent with the
-         * request: a double click reuses it and the gateway replays the first
-         * outcome rather than charging twice (AC-28.6). A NEW attempt — the
-         * author pressing "generate another" — gets a new key, because they
-         * mean a new image.
-         */
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setResult({
-        assetId: String(payload['assetId'] ?? ''),
-        formatKey: String(payload['formatKey'] ?? formatKey),
-        previewToken: typeof payload['previewToken'] === 'string' ? payload['previewToken'] : null,
-        name: String(payload['name'] ?? ''),
-      });
-      // The library's storage figures and the asset list have both moved.
-      router.refresh();
-    } catch (error: unknown) {
-      const code = error instanceof Error ? error.message : 'INTERNAL';
-      const key = FAILURE_KEYS[code];
-      setFailure(key ? labels[key] : labels.failed);
-    } finally {
-      setBusy(false);
-    }
-  }, [brandId, brief, busy, formatKey, labels, post, router]);
+  /**
+   * GENERATE, FOR AN EXPLICITLY NAMED FORMAT (AC-28.2).
+   *
+   * THE ARGUMENT IS THE FIX, AND IT IS NOT A STYLE PREFERENCE. This read
+   * `formatKey` out of the closure, and the adaptation buttons did
+   * `setFormatKey(next)` immediately followed by `generate()`. A React state
+   * update is asynchronous: the callback in that click still closes over the
+   * PREVIOUS render's `formatKey`, so "Square, then adapt to Story" generated
+   * another SQUARE — silently, at full price, and reported as a story.
+   *
+   * `setTimeout`, a `useEffect` on `formatKey`, or a ref would each have made
+   * the symptom go away while leaving the same question ("which format is this
+   * call for?") answered by whatever state happened to have settled. The
+   * target is now a PARAMETER, so the answer is at the call site and cannot
+   * drift from it.
+   *
+   * THE ARGUMENT IS ALSO WHAT COMES BACK. The result records the format the
+   * SERVER says it produced, falling back to the format asked for — never to
+   * the dropdown, which the reader may have moved since.
+   */
+  const generate = useCallback(
+    async (targetFormatKey: string) => {
+      if (brief.trim() === '' || busy) return;
+      setBusy(true);
+      setFailure(null);
+      try {
+        const payload = await post('generate', {
+          brandId,
+          brief: brief.trim(),
+          formatKey: targetFormatKey,
+          /*
+           * ONE KEY PER ATTEMPT, generated in the browser and sent with the
+           * request: a double click reuses it and the gateway replays the first
+           * outcome rather than charging twice (AC-28.6). A NEW attempt — the
+           * author pressing "generate another" — gets a new key, because they
+           * mean a new image.
+           */
+          idempotencyKey: crypto.randomUUID(),
+        });
+        setResult({
+          assetId: String(payload['assetId'] ?? ''),
+          formatKey: String(payload['formatKey'] ?? targetFormatKey),
+          previewToken:
+            typeof payload['previewToken'] === 'string' ? payload['previewToken'] : null,
+          name: String(payload['name'] ?? ''),
+        });
+        // The library's storage figures and the asset list have both moved.
+        router.refresh();
+      } catch (error: unknown) {
+        const code = error instanceof Error ? error.message : 'INTERNAL';
+        const key = FAILURE_KEYS[code];
+        setFailure(key ? labels[key] : labels.failed);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [brandId, brief, busy, labels, post, router],
+  );
 
-  const chosen = formats.find((format) => format.key === formatKey) ?? formats[0];
+  /**
+   * THE FRAME THE RESULT IS SHOWN IN IS THE RESULT'S OWN (AC-28.2).
+   *
+   * Not the dropdown's. The picture on screen was framed by whatever format
+   * was selected at render time, so moving the dropdown after a generation
+   * re-cropped a finished image into a shape it is not — and after the stale
+   * closure above, the frame and the bytes disagreed by construction.
+   *
+   * A result whose format is no longer in the catalogue falls back to square
+   * rather than to the selection, because an unknown shape is not a reason to
+   * assert a different one.
+   */
+  const resultFormat = result
+    ? (formats.find((format) => format.key === result.formatKey) ?? null)
+    : null;
 
   return (
     <div style={{ display: 'grid', gap: spacingTokens.lg }} data-testid="creative-studio">
@@ -257,7 +296,7 @@ export function CreativeStudioView({
                 type="button"
                 style={buttonStyle('brand')}
                 disabled={busy || brief.trim() === ''}
-                onClick={() => void generate()}
+                onClick={() => void generate(formatKey)}
                 data-testid="creative-generate"
               >
                 {busy ? labels.generating : labels.generate}
@@ -279,9 +318,18 @@ export function CreativeStudioView({
           ) : (
             <div style={{ display: 'grid', gap: spacingTokens.sm }}>
               <div
+                /*
+                 * THE RESULT'S OWN FORMAT, ON THE ELEMENT. Not decoration: it
+                 * is what lets a test assert that the picture on screen is the
+                 * shape the customer asked for, which is the one thing a
+                 * screenshot cannot be made to prove reliably (AC-28.2).
+                 */
+                data-testid="creative-result-frame"
+                data-format={result.formatKey}
+                data-aspect={resultFormat?.aspect ?? '1:1'}
                 style={{
                   position: 'relative',
-                  aspectRatio: (chosen?.aspect ?? '1:1').replace(':', ' / '),
+                  aspectRatio: (resultFormat?.aspect ?? '1:1').replace(':', ' / '),
                   borderRadius: radiusTokens.md,
                   overflow: 'hidden',
                   background: colorTokens.surfaceMuted,
@@ -294,7 +342,35 @@ export function CreativeStudioView({
                     fit="contain"
                     testId="creative-image"
                   />
-                ) : null}
+                ) : (
+                  /*
+                   * NO GRANT YET IS NOT NOTHING TO SAY (AC-28.3).
+                   *
+                   * A generated image lands in the library PENDING its scan, and
+                   * the download service refuses a grant for a file the scanner
+                   * has not cleared — correctly, and for seconds rather than
+                   * minutes. This rendered an empty frame with a badge over it,
+                   * which reads as a failed generation rather than as the safety
+                   * step it is. The file exists, and the screen says so.
+                   */
+                  <p
+                    data-testid="creative-scanning"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: 0,
+                      padding: spacingTokens.md,
+                      textAlign: 'center',
+                      ...typographyTokens.bodySm,
+                      color: colorTokens.textSecondary,
+                    }}
+                  >
+                    {labels.scanning}
+                  </p>
+                )}
                 {/*
                   ALWAYS LABELLED. A customer must be able to tell what a model
                   made from what they made, on the screen as well as in the row.
@@ -330,7 +406,12 @@ export function CreativeStudioView({
                   type="button"
                   style={buttonStyle('ghost', 'sm')}
                   disabled={busy}
-                  onClick={() => void generate()}
+                  /*
+                   * "GENERATE ANOTHER" MEANS ANOTHER OF THIS ONE, so it names
+                   * the RESULT's format rather than the dropdown's — the
+                   * control sits under the picture it is offering to redo.
+                   */
+                  onClick={() => void generate(result.formatKey)}
                   data-testid="creative-regenerate"
                 >
                   {labels.regenerate}
@@ -357,9 +438,16 @@ export function CreativeStudioView({
                         className="cs-channel"
                         disabled={busy}
                         onClick={() => {
+                          /*
+                           * THE TARGET IS PASSED, NOT SET-THEN-READ. The two
+                           * state updates keep the rest of the screen honest —
+                           * the dropdown and the price follow the adaptation —
+                           * but the generation itself does not wait on either,
+                           * and could not have read them in this tick anyway.
+                           */
                           setFormatKey(format.key);
                           void refreshQuote(format.key);
-                          void generate();
+                          void generate(format.key);
                         }}
                         data-testid={`creative-adapt-${format.key}`}
                       >

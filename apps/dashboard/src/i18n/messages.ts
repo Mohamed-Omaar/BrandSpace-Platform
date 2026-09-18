@@ -1157,6 +1157,7 @@ export const messages = {
     'creative.noBrandBody': 'الصورة تُنشأ على هوية علامة واحدة. اخترها من المبدّل في الأعلى.',
     'creative.noLogoNotice': 'لا يُضاف شعار العلامة تلقائيًا إلى الصور المُنشأة.',
     'creative.generatedBadge': 'أُنشئت بالذكاء الاصطناعي',
+    'creative.scanning': 'الصورة محفوظة ويجري فحصها. ستظهر المعاينة بعد اكتمال الفحص.',
     'creative.format.square': 'مربّع للمنشورات',
     'creative.format.portrait': 'طولي للمنشورات',
     'creative.format.story': 'ستوري بملء الشاشة',
@@ -2351,6 +2352,8 @@ export const messages = {
       "An image is generated on one brand's identity. Choose one from the selector above.",
     'creative.noLogoNotice': 'A brand logo is never added to a generated image automatically.',
     'creative.generatedBadge': 'AI generated',
+    'creative.scanning':
+      'The image is saved and is being scanned. The preview appears once the scan clears it.',
     'creative.format.square': 'Square feed post',
     'creative.format.portrait': 'Portrait feed post',
     'creative.format.story': 'Full-screen story',

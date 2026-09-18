@@ -74,6 +74,7 @@ export default async function CreativeStudioPage({
     adaptHint: t('creative.adaptHint'),
     noLogoNotice: t('creative.noLogoNotice'),
     generatedBadge: t('creative.generatedBadge'),
+    scanning: t('creative.scanning'),
     failed: t('creative.failed'),
     insufficientCredits: t('creative.insufficientCredits'),
   };

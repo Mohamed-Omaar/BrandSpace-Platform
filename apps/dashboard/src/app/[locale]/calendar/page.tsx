@@ -154,13 +154,25 @@ export default async function CalendarPage({
     });
 
     /*
-     * DRAFTS THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
+     * CONTENT THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
      * An item with no variant has no caption to publish, and the service
      * refuses it — so offering it in the picker would be offering a choice that
      * fails. The list is what the service would accept, computed the same way.
+     *
+     * DRAFT **AND APPROVED**, which is what `SCHEDULABLE_FROM` says. The picker
+     * offered drafts only, and that made the approval workflow a dead end: with
+     * a brand's `requireApprovalBeforeScheduling` switched on, a DRAFT is
+     * refused by the gate and an APPROVED post was never offered — so nothing
+     * at all could be scheduled, and the one status the gate exists to admit
+     * was the one status the screen hid. `SCHEDULED` is deliberately absent: it
+     * is already on the calendar, and rescheduling has its own control.
      */
     const schedulable = (
-      await library.listItems({ status: 'DRAFT', limit: 200, brandScope: workspace.brandScope })
+      await library.listItems({
+        statuses: ['DRAFT', 'APPROVED'],
+        limit: 200,
+        brandScope: workspace.brandScope,
+      })
     ).filter((item) => item.variants.length > 0);
 
     /*

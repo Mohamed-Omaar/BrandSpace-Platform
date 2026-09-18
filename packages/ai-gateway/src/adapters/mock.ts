@@ -199,6 +199,201 @@ function answerFrom(context: readonly string[], maxOutputTokens: number): string
   return (lastStop > budget / 2 ? window.slice(0, lastStop + 1) : window).trim();
 }
 
+/**
+ * THE TASKS THAT ASK FOR A DOCUMENT RATHER THAN A SENTENCE.
+ *
+ * WHY THIS EXISTS, AND WHAT IT IS NOT. Several product surfaces parse the
+ * model's answer against a schema and refuse anything else — correctly: a
+ * model's output is untrusted input about to become a database row (AC-11.9).
+ * The development adapter returned prose for every task, so every one of those
+ * surfaces answered "that could not be completed" and the whole path was
+ * unprovable end to end. The Content Studio had never once produced a draft in
+ * a browser.
+ *
+ * IT IS STILL SELECTION, NOT GENERATION. The words come from the SAME context
+ * `answerFrom` uses — the workspace's own approved knowledge, already chosen by
+ * the retriever — arranged in the shape the caller asked for. Nothing is
+ * invented, no claim is composed, and nothing in the material can make this
+ * adapter fail, stall or change model.
+ *
+ * IT IS KEYED ON THE PLATFORM'S OWN TASK KEY, from the closed registry, chosen
+ * by the routing rule. A customer cannot reach it and a prompt cannot select
+ * it: this is not prompt-sniffing.
+ *
+ * AND IT IS DEVELOPMENT ONLY. The provider is `mock`, whose base url resolves
+ * nowhere and whose credential is a placeholder; production routes to a real
+ * model or to nothing at all.
+ */
+const STRUCTURED_TASKS = new Set([
+  'caption.generate',
+  // Both the strategy proposal and the content-gap analysis run under this key:
+  // routing is per TASK, and they are one task asked two ways. The shape is
+  // told apart below by the schema the platform's own prompt printed.
+  'strategy.generate',
+  'plan.monthly',
+  'analytics.explain',
+]);
+
+/** The platform keys a caption request named, read from the prompt's own line. */
+function platformsFromPrompt(prompt: string): string[] {
+  /*
+   * THE CHANNEL LINE THE STUDIO WRITES, and only that line. This reads the
+   * PLATFORM's own prompt, which this package composes — not customer text, and
+   * not the untrusted context, which is never parsed here or anywhere.
+   */
+  const line = /Write for these channels: ([^\n]+)/.exec(prompt)?.[1] ?? '';
+  const keys = line
+    .split(';')
+    .map((part) => part.trim().split(/\s+/)[0] ?? '')
+    .filter((key) => key !== '');
+  return keys.length > 0 ? keys : ['instagram'];
+}
+
+/**
+ * A localized pair, from one piece of the brand's own material.
+ *
+ * NO DIGITS. The grounding validator refuses prose containing a numeral that is
+ * not in the evidence — correctly, because a number in a claim is a measurement
+ * — and material selected from a brand's knowledge can easily contain one. A
+ * mock that emitted a stray "2024" would be refused for saying something it
+ * never meant to say.
+ */
+function localizedFromMaterial(material: string, fallback: string): { ar: string; en: string } {
+  const clean = material
+    .replace(/[0-9\u0660-\u0669]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const text = clean === '' ? fallback : clean.slice(0, 160);
+  return { ar: text, en: text };
+}
+
+/**
+ * The evidence ordinals the caller actually supplied, in order.
+ *
+ * READ FROM THE PLATFORM'S OWN EVIDENCE BLOCK, whose lines begin `e1`, `e2`.
+ * A claim must cite a row that exists: citing one that does not is exactly the
+ * fabricated citation the grounding gate was built to refuse, and a mock that
+ * invented `[1]` on an empty package would be testing the gate rather than the
+ * path.
+ */
+function evidenceOrdinals(context: readonly string[]): number[] {
+  const found = new Set<number>();
+  for (const match of context.join('\n').matchAll(/(?:^|\s)e(\d{1,3})\b/g)) {
+    const ordinal = Number(match[1]);
+    if (Number.isInteger(ordinal) && ordinal > 0) found.add(ordinal);
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+/**
+ * A REASONING DOCUMENT IN THE SHAPE THE PROMPT PRINTED.
+ *
+ * WHICH SHAPE, AND HOW IT IS KNOWN. Three product surfaces share one task key
+ * or differ only by schema, so the task alone cannot tell them apart. Each
+ * prompt prints the schema it wants — `"gaps"`, `"pillars"`, `"claims"` — and
+ * that line is written by THIS CODEBASE, in `packages/intelligence` and
+ * `packages/analytics`. Reading our own instruction is not prompt-sniffing and
+ * is not an instruction channel: nothing a customer writes reaches it, and the
+ * only thing it can change is which of three fixed shapes is returned.
+ *
+ * RETURNS NULL WHEN IT CANNOT ANSWER HONESTLY — an unrecognised shape, or a
+ * claim-shaped document with no evidence to cite. The caller then falls back to
+ * prose, the product refuses it as unparseable, and the refusal is the right
+ * outcome rather than a fabricated citation.
+ */
+function reasoningDocument(
+  prompt: string,
+  context: readonly string[],
+  maxOutputTokens: number,
+): string | null {
+  const material = answerFrom(context, maxOutputTokens).replace(/\s+/g, ' ').trim();
+  const summary = localizedFromMaterial(material, 'A short summary of the material supplied.');
+  const ordinals = evidenceOrdinals(context);
+  const cite = ordinals.slice(0, 1);
+
+  if (prompt.includes('"gaps"')) {
+    if (cite.length === 0) return null;
+    return JSON.stringify({
+      summary,
+      gaps: [
+        {
+          title: localizedFromMaterial(material, 'An area with nothing published against it'),
+          rationale: {
+            evidenceRefs: cite,
+            text: localizedFromMaterial(material, 'The reference material shows nothing here.'),
+          },
+          suggestedAction: localizedFromMaterial(material, 'Plan content against it.'),
+        },
+      ],
+    });
+  }
+
+  if (prompt.includes('"pillars"')) {
+    if (cite.length === 0) return null;
+    const rationale = {
+      evidenceRefs: cite,
+      text: localizedFromMaterial(material, 'It rests on the material supplied.'),
+    };
+    return JSON.stringify({
+      summary,
+      pillars: [
+        {
+          name: localizedFromMaterial(material, 'The brand own subject'),
+          rationale,
+          sharePercent: 100,
+        },
+      ],
+      channelMix: [{ platformKey: 'linkedin', sharePercent: 100, rationale }],
+      monthlyPlan: [],
+    });
+  }
+
+  if (prompt.includes('"claims"')) {
+    if (cite.length === 0) return null;
+    return JSON.stringify({
+      summary,
+      claims: [
+        {
+          evidenceRefs: cite,
+          text: localizedFromMaterial(material, 'The measurements supplied show this.'),
+        },
+      ],
+      notableChanges: [],
+      recommendations: [],
+    });
+  }
+
+  return null;
+}
+
+/**
+ * A caption document, composed from the brand's own material.
+ *
+ * ONE VARIANT PER CHANNEL ASKED FOR, each carrying a prefix of the context and
+ * nothing else. The body is deliberately SHORT — well inside every platform's
+ * ceiling — because a mock that overran a limit would fail a validation the
+ * product is right to apply and would be testing the limit rather than the
+ * path.
+ */
+function captionDocument(
+  prompt: string,
+  context: readonly string[],
+  maxOutputTokens: number,
+): string {
+  const material = answerFrom(context, maxOutputTokens).replace(/\s+/g, ' ').trim();
+  const body = material === '' ? 'A short note from this brand.' : material.slice(0, 180);
+  return JSON.stringify({
+    // The brief's own first line, which the Studio would otherwise derive
+    // itself. Never a sentence this adapter made up about the brand.
+    title: (/Brief:\n([^\n]+)/.exec(prompt)?.[1] ?? 'Draft').slice(0, 120),
+    variants: platformsFromPrompt(prompt).map((platformKey) => ({
+      platformKey,
+      body,
+      hashtags: [],
+    })),
+  });
+}
+
 export class MockProviderAdapter implements AiProviderAdapter {
   readonly key = 'mock';
   readonly supportedModalities = MOCK_MODALITIES;
@@ -276,10 +471,25 @@ export class MockProviderAdapter implements AiProviderAdapter {
     const promptChars =
       request.prompt.length + context.reduce((total, entry) => total + entry.length, 0);
 
+    /*
+     * A DOCUMENT WHERE THE TASK ASKS FOR ONE, prose everywhere else. The task
+     * key is the platform's own and comes from the resolved route; see
+     * `STRUCTURED_TASKS` for why an adapter is allowed to know it.
+     */
+    const structured = request.taskKey !== undefined && STRUCTURED_TASKS.has(request.taskKey);
+
+    const document = structured
+      ? request.taskKey === 'caption.generate'
+        ? captionDocument(request.prompt, context, request.maxOutputTokens)
+        : reasoningDocument(request.prompt, context, request.maxOutputTokens)
+      : null;
+
     return {
-      text: this.#answerFromContext
-        ? answerFrom(context, request.maxOutputTokens)
-        : `[mock:${request.modelKey}] ${words.join(' ')}`,
+      text:
+        document ??
+        (this.#answerFromContext
+          ? answerFrom(context, request.maxOutputTokens)
+          : `[mock:${request.modelKey}] ${words.join(' ')}`),
       modelKey: request.modelKey,
       usage: {
         promptTokens: Math.max(1, Math.ceil(promptChars / CHARS_PER_TOKEN)),

@@ -666,8 +666,8 @@ The previous "Phase 8 — Billing and Launch" is superseded: its billing half is
 website and launch-readiness half is Phase 10, and the product work neither of them ever covered is
 Phase 8.
 
-**PHASE 8 IS AN UMBRELLA PHASE AND IS DELIVERED IN SEVERAL WORKSTREAMS**, each its own pull request
-(D-195). Campaigns, the AI Creative Studio and the media workflow are **inside Phase 8** and remain
+**PHASE 8 IS AN UMBRELLA PHASE AND IS DELIVERED IN SEVERAL WORKSTREAMS** (D-195); how those
+workstreams are split across pull requests is an implementation detail, not part of the phase. Campaigns, the AI Creative Studio and the media workflow are **inside Phase 8** and remain
 mandatory; they are not deferred to Phase 9 or Phase 10 and never were. **There is no Phase 11.**
 
 ---
@@ -677,11 +677,13 @@ mandatory; they are not deferred to Phase 9 or Phase 10 and never were. **There 
 **Goal:** the customer-facing product is one whole, coherent system — a customer can go from a brand
 identity to a published post and back to a learning, without leaving the product to do any of it.
 
-**PHASE 8 IS AN UMBRELLA PHASE, DELIVERED IN SEVERAL WORKSTREAMS.** It is not one pull request and it
-is not finished when the first one merges. Each workstream below is a separate PR; the phase closes
-only when the exit journey at the end of this section runs end to end.
+**PHASE 8 IS AN UMBRELLA PHASE, DELIVERED IN SEVERAL WORKSTREAMS.** It is not finished when the
+first workstream lands. **PR structure is an implementation detail** — a workstream may be its own
+pull request or several may travel together, and neither splits Phase 8 into sub-phases. The phase
+closes only when every workstream below is delivered and the exit journey at the end of this section
+runs end to end.
 
-### Workstream 1 — Product coherence _(PR 1, delivered)_
+### Workstream 1 — Product coherence _(delivered)_
 
 1. **Final delivery contract** — the workspace/brand model, the navigation inventory and the
    three-phase roadmap recorded in the repository as authoritative (D-187 … D-189).

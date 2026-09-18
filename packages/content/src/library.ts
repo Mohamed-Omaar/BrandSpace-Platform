@@ -72,6 +72,17 @@ export class ContentLibraryService {
     brandScope?: readonly string[] | null | undefined;
     status?: ContentItem['status'] | undefined;
     /**
+     * SEVERAL STATUSES, when one is not the question being asked.
+     *
+     * The Calendar's picker needs "everything a slot could be created from",
+     * which the scheduling service defines as DRAFT or APPROVED — a single
+     * status cannot express it, and filtering a page AFTER the database
+     * truncated it would filter a list that had already lost rows.
+     *
+     * Ignored when `status` is given: one predicate, never two.
+     */
+    statuses?: readonly ContentItem['status'][] | undefined;
+    /**
      * PHASE 8 — the campaign this content is filed under (AC-26.3).
      *
      * IN THE QUERY, for the same reason the brand scope is: a caller filtering
@@ -91,7 +102,11 @@ export class ContentLibraryService {
         deletedAt: null,
         // INTERSECTS rather than overwrites — see `brandIdQueryFilter`.
         ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
-        ...(input.status ? { status: input.status } : {}),
+        ...(input.status
+          ? { status: input.status }
+          : input.statuses && input.statuses.length > 0
+            ? { status: { in: [...input.statuses] } }
+            : {}),
         ...(input.campaignId ? { campaignId: input.campaignId } : {}),
         /*
          * Search is over the TITLE only, and deliberately.

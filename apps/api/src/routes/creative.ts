@@ -10,8 +10,12 @@ import { CreativeStudioService, findCreativeFormat } from '@brandspace/creative'
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { PrismaClient } from '@brandspace/database';
-import { getPlatformClient } from '@brandspace/database/platform';
-import { EntitlementService, QUOTA_FEATURES, UsageService } from '@brandspace/entitlements';
+import {
+  EntitlementService,
+  QUOTA_FEATURES,
+  TenantCatalogueSource,
+  UsageService,
+} from '@brandspace/entitlements';
 import { brandInScope } from '@brandspace/shared';
 import { route } from '../route-contract';
 import {
@@ -253,9 +257,24 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                * number in this file. A generated image counts against the same
                * quota a person's own upload does, because it is the same
                * library.
+               *
+               * READ FROM THE TENANT-SIDE CATALOGUE PROJECTION, exactly as the
+               * dashboard and the Copilot's gate read it. This was built with
+               * the PLATFORM client and no catalogue source at all, which the
+               * service refuses outright — so every generation through this
+               * route answered 500 before it reached the gateway. The
+               * isolation suite could not see it: it constructs the service
+               * itself and supplies the ceiling directly, which is the right
+               * shape for a domain test and leaves the WIRING untested. The
+               * functional end-to-end flow is what found it.
+               *
+               * `entitlement_catalogue_snapshot` is the projection the
+               * Configuration Service writes on activation; two sources for one
+               * answer is how a limit comes out different on two surfaces.
                */
               storageLimitGb: await new EntitlementService({
-                prisma: getPlatformClient(),
+                prisma: scopedFor(db),
+                catalogueSource: new TenantCatalogueSource(scopedFor(db), currentEnvironment()),
                 environment: currentEnvironment(),
               }).limit(caller.workspaceId, QUOTA_FEATURES.storageGb),
             });

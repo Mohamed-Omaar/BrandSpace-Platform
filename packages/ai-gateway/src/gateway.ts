@@ -779,6 +779,11 @@ export class AiGateway {
             maxOutputTokens: route.parameters.maxOutputTokens,
             temperature: route.parameters.temperature,
             ...(input.untrustedContext ? { untrustedContext: input.untrustedContext } : {}),
+            // The task the ROUTE resolved, so an adapter can vary by it — a
+            // response-format hint, a system prompt, a JSON mode. It comes from
+            // the resolved route rather than from any request body, so it is
+            // always a key from the closed registry.
+            taskKey: route.taskKey,
           },
           ctx,
         );

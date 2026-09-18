@@ -60,6 +60,56 @@ const APPROVAL_TITLE = 'Launch announcement';
  * nothing where there is only one. It carries its own draft so both can be in
  * review at once.
  */
+/**
+ * The approved knowledge the primary fixture brand is set up with.
+ *
+ * FOUR ENTRIES ACROSS THE TWO AREAS GENERATION GROUNDS ON, which is what takes
+ * the brand past the grounding floor. Written out here rather than generated,
+ * so a reader can see what the model is actually given — and so nothing in it
+ * is a claim about a real company.
+ */
+const JOURNEY_KNOWLEDGE: ReadonlyArray<{
+  area: string;
+  itemKey: string;
+  titleEn: string;
+  titleAr: string;
+  bodyEn: string;
+  bodyAr: string;
+}> = [
+  {
+    area: 'IDENTITY',
+    itemKey: 'journey-positioning',
+    titleEn: 'Positioning',
+    titleAr: 'التموضع',
+    bodyEn: 'A speciality roastery for people who make coffee at home.',
+    bodyAr: 'محمصة متخصصة لمن يحضّرون القهوة في المنزل.',
+  },
+  {
+    area: 'IDENTITY',
+    itemKey: 'journey-mission',
+    titleEn: 'Mission',
+    titleAr: 'الرسالة',
+    bodyEn: 'Make a good cup repeatable without a barista in the room.',
+    bodyAr: 'جعل الكوب الجيد قابلًا للتكرار دون وجود باريستا.',
+  },
+  {
+    area: 'IDENTITY',
+    itemKey: 'journey-value',
+    titleEn: 'Value proposition',
+    titleAr: 'القيمة المقدمة',
+    bodyEn: 'Single-origin beans with the brewing notes that suit them.',
+    bodyAr: 'حبوب أحادية المصدر مع ملاحظات التحضير المناسبة لها.',
+  },
+  {
+    area: 'TONE_OF_VOICE',
+    itemKey: 'journey-tone',
+    titleEn: 'Tone of voice',
+    titleAr: 'نبرة الصوت',
+    bodyEn: 'Warm, plain and specific. Never precious about coffee.',
+    bodyAr: 'دافئة وواضحة ومحددة، دون تكلّف في الحديث عن القهوة.',
+  },
+];
+
 const SECOND_BRAND_SLUG = 'e2e-approvals-brand-two';
 const SECOND_BRAND_NAME = 'E2E Second Brand';
 const SECOND_IDEMPOTENCY_KEY = 'e2e-approvals-second-brand';
@@ -280,6 +330,52 @@ async function main(): Promise<void> {
           });
         }
         await platform.approvalPolicy.deleteMany({ where: { brandId: brand.id } });
+
+        /*
+         * APPROVED BRAND KNOWLEDGE, SO THE BRAND IS A BRAND THE PRODUCT CAN
+         * WRITE FOR — Phase 8's functional journey.
+         *
+         * WHY THE FIXTURE AND NOT THE TEST. Generation REFUSES for want of
+         * approved knowledge, freely and by design (AC-11.x): "your Brand Brain
+         * has nothing to write this from" is the product working, and it is the
+         * state this workspace was in. But the exit journey starts AFTER a
+         * brand has been set up — Brand Profile, then Brand Brain, then the
+         * work — so a journey that had to ingest a document, wait for a
+         * candidate and approve it before it could write a caption would be
+         * re-testing Phase 5A's ingestion suite on its way past.
+         *
+         * SO THE SETUP IS SEEDED AND THE JOURNEY IS DRIVEN. These are the same
+         * four canonical entries the visual fixture uses for its own brand,
+         * written the same way: CANONICAL memory, HUMAN origin, ACTIVE — a
+         * person's own statements about their brand, which is exactly what this
+         * area holds.
+         *
+         * IDEMPOTENT, and it does NOT touch anything a person or a review
+         * created: it writes only its own `itemKey`s and only when absent.
+         */
+        for (const entry of JOURNEY_KNOWLEDGE) {
+          const already = await db.brandKnowledgeItem.findFirst({
+            where: { brandId: brand.id, itemKey: entry.itemKey },
+            select: { id: true },
+          });
+          if (already) continue;
+          await db.brandKnowledgeItem.create({
+            data: {
+              workspaceId,
+              brandId: brand.id,
+              area: entry.area as never,
+              memory: 'CANONICAL',
+              origin: 'HUMAN',
+              status: 'ACTIVE',
+              itemKey: entry.itemKey,
+              title: { en: entry.titleEn, ar: entry.titleAr },
+              body: { en: entry.bodyEn, ar: entry.bodyAr },
+              version: 1,
+              lastReviewedAt: new Date('2026-01-01T00:00:00.000Z'),
+              reviewDueAt: new Date('2099-01-01T00:00:00.000Z'),
+            },
+          });
+        }
 
         const item =
           existing ??

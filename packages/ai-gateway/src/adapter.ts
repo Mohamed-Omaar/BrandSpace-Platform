@@ -61,6 +61,22 @@ export interface TextRequest {
   readonly temperature?: number;
   /** Untrusted context, inserted as clearly delimited data (§10.3). */
   readonly untrustedContext?: readonly string[];
+  /**
+   * WHAT KIND OF WORK THIS IS — the platform's own task key, never a customer
+   * string.
+   *
+   * WHY AN ADAPTER MAY KNOW IT. A real provider adapter routinely varies by
+   * task: a system prompt, a response-format hint, a JSON-mode flag. Passing
+   * the task is how that becomes possible without each adapter guessing from
+   * the prompt text.
+   *
+   * IT IS NOT AN INSTRUCTION CHANNEL. The key comes from the CLOSED registry in
+   * `tasks.ts`, is chosen by the routing rule rather than by any request body,
+   * and nothing a customer writes can change it.
+   *
+   * OPTIONAL, so an adapter that does not care never has to look.
+   */
+  readonly taskKey?: string;
 }
 
 export interface TextResult {
