@@ -353,7 +353,13 @@ describe('the Hub refuses what it should refuse', () => {
         providerKey: 'stripe',
         environment: ENV,
         settings: {},
-        credentials: { apiKey: 'sk-live-not-a-real-key' },
+        /*
+         * NOT `sk-...`. Nothing here needs a value shaped like a real key, and
+         * the repository's secret scan is right to fail a tracked file that
+         * contains one - a fixture that looks like a credential is how a real
+         * one eventually hides among them.
+         */
+        credentials: { apiKey: 'undeclared-credential-value' },
         reason: 'Attempting to configure a provider nobody registered.',
       }),
     ).rejects.toThrow(/registered/i);
@@ -372,14 +378,14 @@ describe('the Hub refuses what it should refuse', () => {
         adminOverride: 'true',
         'settings.__proto__': 'polluted',
       },
-      credentials: { apiKey: 'sk-undeclared-credential-value' },
+      credentials: { apiKey: 'undeclared-credential-value' },
       reason: 'Phase 10 correction: proving undeclared keys are not stored.',
     });
 
     const document = JSON.stringify(await configuration.get('integrations.payment', ENV));
     expect(document).not.toContain('adminOverride');
     expect(document).not.toContain('polluted');
-    expect(document).not.toContain('sk-undeclared-credential-value');
+    expect(document).not.toContain('undeclared-credential-value');
   });
 
   it('refuses a credential write without verified MFA', async () => {

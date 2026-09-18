@@ -132,7 +132,7 @@ describe('a form is parsed against the registry, never the other way round', () 
   });
 
   it('ignores an undeclared credential key entirely', () => {
-    expect(parseCredentialInput(payment, { apiKey: 'sk-not-declared-here' })).toEqual({});
+    expect(parseCredentialInput(payment, { apiKey: 'not-declared-here' })).toEqual({});
   });
 });
 
