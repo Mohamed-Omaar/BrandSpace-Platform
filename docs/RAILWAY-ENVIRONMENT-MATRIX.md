@@ -26,6 +26,7 @@ the two disagree, the code is right and this file is stale.
 | **E** | External-provider configuration — storage and the service token are live |
 | **F** | Development / test only                                                  |
 | **G** | **Forbidden in production** — the parser throws                          |
+| **H** | **Process-local** — typed for one command, never stored on a service     |
 
 Service column: `W` web · `D` dashboard · `A` admin · `P` api · `K` worker · `M` migration job
 
@@ -262,6 +263,27 @@ Its presence means a production environment was assembled by copying a
 development one — and the next thing copied might not be harmless.
 
 **The smoke test checks for it explicitly.**
+
+---
+
+## H — Bootstrap-only, process-local
+
+**Never added to a Railway service.** These exist for the duration of one
+interactive command — the production Platform Owner bootstrap, `docs/
+RAILWAY-DEPLOYMENT.md` §24 — and are gone when it exits. A variable stored on a
+service is readable by everybody with project access for as long as nobody
+thinks to remove it, which is precisely the wrong property for both of these.
+
+| Variable                            | Purpose                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BOOTSTRAP_PLATFORM_OWNER_EMAIL`    | The real Platform Owner's address. **Required** by the bootstrap, and deliberately never hard-coded in source (CLAUDE.md §2.2). Nothing in the running product reads it. Passed inline: `BOOTSTRAP_PLATFORM_OWNER_EMAIL='…' pnpm bootstrap:production-owner`.                                   |
+| `BOOTSTRAP_PLATFORM_OWNER_PASSWORD` | **Avoid.** The bootstrap prompts for the password at the terminal without echoing it, which is the only good answer. This escape hatch exists for a shell that genuinely cannot prompt; the command prints a warning every time it is used, telling the operator to remove it if it was stored. |
+
+The bootstrap refuses outright unless `APP_ENV=production`, `NODE_ENV=production`,
+`DATABASE_PLATFORM_URL` resolves to the `brandspace_platform` role, the vault can
+seal (`SECRET_VAULT_KMS_KEY_ARN`, class C), and stdout **and** stdin are a real
+TTY — the last because the one-time TOTP seed and recovery codes must never be
+printed into a pipe, a log or a redirected file.
 
 ---
 
