@@ -70,8 +70,8 @@ export const envSchema = z.object({
    * Separate signing keys per realm. docs/SECURITY.md §3: a customer session
    * presented to Admin must be cryptographically unusable, not merely rejected by policy.
    */
-  CUSTOMER_SESSION_SECRET: z.string().min(32),
-  PLATFORM_SESSION_SECRET: z.string().min(32),
+  CUSTOMER_SESSION_SECRET: z.string().min(32).optional(),
+  PLATFORM_SESSION_SECRET: z.string().min(32).optional(),
 
   // --- Encryption -----------------------------------------------------------
   /*
@@ -146,11 +146,30 @@ export type Env = z.infer<typeof envSchema>;
  * are checked: a deployment is production if EITHER says so, which is the
  * cautious direction.
  */
-function assertProductionSafety(env: Env): void {
+export type StartupServiceProfile = 'complete' | 'api' | 'worker';
+
+function requireProductionValue(
+  env: Env,
+  name: keyof Env,
+): void {
+  const value = env[name];
+  if (value === undefined || value === '') {
+    throw new Error(`${String(name)} is required in production for this service.`);
+  }
+}
+
+function assertProductionSafety(
+  env: Env,
+  profile: StartupServiceProfile = 'complete',
+): void {
   const deployment = currentEnvironment({ APP_ENV: env.APP_ENV });
   if (env.NODE_ENV !== 'production' && deployment !== 'PRODUCTION') return;
 
-  if (env.CUSTOMER_SESSION_SECRET === env.PLATFORM_SESSION_SECRET) {
+  if (
+    env.CUSTOMER_SESSION_SECRET !== undefined &&
+    env.PLATFORM_SESSION_SECRET !== undefined &&
+    env.CUSTOMER_SESSION_SECRET === env.PLATFORM_SESSION_SECRET
+  ) {
     throw new Error(
       'CUSTOMER_SESSION_SECRET and PLATFORM_SESSION_SECRET must differ: ' +
         'the two session realms must not share a signing key (docs/SECURITY.md §3).',
@@ -186,31 +205,40 @@ function assertProductionSafety(env: Env): void {
   }
 
   /*
-   * THE THREE KEY DOMAINS ARE REQUIRED IN PRODUCTION, AND MUST DIFFER.
+   * SERVICE-AWARE SECRET REQUIREMENTS.
    *
-   * Absent, the vault cannot seal anything and the process would discover that
-   * the first time a customer enrolled an authenticator. Shared, the whole
-   * point of D-136 and D-206 is gone: one leaked key would unwrap platform
-   * provider credentials, every customer OAuth token and every MFA seed alike.
+   * The complete contract is useful for local verification and CI, but no
+   * production process should receive secrets it cannot use. In particular,
+   * the worker must never receive the platform-vault or MFA key, and the API
+   * does not need either session-signing key. The per-service profile enforces
+   * the minimum set each process is designed to hold while preserving the
+   * blast-radius boundaries in docs/SECURITY.md and the Railway env matrix.
    */
-  const keyDomains: readonly (readonly [string, string | undefined])[] = [
-    ['SECRET_VAULT_KEK', env.SECRET_VAULT_KEK],
-    ['SOCIAL_TOKEN_VAULT_KEK', env.SOCIAL_TOKEN_VAULT_KEK],
-    ['CUSTOMER_MFA_VAULT_KEK', env.CUSTOMER_MFA_VAULT_KEK],
-  ];
-  for (const [name, value] of keyDomains) {
-    if (!value) {
-      throw new Error(
-        `${name} is required in production. Each key domain has its own key so that ` +
-          'one leaked key cannot unwrap the others (D-136, D-206).',
-      );
-    }
+  if (profile === 'complete') {
+    requireProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+    requireProductionValue(env, 'PLATFORM_SESSION_SECRET');
+    requireProductionValue(env, 'SECRET_VAULT_KEK');
+    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
+    requireProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
+  } else if (profile === 'api') {
+    requireProductionValue(env, 'DATABASE_PLATFORM_URL');
+    requireProductionValue(env, 'SECRET_VAULT_KEK');
+    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
+    requireProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
+  } else {
+    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
   }
-  const distinct = new Set(keyDomains.map(([, value]) => value));
+
+  const keyDomains = [
+    env.SECRET_VAULT_KEK,
+    env.SOCIAL_TOKEN_VAULT_KEK,
+    env.CUSTOMER_MFA_VAULT_KEK,
+  ].filter((value): value is string => value !== undefined);
+  const distinct = new Set(keyDomains);
   if (distinct.size !== keyDomains.length) {
     throw new Error(
-      'SECRET_VAULT_KEK, SOCIAL_TOKEN_VAULT_KEK and CUSTOMER_MFA_VAULT_KEK must all differ. ' +
-        'Sharing one collapses three blast radii into one (D-136, D-206).',
+      'SECRET_VAULT_KEK, SOCIAL_TOKEN_VAULT_KEK and CUSTOMER_MFA_VAULT_KEK must all differ when present. ' +
+        'Sharing one collapses separate blast radii into one (D-136, D-206).',
     );
   }
 
@@ -261,10 +289,18 @@ export interface StartupConfigurationResult {
 
 export function validateStartupConfiguration(
   source: NodeJS.ProcessEnv = process.env,
+  profile: StartupServiceProfile = 'complete',
 ): StartupConfigurationResult {
   const environment = currentEnvironment(source as Record<string, string | undefined>);
   try {
-    parseEnv(source);
+    const parsed = envSchema.safeParse(source);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('\n');
+      throw new Error(`Invalid environment configuration:\n${issues}`);
+    }
+    assertProductionSafety(parsed.data, profile);
     return { environment, ok: true, problems: [] };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Invalid environment configuration.';
@@ -283,6 +319,6 @@ export function parseEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // The message names the failing variables but never prints their values.
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
-  assertProductionSafety(parsed.data);
+  assertProductionSafety(parsed.data, 'complete');
   return parsed.data;
 }
