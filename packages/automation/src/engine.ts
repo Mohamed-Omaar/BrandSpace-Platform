@@ -650,10 +650,23 @@ export class AutomationEngine {
       return { run: existing, status: existing.status, confirmationToken: null };
     }
 
-    let run: AutomationRun;
-    try {
-      run = await this.#db.automationRun.create({
-        data: {
+    /*
+     * DO NOT CATCH A UNIQUE-VIOLATION INSIDE THIS TENANT TRANSACTION.
+     *
+     * PostgreSQL marks a transaction failed after a constraint error. Catching
+     * Prisma P2002 in application code does not make that transaction usable
+     * again, so the follow-up SELECT for the winning row would fail with 25P02.
+     *
+     * createMany(..., skipDuplicates: true) maps the de-duplication to
+     * INSERT ... ON CONFLICT DO NOTHING instead. That preserves the same
+     * database-enforced uniqueness guarantee without poisoning the surrounding
+     * withWorkspace transaction when two queue deliveries race.
+     */
+    const runId = randomUUID();
+    const inserted = await this.#db.automationRun.createMany({
+      data: [
+        {
+          id: runId,
           workspaceId: this.#workspaceId,
           brandId: rule.brandId,
           ruleId: rule.id,
@@ -665,23 +678,22 @@ export class AutomationEngine {
           actionType: rule.actionType,
           correlationId: randomUUID(),
         },
+      ],
+      skipDuplicates: true,
+    });
+
+    if (inserted.count === 0) {
+      const winner = await this.#db.automationRun.findFirst({
+        where: { workspaceId: this.#workspaceId, idempotencyKey },
       });
-    } catch (error: unknown) {
-      /*
-       * TWO DELIVERIES RACED AND THE OTHER ONE WON. The unique constraint refused
-       * this insert, which is exactly the outcome that makes duplicate delivery
-       * safe — the winner is running, and this one returns what it finds.
-       */
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const winner = await this.#db.automationRun.findFirst({
-          where: { workspaceId: this.#workspaceId, idempotencyKey },
-        });
-        return winner
-          ? { run: winner, status: winner.status, confirmationToken: null }
-          : { run: null, status: 'NOT_RUN', confirmationToken: null };
-      }
-      throw error;
+      return winner
+        ? { run: winner, status: winner.status, confirmationToken: null }
+        : { run: null, status: 'NOT_RUN', confirmationToken: null };
     }
+
+    const run: AutomationRun = await this.#db.automationRun.findFirstOrThrow({
+      where: { id: runId, workspaceId: this.#workspaceId },
+    });
 
     // --- The daily ceiling ---------------------------------------------------
     const since = new Date(now.getTime() - 24 * 60 * 60 * 1_000);
