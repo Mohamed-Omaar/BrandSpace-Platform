@@ -224,6 +224,32 @@ describe('startup validation', () => {
     ).toThrow(/SOCIAL_TOKEN_VAULT_KEK/);
   });
 
+  it('refuses credentials that are outside the worker blast-radius boundary', () => {
+    const workerEnv = {
+      NODE_ENV: 'production',
+      APP_ENV: 'production',
+      DATABASE_URL: COMPLETE['DATABASE_URL'],
+      SOCIAL_TOKEN_VAULT_KEK: COMPLETE['SOCIAL_TOKEN_VAULT_KEK'],
+      SECRET_VAULT_KEK: COMPLETE['SECRET_VAULT_KEK'],
+      PUBLIC_WEB_URL: COMPLETE['PUBLIC_WEB_URL'],
+      PUBLIC_API_BASE_URL: COMPLETE['PUBLIC_API_BASE_URL'],
+    } as NodeJS.ProcessEnv;
+    expect(() => validateStartupConfiguration(workerEnv, 'worker')).toThrow(
+      /SECRET_VAULT_KEK.*must not be present/i,
+    );
+  });
+
+  it('refuses session signing keys on the API process', () => {
+    const { CUSTOMER_SESSION_SECRET: _customer, PLATFORM_SESSION_SECRET: _platform, ...apiEnv } =
+      COMPLETE as Record<string, string>;
+    expect(() =>
+      validateStartupConfiguration(
+        { ...apiEnv, CUSTOMER_SESSION_SECRET: 'x'.repeat(48) } as NodeJS.ProcessEnv,
+        'api',
+      ),
+    ).toThrow(/CUSTOMER_SESSION_SECRET.*must not be present/i);
+  });
+
   it('reports instead of throwing outside production', () => {
     // A developer with half an environment should get a readable warning and a
     // running process, not a refusal to start.
