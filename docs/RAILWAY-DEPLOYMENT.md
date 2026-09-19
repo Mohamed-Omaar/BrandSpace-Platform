@@ -141,9 +141,10 @@ Read from the source, not assumed.
 | Redis / BullMQ                              |  —  | ✅ (producer) |  ✅   | ✅ (producer) | ✅ (consumer) |
 | Customer session secret                     |  —  |      ✅       |   —   |       —       |       —       |
 | Platform session secret                     |  —  |       —       |  ✅   |       —       |       —       |
-| `SECRET_VAULT_KEK`                          |  —  |       —       |  ✅   |      ✅       |       —       |
-| `SOCIAL_TOKEN_VAULT_KEK`                    |  —  |       —       |   —   |      ✅       |      ✅       |
-| `CUSTOMER_MFA_VAULT_KEK`                    |  —  |      ✅       |   —   |      ✅       |       —       |
+| Platform secret key domain                  |  —  |       —       |  ✅   |      ✅       |       —       |
+| Social token key domain                     |  —  |       —       |   —   |      ✅       |      ✅       |
+| Customer MFA key domain                     |  —  |      ✅       |   —   |      ✅       |       —       |
+| AWS identity for KMS (its own, per service) |  —  |      ✅       |  ✅   |      ✅       |      ✅       |
 | Object storage                              |  —  |      ✅       |   —   |      ✅       |      ✅       |
 | Public ingress                              | ✅  |      ✅       |  ✅   |      ✅       |       —       |
 
@@ -907,7 +908,7 @@ Full Access key, and nothing should.
 Four email operations originate in the **customer dashboard**: signup
 verification, its resend, password reset and workspace invitations. Sending them
 for real means resolving the active provider and decrypting its credential,
-which needs `SECRET_VAULT_KEK` — and the whole point of the key-domain split
+which needs the PLATFORM key domain — and the whole point of that split
 (D-136, F-07, `docs/SECURITY.md` §2.4) is that the process serving customers
 does not have it.
 
@@ -1034,12 +1035,15 @@ restore whose object references must still resolve.
 ### Secrets and configuration
 
 Railway sealed variables are **not recoverable** — that is the point of sealing.
-Losing `SECRET_VAULT_KEK` means every stored provider credential is
-unrecoverable ciphertext; losing `SOCIAL_TOKEN_VAULT_KEK` means every customer
-reconnects their social accounts; losing `CUSTOMER_MFA_VAULT_KEK` means every
-customer re-enrols their authenticator.
+**In production the keys themselves live in AWS KMS (§25), not in Railway**, so
+what Railway holds is an ARN and an IAM pair, both replaceable. What is NOT
+replaceable is the KMS key: deleting or scheduling deletion of the platform key
+makes every stored provider credential unrecoverable ciphertext; the social key,
+every customer reconnects their accounts; the customer-MFA key, every customer
+re-enrols their authenticator. **Enable deletion protection on all three**, and
+keep their ARNs written down outside AWS.
 
-**The three KEKs must be escrowed outside Railway** — a password manager or an
+**The staging KEKs must be escrowed outside Railway** — a password manager or an
 HSM the owner controls — before the first customer exists.
 `docs/OPERATIONS.md` §7 covers rotation.
 
@@ -1144,11 +1148,15 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
    are declared and empty.
 9. **Generate Railway domains** for `web`, `dashboard`, `admin`, `api`. Take the
    four https origins.
-10. **Set the secrets and URLs.** Three database URLs, two session secrets,
-    three KEKs, six public URLs, the four `STORAGE_*` values from step 6, and
+10. **Create the three KMS keys and the four IAM users** for this environment
+    (§25), and set the secrets and URLs: three database URLs, two session
+    secrets, the key-domain ARNs and per-service AWS pairs each service is
+    entitled to, six public URLs, the four `STORAGE_*` values from step 6, and
     `INTERNAL_SERVICE_TOKEN` — per service, per
-    `docs/RAILWAY-ENVIRONMENT-MATRIX.md`. Generate with §22's commands. Escrow
-    the three KEKs outside Railway now, not later.
+    `docs/RAILWAY-ENVIRONMENT-MATRIX.md`. Generate with §22's commands. In
+    staging, set the three KEKs and escrow them outside Railway now, not later.
+    **A service given a key domain it may not reach refuses to start**, so this
+    step is also where a mis-pasted variable is caught.
 11. **Run migrations.** The one-off job from §4.1, with `DATABASE_MIGRATION_URL`
     only. It must succeed before anything else deploys.
 12. **Deploy the private services** — `worker` first, so queue consumers exist
@@ -1194,9 +1202,12 @@ in the repository.
 4. **Generate and set every secret.** Never by hand, never reused across
    environments:
    ```bash
-   # Session secrets and KEKs — 48 bytes, base64. Each one generated separately.
+   # Session secrets — 48 bytes, base64. Each one generated separately.
    openssl rand -base64 48    # CUSTOMER_SESSION_SECRET
    openssl rand -base64 48    # PLATFORM_SESSION_SECRET   (must differ)
+
+   # The three KEKs are for STAGING and local development only. Production
+   # seals through AWS KMS instead (§25) and never falls back to these.
    openssl rand -base64 48    # SECRET_VAULT_KEK
    openssl rand -base64 48    # SOCIAL_TOKEN_VAULT_KEK    (must differ)
    openssl rand -base64 48    # CUSTOMER_MFA_VAULT_KEK    (must differ)
@@ -1207,7 +1218,8 @@ in the repository.
    The environment parser rejects anything containing `change-me`, `placeholder`,
    `example`, `devonly`, `localhost`, `replace_with`, `ci-only` or `test-only`, so
    a copied template value fails at boot rather than at the first sign-in.
-5. **Escrow the three KEKs** outside Railway before the first customer. §17.
+5. **Escrow the three staging KEKs** outside Railway, and record the three
+   production KMS key ARNs with deletion protection enabled. §17, §25.
 6. **Create the migration job** — the one Railway service this blueprint
    deliberately leaves out of IaC:
    - Source: this repository, root directory `/`
@@ -1229,9 +1241,10 @@ in the repository.
     the bucket will now hold real customer media.
 12. **If a Railway Bucket was created from the earlier revision of this
     blueprint, delete it.** It is no longer referenced and holds nothing (§6.1).
-13. **Configure AWS KMS for the platform secret vault.** §25. Nothing in
-    production can seal a secret until this is done — not a provider credential
-    in the Integrations Hub, and not the Platform Owner's second factor. It
+13. **Create the three AWS KMS keys and the four scoped IAM users.** §25.
+    Nothing in production can seal a secret until this is done — not a provider
+    credential in the Integrations Hub, not a customer's social token, not a
+    customer's MFA seed, and not the Platform Owner's second factor. It
     therefore comes before item 14, and item 14 refuses if it was skipped.
 14. **Bootstrap the Platform Owner**, interactively, over `railway ssh`. §24 is
     the whole procedure; it takes about two minutes and produces a TOTP seed and
@@ -1413,62 +1426,82 @@ Center, never seeded (CLAUDE.md §2.2).
 
 ---
 
-## 25. The platform secret vault and AWS KMS (F-09)
+## 25. The three key domains and AWS KMS (F-09)
 
-### 25.1 Why this is not optional
+### 25.1 Why this is not optional, and why it is three keys
 
-Every platform secret — a provider credential entered in the Integrations Hub,
-a Platform Owner's TOTP seed — is sealed with envelope encryption: a random
-32-byte data key encrypts the value with AES-256-GCM, and a key provider wraps
-that data key.
+Every secret BrandSpace stores is sealed with envelope encryption: a random
+32-byte data key encrypts the value with AES-256-GCM locally, and a key provider
+wraps that data key. **KMS never sees a secret value** — only the 32-byte key
+that protects one.
 
 `createKeyProvider()` **refuses the local development provider when
-`NODE_ENV=production`**, because that provider derives its key from
-`SECRET_VAULT_KEK` and therefore keeps the key in the same environment as the
-data it protects — no hardware protection, no access policy, no independent
-audit trail.
+`NODE_ENV=production`**, because that provider derives its key from a `*_KEK`
+variable and therefore keeps the key in the same environment as the data it
+protects — no hardware protection, no access policy, no independent audit trail.
+Until F-09 was resolved the alternative provider threw from both methods, so a
+production deployment could not seal anything at all.
 
-Until this was resolved, the alternative provider threw from both methods, so a
-production deployment **could not seal a single platform secret**. The vault
-existed and could not hold anything. That is now fixed: `KmsKeyProvider` wraps
-through AWS KMS.
+**There are three key domains, and each needs its own key.** A domain is a blast
+radius, not a namespace (D-136, D-206):
 
-**Consequence: production needs `SECRET_VAULT_KMS_KEY_ARN`.** Without it the
-Control Center and the API cannot construct a `SecretService` at all — the
-Integrations Hub cannot store the Resend key, and platform sign-in cannot
-resolve the owner's TOTP seed.
+| Domain          | Seals                                                                   | Variable                         |
+| --------------- | ----------------------------------------------------------------------- | -------------------------------- |
+| Platform secret | Provider credentials in the Integrations Hub; Platform Owner TOTP seeds | `SECRET_VAULT_KMS_KEY_ARN`       |
+| Social token    | Customers' own OAuth tokens for publishing                              | `SOCIAL_TOKEN_VAULT_KMS_KEY_ARN` |
+| Customer MFA    | Customers' own authenticator seeds, read at sign-in                     | `CUSTOMER_MFA_VAULT_KMS_KEY_ARN` |
 
-### 25.2 Create one key per environment
+One key for all three would mean the publish worker — which must unwrap a
+customer's OAuth token — could also unwrap every platform provider credential in
+the database. That is the exact reach F-07 exists to deny. **The environment
+parser refuses a deployment that points two of these at the same key.**
+
+**Without a domain's ARN, the services that use it do not come up.** That is
+deliberate: the alternative is a process that starts, looks healthy, and fails
+the first time a customer connects an account, enables MFA, or an owner saves a
+credential.
+
+### 25.2 Create three keys, per environment
 
 Staging and production get **different keys**, for the same reason they get
 different database credentials: a staging incident must not be able to decrypt
-production secrets.
+production secrets. So: three keys per environment, six in total.
 
 ```bash
-# Once per environment. Symmetric, used for Encrypt/Decrypt only.
-aws kms create-key \
-  --description "BrandSpace platform secret vault (production)" \
-  --key-usage ENCRYPT_DECRYPT \
-  --key-spec SYMMETRIC_DEFAULT
-
-# Note the KeyMetadata.Arn from the output — that is SECRET_VAULT_KMS_KEY_ARN.
-# An alias is convenient for humans but the ARN is what BrandSpace stores, so a
-# repointed alias can never silently change which key wrapped existing data.
-aws kms create-alias \
-  --alias-name alias/brandspace-vault-production \
-  --target-key-id <key-id>
+# Repeat for each of the three domains, in each environment.
+for DOMAIN in platform-vault social-token customer-mfa; do
+  aws kms create-key \
+    --description "BrandSpace ${DOMAIN} (production)" \
+    --key-usage ENCRYPT_DECRYPT \
+    --key-spec SYMMETRIC_DEFAULT
+  # Note KeyMetadata.Arn from each output. An alias is convenient for humans,
+  # but the ARN is what BrandSpace stores, so a repointed alias can never
+  # silently change which key wrapped existing data.
+done
 ```
 
-**Enable automatic key rotation** (`aws kms enable-key-rotation --key-id <id>`).
-KMS keeps previous key material, so existing ciphertexts continue to decrypt;
-nothing in BrandSpace needs to change.
+**Enable automatic key rotation on each** (`aws kms enable-key-rotation --key-id
+<id>`). KMS keeps previous key material, so existing ciphertexts continue to
+decrypt and nothing in BrandSpace needs to change.
 
-### 25.3 An IAM user scoped to that key alone
+### 25.3 One IAM user per SERVICE, not one per key
 
 Railway runs no AWS instance role, so there is no ambient identity to inherit
-and a key pair is the only option. **Scope it to the one key.** A broader policy
-turns a leaked pair into access to every key in the account, which is exactly
-the blast radius the three separate key domains (D-136, D-206) exist to prevent.
+and a key pair is the only option. **A single shared pair would make the three
+separate keys decorative**, because whoever leaked it could call `Decrypt` on
+all of them. So each service gets its own IAM user, allowed only the keys that
+service is permitted:
+
+| IAM user               | May Encrypt/Decrypt with | Used by     |
+| ---------------------- | ------------------------ | ----------- |
+| `brandspace-admin`     | platform vault key       | `admin`     |
+| `brandspace-dashboard` | customer MFA key         | `dashboard` |
+| `brandspace-worker`    | social token key         | `worker`    |
+| `brandspace-api`       | all three                | `api`       |
+
+The API is the only service that legitimately serves all three domains —
+platform secret management, the social publishing pipeline and customer sign-in
+— so it is the only principal allowed all three keys.
 
 ```json
 {
@@ -1477,40 +1510,67 @@ the blast radius the three separate key domains (D-136, D-206) exist to prevent.
     {
       "Effect": "Allow",
       "Action": ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"],
-      "Resource": "arn:aws:kms:<region>:<account>:key/<key-id>"
+      "Resource": ["arn:aws:kms:<region>:<account>:key/<the keys this service may use>"]
     }
   ]
 }
 ```
 
-`kms:GenerateDataKey` is deliberately **absent**: BrandSpace generates the data
-key locally and asks KMS only to wrap it, so the permission would be unused.
+`kms:GenerateDataKey` is deliberately **absent** from every one of these
+policies: BrandSpace generates the data key locally and asks KMS only to wrap
+it, so the permission would be unused.
 
-### 25.4 Railway variables
+`web` and the migration job get **no key and no AWS credentials**. The marketing
+site is the most exposed service in the fleet and holds nothing; the migration
+job performs DDL and never touches a secret.
 
-On **`admin`** and **`api`** — the two services that hold the platform vault key:
+### 25.4 Railway variables, per service
 
-| Variable                   | Value                     |
-| -------------------------- | ------------------------- |
-| `SECRET_VAULT_KMS_KEY_ARN` | The ARN from §25.2        |
-| `AWS_ACCESS_KEY_ID`        | The IAM key id from §25.3 |
-| `AWS_SECRET_ACCESS_KEY`    | Its secret half           |
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` appear on four services under
+the same names and **must hold four different pairs** — one per IAM user above.
 
-`AWS_REGION` is **not required**: an ARN carries its region, and the provider
-reads it from there. Set it only if you deliberately want to override.
+| Service     | Key ARNs                                                                                       | AWS pair    |
+| ----------- | ---------------------------------------------------------------------------------------------- | ----------- |
+| `web`       | none                                                                                           | none        |
+| `dashboard` | `CUSTOMER_MFA_VAULT_KMS_KEY_ARN`                                                               | dashboard's |
+| `admin`     | `SECRET_VAULT_KMS_KEY_ARN`                                                                     | admin's     |
+| `api`       | `SECRET_VAULT_KMS_KEY_ARN`, `SOCIAL_TOKEN_VAULT_KMS_KEY_ARN`, `CUSTOMER_MFA_VAULT_KMS_KEY_ARN` | api's       |
+| `worker`    | `SOCIAL_TOKEN_VAULT_KMS_KEY_ARN`                                                               | worker's    |
+| migration   | none                                                                                           | none        |
 
-`SECRET_VAULT_KEK` stays declared for staging and local use. In production it is
-present but unused — the KMS provider takes precedence whenever the ARN is set.
+**Every service refuses to start if it is given a domain it may not reach** — in
+either form, the ARN or the KEK. Setting `SECRET_VAULT_KMS_KEY_ARN` on the
+dashboard is not a harmless extra variable; it is a start-up failure, and that
+is the point.
+
+`AWS_REGION` is **not required**: an ARN carries its region and the provider
+reads it from there. Set it only to override deliberately.
+
+**The `*_KEK` variables are no longer required in production, and are never a
+fallback there.** They stay declared because the same blueprint builds staging,
+where they are what encrypts. In production `createKeyProvider` prefers the ARN
+and throws rather than derive a local key, so a deployment with a KEK and no ARN
+does not quietly downgrade — it refuses.
 
 ### 25.5 Confirm it works before relying on it
 
-- ☐ Control Center → Integrations → Transactional email → **Resend** → enter a
-  key → **Save** succeeds. Before this fix that save failed with a key-provider
-  error; it is the cheapest end-to-end proof that the vault can seal.
-- ☐ `aws kms describe-key --key-id <arn>` from a shell with the same IAM
-  credentials returns the key, confirming the policy is not too narrow.
-- ☐ Check CloudTrail for `Encrypt` events on that key after the save — the
-  independent audit trail the development provider could not offer.
+- ☐ **Platform domain.** Control Center → Integrations → Transactional email →
+  **Resend** → enter a key → **Save** succeeds. Before this fix that save failed
+  with a key-provider error; it is the cheapest end-to-end proof that the
+  platform vault can seal.
+- ☐ **Customer MFA domain.** Sign up a test customer on the dashboard and enable
+  MFA. The seed is sealed through this domain, so enrolment completing proves it.
+- ☐ **Social token domain.** Connect one social account. The OAuth token is
+  sealed on the way in, and the worker unseals it on the first publish — so a
+  successful publish proves both ends.
+- ☐ `aws kms describe-key --key-id <arn>` for each of the three, from a shell
+  with that service's IAM credentials, confirming each policy is neither too
+  narrow nor too wide.
+- ☐ Check CloudTrail for `Encrypt` events on each key after the steps above —
+  the independent audit trail the development provider could not offer.
+- ☐ **Prove the boundary.** From the dashboard's IAM credentials, `aws kms
+describe-key` against the PLATFORM key must be denied. A boundary nobody has
+  seen refuse is a boundary nobody has tested.
 
 **If a save fails with `AccessDeniedException`,** the IAM policy is wrong.
 **If it fails with `IncorrectKeyException`,** a value was sealed under a
@@ -1527,6 +1587,10 @@ the ciphertext belongs to first.
 - The refusal to use the development provider in production. That rule stands;
   only its error message changed, to name a configuration rather than an
   unresolved decision.
+- **One implementation.** `KmsKeyProvider` and the `KeyDomain` abstraction are
+  unchanged by the move to three domains. A domain is a pair of variable names,
+  not a third copy of a cipher — three implementations of envelope encryption
+  would be three places for it to be wrong.
 
 ---
 
