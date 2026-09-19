@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  Prisma,
   writeAuditEvent,
   type AutomationActionType,
   type AutomationRule,
   type AutomationRun,
   type AutomationTrigger,
+  type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
 import {
