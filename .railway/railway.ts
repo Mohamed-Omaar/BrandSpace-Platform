@@ -1,4 +1,4 @@
-import { bucket, defineRailway, github, postgres, redis, ref, service } from 'railway/iac';
+import { defineRailway, github, postgres, redis, ref, service } from 'railway/iac';
 
 /**
  * BrandSpace on Railway — Infrastructure as Code.
@@ -27,10 +27,12 @@ import { bucket, defineRailway, github, postgres, redis, ref, service } from 'ra
  *      (§10). They are listed in the deployment doc, not declared here, because
  *      a domain typed into a file is a domain nobody verified they control.
  *
- *   4. NO STORAGE WIRING, though the bucket itself is declared. See the comment
- *      on `media` below: the repository has an `ObjectStore` interface and an
- *      env contract but no S3 implementation, so wiring credentials to it today
- *      would describe a capability that does not exist.
+ *   4. NO RAILWAY BUCKET. An earlier revision declared one, unwired, against
+ *      the day an S3 adapter existed. That adapter now exists and does not use
+ *      it: BrandSpace stores objects in Cloudflare R2, outside this project
+ *      entirely, so a Railway Bucket would be a provisioned resource nothing
+ *      reads. `docs/RAILWAY-DEPLOYMENT.md` §6 has the reasoning and what to do
+ *      if one was already created.
  */
 
 /** The GitHub source every service builds from. One repository, five processes. */
@@ -115,31 +117,15 @@ export default defineRailway((ctx, project) => {
   const isProduction = ctx.isEnvironment('production');
 
   /*
-   * THE MANAGED DATA SERVICES. All three are private: none is given a domain or
-   * a TCP proxy, so nothing outside the environment's private network can open
-   * a connection to them.
+   * THE MANAGED DATA SERVICES. Both are private: neither is given a domain or a
+   * TCP proxy, so nothing outside the environment's private network can open a
+   * connection to them.
+   *
+   * THERE IS NO THIRD. Object storage is Cloudflare R2, which is not a Railway
+   * resource and is wired below through `storageEnv`.
    */
   const db = postgres('postgres', { region: REGION });
   const cache = redis('redis', { region: REGION });
-
-  /*
-   * DECLARED, AND DELIBERATELY NOT WIRED TO ANYTHING YET.
-   *
-   * `packages/storage` defines an `ObjectStore` interface and ships exactly one
-   * implementation: a filesystem store that `createObjectStore` REFUSES to
-   * return when `APP_ENV=production`. There is no S3 client in the repository —
-   * no `@aws-sdk` dependency anywhere — so the `STORAGE_*` variables in
-   * `packages/shared/src/env.ts` are a contract nothing currently reads.
-   *
-   * Wiring this bucket's credentials into those variables today would look like
-   * working object storage and behave like none. The bucket is declared so the
-   * infrastructure is reviewable and ready; the wiring is one commit away and
-   * waits on an S3 adapter. docs/RAILWAY-DEPLOYMENT.md §6 has the exact mapping.
-   *
-   * Bucket regions are their own short list — `sjc`, `iad`, `ams`, `sin` — so
-   * `ams` is the one that sits beside EU West.
-   */
-  const media = bucket('media', { region: 'ams' });
 
   /** Every service that opens a database connection needs these three. */
   const databaseEnv = {
@@ -203,6 +189,66 @@ export default defineRailway((ctx, project) => {
     ),
     PUBLIC_DASHBOARD_BASE_URL: ownerSetting('https origin customers are returned to.'),
   };
+
+  /**
+   * OBJECT STORAGE — Cloudflare R2, or any S3-compatible endpoint.
+   *
+   * NOT A RAILWAY RESOURCE, AND THAT IS THE WHOLE ARCHITECTURE. Railway
+   * containers have ephemeral filesystems: a redeploy replaces the container
+   * and everything written to local disk goes with it. `createObjectStore`
+   * REFUSES to return a filesystem store when `APP_ENV=production` for exactly
+   * that reason, so production storage has to live somewhere a deploy cannot
+   * reach. R2 is that somewhere.
+   *
+   * GENERIC S3, NOT A CLOUDFLARE API. `packages/storage` talks to an
+   * `endpoint`; nothing above it imports a Cloudflare SDK or knows the vendor's
+   * name. Moving to AWS S3, MinIO or Backblaze is these five variables.
+   *
+   * FIVE VALUES, SUPPLIED BY THE OWNER, NEVER WRITTEN HERE. An endpoint carries
+   * a Cloudflare account id and a key pair is a key pair, so all five are
+   * sealed and value-less in this file. `STORAGE_REGION` is omitted entirely:
+   * R2 requires `auto`, which is the schema default.
+   *
+   * PRODUCTION AND STAGING MUST USE DIFFERENT BUCKETS AND DIFFERENT KEYS.
+   * Railway keeps variables per environment, so this declaration produces two
+   * independent sets — but nothing stops an operator pasting the same values
+   * into both, which would let a staging test delete a customer's file.
+   * docs/RAILWAY-ENVIRONMENT-MATRIX.md makes it a checklist item.
+   */
+  const storageEnv = {
+    STORAGE_ENDPOINT: ownerSecret(
+      'S3 API origin for the bucket. Contains the Cloudflare account id, so it is sealed rather than a plain setting.',
+    ),
+    STORAGE_BUCKET: ownerSecret('Bucket name. MUST differ between production and staging.'),
+    STORAGE_ACCESS_KEY_ID: ownerSecret(
+      'R2 API token scoped to this bucket. Never an account-wide token.',
+    ),
+    STORAGE_SECRET_ACCESS_KEY: ownerSecret(
+      'The secret half of the pair. Cloudflare shows it once; Railway seals it here.',
+    ),
+  };
+
+  /**
+   * The service token the dashboard and the Control Center present to the API.
+   *
+   * WHY IT EXISTS. Sending a real verification email means resolving the active
+   * provider and decrypting its credential, which needs `SECRET_VAULT_KEK` —
+   * and the customer-facing dashboard must never hold that key (F-07,
+   * docs/SECURITY.md §2.4). So the dashboard asks the API to send, over the
+   * private network, and the API does the resolving. That request carries no
+   * customer session — a signup or a password reset has none by definition —
+   * so it authenticates as a SERVICE.
+   *
+   * IT IS NOT A PROVIDER CREDENTIAL. It grants exactly one capability: ask for
+   * one of six named templates to be sent. It cannot compose a message, cannot
+   * choose a subject, and cannot read anything back.
+   *
+   * ONE VALUE, THREE SERVICES. The two callers and the API compare the same
+   * string, so it is declared once and spread into each.
+   */
+  const internalServiceToken = ownerSecret(
+    'Shared token the dashboard and Control Center present to POST /v1/internal/email/deliver. At least 32 characters, random, and different per environment.',
+  );
 
   /** Where the dashboard and the Control Center reach the API, over the private network. */
   const internalApiUrl = `http://api.railway.internal:${PORTS.api}`;
@@ -271,6 +317,20 @@ export default defineRailway((ctx, project) => {
        * unwrap a platform provider credential or a customer's social token.
        */
       CUSTOMER_MFA_VAULT_KEK: vaultEnv.CUSTOMER_MFA_VAULT_KEK,
+      /*
+       * IT READS AND WRITES OBJECTS DIRECTLY. Asset uploads and Brand Brain
+       * ingestion both run in this process, so it needs the bucket — but note
+       * what it does NOT get: these are server-side variables with no
+       * `NEXT_PUBLIC_` prefix, so Next.js never inlines them into a bundle and
+       * no browser ever receives a byte of them.
+       */
+      ...storageEnv,
+      /*
+       * SO IT CAN ASK THE API TO SEND MAIL. Signup verification, its resend,
+       * password reset and workspace invitations originate here; the credential
+       * that actually sends them does not, and must not.
+       */
+      INTERNAL_SERVICE_TOKEN: internalServiceToken,
     },
   });
 
@@ -307,6 +367,20 @@ export default defineRailway((ctx, project) => {
         'Signing key for the PLATFORM session realm. Must differ from CUSTOMER_SESSION_SECRET.',
       ),
       SECRET_VAULT_KEK: vaultEnv.SECRET_VAULT_KEK,
+      /*
+       * FOR SECURITY AND ACCOUNT MAIL THE CONTROL CENTER ORIGINATES. It could
+       * arguably resolve the provider itself — it already holds the vault key —
+       * but two processes resolving "which provider is live" is how a platform
+       * ends up sending through one nobody activated. One answer, in the API.
+       */
+      INTERNAL_SERVICE_TOKEN: internalServiceToken,
+      /*
+       * AND DELIBERATELY NO `STORAGE_*`. The Control Center displays metadata
+       * about customer files; it never moves their bytes. A bucket credential
+       * here would widen the blast radius of the one service that already holds
+       * the platform database identity and the secret vault key, to buy
+       * nothing.
+       */
     },
   });
 
@@ -355,6 +429,20 @@ export default defineRailway((ctx, project) => {
       ...vaultEnv,
       PORT: String(PORTS.api),
       REDIS_URL: ref(cache, 'REDIS_URL'),
+      /*
+       * THE CREATIVE ROUTES AND THE MAINTENANCE SWEEPS BOTH TOUCH OBJECTS, and
+       * `/health/ready` reports whether this contract is complete — which is
+       * the one place an operator finds out that a deployment can serve every
+       * screen and still not accept a file.
+       */
+      ...storageEnv,
+      /*
+       * THE OTHER END OF THE SERVICE TOKEN. This process VERIFIES it; the
+       * dashboard and Control Center present it. Without it the internal
+       * delivery route answers 404 to everybody, including them, which is the
+       * intended failure: no token, no sending.
+       */
+      INTERNAL_SERVICE_TOKEN: internalServiceToken,
     },
   });
 
@@ -410,11 +498,23 @@ export default defineRailway((ctx, project) => {
        * dashboard. Not a credential: a hostname.
        */
       BRANDSPACE_POSTGRES_PRIVATE_HOST: ref(db, 'RAILWAY_PRIVATE_DOMAIN'),
+      /*
+       * THE HEAVIEST OBJECT USER OF THE FIVE. Asset processing reads an upload
+       * back and writes its derivatives; ingestion reads documents. This is the
+       * process the smoke test's "upload, redeploy, still there" step actually
+       * exercises.
+       */
+      ...storageEnv,
+      /*
+       * NO `INTERNAL_SERVICE_TOKEN`. The worker sends notifications through the
+       * notification pipeline, not by asking the API for a transactional
+       * template. Giving it the token would grant a capability nothing uses.
+       */
     },
   });
 
   return project('brandspace', {
     environments: ['production', 'staging'],
-    resources: [db, cache, media, web, dashboard, admin, api, worker],
+    resources: [db, cache, web, dashboard, admin, api, worker],
   });
 });

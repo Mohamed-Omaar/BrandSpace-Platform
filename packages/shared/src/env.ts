@@ -36,12 +36,28 @@ export const envSchema = z.object({
   // --- Redis ----------------------------------------------------------------
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
-  // --- Object storage (S3-compatible; Cloudflare R2 intended) ---------------
+  // --- Object storage (S3-compatible; Cloudflare R2 is the first target) ----
+  /*
+   * OPTIONAL IN THE SCHEMA, REQUIRED IN PRODUCTION BY THE FACTORY. A developer
+   * with no bucket must still be able to start; a production deployment with no
+   * bucket must not accept an upload. `createObjectStore` is where that second
+   * rule lives, because it is the only place that knows whether the caller is
+   * about to store a customer's file — see packages/storage/src/factory.ts.
+   */
   STORAGE_ENDPOINT: z.string().url().optional(),
   STORAGE_REGION: z.string().default('auto'),
   STORAGE_BUCKET: z.string().optional(),
   STORAGE_ACCESS_KEY_ID: z.string().optional(),
   STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
+  /**
+   * Path-style addressing instead of virtual-host style.
+   *
+   * The one genuinely provider-dependent switch: R2 and AWS serve virtual-host
+   * style, MinIO and several self-hosted gateways serve only path-style, and a
+   * client that guesses wrong fails at DNS rather than with a useful error.
+   * Absent means virtual-host, which is what R2 wants.
+   */
+  STORAGE_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
 
   // --- Hostnames (D-04) -----------------------------------------------------
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:3000'),
@@ -86,6 +102,21 @@ export const envSchema = z.object({
   PUBLIC_DASHBOARD_BASE_URL: z.string().url().default('http://localhost:3001'),
   /** Where the dashboard reaches the API server-side; internal, not browser-visible. */
   BRANDSPACE_API_URL: z.string().url().default('http://localhost:3003'),
+
+  /**
+   * The service token the dashboard presents to the API's internal email
+   * delivery route.
+   *
+   * NOT A PROVIDER CREDENTIAL, and not a session secret: it authenticates a
+   * PROCESS to another process across the private network. It exists because a
+   * customer signing up has no session to forward, and the dashboard must not
+   * hold the key that decrypts the email provider's own credential (F-07).
+   *
+   * Optional in the schema because a developer running only the dashboard does
+   * not need it. Without it in production, customer email is not sent and the
+   * API says so at boot.
+   */
+  INTERNAL_SERVICE_TOKEN: z.string().min(32).optional(),
 
   // --- Development billing provider ----------------------------------------
   /**

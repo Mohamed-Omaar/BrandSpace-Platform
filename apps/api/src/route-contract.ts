@@ -8,7 +8,20 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
  * the first unauthorized request.
  */
 
-export type RouteScope = 'public' | 'platform' | 'workspace';
+/**
+ * `internal` is SERVICE-TO-SERVICE, not a user scope.
+ *
+ * It exists for one reason: the customer dashboard must be able to ask for an
+ * email to be sent without being able to read the provider credential that
+ * sends it. There is no session on a signup or password-reset request, so the
+ * caller is a PROCESS rather than a person — and a process is authenticated by
+ * a shared service token, not by a permission key.
+ *
+ * An internal route must never be something a browser is meant to reach. The
+ * contract records the scope so the route report shows exactly which surfaces
+ * are service-only, and the handler checks the token itself.
+ */
+export type RouteScope = 'public' | 'platform' | 'workspace' | 'internal';
 
 export interface RouteContract {
   readonly scope: RouteScope;
@@ -55,10 +68,11 @@ export function route(
   if (!contract || typeof contract.scope !== 'string') {
     throw new Error(`Route ${method} ${url} does not declare a scope. See docs/SECURITY.md §4.5.`);
   }
-  if (contract.scope !== 'public' && !contract.permission) {
+  if (contract.scope !== 'public' && contract.scope !== 'internal' && !contract.permission) {
     throw new Error(
       `Route ${method} ${url} has scope "${contract.scope}" but declares no permission. ` +
-        `Non-public routes must name the permission they require.`,
+        `Non-public routes must name the permission they require. ` +
+        `("internal" is the exception: it is a service caller, authenticated by token.)`,
     );
   }
   registry.push({ method, url, contract });

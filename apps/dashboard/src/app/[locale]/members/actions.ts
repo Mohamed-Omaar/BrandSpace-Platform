@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { inWorkspace, membershipActor, requireWorkspace } from '../../../server/customer-context';
+import { customerLink } from '../../../server/email-links';
 
 const log = createLogger({ context: { component: 'dashboard.members' } });
 
@@ -62,7 +63,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
         workspaceId: session.workspace.workspaceId,
         variables: { expiresAt: issued.expiresAt.toISOString() },
         // Composed here, never persisted.
-        link: `/${locale}/invitations/${issued.token}`,
+        link: customerLink(`/${locale}/invitations/${issued.token}`),
       });
     });
 
@@ -95,7 +96,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
         templateKey: 'workspace.invitation.resent',
         locale: locale === 'ar' ? 'AR' : 'EN',
         workspaceId: session.workspace.workspaceId,
-        link: `/${locale}/invitations/${issued.token}`,
+        link: customerLink(`/${locale}/invitations/${issued.token}`),
       });
     });
     destination = membersUrl(locale, { ok: 'INVITATION_RESENT' });

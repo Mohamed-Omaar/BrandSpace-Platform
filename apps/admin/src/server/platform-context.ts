@@ -5,6 +5,7 @@ import { getPlatformClient, type PlatformPrismaClient } from '@brandspace/databa
 import {
   InvitationService,
   MembershipService,
+  ApiEmailProvider,
   OutboxEmailProvider,
   PLATFORM_REALM,
   PlatformAuthService,
@@ -26,7 +27,7 @@ import {
 import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
 import { IntegrationsService, type IntegrationDefinition } from '@brandspace/integrations';
-import { currentEnvironment } from '@brandspace/shared';
+import { currentEnvironment, isProduction } from '@brandspace/shared';
 
 /**
  * Server-only platform context for the Control Center.
@@ -212,10 +213,24 @@ export function getAiUsageExplorer(): AiUsageExplorer {
 }
 
 /**
- * Outbound email. D-41: no vendor is approved, so the default writes to the
- * auditable outbox rather than pretending a message was delivered.
+ * How the Control Center sends email.
+ *
+ * IT DELEGATES RATHER THAN RESOLVING, even though this process holds
+ * `SECRET_VAULT_KEK` and could resolve the provider itself. The reason is not
+ * capability, it is arithmetic: two resolvers are two answers to "which
+ * provider is live", and they drift the first time one is changed. The API owns
+ * the answer (apps/api/src/email-provider.ts) and this asks it.
+ *
+ * THE TRUSTED CHANNEL DECIDES, NOT THE ENVIRONMENT LABEL — the same rule the
+ * dashboard follows, for the same reason: a staging deployment wired exactly
+ * like production must exercise the path production takes, not a table.
+ * Without `INTERNAL_SERVICE_TOKEN` and outside production it stays the outbox,
+ * so an operator suspending a workspace locally gets a row they can read rather
+ * than a network call they have to run an API for.
  */
 export function getEmailProvider(): EmailProvider {
+  const delegationConfigured = (process.env['INTERNAL_SERVICE_TOKEN'] ?? '').trim() !== '';
+  if (isProduction() || delegationConfigured) return new ApiEmailProvider();
   return new OutboxEmailProvider(getPlatformPrisma());
 }
 

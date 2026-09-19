@@ -22,6 +22,7 @@
     "@brandspace/creative": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
+    "@brandspace/integrations": "workspace:*",
     "@brandspace/intelligence": "workspace:*",
     "@brandspace/jobs": "workspace:*",
     "@brandspace/observability": "workspace:*",
@@ -32,10 +33,10 @@
     "@brandspace/storage": "workspace:*",
     "fastify": "5.12.1",
     "ioredis": "5.11.1",
+    "tsx": "4.23.13",
     "zod": "3.25.76"
   },
   "devDependencies": {
-    "tsx": "4.23.13",
     "typescript": "5.9.3"
   }
 }

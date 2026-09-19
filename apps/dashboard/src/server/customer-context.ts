@@ -12,6 +12,7 @@ import {
   CustomerAuthService,
   InvitationService,
   MembershipService,
+  ApiEmailProvider,
   OutboxEmailProvider,
   type AuthenticatedCustomer,
   type CustomerWorkspaceContext,
@@ -25,7 +26,7 @@ import {
   TenantCatalogueSource,
   UsageService,
 } from '@brandspace/entitlements';
-import { currentEnvironment } from '@brandspace/shared';
+import { currentEnvironment, isProduction } from '@brandspace/shared';
 
 /**
  * Server-only customer context.
@@ -115,7 +116,7 @@ export async function inWorkspace<T>(
         ledger: new CreditLedgerService({ prisma: scoped }),
         subscriptions: new SubscriptionService({ prisma: scoped }),
         usage: new UsageService({ prisma: scoped }),
-        email: new OutboxEmailProvider(scoped),
+        email: customerEmailProvider(scoped),
       });
     },
     { prisma: prisma() },
@@ -123,12 +124,48 @@ export async function inWorkspace<T>(
 }
 
 /**
- * The outbox for messages that have NO workspace — password resets, which must
- * answer identically whether or not an account exists and therefore cannot
+ * How this process sends email.
+ *
+ * TWO IMPLEMENTATIONS, AND THE SPLIT IS THE SECURITY BOUNDARY.
+ *
+ * This process cannot send for real: the active provider's credential is sealed
+ * under `SECRET_VAULT_KEK`, a key domain it deliberately does not hold (D-136,
+ * F-07). So when real delivery is wanted it ASKS the API, which does hold it.
+ * Nothing about the calling flow changes — `ApiEmailProvider` is an
+ * `EmailProvider` like any other.
+ *
+ * WHAT DECIDES IS THE TRUSTED CHANNEL, NOT THE ENVIRONMENT LABEL, and that is
+ * a correction rather than a convenience. Keying this on `isProduction()` alone
+ * meant no non-production deployment could ever exercise real delivery — the
+ * end-to-end suite included, which is precisely where the chain should be
+ * proven before it carries a customer's verification link. A staging
+ * environment configured exactly like production would have quietly written to
+ * a table instead of sending.
+ *
+ * So: `INTERNAL_SERVICE_TOKEN` present means somebody deliberately wired this
+ * process to the API's delivery surface, and it uses it. Absent, outside
+ * production, it stays the outbox — which is every ordinary development
+ * checkout, so local mail remains deterministic, offline and inspectable in a
+ * table rather than depending on a running API.
+ *
+ * PRODUCTION NEVER TAKES THE OUTBOX BRANCH, token or no token. Without the
+ * token `ApiEmailProvider` refuses with a message naming what is missing, which
+ * is the diagnosis an operator needs; falling through to `OutboxEmailProvider`
+ * would produce its own production refusal about a completely different thing.
+ */
+function customerEmailProvider(client: PrismaClient): EmailProvider {
+  const delegationConfigured = (process.env['INTERNAL_SERVICE_TOKEN'] ?? '').trim() !== '';
+  if (isProduction() || delegationConfigured) return new ApiEmailProvider();
+  return new OutboxEmailProvider(client);
+}
+
+/**
+ * The provider for messages that have NO workspace — password resets, which
+ * must answer identically whether or not an account exists and therefore cannot
  * resolve one. Workspace-scoped mail goes through `inWorkspace().email`.
  */
 export function getUnscopedEmailProvider(): EmailProvider {
-  return new OutboxEmailProvider(prisma());
+  return customerEmailProvider(prisma());
 }
 
 /**

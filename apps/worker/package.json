@@ -23,10 +23,10 @@
     "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "bullmq": "5.81.4",
-    "ioredis": "5.11.1"
+    "ioredis": "5.11.1",
+    "tsx": "4.23.13"
   },
   "devDependencies": {
-    "tsx": "4.23.13",
     "typescript": "5.9.3"
   }
 }

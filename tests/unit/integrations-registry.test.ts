@@ -75,7 +75,34 @@ describe('every registered integration is honest about itself', () => {
     for (const definition of INTEGRATION_DEFINITIONS) {
       expect(definition.noteEn.length, definition.providerKey).toBeGreaterThan(20);
       expect(definition.noteAr.length, definition.providerKey).toBeGreaterThan(20);
-      expect(definition.displayNameAr).not.toBe(definition.displayNameEn);
+      /*
+       * THE NOTE IS WHERE THE TRANSLATION HAS TO BE REAL. A sentence that is
+       * byte-identical in both columns was copied, not written, and the reader
+       * of the other language gets nothing.
+       */
+      expect(definition.noteAr, definition.providerKey).not.toBe(definition.noteEn);
+    }
+  });
+
+  it('translates every display name that contains a translatable word', () => {
+    /*
+     * THIS USED TO DEMAND THAT EVERY ARABIC DISPLAY NAME DIFFER, and it was
+     * right for as long as every row was a description — "Deterministic AI
+     * (development)" has an Arabic form and an untranslated one would be a gap.
+     *
+     * A VENDOR'S NAME IS NOT A DESCRIPTION. "Resend" is a proper noun; the
+     * correct Arabic for it is "Resend", and inventing a transliteration to
+     * satisfy an assertion would put a name on the screen that the vendor does
+     * not use and an owner cannot search for.
+     *
+     * So the rule narrows to what it was actually protecting: a display name
+     * with more than one word says something ABOUT the provider, and that must
+     * be translated. A single bare token is a name, and is left alone.
+     */
+    for (const definition of INTEGRATION_DEFINITIONS) {
+      const isBareProperNoun = !/\s/.test(definition.displayNameEn);
+      if (isBareProperNoun) continue;
+      expect(definition.displayNameAr, definition.providerKey).not.toBe(definition.displayNameEn);
     }
   });
 

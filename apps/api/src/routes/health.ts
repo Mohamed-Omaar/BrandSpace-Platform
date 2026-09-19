@@ -8,6 +8,7 @@ import {
   type DependencyCheck,
 } from '@brandspace/observability';
 import { queueUrl } from '@brandspace/jobs';
+import { readS3Configuration } from '@brandspace/storage';
 import { currentEnvironment } from '@brandspace/shared';
 import { route } from '../route-contract';
 
@@ -68,6 +69,41 @@ export async function probeDependencies(): Promise<readonly DependencyCheck[]> {
     ...(queueConfigured
       ? {}
       : { detail: 'REDIS_URL is not set, so no background job can be dispatched.' }),
+  });
+
+  /*
+   * OBJECT STORAGE, REPORTED AS CONFIGURATION RATHER THAN AS REACHABILITY.
+   *
+   * WHY IT IS HERE AT ALL. Uploads, generated media and every asset download
+   * go through the object store, and the store is configured entirely by
+   * `STORAGE_*` environment variables — which means a deployment can be fully
+   * green, fully connected to its database and completely unable to accept a
+   * file, with nothing anywhere saying so until a customer tries. This check is
+   * the thing that says so.
+   *
+   * WHY IT DOES NOT OPEN A CONNECTION. Railway probes readiness continuously,
+   * and a `HeadBucket` on every probe is a paid request to Cloudflare several
+   * times a minute, for the lifetime of the deployment, to re-answer a question
+   * whose answer changes almost never. The end-to-end proof that bytes reach
+   * the bucket and survive a redeploy is the owner-run step in
+   * docs/RAILWAY-SMOKE-TEST.md; this line answers the cheaper question, and its
+   * `detail` says which question that is rather than implying the other.
+   *
+   * WHY IT IS NOT REQUIRED. The same reading of §19 the queue gets: without
+   * storage the platform still serves every screen, every read and every
+   * non-media action. Answering "not ready" would pull a mostly-working product
+   * out of the load balancer, and `createObjectStore` already refuses loudly at
+   * the point where the missing capability actually matters.
+   */
+  const storage = readS3Configuration(process.env);
+  checks.push({
+    name: 'object-storage',
+    state: storage.ok ? 'ok' : 'not_configured',
+    required: false,
+    capability: 'file-storage',
+    detail: storage.ok
+      ? 'Configured. This reports the STORAGE_* contract, not a live request to the bucket.'
+      : `Incomplete STORAGE_* configuration (${storage.missing.join(', ')}); uploads and media downloads will refuse.`,
   });
 
   /*

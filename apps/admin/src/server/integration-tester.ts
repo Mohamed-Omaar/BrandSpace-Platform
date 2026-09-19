@@ -6,10 +6,14 @@ import {
   DevelopmentPaymentProvider,
 } from '@brandspace/billing';
 import { MockProviderAdapter } from '@brandspace/ai-gateway';
-import { OutboxEmailProvider } from '@brandspace/auth';
+import {
+  OutboxEmailProvider,
+  ResendEmailProvider,
+  resendTransportOverride,
+} from '@brandspace/auth';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { isProduction, systemClock } from '@brandspace/shared';
-import type { IntegrationTester } from '@brandspace/integrations';
+import { findIntegration, type IntegrationTester } from '@brandspace/integrations';
 import { currentEnvironment, getSecretService } from './platform-context';
 
 /**
@@ -78,12 +82,28 @@ export function integrationTester(): IntegrationTester {
       const credentials = await resolve(input.credentialRefs);
 
       /*
-       * PRODUCTION CANNOT REACH ANY OF THESE. Every adapter below is a
-       * development double, and each refuses to be constructed in production on
-       * its own account — but the Hub should say so in a sentence an operator
-       * can read rather than surfacing a constructor exception.
+       * PRODUCTION CANNOT REACH A DEVELOPMENT DOUBLE — but it MUST be able to
+       * reach a real one.
+       *
+       * THIS USED TO REFUSE EVERYTHING. That was right while every adapter in
+       * the switch below was a development double: each refuses to construct in
+       * production on its own account, and the Hub should say so in a sentence
+       * rather than surfacing a constructor exception. It stopped being right
+       * the moment Resend was registered, because Test Connection on a
+       * production deployment is exactly when an owner most needs a truthful
+       * answer about a real credential.
+       *
+       * (Object storage is the category with no case below. It is configured by
+       * the deployment rather than on this screen, and the Control Center is
+       * not given a bucket credential to test with — the registry marks it
+       * `testable: false` and says where the proof lives instead.)
+       *
+       * So the registry decides, as it does everywhere else: `developmentOnly`
+       * is the property, and the refusal follows it rather than the
+       * environment alone.
        */
-      if (isProduction()) {
+      const definition = findIntegration(input.category, input.providerKey);
+      if (isProduction() && (!definition || definition.developmentOnly)) {
         return {
           ok: false,
           latencyMs: 0,
@@ -157,6 +177,61 @@ export function integrationTester(): IntegrationTester {
               ? 'Signed a probe event with the saved webhook secret and verified it.'
               : 'The saved webhook secret did not verify its own signature.',
           };
+        }
+
+        case 'email:resend': {
+          /*
+           * A READ, NOT A SEND. `GET /domains` proves the key is accepted and
+           * writes nothing; sending a probe message would put real mail in a
+           * real inbox every time an operator pressed a button.
+           *
+           * ITS ONE LIMITATION IS REPORTED, NOT HIDDEN. A Resend key restricted
+           * to *Sending access* cannot list domains and answers 401 even though
+           * it can send perfectly well. So a 401 here is reported as
+           * "unverified", with the reason — not as a failure that would tell an
+           * operator to replace a key that works.
+           */
+          const apiKey = credentials['apiKey'];
+          const fromEmail = input.settings['fromEmail'];
+          if (!apiKey || !fromEmail) {
+            return {
+              ok: false,
+              latencyMs: Date.now() - startedAt,
+              message:
+                'The saved configuration is missing the API key or the From address, so nothing could be verified.',
+            };
+          }
+          const provider = new ResendEmailProvider({
+            apiKey,
+            fromEmail,
+            fromName: input.settings['fromName'],
+            replyTo: input.settings['replyTo'],
+            /*
+             * THE SAME NETWORK-BOUNDARY SEAM THE API USES, and it has to be the
+             * same one: a seam that existed only there would let the end-to-end
+             * suite's Test Connection reach the real vendor while its delivery
+             * reached the fake, and the two would be verifying different
+             * things. Refused in production by the helper itself.
+             */
+            ...resendTransportOverride(),
+          });
+          try {
+            await provider.verifyCredential();
+            return {
+              ok: true,
+              latencyMs: Date.now() - startedAt,
+              message: `Resend accepted the saved key. Mail will be sent as ${provider.from}.`,
+            };
+          } catch {
+            return {
+              ok: false,
+              latencyMs: Date.now() - startedAt,
+              message:
+                'Resend did not accept the saved key for reading domains. A key restricted to ' +
+                'Sending access cannot perform this check and will still send \u2014 use a key with ' +
+                'domain read access to verify it here.',
+            };
+          }
         }
 
         case 'email:outbox': {

@@ -210,12 +210,14 @@ const DEVELOPMENT_AND_TEST: readonly IntegrationEnvironment[] = ['DEVELOPMENT', 
 /**
  * The providers BrandSpace can actually talk to today.
  *
- * ALL FIVE ARE DEVELOPMENT DOUBLES, and the registry says so on every row
- * rather than in a footnote. That is the true state of the platform at the end
- * of Phase 10: the contracts, the routing, the accounting and the screens are
- * finished, and no production vendor has been chosen. Adding one is a new
- * entry here plus its adapter — which is exactly the claim §4 asks this file
- * to make good on.
+ * FIVE DEVELOPMENT DOUBLES AND TWO REAL VENDORS. Phase 10 ended with only the
+ * doubles, and the claim it made was that adding a real provider would be one
+ * entry here plus its adapter. Cloudflare R2 and Resend are that claim being
+ * cashed: two rows below, two adapters, no change to the Hub, the
+ * configuration service, the Secret Service or any screen.
+ *
+ * AI, SOCIAL AND PAYMENTS REMAIN DOUBLES. No vendor has been chosen for any of
+ * the three, and none is named anywhere in this file.
  */
 export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
   {
@@ -330,6 +332,68 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
       'يكتب كل رسالة في جدول قابل للتدقيق بدل إرسالها. لا يخرج شيء من النظام، ويرفضه الإنتاج بدل الادعاء بأن البريد أُرسل.',
   },
   {
+    providerKey: 'resend',
+    displayNameEn: 'Resend',
+    displayNameAr: 'Resend',
+    category: 'email',
+    supportedEnvironments: INTEGRATION_ENVIRONMENTS,
+    capabilities: { transactional: true, templates: false, deliveryReceipts: false, bulk: false },
+    credentialFields: [
+      {
+        key: 'apiKey',
+        labelEn: 'API key',
+        labelAr: 'مفتاح الواجهة',
+        secret: true,
+        required: true,
+        helpEn:
+          'A Resend API key with Sending access. Entered once and never shown again \u2014 only a mask, a fingerprint and the date it was set.',
+        helpAr:
+          'مفتاح Resend بصلاحية الإرسال. يُدخل مرة واحدة ولا يُعرض مجددًا \u2014 يظهر القناع والبصمة وتاريخ الضبط فقط.',
+      },
+    ],
+    settingFields: [
+      {
+        key: 'fromEmail',
+        labelEn: 'From address',
+        labelAr: 'عنوان المُرسِل',
+        secret: false,
+        required: true,
+        kind: 'text',
+        helpEn:
+          'The address every message is sent from. Its domain must be verified in Resend, or the provider refuses the send.',
+        helpAr: 'العنوان الذي تُرسل منه كل رسالة. يجب التحقق من نطاقه في Resend وإلا رُفض الإرسال.',
+      },
+      {
+        key: 'fromName',
+        labelEn: 'From name',
+        labelAr: 'اسم المُرسِل',
+        secret: false,
+        required: false,
+        kind: 'text',
+        helpEn: 'Shown beside the address in the recipient\u2019s inbox. Optional.',
+        helpAr: 'يظهر بجانب العنوان في بريد المستلم. اختياري.',
+      },
+      {
+        key: 'replyTo',
+        labelEn: 'Reply-To address',
+        labelAr: 'عنوان الرد',
+        secret: false,
+        required: false,
+        kind: 'text',
+        helpEn:
+          'Where a recipient\u2019s reply goes, when that should differ from the sending address. Optional.',
+        helpAr: 'إلى أين يذهب رد المستلم إن اختلف عن عنوان الإرسال. اختياري.',
+      },
+    ],
+    adapterAvailable: true,
+    testable: true,
+    developmentOnly: false,
+    noteEn:
+      'Sends real mail. Verify the sending domain in Resend before activating: an unverified domain is refused at send time, which means a customer never receives their verification link.',
+    noteAr:
+      'يرسل بريدًا حقيقيًا. تحقّق من نطاق الإرسال في Resend قبل التفعيل: النطاق غير الموثّق يُرفض عند الإرسال، ما يعني أن العميل لن يستلم رابط التحقق.',
+  },
+  {
     providerKey: 'filesystem',
     displayNameEn: 'Local filesystem storage (development)',
     displayNameAr: 'تخزين محلي على القرص (تطوير)',
@@ -345,6 +409,56 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
       'Keeps uploads on the machine running the process. Production refuses it: the first restart on new hardware would lose every file.',
     noteAr:
       'يحفظ الملفات على الجهاز الذي يشغّل العملية. يرفضه الإنتاج: أول إعادة تشغيل على جهاز جديد تفقد كل ملف.',
+  },
+  {
+    providerKey: 'cloudflare-r2',
+    displayNameEn: 'Cloudflare R2 (S3-compatible)',
+    displayNameAr: 'Cloudflare R2 (متوافق مع S3)',
+    category: 'storage',
+    supportedEnvironments: INTEGRATION_ENVIRONMENTS,
+    capabilities: { put: true, get: true, delete: true, signedUrls: false, versioning: false },
+    /*
+     * NO FORM, AND THAT IS THE POINT.
+     *
+     * Object storage is configured by the DEPLOYMENT, through the `STORAGE_*`
+     * environment variables `packages/shared/src/env.ts` declares, and
+     * `createObjectStore` reads nothing else. Offering an endpoint and a key
+     * here would create a second place to configure one thing — an owner would
+     * type credentials into a form, watch it save, and watch the running
+     * processes keep using the ones from the environment. A configuration
+     * screen that is ignored is worse than no configuration screen.
+     *
+     * WHY STORAGE IS NOT LIKE EMAIL, which does get a form. The email provider
+     * is resolved per send, by a process that can read the platform database
+     * and decrypt a credential, so configuration is the right home for it. The
+     * object store is constructed synchronously inside worker processors and
+     * request handlers, long before any configuration read could be awaited,
+     * and it sits at the same level as `DATABASE_URL` and `REDIS_URL` —
+     * infrastructure the platform is handed, not a vendor the platform selects.
+     *
+     * IT STILL BELONGS IN THIS REGISTRY. The Hub is where an owner goes to ask
+     * "what is this platform connected to", and a storage vendor that appears
+     * nowhere would make the answer incomplete. What the entry provides is the
+     * description and the honest note below; what it does not provide is a form
+     * that writes somewhere nothing reads.
+     */
+    credentialFields: [],
+    settingFields: [],
+    adapterAvailable: true,
+    /*
+     * NOT TESTABLE FROM HERE. A reachability check needs the bucket credential,
+     * and the Control Center deliberately does not hold it: an object-store key
+     * is given only to the processes that move bytes (docs/SECURITY.md §2.4).
+     * The API reports whether storage is configured on `/health/ready`, and the
+     * end-to-end proof that bytes survive a redeploy is the owner-run step in
+     * docs/RAILWAY-SMOKE-TEST.md rather than a green tick on this screen.
+     */
+    testable: false,
+    developmentOnly: false,
+    noteEn:
+      'Holds every customer file. Bytes live at Cloudflare rather than on Railway, so a redeploy cannot lose an upload. The adapter speaks S3 and works against any S3-compatible endpoint. Configured by the STORAGE_* deployment variables, not on this screen — production and staging must use different buckets and different credentials.',
+    noteAr:
+      'يحتفظ بكل ملفات العملاء. تبقى البايتات لدى Cloudflare لا على Railway، فلا تُفقد أي ملفات عند إعادة النشر. يتحدث المحوّل بروتوكول S3 ويعمل مع أي نقطة نهاية متوافقة. يُضبط عبر متغيرات النشر STORAGE_* وليس من هذه الشاشة — ويجب أن يستخدم الإنتاج والتجريب حاويتين مختلفتين وبيانات اعتماد مختلفة.',
   },
   {
     providerKey: 'mock',

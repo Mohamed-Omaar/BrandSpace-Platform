@@ -15,11 +15,17 @@
  * that move, not a rewrite. Brand Brain re-exports what it used to own, so no
  * caller changed.
  *
- * The interface is PROVIDER-AGNOSTIC on purpose. No storage vendor is approved
- * (the `integrations.storage` configuration domain exists and is empty), so
- * shipping an S3 client here would be exactly the vendor lock-in CLAUDE.md §2.2
- * forbids. `FilesystemObjectStore` is what development and tests run against; a
- * real adapter implements the same small interface.
+ * The interface is PROVIDER-AGNOSTIC, and stays that way now that a vendor has
+ * been chosen. Cloudflare R2 is the first production target, and it is reached
+ * through `S3ObjectStore` — an implementation of these three methods that names
+ * no vendor and takes every endpoint, bucket and credential as configuration.
+ * `FilesystemObjectStore` is still what development and tests run against, and
+ * both stores accept exactly the same keys so a layout cannot work in one and
+ * fail in the other.
+ *
+ * THE FACTORY LIVES IN `factory.ts`, not here. It has to know about both this
+ * module and the S3 one, and putting it beside either would make the pair
+ * import each other.
  */
 
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -81,23 +87,6 @@ export class InMemoryObjectStore implements ObjectStore {
   }
 }
 
-/**
- * Resolve the object store for an environment.
- *
- * THE GATE IS THE DEPLOYMENT ENVIRONMENT, NOT THE BUILD MODE.
- *
- * It keyed on `NODE_ENV` first, which was wrong in a way only an end-to-end run
- * could show: `NODE_ENV` is `production` in ANY production build, including the
- * one the E2E suite serves and the one a developer runs to check a bundle. That
- * made the memory store unavailable to every built app, and the whole Brand
- * Brain screen failed with a storage error before it rendered a single read.
- *
- * `APP_ENV` is what the rest of the platform already uses to mean "which
- * deployment is this" — `currentEnvironment()` in both apps reads it — and it is
- * the value that should decide. A real production deployment still refuses:
- * failing there is correct, because the alternative is a local-disk store that
- * silently loses every customer upload the first time an instance is replaced.
- */
 /**
  * Split a storage key into path segments, refusing anything that could escape
  * the root.
@@ -183,26 +172,4 @@ export class FilesystemObjectStore implements ObjectStore {
 /** Where the development store keeps its bytes when nothing overrides it. */
 export function defaultObjectStoreDirectory(env: NodeJS.ProcessEnv = process.env): string {
   return env['BRANDSPACE_OBJECT_STORE_DIR'] ?? path.join(tmpdir(), 'brandspace-objects');
-}
-
-export function createObjectStore(options: {
-  /** The DEPLOYMENT environment: `APP_ENV`, never `NODE_ENV`. */
-  appEnv: string;
-  store?: ObjectStore;
-  /** Override the development root. Defaults to `defaultObjectStoreDirectory()`. */
-  directory?: string;
-}): ObjectStore {
-  if (options.store) return options.store;
-  if (options.appEnv === 'production') {
-    throw new Error(
-      'No object store is configured. Configure integrations.storage before enabling uploads.',
-    );
-  }
-  /*
-   * NOT `InMemoryObjectStore`, deliberately. The producer (dashboard) and the
-   * consumer (worker) are separate processes; a store only one of them can read
-   * is not a store. `InMemoryObjectStore` stays exported for unit and isolation
-   * tests, which run producer and consumer in one process on purpose.
-   */
-  return new FilesystemObjectStore(options.directory ?? defaultObjectStoreDirectory());
 }

@@ -16,10 +16,11 @@ import {
   inWorkspace,
 } from '../../../server/customer-context';
 import { getPrisma } from '@brandspace/database';
-import { InvitationService, OutboxEmailProvider, SignupService } from '@brandspace/auth';
+import { InvitationService, SignupService } from '@brandspace/auth';
 import { TenantOnboardingPolicySource, type OnboardingPolicy } from '@brandspace/onboarding';
 import { withoutTenantContext } from '@brandspace/database';
 import { currentEnvironment } from '../../../server/customer-context';
+import { customerLink } from '../../../server/email-links';
 
 const log = createLogger({ context: { component: 'dashboard.auth' } });
 
@@ -49,8 +50,12 @@ function signupService(locale: string): SignupService {
   const prisma = getPrisma();
   return new SignupService({
     prisma,
-    email: new OutboxEmailProvider(prisma),
-    verificationLink: (token) => `/${locale}/verify?token=${encodeURIComponent(token)}`,
+    // Production delegates to the API, which holds the key that unwraps the
+    // provider credential; development keeps the deterministic outbox. See
+    // apps/dashboard/src/server/customer-context.ts.
+    email: getUnscopedEmailProvider(),
+    verificationLink: (token) =>
+      customerLink(`/${locale}/verify?token=${encodeURIComponent(token)}`),
   });
 }
 
@@ -148,7 +153,7 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
         locale: locale === 'ar' ? 'AR' : 'EN',
         // The token is composed into the link and handed over; it is never
         // persisted, not even in the outbox row.
-        link: `/${locale}/reset/${issued.token}`,
+        link: customerLink(`/${locale}/reset/${issued.token}`),
       });
     }
   } catch (error: unknown) {
