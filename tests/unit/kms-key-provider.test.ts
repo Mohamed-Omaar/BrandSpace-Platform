@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CUSTOMER_MFA_DOMAIN,
   KmsKeyProvider,
   LocalDevelopmentKeyProvider,
+  PLATFORM_SECRET_DOMAIN,
+  SOCIAL_TOKEN_DOMAIN,
   createKeyProvider,
   decryptSecret,
   encryptSecret,
@@ -178,9 +181,9 @@ describe('a secret encrypted through KMS decrypts through KMS', () => {
   });
 });
 
-describe('createKeyProvider chooses the right provider for the environment', () => {
-  const KEK = 'k'.repeat(48);
+const KEK = 'k'.repeat(48);
 
+describe('createKeyProvider chooses the right provider for the environment', () => {
   it('prefers KMS whenever a key ARN is configured', () => {
     const provider = createKeyProvider({
       SECRET_VAULT_KMS_KEY_ARN: FAKE_KEY_ARN,
@@ -224,5 +227,66 @@ describe('createKeyProvider chooses the right provider for the environment', () 
     expect(() => createKeyProvider({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toThrow(
       /is not configured/,
     );
+  });
+});
+
+/**
+ * ALL THREE DOMAINS, NOT JUST THE PLATFORM ONE.
+ *
+ * `KeyDomain` has named three key domains since Phase 9, and the first cut of
+ * the KMS work made only the platform one production-capable — which would have
+ * left the publish worker and the customer login surface unable to seal
+ * anything in production, discovered on the day the first customer connected an
+ * account or enabled MFA.
+ *
+ * The provider is the SAME CLASS for all three. What differs is which pair of
+ * environment variables the domain reads, so that is what these assert.
+ */
+describe('every key domain is production-capable, through one implementation', () => {
+  const DOMAINS = [
+    { domain: PLATFORM_SECRET_DOMAIN, arn: `${FAKE_KEY_ARN}-platform` },
+    { domain: SOCIAL_TOKEN_DOMAIN, arn: `${FAKE_KEY_ARN}-social` },
+    { domain: CUSTOMER_MFA_DOMAIN, arn: `${FAKE_KEY_ARN}-customer-mfa` },
+  ];
+
+  it.each(DOMAINS)('$domain.label reads its own ARN variable', ({ domain, arn }) => {
+    const provider = createKeyProvider(
+      { [domain.kmsVar]: arn, NODE_ENV: 'production' } as NodeJS.ProcessEnv,
+      domain,
+    );
+    expect(provider.name).toBe('aws-kms');
+    expect(provider.currentKeyId()).toBe(arn);
+  });
+
+  it.each(DOMAINS)("$domain.label ignores another domain's ARN", ({ domain, arn }) => {
+    /*
+     * THE NEGATIVE THAT MAKES THE DOMAINS REAL. If a domain fell back to
+     * another domain's key, the three blast radii would be one — and nothing
+     * would ever fail to prove it.
+     */
+    const foreign = DOMAINS.find((d) => d.domain.kmsVar !== domain.kmsVar);
+    if (!foreign) throw new Error('the matrix needs at least two domains');
+    expect(() =>
+      createKeyProvider(
+        { [foreign.domain.kmsVar]: arn, NODE_ENV: 'production' } as NodeJS.ProcessEnv,
+        domain,
+      ),
+    ).toThrow(new RegExp(domain.kekVar));
+  });
+
+  it.each(DOMAINS)('$domain.label still refuses a bare KEK in production', ({ domain }) => {
+    expect(() =>
+      createKeyProvider(
+        { [domain.kekVar]: KEK, NODE_ENV: 'production' } as NodeJS.ProcessEnv,
+        domain,
+      ),
+    ).toThrow(/must not be used in production/);
+  });
+
+  it('names three DIFFERENT variables, so one value cannot serve all three', () => {
+    const kms = new Set(DOMAINS.map((d) => d.domain.kmsVar));
+    const keks = new Set(DOMAINS.map((d) => d.domain.kekVar));
+    expect(kms.size).toBe(3);
+    expect(keks.size).toBe(3);
   });
 });

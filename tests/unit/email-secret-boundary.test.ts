@@ -198,27 +198,66 @@ describe('the deployment blueprint grants the same boundary', () => {
     return blueprint.slice(envAt, end);
   }
 
-  it('does not give the dashboard SECRET_VAULT_KEK', () => {
+  /**
+   * Each service's key domains, as the blueprint spells them.
+   *
+   * ONE TABLE RATHER THAN FOUR TESTS, so that the NEGATIVE half — which is the
+   * half that matters — is derived rather than remembered. Adding a service or
+   * a domain here forces both assertions to be made about it.
+   */
+  const DOMAIN_GROUPS = ['platformVaultEnv', 'socialVaultEnv', 'customerMfaVaultEnv'] as const;
+  const KEY_DOMAINS: Record<string, readonly (typeof DOMAIN_GROUPS)[number][]> = {
+    web: [],
+    dashboard: ['customerMfaVaultEnv'],
+    admin: ['platformVaultEnv'],
+    api: ['platformVaultEnv', 'socialVaultEnv', 'customerMfaVaultEnv'],
+    worker: ['socialVaultEnv'],
+  };
+
+  it.each(Object.keys(KEY_DOMAINS))('%s holds exactly its own key domains', (name) => {
+    const env = code(serviceEnv(name));
+    const permitted = KEY_DOMAINS[name] ?? [];
+    for (const group of DOMAIN_GROUPS) {
+      if (permitted.includes(group)) {
+        expect(env, `${name} needs ${group}`).toContain(group);
+      } else {
+        expect(env, `${name} must not hold ${group}`).not.toContain(group);
+      }
+    }
+  });
+
+  it.each(Object.keys(KEY_DOMAINS))('%s gets an AWS identity only if it has a key', (name) => {
+    const env = code(serviceEnv(name));
+    const hasKey = (KEY_DOMAINS[name] ?? []).length > 0;
+    if (hasKey) {
+      // Named per service, so the reviewer sees that the four pairs differ.
+      expect(env, `${name} needs credentials for its key`).toContain(`awsIdentityFor('${name}'`);
+    } else {
+      expect(env, `${name} must not hold AWS credentials`).not.toContain('awsIdentityFor');
+    }
+  });
+
+  it('gives the dashboard the service token instead of the platform key', () => {
+    /*
+     * F-07, as the blueprint states it. Sending a verification email means
+     * decrypting the provider's credential, which needs the PLATFORM domain —
+     * so the customer-facing process asks the API to send rather than holding
+     * the key that would let it send by itself.
+     */
     const env = code(serviceEnv('dashboard'));
-    expect(env).not.toContain('SECRET_VAULT_KEK');
-    expect(env).not.toContain('SOCIAL_TOKEN_VAULT_KEK');
-    // It DOES get the MFA key: the login surface verifies a TOTP code (D-206).
-    expect(env).toContain('CUSTOMER_MFA_VAULT_KEK');
+    expect(env).toContain('INTERNAL_SERVICE_TOKEN');
+    expect(env).not.toContain('platformVaultEnv');
   });
 
-  it('gives the dashboard the service token instead, which sends nothing by itself', () => {
-    expect(code(serviceEnv('dashboard'))).toContain('INTERNAL_SERVICE_TOKEN');
-  });
-
-  it('gives the API the vault key, because it is the process that decrypts', () => {
+  it('gives the API the platform domain, because it is the process that decrypts', () => {
     const env = code(serviceEnv('api'));
-    expect(env).toContain('vaultEnv');
+    expect(env).toContain('platformVaultEnv');
     expect(env).toContain('INTERNAL_SERVICE_TOKEN');
   });
 
-  it('gives the worker neither the vault key nor the service token', () => {
+  it('gives the worker neither the platform domain nor the service token', () => {
     const env = code(serviceEnv('worker'));
-    expect(env).not.toContain('SECRET_VAULT_KEK');
+    expect(env).not.toContain('platformVaultEnv');
     expect(env).not.toContain('INTERNAL_SERVICE_TOKEN');
   });
 

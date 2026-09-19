@@ -85,12 +85,46 @@ export const envSchema = z.object({
    * developer who is not using the vault need not invent one", and that is a
    * different question from whether a deployment may run without it.
    */
-  /** Key-encryption key for the platform secret vault. KMS-ready. */
+  /** Key-encryption key for the platform secret vault. Development and staging. */
   SECRET_VAULT_KEK: z.string().min(32).optional(),
   /** Phase 6 — customers' own social OAuth tokens (D-136). */
   SOCIAL_TOKEN_VAULT_KEK: z.string().min(32).optional(),
   /** Phase 9 — customers' own MFA seeds, reachable from the login surface (D-206). */
   CUSTOMER_MFA_VAULT_KEK: z.string().min(32).optional(),
+
+  /*
+   * THE SAME THREE DOMAINS, AS MANAGED KEYS (F-09).
+   *
+   * `createKeyProvider` refuses the KEK-derived provider when
+   * `NODE_ENV=production` — it keeps the key in the same environment as the
+   * data it protects — so in production each domain a process must seal or
+   * unseal needs its own AWS KMS key. Three separate keys rather than one,
+   * for exactly the reason there are three KEKs: a domain is a blast radius,
+   * and the worker holding the key that unwraps customers' OAuth tokens must
+   * not thereby hold the one that unwraps platform provider credentials.
+   *
+   * Each is an ARN rather than an alias, so the key a ciphertext was wrapped
+   * under stays unambiguous after an alias is repointed.
+   */
+  SECRET_VAULT_KMS_KEY_ARN: z.string().min(1).optional(),
+  SOCIAL_TOKEN_VAULT_KMS_KEY_ARN: z.string().min(1).optional(),
+  CUSTOMER_MFA_VAULT_KMS_KEY_ARN: z.string().min(1).optional(),
+
+  /*
+   * HOW A PROCESS AUTHENTICATES TO KMS.
+   *
+   * Railway runs no AWS instance role, so there is no ambient identity to
+   * inherit and a key pair is the only option. THE NAMES ARE THE SAME ON EVERY
+   * SERVICE AND THE VALUES ARE DELIBERATELY DIFFERENT: each service gets its
+   * own IAM principal, scoped to exactly the keys that service is permitted,
+   * so a leaked pair reaches one blast radius rather than all three.
+   *
+   * `AWS_REGION` is optional because an ARN already carries its region and the
+   * provider reads it from there; set it only to override deliberately.
+   */
+  AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  AWS_REGION: z.string().min(1).optional(),
 
   // --- Public base URLs -----------------------------------------------------
   /*
@@ -146,7 +180,53 @@ export type Env = z.infer<typeof envSchema>;
  * are checked: a deployment is production if EITHER says so, which is the
  * cautious direction.
  */
-export type StartupServiceProfile = 'complete' | 'api' | 'worker';
+export type StartupServiceProfile = 'complete' | 'web' | 'dashboard' | 'admin' | 'api' | 'worker';
+
+/**
+ * The three key domains, as the pair of variables each one is configured by.
+ *
+ * ONE TABLE, READ BY EVERY RULE BELOW. The alternative — naming the six
+ * variables individually in each service's branch — is how the worker ended up
+ * with a rule about `SECRET_VAULT_KEK` and no rule at all about the ARN that
+ * replaces it in production.
+ */
+const KEY_DOMAIN_VARIABLES = {
+  platform: { kms: 'SECRET_VAULT_KMS_KEY_ARN', kek: 'SECRET_VAULT_KEK' },
+  social: { kms: 'SOCIAL_TOKEN_VAULT_KMS_KEY_ARN', kek: 'SOCIAL_TOKEN_VAULT_KEK' },
+  customerMfa: { kms: 'CUSTOMER_MFA_VAULT_KMS_KEY_ARN', kek: 'CUSTOMER_MFA_VAULT_KEK' },
+} as const satisfies Record<string, { readonly kms: keyof Env; readonly kek: keyof Env }>;
+
+export type KeyDomainName = keyof typeof KEY_DOMAIN_VARIABLES;
+
+const ALL_KEY_DOMAINS = Object.keys(KEY_DOMAIN_VARIABLES) as readonly KeyDomainName[];
+
+/**
+ * Which key domains each production service is permitted to hold — and, by
+ * omission, which it is refused.
+ *
+ * THIS IS THE BLAST-RADIUS MODEL, WRITTEN DOWN (D-136, D-206, F-07):
+ *
+ *   admin      the platform secret vault only. It manages provider credentials
+ *              and resolves a Platform Owner's TOTP seed; it has no business
+ *              unwrapping a customer's OAuth token or a customer's MFA seed.
+ *   dashboard  the customer MFA domain only. It verifies a TOTP code at
+ *              sign-in, so a login request must not be able to reach a platform
+ *              provider credential — that is F-07 exactly.
+ *   api        all three, because it legitimately serves all three: platform
+ *              secret management, social publishing and customer sign-in.
+ *   worker     the social token domain only. The publish processor unwraps a
+ *              customer's own OAuth token and nothing else.
+ *   web        none. It is a static marketing site and holds no key at all.
+ *   complete   all three: the local and CI profile, which is not a deployment.
+ */
+const PERMITTED_KEY_DOMAINS: Record<StartupServiceProfile, readonly KeyDomainName[]> = {
+  complete: ALL_KEY_DOMAINS,
+  web: [],
+  dashboard: ['customerMfa'],
+  admin: ['platform'],
+  api: ALL_KEY_DOMAINS,
+  worker: ['social'],
+};
 
 function requireProductionValue(env: Env, name: keyof Env): void {
   const value = env[name];
@@ -163,6 +243,91 @@ function forbidProductionValue(env: Env, name: keyof Env): void {
         'keeping unused credentials out preserves the intended blast-radius boundary.',
     );
   }
+}
+
+/**
+ * The production key-domain contract, for one service.
+ *
+ * THREE RULES, AND THE THIRD IS THE ONE THAT CHANGED.
+ *
+ * 1. EVERY PERMITTED DOMAIN NEEDS ITS MANAGED KEY. In production the KEK-derived
+ *    provider is refused outright — it keeps the key in the same environment as
+ *    the data it protects — so a service that must seal or unseal in a domain
+ *    needs that domain's KMS ARN. Without it the process comes up and fails the
+ *    first time somebody saves a credential or signs in, which is the failure
+ *    mode F-09 produced and this rule exists to convert into a start-up refusal.
+ *
+ * 2. A DOMAIN THE SERVICE MAY NOT REACH IS REFUSED IN BOTH FORMS. Neither the
+ *    ARN nor the KEK. Holding an unusable key is not harmless: it is a
+ *    credential sitting in a service's environment waiting for the day
+ *    somebody wires it up, and the blast-radius model is only real if the
+ *    material is actually absent.
+ *
+ * 3. A PERMITTED DOMAIN'S KEK IS NOT REQUIRED, AND ITS ABSENCE IS NOT A FALLBACK.
+ *    It used to be required, which meant a production deployment had to carry a
+ *    key it could not legally use. It may still be present — the same blueprint
+ *    builds staging, where it is what encrypts — but production never falls back
+ *    to it: `createKeyProvider` prefers the ARN and throws rather than derive a
+ *    local KEK when `NODE_ENV=production`.
+ */
+function assertKeyDomainBoundaries(env: Env, profile: StartupServiceProfile): void {
+  const permitted = new Set(PERMITTED_KEY_DOMAINS[profile]);
+
+  for (const domain of ALL_KEY_DOMAINS) {
+    const { kms, kek } = KEY_DOMAIN_VARIABLES[domain];
+    if (permitted.has(domain)) {
+      requireProductionValue(env, kms);
+    } else {
+      forbidProductionValue(env, kms);
+      forbidProductionValue(env, kek);
+    }
+  }
+
+  /*
+   * ONE KEY PER DOMAIN, NOT ONE KEY WEARING THREE NAMES. Pointing two ARNs at
+   * the same CMK would satisfy every rule above and collapse two blast radii
+   * into one — the whole reason there are three domains. The same check has
+   * always applied to the KEKs; it applies to the managed keys for the same
+   * reason.
+   */
+  assertDistinct(
+    env,
+    ALL_KEY_DOMAINS.map((d) => KEY_DOMAIN_VARIABLES[d].kms),
+    'Each key domain needs its OWN AWS KMS key',
+  );
+  assertDistinct(
+    env,
+    ALL_KEY_DOMAINS.map((d) => KEY_DOMAIN_VARIABLES[d].kek),
+    'Each key domain needs its OWN key-encryption key',
+  );
+
+  /*
+   * THE IDENTITY THAT USES THOSE KEYS. Railway offers no instance role, so a
+   * process with a KMS key and no credentials cannot call KMS at all — and
+   * would discover that at the first save rather than at boot. A service with
+   * NO key domain must not carry AWS credentials either: they would grant a
+   * reach nothing in that process uses.
+   */
+  if (permitted.size > 0) {
+    requireProductionValue(env, 'AWS_ACCESS_KEY_ID');
+    requireProductionValue(env, 'AWS_SECRET_ACCESS_KEY');
+  } else {
+    forbidProductionValue(env, 'AWS_ACCESS_KEY_ID');
+    forbidProductionValue(env, 'AWS_SECRET_ACCESS_KEY');
+  }
+}
+
+/** Refuse when two of the named variables carry the same value. */
+function assertDistinct(env: Env, names: readonly (keyof Env)[], why: string): void {
+  const present = names
+    .map((name) => env[name])
+    .filter((value): value is string => typeof value === 'string' && value !== '');
+  if (new Set(present).size === present.length) return;
+  throw new Error(
+    `${why}: ${names.join(', ')} must all differ when present. ` +
+      'Sharing one collapses separate blast radii into one (D-136, D-206). ' +
+      '(No value is ever shown.)',
+  );
 }
 
 function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'complete'): void {
@@ -221,38 +386,36 @@ function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'comp
   if (profile === 'complete') {
     requireProductionValue(env, 'CUSTOMER_SESSION_SECRET');
     requireProductionValue(env, 'PLATFORM_SESSION_SECRET');
-    requireProductionValue(env, 'SECRET_VAULT_KEK');
-    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
-    requireProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
   } else if (profile === 'api') {
     requireProductionValue(env, 'DATABASE_PLATFORM_URL');
-    requireProductionValue(env, 'SECRET_VAULT_KEK');
-    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
-    requireProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
     forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
     forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
-  } else {
-    requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
+  } else if (profile === 'admin') {
+    requireProductionValue(env, 'DATABASE_PLATFORM_URL');
+    requireProductionValue(env, 'PLATFORM_SESSION_SECRET');
+    forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+  } else if (profile === 'dashboard') {
+    requireProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+    forbidProductionValue(env, 'DATABASE_PLATFORM_URL');
+    forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
+  } else if (profile === 'web') {
+    /*
+     * THE MARKETING SITE HOLDS NOTHING. It renders public pages; every
+     * credential it were given would be one an attacker who reached the most
+     * exposed service in the fleet would inherit.
+     */
     forbidProductionValue(env, 'DATABASE_PLATFORM_URL');
     forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
     forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
-    forbidProductionValue(env, 'SECRET_VAULT_KEK');
-    forbidProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
+    forbidProductionValue(env, 'INTERNAL_SERVICE_TOKEN');
+  } else {
+    forbidProductionValue(env, 'DATABASE_PLATFORM_URL');
+    forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+    forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
     forbidProductionValue(env, 'INTERNAL_SERVICE_TOKEN');
   }
 
-  const keyDomains = [
-    env.SECRET_VAULT_KEK,
-    env.SOCIAL_TOKEN_VAULT_KEK,
-    env.CUSTOMER_MFA_VAULT_KEK,
-  ].filter((value): value is string => value !== undefined);
-  const distinct = new Set(keyDomains);
-  if (distinct.size !== keyDomains.length) {
-    throw new Error(
-      'SECRET_VAULT_KEK, SOCIAL_TOKEN_VAULT_KEK and CUSTOMER_MFA_VAULT_KEK must all differ when present. ' +
-        'Sharing one collapses separate blast radii into one (D-136, D-206).',
-    );
-  }
+  assertKeyDomainBoundaries(env, profile);
 
   /*
    * NO PRODUCTION DEPLOYMENT CARRIES THE DEVELOPMENT BILLING SECRET. Its only
