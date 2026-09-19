@@ -136,19 +136,19 @@ describe('the one place that resolves the active email provider', () => {
 
   it('is the only file in the repository that constructs ResendEmailProvider for delivery', () => {
     /*
-     * The Control Center's Test Connection constructs one too, from the
-     * credential the owner just saved, and that is correct: it is testing a key
-     * rather than sending product mail. Both live in processes that already
-     * hold the vault key. Anything OUTSIDE these two is a third answer to
-     * "which provider sends", which is the failure this asserts against.
+     * ONE PROCESS, ONE CONSTRUCTOR, and the list got shorter rather than
+     * longer. The Control Center used to construct one as well, for a Test
+     * Connection button; that button is gone, because the credential the
+     * platform asks for is a Resend Sending-access key restricted to the
+     * verified domain and Resend refuses it every read-only check. Anything
+     * outside this list is a second answer to "which provider sends", which is
+     * the failure this asserts against.
      */
     const ALLOWED = [
       'apps/api/src/email-provider.ts',
-      'apps/admin/src/server/integration-tester.ts',
       // The adapter's own tests. `packages/auth/src/email-resend.ts` is
       // deliberately absent: it DEFINES the class and never constructs one.
       'tests/unit/production-adapters.test.ts',
-      'tests/isolation/production-email.test.ts',
     ];
 
     const found = [

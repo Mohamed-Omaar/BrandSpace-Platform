@@ -346,9 +346,9 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
         secret: true,
         required: true,
         helpEn:
-          'A Resend API key with Sending access. Entered once and never shown again \u2014 only a mask, a fingerprint and the date it was set.',
+          'A Resend API key with SENDING ACCESS ONLY, restricted to your verified sending domain — the least privilege that can send. Do not use a Full Access key. Entered once and never shown again — only a mask, a fingerprint and the date it was set.',
         helpAr:
-          'مفتاح Resend بصلاحية الإرسال. يُدخل مرة واحدة ولا يُعرض مجددًا \u2014 يظهر القناع والبصمة وتاريخ الضبط فقط.',
+          'مفتاح Resend بصلاحية الإرسال. يُدخل مرة واحدة ولا يُعرض مجددًا — يظهر القناع والبصمة وتاريخ الضبط فقط.',
       },
     ],
     settingFields: [
@@ -370,7 +370,7 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
         secret: false,
         required: false,
         kind: 'text',
-        helpEn: 'Shown beside the address in the recipient\u2019s inbox. Optional.',
+        helpEn: 'Shown beside the address in the recipient’s inbox. Optional.',
         helpAr: 'يظهر بجانب العنوان في بريد المستلم. اختياري.',
       },
       {
@@ -381,17 +381,50 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
         required: false,
         kind: 'text',
         helpEn:
-          'Where a recipient\u2019s reply goes, when that should differ from the sending address. Optional.',
+          'Where a recipient’s reply goes, when that should differ from the sending address. Optional.',
         helpAr: 'إلى أين يذهب رد المستلم إن اختلف عن عنوان الإرسال. اختياري.',
       },
     ],
     adapterAvailable: true,
-    testable: true,
+    /*
+     * NOT TESTABLE FROM THIS SCREEN, AND THAT IS A CHOICE ABOUT THE CREDENTIAL
+     * RATHER THAN A GAP IN THE ADAPTER.
+     *
+     * The key BrandSpace asks for is the least-privileged one that can do the
+     * job: Resend **Sending access**, restricted to the verified sending
+     * domain. Such a key can send and can do nothing else — it cannot list
+     * domains, read the account, or manage anything.
+     *
+     * Every non-destructive check Resend offers is a READ, and a
+     * Sending-access key is refused all of them. So a Test Connection button
+     * here had exactly three possible behaviours, and all three are worse than
+     * no button:
+     *
+     *   1. Call `GET /domains` and report 401 — telling an owner their
+     *      correctly-scoped production key is broken. A red tick on a working
+     *      credential trains people to ignore ticks.
+     *   2. Ask for a Full Access key so the read succeeds — widening a
+     *      production credential's scope to light up a UI element. The key
+     *      would then be able to manage the account, and it would live in the
+     *      vault forever at that scope.
+     *   3. Send a probe message — an unsolicited email, to somebody's real
+     *      inbox, every time an operator presses a button.
+     *
+     * WHAT PROVES THE KEY INSTEAD. The controlled production smoke email after
+     * activation (docs/RAILWAY-SMOKE-TEST.md §7.2): a real signup the owner
+     * performs, to an address the owner controls, once. That is the same
+     * operation the credential exists to perform, which makes it the only
+     * honest test of a send-only key.
+     *
+     * Save and Activate remain separate operations. Removing the middle step
+     * does not merge them.
+     */
+    testable: false,
     developmentOnly: false,
     noteEn:
-      'Sends real mail. Verify the sending domain in Resend before activating: an unverified domain is refused at send time, which means a customer never receives their verification link.',
+      'Sends real mail. Use a Resend key with Sending access, restricted to your verified sending domain — the least privilege that can send. There is deliberately no Test connection button: every read-only check Resend offers is refused to a send-only key, so the alternatives would be a red tick on a working credential, a wider key than the platform needs, or an unsolicited probe email. Verify the sending domain in Resend before activating, then confirm delivery with the controlled smoke email after activation.',
     noteAr:
-      'يرسل بريدًا حقيقيًا. تحقّق من نطاق الإرسال في Resend قبل التفعيل: النطاق غير الموثّق يُرفض عند الإرسال، ما يعني أن العميل لن يستلم رابط التحقق.',
+      'يرسل بريدًا حقيقيًا. استخدم مفتاح Resend بصلاحية الإرسال فقط، مقيّدًا بنطاق الإرسال الموثّق — وهي أقل صلاحية كافية للإرسال. لا يوجد زر اختبار اتصال عمدًا: كل فحص للقراءة توفّره Resend مرفوض لمفتاح الإرسال فقط، والبدائل إما إظهار فشل لمفتاح سليم، أو طلب مفتاح أوسع مما تحتاج المنصة، أو إرسال رسالة اختبار غير مطلوبة. تحقّق من نطاق الإرسال في Resend قبل التفعيل، ثم أكّد التسليم برسالة التحقق المضبوطة بعد التفعيل.',
   },
   {
     providerKey: 'filesystem',

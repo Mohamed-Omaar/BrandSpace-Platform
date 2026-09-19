@@ -363,17 +363,33 @@ describe('Resend is an EmailProvider and nothing above it knows the vendor', () 
     expect(JSON.stringify(error, Object.getOwnPropertyNames(error))).not.toContain(FAKE_RESEND_KEY);
   });
 
-  it('verifies a credential with a read, never by sending a message', async () => {
-    const { calls, fetchLike } = capture(200, { data: [] });
+  it('exposes nothing a send-only key cannot do', () => {
+    /*
+     * THE ADAPTER'S SURFACE MATCHES THE CREDENTIAL'S.
+     *
+     * There was briefly a `verifyCredential()` here, issuing `GET /domains` for
+     * a Test Connection button. The credential BrandSpace asks for is a Resend
+     * SENDING-ACCESS key restricted to the verified domain — the least
+     * privilege that can do the job — and such a key is refused every read
+     * Resend offers. The check would have reported a correctly-scoped
+     * production key as broken, and its presence would have pressured somebody
+     * into widening the key to make a tick go green.
+     *
+     * This asserts the absence rather than trusting it: a re-added read method
+     * is a re-added reason to ask for a Full Access key.
+     */
     const provider = new ResendEmailProvider({
       apiKey: FAKE_RESEND_KEY,
       fromEmail: 'hello@example.com',
       baseUrl: 'https://resend.example.invalid',
-      fetch: fetchLike,
+      fetch: async () => new Response('{}', { status: 200 }),
     });
-    await provider.verifyCredential();
-    expect(calls[0]?.init.method).toBe('GET');
-    expect(calls[0]?.url).toContain('/domains');
+
+    expect((provider as unknown as Record<string, unknown>)['verifyCredential']).toBeUndefined();
+    // What it DOES have, so the assertion above cannot pass by the object being
+    // empty or the wrong shape.
+    expect(typeof provider.send).toBe('function');
+    expect(provider.key).toBe('resend');
   });
 
   it('refuses to construct without a key or a From address', () => {
@@ -498,6 +514,23 @@ describe('the registry describes the two real providers honestly', () => {
     expect(resend?.credentialFields.every((f) => f.secret)).toBe(true);
     expect(resend?.settingFields.map((f) => f.key)).toEqual(['fromEmail', 'fromName', 'replyTo']);
     expect(resend?.settingFields.every((f) => !f.secret)).toBe(true);
+
+    /*
+     * NOT TESTABLE FROM THE HUB, and the registry is where that is decided.
+     *
+     * The recommended production credential is a Sending-access key restricted
+     * to the verified domain. Every non-destructive check Resend offers is a
+     * read, and a send-only key is refused all of them — so a Test Connection
+     * button could only report a working key as broken, demand a wider key, or
+     * send an unsolicited probe message. The note has to SAY so, or an owner
+     * meets a missing button with no explanation.
+     */
+    expect(resend?.testable).toBe(false);
+    expect(resend?.adapterAvailable).toBe(true);
+    expect(resend?.credentialFields[0]?.helpEn).toContain('SENDING ACCESS ONLY');
+    expect(resend?.noteEn).toContain('no Test connection button');
+    expect(resend?.noteEn).toContain('Sending access');
+    expect(resend?.noteAr).toContain('Resend');
   });
 
   it('registers Cloudflare R2 for production with NO second configuration store', () => {

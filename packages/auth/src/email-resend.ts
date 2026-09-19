@@ -16,6 +16,15 @@ import { renderEmail } from './email-templates';
  * services take an `EmailProvider`; this is one. Swapping vendor is a registry
  * entry and a sibling of this file.
  *
+ * IT SENDS, AND DOES NOTHING ELSE. There was briefly a `verifyCredential()`
+ * here, issuing `GET /domains` for the Control Center's Test Connection button.
+ * Both are gone, because the credential the platform asks for is a Resend
+ * SENDING-ACCESS key restricted to the verified domain — the least privilege
+ * that can do the job — and such a key is refused every read Resend offers. A
+ * check it cannot pass would have reported a correctly-scoped production key as
+ * broken; keeping it would have pressured somebody into widening the key to
+ * make a tick go green. The adapter's surface now matches the credential's.
+ *
  * THE CREDENTIAL ARRIVES AS AN ARGUMENT AND IS NEVER READ FROM THE ENVIRONMENT.
  * It lives in the Secret Service, is resolved server-side by a surface that is
  * allowed to (the API and the Control Center), and is handed here. A
@@ -165,25 +174,6 @@ export class ResendEmailProvider implements EmailProvider {
     return { messageId: id };
   }
 
-  /**
-   * Can this credential send?
-   *
-   * `GET /domains` IS THE LEAST SIDE-EFFECTFUL OPERATION THAT PROVES ANYTHING.
-   * It reads, it writes nothing, it sends no mail, and it fails with 401 for a
-   * bad key — which is the question Test Connection is asking.
-   *
-   * ITS LIMITATION IS DOCUMENTED RATHER THAN HIDDEN. A Resend key restricted to
-   * *Sending access* cannot list domains and answers 401 even though it can
-   * send perfectly well, so a restricted key reports "not verified" here. The
-   * honest alternatives were both worse: sending a real probe message (a side
-   * effect, to a real inbox) or returning success because a key is present (a
-   * green tick that proves only that a string was typed). The Hub's note says
-   * which key to use.
-   */
-  async verifyCredential(): Promise<void> {
-    await this.#get('/domains');
-  }
-
   async #post(path: string, body: unknown): Promise<unknown> {
     return this.#request(path, {
       method: 'POST',
@@ -192,13 +182,6 @@ export class ResendEmailProvider implements EmailProvider {
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
-    });
-  }
-
-  async #get(path: string): Promise<unknown> {
-    return this.#request(path, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${this.#apiKey}` },
     });
   }
 

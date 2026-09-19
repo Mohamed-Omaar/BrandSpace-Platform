@@ -41,9 +41,10 @@ import { route } from '../route-contract';
  *      product declares; the words come from the platform's own catalogue. A
  *      caller cannot supply a subject or a body, so it cannot compose a message
  *      the product would not have sent itself.
- *   3. NO ARBITRARY LINK TARGET. The link is a path the dashboard composed from
- *      a token it just issued; the schema caps its length and the renderer
- *      escapes it.
+ *   3. NO ARBITRARY LINK TARGET — enforced, not assumed. Every supplied link
+ *      must be an absolute URL whose ORIGIN is exactly
+ *      `PUBLIC_DASHBOARD_BASE_URL`. See `linkIsOurs` below for why holding the
+ *      token is not enough to be trusted with this field.
  */
 
 const log = createLogger({ context: { component: 'api.internal.email' } });
@@ -68,6 +69,64 @@ const deliverySchema = z.object({
   variables: z.record(z.string(), z.unknown()).optional(),
   link: z.string().max(2048).optional(),
 });
+
+/**
+ * Is this link one of OURS?
+ *
+ * THE HOLE THIS CLOSES. The route's own contract said "no arbitrary link
+ * target", and the schema enforced a length and nothing else. A caller holding
+ * `INTERNAL_SERVICE_TOKEN` could therefore have a BrandSpace-branded
+ * verification or password-reset message, sent from the platform's own verified
+ * domain, carry a link to anywhere at all. The closed template set stops a
+ * caller composing a message the product would not send; it does nothing about
+ * where that message POINTS, which is the part a recipient clicks.
+ *
+ * WHY THE TOKEN IS NOT ENOUGH. It authenticates a PROCESS, not an intention. It
+ * sits in the environment of three services, is read by anything that can see
+ * their configuration, and would survive in a log or a backup long after a
+ * rotation. Treating possession of it as proof that a URL is safe makes the
+ * blast radius of that one string "every customer's inbox, over our sending
+ * reputation" rather than "ask for one of six named templates".
+ *
+ * THE RULE IS ORIGIN EQUALITY, not a prefix or a suffix match.
+ * `startsWith(base)` would admit `https://app.example.com.attacker.test/…`;
+ * `endsWith(host)` would admit `https://attacker.test/?next=app.example.com`.
+ * `URL.origin` normalises scheme, host and port and compares the three
+ * together, which is the only comparison that cannot be talked around.
+ *
+ * PRODUCTION ADDITIONALLY REQUIRES https, because a verification link is a
+ * bearer credential and `http://` puts it on the wire. `assertProductionSafety`
+ * already refuses an `http://` `PUBLIC_DASHBOARD_BASE_URL` in production, so
+ * this is a second independent guard rather than the only one.
+ */
+function linkIsOurs(link: string): boolean {
+  const base = process.env['PUBLIC_DASHBOARD_BASE_URL']?.trim();
+  if (!base) {
+    /*
+     * NO CONFIGURED ORIGIN MEANS NOTHING TO COMPARE AGAINST, so nothing is
+     * accepted. Refusing here costs a link in a misconfigured development
+     * checkout; the alternative — accepting anything when the variable is
+     * missing — is the exact failure this function exists to prevent, arriving
+     * through a forgotten variable instead of through a malicious caller.
+     */
+    return false;
+  }
+
+  let target: URL;
+  let expected: URL;
+  try {
+    target = new URL(link);
+    expected = new URL(base);
+  } catch {
+    // A relative path, a `javascript:` string, a bare host — none is an
+    // absolute URL, and `new URL` is the one parser that decides that.
+    return false;
+  }
+
+  if (target.origin !== expected.origin) return false;
+  if (isProduction() && target.protocol !== 'https:') return false;
+  return true;
+}
 
 /**
  * Is the caller the service we think it is?
@@ -153,6 +212,23 @@ export function registerInternalEmailRoutes(app: FastifyInstance): void {
 
       const parsed = deliverySchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+
+      if (parsed.data.link !== undefined && !linkIsOurs(parsed.data.link)) {
+        /*
+         * REFUSED BEFORE A PROVIDER IS EVEN RESOLVED, so nothing reaches the
+         * transport and no message is composed.
+         *
+         * THE REJECTED LINK IS NOT LOGGED. It is attacker-controlled text on
+         * one reading and a live credential on another — a genuine reset link
+         * submitted with a typo'd origin would be written to an operator's log
+         * by the very line meant to catch abuse. The template key says enough
+         * to find the caller; the URL adds nothing an operator can act on.
+         */
+        log.warn('internal email refused: link origin is not the dashboard', {
+          templateKey: parsed.data.templateKey,
+        });
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
 
       const message = {
         to: parsed.data.to,

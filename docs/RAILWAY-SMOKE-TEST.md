@@ -202,19 +202,25 @@ Run this section once before activation and again after — deployment doc §16.
 - ☐ ✅ Re-open the page: the key shows as **masked metadata only**
   (`re-…`, a fingerprint, a last-rotated time). There is no way to read it back,
   and the input is empty rather than pre-filled.
-- ☐ ✅ **Test connection** reports a result. It is still **not active** — testing
-  is not activating, and nothing activates automatically after a green test.
-  - A restricted _Sending access_ key reports a failure here even though it can
-    send. That limitation is stated on the screen; use a key with domain read
-    access to test — deployment doc §16.2.
+- ☐ ✅ **There is no Test connection button on this screen**, and the note says
+  why. The key is a Sending-access key restricted to the verified domain — the
+  least privilege that can send — and Resend refuses it every read-only check,
+  so a button could only report a working key as broken, demand a wider key, or
+  send an unsolicited probe message. Deployment doc §16.2.
+  - **Do not create a Full Access key to make a tick go green.** Nothing in the
+    product asks for one.
+  - The proof is §7.2 below: the controlled smoke email, which is the same
+    operation the credential exists to perform.
 - ☐ ✅ **Activate**, with a change reason. The activation appears in the change
   history with its author, its reason and a rollback.
 
 ### 7.2 After activation
 
-- ☐ ✅ **Customer signup verification arrives.** Sign up with a real address you
-  control; the verification email is delivered by Resend and the link verifies
-  the account.
+- ☐ ✅ **The controlled smoke email — the one test of the send-only key.** Sign
+  up with a real address **you control**, once. The verification email is
+  delivered by Resend and the link verifies the account. A 401 here means the
+  key is genuinely wrong; a rejected domain means it is not verified in Resend.
+  This is the step §7.1 defers to, so do not skip it.
 - ☐ ✅ **Resend verification** sends a second link.
 - ☐ ✅ **Password reset** sends, and the link works.
 - ☐ ✅ **Workspace invitation** sends, and **invitation resend** sends again.
@@ -244,6 +250,24 @@ Run this section once before activation and again after — deployment doc §16.
 - ☐ ✅ A request with a valid token but an unknown `templateKey` is refused with
   `VALIDATION_FAILED` — a caller cannot compose a message the product would not
   have sent itself
+- ☐ ✅ **A request with a VALID token and a foreign link is refused**, with
+  `422 VALIDATION_FAILED` and no mail sent. The token authenticates a process,
+  not an intention: every link must be an absolute URL whose origin is exactly
+  `PUBLIC_DASHBOARD_BASE_URL`, or a BrandSpace-branded message from the
+  platform's own verified domain could point anywhere.
+
+  ```bash
+  curl -sSi -X POST https://api.example.com/v1/internal/email/deliver \
+    -H "x-brandspace-service-token: $INTERNAL_SERVICE_TOKEN" \
+    -H 'content-type: application/json' \
+    -d '{"to":"you@example.com","templateKey":"auth.email_verification",
+         "locale":"EN","link":"https://attacker.example/collect"}'
+  ```
+
+  - **A 200 here is the finding.** It would mean the origin check is not
+    running, and the route is a phishing primitive with the platform's sending
+    reputation behind it.
+  - Confirm no message arrived at the address you used.
 
 ---
 

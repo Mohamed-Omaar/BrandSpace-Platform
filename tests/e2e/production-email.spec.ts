@@ -127,24 +127,23 @@ test.describe('the owner connects Resend, and a customer signup uses it', () => 
     // an attribute is still a value that reached the browser.
     expect(await page.content()).not.toContain(FIXTURE_KEY);
 
-    // ---- 5. Test Connection: a real read, through the real adapter ---------
-    await page.getByTestId('test-connection').click();
-    await settled(page, /ok=CONNECTION_TESTED|error=/);
-
-    const afterTest = await recorded(page);
-    const verify = afterTest.find((entry) => entry.path === '/domains');
-    expect(verify, 'Test Connection must reach the provider').toBeTruthy();
-    expect(verify!.method).toBe('GET');
+    // ---- 5. THERE IS NO TEST CONNECTION BUTTON, and the screen says why ---
     /*
-     * THE KEY TRAVELLED IN THE AUTHORIZATION HEADER AND NOWHERE ELSE. This is
-     * the assertion that would catch a key in a query string — which would put
-     * it in every proxy log between here and the provider.
+     * The credential BrandSpace asks for is a Resend Sending-access key
+     * restricted to the verified domain — the least privilege that can send.
+     * Every non-destructive check Resend offers is a read, and such a key is
+     * refused all of them. A button here could only report a working key as
+     * broken, demand a wider key, or send an unsolicited probe message.
      */
-    expect(verify!.authorization).toBe(`Bearer ${FIXTURE_KEY}`);
-    // A read, not a send: Test Connection must not put a message in an inbox.
-    expect(afterTest.some((entry) => entry.path === '/emails')).toBe(false);
+    await expect(page.getByTestId('test-connection')).toHaveCount(0);
+    await expect(page.getByTestId('integration-note')).toContainText('no Test connection button');
+    await expect(page.getByTestId('integration-note')).toContainText('smoke email');
 
-    // ---- 6. TEST IS NOT ACTIVATE ------------------------------------------
+    // NOTHING WAS SENT while the owner configured the provider. A screen that
+    // probed the vendor on load would put mail in an inbox nobody asked about.
+    expect(await recorded(page)).toEqual([]);
+
+    // ---- 6. STILL NOT ACTIVE ----------------------------------------------
     await expect(page.getByTestId('detail-enabled')).toHaveText(/no/i);
 
     // ---- 7. Activate, as a separate act with its own reason ---------------
@@ -252,6 +251,87 @@ test.describe('the secret boundary, observed from outside', () => {
     const sends = (await recorded(page)).filter((entry) => entry.path === '/emails');
     expect(sends.every((entry) => JSON.stringify(entry.body).indexOf('attacker') === -1)).toBe(
       true,
+    );
+  });
+
+  test('a VALID service token cannot point a BrandSpace message at another origin', async ({
+    page,
+  }) => {
+    /*
+     * THE HOLE THIS CLOSES, AND WHY THE TOKEN IS NOT THE ANSWER TO IT.
+     *
+     * The route's contract said "no arbitrary link target"; the schema enforced
+     * a length and nothing else. A caller holding `INTERNAL_SERVICE_TOKEN`
+     * could therefore have a BrandSpace-branded verification or password-reset
+     * message, from the platform's own verified sending domain, carry a link to
+     * anywhere — which is a credible phishing primitive with our sending
+     * reputation behind it.
+     *
+     * The token authenticates a PROCESS, not an intention. It sits in three
+     * services' environments and would outlive a rotation in any log or backup
+     * that captured it. So the link is checked on its own merits: absolute URL,
+     * origin exactly equal to `PUBLIC_DASHBOARD_BASE_URL`.
+     *
+     * EVERY CASE BELOW USES THE REAL, CORRECT TOKEN. That is the point: this is
+     * not a test of authentication.
+     */
+    const api = `http://127.0.0.1:3103/v1/internal/email/deliver`;
+    const token = 'e2e-only-internal-service-token-0123456789abcdef';
+    await resetTransport(page);
+
+    const base = {
+      to: 'recipient@brandspace.test',
+      templateKey: 'auth.email_verification' as const,
+      locale: 'EN' as const,
+    };
+
+    const refused = [
+      // A different origin entirely.
+      'https://attacker.example/collect',
+      // A prefix match on the configured base — what `startsWith` would admit.
+      `${DASHBOARD_BASE_URL}.attacker.example/en/verify?token=abc`,
+      // The base as a path or a query value, not as the origin.
+      `https://attacker.example/${DASHBOARD_BASE_URL}`,
+      `https://attacker.example/?next=${encodeURIComponent(DASHBOARD_BASE_URL)}`,
+      // Right host, wrong port — `origin` compares all three parts.
+      'http://127.0.0.1:9999/en/verify?token=abc',
+      // Right host and port, wrong scheme.
+      'ftp://127.0.0.1:3101/en/verify?token=abc',
+      // Not a URL at all.
+      'javascript:alert(1)',
+      '/en/verify?token=abc',
+      'not a url',
+      // Credentials in the authority, which some parsers mis-attribute.
+      'https://127.0.0.1:3101@attacker.example/en/verify',
+    ];
+
+    for (const link of refused) {
+      const response = await page.request.post(api, {
+        data: { ...base, link },
+        headers: { 'x-brandspace-service-token': token },
+      });
+      expect(response.status(), `must refuse: ${link}`).toBe(422);
+    }
+
+    /*
+     * AND NOTHING REACHED THE TRANSPORT. A refusal that still composed and sent
+     * the message would satisfy the status assertion above and fail the only
+     * one that matters.
+     */
+    expect((await recorded(page)).filter((entry) => entry.path === '/emails')).toEqual([]);
+
+    // A genuine dashboard link on the same route is accepted, so the guard is
+    // a boundary rather than a blanket refusal of the `link` field.
+    const accepted = await page.request.post(api, {
+      data: { ...base, link: `${DASHBOARD_BASE_URL}/en/verify?token=abc` },
+      headers: { 'x-brandspace-service-token': token },
+    });
+    expect(accepted.status()).toBe(200);
+
+    const sends = (await recorded(page)).filter((entry) => entry.path === '/emails');
+    expect(sends).toHaveLength(1);
+    expect(String((sends[0]!.body as Record<string, unknown>)['html'])).toContain(
+      `${DASHBOARD_BASE_URL}/en/verify?token=abc`,
     );
   });
 });

@@ -239,6 +239,37 @@ export class IntegrationsService {
       environment: input.environment,
     });
 
+    /*
+     * SOME PROVIDERS DECLARE THAT THEY CANNOT BE TESTED, and that declaration
+     * is enforced HERE rather than only by the screen that hides the button.
+     *
+     * The Hub omits the button for a provider marked `testable: false`, but a
+     * server action is reachable by anybody who can reach the action — hiding a
+     * control is presentation, not authorisation. Without this guard the
+     * request would fall through to the tester, find no case for the provider,
+     * and record a "no connection test is implemented" failure against a
+     * perfectly healthy integration.
+     *
+     * TWO PROVIDERS ARE IN THIS POSITION TODAY, both because the credential
+     * that does the job cannot answer a read: Cloudflare R2 (the Control Center
+     * holds no bucket credential) and Resend (a Sending-access key is refused
+     * every read the vendor offers). In both cases the honest answer is that
+     * this screen cannot tell, which is what gets recorded.
+     */
+    if (!definition.testable) {
+      const message =
+        `${definition.displayNameEn} cannot be tested from here. ` +
+        'Its credential is scoped to the one operation it performs and cannot answer a ' +
+        'read-only check, so a result from this screen would not mean anything.';
+      await this.#record(definition, input.environment, {
+        outcome: 'REFUSED',
+        latencyMs: null,
+        message,
+        requestedByPlatformUserId: input.requestedByPlatformUserId ?? null,
+      });
+      return this.get(input.actor, input.category, input.providerKey, input.environment);
+    }
+
     const refusal = selectionRefusal(definition, input.environment);
     if (refusal) {
       await this.#record(definition, input.environment, {

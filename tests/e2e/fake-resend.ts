@@ -18,6 +18,13 @@ import { createServer } from 'node:http';
  * whether a link is present — and, deliberately, the Authorization header, so a
  * test can prove the key travelled in the header and nowhere else. The recorded
  * key is the fixture's, which is not a credential.
+ *
+ * IT SERVES ONLY `POST /emails`, because that is the only Resend operation the
+ * product performs. A `GET /domains` handler lived here while the Control
+ * Center had a Test Connection button; both are gone, since the credential
+ * BrandSpace asks for is a Sending-access key that Resend refuses every read
+ * to. A stand-in that answered a call the product never makes would let a
+ * re-added read pass its tests against a fake more permissive than the vendor.
  */
 
 interface RecordedRequest {
@@ -67,14 +74,6 @@ const server = createServer((req, res) => {
       authorization: String(req.headers['authorization'] ?? ''),
       body,
     });
-
-    // `GET /domains` — what `verifyCredential()` asks. One verified domain, so
-    // Test Connection can report a truthful success.
-    if (url.pathname === '/domains') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ data: [{ id: 'fake-domain', name: 'brandspace.test' }] }));
-      return;
-    }
 
     // `POST /emails` — the send. Answers with a provider message id, which is
     // what the adapter returns and what makes a delivery traceable.

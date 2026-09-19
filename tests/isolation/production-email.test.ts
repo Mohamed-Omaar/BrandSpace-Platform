@@ -7,7 +7,7 @@ import {
   activeProviderSelection,
   findIntegration,
 } from '@brandspace/integrations';
-import { ResendEmailProvider, renderEmail } from '@brandspace/auth';
+import { renderEmail } from '@brandspace/auth';
 import { PLATFORM_PERMISSIONS } from '@brandspace/shared';
 import { appRoleClient, ensurePlatformRole, platformRoleClient } from './fixtures';
 
@@ -288,9 +288,57 @@ describe('the owner saves the Resend credential from the Hub', () => {
   });
 });
 
-describe('Test Connection', () => {
-  it('resolves the saved credential server-side and hands it to the adapter', async () => {
-    let received: string | null = null;
+describe('Resend is not testable from the Hub, and that is deliberate', () => {
+  /*
+   * THE LEAST-PRIVILEGE CREDENTIAL DECIDES THE SURFACE.
+   *
+   * BrandSpace asks for a Resend SENDING-ACCESS key restricted to the verified
+   * sending domain. It can send and do nothing else — every non-destructive
+   * check Resend offers is a read, and a send-only key is refused all of them.
+   *
+   * A Test Connection button therefore had three possible behaviours: report a
+   * correctly-scoped production key as broken, demand a Full Access key to make
+   * the tick go green, or send an unsolicited probe message to a real inbox.
+   * The registry marks the provider `testable: false` instead, and the proof
+   * the key works is the controlled smoke email the owner performs after
+   * activation.
+   *
+   * SAVE AND ACTIVATE REMAIN SEPARATE. Removing the middle step does not merge
+   * the other two, which the surrounding suites assert.
+   */
+  it('declares itself untestable rather than failing an honest key', () => {
+    const definition = findIntegration(CATEGORY, PROVIDER);
+    expect(definition?.testable).toBe(false);
+    // Still a real, usable adapter — untestable is not unavailable.
+    expect(definition?.adapterAvailable).toBe(true);
+    expect(definition?.developmentOnly).toBe(false);
+  });
+
+  it('asks for a send-only key by name, so nobody widens the scope to suit a button', () => {
+    const definition = findIntegration(CATEGORY, PROVIDER);
+    const apiKey = definition?.credentialFields.find((field) => field.key === 'apiKey');
+    expect(apiKey?.helpEn).toContain('SENDING ACCESS ONLY');
+    expect(apiKey?.helpEn).toContain('Do not use a Full Access key');
+  });
+
+  it('explains the missing button on the screen, in both languages', () => {
+    const definition = findIntegration(CATEGORY, PROVIDER);
+    expect(definition?.noteEn).toContain('no Test connection button');
+    expect(definition?.noteEn).toContain('smoke email');
+    expect(definition?.noteAr).not.toBe(definition?.noteEn);
+    expect(definition?.noteAr.length).toBeGreaterThan(40);
+  });
+
+  it('REFUSES a test request at the service, not merely by hiding a button', async () => {
+    /*
+     * THE SCREEN HIDES THE BUTTON; THIS IS WHAT ENFORCES IT. A server action is
+     * reachable by anybody who can reach the action, so an omitted control is
+     * presentation rather than authorisation. Without the guard the request
+     * would fall through to the tester, find no case for Resend, and record a
+     * "no connection test is implemented" failure against a healthy
+     * integration — a red mark an owner would act on.
+     */
+    let testerRan = false;
 
     const view = await integrations.testConnection({
       actor: owner(),
@@ -298,57 +346,29 @@ describe('Test Connection', () => {
       providerKey: PROVIDER,
       environment: ENV,
       tester: {
-        async test(input) {
-          const ref = input.credentialRefs['apiKey'];
-          expect(ref, 'the tester receives a reference, not a value').toBeTruthy();
-          expect(ref).not.toBe(FAKE_RESEND_KEY);
-          received = await secrets.resolveSecret(ref!, ENV);
-
-          /*
-           * THE REAL ADAPTER, constructed from the resolved value and a fake
-           * transport. `verifyCredential` must be a READ — Test Connection that
-           * sent a probe message would put an unrequested email in somebody's
-           * inbox every time an owner pressed a button.
-           */
-          let method = '';
-          let path = '';
-          const provider = new ResendEmailProvider({
-            apiKey: received,
-            fromEmail: input.settings['fromEmail'] ?? '',
-            baseUrl: 'https://resend.invalid',
-            fetch: async (url, init) => {
-              method = String(init.method);
-              path = new URL(url).pathname;
-              return new Response(JSON.stringify({ data: [] }), { status: 200 });
-            },
-          });
-          await provider.verifyCredential();
-          expect(method).toBe('GET');
-          expect(path).toBe('/domains');
-
-          return { ok: true, latencyMs: 1, message: 'Reached Resend with the saved key.' };
+        async test() {
+          testerRan = true;
+          return { ok: true, latencyMs: 1, message: 'This must never run.' };
         },
       },
       requestedByPlatformUserId: ownerId,
     });
 
-    // What arrives at the adapter is what the owner typed — not an environment
-    // variable, not a placeholder.
-    expect(received).toBe(FAKE_RESEND_KEY);
-    expect(view.connection).toBe('ok');
-  });
+    expect(testerRan, 'no adapter may be reached for an untestable provider').toBe(false);
+    expect(view.connection).not.toBe('ok');
 
-  it('keeps no plaintext in the health-check row it writes', async () => {
-    const rows = await platform.integrationHealthCheck.findMany({
+    // The refusal is RECORDED, and says why rather than reporting a failure.
+    const [latest] = await platform.integrationHealthCheck.findMany({
       where: { category: CATEGORY, providerKey: PROVIDER, environment: ENV },
       orderBy: { checkedAt: 'desc' },
-      take: 10,
+      take: 1,
     });
-    expect(rows.length).toBeGreaterThan(0);
-    expect(JSON.stringify(rows)).not.toContain(FAKE_RESEND_KEY);
+    expect(latest?.outcome).toBe('REFUSED');
+    expect(latest?.message).toContain('cannot be tested from here');
+    expect(JSON.stringify(latest)).not.toContain(FAKE_RESEND_KEY);
   });
 
-  it('activates nothing: a green test is not a switch', async () => {
+  it('is still inactive: nothing about removing the test activated it', async () => {
     const view = await integrations.get(owner(), CATEGORY, PROVIDER, ENV);
     expect(view.enabled).toBe(false);
 

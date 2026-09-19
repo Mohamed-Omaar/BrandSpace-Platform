@@ -847,13 +847,16 @@ process that can read the platform database and decrypt a credential. The owner
 workflow is:
 
 > Control Center → Integrations → Transactional email → Resend → enter the API
-> key and From address → **Save** → **Test connection** → **Activate**.
+> key and From address → **Save** → **Activate**.
 
-**Save ≠ Test ≠ Activate.** They are three deliberate acts. Saving writes the
-key to the Secret Service and the settings to the Configuration Service and
-activates nothing. Testing makes one read-only request and activates nothing —
-there is no automatic activation after a green test. Activating is a full
-configuration change with an author, a reason, an audit trail and a rollback.
+**Save ≠ Activate.** Two deliberate acts. Saving writes the key to the Secret
+Service and the settings to the Configuration Service and activates nothing.
+Activating is a full configuration change with an author, a reason, an audit
+trail and a rollback.
+
+**There is no Test connection step, and §16.2 explains why.** The proof that
+the credential works is the controlled smoke email after activation, which is
+the same operation the credential exists to perform.
 
 ### 16.2 Settings, and the one credential
 
@@ -867,12 +870,37 @@ configuration change with an author, a reason, an audit trail and a rollback.
 Nothing else. A larger form would be inventing settings the product does not
 use.
 
-**On Test connection:** it issues `GET /domains`, the least side-effectful
-operation that proves anything — it reads, writes nothing and sends no mail. It
-has one honest limitation, which the failure message states rather than hides: a
-key restricted to _Sending access_ cannot list domains and answers 401 even
-though it can send perfectly well. Use a key with domain read access to test, or
-accept that the check cannot distinguish a restricted key from a bad one.
+#### The credential is a SENDING-ACCESS key, and that decides the rest
+
+Use a Resend API key with **Sending access**, restricted to the verified sending
+domain. That is the least privilege that can do the job: it can send, and it can
+do nothing else — it cannot list domains, read the account or manage anything.
+
+**Which is why there is no Test connection button.** Every non-destructive check
+Resend offers is a READ, and a send-only key is refused all of them. A button
+here had exactly three possible behaviours, and all three are worse than no
+button:
+
+1. Call `GET /domains` and report 401 — telling an owner their correctly-scoped
+   production key is broken. A red tick on a working credential trains people to
+   ignore ticks.
+2. Ask for a **Full Access** key so the read succeeds — widening a production
+   credential's scope to light up a UI element, and then keeping it at that
+   scope in the vault forever.
+3. Send a probe message — an unsolicited email, to a real inbox, every time an
+   operator presses a button.
+
+The registry marks Resend `testable: false`, the Hub omits the button, and
+`IntegrationsService.testConnection` **refuses the request at the service** as
+well — a hidden control is presentation, not authorisation.
+
+**What proves the key instead:** the controlled smoke email after activation
+(`docs/RAILWAY-SMOKE-TEST.md` §7.2). One real signup, to an address the owner
+controls. It is the same operation the credential exists to perform, which makes
+it the only honest test of a send-only key.
+
+**Do not widen the key to get a green tick.** Nothing in the product asks for a
+Full Access key, and nothing should.
 
 ### 16.3 The secret boundary, and the internal delivery route
 
@@ -1135,7 +1163,7 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 18. **Re-run the smoke test** against the custom domains.
 19. **Repeat 3–18 for production**, with its own instances and its own secrets.
 20. **Activate Resend** in the Integrations Hub (§16.1): enter the key and From
-    address, Save, Test connection, Activate. Until this step, customer signup
+    address, Save, Activate. Until this step, customer signup
     verification, invitations and password reset are expected to fail closed.
     Re-run the smoke test's email items afterwards.
 21. **Only then**, the remaining external integrations — AI, social, payments —
@@ -1189,9 +1217,10 @@ in the repository.
 8. **Confirm PITR is enabled** on the production Postgres, and run a restore
    drill on staging. §17.
 9. **Create a Resend account**, verify the sending domain, and generate an API
-   key. A key with **domain read access** if Test connection should be able to
-   verify it — see §16.2 for why a Sending-access-only key reports a failure it
-   does not deserve. A separate key per environment.
+   key with **Sending access, restricted to that domain** — the least privilege
+   that can send. Do **not** create a Full Access key: nothing in the product
+   needs one, and §16.2 explains why no UI asks for one either. A separate key
+   per environment.
 10. **Generate `INTERNAL_SERVICE_TOKEN`** — `openssl rand -base64 48` — and set
     the same value on `dashboard`, `admin` and `api`, different per environment.
 11. **Decide bucket versioning and lifecycle policy** in Cloudflare (§17), since
