@@ -165,10 +165,7 @@ function forbidProductionValue(env: Env, name: keyof Env): void {
   }
 }
 
-function assertProductionSafety(
-  env: Env,
-  profile: StartupServiceProfile = 'complete',
-): void {
+function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'complete'): void {
   const deployment = currentEnvironment({ APP_ENV: env.APP_ENV });
   if (env.NODE_ENV !== 'production' && deployment !== 'PRODUCTION') return;
 
