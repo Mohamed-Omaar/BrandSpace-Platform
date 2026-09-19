@@ -16,7 +16,12 @@ import {
   type AdapterApplication,
   type ApplicationResolver,
 } from '@brandspace/social-connectors';
-import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import {
+  createLogger,
+  currentEnvironment,
+  internalErrorFields,
+  isAppError,
+} from '@brandspace/shared';
 import { route } from '../route-contract';
 
 /**
@@ -102,13 +107,6 @@ function configurationService(): ConfigurationService {
 function secretService(): SecretService {
   cachedSecrets ??= new SecretService({ prisma: getPlatformClient() });
   return cachedSecrets;
-}
-
-function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
 }
 
 /**

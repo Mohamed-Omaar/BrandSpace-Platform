@@ -49,11 +49,53 @@ export { deterministicPng } from './adapters/deterministic-image';
 export { MockProviderAdapter } from './adapters/mock';
 export type { MockAdapterOptions, MockCall, MockDirective } from './adapters/mock';
 
-export { AI_TASK_KEYS, AI_TASKS, findAiTask, isAiTaskKey, MVP_AI_TASK_KEYS } from './tasks';
+export {
+  AI_TASK_KEYS,
+  AI_TASKS,
+  capabilityForTask,
+  findAiTask,
+  isAiTaskKey,
+  MVP_AI_TASK_KEYS,
+  REQUESTED_AI_CAPABILITIES,
+  tasksForCapability,
+  tasksWithInconsistentModality,
+} from './tasks';
 export type { AiTaskDefinition, AiTaskKey } from './tasks';
 
-export { resolveRoute, RoutingError } from './routing';
-export type { RegisteredModel, ResolvedRoute, RoutingQuery, RoutingRule } from './routing';
+export {
+  assessCapability,
+  NO_CAPABILITY_ROUTING,
+  resolveCapabilityRoute,
+  resolveRoute,
+  RoutingError,
+} from './routing';
+export type {
+  AiRoutingProfile,
+  CapabilityCandidate,
+  CapabilityRoute,
+  CapabilityRouting,
+  RegisteredModel,
+  ResolvedRoute,
+  RoutingQuery,
+  RoutingRule,
+} from './routing';
+
+/* Phase 10 — the capability vocabulary (§5) and the catalogue it checks. */
+export {
+  AI_CAPABILITIES,
+  AI_CAPABILITY_KEYS,
+  capabilityRefusal,
+  findAiCapability,
+  isAiCapabilityKey,
+  modelSatisfies,
+  NO_MODEL_FEATURES,
+} from './capabilities';
+export type {
+  AiCapabilityDefinition,
+  AiCapabilityKey,
+  ModelFeatureDeclaration,
+  ModelFeatureRequirements,
+} from './capabilities';
 
 export {
   assessMargin,

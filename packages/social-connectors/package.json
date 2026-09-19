@@ -17,7 +17,6 @@
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/jobs": "workspace:*",
-    "@brandspace/providers": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "@brandspace/vault": "workspace:*"
   },

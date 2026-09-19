@@ -9,7 +9,11 @@ import {
   type MediaProcessingPayload,
   type PublishJobsPayload,
 } from '@brandspace/jobs';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import {
+  createLogger,
+  internalErrorFields,
+  validateStartupConfiguration,
+} from '@brandspace/shared';
 import { processAssetJob } from './processors/assets';
 import { processIngestionJob } from './processors/ingestion';
 import { processPublishJob, processVerifyJob } from './processors/publishing';
@@ -49,6 +53,23 @@ function connection(): IORedis {
 }
 
 async function main(): Promise<void> {
+  /*
+   * PHASE 10 §18 — VALIDATE THE ENVIRONMENT BEFORE CONSUMING ANYTHING.
+   *
+   * In production this throws and the process never reaches the queues, which
+   * is the whole point: a worker that comes up with a half-configured
+   * environment takes jobs, fails them, and retries them until somebody
+   * notices. Outside production it logs and continues, because a developer
+   * running one queue locally should not have to assemble a whole deployment.
+   */
+  const configuration = validateStartupConfiguration();
+  if (!configuration.ok) {
+    log.warn('configuration is incomplete', {
+      environment: configuration.environment,
+      problems: configuration.problems,
+    });
+  }
+
   log.info('worker starting', {
     queues: QUEUE_NAMES.map((name) => ({
       name,

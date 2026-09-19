@@ -703,6 +703,18 @@ than silently succeeding.
   pretending to work — see F-09.
 - **Nothing is logged**: audit events for create, rotate, disable, enable and revoke carry the ref and the
   actor, never the value. The isolation suite searches every raw row of the database for the plaintext.
+- **A credential entered in the Integrations Hub takes exactly this path** (D-218). The Hub's form writes
+  through `SecretService.createSecret` for an empty slot and `rotateSecret` for one already set, against a
+  deterministic reference so a rotation finds the secret it is replacing rather than orphaning it. The
+  configuration document stores that reference and never the value; the secret input is write-only and is
+  never pre-populated, because there is nothing to pre-populate it from. The browser-level suite asserts
+  the plaintext appears nowhere in the rendered HTML — not only in the visible text, because a value
+  echoed into an input's `value` attribute is invisible to a reader and perfectly readable to anyone with
+  the page source.
+- **Test Connection resolves at the adapter boundary, not in the Hub** (D-219). `packages/integrations`
+  hands the tester the credential REFERENCES from configuration; the tester exchanges them for values one
+  line before constructing an adapter, which is the `resolveSecret()` seam described above. The Hub
+  package itself cannot decrypt anything, and a unit guard asserts it cannot even name the operation.
 
 ### 18.5 Telemetry
 
@@ -2915,3 +2927,141 @@ Four further properties, each asserted rather than described:
 The dunning escalation ends at SUSPENDED. Nothing in the billing path deletes a customer resource, at
 any point, under any configuration — and the audit event records `dataRetained: true` explicitly so
 it cannot be misread later as a deletion. Export remains available throughout.
+
+---
+
+## 39. Phase 10 — the headers, the contract, and what refuses in production
+
+### 39.1 Content-Security-Policy was the control this platform did not have
+
+`nosniff` and `X-Frame-Options` cover the two easiest attacks. Neither does anything about an injected
+script, which is the one that reads a session, exfiltrates a workspace or drives a server action as the
+signed-in user. Phase 10 adds a CSP to all three applications, with a **per-request nonce**.
+
+```
+default-src 'self'
+script-src 'self' 'nonce-<per request>' 'strict-dynamic'
+style-src 'self' 'unsafe-inline'
+style-src-attr 'unsafe-inline'
+img-src 'self' data: blob:
+connect-src 'self'
+object-src 'none'
+base-uri 'self'
+form-action 'self'
+frame-ancestors 'none'
+upgrade-insecure-requests
+```
+
+**It lives in middleware, not `next.config.mjs`.** The nonce has to be minted per request, and Next.js
+reads the CSP off the INCOMING request headers to stamp that nonce onto its own inline bootstrap
+scripts. A static `headers()` block would produce a policy that blocks the framework's own scripts.
+
+**`'strict-dynamic'` is why the nonce is worth having.** A script the nonce admits may load the chunks
+it needs, so the policy survives a bundle change rather than needing a new host in an allow-list every
+time a file moves.
+
+**`style-src` still carries `'unsafe-inline'`, and the reason is stated rather than hidden.** This
+product styles through React `style` objects, which become style ATTRIBUTES, and CSP has no nonce
+mechanism for those. `style-src-attr` scopes the allowance to attributes rather than blessing arbitrary
+`<style>` blocks. Removing it is a design-system rewrite, not a security fix, and claiming a stricter
+policy than the one actually sent would help nobody.
+
+**The three directives whose absence is the classic gap are all closed.** Without `object-src 'none'` a
+plugin vector stays open; without `base-uri 'self'` an injected `<base>` redirects every relative
+script; without `form-action 'self'` an injected form posts a customer's input to somebody else's
+server. None of the three is visible by reading the string, which is why a unit test asserts each one.
+
+**A test also loads a real page and requires no CSP console violation.** A policy that blocks the
+framework's bootstrap produces a page that renders and does nothing — and every header assertion would
+still pass.
+
+### 39.2 Nothing behind a session is cacheable
+
+`private, no-store, max-age=0, must-revalidate` on every dashboard and Control Center response. Both
+directives are needed because different things read each: a shared proxy obeys `private`, a browser's
+back/forward cache obeys `no-store`. The classic disclosure is sign out, press Back, and read the
+previous customer's invoices on a shared machine.
+
+`Strict-Transport-Security` is sent **in production only**. Over http it means nothing, and from a
+developer's machine it would pin `localhost` to https in their browser for two years.
+
+### 39.3 The environment contract is now actually run
+
+`parseEnv` and the schema behind it have been in this repository since Phase 1, and until Phase 10 the
+only thing that ever called them was a unit test. Every guarantee in that file — the two session realms
+differing, no placeholder secret, the platform pool being a different role — was asserted against a
+fixture and enforced nowhere.
+
+`validateStartupConfiguration()` runs as `apps/api` and `apps/worker` come up. **In production it
+throws and the process does not start; outside production it logs and continues**, because a developer
+with half an environment should get a readable warning and a running process.
+
+Production additionally requires:
+
+- **All three key domains present and DIFFERENT.** Sharing one collapses three blast radii into one, and
+  the whole point of D-136 and D-206 is that a leaked key unwraps one thing.
+- **No secret carrying a template or CI marker** — `REPLACE_WITH`, `change-me`, `ci-only`, `example`.
+  A value copied out of `.env.example` is not a secret, and finding that out at the first sign-in is
+  finding out too late.
+- **No `BILLING_DEV_WEBHOOK_SECRET`.** Its only consumer cannot run in production, so its presence means
+  a production environment was assembled by copying a development one — and the next thing copied might
+  not be harmless.
+- **https on the public URLs.**
+
+### 39.4 Five development doubles that refuse
+
+| Double                          | Refuses at            | What it prevents                                                   |
+| ------------------------------- | --------------------- | ------------------------------------------------------------------ |
+| The deterministic AI provider   | Its constructor       | Invented marketing copy served as though a model wrote it          |
+| The outbox email provider       | Its constructor       | `status: 'SENT'` for a verification link nobody will ever receive  |
+| The filesystem object store     | Its factory           | Uploads on local disk, lost the first time an instance is replaced |
+| The development payment adapter | Route registration    | A mock checkout page existing at any URL in production             |
+| The mock social connectors      | Registry construction | A post marked `PUBLISHED` with an external id pointing at nothing  |
+
+**Refusing at the CONSTRUCTOR rather than at registration is the point** for the first two. Registration
+was already conditional for the AI mock in three separate files, which is three places to add a fourth
+and get it wrong.
+
+**And an unconfigured AI request fails closed correctly**, which is the part a unit test cannot show:
+with no adapter registered, routing still resolves and the pipeline still reserves — then the chain
+finds nothing to call, the request fails, the reservation is released and no ledger row is written. A
+failed provider request never results in a deduction (CLAUDE.md §2.4), including this failure.
+
+### 39.5 What may be logged, and what may never be
+
+**Phase 10 §20 asked for this to be written down rather than practised.** The redaction layer runs on
+every log sink and every error serializer (`@brandspace/observability`), and this is the contract it
+implements.
+
+**Never, under any circumstances:**
+
+| Never logged                                                    | Because                                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| API keys and provider secrets                                   | The whole point of the vault is that they exist in one place                    |
+| Passwords and password hashes                                   | A hash in a log is an offline cracking target with no rate limit                |
+| MFA secrets and recovery codes                                  | Either one defeats the second factor entirely                                   |
+| OAuth access and refresh tokens                                 | A customer's token is their account, and it is TENANT data                      |
+| Payment secrets and webhook signing keys                        | A signing key in a log lets anybody forge a paid invoice                        |
+| Complete `Authorization`, `Cookie` or `Set-Cookie` headers      | Each carries a live session                                                     |
+| Raw prompts and raw provider responses                          | The output-persistence policy forbids persisting them, and a log is persistence |
+| Customer content — post bodies, brand documents, uploaded files | It is the customer's, not ours                                                  |
+| A raw provider error, verbatim                                  | Providers echo request URLs, and request URLs carry credentials                 |
+
+**Routinely logged, and safe:**
+
+correlation and request ids · job ids and queue names · `workspaceId` (an opaque uuid, and the thing
+that makes a log line attributable at all) · `brandId` · the AI task key, capability and model key ·
+provider KEY, never its credential · a stable failure CODE from the closed taxonomy · latency ·
+counts and sizes · the deployment environment · a platform user id for an audited action.
+
+**Two rules that are easy to state and easy to break:**
+
+1. **`workspaceId` is logged; a workspace's CONTENT is not.** A log that helps an operator find one
+   tenant's failure is useful; one that lets them read that tenant's drafts is a second copy of the
+   product with no access control.
+2. **An error's `message` is for an operator, and an `AppError`'s public JSON is for a customer.** The
+   two are different strings on purpose (`AppError.toPublicJSON` omits the operator half), and
+   `internalErrorFields()` is the only approved way to put an exception into a log line.
+
+**Traces carry the same rule.** A span attribute is a log field with a different name: the secret
+actions record a ref, a category and an environment, and never a value.

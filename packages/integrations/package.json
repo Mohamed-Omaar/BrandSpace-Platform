@@ -1,5 +1,5 @@
 {
-  "name": "@brandspace/providers",
+  "name": "@brandspace/integrations",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,8 +13,11 @@
     "build": "tsc --emitDeclarationOnly --declarationDir dist"
   },
   "dependencies": {
+    "@brandspace/config": "workspace:*",
+    "@brandspace/database": "workspace:*",
+    "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
-    "@brandspace/config": "workspace:*"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "typescript": "5.9.3"

@@ -124,7 +124,7 @@ describe('the Secret Service is unreachable from tenant-facing surfaces (F-07)',
     ['apps/worker/src/__boundary_probe.ts', 'background workers'],
     ['packages/entitlements/src/__boundary_probe.ts', 'an ordinary domain package'],
     ['packages/ui/src/__boundary_probe.ts', 'the design system'],
-    ['packages/providers/src/__boundary_probe.ts', 'the provider adapters'],
+    ['packages/storage/src/__boundary_probe.ts', 'the object-storage boundary'],
   ])('rejects @brandspace/secrets in %s (%s)', (file) => {
     expect(lintSnippet(file, "import '@brandspace/secrets';")).toMatch(RESTRICTED);
   });
@@ -191,9 +191,17 @@ describe('Phase 2A packages stay inside their declared dependencies', () => {
       'secrets must not depend on configuration',
     ],
     [
-      'packages/providers/src/__boundary_probe.ts',
-      "import '@brandspace/database';",
-      'provider adapters must not read the database directly',
+      /*
+       * Phase 10. The Integrations Hub reads configuration, MASKED secret
+       * metadata and its own health table — and nothing else. It must not
+       * reach an adapter package: an import of `ai-gateway`, `billing`,
+       * `social-connectors` or `storage` would put it at the centre of the
+       * dependency graph and let a Control Center screen reach a customer
+       * OAuth token.
+       */
+      'packages/integrations/src/__boundary_probe.ts',
+      "import '@brandspace/ai-gateway';",
+      'the Integrations Hub must not import an adapter package',
     ],
     [
       'packages/config/src/__boundary_probe.ts',

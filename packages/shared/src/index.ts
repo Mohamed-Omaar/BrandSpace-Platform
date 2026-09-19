@@ -1,5 +1,7 @@
 export * from './brand-scope';
 export * from './clock';
+export * from './deployment';
+export * from './security-headers';
 export * from './env';
 export * from './errors';
 export * from './file-signature';

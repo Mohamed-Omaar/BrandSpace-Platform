@@ -316,7 +316,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -326,7 +326,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -350,9 +350,9 @@ export default defineConfig({
      *
      * That was merely wasteful at eight captures. At fifty-five, several of
      * them full-page shots of a document twelve thousand pixels tall, it turned
-     * a three-minute CI step into one that did not finish. The intent is now
-     * implemented rather than described: `pnpm e2e:screenshots` sets the flag,
-     * and nothing else runs it.
+     * a CI step that then took about three minutes into one that did not
+     * finish. The intent is now implemented rather than described:
+     * `pnpm e2e:screenshots` sets the flag, and nothing else runs it.
      */
     ...(process.env['BRANDSPACE_VISUAL_REVIEW'] === '1'
       ? [
@@ -444,6 +444,25 @@ export default defineConfig({
     },
     {
       /*
+       * PHASE 8 — the global Brand Context and Brand Profile.
+       *
+       * ITS OWN SERIAL PROJECT, for the reason approvals has one: it edits a
+       * brand's profile and puts it back, and two workers doing that at once
+       * would each see the other's intermediate state. It also changes the
+       * stored brand SELECTION, which is a cookie every other authenticated
+       * suite in the same browser context would then inherit.
+       */
+      name: 'brand-context',
+      testMatch: /brand-context\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
        * Approvals gets its own SERIAL project, for the reason the calendar and
        * the Studio already have one — and one more besides.
        *
@@ -459,25 +478,6 @@ export default defineConfig({
        * projects either: the suite sets its own phone viewport for the one test
        * that measures overflow, which is more honest than inferring layout from
        * which project happened to run.
-       */
-      name: 'brand-context',
-      testMatch: /brand-context\.spec\.ts/,
-      fullyParallel: false,
-      use: {
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1280, height: 800 },
-        launchOptions,
-      },
-    },
-    {
-      /*
-       * PHASE 8 — the global Brand Context and Brand Profile.
-       *
-       * ITS OWN SERIAL PROJECT, for the reason approvals has one: it edits a
-       * brand's profile and puts it back, and two workers doing that at once
-       * would each see the other's intermediate state. It also changes the
-       * stored brand SELECTION, which is a cookie every other authenticated
-       * suite in the same browser context would then inherit.
        */
       name: 'approvals',
       testMatch: /(approvals|viewer-read-only)\.spec\.ts/,
@@ -594,6 +594,35 @@ export default defineConfig({
        */
       name: 'content-studio',
       testMatch: /content-studio\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * PHASE 10 — the PLATFORM OWNER journey, in its own SERIAL project.
+       *
+       * IT MUTATES THE CONFIGURATION THE WHOLE SUITE READS. Activating and
+       * disabling an integration creates and activates a configuration version
+       * for the environment every other signed-in suite is reading, so two
+       * browsers doing it at once would each be asserting on the other's
+       * intermediate state — and the admin console suite would see drafts it
+       * did not create.
+       *
+       * IT ALSO DRIVES THE SAME CONTROL CENTER SESSION as `admin-console`,
+       * against the same configuration drafts. Those two must not overlap, and
+       * separate serial projects is how Playwright expresses that while still
+       * letting each run at its own pace.
+       *
+       * The viewport projects would add only interference: the suite sets its
+       * own phone viewport for the one test that measures overflow and runs axe
+       * in both directions itself.
+       */
+      name: 'phase10-platform',
+      testMatch: /phase10-platform\.spec\.ts/,
       fullyParallel: false,
       use: {
         ...devices['Desktop Chrome'],

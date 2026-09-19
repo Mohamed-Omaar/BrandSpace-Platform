@@ -75,6 +75,62 @@ const aiProvidersSchema = z.object({
  */
 const aiBillingUnit = z.enum(['1k_tokens', 'image', 'second', 'character', 'request']);
 
+/**
+ * The AI capability vocabulary, as configuration sees it.
+ *
+ * DELIBERATELY A COPY. `@brandspace/ai-gateway` owns the definitions — which
+ * modality each capability executes as, and which model features it requires —
+ * and this package may not import it: the dependency runs the other way
+ * (`ai-gateway` reads configuration, not the reverse). The modality enum a few
+ * lines below is duplicated for exactly the same reason and has been since
+ * Phase 4.
+ *
+ * WHAT KEEPS THE TWO HONEST is not this comment: `tests/unit/ai-capabilities.test.ts`
+ * asserts the two lists are identical, so adding a capability in one place and
+ * not the other fails the build rather than silently making a capability
+ * unconfigurable.
+ */
+/**
+ * What each capability REQUIRES of a model, as configuration sees it.
+ *
+ * The same deliberate copy as the key list below, and for the same reason: the
+ * activation check has to be able to refuse a route whose model does not
+ * declare what the capability needs, and it cannot ask `@brandspace/ai-gateway`.
+ * `tests/unit/ai-capabilities.test.ts` asserts this table matches the one that
+ * owns it, field for field.
+ *
+ * `executionModality` is the model modality the capability runs on;
+ * `requires` names the feature flags that must be true on the model.
+ */
+export const AI_CAPABILITY_REQUIREMENTS: Record<
+  string,
+  { readonly executionModality: string; readonly requires: readonly string[] }
+> = {
+  TEXT_LIGHT: { executionModality: 'text', requires: [] },
+  CONTENT_STANDARD: { executionModality: 'text', requires: [] },
+  REASONING_COMPLEX: { executionModality: 'text', requires: ['supportsStructuredOutput'] },
+  IMAGE_GENERATION: { executionModality: 'image', requires: [] },
+  VISION_ANALYSIS: { executionModality: 'text', requires: ['supportsVision'] },
+  EMBEDDINGS: { executionModality: 'embedding', requires: ['supportsEmbeddings'] },
+  SPEECH_TO_TEXT: { executionModality: 'voice', requires: ['supportsAudioInput'] },
+  TEXT_TO_SPEECH: { executionModality: 'voice', requires: ['supportsAudioOutput'] },
+  VIDEO_GENERATION: { executionModality: 'video', requires: [] },
+  MODERATION: { executionModality: 'moderation', requires: [] },
+};
+
+const aiCapabilityKey = z.enum([
+  'TEXT_LIGHT',
+  'CONTENT_STANDARD',
+  'REASONING_COMPLEX',
+  'IMAGE_GENERATION',
+  'VISION_ANALYSIS',
+  'EMBEDDINGS',
+  'SPEECH_TO_TEXT',
+  'TEXT_TO_SPEECH',
+  'VIDEO_GENERATION',
+  'MODERATION',
+]);
+
 const aiModelsSchema = z.object({
   models: z
     .array(
@@ -125,22 +181,84 @@ const aiModelsSchema = z.object({
          * arrives.
          */
         qualityBenchmarkRef: z.string().nullable().default(null),
-      }),
-    )
-    .default([]),
-});
 
-const aiModelCapabilitiesSchema = z.object({
-  capabilities: z
-    .array(
-      z.object({
-        modelKey: z.string().min(1),
-        contextWindow: z.number().int().positive().nullable(),
-        maxOutputTokens: z.number().int().positive().nullable(),
-        supportsStreaming: z.boolean().default(false),
+        /*
+         * ------------------------------------------------------------------
+         * PHASE 10 — THE MODEL CATALOGUE (§6).
+         *
+         * Everything below describes what a model IS, so the router can decide
+         * what it may be used FOR. It replaces the `ai.model-capabilities`
+         * domain, which described the same models in a second document that
+         * nothing read: one model, one record, no chance of the two disagreeing
+         * about whether a model supports tools.
+         * ------------------------------------------------------------------
+         */
+
+        /**
+         * Capability keys this model is declared able to serve.
+         *
+         * DECLARED, NEVER INFERRED. A model is eligible for a capability
+         * because an operator said so and the feature flags below back it up —
+         * not because its name looks like a reasoning model. Routing refuses a
+         * model that is not declared here even when an operator names it in a
+         * route, primary or fallback alike (§7).
+         */
+        capabilities: z.array(aiCapabilityKey).default([]),
+
+        /* Feature declarations the capability requirements are checked against. */
+        supportsVision: z.boolean().default(false),
+        supportsStructuredOutput: z.boolean().default(false),
         supportsToolUse: z.boolean().default(false),
-        supportsJsonMode: z.boolean().default(false),
+        supportsAudioInput: z.boolean().default(false),
+        supportsAudioOutput: z.boolean().default(false),
+        supportsEmbeddings: z.boolean().default(false),
+        supportsStreaming: z.boolean().default(false),
+
+        /** Descriptive limits. `null` means the operator has not entered one. */
+        contextWindowTokens: z.number().int().positive().nullable().default(null),
+        maxOutputTokens: z.number().int().positive().nullable().default(null),
+        /** BCP-47 tags the provider states the model handles well. */
         languages: z.array(z.string()).default([]),
+
+        /**
+         * How quick this model is, relative to the others in the catalogue.
+         *
+         * A TIER AND NOT A NUMBER, because a millisecond figure entered by hand
+         * is stale the day after it is typed and invites routing decisions that
+         * look precise and are not. `qualityTier` above already works this way.
+         */
+        latencyTier: z.enum(['fast', 'standard', 'slow']).default('standard'),
+
+        /*
+         * PRICES THAT ARE NOT PER TOKEN.
+         *
+         * `inputCostPerUnitMicroMinor` / `outputCostPerUnitMicroMinor` above
+         * carry the per-`costUnit` rates and are unchanged. An image model and
+         * a speech model are billed by things a token rate cannot express, so
+         * they get their own optional fields rather than an overloaded one that
+         * means a different thing depending on modality.
+         *
+         * All `null` until an operator enters real numbers. No price is
+         * invented here (CLAUDE.md §2.2).
+         */
+        imageCostPerImageMicroMinor: z.number().int().nonnegative().nullable().default(null),
+        audioCostPerSecondMicroMinor: z.number().int().nonnegative().nullable().default(null),
+        audioCostPerCharacterMicroMinor: z.number().int().nonnegative().nullable().default(null),
+
+        /**
+         * When these prices took effect, as an ISO date.
+         *
+         * WHAT IT IS FOR, and what it is NOT for. Historical usage rows already
+         * store the cost basis they were charged under, so yesterday is never
+         * recalculated at today's rates (§6, D-213). This field is the
+         * OPERATOR-FACING record of when the current rates were entered, so a
+         * margin report that suddenly moves has a date to point at.
+         */
+        pricingEffectiveFrom: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .default(null),
       }),
     )
     .default([]),
@@ -234,6 +352,59 @@ const aiRoutingSchema = z.object({
  * budget nobody set must not quietly refuse a customer's request, and a number
  * invented here would be a commercial decision made in source (CLAUDE.md §2.2).
  */
+/**
+ * CAPABILITY ROUTING AND ROUTING PROFILES — Phase 10 §7 and §8.
+ *
+ * WHAT THIS ADDS TO `ai.routing`, which is unchanged and still authoritative.
+ * A rule in `ai.routing` names one TASK and wins outright when it matches; this
+ * document is the layer beneath it, answering "what serves COMPLEX REASONING"
+ * once instead of once per feature. Resolution order is therefore: workspace
+ * task rule, plan task rule, global task rule, then the capability route. An
+ * operator who wants one feature on a different model still writes one task
+ * rule and nothing else changes.
+ *
+ * WHY PROFILES ARE A STRATEGY AND NOT A SAVED SET OF MODELS. "Economy" cannot
+ * be a list of model keys in source without this file naming vendors, which
+ * CLAUDE.md §2.2 forbids outright. It is instead a RANKING RULE applied to the
+ * catalogue the owner filled in: economy prefers the cheapest model that
+ * actually declares the capability, premium prefers the highest quality tier,
+ * balanced splits on whether the capability is a cheap one or a reasoning one.
+ * The algorithm invents no vendor, no model and no price — it only orders what
+ * is already there, and it is empty until the owner enters a catalogue.
+ *
+ * `custom` turns the strategy off entirely: the routes below are the answer,
+ * and a capability with no primary model is unavailable and says so.
+ */
+const aiRoutingProfile = z.enum(['economy', 'balanced', 'premium', 'custom']);
+
+const aiCapabilityRoutesSchema = z.object({
+  activeProfile: aiRoutingProfile.default('custom'),
+  routes: z
+    .array(
+      z.object({
+        capability: aiCapabilityKey,
+        enabled: z.boolean().default(true),
+        /**
+         * Explicit choices. Required under `custom`; under a strategy profile
+         * they are an OVERRIDE for that one capability, and null means "let the
+         * profile choose".
+         */
+        primaryModelKey: z.string().nullable().default(null),
+        fallbackModelKeys: z.array(z.string()).max(2).default([]),
+        timeoutMs: z.number().int().positive().max(600_000).default(30_000),
+        retryPolicy: aiRoutingRetrySchema.default({}),
+        maxCostPerRequestMinor: z.number().int().nonnegative().nullable().default(null),
+        /** Ceiling on generated length, independent of the model maximum. */
+        maxOutputTokens: z.number().int().positive().max(200_000).nullable().default(null),
+        /** Refuse a model below this tier even when a profile would pick it. */
+        minimumQualityTier: z.enum(['fast', 'balanced', 'premium']).nullable().default(null),
+        /** Break ties toward speed or toward cost. Never overrides capability. */
+        latencyPreference: z.enum(['fastest', 'balanced', 'cheapest']).nullable().default(null),
+      }),
+    )
+    .default([]),
+});
+
 const aiBudgetLimitsSchema = z.object({
   creditsPerDayMilli: z.number().int().nonnegative().nullable().default(null),
   creditsPerMonthMilli: z.number().int().nonnegative().nullable().default(null),
@@ -1991,10 +2162,11 @@ export const CONFIG_DOMAINS = {
   // schemaVersion 2 adds the D-13 eligibility gates a provider must clear
   // before it can be activated.
   'ai.providers': { schema: aiProvidersSchema, schemaVersion: 2 },
-  // schemaVersion 3 adds the cost basis each model is priced from and the
-  // D-17 Arabic-benchmark reference it needs before general availability.
-  'ai.models': { schema: aiModelsSchema, schemaVersion: 3 },
-  'ai.model-capabilities': { schema: aiModelCapabilitiesSchema, schemaVersion: 1 },
+  // schemaVersion 4 is the Phase 10 catalogue: capability declarations, the
+  // feature flags they are checked against, descriptive limits, a latency tier
+  // and the prices that are not per token. It absorbed `ai.model-capabilities`,
+  // a domain that described the same models in a second document nothing read.
+  'ai.models': { schema: aiModelsSchema, schemaVersion: 4 },
   // schemaVersion 3 adds `parameters`, `retryPolicy`, moderation and the
   // output-retention window. All carry defaults, so an earlier payload still
   // parses; the bump records that new drafts are written against the wider
@@ -2003,6 +2175,10 @@ export const CONFIG_DOMAINS = {
   // schemaVersion 3 adds the credit-to-currency reference margin needs and the
   // D-15 target gross margin that credit prices are derived from.
   'ai.credit-rules': { schema: aiCreditRulesSchema, schemaVersion: 3 },
+  // Phase 10. The capability layer beneath `ai.routing`, plus the active
+  // routing profile. It names no vendor: a profile RANKS the catalogue the
+  // owner entered, and `custom` turns the ranking off.
+  'ai.capability-routing': { schema: aiCapabilityRoutesSchema, schemaVersion: 1 },
   'ai.budgets': { schema: aiBudgetsSchema, schemaVersion: 1 },
   plans: { schema: plansSchema, schemaVersion: 1 },
   entitlements: { schema: entitlementsSchema, schemaVersion: 1 },

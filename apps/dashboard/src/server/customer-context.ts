@@ -25,6 +25,7 @@ import {
   TenantCatalogueSource,
   UsageService,
 } from '@brandspace/entitlements';
+import { currentEnvironment } from '@brandspace/shared';
 
 /**
  * Server-only customer context.
@@ -130,13 +131,6 @@ export function getUnscopedEmailProvider(): EmailProvider {
   return new OutboxEmailProvider(prisma());
 }
 
-export function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
-
 /**
  * Resolve the signed-in customer, or null.
  *
@@ -207,6 +201,38 @@ export async function requireWorkspace(
   return { customer, workspace, token };
 }
 
+/**
+ * The same resolution as `requireWorkspace`, for a ROUTE HANDLER.
+ *
+ * WHY IT CANNOT REUSE `requireWorkspace`. That function redirects, which is
+ * correct for a page and wrong for a fetch: a browser following a 307 to the
+ * sign-in HTML instead of receiving a 401 turns an expired session into a
+ * parse error. This returns null and lets the caller choose the status.
+ *
+ * EVERYTHING ELSE IS IDENTICAL, including the parts that matter: the workspace
+ * comes from the SESSION and never from the URL or a body, membership is
+ * re-verified on this request, and a missing permission resolves to null so the
+ * caller answers 404 rather than 403 (docs/SECURITY.md §2.3).
+ */
+export async function resolveApiWorkspace(
+  permissionKey?: string,
+): Promise<WorkspaceSession | null> {
+  const customer = await getCustomer().catch(() => null);
+  if (!customer) return null;
+  const token = (await getSessionToken()) ?? '';
+  const available = await getCustomerAuth()
+    .listWorkspaces(token)
+    .catch(() => null);
+  if (available === null || available.length === 0) return null;
+
+  const workspace = customer.activeWorkspaceId
+    ? available.find((w) => w.workspaceId === customer.activeWorkspaceId)
+    : undefined;
+  if (!workspace) return null;
+  if (permissionKey && !workspace.permissionKeys.includes(permissionKey)) return null;
+  return { customer, workspace, token };
+}
+
 /** The membership-service actor shape, built in one place so none is partial. */
 export function membershipActor(session: WorkspaceSession): {
   userId: string;
@@ -219,3 +245,10 @@ export function membershipActor(session: WorkspaceSession): {
     permissionKeys: session.workspace.permissionKeys,
   };
 }
+
+/**
+ * Re-exported from `@brandspace/shared` so every caller in this app keeps its
+ * existing import. The DEFINITION moved: it used to live here, and in eleven
+ * other files, each a private copy of the same four lines (Phase 10 §18).
+ */
+export { currentEnvironment };

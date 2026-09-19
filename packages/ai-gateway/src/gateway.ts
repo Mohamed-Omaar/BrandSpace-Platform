@@ -28,7 +28,9 @@ import {
   type ModelCostBasis,
 } from './pricing';
 import {
+  NO_CAPABILITY_ROUTING,
   resolveRoute,
+  type CapabilityRouting,
   type RegisteredModel,
   type ResolvedRoute,
   type RoutingRule,
@@ -73,6 +75,14 @@ export interface AiConfiguration {
   readonly models: readonly RegisteredModel[];
   readonly costBases: readonly ModelCostBasis[];
   readonly routingRules: readonly RoutingRule[];
+  /**
+   * The capability layer beneath the task rules — Phase 10 §7.
+   *
+   * OPTIONAL so a source written before Phase 10 (a test double, a fixture)
+   * still satisfies the interface, and so its absence means exactly what an
+   * empty document means: no capability route configured.
+   */
+  readonly capabilityRouting?: CapabilityRouting;
   readonly creditRules: readonly CreditRule[];
   readonly budgets: AiBudgets;
 }
@@ -228,6 +238,7 @@ export class AiGateway {
       { taskKey: request.taskKey, workspaceId: request.workspaceId, planKey: request.planKey },
       config.routingRules,
       config.models,
+      config.capabilityRouting ?? NO_CAPABILITY_ROUTING,
     );
 
     const multiplier = request.creditMultiplierBasisPoints ?? 10_000;
@@ -342,6 +353,7 @@ export class AiGateway {
       { taskKey: request.taskKey, workspaceId: request.workspaceId, planKey: request.planKey },
       config.routingRules,
       config.models,
+      config.capabilityRouting ?? NO_CAPABILITY_ROUTING,
     );
 
     const multiplier = request.creditMultiplierBasisPoints ?? 10_000;
@@ -435,6 +447,10 @@ export class AiGateway {
           taskKey: request.taskKey,
           idempotencyKey: request.idempotencyKey,
           routingTaskKey: route.taskKey,
+          // Phase 10 — which capability constrained the choice, and which
+          // profile ranked it. Null profile means a TASK rule answered.
+          routingCapability: route.capability,
+          routingProfile: route.profile,
           resolvedModelKey: modelKey,
           attemptedModelKeys: [],
           status: 'PENDING',

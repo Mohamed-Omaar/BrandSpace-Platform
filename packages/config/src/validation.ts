@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import { systemClock } from '@brandspace/shared';
-import { CONFIG_DOMAINS, type ConfigDomain } from './domains';
+import { AI_CAPABILITY_REQUIREMENTS, CONFIG_DOMAINS, type ConfigDomain } from './domains';
 
 /**
  * Two-stage validation — docs/ARCHITECTURE.md §7.2.
@@ -68,6 +68,46 @@ interface ModelLike {
   inputCostPerUnitMicroMinor?: number | null;
   outputCostPerUnitMicroMinor?: number | null;
   qualityBenchmarkRef?: string | null;
+  // Phase 10 — the catalogue fields a capability check reads.
+  modality?: string;
+  qualityTier?: string;
+  capabilities?: string[];
+  supportsVision?: boolean;
+  supportsStructuredOutput?: boolean;
+  supportsToolUse?: boolean;
+  supportsAudioInput?: boolean;
+  supportsAudioOutput?: boolean;
+  supportsEmbeddings?: boolean;
+}
+
+/**
+ * Why a model may not serve a capability, or null when it may — Phase 10 §7.
+ *
+ * The SAME rule the router applies at request time, applied here at activation
+ * time. Two places rather than one is deliberate: the router must check because
+ * a model can be disabled after a route is activated, and activation must check
+ * because discovering an impossible route on a customer request means the
+ * customer discovers it too.
+ */
+function capabilityRefusalFor(capability: string, model: ModelLike): string | null {
+  const requirement = AI_CAPABILITY_REQUIREMENTS[capability];
+  if (!requirement) return `names capability "${capability}", which is not defined`;
+  if (!(model.capabilities ?? []).includes(capability)) {
+    return `model "${model.key}" is not declared for ${capability}`;
+  }
+  if (model.modality !== undefined && model.modality !== requirement.executionModality) {
+    return (
+      `${capability} needs a ${requirement.executionModality} model, ` +
+      `and "${model.key}" is ${model.modality}`
+    );
+  }
+  const missing = requirement.requires.filter(
+    (flag) => (model as unknown as Record<string, boolean | undefined>)[flag] !== true,
+  );
+  if (missing.length > 0) {
+    return `model "${model.key}" does not declare ${missing.join(', ')}, which ${capability} requires`;
+  }
+  return null;
 }
 interface ProviderLike {
   key: string;
@@ -151,6 +191,119 @@ function semantic(
             `Model "${model.key}" is servable but has no cost basis. ` +
             'Enter the provider input and output rates before activating it.',
         });
+      }
+    }
+
+    /*
+     * PHASE 10 — a capability a model DECLARES but cannot actually serve.
+     *
+     * A tick box is not a capability. If an operator declares VISION_ANALYSIS
+     * on a model whose vision flag is off, the declaration is refused here
+     * rather than becoming a route that fails on a customer request.
+     */
+    for (const [i, model] of ((doc['models'] ?? []) as ModelLike[]).entries()) {
+      for (const capability of model.capabilities ?? []) {
+        if (!AI_CAPABILITY_REQUIREMENTS[capability]) continue; // the enum refused it
+        const refusal = capabilityRefusalFor(capability, model);
+        if (refusal !== null) {
+          issues.push({
+            severity: 'error',
+            path: `models.${i}.capabilities`,
+            message: `Declares ${capability} but ${refusal}.`,
+          });
+        }
+      }
+    }
+  }
+
+  if (domain === 'ai.capability-routing') {
+    const models = ((context['ai.models'] as { models?: ModelLike[] })?.models ??
+      []) as ModelLike[];
+    const byKey = new Map(models.map((m) => [m.key, m]));
+    const profile = String(doc['activeProfile'] ?? 'custom');
+    const seen = new Set<string>();
+
+    for (const [i, raw] of ((doc['routes'] ?? []) as Record<string, unknown>[]).entries()) {
+      const capability = String(raw['capability']);
+      if (seen.has(capability)) {
+        issues.push({
+          severity: 'error',
+          path: `routes.${i}.capability`,
+          message: `A route for ${capability} is already defined. One capability, one route.`,
+        });
+      }
+      seen.add(capability);
+
+      const enabled = raw['enabled'] !== false;
+      const primary = raw['primaryModelKey'] === null ? null : String(raw['primaryModelKey'] ?? '');
+      const fallbacks = ((raw['fallbackModelKeys'] ?? []) as unknown[]).map(String);
+
+      /*
+       * `custom` means the routes ARE the answer, so an enabled capability with
+       * no primary model is a gap the operator has to close. Under a strategy
+       * profile the same row legitimately means "let the profile choose".
+       */
+      if (profile === 'custom' && enabled && !primary) {
+        issues.push({
+          severity: 'error',
+          path: `routes.${i}.primaryModelKey`,
+          message:
+            `The custom profile routes by this table, and ${capability} has no primary model. ` +
+            'Name one, switch the capability off, or choose a routing profile.',
+        });
+      }
+
+      // A named model must be able to do the work — PRIMARY AND FALLBACK ALIKE.
+      // §7: a fallback may never silently violate the required capabilities.
+      for (const [position, key] of [primary, ...fallbacks].entries()) {
+        if (!key) continue;
+        const model = byKey.get(key);
+        if (byKey.size === 0) continue; // no catalogue in context yet
+        const where = position === 0 ? 'primaryModelKey' : `fallbackModelKeys.${position - 1}`;
+        if (!model) {
+          issues.push({
+            severity: 'error',
+            path: `routes.${i}.${where}`,
+            message: `Routes to model "${key}", which is not defined in ai.models.`,
+          });
+          continue;
+        }
+        if (model.status === 'disabled' || model.disableSwitch === true) {
+          issues.push({
+            severity: 'error',
+            path: `routes.${i}.${where}`,
+            message: `Routes to model "${key}", which is disabled.`,
+          });
+          continue;
+        }
+        const refusal = capabilityRefusalFor(capability, model);
+        if (refusal !== null) {
+          issues.push({
+            severity: 'error',
+            path: `routes.${i}.${where}`,
+            message: `${position === 0 ? 'Primary' : 'Fallback'} for ${capability} cannot serve it: ${refusal}.`,
+          });
+        }
+      }
+
+      const minimum = raw['minimumQualityTier'];
+      if (typeof minimum === 'string' && byKey.size > 0) {
+        const rank: Record<string, number> = { fast: 1, balanced: 2, premium: 3 };
+        const floor = rank[minimum] ?? 0;
+        const anyAbove = models.some(
+          (m) =>
+            (m.capabilities ?? []).includes(capability) &&
+            (rank[m.qualityTier ?? 'fast'] ?? 0) >= floor,
+        );
+        if (!anyAbove) {
+          issues.push({
+            severity: 'warning',
+            path: `routes.${i}.minimumQualityTier`,
+            message:
+              `No model declared for ${capability} reaches the "${minimum}" tier, so this route ` +
+              'cannot resolve. Lower the floor or add a model.',
+          });
+        }
       }
     }
   }

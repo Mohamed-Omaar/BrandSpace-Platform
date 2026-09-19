@@ -130,6 +130,7 @@ describe('the CSS mirror cannot drift from the TypeScript tokens', () => {
     ['--bs-surface', colorTokens.surface],
     ['--bs-app-background', colorTokens.appBackground],
     ['--bs-border-strong', colorTokens.borderStrong],
+    ['--bs-document-rule', colorTokens.documentRule],
     ['--bs-text-primary', colorTokens.textPrimary],
     ['--bs-danger', colorTokens.danger],
     ['--bs-focus-ring', colorTokens.focusRing],
@@ -783,7 +784,8 @@ describe('the design showcase cannot reach production', () => {
   });
 
   it('no page hand-rolls a heading; only the shells write one', () => {
-    // The three shells that own a page title. Every other file composes.
+    // The shells that own a page title, and the one document that is its own
+    // page. Every other file composes.
     const SHELLS = [
       'apps/dashboard/src/components/auth-card.tsx',
       'apps/admin/src/components/platform-auth.tsx',
@@ -791,6 +793,17 @@ describe('the design showcase cannot reach production', () => {
       // blue: §15 scopes this revision to the dashboard and the console, and
       // restyling the marketing site is not this change's business.
       'apps/web/src/components/app-shell.tsx',
+      /*
+       * AND ONE FILE THAT IS NOT A SHELL AND NOT A PAGE — it is a DOCUMENT.
+       *
+       * `/[locale]/billing/invoices/[id]/document` deliberately has no
+       * `WorkspaceShell`, no navigation and no `PageHeader`: it is an invoice at
+       * A4 proportions, and what a customer sends their accountant is this page
+       * printed. Its `<h1>` is the invoice number, typeset in points so that
+       * screen and paper cannot drift apart; composing a `PageHeader` would put
+       * application chrome on an accounting document. Phase 10 §23, D-216.
+       */
+      'apps/dashboard/src/app/[locale]/billing/invoices/[invoiceId]/document/page.tsx',
     ];
     const offenders = [
       ...collectSourceFiles('apps/dashboard/src'),

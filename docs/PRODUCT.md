@@ -677,3 +677,49 @@ different questions, and collapsing them buries the invoices under an entitlemen
   and export remains available.
 - **A suspension withdraws access and keeps everything.** The words are on the screen, because that
   is the moment a customer most needs to be told what is NOT happening.
+
+---
+
+## 14. Phase 10 — what the platform gained, and what it still waits for
+
+### 14.1 For the customer
+
+| Screen                           | What is new                                                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Billing & Usage → an invoice** | A link to the document, and a PDF download                                                                                                             |
+| **The invoice document**         | A standalone printable route — no navigation, no chrome, A4 proportions, bilingual and correctly bidirectional. What a customer sends their accountant |
+| **Billing & Usage**              | An accounting export: invoices, credit notes and payments for a period, as CSV or JSON                                                                 |
+
+**And one thing that is deliberately honest rather than complete:** the server-generated PDF is English
+only until a licensed Arabic font is chosen (D-216). The screen says so, and the bilingual document —
+which is the one a customer actually prints — is complete today.
+
+### 14.2 For the platform owner
+
+**Integrations** is new, and it is the screen this product was missing: one place that answers "what is
+this platform connected to" — and the place an owner connects one. Categories, environments, declared
+capabilities, masked credentials, connection status, verification history, and the three operations that
+are deliberately separate: **Save configuration**, **Test connection**, **Activate**.
+
+**Connecting a provider takes one screen.** The provider page renders a form from the fields its adapter
+declares, saves settings through the Configuration Service and credentials through the Secret Service,
+and creates the provider's configuration record if it does not exist yet. The generic Configuration and
+Secrets pages remain for inspection, advanced administration and recovery; neither is a required step
+(D-218).
+
+**Routing** now shows the capability layer: the active profile, every capability with the models
+eligible to serve it, and — for each declared model — WHY it is excluded when it is.
+
+**Health** and the **console overview** show the same readiness verdict the platform's own probe
+returns, plus the production integration gaps.
+
+### 14.3 What Phase 10 deliberately did not do
+
+- **It activated no external provider.** Every provider BrandSpace can talk to today is a development
+  double, and every row of the Integrations screen says so.
+- **It chose no payment provider** (D-21, D-204), no AI vendor (D-13) and registered no social developer
+  application (D-18, D-19).
+- **It added no metrics backend** (D-217). Request volume and queue depth need a time-series store
+  nobody has chosen, and the console says so rather than drawing an empty chart.
+
+**The platform is complete. What remains is configuration an owner enters.**

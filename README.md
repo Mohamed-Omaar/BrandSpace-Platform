@@ -32,12 +32,12 @@ Permanent project rules are in [`CLAUDE.md`](CLAUDE.md).
 
 ## Prerequisites
 
-| Tool       | Version                          |
-| ---------- | -------------------------------- |
-| Node.js    | ≥ 22                             |
-| pnpm       | ≥ 10                             |
-| PostgreSQL | 16+                              |
-| Redis      | 7+ (not yet required in Phase 1) |
+| Tool       | Version                                                                  |
+| ---------- | ------------------------------------------------------------------------ |
+| Node.js    | ≥ 22                                                                     |
+| pnpm       | ≥ 10                                                                     |
+| PostgreSQL | 16+                                                                      |
+| Redis      | 7+ — **required from Phase 5B onwards** for the isolation and E2E suites |
 
 ---
 
@@ -194,7 +194,7 @@ pnpm --filter @brandspace/worker    dev
 ```bash
 pnpm test              # unit + isolation
 pnpm test:unit         # unit tests, no database needed
-pnpm test:isolation    # tenant isolation + RLS + platform role, needs PostgreSQL
+pnpm test:isolation    # tenant isolation + RLS + platform role, needs PostgreSQL AND Redis
 pnpm gate:isolation    # the D-29 coverage gate
 
 pnpm e2e:build         # build the three apps (Playwright serves the production output)
@@ -203,6 +203,13 @@ pnpm test:e2e          # runs e2e:seed, then Playwright
 pnpm test:e2e:ui       # the same suite in Playwright's UI mode
 pnpm test:e2e:report   # open the HTML report from the last run
 ```
+
+**START REDIS BEFORE THE ISOLATION SUITE.** Several suites dispatch a background job and assert on what
+the worker did with it. With `REDIS_URL` set and nothing listening, the client retries rather than
+failing fast, so each of those tests burns its full timeout — the run takes seventeen minutes instead
+of three and reports five files "failing" with no cause. It reads exactly like a regression and is not.
+`tests/isolation/global-setup.ts` now prints a warning when it detects this; the fix is to start Redis,
+or to unset `REDIS_URL` if the file you are running touches no queue.
 
 The E2E suite needs a **migrated test database**, because the Control Center is a real, session-gated
 application — a suite that only exercised the signed-out state would prove nothing about it:

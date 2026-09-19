@@ -249,6 +249,7 @@ take it on trust.
 | `/[locale]/billing`, `/billing/invoices/[invoiceId]`, `/billing/checkout/[outcome]` | **Billing & Usage.** The demo's `#customer/billing` route is `simpleFeaturePage('billing')` — the "Future product preview" placeholder with three identical cards. There is no plan grid, no invoice table, no invoice document and no checkout return state in the Landing repository at the pinned commit | `packages/ui`'s `Card`, `SectionHeader`, `Banner`, `StateMessage`, `DataTable`, `Field`, `Button` and the tokens; the shared shell. The subscription/credits pair is the SAME `bs-split-main` composition `/[locale]/plan` already uses, deliberately, so a reader moving between "what am I entitled to" and "what do I owe" meets one page design. The plan and pack grids are the auto-fit card grid the Campaigns list uses; the invoice list is the `DataTable` the members and activity routes use; the invoice document is the `Card` + definition-list composition the settings routes use. Nothing new was drawn, and no amount is rendered anywhere except through `formatMoney`, which takes the number of decimals from the currency itself | D-204, D-205 |
 | `/[locale]/onboarding`, `/onboarding/workspace` | **The first-run checklist and workspace creation.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. Signing up is the one journey a product demo has no reason to draw | `Card`, `SectionHeader`, `Field`, `Button` and the tokens; the shared shell for the checklist, and `AuthCard` — the existing sign-in/reset composition — for creation, because creating a first workspace happens before there is a workspace for the shell to be about. The checklist rows are the same list geometry `/[locale]/plan`'s usage list uses, with the same hairline separators | D-210 |
 | `/[locale]/sign-up`, `/sign-up/sent`, `/verify`, `/mfa` | **Signup, verification and the second factor.** The demo has a marketing site and a signed-in product; it has no account-creation flow at all | `AuthCard`, `Field`, `Banner` and the auth control styles — the IDENTICAL composition `/sign-in` and `/reset` already use, in the same order. A reader arriving from the marketing site meets the same card they will meet again at every later sign-in | D-206 |
+| `/[locale]/billing/invoices/[invoiceId]/document` | **The invoice as a printable document.** The demo has no invoice at all, and this is not a screen in the first place: it is a document that happens to be served over HTTP, with no navigation, no shell and A4 proportions | Deliberately NOT the dashboard shell, and that absence is the design decision. It is the platform's typography scale, the platform's own `surface`, `textPrimary` and `textSecondary` tokens, one new token (`documentRule` — a rule weight that survives a printer, where the screen borders do not), and the same definition-list and table composition the invoice SCREEN uses — so the two say the same thing in the same order. Its `@page` rules and print colours are declared inline on the route, because an accounting document must not be alterable by a change to a shared stylesheet. Every amount renders through `formatMoney`, which takes its decimals from the currency itself | D-216 |
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
@@ -354,6 +355,47 @@ and it is not registered at all when `APP_ENV=production`.
 
 It is listed here rather than left unexplained because a reader scanning for unstyled surfaces would
 otherwise find it and reasonably file a bug.
+
+### 6.8 Phase 10 — the Control Center's Integrations Hub
+
+The manifest above covers CUSTOMER routes. The Control Center has never had a demo reference of any
+kind — it is not in the Landing repository at all — and its screens have been composed from
+`packages/ui` and the `admin-shell` primitives since Phase 2A. **Integrations** continues that, and is
+recorded here because it is the largest admin screen added since.
+
+**Composed from:** `PageIntro`, `SectionHeader`, `DataTable`, `Cell`, `EmptyState` and the existing
+console button, input and typography styles — the identical composition the Secrets, Plans, Providers
+and Routing pages already use. Nothing new was drawn.
+
+**Two rules it follows that are easy to get wrong on a status screen:**
+
+- **Colour is never the only carrier of meaning** (WCAG 2.2 AA 1.4.1). Every state is a WORD first and
+  a colour second: "Active", "Not active", "Complete", "Incomplete", "Working", "Failed", "Never
+  tested". A reader who cannot distinguish the two greens still reads the row correctly.
+- **A refusal is a sentence, not a disabled control.** When a development double cannot be activated in
+  production, the page says why and what to do instead. A greyed-out button teaches nothing, and an
+  owner evaluating vendors is exactly the reader who needs the reason.
+
+**The detail route** (`/console/integrations/[category]/[providerKey]`) is the same composition again,
+with the masked-credential table using the console's existing mono-caption style for the hint and the
+fingerprint. The change-reason input is the existing `inputStyle()`; the activate and disable controls
+are `primaryButtonStyle()` and `secondaryButtonStyle()`.
+
+**The configuration form added by the Phase 10 correction is composed, not drawn.** Every control is
+the console's existing `inputStyle()` with `.bs-control`, laid out with the same label-above-field grid
+the Secrets and Configuration pages already use; the generated-values table is the same `DataTable`.
+Nothing new was created for it, which is why there is no new component to record here.
+
+**Three things about it are product decisions rather than visual ones**, recorded because a reader
+scanning the form will notice each and might reasonably file a bug:
+
+- **A secret input is always empty, including on a provider that has one saved.** It is not a rendering
+  oversight; nothing in this product can read a stored value back to pre-populate it. The field's help
+  text says so, and the placeholder says what an empty box means.
+- **A generated value renders as a read-only row, not an input.** A webhook URL is the address of one of
+  our own routes, so an input for it would be a way to redirect a payment callback.
+- **The form is generated from the registry.** A provider that declares no settings and no credentials —
+  which is every development double except the payment one — correctly shows no form at all.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 

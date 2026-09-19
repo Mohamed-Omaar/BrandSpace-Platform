@@ -1086,3 +1086,100 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-38.3 | A real id from another workspace and a fabricated id fail identically                                      | `commerce-tenancy`              |
 | AC-38.4 | The tenant role has no access to the webhook inbox or the invoice-number counter at all                    | `commerce-tenancy`              |
 | AC-38.5 | Every new tenant-owned model carries `workspaceId`, RLS with FORCE, a policy, D-29 registration and a test | `isolation-gate`, `rls-raw-sql` |
+
+---
+
+## 27. Phase 10 Acceptance Criteria — Platform Completion & Production Readiness
+
+> Every row is settled by a named suite. `phase10-integrations` and `phase10-production` run against
+> REAL PostgreSQL; `phase10-platform.spec` drives a real browser through the owner's journey.
+>
+> **What "settled" means here is narrower than in earlier phases**, and deliberately. Phase 10 finishes
+> the PLATFORM; it activates no external provider. A row proven against a development adapter says the
+> platform's side is complete — it does not say a vendor has been tested, and none has.
+
+### AC-39 The Integrations Hub (Phase 10, settled)
+
+| ID      | Criterion                                                                                                                       | Settled by                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| AC-39.1 | Every external system BrandSpace can connect to is described in ONE registry, and the screen is generated from it               | `phase10-integrations`, `integrations-registry` |
+| AC-39.2 | The Hub lists no provider without an adapter, so "configure and activate from the Control Center" is true of every row it shows | `phase10-integrations`                          |
+| AC-39.3 | A credential is shown masked — a hint, a fingerprint, a rotation date — and no read path for a value exists anywhere            | `integrations-registry`, `phase10-platform`     |
+| AC-39.4 | Test Connection records its outcome, including refusals and never-attempted, and activates nothing                              | `phase10-integrations`, `phase10-platform`      |
+| AC-39.5 | Activation is a configuration change with an author, a reason, validation, an audit event and a rollback                        | `phase10-platform`                              |
+| AC-39.6 | `integration_health_check` is platform-owned; the tenant role is refused a read, a count and a write                            | `phase10-integrations`                          |
+
+### AC-45 The Hub is the configuration surface, not only the inspection surface (Phase 10 correction, settled)
+
+| ID       | Criterion                                                                                                                              | Settled by                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| AC-45.1  | A provider with an adapter is configured entirely from its own page: enter settings and credentials, save, test, activate              | `phase10-platform`                                                            |
+| AC-45.2  | The form is generated from the registry's `settingFields` and `credentialFields`; a provider declaring neither gets no form            | `integrations-configuration`, `phase10-platform`                              |
+| AC-45.3  | Saving creates the provider's configuration record when none exists, so no visit to the Configuration page is required first           | `phase10-hub-configuration`, `integrations-configuration`                     |
+| AC-45.4  | Credentials are written through the existing Secret Service; the configuration document holds a stable reference and never a value     | `phase10-hub-configuration`                                                   |
+| AC-45.5  | A secret input is write-only and never pre-populated; an empty box leaves the stored credential untouched                              | `integrations-configuration`, `phase10-platform`                              |
+| AC-45.6  | Re-entering a credential rotates it against the same reference, and neither the old nor the new value is recoverable from the page     | `phase10-hub-configuration`, `phase10-platform`                               |
+| AC-45.7  | Save does not activate, and Test does not activate                                                                                     | `integrations-configuration`, `phase10-hub-configuration`, `phase10-platform` |
+| AC-45.8  | Test Connection resolves the saved configuration's references at the adapter boundary, never a process environment variable            | `phase10-hub-configuration`                                                   |
+| AC-45.9  | Undeclared fields and unknown provider keys are refused or never read; a generated field is never taken from a form                    | `integrations-configuration`, `phase10-hub-configuration`                     |
+| AC-45.10 | A credential write requires `platform.secret.manage` and verified MFA; the configuration edit requires `platform.configuration.manage` | `phase10-hub-configuration`                                                   |
+| AC-45.11 | Audit events record the slot, the reference and whether the write was a creation or a rotation — and never a value                     | `phase10-hub-configuration`                                                   |
+| AC-45.12 | The form renders in ar and en, RTL and LTR, with translated labels and no accessibility violation                                      | `phase10-platform`                                                            |
+
+### AC-40 AI capabilities, catalogue and routing (Phase 10, settled)
+
+| ID      | Criterion                                                                                                           | Settled by                            |
+| ------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| AC-40.1 | Product code requests a CAPABILITY; which model serves it is configuration alone                                    | `ai-capability-routing`               |
+| AC-40.2 | A model may serve a capability only if it is DECLARED for it and its feature flags back the declaration up          | `ai-capability-routing`               |
+| AC-40.3 | A fallback that cannot satisfy the capability is excluded, never served — checked at activation AND at request time | `ai-capability-routing`               |
+| AC-40.4 | Economy, Balanced, Premium and Custom all resolve, and none can promote an undeclared model                         | `ai-capability-routing`               |
+| AC-40.5 | The catalogue carries limits, modalities, tiers and per-unit, per-image and per-second prices — none in source      | `ai-capability-routing`               |
+| AC-40.6 | An existing task rule still wins outright, so every pre-Phase-10 route resolves exactly as before                   | `ai-capability-routing`, `ai-routing` |
+| AC-40.7 | A capability an operator switched off refuses as a DECISION, distinguishable from a configuration gap               | `ai-capability-routing`               |
+
+### AC-41 Production fails closed (Phase 10, settled)
+
+| ID      | Criterion                                                                                                | Settled by                                  |
+| ------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| AC-41.1 | The deterministic AI provider cannot be CONSTRUCTED when `APP_ENV=production`                            | `production-safety`                         |
+| AC-41.2 | The outbox email provider likewise, and `createEmailProvider` refuses rather than reporting mail as sent | `production-safety`, `phase10-production`   |
+| AC-41.3 | No development-only integration can be selected for production, in one function every caller shares      | `production-safety`, `phase10-integrations` |
+| AC-41.4 | With no AI provider configured, a request fails closed, releases its reservation and charges nothing     | `phase10-production`                        |
+| AC-41.5 | Production requires all three key domains, present and DIFFERENT                                         | `production-safety`                         |
+| AC-41.6 | A secret still carrying a template or CI marker refuses production start-up                              | `production-safety`                         |
+| AC-41.7 | The environment contract is validated at start-up: production throws, development warns                  | `production-safety`                         |
+
+### AC-42 Health, readiness and observability (Phase 10, settled)
+
+| ID      | Criterion                                                                                                   | Settled by                              |
+| ------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| AC-42.1 | Liveness depends on nothing external, so a dependency blip cannot restart the fleet                         | `platform-health`                       |
+| AC-42.2 | Readiness probes the database for real and returns 503 only when a REQUIRED dependency is down              | `platform-health`, `phase10-production` |
+| AC-42.3 | Losing an optional dependency degrades the capability it serves and names it, rather than failing readiness | `platform-health`                       |
+| AC-42.4 | The public probe reveals a state per named check and no hostname, role, version or driver error             | `platform-health`, `phase10-production` |
+| AC-42.5 | The Control Center reaches the SAME verdict from the same function, with operator detail added              | `phase10-platform`                      |
+
+### AC-43 Security hardening (Phase 10, settled)
+
+| ID      | Criterion                                                                                 | Settled by                                   |
+| ------- | ----------------------------------------------------------------------------------------- | -------------------------------------------- |
+| AC-43.1 | Every app sends a Content-Security-Policy with a per-request nonce and `'strict-dynamic'` | `security-headers`, `phase10-platform`       |
+| AC-43.2 | `object-src`, `base-uri`, `form-action` and `frame-ancestors` are all closed              | `security-headers`                           |
+| AC-43.3 | HSTS is sent in production and never outside it                                           | `security-headers`                           |
+| AC-43.4 | Nothing behind a session is cacheable — `private` AND `no-store`                          | `security-headers`, `phase10-platform`       |
+| AC-43.5 | No secret value is reachable from any browser, any API response or any audit payload      | `phase10-integrations`, `phase10-production` |
+
+### AC-44 The invoice document and the accounting export (Phase 10, settled)
+
+| ID      | Criterion                                                                                                        | Settled by           |
+| ------- | ---------------------------------------------------------------------------------------------------------------- | -------------------- |
+| AC-44.1 | The document is built from the stored row and its snapshots; a later price or address change does not rewrite it | `invoice-document`   |
+| AC-44.2 | Amounts render at the currency's OWN scale, so a three-digit currency stays three-digit                          | `invoice-document`   |
+| AC-44.3 | The document sets both languages and both directions, and prints as one document from one markup                 | `phase10-platform`   |
+| AC-44.4 | The server-rendered PDF is a valid file with a correct cross-reference table                                     | `invoice-document`   |
+| AC-44.5 | An Arabic PDF is REFUSED with a stated reason rather than served as empty boxes (D-216)                          | `invoice-document`   |
+| AC-44.6 | The accounting export carries exact minor units AND the scaled decimal, and quotes every field                   | `invoice-document`   |
+| AC-44.7 | A credit note exports as a negative, so a period reconciles to what was actually billed                          | `invoice-document`   |
+| AC-44.8 | Jurisdiction fields are explicit columns; no country's tax law is encoded as universal                           | `invoice-document`   |
+| AC-44.9 | An invoice or an export belonging to another workspace is a 404, shaped like an id that never existed            | `phase10-production` |

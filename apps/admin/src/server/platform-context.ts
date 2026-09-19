@@ -25,6 +25,8 @@ import {
 } from '@brandspace/entitlements';
 import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
+import { IntegrationsService, type IntegrationDefinition } from '@brandspace/integrations';
+import { currentEnvironment } from '@brandspace/shared';
 
 /**
  * Server-only platform context for the Control Center.
@@ -53,6 +55,46 @@ export function getSecretService(): SecretService {
 
 export function getConfigService(): ConfigurationService {
   return new ConfigurationService({ prisma: getPlatformPrisma() });
+}
+
+/**
+ * The Integrations Hub — Phase 10 §2.
+ *
+ * IT OWNS NOTHING AND JOINS THREE THINGS: the configuration that selects a
+ * provider, the MASKED credential metadata the Secret Service holds, and the
+ * `integration_health_check` rows recording what happened last time we called.
+ * Every one of those already required the platform identity, which is why this
+ * lives here beside the others rather than being reachable from the dashboard.
+ */
+export function getIntegrationsService(): IntegrationsService {
+  return new IntegrationsService({
+    prisma: getPlatformPrisma(),
+    configuration: getConfigService(),
+    secrets: getSecretService(),
+  });
+}
+
+/**
+ * The setting values BrandSpace computes rather than asks for — correction §10.
+ *
+ * A WEBHOOK URL IS OURS. It is the address of a route in this product, so the
+ * owner's job is to copy it into the provider's console, not to type it into
+ * ours. Rendering it as an input would have been an invitation to point a
+ * payment callback at somebody else's host, and `saveConfiguration` filters this
+ * map by the registry's `generated` flag so a caller cannot smuggle an ordinary
+ * setting through it.
+ */
+export function generatedSettingsFor(
+  definition: IntegrationDefinition,
+): Readonly<Record<string, string>> {
+  const apiBaseUrl = (process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003').replace(
+    /\/+$/,
+    '',
+  );
+  if (definition.category === 'payment') {
+    return { webhookUrl: `${apiBaseUrl}/v1/billing/webhook/${definition.providerKey}` };
+  }
+  return {};
 }
 
 export function getPlatformAuth(): PlatformAuthService {
@@ -177,13 +219,6 @@ export function getEmailProvider(): EmailProvider {
   return new OutboxEmailProvider(getPlatformPrisma());
 }
 
-export function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
-
 export { getPlatformPrisma };
 
 /**
@@ -275,3 +310,10 @@ export class PlatformAccessError extends Error {
     this.name = 'PlatformAccessError';
   }
 }
+
+/**
+ * Re-exported from `@brandspace/shared` so every caller in this app keeps its
+ * existing import. The DEFINITION moved: it used to live here, and in eleven
+ * other files, each a private copy of the same four lines (Phase 10 §18).
+ */
+export { currentEnvironment };

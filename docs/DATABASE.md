@@ -1762,3 +1762,45 @@ authoritative provider event, never a customer action (D-209).
 tag, wrapped data key and the authenticated context that binds it to that one user. The seed itself
 is never stored: the plaintext exists only in the QR code shown once at enrolment. It is sealed under
 `CUSTOMER_MFA_VAULT_KEK`, a third key domain, for the reasons in D-206.
+
+---
+
+## 20. Phase 10 — Integrations
+
+### 20.1 One table, and it holds observations
+
+`integration_health_check` is **platform-owned**: ENABLE + FORCE row-level security, a `platform_only`
+policy, `REVOKE ALL ... FROM brandspace_app`, and isolation coverage proving the tenant role is refused
+a read, a count and a write.
+
+| Column                      | Notes                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| `category`, `providerKey`   | The registry's vocabulary. Plain text, so adding a category needs no migration   |
+| `environment`               | `DeploymentEnvironment`                                                          |
+| `outcome`                   | `OK` / `FAILED` / `NOT_CONFIGURED` / `REFUSED`                                   |
+| `latencyMs`                 | Null when nothing was attempted                                                  |
+| `message`                   | Operator-facing, safe to display. Never a credential, never a raw provider error |
+| `requestedByPlatformUserId` | `ON DELETE SET NULL`                                                             |
+| `checkedAt`                 | Indexed with the lookup key, descending                                          |
+
+**Why a table and not configuration.** Which provider is configured, with which settings and which
+credential references, is CONFIGURATION — versioned, validated, activatable, rollback-able, and it stays
+in the configuration service. "The credential worked at 14:02" is an OBSERVATION: not a setting anybody
+chose, and versioning it alongside the settings would turn every health check into a configuration
+change with an author and an activation.
+
+**Why no tenant access at all.** A row names a platform credential reference and whether it works. One
+workspace being able to COUNT BrandSpace's provider failures is a disclosure in itself, so the policy
+admits `brandspace_platform` and nobody else — the same reasoning that made `billing_event`
+platform-owned in Phase 9.
+
+**`ON DELETE SET NULL`, not CASCADE.** An operator leaving the company must not erase the record that a
+production credential was verified before it was used. An isolation test reads
+`information_schema.referential_constraints` and asserts the rule rather than trusting the schema file.
+
+### 20.2 The index is named explicitly, and drift is how that was found
+
+`@@index(..., map: "integration_health_check_lookup_idx")`. Prisma's generated name for this index is
+truncated to `integration_health_check_category_providerKey_environment_c_idx`, while the migration
+writes the readable one — a difference the drift check in `f80-migration-upgrade` caught before it
+reached a review. The schema now names it, so the two agree.

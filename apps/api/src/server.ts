@@ -1,5 +1,10 @@
 import Fastify from 'fastify';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import {
+  createLogger,
+  currentEnvironment,
+  internalErrorFields,
+  validateStartupConfiguration,
+} from '@brandspace/shared';
 import { registerBrandBrainRoutes } from './routes/brand-brain';
 import { registerContentRoutes } from './routes/content';
 import { registerCreativeRoutes } from './routes/creative';
@@ -27,6 +32,25 @@ import { MaintenanceScheduler } from './scheduler';
 export async function buildServer() {
   const app = Fastify({ logger: false, disableRequestLogging: true });
   const log = createLogger({ context: { service: 'api' } });
+
+  /*
+   * PHASE 10 §18 — VALIDATE THE ENVIRONMENT BEFORE A ROUTE EXISTS.
+   *
+   * The schema in `@brandspace/shared` has described this contract since Phase
+   * 1 and, until Phase 10, nothing but a unit test ever ran it: the two session
+   * realms differing, no placeholder secret, a separate platform role — all
+   * asserted against a fixture and enforced nowhere. In production this throws
+   * and the API does not come up. Outside production it logs, because a
+   * developer with half an environment should get a readable warning and a
+   * running server.
+   */
+  const configuration = validateStartupConfiguration();
+  if (!configuration.ok) {
+    log.warn('configuration is incomplete', {
+      environment: configuration.environment,
+      problems: configuration.problems,
+    });
+  }
 
   app.addHook('onRequest', async (req, reply) => {
     // Correlation id on every request — docs/ARCHITECTURE.md §3.10.
@@ -73,13 +97,6 @@ export async function buildServer() {
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;
-}
-
-function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
 }
 
 /*

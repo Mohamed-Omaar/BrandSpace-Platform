@@ -22,7 +22,12 @@ import type { InsightDenialSink } from '@brandspace/analytics';
 import type { CopilotDenialSink } from '@brandspace/copilot';
 import type { AutomationDenialSink } from '@brandspace/automation';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import {
+  createLogger,
+  currentEnvironment,
+  internalErrorFields,
+  isAppError,
+} from '@brandspace/shared';
 
 /**
  * The shared plumbing every Phase 7 route needs.
@@ -51,14 +56,6 @@ export function configurationService(): ConfigurationService {
   return cachedConfiguration;
 }
 
-export function currentEnvironment(): 'DEVELOPMENT' | 'STAGING' | 'PRODUCTION' {
-  // APP_ENV, not NODE_ENV: every built app has NODE_ENV=production (D-97).
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
-
 /**
  * Build the gateway once per process.
  *
@@ -73,7 +70,23 @@ export function gateway(): AiGateway {
   const platform = getPlatformClient();
   const environment = currentEnvironment();
   const adapters = new Map<string, AiProviderAdapter>([
-    ['mock', new MockProviderAdapter({ answerFromContext: environment !== 'PRODUCTION' })],
+    /*
+     * PHASE 10 §11 — NO ADAPTER AT ALL IN PRODUCTION, rather than a mock with
+     * its context-answering turned off.
+     *
+     * With no adapter registered, routing still resolves and the pipeline still
+     * reserves, but the chain finds nothing to call and the request fails with
+     * MODEL_UNAVAILABLE — which releases the reservation, charges nothing, and
+     * shows the customer "this is temporarily unavailable". That is the honest
+     * outcome when no AI provider has been configured. Serving invented text
+     * that looks like a model wrote it is the outcome this replaces.
+     *
+     * `MockProviderAdapter` also refuses to be constructed in production, so
+     * this is the second of two locks rather than the only one.
+     */
+    ...(environment === 'PRODUCTION'
+      ? []
+      : ([['mock', new MockProviderAdapter({ answerFromContext: true })]] as const)),
   ]);
   cachedGateway = new AiGateway({
     prisma: platform,
@@ -322,3 +335,10 @@ export function automationDenialSink(workspaceId: string): AutomationDenialSink 
     );
   };
 }
+
+/**
+ * Re-exported from `@brandspace/shared` so every caller in this app keeps its
+ * existing import. The DEFINITION moved: it used to live here, and in eleven
+ * other files, each a private copy of the same four lines (Phase 10 §18).
+ */
+export { currentEnvironment };

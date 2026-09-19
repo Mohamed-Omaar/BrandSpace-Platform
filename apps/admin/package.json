@@ -11,11 +11,12 @@
   "dependencies": {
     "@brandspace/ai-gateway": "workspace:*",
     "@brandspace/auth": "workspace:*",
+    "@brandspace/billing": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
+    "@brandspace/integrations": "workspace:*",
     "@brandspace/observability": "workspace:*",
-    "@brandspace/providers": "workspace:*",
     "@brandspace/secrets": "workspace:*",
     "@brandspace/shared": "workspace:*",
     "@brandspace/ui": "workspace:*",

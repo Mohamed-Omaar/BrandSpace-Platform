@@ -28,13 +28,16 @@ export class ConfigurationAiSource implements AiConfigurationSource {
     // Read together rather than one at a time: five sequential round trips on
     // the path of every AI request is latency the customer pays for. The
     // service caches each domain, so a warm process does no I/O at all.
-    const [providers, models, routing, creditRules, budgets] = await Promise.all([
-      this.#configuration.get('ai.providers', this.#environment),
-      this.#configuration.get('ai.models', this.#environment),
-      this.#configuration.get('ai.routing', this.#environment),
-      this.#configuration.get('ai.credit-rules', this.#environment),
-      this.#configuration.get('ai.budgets', this.#environment),
-    ]);
+    const [providers, models, routing, capabilityRouting, creditRules, budgets] = await Promise.all(
+      [
+        this.#configuration.get('ai.providers', this.#environment),
+        this.#configuration.get('ai.models', this.#environment),
+        this.#configuration.get('ai.routing', this.#environment),
+        this.#configuration.get('ai.capability-routing', this.#environment),
+        this.#configuration.get('ai.credit-rules', this.#environment),
+        this.#configuration.get('ai.budgets', this.#environment),
+      ],
+    );
 
     return {
       providers: providers.providers.map((provider) => ({
@@ -51,6 +54,21 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         qualityTier: model.qualityTier,
         status: model.status,
         disableSwitch: model.disableSwitch,
+        // Phase 10 — what the operator declared this model can do, and what it
+        // costs. Carried through verbatim; the router decides, not this file.
+        capabilities: model.capabilities,
+        features: {
+          vision: model.supportsVision,
+          structuredOutput: model.supportsStructuredOutput,
+          toolUse: model.supportsToolUse,
+          audioInput: model.supportsAudioInput,
+          audioOutput: model.supportsAudioOutput,
+          embeddings: model.supportsEmbeddings,
+        },
+        latencyTier: model.latencyTier,
+        inputCostPerUnitMicroMinor: model.inputCostPerUnitMicroMinor,
+        outputCostPerUnitMicroMinor: model.outputCostPerUnitMicroMinor,
+        imageCostPerImageMicroMinor: model.imageCostPerImageMicroMinor,
       })),
       // Only models whose rates an operator has actually entered get a cost
       // basis. The rest have none, and `providerCostMicroMinor` refuses them
@@ -82,6 +100,21 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         moderateInput: rule.moderateInput,
         moderationModelKey: rule.moderationModelKey,
       })),
+      capabilityRouting: {
+        activeProfile: capabilityRouting.activeProfile,
+        routes: capabilityRouting.routes.map((route) => ({
+          capability: route.capability,
+          enabled: route.enabled,
+          primaryModelKey: route.primaryModelKey,
+          fallbackModelKeys: route.fallbackModelKeys,
+          timeoutMs: route.timeoutMs,
+          retryPolicy: route.retryPolicy,
+          maxCostPerRequestMinor: route.maxCostPerRequestMinor,
+          maxOutputTokens: route.maxOutputTokens,
+          minimumQualityTier: route.minimumQualityTier,
+          latencyPreference: route.latencyPreference,
+        })),
+      },
       creditRules: creditRules.costs.map((cost) => ({
         taskKey: cost.taskKey,
         modelKey: cost.modelKey,

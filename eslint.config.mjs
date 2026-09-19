@@ -32,9 +32,20 @@ const ALLOWED_IMPORTS = {
   // be able to import this without pulling the database or the domain packages
   // in, and the payloads are pointers rather than data (payloads.ts).
   jobs: ['shared'],
-  providers: ['shared', 'config'],
+  /*
+   * Phase 10 — the Integrations Hub. It reads CONFIGURATION, joins it with
+   * MASKED secret metadata, and records health checks through the platform
+   * database client.
+   *
+   * NOT `ai-gateway`, `billing`, `social-connectors` or `storage`, and that
+   * absence is the design. Testing a connection means running an adapter, and
+   * an import of all four would put this package at the centre of the graph and
+   * let a Control Center screen reach a customer OAuth token. The caller
+   * injects an `IntegrationTester` instead.
+   */
+  integrations: ['shared', 'database', 'config', 'secrets'],
   entitlements: ['shared', 'database', 'config'],
-  'ai-gateway': ['shared', 'database', 'config', 'entitlements', 'providers'],
+  'ai-gateway': ['shared', 'database', 'config', 'entitlements'],
   // Brand Brain reads configuration, enforces entitlements, and routes every
   // AI operation through the gateway rather than touching a provider itself.
   'brand-brain': ['shared', 'database', 'config', 'entitlements', 'ai-gateway', 'storage'],
@@ -54,22 +65,14 @@ const ALLOWED_IMPORTS = {
   // Approvals — "is this item cleared to go?" — and takes it through a narrow
   // interface the caller injects, exactly as the calendar takes `ApprovalGate`.
   // A package dependency would have bought the same answer and a cycle risk.
-  'social-connectors': [
-    'shared',
-    'database',
-    'config',
-    'entitlements',
-    'providers',
-    'vault',
-    'jobs',
-  ],
+  'social-connectors': ['shared', 'database', 'config', 'entitlements', 'vault', 'jobs'],
   /*
    * Phase 9 — the commercial domain. It reaches `entitlements` for the plan
    * catalogue and the credit ledger port, and `vault` for nothing at all: a
    * payment provider's credentials belong to the Secret Service, and hosted
    * checkout means no instrument ever reaches this package to be sealed.
    */
-  billing: ['shared', 'database', 'config', 'entitlements', 'providers'],
+  billing: ['shared', 'database', 'config', 'entitlements'],
   /*
    * Phase 9 — joining. It composes the commercial geography (`billing`), the
    * plan catalogue and the ledger (`entitlements`) and the activated
@@ -215,8 +218,23 @@ function packageBoundary(pkg) {
           paths: pkg === 'database' ? [] : DB_ACCESS_PATHS,
           patterns: [
             PLATFORM_POOL_PATTERN,
-            // Only auth may reach the Secret Service among packages.
-            ...(pkg === 'auth' || pkg === 'secrets' ? [] : [SECRETS_PATTERN]),
+            /*
+             * Only `auth` and `integrations` may reach the Secret Service
+             * among packages.
+             *
+             * `integrations` needs it for MASKED METADATA ONLY — a hint, a
+             * fingerprint, a rotation date — which is what the Control Center
+             * shows beside each provider. It calls `listSecrets`, which
+             * requires a platform actor and returns no value; there is no
+             * `resolveSecret` call in the package and no code path that could
+             * make one. The import is still restricted rather than open,
+             * because the package that can name the Secret Service is one edit
+             * away from decrypting with it, and this list is where that edit
+             * gets noticed.
+             */
+            ...(pkg === 'auth' || pkg === 'secrets' || pkg === 'integrations'
+              ? []
+              : [SECRETS_PATTERN]),
             // No package outside database may open a platform-scoped client.
             ...(pkg === 'database' ? [] : [PLATFORM_CLIENT_PATTERN]),
             ...[...forbiddenPackages, ...forbiddenApps].map((name) => ({

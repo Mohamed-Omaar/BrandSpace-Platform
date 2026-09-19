@@ -94,6 +94,7 @@ at all — zero occurrences across all ten files, including its own `.public-*` 
 | Yellow as text                         | `brandYellowText`                                               | 5.52:1 on white; the only permitted yellow-toned text       |
 | Hairline (last resort)                 | `hairline`, `cardBorder`                                        | Invisible at rest; becomes a real 3:1 edge in high contrast |
 | High-contrast boundary                 | `controlBorderContrast`, `borderStrong`                         | 3.4:1 — restored by `prefers-contrast: more` (D-55)         |
+| A rule on PAPER                        | `documentRule`                                                  | Print weight; the invoice document only (Phase 10 §23)      |
 
 ### How hierarchy is made, now that borders do not make it
 

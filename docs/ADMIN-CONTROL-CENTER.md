@@ -721,3 +721,123 @@ silently lost.
 `integrations.payment` exists and is empty. D-204 leaves the choice to the owner; the only adapter
 registered is the development one, and it is refused in production. Phase 10 selects the vendor,
 stores its credentials through the Secret Service, and adds it to `commerce.providerRouting`.
+
+---
+
+## 22. Phase 10 — the Integrations Hub
+
+### 22.1 What it replaced
+
+Before this screen, an owner configuring BrandSpace had to know that AI providers lived under
+`ai.providers`, social applications under `integrations.social-apps`, payments, email, storage and
+observability under four `integrations.*` domains, and every credential on a separate Secrets page.
+Six screens and a mental map. **Integrations** is the map.
+
+### 22.2 It is generated, not hand-written
+
+The screen is built from `INTEGRATION_DEFINITIONS` in `@brandspace/integrations`. Adding a provider is a
+registry entry plus its adapter; no page changes. That is also what makes §4's promise checkable rather
+than aspirational: **the Hub lists only providers BrandSpace has an adapter for**, so "configure and
+activate it from the Control Center" is true of every row it shows.
+
+**Every provider in the registry today is a development double, and every row says so.** That is the
+honest state of the platform at the end of Phase 10: the contracts, the routing, the accounting and the
+screens are finished, and no production vendor has been chosen. There is deliberately no generic
+arbitrary-HTTP provider — one would let an owner point payment webhooks at an unvalidated endpoint and
+call it compatibility.
+
+### 22.3 It is where an owner configures a provider, not only where they inspect one
+
+**When an adapter exists, ordinary provider setup happens entirely here:**
+
+> Platform Control Center → Integrations → the provider → enter settings and credentials → **Save
+> configuration** → **Test connection** → **Activate**
+
+The provider page renders its own form from the registry's `settingFields` and `credentialFields`, so a
+provider that declares a base URL and an API key gets inputs for exactly those and nothing else. Saving
+creates the provider's configuration record if it does not exist yet — an owner is never sent to the
+Configuration page to create one before they can begin.
+
+**The generic Configuration and Secrets pages remain**, and they remain useful: inspecting a document's
+version history, comparing environments, an advanced edit the Hub's form does not express, recovery when
+something is wrong. They are no longer a required step in connecting a provider.
+
+**Nothing moved underneath.** Settings are written through the Configuration Service — draft, validate,
+activate — so an integration change still has an author, a change reason, a validation pass, an audit
+event, a version history and a rollback. Credentials are written through the Secret Service, so they are
+encrypted with the same key domain, masked the same way, and audited the same way as one entered on the
+Secrets page. There is no second configuration system and no second secret store.
+
+**Write-only credential inputs.** A secret box is never pre-populated, because nothing in this product
+can read a stored value back. An empty box therefore means _leave this credential alone_ — which is why
+correcting a URL does not wipe a working key — and entering a value replaces it and is recorded as a
+rotation against the same stable reference.
+
+**Values BrandSpace generates are shown, not asked for.** A webhook or callback URL is the address of one
+of our own routes; it renders read-only and copyable. An input for it would be a way to point a payment
+callback at somebody else's host.
+
+**Two authorities, and neither is relaxed for the new screen.** `platform.configuration.manage` is
+required for the settings edit; `platform.secret.manage` _and_ verified MFA are required for every
+credential write, checked inside the Secret Service. Activation continues to require the stronger
+`platform.configuration.activate`. A role that may edit configuration but not manage secrets can save a
+URL and is still refused a key.
+
+### 22.4 Per provider
+
+| Shown                          | Read from                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------- |
+| Provider, adapter, environment | The registry                                                                    |
+| Enabled / disabled             | The category's configuration domain, active version                             |
+| Configuration completeness     | Required credentials and settings, compared against what is stored              |
+| Masked credential status       | The Secret Service — a hint, a fingerprint, a rotation date                     |
+| Connection status              | `integration_health_check`, newest first                                        |
+| Last success / last failure    | The same table                                                                  |
+| Declared capabilities          | The registry, because §4 says capabilities are declared and never assumed equal |
+| Verification history           | Every attempt, including refusals and never-attempted                           |
+
+**A credential is never readable again.** There is no reveal operation anywhere in this product — not
+hidden behind a permission, absent. An owner confirms "same key" from the fingerprint, which is what
+they actually need, and a database dump yields nothing.
+
+### 22.5 Saving is not testing, and testing is not activating
+
+**Save configuration** writes settings and credentials and stops there. A provider whose key was just
+saved is a provider with a key, not a provider serving traffic; `applyProviderRecord` is structurally
+incapable of writing `status` or `activeProviderKey`, so this is a property of the code rather than a
+discipline.
+
+**Test Connection** writes an `integration_health_check` row and changes nothing about what serves
+traffic. It uses minimal billable usage, reports a sentence rather than a credential or a raw provider
+error, and records the outcome — including the refusals and the attempts that never left the platform,
+because "we never tried" is an answer the next operator needs.
+
+**And it tests the configuration the owner actually saved.** The Hub hands the tester the settings from
+the configuration document and the credential REFERENCES it holds; the tester exchanges those references
+for values at the adapter boundary — the single sanctioned decryption seam — and constructs the adapter
+from them. `packages/integrations` cannot decrypt anything, and a unit guard asserts it cannot even name
+the operation. This closes a real defect: the payment tester used to read `BILLING_DEV_WEBHOOK_SECRET`
+from the process environment while the screen displayed a `webhookSecret` the owner had entered, so it
+reported success for a credential nobody had verified. Phase 9's automated billing fixtures still use
+that variable for their own loopback signing, which is a separate concern and deliberately unchanged.
+
+**Activate / Disable** goes through `ConfigurationService` — draft, validate, activate — exactly like
+every other configuration change. That is not ceremony: it is what gives an activation an author, a
+change reason of at least eight characters, a validation pass, an audit event, a version history and a
+rollback. A second write path would have had none of those, and §3's requirement that integration
+changes obey the existing Platform Admin security model would have been a comment rather than a fact.
+
+**A development double cannot be activated in production.** The refusal lives in `selectionRefusal()`
+so every caller — the screen, the action, the readiness check — asks one function, and the screen shows
+the REASON rather than a disabled button, because a disabled button teaches nothing.
+
+### 22.6 Routing, catalogue and health
+
+- **Routing** shows the active profile and what each one does, every capability with the models
+  eligible to serve it, and — for each declared model — the verdict from the same function the router
+  uses, so an operator can see WHY a model is excluded rather than inferring it from a modality column.
+- **Health** shows the readiness verdict `evaluateHealth()` produces, which is the same one
+  `/health/ready` returns, plus the operator detail the public endpoint withholds.
+- **The console overview** carries readiness, the degraded capabilities and the count of production
+  integration gaps. It used to carry a card promising that "operational indicators appear here once
+  telemetry is wired in a later phase"; Phase 10 is that phase, so the promise is replaced by the thing.

@@ -18,7 +18,7 @@ import {
 import { createScheduleQuota } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
-import { createLogger, systemClock } from '@brandspace/shared';
+import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
 
 /**
  * Evaluate the automation rules listening for one event.
@@ -48,13 +48,6 @@ import { createLogger, systemClock } from '@brandspace/shared';
  */
 
 const log = createLogger({ context: { component: 'worker.automation' } });
-
-function currentEnvironment(): Environment {
-  const appEnv = process.env['APP_ENV'] ?? 'development';
-  if (appEnv === 'production') return 'PRODUCTION';
-  if (appEnv === 'staging') return 'STAGING';
-  return 'DEVELOPMENT';
-}
 
 /**
  * The CURRENT authority of a rule's creator, or null when they no longer have
