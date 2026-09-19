@@ -62,7 +62,7 @@ async function main(): Promise<void> {
    * notices. Outside production it logs and continues, because a developer
    * running one queue locally should not have to assemble a whole deployment.
    */
-  const configuration = validateStartupConfiguration();
+  const configuration = validateStartupConfiguration(process.env, 'worker');
   if (!configuration.ok) {
     log.warn('configuration is incomplete', {
       environment: configuration.environment,
