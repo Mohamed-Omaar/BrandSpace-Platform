@@ -158,6 +158,19 @@ function requireProductionValue(
   }
 }
 
+function forbidProductionValue(
+  env: Env,
+  name: keyof Env,
+): void {
+  const value = env[name];
+  if (value !== undefined && value !== '') {
+    throw new Error(
+      `${String(name)} must not be present in production for this service; ` +
+        'keeping unused credentials out preserves the intended blast-radius boundary.',
+    );
+  }
+}
+
 function assertProductionSafety(
   env: Env,
   profile: StartupServiceProfile = 'complete',
@@ -225,8 +238,16 @@ function assertProductionSafety(
     requireProductionValue(env, 'SECRET_VAULT_KEK');
     requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
     requireProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
+    forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+    forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
   } else {
     requireProductionValue(env, 'SOCIAL_TOKEN_VAULT_KEK');
+    forbidProductionValue(env, 'DATABASE_PLATFORM_URL');
+    forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
+    forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
+    forbidProductionValue(env, 'SECRET_VAULT_KEK');
+    forbidProductionValue(env, 'CUSTOMER_MFA_VAULT_KEK');
+    forbidProductionValue(env, 'INTERNAL_SERVICE_TOKEN');
   }
 
   const keyDomains = [
