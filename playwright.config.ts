@@ -47,6 +47,27 @@ loadTestEnv();
 const PORTS = { web: 3100, dashboard: 3101, admin: 3102, api: 3103, worker: 3104 } as const;
 
 /**
+ * The stand-in for Resend's HTTP API — `tests/e2e/fake-resend.ts`.
+ *
+ * It is a SERVER rather than an in-process stub because the thing under test is
+ * that configuration activated in the Control Center changes which adapter a
+ * customer signup reaches, in a different process. Substituting anything above
+ * the socket would prove only that the substitution happened. Nothing here has
+ * or needs a Resend account.
+ */
+const FAKE_RESEND_PORT = 3105;
+
+/**
+ * The service token the dashboard presents to the API's internal email route.
+ *
+ * NOT A SECRET IN ANY MEANINGFUL SENSE — it authorises one capability against a
+ * server this suite started seconds ago and tears down at the end. It is
+ * written here, from a fixed string, so the suite does not depend on a value in
+ * `.env.test` that a developer may not have.
+ */
+const E2E_SERVICE_TOKEN = 'e2e-only-internal-service-token-0123456789abcdef';
+
+/**
  * Optional override for the Chromium binary.
  *
  * CI installs the exact browser build this Playwright version expects, so it
@@ -111,6 +132,22 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
     // Brand Brain chat is proxied to the API service. Without this the proxy
     // answers an honest 503 and the chat suite would be testing the fallback.
     env['BRANDSPACE_API_URL'] = `http://127.0.0.1:${PORTS.api}`;
+    /*
+     * SO THE DASHBOARD CAN ASK THE API TO SEND MAIL (F-07). It holds this and
+     * not `SECRET_VAULT_KEK`, which is exactly the boundary the email suite
+     * proves: real provider-backed delivery, originated here, with no
+     * credential in this process that could perform it.
+     */
+    env['INTERNAL_SERVICE_TOKEN'] = E2E_SERVICE_TOKEN;
+    /*
+     * THE ORIGIN ITS EMAIL LINKS ARE BUILT FROM — set here, from `PORTS`, for
+     * the same reason `BRANDSPACE_API_URL` is: the value in `.env.test` names a
+     * developer's local ports, not this suite's. A verification link addressed
+     * to port 3001 while the suite serves 3101 is a link that cannot be
+     * followed, and until the email journey asserted on the SENT message
+     * nothing would have noticed.
+     */
+    env['PUBLIC_DASHBOARD_BASE_URL'] = `http://127.0.0.1:${PORTS.dashboard}`;
   }
 
   if (app === 'api') {
@@ -130,6 +167,16 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
      * with extra steps.
      */
     env['PUBLIC_DASHBOARD_BASE_URL'] = `http://127.0.0.1:${PORTS.dashboard}`;
+    // The verifying end of the same token.
+    env['INTERNAL_SERVICE_TOKEN'] = E2E_SERVICE_TOKEN;
+    /*
+     * AND THE ONLY SUBSTITUTION IN THE EMAIL CHAIN. The registry, the
+     * configuration read, the decryption and `ResendEmailProvider` are all the
+     * real ones; this names the host its request lands on.
+     * `apps/api/src/email-provider.ts` ignores it outright when
+     * `APP_ENV=production`.
+     */
+    env['BRANDSPACE_RESEND_BASE_URL'] = `http://127.0.0.1:${FAKE_RESEND_PORT}`;
   }
 
   if (app === 'worker') {
@@ -142,6 +189,16 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
      * inline fallback and prove nothing about the path production takes.
      */
     env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
+  }
+
+  if (app === 'admin') {
+    /*
+     * TEST CONNECTION MUST REACH THE SAME FAKE THE DELIVERY PATH REACHES.
+     * The Control Center constructs its own `ResendEmailProvider` to verify a
+     * key; without this it would call the real vendor while the API called the
+     * stand-in, and the journey would be verifying two different things.
+     */
+    env['BRANDSPACE_RESEND_BASE_URL'] = `http://127.0.0.1:${FAKE_RESEND_PORT}`;
   }
 
   const keys =
@@ -316,7 +373,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email)\.(spec|screenshots\.spec)\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -326,7 +383,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore:
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email)\.(spec|screenshots\.spec)\.ts/,
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
@@ -632,6 +689,28 @@ export default defineConfig({
     },
     {
       /*
+       * THE EMAIL CHAIN, END TO END — the production-adapters pass, section D.
+       *
+       * ITS OWN PROJECT AND SERIAL, because it ACTIVATES a provider in shared
+       * configuration. Two workers racing on `integrations.email` would have
+       * one journey activate Resend while the other disables it, and the
+       * failure would look like a product bug rather than a suite that shares
+       * mutable state with itself.
+       *
+       * It leaves the environment as it found it, which is why the journey's
+       * last step is a disable rather than an assertion.
+       */
+      name: 'production-email',
+      testMatch: /production-email\.spec\.ts/,
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
        * VISUAL PARITY against the pinned demo — docs/UI-FIDELITY-CONTRACT.md §5.
        *
        * Its own project because it needs settings the functional suites must
@@ -658,5 +737,18 @@ export default defineConfig({
     },
   ],
 
-  webServer: [server('web'), server('dashboard'), server('admin'), server('api'), server('worker')],
+  webServer: [
+    {
+      command: 'pnpm exec tsx tests/e2e/fake-resend.ts',
+      url: `http://127.0.0.1:${FAKE_RESEND_PORT}/__recorded`,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 60_000,
+      env: { FAKE_RESEND_PORT: String(FAKE_RESEND_PORT) },
+    },
+    server('web'),
+    server('dashboard'),
+    server('admin'),
+    server('api'),
+    server('worker'),
+  ],
 });

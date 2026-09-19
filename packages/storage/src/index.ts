@@ -1,6 +1,5 @@
 export {
   checksumOf,
-  createObjectStore,
   defaultObjectStoreDirectory,
   FilesystemObjectStore,
   InMemoryObjectStore,
@@ -8,6 +7,10 @@ export {
   type ObjectStore,
   type StoredObject,
 } from './object-store';
+
+export { S3ObjectStore, type S3ObjectStoreOptions } from './s3-object-store';
+
+export { createObjectStore, readS3Configuration, type S3EnvironmentConfiguration } from './factory';
 
 export {
   contentDispositionHeader,

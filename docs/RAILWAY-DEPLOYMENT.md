@@ -28,6 +28,14 @@ Discovery against the repository — not assumption — turned up three things t
 a generic Railway blueprint would have got wrong. They are stated first because
 each one changes what the owner should expect from the first deployment.
 
+> **Revised after the production-adapters pass.** §0.2 described a missing S3
+> adapter and named Railway Buckets as the target. Both have changed: the
+> adapter exists, and the target is Cloudflare R2, outside Railway entirely.
+> The original finding is kept below, struck through, because the reasoning it
+> records — why a container filesystem is not storage — is what the new answer
+> is built on. §6 is rewritten accordingly. Transactional email moved the same
+> way: §16 no longer describes a capability that waits on code.
+
 ### 0.1 Railway's PostgreSQL credential must never reach an application service
 
 Railway provisions Postgres with one credential, and it is the instance owner.
@@ -41,21 +49,31 @@ silently, while every test in the repository still passed.
 The three roles are created **after** provisioning, by the owner, with
 `scripts/sql/setup-database-roles.sql`. §3 has the procedure.
 
-### 0.2 There is no S3 adapter, so production uploads fail closed
+### 0.2 ~~There is no S3 adapter, so production uploads fail closed~~ — RESOLVED
 
-`packages/storage` defines an `ObjectStore` interface and ships exactly one
-implementation — `FilesystemObjectStore` — which `createObjectStore()` refuses to
-return when `APP_ENV=production`. There is no S3 client anywhere in the
-repository: no `@aws-sdk` dependency, no endpoint code, nothing reading the
-`STORAGE_*` variables that `packages/shared/src/env.ts` declares.
+**Superseded.** The original finding read:
 
-So the `STORAGE_*` contract exists and nothing consumes it. Railway Buckets is
-the right answer and §6 maps it exactly, but **asset upload cannot work on the
-first deployment** and the platform is correct to refuse rather than write
-customer files to a container filesystem that the next restart discards.
+> `packages/storage` defines an `ObjectStore` interface and ships exactly one
+> implementation — `FilesystemObjectStore` — which `createObjectStore()` refuses
+> to return when `APP_ENV=production`. There is no S3 client anywhere in the
+> repository … So the `STORAGE_*` contract exists and nothing consumes it.
+> **Asset upload cannot work on the first deployment.**
 
-This is the one unresolved blocker for feature completeness. It does not block
-deploying, and it is not a reason to weaken the guard.
+`packages/storage/src/s3-object-store.ts` now implements `ObjectStore` against
+the S3 protocol, and `createObjectStore()` returns it in production when the
+`STORAGE_*` contract is complete. What did **not** change is the refusal: an
+incomplete contract in production throws and names the missing variables, and
+the filesystem store is still unreachable there. Production never silently
+falls back to local disk, `/tmp` or memory.
+
+The target is **Cloudflare R2**, not Railway Buckets — §6 has the reasoning.
+Nothing above `packages/storage` knows either name: the adapter speaks generic
+S3 to an endpoint, so moving to AWS S3, MinIO or Backblaze is a change of five
+environment variables.
+
+**Asset upload works on the first deployment, once the owner supplies the five
+`STORAGE_*` values.** It is no longer a blocker; it is a configuration step,
+and §22 lists it as one.
 
 ### 0.3 Public URLs must exist before the first production boot succeeds
 
@@ -97,15 +115,20 @@ commands that have to be kept in step with `package.json`, the blueprint pins
 deterministic as a side effect: `http://api.railway.internal:3003`.
 
 **The API and worker execute TypeScript directly.** Neither has a build script.
-Both run `tsx`, which is a **devDependency**, and both import `.ts` source from
-workspace packages (`packages/*/package.json` sets `"main": "./src/index.ts"`).
-Package `build` scripts emit declarations only — `tsc --emitDeclarationOnly` —
-so there is no compiled JavaScript to run.
+Both run `tsx`, and both import `.ts` source from workspace packages
+(`packages/*/package.json` sets `"main": "./src/index.ts"`). Package `build`
+scripts emit declarations only — `tsc --emitDeclarationOnly` — so there is no
+compiled JavaScript to run.
 
-The consequence is §12's central constraint: **any build that prunes dev
-dependencies breaks the API and the worker.** It breaks loudly (`tsx: not
-found`), not silently, which is the right failure — but it is the first thing to
-check on the first staging deploy.
+**`tsx` is therefore a RUNTIME dependency, and is now declared as one.** It was
+a `devDependency`, which made any dev-dependency-pruning build crash on start
+with `tsx: not found` — after the image was built, after the deploy was
+accepted, at the moment traffic arrived. It has been moved to `dependencies` in
+`apps/api/package.json` and `apps/worker/package.json`, the lockfile records it
+there, and `tests/unit/production-runtime.test.ts` fails if either regresses.
+Verified by a real production-only install (`pnpm deploy --prod`) of both
+services: `tsx` resolves and executes in the pruned tree, and `typescript` is
+correctly absent from it.
 
 ### 1.3 Which process needs which capability
 
@@ -187,7 +210,9 @@ no internal traffic leaves Railway.
 | `postgres` | No public URL, no TCP proxy                                                 |
 | `redis`    | No public URL, no TCP proxy                                                 |
 
-`media` (Railway Bucket) is declared but wired to nothing — §0.2 and §6.
+There is **no Railway Bucket**. Object storage is Cloudflare R2, outside the
+project entirely — §6.1 has the reasoning and says to delete one if the earlier
+revision of this blueprint led to it being created.
 
 ### Per-service configuration
 
@@ -410,43 +435,105 @@ of record: a lost queue means re-dispatching sweeps, which `docs/OPERATIONS.md`
 
 ## 6. Object storage
 
-### 6.1 The state of things
+### 6.1 Cloudflare R2, and why not Railway Buckets
 
-As §0.2 says: the abstraction and the environment contract exist, the
-implementation does not. `createObjectStore()` throws in production with
-_"No object store is configured. Configure integrations.storage before enabling
-uploads."_ — which is the correct behaviour and must not be softened.
+BrandSpace stores objects in **Cloudflare R2**, reached over the S3 protocol.
+The earlier revision of this document named Railway Buckets. That was written
+when no adapter existed and the choice was theoretical; with an adapter in hand,
+three things decided it the other way:
 
-### 6.2 Railway Buckets is the right target
+1. **Blast radius.** Railway holds the database, the queue and all five
+   application processes. Putting customer files there too means one vendor
+   account is the single point of loss for everything — including the backups'
+   destination if they ever land beside the data they back up.
+   `docs/OPERATIONS.md` treats storage and compute as separable, and they should
+   stay separable.
+2. **Egress.** R2 charges nothing for egress. Customer media is read far more
+   often than it is written — every asset thumbnail, every preview, every
+   download grant — and an egress-billed store makes the product's most ordinary
+   operation the line item that grows fastest.
+3. **A managed bucket is not a commitment either way.** The adapter speaks
+   generic S3. If R2 turns out to be wrong, the migration is a bucket copy and
+   five environment variables, not a code change.
 
-S3-compatible, private by default, in-region, and no second vendor to onboard.
-Railway injects these variables into a linked service:
+**If a Railway Bucket was already created from the earlier blueprint, delete
+it.** It is unwired, it is not referenced by `.railway/railway.ts` any more, and
+leaving a provisioned empty bucket in the project invites somebody to assume it
+holds something.
 
-| Railway Bucket variable | BrandSpace variable         | Note                                          |
-| ----------------------- | --------------------------- | --------------------------------------------- |
-| `AWS_ENDPOINT_URL`      | `STORAGE_ENDPOINT`          | e.g. `https://storage.railway.app`            |
-| `AWS_ACCESS_KEY_ID`     | `STORAGE_ACCESS_KEY_ID`     | secret                                        |
-| `AWS_SECRET_ACCESS_KEY` | `STORAGE_SECRET_ACCESS_KEY` | secret                                        |
-| `AWS_S3_BUCKET_NAME`    | `STORAGE_BUCKET`            |                                               |
-| `AWS_DEFAULT_REGION`    | `STORAGE_REGION`            | the schema already defaults to `auto`         |
-| `AWS_S3_URL_STYLE`      | —                           | `virtual`; an adapter concern, not an env one |
+### 6.2 The five variables
 
-Verify these names against the bucket's own variable list before relying on
-them — they were read from Railway's documentation, not from a provisioned
-bucket.
+`readS3Configuration()` in `packages/storage/src/factory.ts` is the only reader.
 
-### 6.3 What is still needed
+| Variable                    | Required | Where it comes from                                                                            |
+| --------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `STORAGE_ENDPOINT`          | yes      | The R2 **S3 API** origin for the account. Contains the account id — treat as secret.           |
+| `STORAGE_BUCKET`            | yes      | Bucket name. **Must differ between production and staging.**                                   |
+| `STORAGE_ACCESS_KEY_ID`     | yes      | An R2 API token scoped to this bucket. Never an account-wide token.                            |
+| `STORAGE_SECRET_ACCESS_KEY` | yes      | The secret half. Cloudflare shows it once.                                                     |
+| `STORAGE_REGION`            | no       | R2 requires `auto`, which is the schema default. Leave unset.                                  |
+| `STORAGE_FORCE_PATH_STYLE`  | no       | `true` only for gateways needing `host/bucket/key`, such as MinIO. Leave unset for R2 and AWS. |
 
-An `S3ObjectStore implements ObjectStore` in `packages/storage`, registered as a
-non-development-only `storage` integration in
-`packages/integrations/src/registry.ts`, returned by `createObjectStore()` when
-the variables are present. That is a product change and explicitly out of scope
-here.
+**All four required values or none.** A partial configuration is the worst
+outcome — it constructs, accepts an upload and fails at the provider with an
+error that names a bucket rather than a missing variable — so the factory
+refuses and lists exactly which names are absent.
 
-Until it lands: the bucket is declared and empty, `STORAGE_*` is set on no
-service, and uploads fail closed. Presigned URLs, CORS and lifecycle rules are
-all decisions the adapter's design should take — writing them down now would be
-guessing at an interface nobody has built.
+### 6.3 Which services get them, and which deliberately do not
+
+| Service     | `STORAGE_*` | Why                                                                                                                                                              |
+| ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dashboard` | yes         | Asset uploads and Brand Brain ingestion run in this process.                                                                                                     |
+| `api`       | yes         | Creative routes and maintenance sweeps read and write objects.                                                                                                   |
+| `worker`    | yes         | Asset processing and ingestion — the heaviest object user of the five.                                                                                           |
+| `admin`     | **no**      | Displays file metadata; never moves bytes. It already holds the platform database identity and the secret vault key, and a bucket credential there buys nothing. |
+| `web`       | **no**      | Static marketing site. Touches no customer data at all.                                                                                                          |
+
+**No `NEXT_PUBLIC_` prefix, ever.** These are server-side variables; Next.js
+inlines only `NEXT_PUBLIC_*` into client bundles, so no browser receives any
+part of them. `CLAUDE.md` §2.3 makes this a rule rather than a habit.
+
+### 6.4 Production and staging must not share a bucket
+
+Railway stores variables per environment, so the declaration in
+`.railway/railway.ts` produces two independent sets — but nothing stops an
+operator pasting the same values into both. A staging run that deletes an object
+is a customer file deleted. Two buckets, two API tokens, and
+`docs/RAILWAY-ENVIRONMENT-MATRIX.md` carries it as a checklist item.
+
+### 6.5 It is configured by the deployment, not in the Control Center
+
+The Integrations Hub lists `Cloudflare R2 (S3-compatible)` under Object storage
+so the owner can see what the platform is connected to — with **no form**. It
+declares no credential fields and no setting fields, and it is not testable from
+that screen.
+
+That is deliberate. The object store is constructed synchronously inside worker
+processors and request handlers, long before any configuration read could be
+awaited; it sits at the same level as `DATABASE_URL` and `REDIS_URL`. A Hub form
+would be a second place to configure one thing, and the second place would be
+the one nothing reads — an owner rotating a key there would believe they had
+rotated it. Transactional email is the opposite case and does get a form (§16),
+because it is resolved per send by a process that can read the platform database
+and decrypt a credential.
+
+### 6.6 How to tell whether it is working
+
+- `GET /health/ready` on the API reports an `object-storage` check. `ok` means
+  the `STORAGE_*` contract is complete; `not_configured` names the missing
+  variables. It deliberately makes **no request to the bucket** — Railway probes
+  readiness continuously, and a `HeadBucket` per probe is a paid request several
+  times a minute to re-answer a question whose answer never changes.
+- The real proof is the round trip: upload a file in the dashboard, confirm the
+  worker processed it, redeploy, confirm it is still there.
+  `docs/RAILWAY-SMOKE-TEST.md` §6 is that procedure.
+
+### 6.7 Still open
+
+Presigned URLs, CORS rules and lifecycle policy. The adapter does not issue
+presigned URLs today — `capabilities.signedUrls` is `false` in the registry and
+downloads go through `DownloadGrantIssuer` — so nothing is blocked by their
+absence. They are the natural next storage decision, not this pass's.
 
 ---
 
@@ -455,6 +542,9 @@ guessing at an interface nobody has built.
 `docs/RAILWAY-ENVIRONMENT-MATRIX.md` is the authoritative matrix — every
 variable, its class, its consumers, its format and its production rule. It is a
 separate file because it is a reference table, not a narrative.
+
+Two variables joined it in this pass, both owner-supplied and both sealed:
+the four `STORAGE_*` values (§6.2) and `INTERNAL_SERVICE_TOKEN` (§16.3).
 
 The one thing to repeat here, because it is the most expensive mistake
 available: **`BILLING_DEV_WEBHOOK_SECRET` must not be set in production.**
@@ -469,19 +559,20 @@ thing copied might not be harmless.
 
 Two Railway environments in one project. **Nothing is shared.**
 
-| Concern            | Production                       | Staging                                     |
-| ------------------ | -------------------------------- | ------------------------------------------- |
-| `APP_ENV`          | `production`                     | `staging`                                   |
-| `NODE_ENV`         | `production`                     | `production` (it is a built app)            |
-| Postgres           | Its own instance                 | Its own instance, no production data        |
-| Redis              | Its own instance                 | Its own instance                            |
-| Bucket             | Its own bucket                   | Its own bucket                              |
-| Every secret       | Unique                           | Unique — never a copy of production         |
-| Domains            | The real ones                    | `*.up.railway.app` or `staging.*`           |
-| OAuth callbacks    | Production origins               | Staging origins, registered separately      |
-| Email              | Refuses to send until configured | Same refusal; outbox is non-production only |
-| `LOG_LEVEL`        | `info`                           | `debug`                                     |
-| External providers | None activated                   | None activated                              |
+| Concern                  | Production                      | Staging                                 |
+| ------------------------ | ------------------------------- | --------------------------------------- |
+| `APP_ENV`                | `production`                    | `staging`                               |
+| `NODE_ENV`               | `production`                    | `production` (it is a built app)        |
+| Postgres                 | Its own instance                | Its own instance, no production data    |
+| Redis                    | Its own instance                | Its own instance                        |
+| Object storage           | Its own R2 bucket and API token | **A different** R2 bucket and API token |
+| Every secret             | Unique                          | Unique — never a copy of production     |
+| Domains                  | The real ones                   | `*.up.railway.app` or `staging.*`       |
+| OAuth callbacks          | Production origins              | Staging origins, registered separately  |
+| Email                    | Resend, its own API key         | Resend, **a different** API key         |
+| `LOG_LEVEL`              | `info`                          | `debug`                                 |
+| `INTERNAL_SERVICE_TOKEN` | Its own value                   | **A different** value                   |
+| AI / social / payments   | None activated                  | None activated                          |
 
 **Production data must never be copied into staging.** If staging needs
 realistic data it gets seeded data, not a restore: a restore brings customer
@@ -497,18 +588,19 @@ fail-closed paths production will.
 
 ## 9. Networking
 
-| From                             | To                 | Path                                             | Protocol            |
-| -------------------------------- | ------------------ | ------------------------------------------------ | ------------------- |
-| Internet                         | `web`              | Public domain                                    | HTTPS               |
-| Internet                         | `dashboard`        | Public domain                                    | HTTPS               |
-| Internet                         | `admin`            | Public domain                                    | HTTPS               |
-| Internet                         | `api`              | Public domain — OAuth callbacks, future webhooks | HTTPS               |
-| `dashboard`                      | `api`              | `http://api.railway.internal:3003`               | HTTP over WireGuard |
-| `admin`                          | `api`              | `http://api.railway.internal:3003`               | HTTP over WireGuard |
-| dashboard / admin / api / worker | `postgres`         | `<postgres>.railway.internal:5432`               | private             |
-| dashboard / admin / api / worker | `redis`            | reference variable, private domain               | private             |
-| `dashboard` / `api` / `worker`   | Bucket             | HTTPS to the S3 endpoint — _not wired yet_       | HTTPS               |
-| `api` / `worker`                 | External providers | Outbound HTTPS — **none activated**              | HTTPS               |
+| From                             | To                              | Path                                             | Protocol            |
+| -------------------------------- | ------------------------------- | ------------------------------------------------ | ------------------- |
+| Internet                         | `web`                           | Public domain                                    | HTTPS               |
+| Internet                         | `dashboard`                     | Public domain                                    | HTTPS               |
+| Internet                         | `admin`                         | Public domain                                    | HTTPS               |
+| Internet                         | `api`                           | Public domain — OAuth callbacks, future webhooks | HTTPS               |
+| `dashboard`                      | `api`                           | `http://api.railway.internal:3003`               | HTTP over WireGuard |
+| `admin`                          | `api`                           | `http://api.railway.internal:3003`               | HTTP over WireGuard |
+| dashboard / admin / api / worker | `postgres`                      | `<postgres>.railway.internal:5432`               | private             |
+| dashboard / admin / api / worker | `redis`                         | reference variable, private domain               | private             |
+| `dashboard` / `api` / `worker`   | Cloudflare R2                   | Outbound HTTPS to `STORAGE_ENDPOINT`             | HTTPS               |
+| `api`                            | Resend                          | Outbound HTTPS to `api.resend.com`               | HTTPS               |
+| `api` / `worker`                 | AI / social / payment providers | Outbound HTTPS — **none activated**              | HTTPS               |
 
 Internal traffic uses `http://`, not `https://`: Railway's private network is
 already encrypted with WireGuard, and terminating TLS inside it buys a second
@@ -560,13 +652,13 @@ providers are activated.
 
 ## 11. Health checks
 
-| Service     | Path            | What it proves                                          |
-| ----------- | --------------- | ------------------------------------------------------- |
-| `api`       | `/health/ready` | The tenant database answered within 2 s                 |
-| `worker`    | `/`             | `worker.isRunning()` — the BullMQ consumer is consuming |
-| `web`       | `/`             | The Next.js server renders                              |
-| `dashboard` | `/`             | The Next.js server renders                              |
-| `admin`     | `/`             | The Next.js server renders                              |
+| Service     | Path            | What it proves                                                                                                     |
+| ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `api`       | `/health/ready` | The tenant database answered within 2 s; the queue, tracing and `STORAGE_*` contract are reported but non-required |
+| `worker`    | `/`             | `worker.isRunning()` — the BullMQ consumer is consuming                                                            |
+| `web`       | `/`             | The Next.js server renders                                                                                         |
+| `dashboard` | `/`             | The Next.js server renders                                                                                         |
+| `admin`     | `/`             | The Next.js server renders                                                                                         |
 
 **Readiness, not liveness, for the API's routing probe.** `/health/live` checks
 nothing external by design — a liveness probe that touched the database would
@@ -575,9 +667,19 @@ restart the whole fleet the moment the database blinked. `/health/ready` returns
 routing to that instance.
 
 **The semantics are preserved, not reinterpreted.** `/health/ready` reports the
-queue and tracing as non-required: Redis being down degrades `background-jobs`
-and leaves the service ready. Railway will keep routing to it, which is the
-documented intent.
+queue, tracing and object storage as non-required: Redis being down degrades
+`background-jobs` and leaves the service ready. Railway will keep routing to it,
+which is the documented intent.
+
+**The `object-storage` check reports configuration, not reachability**, and says
+so in its own `detail`. `ok` means the `STORAGE_*` contract is complete;
+`not_configured` names the missing variables. It makes no request to the bucket:
+Railway probes readiness continuously, and a `HeadBucket` per probe would be a
+paid request several times a minute to re-answer a question whose answer never
+changes. It is non-required for the same reason the queue is — without storage
+the platform still serves every screen and every non-media action, and
+`createObjectStore` already refuses loudly where the missing capability actually
+matters. The round-trip proof is `docs/RAILWAY-SMOKE-TEST.md` §6.
 
 No new endpoint was created. The Next.js apps have no dedicated health route, so
 `/` is used — it exercises rendering, middleware and the CSP path, which is more
@@ -610,26 +712,20 @@ system packages or a multi-stage prune; this build needs neither.
 reads `packageManager: pnpm@10.33.0` from the root `package.json`, so the
 lockfile is honoured without configuration.
 
-### The one thing Railpack must not do
+### ~~The one thing Railpack must not do~~ — RESOLVED
 
-**It must not prune dev dependencies.** §1.2: the API and worker run `tsx`, a
-devDependency, against `.ts` source. If the production image drops dev
-dependencies, both crash on start with `tsx: not found`.
+The previous revision named this the single highest-risk item in the blueprint:
+if the production image pruned dev dependencies, the API and worker would crash
+on start with `tsx: not found`, because `tsx` was a devDependency and both
+services run `.ts` source through it.
 
-This is the single highest-risk item in the blueprint. It is also the easiest to
-check — it is the first item in the smoke test — and it fails loudly rather than
-silently.
+**It is fixed at the source rather than worked around at the deployment.** `tsx`
+is now a runtime dependency of both services (§1.2), so a pruning build is no
+longer a failure mode — it is the correct build. The Dockerfile fallback the
+previous revision proposed is unnecessary and was dropped.
 
-Two fixes, in order of preference:
-
-1. **Repository fix (recommended, out of scope here).** Move `tsx` from
-   `devDependencies` to `dependencies` in `apps/api/package.json` and
-   `apps/worker/package.json`. One line each, no behaviour change, removes the
-   risk permanently. This blueprint does not make the change because §23 limits
-   it to deployment files; it is the first follow-up to approve.
-2. **Deployment fix.** If Railpack prunes and the repository cannot be changed,
-   switch the API and worker to a small Dockerfile that installs with dev
-   dependencies and does not prune.
+The smoke test still checks that both services start, because "it should work
+now" is not the same as "it did".
 
 ### Build-time environment
 
@@ -672,29 +768,33 @@ Railway's stated cutoff for them is 2026-12-01 — and neither is used here.
 
 ### What the file expresses
 
-Project, both environments, Postgres, Redis, Bucket, five services with their
-source, builder, build command, watch patterns, start command, healthcheck,
-restart policy, replica count, region, drain seconds, and every non-secret
-variable.
+Project, both environments, Postgres, Redis, five services with their source,
+builder, build command, watch patterns, start command, healthcheck, restart
+policy, replica count, region, drain seconds, and every non-secret variable.
+
+**No Railway Bucket.** An earlier revision declared one, unwired, against the
+day an S3 adapter existed. That adapter now exists and stores objects in
+Cloudflare R2 instead (§6.1), so the bucket was removed rather than left as a
+provisioned resource nothing reads.
 
 ### What it deliberately does not express
 
-| Not in the file         | Why, and where it is instead                                                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Secret **values**       | Declared with `isSealed` + `preserveExisting` and no value. Applying can never overwrite what the owner set; reading can never reveal it. |
-| The three database URLs | Owner-supplied after role creation (§3.2). Railway's own credential must never be referenced.                                             |
-| Domains                 | §10. A domain in a file is a domain nobody verified they control.                                                                         |
-| `STORAGE_*`             | §6. There is no adapter to consume them.                                                                                                  |
-| The migration job       | §4.1. A run-once service in a repeatedly-applied file invites a re-run.                                                                   |
-| Volumes                 | Nothing needs one. The apps are stateless; Postgres and Redis manage their own.                                                           |
-| Backup schedules        | §17 — verify what Railway provides before declaring anything.                                                                             |
+| Not in the file         | Why, and where it is instead                                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Secret **values**       | Declared with `isSealed` + `preserveExisting` and no value. Applying can never overwrite what the owner set; reading can never reveal it.                                                     |
+| The three database URLs | Owner-supplied after role creation (§3.2). Railway's own credential must never be referenced.                                                                                                 |
+| Domains                 | §10. A domain in a file is a domain nobody verified they control.                                                                                                                             |
+| `STORAGE_*` **values**  | §6. The five variable declarations ARE in the file, sealed and value-less, and wired to `dashboard`, `api` and `worker` only. What is absent is any endpoint, bucket name, account id or key. |
+| The migration job       | §4.1. A run-once service in a repeatedly-applied file invites a re-run.                                                                                                                       |
+| Volumes                 | Nothing needs one. The apps are stateless; Postgres and Redis manage their own.                                                                                                               |
+| Backup schedules        | §17 — verify what Railway provides before declaring anything.                                                                                                                                 |
 
 ### Validation performed
 
 | Check                                                                                        | Result                                                                                                              |
 | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `tsc --noEmit` against the real `railway@3.11.0` types, `strict: true`                       | Passes                                                                                                              |
-| Offline dry run: execute the program for both environments, inspect the resulting definition | 8 resources, all five services, expected commands and references                                                    |
+| Offline dry run: execute the program for both environments, inspect the resulting definition | 7 resources, all five services, expected commands and references                                                    |
 | Secret declarations carry no value                                                           | Confirmed — they normalise to `{type:'raw', value:{description, isSealed, preserveExisting}}` with no `value` field |
 
 ```bash
@@ -722,8 +822,8 @@ capability is genuinely unavailable:
 | AI generation     | The deterministic provider refuses to construct in production; AI features are unavailable, the platform runs |
 | Social publishing | Mock connectors refuse in production; no account can be connected                                             |
 | Payments          | The development adapter refuses in production; checkout is unavailable                                        |
-| Email             | `UnconfiguredEmailProvider` **throws** — §16                                                                  |
-| Object storage    | `createObjectStore` throws — §0.2                                                                             |
+| Email             | `UnconfiguredEmailProvider` **throws** until Resend is activated — §16                                        |
+| Object storage    | `createObjectStore` throws, naming the missing `STORAGE_*` variables — §6                                     |
 | Observability     | Spans are created locally and nothing is exported; readiness reports it                                       |
 
 **No guard is weakened to make the first deployment green.** A green deployment
@@ -734,30 +834,158 @@ it cannot.
 
 ## 16. Email
 
-No provider has been chosen. In production `createEmailProvider` resolves an
-unset or `outbox` provider to `UnconfiguredEmailProvider`, whose `send()`
-**throws**:
+### 16.1 Resend, configured from the Control Center
 
-> Email provider "outbox" has no implementation, so nothing was sent. Configure a
-> transactional email provider in Platform Admin > Integrations.
+Transactional email goes through **Resend**, reached over its HTTP API by
+`packages/auth/src/email-resend.ts`. Nothing above that file knows the vendor's
+name: signup, invitation and password-reset services take an `EmailProvider`,
+and this is one.
 
-It does not pretend delivery succeeded. The outbox — which records messages to an
-auditable table — is development-only and production refuses it (D-41).
+Unlike object storage (§6.5), email **is** configured in the Integrations Hub
+rather than by environment variable, because it is resolved per send by a
+process that can read the platform database and decrypt a credential. The owner
+workflow is:
 
-### Flows that cannot complete until email is connected
+> Control Center → Integrations → Transactional email → Resend → enter the API
+> key and From address → **Save** → **Activate**.
 
-Listed in the smoke test as _expected blocked_, not as failures:
+**Save ≠ Activate.** Two deliberate acts. Saving writes the key to the Secret
+Service and the settings to the Configuration Service and activates nothing.
+Activating is a full configuration change with an author, a reason, an audit
+trail and a rollback.
 
-- **Customer signup email verification.** A customer can sign up; the
-  verification email throws and the account stays `PENDING`.
-- **Workspace invitations.** An invitation can be created; the email does not
-  send.
-- **Password reset.**
-- **Notification emails** from approvals and automations.
+**There is no Test connection step, and §16.2 explains why.** The proof that
+the credential works is the controlled smoke email after activation, which is
+the same operation the credential exists to perform.
 
-**Platform owner sign-in is not affected** — it uses the platform session realm
-and TOTP, neither of which sends mail — so the Control Center is reachable and
-the Integrations Hub can be used to configure email as the first act of
+### 16.2 Settings, and the one credential
+
+| Field      | Kind    | Note                                                                                                                                                   |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| API key    | secret  | Write-only. Stored through the Secret Service; only masked metadata is ever readable afterwards. Configuration holds a **reference**, never the value. |
+| From email | setting | Required. Must be on a domain verified in Resend.                                                                                                      |
+| From name  | setting | Optional display name.                                                                                                                                 |
+| Reply-To   | setting | Optional.                                                                                                                                              |
+
+Nothing else. A larger form would be inventing settings the product does not
+use.
+
+#### The credential is a SENDING-ACCESS key, and that decides the rest
+
+Use a Resend API key with **Sending access**, restricted to the verified sending
+domain. That is the least privilege that can do the job: it can send, and it can
+do nothing else — it cannot list domains, read the account or manage anything.
+
+**Which is why there is no Test connection button.** Every non-destructive check
+Resend offers is a READ, and a send-only key is refused all of them. A button
+here had exactly three possible behaviours, and all three are worse than no
+button:
+
+1. Call `GET /domains` and report 401 — telling an owner their correctly-scoped
+   production key is broken. A red tick on a working credential trains people to
+   ignore ticks.
+2. Ask for a **Full Access** key so the read succeeds — widening a production
+   credential's scope to light up a UI element, and then keeping it at that
+   scope in the vault forever.
+3. Send a probe message — an unsolicited email, to a real inbox, every time an
+   operator presses a button.
+
+The registry marks Resend `testable: false`, the Hub omits the button, and
+`IntegrationsService.testConnection` **refuses the request at the service** as
+well — a hidden control is presentation, not authorisation.
+
+**What proves the key instead:** the controlled smoke email after activation
+(`docs/RAILWAY-SMOKE-TEST.md` §7.2). One real signup, to an address the owner
+controls. It is the same operation the credential exists to perform, which makes
+it the only honest test of a send-only key.
+
+**Do not widen the key to get a green tick.** Nothing in the product asks for a
+Full Access key, and nothing should.
+
+### 16.3 The secret boundary, and the internal delivery route
+
+Four email operations originate in the **customer dashboard**: signup
+verification, its resend, password reset and workspace invitations. Sending them
+for real means resolving the active provider and decrypting its credential,
+which needs `SECRET_VAULT_KEK` — and the whole point of the key-domain split
+(D-136, F-07, `docs/SECURITY.md` §2.4) is that the process serving customers
+does not have it.
+
+**That key was not given to the dashboard.** Instead the dashboard asks and the
+API sends:
+
+```
+dashboard  ──POST /v1/internal/email/deliver──▶  api
+  (no vault key, no provider credential)          (resolves the active provider,
+                                                   decrypts the key, sends)
+```
+
+The dashboard's flow logic, transactions and anti-enumeration behaviour are
+untouched — only the last hop moved to a process already allowed to hold a
+provider credential. `apps/api/src/email-provider.ts` is the single place in the
+repository that decides which provider sends.
+
+What stops the route being an open relay:
+
+1. **A shared service token**, `INTERNAL_SERVICE_TOKEN`, compared in constant
+   time. Without it the route answers **404** — not 401, which would confirm the
+   endpoint to anybody scanning.
+2. **A closed template set.** The body names one of the six templates the
+   product declares; the words come from the platform's own catalogue. A caller
+   cannot supply a subject or a body.
+3. **No arbitrary link target.** The link is a path the dashboard composed from
+   a token it just issued.
+
+`INTERNAL_SERVICE_TOKEN` is a **service** token, not a provider credential: it
+grants exactly one capability, and it cannot read anything back. At least 32
+characters, random, and different per environment. It is set on `dashboard`,
+`admin` and `api` — not on `worker`, which sends through the notification
+pipeline instead.
+
+### 16.4 What is logged, and what is not
+
+Never: the API key, the `Authorization` header, or the provider's own error
+text. Resend explains a refusal by quoting the request it refused, so its
+message routinely contains the recipient address. Only the HTTP status and
+Resend's machine code (`validation_error`, `invalid_api_key` …) escape, and the
+code is shape-checked before use. The operator who needs the vendor's wording
+has it in Resend's dashboard, addressed by the message id — which is where
+request content belongs.
+
+The delivery log line carries the template key and the provider. Not the
+recipient, not the link: a password-reset link in a log is a password reset
+anybody with log access can perform.
+
+### 16.5 Flows that work once Resend is activated
+
+All of these were _expected blocked_ in the previous revision and are now
+_expected to pass_ after configuration:
+
+- Customer signup email verification
+- Resend verification
+- Password reset
+- Workspace invitation, and invitation resend
+- Security and account notices
+- Billing transactional mail
+
+**One correction this pass had to make for any of them to work.** Every link the
+dashboard put in an email was a PATH — `/en/verify?token=…`. That was invisible
+while the outbox held the message and a developer read it in a browser already
+on the dashboard's origin. In a real inbox the reader is somewhere else
+entirely, and the link resolves to nothing: a customer who cannot click the
+verification link cannot finish signing up, with no error anywhere. Links are
+now built from `PUBLIC_DASHBOARD_BASE_URL`, and production refuses to build one
+without it rather than guessing an origin.
+
+Before activation they still fail closed: `UnconfiguredEmailProvider.send()`
+throws rather than reporting a delivery that did not happen, and production
+never silently falls back to the outbox (D-41). Development and test are
+unchanged — `OutboxEmailProvider` writes its auditable row and nothing leaves
+the system.
+
+**Platform owner sign-in is not affected** either way — it uses the platform
+session realm and TOTP, neither of which sends mail — so the Control Center is
+reachable and the Hub can be used to configure email as the first act of
 operating the platform.
 
 ---
@@ -787,8 +1015,21 @@ over is a separate, manual step.
 
 ### Object storage
 
-Not applicable yet (§6). When the adapter lands, bucket versioning and lifecycle
-become a real decision.
+**Not covered by the Railway backup, because it is not on Railway.** Objects
+live in Cloudflare R2 (§6.1), and a Railway restore brings back the database
+rows that reference files without bringing back the files.
+
+Two decisions the owner now owes, since the adapter exists and the bucket will
+hold real customer media:
+
+- **Bucket versioning**, so an accidental delete or overwrite is recoverable.
+  The platform's delete path is idempotent and does not tombstone.
+- **Lifecycle policy** for abandoned multipart uploads and for objects whose
+  owning row was hard-deleted.
+
+Neither is expressible in `.railway/railway.ts` — they are Cloudflare settings.
+`docs/OPERATIONS.md` §3's restore drill should be extended to cover a database
+restore whose object references must still resolve.
 
 ### Secrets and configuration
 
@@ -845,6 +1086,10 @@ single.
 **Mandatory:** `web`, `dashboard`, `admin`, `api`, `worker`, Postgres, Redis.
 Seven. None can be removed without removing a capability or breaking isolation.
 
+**Plus two external services, neither billed by Railway:** a Cloudflare R2
+bucket (§6) and a Resend account (§16). The Railway Bucket that an earlier
+revision listed here as deferrable no longer exists in the blueprint at all.
+
 **Could be collapsed, and should not be:**
 
 - `admin` into `dashboard` — they are separate session realms and separate
@@ -857,9 +1102,6 @@ Seven. None can be removed without removing a capability or breaking isolation.
 
 **Genuinely optional now:**
 
-- The **Bucket** — declared, but nothing can use it until §6's adapter exists.
-  Remove it from `.railway/railway.ts` to defer the cost; re-add it with the
-  adapter.
 - The **migration job** exists only while it runs.
 - **Staging** can be created later than production, though creating it first is
   the point of §20.
@@ -893,7 +1135,9 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 3. **Create the staging environment.**
 4. **Provision Postgres**, region EU West. Private only.
 5. **Provision Redis**, same region. Private only.
-6. **Provision the Bucket** — or skip it per §19 until the adapter exists.
+6. **Create the Cloudflare R2 bucket and its scoped API token** (§6). A
+   separate bucket and a separate token for staging and for production. This is
+   outside Railway.
 7. **Create the three database roles** (§3.2). Capture the three passwords.
 8. **`railway config apply`.** Creates the five services with their build,
    deploy and non-secret configuration. They will not start yet: their secrets
@@ -901,7 +1145,8 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 9. **Generate Railway domains** for `web`, `dashboard`, `admin`, `api`. Take the
    four https origins.
 10. **Set the secrets and URLs.** Three database URLs, two session secrets,
-    three KEKs, six public URLs — per service, per
+    three KEKs, six public URLs, the four `STORAGE_*` values from step 6, and
+    `INTERNAL_SERVICE_TOKEN` — per service, per
     `docs/RAILWAY-ENVIRONMENT-MATRIX.md`. Generate with §22's commands. Escrow
     the three KEKs outside Railway now, not later.
 11. **Run migrations.** The one-off job from §4.1, with `DATABASE_MIGRATION_URL`
@@ -917,8 +1162,13 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
     redeploy so callbacks are built from the real origins.
 18. **Re-run the smoke test** against the custom domains.
 19. **Repeat 3–18 for production**, with its own instances and its own secrets.
-20. **Only then**, external integrations — one category at a time, through the
-    Integrations Hub, each verified with Test Connection before activation.
+20. **Activate Resend** in the Integrations Hub (§16.1): enter the key and From
+    address, Save, Activate. Until this step, customer signup
+    verification, invitations and password reset are expected to fail closed.
+    Re-run the smoke test's email items afterwards.
+21. **Only then**, the remaining external integrations — AI, social, payments —
+    one category at a time, through the Integrations Hub, each verified with
+    Test Connection before activation. None of them is activated by this pass.
 
 ---
 
@@ -966,20 +1216,34 @@ in the repository.
    you. §10.
 8. **Confirm PITR is enabled** on the production Postgres, and run a restore
    drill on staging. §17.
-9. **Approve the two follow-ups this blueprint cannot make itself:**
-   - Move `tsx` to `dependencies` for `apps/api` and `apps/worker` (§12).
-   - Build the S3 object store adapter (§6.3).
-10. **Approve the deployment itself**, after reviewing this blueprint.
+9. **Create a Resend account**, verify the sending domain, and generate an API
+   key with **Sending access, restricted to that domain** — the least privilege
+   that can send. Do **not** create a Full Access key: nothing in the product
+   needs one, and §16.2 explains why no UI asks for one either. A separate key
+   per environment.
+10. **Generate `INTERNAL_SERVICE_TOKEN`** — `openssl rand -base64 48` — and set
+    the same value on `dashboard`, `admin` and `api`, different per environment.
+11. **Decide bucket versioning and lifecycle policy** in Cloudflare (§17), since
+    the bucket will now hold real customer media.
+12. **If a Railway Bucket was created from the earlier revision of this
+    blueprint, delete it.** It is no longer referenced and holds nothing (§6.1).
+13. **Approve the deployment itself**, after reviewing this blueprint.
+
+> The two follow-ups the previous revision listed here are **done**: `tsx` is a
+> runtime dependency of `apps/api` and `apps/worker`, and the S3 object store
+> adapter exists. Neither is an owner action any more.
 
 ---
 
 ## 23. Open questions for the owner
 
 1. **GCC residency vs Railway's regions.** §1.4. The only question here that
-   could invalidate the platform choice.
-2. **The S3 adapter.** §6.3. Uploads do not work until it exists.
-3. **`tsx` as a production dependency.** §12. One line; removes the highest-risk
-   item in the build.
+   could invalidate the platform choice — and note that object storage is now a
+   second residency decision: R2 buckets have their own location hint.
+2. **Bucket versioning and lifecycle policy.** §17. The bucket holds customer
+   media and the platform's delete path does not tombstone.
+3. **Presigned URLs.** §6.7. Downloads go through `DownloadGrantIssuer` today
+   and nothing is blocked, but it is the natural next storage decision.
 4. **Should the maintenance scheduler leave the API?** §18. It is what keeps the
    API a singleton, and moving it would also let the API drop the platform
    database credential (§1.3).

@@ -9,7 +9,7 @@ import { MockProviderAdapter } from '@brandspace/ai-gateway';
 import { OutboxEmailProvider } from '@brandspace/auth';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { isProduction, systemClock } from '@brandspace/shared';
-import type { IntegrationTester } from '@brandspace/integrations';
+import { findIntegration, type IntegrationTester } from '@brandspace/integrations';
 import { currentEnvironment, getSecretService } from './platform-context';
 
 /**
@@ -78,12 +78,37 @@ export function integrationTester(): IntegrationTester {
       const credentials = await resolve(input.credentialRefs);
 
       /*
-       * PRODUCTION CANNOT REACH ANY OF THESE. Every adapter below is a
-       * development double, and each refuses to be constructed in production on
-       * its own account — but the Hub should say so in a sentence an operator
-       * can read rather than surfacing a constructor exception.
+       * PRODUCTION CANNOT REACH A DEVELOPMENT DOUBLE — but it MUST be able to
+       * reach a real one.
+       *
+       * THIS USED TO REFUSE EVERYTHING. That was right while every adapter in
+       * the switch below was a development double: each refuses to construct in
+       * production on its own account, and the Hub should say so in a sentence
+       * rather than surfacing a constructor exception. It stopped being right
+       * the moment a real provider could be registered at all, because Test
+       * Connection on a production deployment is exactly when an owner most
+       * needs a truthful answer about a real credential.
+       *
+       * TWO CATEGORIES HAVE NO CASE BELOW, both marked `testable: false` in the
+       * registry, and for the same underlying reason: the credential that does
+       * the job is not a credential that can answer a read.
+       *
+       *   - OBJECT STORAGE is configured by the deployment, and the Control
+       *     Center is deliberately not given a bucket credential to test with.
+       *   - RESEND asks for a Sending-access key restricted to the verified
+       *     domain. Every non-destructive check Resend offers is a read, and a
+       *     send-only key is refused all of them. A button here could only
+       *     report a working key as broken, demand a wider key, or send an
+       *     unsolicited probe message.
+       *
+       * Both say where the real proof lives instead.
+       *
+       * So the registry decides, as it does everywhere else: `developmentOnly`
+       * is the property, and the refusal follows it rather than the
+       * environment alone.
        */
-      if (isProduction()) {
+      const definition = findIntegration(input.category, input.providerKey);
+      if (isProduction() && (!definition || definition.developmentOnly)) {
         return {
           ok: false,
           latencyMs: 0,

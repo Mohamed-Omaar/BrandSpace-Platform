@@ -21,12 +21,14 @@ result.
 
 These are first because they fail the whole deployment and cost minutes to check.
 
-- ☐ **`tsx` survived the build.** The API and worker run `tsx` from
-  `devDependencies` against `.ts` source. If Railpack pruned dev dependencies,
-  both crash immediately with `tsx: not found`.
+- ☐ **`tsx` survived the build.** The API and worker run `.ts` source through
+  `tsx`. It is now a runtime `dependency` of both, so a build that prunes dev
+  dependencies is the correct build rather than a failure mode — but check
+  anyway, because "it should work now" is not "it did".
   - Check the deploy logs of `api` and `worker` for `tsx: not found` or
     `Cannot find module`.
-  - If present → deployment doc §12. The fix is one line per `package.json`.
+  - If present → deployment doc §12, and something regressed the packaging that
+    `tests/unit/production-runtime.test.ts` guards.
 - ☐ **Private networking reached the API.** If the dashboard logs
   `BRANDSPACE_API_URL is not configured` or connection refusals to
   `api.railway.internal`, the environment may be IPv6-only while every process
@@ -60,6 +62,11 @@ curl -sSi https://api.example.com/health/ready
 - ☐ ✅ `/health/ready` → `200`, `database` state `ok`
 - ☐ ✅ `/health/ready` reports `queue` as `ok` (Redis wired) and **not required**
 - ☐ ✅ `/health/ready` reports `tracing` as `not_configured` — no collector, by design
+- ☐ ✅ `/health/ready` reports `object-storage` as **`ok`** and **not required**.
+  `not_configured` here names the missing `STORAGE_*` variables and means §6
+  below will fail — fix it before continuing rather than after.
+  - This check reports the **configuration contract**, not a live request to the
+    bucket. §6 is the round trip.
 - ☐ ✅ Neither response contains a hostname, role, port, driver error or version
 - ☐ ✅ The worker's probe answers `{"status":"ok"}` — visible as a passing Railway healthcheck
 
@@ -126,33 +133,141 @@ curl -sSi https://api.example.com/health/ready
 
 ## 6. Object storage
 
-- ☐ 🚫 **Upload fails closed.** Attempt an asset upload. Expected: a refusal
-  naming _"No object store is configured."_
-  - **A successful upload is a failure of this test.** It would mean production
-    accepted the filesystem store and wrote a customer file to a container that
-    the next restart discards.
-- ☐ ✅ No `STORAGE_*` variable is set on any service
-- ☐ ✅ No service is writing to a local path under `/tmp` for customer assets
+Cloudflare R2, not a Railway Bucket — deployment doc §6.1. These steps **expect
+to pass** once the four `STORAGE_*` values are set; the previous revision of
+this document expected them all to be blocked.
 
-Deployment doc §6. This unblocks when an S3 adapter exists.
+- ☐ ✅ `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID` and
+  `STORAGE_SECRET_ACCESS_KEY` are set on **`dashboard`, `api` and `worker` only**
+- ☐ ✅ They are **not** set on `admin` or `web`
+- ☐ ✅ **Staging and production use different buckets and different API tokens.**
+  Compare `STORAGE_BUCKET` and `STORAGE_ACCESS_KEY_ID` across the two
+  environments; if either matches, stop. A staging test that deletes an object
+  is a customer file deleted.
+- ☐ ✅ No variable name begins `NEXT_PUBLIC_STORAGE`, and a view-source of the
+  dashboard contains no part of the access key or the endpoint
+
+**The round trip — the proof that actually matters:**
+
+- ☐ ✅ **Upload.** Upload an asset in the dashboard. It succeeds, and the file
+  appears in the R2 bucket (check in the Cloudflare dashboard, or with
+  `aws s3 ls --endpoint-url "$STORAGE_ENDPOINT"`).
+- ☐ ✅ **The worker reads it back.** The asset moves out of `PROCESSING` — the
+  worker fetched the object from R2 in a different process from the one that
+  wrote it, which is what proves the bytes really left the container.
+- ☐ ✅ **It survives a redeploy.** Redeploy `dashboard` and `worker`, then open
+  the asset again. It is still there and still downloads.
+  - This is the single step that would have failed on a container filesystem,
+    and it is why production refuses one.
+- ☐ ✅ **Integrity.** The stored checksum matches a SHA-256 of the file you
+  uploaded. The adapter computes its own; it does not trust the S3 `ETag`, which
+  is not a SHA-256 for multipart uploads.
+- ☐ ✅ **Delete is idempotent.** Delete the asset, then delete it again through
+  the same path. The second attempt does not error.
+
+**Fail-closed still holds:**
+
+- ☐ 🚫 **An incomplete contract refuses loudly.** _(staging only)_ Unset
+  `STORAGE_BUCKET` on `dashboard` and redeploy. An upload now fails with an error
+  that **names the missing variable**, and `/health/ready` reports
+  `object-storage: not_configured`. Restore the value.
+  - **A successful upload here is a failure of this test.** It would mean
+    production accepted the filesystem store and wrote a customer file to a
+    container the next restart discards.
+- ☐ ✅ No service is writing to a local path under `/tmp` for customer assets
+- ☐ ✅ The Integrations Hub lists `Cloudflare R2 (S3-compatible)` with **no
+  configuration form and no Test connection button** — it is configured by the
+  deployment, and a second configuration screen would be one nothing reads
+  (deployment doc §6.5)
 
 ---
 
-## 7. Authentication
+## 7. Authentication and transactional email
+
+**Before Resend is activated**, the first three items below are 🚫 and correct.
+Run this section once before activation and again after — deployment doc §16.
 
 - ☐ ✅ **Platform owner sign-in works**, including MFA. It uses the platform
   session realm and TOTP and sends no email, so it is reachable on day one.
 - ☐ ✅ The Control Center loads with a platform session
 - ☐ ✅ A customer session cookie presented to the Control Center is refused
-- ☐ 🚫 **Customer signup cannot complete.** Signing up creates a `PENDING`
-  account and the verification email **throws** — _"Email provider 'outbox' has
-  no implementation, so nothing was sent."_
-  - Correct. A silent success here would be the bug.
-- ☐ 🚫 Workspace invitation emails do not send
-- ☐ 🚫 Password reset does not send
+- ☐ 🚫 **Before activation:** signing up creates a `PENDING` account and the
+  verification email **throws**. A silent success here would be the bug.
 
-To exercise customer flows before email is connected, verify an account
-directly in the database on **staging only**, and record that you did.
+### 7.1 Activate Resend
+
+- ☐ ✅ Control Center → Integrations → Transactional email → **Resend**
+- ☐ ✅ Enter the API key and From address, **Save**. The screen reports success
+  and the provider is still **not active** — saving is not activating.
+- ☐ ✅ Re-open the page: the key shows as **masked metadata only**
+  (`re-…`, a fingerprint, a last-rotated time). There is no way to read it back,
+  and the input is empty rather than pre-filled.
+- ☐ ✅ **There is no Test connection button on this screen**, and the note says
+  why. The key is a Sending-access key restricted to the verified domain — the
+  least privilege that can send — and Resend refuses it every read-only check,
+  so a button could only report a working key as broken, demand a wider key, or
+  send an unsolicited probe message. Deployment doc §16.2.
+  - **Do not create a Full Access key to make a tick go green.** Nothing in the
+    product asks for one.
+  - The proof is §7.2 below: the controlled smoke email, which is the same
+    operation the credential exists to perform.
+- ☐ ✅ **Activate**, with a change reason. The activation appears in the change
+  history with its author, its reason and a rollback.
+
+### 7.2 After activation
+
+- ☐ ✅ **The controlled smoke email — the one test of the send-only key.** Sign
+  up with a real address **you control**, once. The verification email is
+  delivered by Resend and the link verifies the account. A 401 here means the
+  key is genuinely wrong; a rejected domain means it is not verified in Resend.
+  This is the step §7.1 defers to, so do not skip it.
+- ☐ ✅ **Resend verification** sends a second link.
+- ☐ ✅ **Password reset** sends, and the link works.
+- ☐ ✅ **Workspace invitation** sends, and **invitation resend** sends again.
+- ☐ ✅ Every message renders correctly in **both Arabic (RTL) and English (LTR)** —
+  set the account locale and repeat one flow.
+- ☐ ✅ The `api` log line for each send carries the **template key and provider
+  only** — no recipient address, no link.
+- ☐ ✅ The Hub shows Resend as the active email provider, and the outbox as
+  refused for production.
+
+### 7.3 The secret boundary held
+
+- ☐ ✅ `dashboard` has **no** `SECRET_VAULT_KEK` — the four customer email flows
+  above work without it, because the dashboard asks the API to send
+  (deployment doc §16.3)
+- ☐ ✅ `INTERNAL_SERVICE_TOKEN` is set on `dashboard`, `admin` and `api`, with the
+  **same value within an environment** and a **different value** between staging
+  and production
+- ☐ ✅ `worker` does **not** have `INTERNAL_SERVICE_TOKEN`
+- ☐ ✅ `POST /v1/internal/email/deliver` from the public internet **without** the
+  token answers **404**, not 401 — it does not confirm the endpoint exists:
+  ```bash
+  curl -sSi -X POST https://api.example.com/v1/internal/email/deliver \
+    -H 'content-type: application/json' -d '{}'
+  ```
+- ☐ ✅ With a **wrong** token it also answers 404
+- ☐ ✅ A request with a valid token but an unknown `templateKey` is refused with
+  `VALIDATION_FAILED` — a caller cannot compose a message the product would not
+  have sent itself
+- ☐ ✅ **A request with a VALID token and a foreign link is refused**, with
+  `422 VALIDATION_FAILED` and no mail sent. The token authenticates a process,
+  not an intention: every link must be an absolute URL whose origin is exactly
+  `PUBLIC_DASHBOARD_BASE_URL`, or a BrandSpace-branded message from the
+  platform's own verified domain could point anywhere.
+
+  ```bash
+  curl -sSi -X POST https://api.example.com/v1/internal/email/deliver \
+    -H "x-brandspace-service-token: $INTERNAL_SERVICE_TOKEN" \
+    -H 'content-type: application/json' \
+    -d '{"to":"you@example.com","templateKey":"auth.email_verification",
+         "locale":"EN","link":"https://attacker.example/collect"}'
+  ```
+
+  - **A 200 here is the finding.** It would mean the origin check is not
+    running, and the route is a phishing primitive with the platform's sending
+    reputation behind it.
+  - Confirm no message arrived at the address you used.
 
 ---
 
@@ -162,8 +277,9 @@ directly in the database on **staging only**, and record that you did.
 - ☐ ✅ **`BILLING_DEV_WEBHOOK_SECRET` is set on no service.** If it were, the
   process would refuse to start — confirm it is absent rather than relying on
   the crash.
-- ☐ ✅ The Integrations Hub loads and every category reports **no active
-  provider**
+- ☐ ✅ The Integrations Hub loads. **Email reports Resend as active** and
+  **storage reports Cloudflare R2**; AI, social and payments report **no active
+  provider** — none of them was activated by this pass
 - ☐ ✅ Each development double shows as refused for production, with its reason
 - ☐ 🚫 Activating a development provider in production is refused by the Hub
 - ☐ ✅ The health screen reports no time-series store rather than drawing an
@@ -209,7 +325,9 @@ directly in the database on **staging only**, and record that you did.
 
 ## 12. Staging is not production
 
-- ☐ ✅ Staging has its own Postgres, Redis and bucket
+- ☐ ✅ Staging has its own Postgres, Redis, **R2 bucket and R2 API token**
+- ☐ ✅ Staging has its own **Resend API key** and its own
+  `INTERNAL_SERVICE_TOKEN`
 - ☐ ✅ **No production data is in staging**
 - ☐ ✅ No secret is shared between the two environments
 - ☐ ✅ Staging `APP_ENV=staging`, production `APP_ENV=production`
@@ -217,14 +335,27 @@ directly in the database on **staging only**, and record that you did.
 
 ---
 
-## Summary of what cannot work yet, and why that is correct
+## Summary of what works, and what still cannot
+
+**Now working, after configuration** — these moved out of the blocked list in
+the production-adapters pass:
+
+| Flow                            | Status | Needs                                      |
+| ------------------------------- | ------ | ------------------------------------------ |
+| Asset and media upload          | ✅     | The four `STORAGE_*` values — §6           |
+| Object read by the worker       | ✅     | The same values on `worker` — §6           |
+| Objects survive a redeploy      | ✅     | R2 rather than a container filesystem — §6 |
+| Customer signup verification    | ✅     | Resend activated — §7.2                    |
+| Resend verification             | ✅     | Resend activated                           |
+| Workspace invitation and resend | ✅     | Resend activated                           |
+| Password reset                  | ✅     | Resend activated                           |
+| Security and billing notices    | ✅     | Resend activated                           |
+
+**Still blocked, deliberately** — no provider has been activated for any of
+these, and this pass did not activate one:
 
 | Flow                                     | Status | Blocked by                                     |
 | ---------------------------------------- | ------ | ---------------------------------------------- |
-| Asset and media upload                   | 🚫     | No S3 adapter — deployment doc §6              |
-| Customer signup verification             | 🚫     | No email provider — §16                        |
-| Workspace invitations                    | 🚫     | No email provider                              |
-| Password reset                           | 🚫     | No email provider                              |
 | AI generation                            | 🚫     | No AI provider activated                       |
 | Social account connection and publishing | 🚫     | No social app registered                       |
 | Checkout and subscriptions               | 🚫     | No payment provider chosen (D-204)             |
@@ -233,3 +364,8 @@ directly in the database on **staging only**, and record that you did.
 Every one of these refuses loudly. **If any of them appears to succeed, that is
 the finding** — it means a production guard was weakened to make a deployment
 look green, and the deployment is less trustworthy than a failing one.
+
+The same rule applies in the other direction to the first table: if an upload
+succeeds while `STORAGE_*` is incomplete, or a verification email reports
+success while no provider is active, the guard has been weakened and the green
+tick is worth less than a refusal.

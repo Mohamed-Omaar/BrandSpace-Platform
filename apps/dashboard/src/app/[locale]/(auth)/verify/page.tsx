@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { colorTokens } from '@brandspace/ui';
 import { getPrisma } from '@brandspace/database';
-import { OutboxEmailProvider, SignupService } from '@brandspace/auth';
+import { SignupService } from '@brandspace/auth';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard } from '../../../../components/auth-card';
+import { getUnscopedEmailProvider } from '../../../../server/customer-context';
+import { customerLink } from '../../../../server/email-links';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,11 +36,15 @@ export default async function VerifyPage({
   const prisma = getPrisma();
   const service = new SignupService({
     prisma,
-    email: new OutboxEmailProvider(prisma),
+    email: getUnscopedEmailProvider(),
     // Never used on this path; verification does not send mail. Supplied
     // because the constructor requires one, and a throwing stub would be a trap
-    // for the next person who adds a send here.
-    verificationLink: (value) => `/${locale}/verify?token=${encodeURIComponent(value)}`,
+    // for the next person who adds a send here. It resolves the same way every
+    // other send in this app does, so that trap stays disarmed in production
+    // too: `new OutboxEmailProvider` here would have thrown the moment this
+    // page was rendered by a production deployment.
+    verificationLink: (value) =>
+      customerLink(`/${locale}/verify?token=${encodeURIComponent(value)}`),
   });
 
   const result = token ? await service.verifyEmail(token).catch(() => null) : null;

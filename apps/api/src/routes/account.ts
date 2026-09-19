@@ -1,13 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import {
-  CUSTOMER_REALM,
-  CustomerAuthService,
-  OutboxEmailProvider,
-  SignupService,
-} from '@brandspace/auth';
+import { CUSTOMER_REALM, CustomerAuthService, SignupService } from '@brandspace/auth';
 import { getPrisma } from '@brandspace/database';
 import { AppError } from '@brandspace/shared';
+import { getEmailProvider } from '../email-provider';
 import { route } from '../route-contract';
 import { fail, sessionTokenFrom } from './phase7-context';
 import { onboardingPolicy } from './phase9-context';
@@ -53,11 +49,24 @@ function userAgentOf(req: FastifyRequest): string | undefined {
   return typeof value === 'string' ? value.slice(0, 512) : undefined;
 }
 
-function signupService(): SignupService {
+/**
+ * The signup service, built per request against the ACTIVE email provider.
+ *
+ * IT IS ASYNC NOW, AND THAT IS THE WHOLE CHANGE. It used to construct
+ * `new OutboxEmailProvider(prisma)` — a provider that writes a row and delivers
+ * nothing. Which provider actually sends is a question only the activated
+ * configuration can answer, and answering it means a configuration read and a
+ * decryption, so the construction cannot be synchronous any more.
+ *
+ * `getEmailProvider` memoises for a minute, so this is not a round trip per
+ * signup. See apps/api/src/email-provider.ts for why the resolution lives
+ * there and not in a package.
+ */
+async function signupService(): Promise<SignupService> {
   const prisma = getPrisma();
   return new SignupService({
     prisma,
-    email: new OutboxEmailProvider(prisma),
+    email: await getEmailProvider(prisma),
     verificationLink: (token, locale) => {
       const base = process.env['PUBLIC_DASHBOARD_BASE_URL'];
       if (!base) {
@@ -91,7 +100,9 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
         const policy = await onboardingPolicy();
-        await signupService().signUp(policy, {
+        await (
+          await signupService()
+        ).signUp(policy, {
           ...parsed.data,
           ip: ipOf(req),
           userAgent: userAgentOf(req),
@@ -141,7 +152,9 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       const parsed = tokenSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
-        const result = await signupService().verifyEmail(parsed.data.token, { ip: ipOf(req) });
+        const result = await (
+          await signupService()
+        ).verifyEmail(parsed.data.token, { ip: ipOf(req) });
         if (!result) {
           // One answer for unknown, expired and already-used. Which of the three
           // it was is not something a caller needs, and telling them turns this
@@ -166,7 +179,9 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
         const policy = await onboardingPolicy();
-        await signupService().resendVerification(policy, parsed.data.email, { ip: ipOf(req) });
+        await (
+          await signupService()
+        ).resendVerification(policy, parsed.data.email, { ip: ipOf(req) });
         return await reply.send({ acknowledged: true });
       } catch (error: unknown) {
         return fail(reply, 'account.verify.resend', error);
@@ -195,7 +210,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       try {
         const prisma = getPrisma();
         const auth = new CustomerAuthService({ prisma });
-        const signup = signupService();
+        const signup = await signupService();
         await auth.completeMfa({
           token,
           code: parsed.data.code,
@@ -226,7 +241,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       if (!user) return;
       try {
         const policy = await onboardingPolicy();
-        const enrolment = await signupService().beginMfaEnrolment(policy, user);
+        const enrolment = await (await signupService()).beginMfaEnrolment(policy, user);
         return await reply.send(enrolment);
       } catch (error: unknown) {
         return fail(reply, 'account.mfa.enrol', error);
@@ -247,7 +262,9 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
         const policy = await onboardingPolicy();
-        const result = await signupService().confirmMfaEnrolment(policy, user, parsed.data.code);
+        const result = await (
+          await signupService()
+        ).confirmMfaEnrolment(policy, user, parsed.data.code);
         return await reply.send(result);
       } catch (error: unknown) {
         return fail(reply, 'account.mfa.confirm', error);
@@ -267,7 +284,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       const parsed = codeSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
       try {
-        await signupService().disableMfa(user, parsed.data.code);
+        await (await signupService()).disableMfa(user, parsed.data.code);
         return await reply.send({ disabled: true });
       } catch (error: unknown) {
         return fail(reply, 'account.mfa.disable', error);

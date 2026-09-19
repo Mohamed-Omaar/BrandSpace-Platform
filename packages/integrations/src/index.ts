@@ -1,3 +1,5 @@
+export { activeProviderSelection, type ActiveProviderSelection } from './active-provider';
+
 /**
  * The Integrations Hub — Phase 10 §2 and §4.
  *

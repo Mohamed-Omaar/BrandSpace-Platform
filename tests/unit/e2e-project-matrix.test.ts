@@ -33,19 +33,37 @@ function specFiles(): readonly string[] {
     .sort();
 }
 
-/** The files Playwright says it would run, from its own listing. */
-function listedFiles(): ReadonlySet<string> {
+/** Playwright's own listing: which projects would run which spec files. */
+function listing(): ReadonlyMap<string, ReadonlySet<string>> {
   const output = execFileSync('pnpm', ['exec', 'playwright', 'test', '--list', '--reporter=list'], {
     cwd: process.cwd(),
     encoding: 'utf8',
     env: { ...process.env, CI: '' },
   });
-  const files = new Set<string>();
-  for (const match of output.matchAll(/›\s+([A-Za-z0-9._-]+\.spec\.ts):/g)) {
-    files.add(match[1] as string);
+  const byFile = new Map<string, Set<string>>();
+  for (const match of output.matchAll(
+    /\[([^\]]+)\]\s+›\s+(?:[^›]*?)([A-Za-z0-9._-]+\.spec\.ts):/g,
+  )) {
+    const project = match[1] as string;
+    const file = match[2] as string;
+    const projects = byFile.get(file) ?? new Set<string>();
+    projects.add(project);
+    byFile.set(file, projects);
   }
-  return files;
+  return byFile;
 }
+
+function listedFiles(): ReadonlySet<string> {
+  return new Set(listing().keys());
+}
+
+/**
+ * The two projects defined by EXCLUSION rather than by a `testMatch`.
+ *
+ * Everything else names the one file it runs, so these are the only two a spec
+ * can end up in by accident.
+ */
+const GENERIC_PROJECTS = ['chromium-desktop', 'chromium-mobile'];
 
 describe('the Playwright project matrix', () => {
   it('runs every spec file on disk', () => {
@@ -59,6 +77,35 @@ describe('the Playwright project matrix', () => {
     expect(
       missing,
       `These spec files belong to no Playwright project and would never run:\n  ${missing.join('\n  ')}`,
+    ).toEqual([]);
+  }, 120_000);
+
+  it('never runs a spec in a dedicated project AND in the generic ones', () => {
+    /*
+     * THE OTHER HALF OF THE SAME EDIT, and the half that fails differently.
+     *
+     * Forgetting to ADD a name to the exclusion lists does not remove the
+     * suite — it runs it twice, once in its own serial project and once more in
+     * the viewport projects, in parallel. A suite given its own project
+     * usually has one because it mutates shared state, so the second copy races
+     * the first and the failure arrives as a product defect rather than as a
+     * configuration mistake.
+     *
+     * `production-email.spec.ts` is the case that prompted this: it activates
+     * an email provider in shared configuration, and the duplicate copy
+     * disabled it midway through the original's journey.
+     */
+    const offenders: string[] = [];
+    for (const [file, projects] of listing()) {
+      const dedicated = [...projects].filter((name) => !GENERIC_PROJECTS.includes(name));
+      const generic = [...projects].filter((name) => GENERIC_PROJECTS.includes(name));
+      if (dedicated.length > 0 && generic.length > 0) {
+        offenders.push(`${file} runs in ${dedicated.join(', ')} AND ${generic.join(', ')}`);
+      }
+    }
+    expect(
+      offenders,
+      `Add these to BOTH viewport testIgnore lists:\n  ${offenders.join('\n  ')}`,
     ).toEqual([]);
   }, 120_000);
 
