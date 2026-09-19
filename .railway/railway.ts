@@ -141,16 +141,78 @@ export default defineRailway((ctx, project) => {
     ),
   };
 
-  /** The three key domains. Separate keys so one leak cannot unwrap the others. */
-  const vaultEnv = {
-    SECRET_VAULT_KEK: ownerSecret('Key-encryption key for the platform secret vault (D-136).'),
-    SOCIAL_TOKEN_VAULT_KEK: ownerSecret(
-      'Key-encryption key for customers’ own social OAuth tokens (D-136).',
+  /**
+   * THE THREE KEY DOMAINS, ONE GROUP EACH — AND NO SERVICE GETS MORE THAN IT USES.
+   *
+   * A domain is a blast radius, not a namespace (D-136, D-206). The publish
+   * worker must unwrap a CUSTOMER's OAuth token; the dashboard must verify a
+   * customer's TOTP code at sign-in; the Control Center must unseal a PLATFORM
+   * provider credential. Those are three different reaches, and a service that
+   * holds a key it never uses is a service whose compromise costs more than it
+   * has to.
+   *
+   * IN PRODUCTION THE KEK IS NOT WHAT ENCRYPTS. `createKeyProvider` refuses the
+   * KEK-derived provider when `NODE_ENV=production` — it keeps the key in the
+   * same environment as the data it protects — so every domain that must seal
+   * or unseal in production needs its own managed AWS KMS key (F-09). The KEK
+   * variables stay declared because the same blueprint builds STAGING, where
+   * they are what encrypts; in production the environment parser requires the
+   * ARN and never falls back to them.
+   *
+   * THREE KEYS, NOT ONE. Pointing all three ARNs at one CMK would satisfy every
+   * variable and collapse the three blast radii into one, so the parser refuses
+   * that too.
+   */
+  const platformVaultEnv = {
+    SECRET_VAULT_KMS_KEY_ARN: ownerSetting(
+      'AWS KMS key ARN for the PLATFORM secret vault — provider credentials and Platform Owner TOTP seeds. REQUIRED in production (F-09).',
     ),
-    CUSTOMER_MFA_VAULT_KEK: ownerSecret(
-      'Key-encryption key for customers’ own MFA seeds, reachable from the login surface (D-206).',
+    SECRET_VAULT_KEK: ownerSecret(
+      'Key-encryption key for the platform secret vault (D-136). Staging and local only; unused in production.',
     ),
   };
+
+  const socialVaultEnv = {
+    SOCIAL_TOKEN_VAULT_KMS_KEY_ARN: ownerSetting(
+      'AWS KMS key ARN for customers’ own SOCIAL OAuth tokens. REQUIRED in production (F-09).',
+    ),
+    SOCIAL_TOKEN_VAULT_KEK: ownerSecret(
+      'Key-encryption key for customers’ own social OAuth tokens (D-136). Staging and local only.',
+    ),
+  };
+
+  const customerMfaVaultEnv = {
+    CUSTOMER_MFA_VAULT_KMS_KEY_ARN: ownerSetting(
+      'AWS KMS key ARN for customers’ own MFA seeds, reachable from the login surface. REQUIRED in production (F-09).',
+    ),
+    CUSTOMER_MFA_VAULT_KEK: ownerSecret(
+      'Key-encryption key for customers’ own MFA seeds (D-206). Staging and local only.',
+    ),
+  };
+
+  /**
+   * The AWS identity a service presents to KMS.
+   *
+   * THE NAMES ARE THE SAME ON EVERY SERVICE AND THE VALUES MUST NOT BE. Railway
+   * runs no AWS instance role, so there is no ambient identity to inherit and a
+   * key pair is the only option — and one pair shared across the fleet would
+   * make the three separate keys decorative, because whoever leaked it could
+   * call `Decrypt` on all of them. Each service gets its OWN IAM user, whose
+   * policy allows `kms:Encrypt` and `kms:Decrypt` on exactly the keys named in
+   * that service's block below and nothing else.
+   *
+   * `kms:GenerateDataKey` is deliberately absent from every one of those
+   * policies: the data key is generated locally and KMS is only ever asked to
+   * wrap it (docs/RAILWAY-DEPLOYMENT.md §25).
+   */
+  const awsIdentityFor = (service: string, keys: string) => ({
+    AWS_ACCESS_KEY_ID: ownerSecret(
+      `IAM key id for the ${service} service. Its policy allows kms:Encrypt and kms:Decrypt on ${keys}, and nothing else.`,
+    ),
+    AWS_SECRET_ACCESS_KEY: ownerSecret(
+      `The secret half of the ${service} service’s IAM key pair. Different from every other service’s.`,
+    ),
+  });
 
   /**
    * Settings every process shares.
@@ -232,7 +294,7 @@ export default defineRailway((ctx, project) => {
    * The service token the dashboard and the Control Center present to the API.
    *
    * WHY IT EXISTS. Sending a real verification email means resolving the active
-   * provider and decrypting its credential, which needs `SECRET_VAULT_KEK` —
+   * provider and decrypting its credential, which needs the PLATFORM key domain —
    * and the customer-facing dashboard must never hold that key (F-07,
    * docs/SECURITY.md §2.4). So the dashboard asks the API to send, over the
    * private network, and the API does the resolving. That request carries no
@@ -311,12 +373,16 @@ export default defineRailway((ctx, project) => {
         'Signing key for the CUSTOMER session realm. Must differ from PLATFORM_SESSION_SECRET.',
       ),
       /*
-       * ONLY THE MFA KEY REACHES THE LOGIN SURFACE (D-206). The dashboard
+       * ONLY THE MFA DOMAIN REACHES THE LOGIN SURFACE (D-206). The dashboard
        * verifies a TOTP code at sign-in, so it needs that one key domain and
        * must not hold the other two: a login request should not be able to
        * unwrap a platform provider credential or a customer's social token.
+       *
+       * Its IAM user can call KMS on the customer-MFA key alone, so even the
+       * credentials in this environment cannot reach the other two keys.
        */
-      CUSTOMER_MFA_VAULT_KEK: vaultEnv.CUSTOMER_MFA_VAULT_KEK,
+      ...customerMfaVaultEnv,
+      ...awsIdentityFor('dashboard', 'the CUSTOMER MFA key only'),
       /*
        * IT READS AND WRITES OBJECTS DIRECTLY. Asset uploads and Brand Brain
        * ingestion both run in this process, so it needs the bucket — but note
@@ -336,8 +402,9 @@ export default defineRailway((ctx, project) => {
 
   /**
    * The Platform Control Center. The only public service holding
-   * `DATABASE_PLATFORM_URL` and `SECRET_VAULT_KEK` — a separate application, a
-   * separate session realm, a separate database identity.
+   * `DATABASE_PLATFORM_URL` and the PLATFORM key domain — a separate
+   * application, a separate session realm, a separate database identity, and
+   * its own AWS identity that can reach one KMS key.
    */
   const admin = service('admin', {
     source: github(REPO),
@@ -366,7 +433,17 @@ export default defineRailway((ctx, project) => {
       PLATFORM_SESSION_SECRET: ownerSecret(
         'Signing key for the PLATFORM session realm. Must differ from CUSTOMER_SESSION_SECRET.',
       ),
-      SECRET_VAULT_KEK: vaultEnv.SECRET_VAULT_KEK,
+      /*
+       * THE PLATFORM DOMAIN, AND ONLY IT. The Control Center manages provider
+       * credentials and resolves a Platform Owner's TOTP seed. It has no
+       * business unwrapping a customer's OAuth token or a customer's MFA seed,
+       * so it holds neither key and its IAM user cannot call KMS on either.
+       *
+       * Without `SECRET_VAULT_KMS_KEY_ARN` this service cannot construct a
+       * SecretService at all in production (F-09).
+       */
+      ...platformVaultEnv,
+      ...awsIdentityFor('admin', 'the PLATFORM secret vault key only'),
       /*
        * FOR SECURITY AND ACCOUNT MAIL THE CONTROL CENTER ORIGINATES. It could
        * arguably resolve the provider itself — it already holds the vault key —
@@ -426,7 +503,17 @@ export default defineRailway((ctx, project) => {
       ...commonEnv,
       ...platformDatabaseEnv,
       ...publicUrlEnv,
-      ...vaultEnv,
+      /*
+       * THE ONLY SERVICE THAT LEGITIMATELY HOLDS ALL THREE DOMAINS, because it
+       * is the only one that serves all three: platform secret management, the
+       * social publishing pipeline, and customer sign-in. Its IAM user is
+       * scoped to those three keys and no others — a wider policy would turn a
+       * leak here into access to every key in the account.
+       */
+      ...platformVaultEnv,
+      ...socialVaultEnv,
+      ...customerMfaVaultEnv,
+      ...awsIdentityFor('api', 'the three vault keys and no others'),
       PORT: String(PORTS.api),
       REDIS_URL: ref(cache, 'REDIS_URL'),
       /*
@@ -491,7 +578,14 @@ export default defineRailway((ctx, project) => {
       PORT: String(PORTS.worker),
       WORKER_PORT: String(PORTS.worker),
       REDIS_URL: ref(cache, 'REDIS_URL'),
-      SOCIAL_TOKEN_VAULT_KEK: vaultEnv.SOCIAL_TOKEN_VAULT_KEK,
+      /*
+       * THE SOCIAL TOKEN DOMAIN, AND ONLY IT. The publish processor unwraps a
+       * customer's own OAuth token. It holds no platform vault key and no
+       * customer MFA key, and its IAM user cannot call KMS on either — which
+       * is F-07 stated as an AWS policy rather than as a convention.
+       */
+      ...socialVaultEnv,
+      ...awsIdentityFor('worker', 'the SOCIAL TOKEN key only'),
       /*
        * The private hostname of the Postgres instance, so the three role URLs
        * can be composed without anybody reading a password out of the

@@ -1,4 +1,5 @@
 import { createDecipheriv, createCipheriv, randomBytes, hkdfSync } from 'node:crypto';
+import { DecryptCommand, EncryptCommand, KMSClient } from '@aws-sdk/client-kms';
 
 /**
  * Key-encryption-key (KEK) provider — the envelope-encryption seam.
@@ -110,30 +111,131 @@ export class LocalDevelopmentKeyProvider implements KeyProvider {
 }
 
 /**
- * KMS-backed provider — the production shape, deliberately NOT implemented.
+ * KMS-backed provider — the production key domain, backed by AWS KMS.
  *
- * It exists so the interface is exercised and the integration point is explicit.
- * Throwing here is honest: claiming KMS support that has never called a KMS
- * would be worse than saying it is not wired yet. See docs/DECISIONS.md F-09.
+ * WHAT CHANGED AND WHY (resolves docs/DECISIONS.md F-09). This class used to
+ * throw from both methods on purpose: claiming KMS support that had never
+ * called a KMS would have been worse than admitting it was not wired. The
+ * consequence was that `NODE_ENV=production` could not seal ANY platform
+ * secret — not a provider credential in the Integrations Hub, not a Platform
+ * Owner's TOTP seed — because `createKeyProvider` refuses the development
+ * provider there and this was the only alternative. A live deployment could
+ * therefore run without a usable secret vault at all.
+ *
+ * THE ENVELOPE STAYS EXACTLY WHERE IT WAS. `encryptSecret`/`decryptSecret` in
+ * `crypto.ts` still generate a random 32-byte data key, still encrypt the
+ * payload with AES-256-GCM locally, and still ask a provider only to wrap and
+ * unwrap that data key. KMS never sees a secret value — only the 32-byte key
+ * that protects one. That keeps the request small, the latency bounded and the
+ * blast radius of a KMS outage limited to new writes and fresh reads.
+ *
+ * THE ENCRYPTION CONTEXT IS THE SAME AAD THE LOCAL PROVIDER AUTHENTICATES.
+ * AWS KMS binds an `EncryptionContext` into the ciphertext and requires the
+ * identical map at decrypt. That is precisely the property the local provider
+ * gets from `setAAD`: a wrapped key cannot be moved to another secret, another
+ * environment or another version. Using the native mechanism rather than
+ * re-implementing it means the guarantee is enforced by KMS itself.
+ *
+ * `KeyId` IS SENT ON DECRYPT TOO, and that is deliberate. KMS can infer the key
+ * from the ciphertext blob, so passing it is optional — but then a blob wrapped
+ * under a DIFFERENT key the caller still has access to would decrypt happily.
+ * Naming the key forces a mismatch to fail, which is what makes key rotation
+ * and environment separation observable rather than silent.
  */
 export class KmsKeyProvider implements KeyProvider {
-  readonly name = 'kms';
-  constructor(private readonly keyArn: string) {}
+  readonly name = 'aws-kms';
+  readonly #keyArn: string;
+  readonly #client: KMSClient;
+
+  /**
+   * @param keyArn  The CMK to wrap under. An ARN rather than an alias, so the
+   *                key a ciphertext was wrapped under is unambiguous even after
+   *                an alias is repointed.
+   * @param client  Injected in tests. Production passes nothing and gets a
+   *                client configured from the standard AWS environment.
+   */
+  constructor(keyArn: string, client?: KMSClient) {
+    if (!keyArn.trim()) {
+      throw new Error('SECRET_VAULT_KMS_KEY_ARN is empty. Refusing to start without a key.');
+    }
+    this.#keyArn = keyArn.trim();
+    /*
+     * REGION COMES FROM THE ARN WHEN THE ENVIRONMENT DOES NOT SAY. An ARN is
+     * `arn:aws:kms:<region>:<account>:key/<id>`, so the region is already
+     * present in the one value an operator cannot get wrong without the key
+     * being wrong too. `AWS_REGION` still wins when set.
+     */
+    const region = regionFromArn(this.#keyArn);
+    // The key is OMITTED rather than set to undefined when the ARN carries no
+    // region, so the SDK falls through to its own resolution chain. Under
+    // `exactOptionalPropertyTypes` an explicit undefined is not the same thing.
+    this.#client = client ?? new KMSClient(region ? { region } : {});
+  }
 
   currentKeyId(): string {
-    return this.keyArn;
+    return this.#keyArn;
   }
 
-  async wrapDataKey(): Promise<WrappedKey> {
-    throw new Error(
-      'The KMS key provider is not implemented. A cloud KMS has not been selected ' +
-        '(docs/DECISIONS.md F-09). Use the local development provider outside production.',
+  async wrapDataKey(dataKey: Buffer, context: string): Promise<WrappedKey> {
+    const result = await this.#client.send(
+      new EncryptCommand({
+        KeyId: this.#keyArn,
+        Plaintext: dataKey,
+        EncryptionContext: { [KMS_CONTEXT_KEY]: context },
+      }),
     );
+    /* c8 ignore next 3 -- KMS answers with a blob or raises; this is belt and braces. */
+    if (!result.CiphertextBlob) {
+      throw new Error('AWS KMS returned no ciphertext for the data key.');
+    }
+    return {
+      wrapped: Buffer.from(result.CiphertextBlob).toString('base64'),
+      keyProvider: this.name,
+      /*
+       * THE KEY THAT ACTUALLY WRAPPED IT, as KMS reports it — not the value
+       * that was asked for. If an alias was resolved, the record names the
+       * concrete key, which is what a later rotation audit needs.
+       */
+      keyId: result.KeyId ?? this.#keyArn,
+    };
   }
 
-  async unwrapDataKey(): Promise<Buffer> {
-    throw new Error('The KMS key provider is not implemented.');
+  async unwrapDataKey(wrapped: WrappedKey, context: string): Promise<Buffer> {
+    const result = await this.#client.send(
+      new DecryptCommand({
+        KeyId: this.#keyArn,
+        CiphertextBlob: Buffer.from(wrapped.wrapped, 'base64'),
+        EncryptionContext: { [KMS_CONTEXT_KEY]: context },
+      }),
+    );
+    /* c8 ignore next 3 -- as above. */
+    if (!result.Plaintext) {
+      throw new Error('AWS KMS returned no plaintext for the wrapped data key.');
+    }
+    return Buffer.from(result.Plaintext);
   }
+}
+
+/**
+ * The single encryption-context entry.
+ *
+ * One well-known key rather than parsing the caller's context string into
+ * several: the string is opaque to this layer, and splitting it here would make
+ * the AAD's meaning depend on a format that belongs to `crypto.ts`.
+ */
+const KMS_CONTEXT_KEY = 'brandspace-context';
+
+/**
+ * Pull the region out of a KMS key ARN.
+ *
+ * Returns undefined for anything that is not shaped like one, which lets the
+ * SDK fall back to its usual resolution chain (`AWS_REGION`, config file,
+ * instance metadata) and produce its own diagnostic rather than this file
+ * inventing one.
+ */
+function regionFromArn(keyArn: string): string | undefined {
+  const parts = keyArn.split(':');
+  return parts.length >= 4 && parts[0] === 'arn' && parts[3] ? parts[3] : undefined;
 }
 
 /**
@@ -208,9 +310,18 @@ export function createKeyProvider(
   }
 
   if (env['NODE_ENV'] === 'production') {
+    /*
+     * STILL A REFUSAL, AND NOW AN ACTIONABLE ONE. Until F-09 was resolved this
+     * was a dead end: the only alternative provider threw from both methods, so
+     * a production deployment simply could not seal a secret. The KMS provider
+     * is real now, so this says what to configure rather than naming a decision
+     * that had not been taken.
+     */
     throw new Error(
-      'The local development key provider must not be used in production. ' +
-        `Configure ${domain.kmsVar} with a managed KMS key (docs/DECISIONS.md F-09).`,
+      'The local development key provider must not be used in production: it keeps the ' +
+        'key in the same environment as the data it protects, with no hardware protection, ' +
+        `no access policy and no independent audit trail. Set ${domain.kmsVar} to an AWS KMS ` +
+        'key ARN instead (docs/RAILWAY-DEPLOYMENT.md §25). (No value is ever shown.)',
     );
   }
 
