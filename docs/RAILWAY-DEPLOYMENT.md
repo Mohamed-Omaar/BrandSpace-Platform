@@ -1351,28 +1351,44 @@ BrandSpace — production Platform Owner bootstrap
   Confirm it:                                      ← again
   permission catalogue: 72 entries
   system roles: 14 entries
-  MFA enrolled, seed sealed through the Secret Service.
-  Password set (Argon2id, never printed).
+  Seed sealed through the Secret Service.
 
-✔ Platform Owner created.
+  ── SHOWN ONCE. Scan this NOW. ───────────────────────────────────────
+  otpauth URI : otpauth://totp/...
+  ─────────────────────────────────────────────────────────────────────
+  Add it to your authenticator, then type the six-digit code it shows.
+  MFA is NOT enabled, and no recovery codes exist, until that code verifies.
+
+  Current 6-digit code: 123456                     ← read off your phone
+  Code verified. MFA enabled, recovery codes stored as hashes.
+
+✔ Platform Owner created and enrolled.
 
   ── SHOWN ONCE. Nothing below can be recovered. ──────────────────────
-  otpauth URI    : otpauth://totp/...
   recovery codes : ····· ····· ····· ····· ····· ····· ····· ····· ····· ·····
   ─────────────────────────────────────────────────────────────────────
 ```
 
+**The enrolment is not finished by generating a seed — it is finished by you
+proving one works.** MFA stays switched off, and no recovery codes exist, until
+the code you type verifies against the seed just sealed. An account marked as
+having MFA on the strength of a seed nobody ever used is an account whose owner
+discovers at their first sign-in that they cannot get in, and platform MFA is
+mandatory (D-27), so there is no other door.
+
+**If the code is wrong,** nothing is enabled and no recovery codes are issued.
+The seed stays sealed and unconfirmed; re-run the command and it will rotate
+that seed and show you a fresh one. Check that the authenticator actually holds
+the entry you just scanned, and that the machine's clock is right.
+
 **Do these before you close the window, in this order:**
 
-1. **Scan the otpauth URI** into your authenticator and confirm it produces a
-   code. There is no second chance: the seed is sealed and this command has no
-   business unsealing one.
-2. **Store the recovery codes** in your password manager. Only their hashes are
-   in the database.
-3. **Exit the SSH session, then clear your local terminal's scrollback.** The
+1. **Store the recovery codes** in your password manager. Only their hashes are
+   in the database, and they are the only way back in if the phone is lost.
+2. **Exit the SSH session, then clear your local terminal's scrollback.** The
    disclosure lived in your terminal, not in the server's logs — but a scrollback
    buffer is still a place a TOTP seed can be read from, screenshotted or pasted.
-4. **Sign in at the Control Center** with the address, the password and a code
+3. **Sign in at the Control Center** with the address, the password and a code
    from the authenticator, and confirm all three work together.
 
 Nothing on those lines is recoverable afterwards. A lost authenticator is
@@ -1382,40 +1398,62 @@ recovered with a recovery code — not by re-running this command.
 
 Every one of these leaves the database untouched.
 
-| It says                                          | What is wrong                                                            |
-| ------------------------------------------------ | ------------------------------------------------------------------------ |
-| `APP_ENV must be exactly "production"`           | You are not on the production deployment. Check `railway link`.          |
-| `NODE_ENV must be exactly "production"`          | The shell was started by a tool that reset it.                           |
-| `the platform secret vault cannot seal anything` | §25 is not done. Set `SECRET_VAULT_KMS_KEY_ARN` and the IAM credentials. |
-| `must connect as brandspace_platform`            | `DATABASE_PLATFORM_URL` holds the wrong role's credential.               |
-| `this is not an interactive terminal`            | You are in a pipe, a CI step or a redirect. Use `railway ssh` directly.  |
-| `still holds a placeholder value`                | A template value (`change-me`, `example`, `localhost`, …) was left in.   |
-| `must be at least 16 characters`                 | Choose a longer password. The value is never printed back at you.        |
-| `A different Platform Owner already exists`      | See §24.6. Do not work around this.                                      |
+| It says                                          | What is wrong                                                                    |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `APP_ENV must be exactly "production"`           | You are not on the production deployment. Check `railway link`.                  |
+| `NODE_ENV must be exactly "production"`          | The shell was started by a tool that reset it.                                   |
+| `the platform secret vault cannot seal anything` | §25 is not done. Set `SECRET_VAULT_KMS_KEY_ARN` and the IAM credentials.         |
+| `must connect as brandspace_platform`            | `DATABASE_PLATFORM_URL` holds the wrong role's credential.                       |
+| `this is not an interactive terminal`            | You are in a pipe, a CI step or a redirect. Use `railway ssh` directly.          |
+| `still holds a placeholder value`                | A template value (`change-me`, `example`, `localhost`, …) was left in.           |
+| `must be at least 16 characters`                 | Choose a longer password. The value is never printed back at you.                |
+| `A different Platform Owner already exists`      | See §24.6. Do not work around this.                                              |
+| `That code did not verify`                       | Wrong code, wrong entry scanned, or a skewed clock. Nothing was enabled; re-run. |
+| `Refusing to bootstrap: …`                       | The account is in a state this command will not repair by guessing. See §24.6.   |
 
-### 24.6 Running it again
+### 24.6 Running it again, and the states it will not repair
 
-Re-running is **safe and inert**. The command reports
-`Already bootstrapped. No row was created, changed or replaced.` and exits.
+Re-running against a **finished** owner is **inert, literally**. The command
+performs two reads, reports
+`Already bootstrapped. No row was created, changed or replaced.` and exits. It
+writes no role, no permission, no audit event and no secret. The isolation suite
+counts every table in the schema before and after, so that sentence stays true.
 
 It specifically **never**:
 
 - replaces an existing password — a re-run is not a password reset, because a
   bootstrap that reset passwords would be a standing account-takeover primitive
   for anybody who can open a shell;
-- re-seals or re-shows the TOTP seed;
-- regenerates the recovery codes.
+- re-seals, rotates or re-shows a **confirmed** TOTP seed;
+- regenerates recovery codes for an account whose MFA is live.
 
-It **does** write one audit event each time, because somebody ran a
-full-privilege command against production and the trail should say so. It also
-re-synchronises the permission catalogue and the system roles, which makes a
-re-run the correct way to pick up a permission that a deploy added.
+**What it WILL finish** is a half-built account:
+
+| State                            | What the command does                                                                                                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account exists, no seed sealed   | Enrols from scratch.                                                                                                                                                                          |
+| Seed sealed, MFA never enabled   | **Resumes.** Rotates that seed — a new version of the same record, so it cannot collide with it — shows you the new URI, and asks for a code. The old seed is never unsealed and never shown. |
+| MFA complete, password never set | Sets the password. MFA is not touched and nothing is disclosed.                                                                                                                               |
+
+**And the states it refuses**, because repairing them means guessing which half
+is correct, and the wrong guess replaces a second factor the owner may still be
+using:
+
+- MFA is enabled but its sealed seed is not in the vault;
+- MFA is enabled against a seed filed under a different reference;
+- a seed reference is recorded while MFA is switched off;
+- a seed is sealed for an address no account holds;
+- the sealed seed exists but is disabled or revoked rather than active.
+
+Each refuses with what is wrong, writes nothing, and names no address, no seed
+and no password. **Resolve these in the Control Center**, or with somebody who
+can — they are not bootstrap problems.
 
 **If it refuses with `A different Platform Owner already exists`,** stop. Either
 the address was mistyped, or somebody else has already bootstrapped this
 platform. The other owner's address is deliberately not printed — whoever is at
 this shell does not necessarily have standing to learn who else administers the
-platform. Resolve it in the Control Center, or ask somebody who can see it.
+platform.
 
 ### 24.7 What this command still does not give you
 

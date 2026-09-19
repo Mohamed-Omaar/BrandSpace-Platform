@@ -12,7 +12,8 @@
  *   - the system roles the product defines,
  *   - ONE PlatformUser, the real owner, with the `platform_owner` role,
  *   - that owner's sealed TOTP seed and the hashes of their recovery codes,
- *   - the audit events recording all of the above.
+ *   - the audit events recording all of the above — one per run that did
+ *     something, and none at all from a run that found nothing to do.
  *
  * It writes no Workspace, no Brand, no customer User, no Membership, no wallet,
  * no campaign, no content, and nothing whose name contains "sample" or "demo".
@@ -26,6 +27,15 @@
  * `asPlatform`, which is the audited door production code uses. A bootstrap
  * with its own private crypto is a bootstrap whose accounts are only as good as
  * the crypto nobody reviewed.
+ *
+ * AND ENROLMENT IS FINISHED BY A PERSON, NOT BY THIS SCRIPT. Generating a seed
+ * proves nothing: not that the operator scanned it, not that their
+ * authenticator accepted it, not that the two clocks agree. So MFA stays off
+ * and no recovery codes exist until a live six-digit code, read off that
+ * authenticator, verifies against the seed just sealed. `classifyOwner` in
+ * `bootstrap-owner-guards.ts` enumerates every state the account can be left
+ * in — including the one a wrong code produces — and says which are resumable
+ * and which get a human instead.
  *
  * HOW TO RUN IT: docs/RAILWAY-DEPLOYMENT.md §24.
  */
@@ -47,6 +57,7 @@ import {
   assertInteractiveDisclosure,
   assertUsableOwnerPassword,
   assertVaultCanSeal,
+  classifyOwner,
 } from './bootstrap-owner-guards';
 
 /**
@@ -61,30 +72,39 @@ const SECRET_ENVIRONMENT = 'PRODUCTION' as const;
 
 /** What the command did, for the operator and for the tests. */
 export type BootstrapOutcome =
+  /** An empty database: the account was created and enrolled. */
   | { readonly kind: 'bootstrapped'; readonly platformUserId: string }
-  | { readonly kind: 'already-bootstrapped'; readonly platformUserId: string }
-  | { readonly kind: 'completed-partial'; readonly platformUserId: string };
+  /** An enrolment that had been sealed and never confirmed was finished. */
+  | { readonly kind: 'resumed'; readonly platformUserId: string }
+  /** MFA was already complete; only the missing password was set. */
+  | { readonly kind: 'completed-partial'; readonly platformUserId: string }
+  /** Nothing to do, and nothing done. */
+  | { readonly kind: 'already-bootstrapped'; readonly platformUserId: string };
 
 /**
- * Material that must reach a human exactly once and then never again.
+ * What the operator is shown, and what they must send back.
  *
- * Carried in a dedicated type rather than logged in passing, so that every
- * place it travels is visible in the signature. The only consumer is the
- * interactive disclosure at the end of `main`.
+ * A NARROW TYPE ON PURPOSE. The seed itself never leaves
+ * `bootstrapProductionOwner`; what crosses this boundary is the URI an
+ * authenticator scans, and what comes back is six digits. Anything that wanted
+ * the raw secret would have to change this signature, which is exactly the
+ * kind of change that should be hard to make by accident.
  */
-export interface OneTimeEnrolment {
+export interface EnrolmentChallenge {
   readonly otpauthUri: string;
-  readonly recoveryCodes: readonly string[];
 }
 
 export interface BootstrapResult {
   readonly outcome: BootstrapOutcome;
   /**
-   * Present ONLY when this run performed the enrolment. A re-run against an
-   * already-enrolled owner returns nothing here, because the seed it would have
-   * to print is one it deliberately cannot read back.
+   * Plaintext recovery codes, to be shown exactly once.
+   *
+   * Present ONLY when this run completed an enrolment. A re-run against a
+   * finished owner returns nothing here — the codes it would have to print are
+   * stored as hashes and cannot be recovered, which is the point of storing
+   * them that way.
    */
-  readonly enrolment: OneTimeEnrolment | null;
+  readonly recoveryCodes: readonly string[] | null;
 }
 
 export interface BootstrapDependencies {
@@ -93,6 +113,12 @@ export interface BootstrapDependencies {
   readonly password: string;
   /** Progress, never content. */
   readonly log: (line: string) => void;
+  /**
+   * Show the enrolment to a person and read back a live code from their
+   * authenticator. The account is not enrolled until what this returns
+   * verifies.
+   */
+  readonly confirmEnrolment: (challenge: EnrolmentChallenge) => Promise<string>;
 }
 
 /**
@@ -262,7 +288,7 @@ async function assertNoForeignOwner(prisma: PrismaClient, ownerEmail: string): P
 export async function bootstrapProductionOwner(
   deps: BootstrapDependencies,
 ): Promise<BootstrapResult> {
-  const { prisma, ownerEmail, password, log } = deps;
+  const { prisma, ownerEmail, password, log, confirmEnrolment } = deps;
 
   /*
    * WHO IS THIS CONNECTION, REALLY.
@@ -283,6 +309,67 @@ export async function bootstrapProductionOwner(
 
   assertUsableOwnerPassword(password);
 
+  const { buildSecretRef, SecretService } = await import('@brandspace/secrets');
+  const mfaRef = buildSecretRef({
+    category: 'mfa_totp',
+    provider: 'platform',
+    environment: 'production',
+    name: ownerEmail,
+  });
+
+  await assertNoForeignOwner(prisma, ownerEmail);
+
+  /*
+   * READ, CLASSIFY, AND ONLY THEN WRITE.
+   *
+   * THE ORDER IS THE WHOLE CORRECTION. The first version synchronised the
+   * catalogue and wrote an audit event BEFORE asking whether there was
+   * anything to do, so "already bootstrapped, nothing changed" was not true:
+   * roles were rewritten and the trail grew on every invocation. Now the
+   * completed case returns having written nothing at all, and the sentence
+   * the operator reads is one they can rely on.
+   */
+  const existingOwner = await prisma.platformUser.findUnique({ where: { email: ownerEmail } });
+  const sealedSeed = await prisma.secretRecord.findUnique({
+    where: { ref_environment: { ref: mfaRef, environment: SECRET_ENVIRONMENT } },
+    select: { id: true, status: true },
+  });
+
+  const state = classifyOwner({ owner: existingOwner, sealed: sealedSeed, expectedRef: mfaRef });
+
+  if (state.kind === 'inconsistent') {
+    /*
+     * FAIL CLOSED. Every state that reaches here is one this command did not
+     * produce and cannot repair without guessing which half of it is correct —
+     * and the wrong guess replaces a working second factor. Nothing was
+     * written; a person decides.
+     */
+    throw new BootstrapRefusal(
+      `Refusing to bootstrap: ${state.reason}\n` +
+        'Nothing was written. Resolve this in the Control Center, or with somebody who can.',
+    );
+  }
+
+  if (state.kind === 'complete') {
+    /* c8 ignore next -- `complete` is only ever returned for an existing owner. */
+    if (existingOwner === null) throw new Error('classifyOwner reported complete with no owner.');
+    /*
+     * INERT, AND LITERALLY SO. No role is rewritten, no permission upserted, no
+     * audit event appended — this path performs two SELECTs and returns.
+     *
+     * NOTHING IS DISCLOSED EITHER. The seed cannot be shown again: it is sealed,
+     * and this command has no business unsealing one. An owner who has lost
+     * their authenticator recovers with a recovery code, not by re-running a
+     * bootstrap.
+     */
+    log('  Platform Owner is already fully bootstrapped.');
+    log('  Nothing was written: no role, no permission, no audit event, no secret.');
+    return {
+      outcome: { kind: 'already-bootstrapped', platformUserId: existingOwner.id },
+      recoveryCodes: null,
+    };
+  }
+
   const requestId = `bootstrap-${crypto.randomUUID()}`;
 
   /*
@@ -291,47 +378,11 @@ export async function bootstrapProductionOwner(
    * as the row's primary key. The alternative — a synthetic system actor — puts
    * an id in the audit trail that corresponds to nobody.
    */
-  const existingOwner = await prisma.platformUser.findUnique({ where: { email: ownerEmail } });
   const platformUserId = existingOwner?.id ?? crypto.randomUUID();
-
-  await assertNoForeignOwner(prisma, ownerEmail);
 
   const roleIdsByKey = await syncCatalogue(prisma, platformUserId, requestId, log);
   const ownerRoleId = roleIdsByKey.get('platform_owner');
   if (!ownerRoleId) throw new Error('platform_owner role was not created.');
-
-  const { hashPassword, generateTotpEnrolment, generateRecoveryCodes, PlatformAuthService } =
-    await import('@brandspace/auth');
-  const { SecretService, buildSecretRef } = await import('@brandspace/secrets');
-
-  const mfaRef = buildSecretRef({
-    category: 'mfa_totp',
-    provider: 'platform',
-    environment: 'production',
-    name: ownerEmail,
-  });
-
-  const sealedSeed = await prisma.secretRecord.findUnique({
-    where: { ref_environment: { ref: mfaRef, environment: SECRET_ENVIRONMENT } },
-  });
-
-  const alreadyComplete =
-    existingOwner !== null &&
-    existingOwner.passwordHash !== null &&
-    existingOwner.mfaEnabled &&
-    existingOwner.mfaSecretRef !== null &&
-    sealedSeed !== null;
-
-  if (alreadyComplete) {
-    /*
-     * NOTHING IS TOUCHED, AND NOTHING IS DISCLOSED. The seed cannot be shown
-     * again — the Secret Service seals it and this command has no business
-     * unsealing one. An owner who has lost their authenticator recovers with a
-     * recovery code, not by re-running a bootstrap.
-     */
-    log('  Platform Owner is already fully bootstrapped. Nothing was changed.');
-    return { outcome: { kind: 'already-bootstrapped', platformUserId }, enrolment: null };
-  }
 
   const owner = await prisma.platformUser.upsert({
     where: { email: ownerEmail },
@@ -350,103 +401,214 @@ export async function bootstrapProductionOwner(
     },
   });
 
-  let enrolment: OneTimeEnrolment | null = null;
+  const {
+    hashPassword,
+    generateTotpEnrolment,
+    generateRecoveryCodes,
+    totpVerifier,
+    PlatformAuthService,
+  } = await import('@brandspace/auth');
 
-  if (sealedSeed === null || owner.mfaSecretRef === null || !owner.mfaEnabled) {
-    const generated = generateTotpEnrolment(ownerEmail);
-
+  if (state.kind === 'needs-password') {
     /*
-     * READ BACK FROM THE DATABASE, not taken from the constant.
-     *
-     * `SecretService` refuses a write unless the actor carries
-     * `platform.secret.manage`, and the actor here is the owner being created.
-     * Asserting the permissions from `ROLE_DEFINITIONS` would describe what the
-     * role SHOULD have; reading `role_permission` describes what it DOES have.
-     * If the catalogue sync above silently failed to attach a permission, this
-     * refuses rather than sealing a seed for a role that cannot manage secrets.
+     * MFA IS ALREADY COMPLETE AND IS NOT TOUCHED. Setting a password that was
+     * never set is not a reset, and it is the one thing that stands between
+     * this account and being usable.
      */
-    const ownerPermissionKeys = (
-      await prisma.rolePermission.findMany({
-        where: { roleId: ownerRoleId },
-        include: { permission: true },
-      })
-    ).map((row) => row.permission.key);
-
-    /*
-     * SEALED BEFORE IT IS REFERENCED. If the write fails, the owner row still
-     * says `mfaEnabled: false` and the next run enrols cleanly. The reverse
-     * order would leave a user pointing at a seed that does not exist.
-     */
-    await new SecretService({ prisma }).createSecret(
-      {
-        platformUserId: owner.id,
-        roleKey: 'platform_owner',
-        mfaVerified: true,
-        permissionKeys: ownerPermissionKeys,
-      },
-      {
-        ref: mfaRef,
-        name: `TOTP seed for ${ownerEmail}`,
-        category: 'mfa_totp',
-        environment: SECRET_ENVIRONMENT,
-        value: generated.secret,
-      },
-    );
-
-    const recoveryCodes = generateRecoveryCodes();
-    await new PlatformAuthService({ prisma }).storeRecoveryCodes(owner.id, recoveryCodes);
-
-    await prisma.platformUser.update({
-      where: { id: owner.id },
-      data: { mfaEnabled: true, mfaSecretRef: mfaRef, mfaEnrolledAt: new Date() },
-    });
-
-    enrolment = { otpauthUri: generated.otpauthUri, recoveryCodes };
-    log('  MFA enrolled, seed sealed through the Secret Service.');
-  } else {
-    log('  MFA was already enrolled; the existing seed was left untouched.');
-  }
-
-  if (owner.passwordHash === null) {
     await prisma.platformUser.update({
       where: { id: owner.id },
       data: { passwordHash: await hashPassword(password) },
     });
-    log('  Password set (Argon2id, never printed).');
-  } else {
-    /*
-     * A PASSWORD THAT EXISTS IS NEVER REPLACED. Re-running this command is not
-     * a password reset, and treating it as one would make a bootstrap script a
-     * standing account-takeover primitive for anybody who can reach a shell.
-     */
-    log('  Password was already set; it was left untouched.');
+    log('  Password set (Argon2id, never printed). The existing MFA enrolment was not touched.');
+    await recordBootstrap(prisma, owner.id, ownerEmail, 'password completed for an enrolled owner');
+    return {
+      outcome: { kind: 'completed-partial', platformUserId: owner.id },
+      recoveryCodes: null,
+    };
   }
 
+  // --- Enrolment, which is not finished until a person proves it works ------
+
+  const generated = generateTotpEnrolment(ownerEmail);
+
+  /*
+   * PERMISSIONS READ BACK FROM THE DATABASE, not taken from the constant.
+   *
+   * `SecretService` refuses a write unless the actor carries
+   * `platform.secret.manage`, and the actor here is the owner being created.
+   * Asserting the permissions from `ROLE_DEFINITIONS` would describe what the
+   * role SHOULD have; reading `role_permission` describes what it DOES have.
+   * If the catalogue sync above silently failed to attach a permission, this
+   * refuses rather than sealing a seed for a role that cannot manage secrets.
+   */
+  const actor = {
+    platformUserId: owner.id,
+    roleKey: 'platform_owner',
+    mfaVerified: true,
+    permissionKeys: (
+      await prisma.rolePermission.findMany({
+        where: { roleId: ownerRoleId },
+        include: { permission: true },
+      })
+    ).map((row) => row.permission.key),
+  };
+
+  const secrets = new SecretService({ prisma });
+
+  if (state.kind === 'enrolment-pending') {
+    /*
+     * ROTATE, NEVER RE-CREATE — AND NEVER REVEAL.
+     *
+     * THIS IS THE DEFECT THIS REWRITE EXISTS TO FIX. A seed sealed under this
+     * ref with MFA still switched off is what a crash, or a mistyped
+     * confirmation code, leaves behind. The previous version took the enrolment
+     * branch anyway and called `createSecret` for a ref that already existed,
+     * which conflicts on the unique index — so the only command able to finish
+     * a half-finished account was the one command guaranteed to fail on it.
+     *
+     * Rotating writes a NEW version of the same record, which is why it cannot
+     * conflict. And rotating is the right answer rather than merely the
+     * convenient one: the old seed was never activated, so nobody's
+     * authenticator depends on it, and replacing it means this command never
+     * has to unseal and print a stored secret.
+     */
+    await secrets.rotateSecret(
+      actor,
+      state.secretId,
+      generated.secret,
+      'Production bootstrap: resuming an enrolment that was never confirmed',
+    );
+    log('  An unconfirmed enrolment was found. Its seed was ROTATED, not revealed.');
+  } else {
+    /*
+     * SEALED BEFORE IT IS REFERENCED. If this write fails, the owner row still
+     * says `mfaEnabled: false` and the next run resumes cleanly. The reverse
+     * order would leave a user pointing at a seed that does not exist.
+     */
+    await secrets.createSecret(actor, {
+      ref: mfaRef,
+      name: `TOTP seed for ${ownerEmail}`,
+      category: 'mfa_totp',
+      environment: SECRET_ENVIRONMENT,
+      value: generated.secret,
+    });
+    log('  Seed sealed through the Secret Service.');
+  }
+
+  /*
+   * MFA IS STILL OFF AT THIS POINT, AND THAT IS THE POINT.
+   *
+   * Generating a seed proves nothing. It does not prove the operator scanned
+   * it, that their authenticator accepted it, or that the two clocks agree.
+   * An account marked `mfaEnabled` on the strength of a seed nobody has used
+   * is an account whose owner discovers at their first sign-in that they
+   * cannot get in — and mandatory platform MFA (D-27) means there is no other
+   * door.
+   *
+   * So the switch is thrown by a code read off a real authenticator, and by
+   * nothing else.
+   */
+  const code = await confirmEnrolment({ otpauthUri: generated.otpauthUri });
+
+  if (!totpVerifier.verify({ secret: generated.secret, token: code })) {
+    /*
+     * The seed stays sealed and MFA stays off, which is exactly the
+     * `enrolment-pending` state the next run knows how to resume. No recovery
+     * codes were generated, so none were invalidated.
+     */
+    throw new BootstrapRefusal(
+      'That code did not verify.\n' +
+        'MFA was NOT enabled and no recovery codes were issued.\n' +
+        'The seed remains sealed and unconfirmed; re-run this command to enrol again — it will\n' +
+        'rotate that seed and show you a fresh one. Check that the authenticator holds the entry\n' +
+        'you just scanned, and that this machine’s clock is correct.',
+    );
+  }
+
+  const recoveryCodes = generateRecoveryCodes();
+
+  /*
+   * CODES FIRST, THEN THE SWITCH.
+   *
+   * `storeRecoveryCodes` REPLACES the whole set, and enabling MFA is the write
+   * that makes the account real. In this order, a crash between the two leaves
+   * codes stored against an account whose MFA is still off — which classifies
+   * as `enrolment-pending`, and the next run replaces them. The reverse order
+   * would leave an ENABLED account with no recovery codes, which is one lost
+   * phone away from permanent lockout.
+   */
+  await new PlatformAuthService({ prisma }).storeRecoveryCodes(owner.id, recoveryCodes);
+
+  const enrolledAt = new Date();
+  await prisma.platformUser.update({
+    where: { id: owner.id },
+    data:
+      owner.passwordHash === null
+        ? {
+            mfaEnabled: true,
+            mfaSecretRef: mfaRef,
+            mfaEnrolledAt: enrolledAt,
+            passwordHash: await hashPassword(password),
+          }
+        : {
+            /*
+             * A PASSWORD THAT EXISTS IS NEVER REPLACED. Re-running this command
+             * is not a password reset, and treating it as one would make a
+             * bootstrap script a standing account-takeover primitive for
+             * anybody who can reach a shell.
+             */
+            mfaEnabled: true,
+            mfaSecretRef: mfaRef,
+            mfaEnrolledAt: enrolledAt,
+          },
+  });
+  log('  Code verified. MFA enabled, recovery codes stored as hashes.');
+
+  await recordBootstrap(
+    prisma,
+    owner.id,
+    ownerEmail,
+    existingOwner === null ? 'owner created and enrolled' : 'unconfirmed enrolment resumed',
+  );
+
+  return {
+    outcome: {
+      kind: existingOwner === null ? 'bootstrapped' : 'resumed',
+      platformUserId: owner.id,
+    },
+    recoveryCodes,
+  };
+}
+
+/**
+ * The one audit event this command writes per effective run.
+ *
+ * NOT WRITTEN AT ALL when there was nothing to do: an audit trail that records
+ * a no-op as an action is one more thing a future reader has to discount.
+ */
+async function recordBootstrap(
+  prisma: PrismaClient,
+  ownerId: string,
+  ownerEmail: string,
+  what: string,
+): Promise<void> {
   await prisma.auditEvent.create({
     data: {
       workspaceId: null,
       // PLATFORM_USER, not SYSTEM: a person ran this, and the account they
       // created is the one the trail should name.
       actorType: 'PLATFORM_USER',
-      actorId: owner.id,
+      actorId: ownerId,
       action: 'platform.bootstrap.owner',
       resourceType: 'platform_user',
-      resourceId: owner.id,
+      resourceId: ownerId,
       severity: 'CRITICAL',
       outcome: 'SUCCESS',
       // The ADDRESS is the identity of the account and belongs in the trail.
       // The password, the seed and the recovery codes do not, and are absent.
-      reason: `Production Platform Owner bootstrap for ${ownerEmail}`,
+      reason: `Production Platform Owner bootstrap for ${ownerEmail}: ${what}`,
     },
   });
-
-  return {
-    outcome: {
-      kind: existingOwner === null ? 'bootstrapped' : 'completed-partial',
-      platformUserId: owner.id,
-    },
-    enrolment,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -483,6 +645,52 @@ function readSecretFromTty(promptText: string): Promise<string> {
       resolve(answer);
     });
   });
+}
+
+/**
+ * Read one line from the terminal, echoed.
+ *
+ * DELIBERATELY ECHOED, unlike the password. A TOTP code is worthless thirty
+ * seconds after it is typed, and an operator who cannot see what they typed
+ * will mistype it — which, under the rule below, costs them the whole
+ * enrolment and a re-run.
+ */
+function readLineFromTty(promptText: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true,
+    });
+    rl.question(promptText, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+/**
+ * The one-time disclosure, and the proof that it landed.
+ *
+ * THE URI IS SHOWN HERE RATHER THAN AT THE END, because the end is now
+ * conditional on this having worked. `bootstrapProductionOwner` does not
+ * enable MFA until the code this returns verifies against the seed it just
+ * sealed, so the operator's authenticator — not the script — is what decides
+ * the account is usable.
+ */
+function showEnrolmentAndReadCode(
+  log: (line: string) => void,
+): (challenge: EnrolmentChallenge) => Promise<string> {
+  return async ({ otpauthUri }) => {
+    log('');
+    log('  ── SHOWN ONCE. Scan this NOW. ───────────────────────────────────────');
+    log(`  otpauth URI : ${otpauthUri}`);
+    log('  ─────────────────────────────────────────────────────────────────────');
+    log('  Add it to your authenticator, then type the six-digit code it shows.');
+    log('  MFA is NOT enabled, and no recovery codes exist, until that code verifies.');
+    log('');
+    return (await readLineFromTty('  Current 6-digit code: ')).trim();
+  };
 }
 
 /**
@@ -551,11 +759,12 @@ async function main(): Promise<void> {
   const prisma = client();
 
   try {
-    const { outcome, enrolment } = await bootstrapProductionOwner({
+    const { outcome, recoveryCodes } = await bootstrapProductionOwner({
       prisma,
       ownerEmail,
       password,
       log,
+      confirmEnrolment: showEnrolmentAndReadCode(log),
     });
 
     log('');
@@ -563,25 +772,28 @@ async function main(): Promise<void> {
       log('✔ Already bootstrapped. No row was created, changed or replaced.');
       return;
     }
-
+    if (outcome.kind === 'completed-partial') {
+      log('✔ Platform Owner completed. The existing MFA enrolment was not touched.');
+      return;
+    }
     log(
-      outcome.kind === 'bootstrapped' ? '✔ Platform Owner created.' : '✔ Platform Owner completed.',
+      outcome.kind === 'resumed'
+        ? '✔ Enrolment resumed and completed.'
+        : '✔ Platform Owner created and enrolled.',
     );
 
-    if (enrolment) {
+    if (recoveryCodes) {
       /*
-       * THE ONE-TIME DISCLOSURE. Shown here and nowhere else, to a terminal the
-       * guard above has already established is real. Nothing on these lines is
-       * recoverable from the database afterwards: the seed is sealed and the
-       * recovery codes are stored as hashes.
+       * THE SECOND HALF OF THE ONE-TIME DISCLOSURE. The otpauth URI was shown
+       * before the code was asked for, because the code is what proves it
+       * landed; these exist only because that proof succeeded.
        */
       log('');
       log('  ── SHOWN ONCE. Nothing below can be recovered. ──────────────────────');
-      log(`  otpauth URI    : ${enrolment.otpauthUri}`);
-      log(`  recovery codes : ${enrolment.recoveryCodes.join(' ')}`);
+      log(`  recovery codes : ${recoveryCodes.join(' ')}`);
       log('  ─────────────────────────────────────────────────────────────────────');
-      log('  Scan the URI into an authenticator NOW and store the recovery codes in');
-      log('  a password manager. Then clear this terminal’s scrollback.');
+      log('  Store them in a password manager — they are the only way back in if the');
+      log('  authenticator is lost. Then clear this terminal’s scrollback.');
     }
   } finally {
     await prisma.$disconnect();

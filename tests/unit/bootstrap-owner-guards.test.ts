@@ -6,8 +6,10 @@ import {
   assertInteractiveDisclosure,
   assertUsableOwnerPassword,
   assertVaultCanSeal,
+  classifyOwner,
   looksLikePlaceholder,
 } from '../../packages/database/prisma/bootstrap-owner-guards';
+import type { OwnerSnapshot } from '../../packages/database/prisma/bootstrap-owner-guards';
 
 /**
  * THE REFUSALS, EXERCISED WITHOUT A PRODUCTION DATABASE.
@@ -232,5 +234,142 @@ describe('the vault must be able to seal before anything is written', () => {
     expect(() =>
       assertVaultCanSeal({ NODE_ENV: 'development', SECRET_VAULT_KEK: 'k' } as NodeJS.ProcessEnv),
     ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * THE RECOVERY STATE MACHINE, AS A TRUTH TABLE.
+ *
+ * Written this way because the defect it replaces was invisible in prose: the
+ * first version asked "is there an owner", "is MFA on" and "is there a seed"
+ * in three separate places, and the combination `seed sealed + MFA off` fell
+ * through to the enrolment branch, which called `createSecret` for a `ref` that
+ * already existed. The unique index refused it, so the only command able to
+ * finish a half-finished account was the one command guaranteed to fail on it.
+ *
+ * Enumerating the states is what makes the gaps visible. Each row below is a
+ * state the database can actually be in.
+ */
+describe('classifying a Platform Owner before touching anything', () => {
+  const REF = 'mfa-totp/platform/production/owner-brandspace-test';
+
+  function owner(over: Partial<NonNullable<OwnerSnapshot['owner']>> = {}) {
+    return { passwordHash: 'hash', mfaEnabled: true, mfaSecretRef: REF, ...over };
+  }
+
+  it('a database with nothing in it is the ordinary first run', () => {
+    expect(classifyOwner({ owner: null, sealed: null, expectedRef: REF })).toEqual({
+      kind: 'absent',
+    });
+  });
+
+  it('an account with a password, MFA and a sealed seed is finished', () => {
+    expect(
+      classifyOwner({ owner: owner(), sealed: { id: 's1', status: 'ACTIVE' }, expectedRef: REF }),
+    ).toEqual({ kind: 'complete' });
+  });
+
+  it('an account with MFA but no password is finishable without touching MFA', () => {
+    expect(
+      classifyOwner({
+        owner: owner({ passwordHash: null }),
+        sealed: { id: 's1', status: 'ACTIVE' },
+        expectedRef: REF,
+      }),
+    ).toEqual({ kind: 'needs-password' });
+  });
+
+  it('an account with no seed at all needs enrolling', () => {
+    expect(
+      classifyOwner({
+        owner: owner({ passwordHash: null, mfaEnabled: false, mfaSecretRef: null }),
+        sealed: null,
+        expectedRef: REF,
+      }),
+    ).toEqual({ kind: 'needs-enrolment' });
+  });
+
+  it('A SEALED SEED WITH MFA STILL OFF IS RESUMABLE — the state that used to conflict', () => {
+    /*
+     * This is the defect. A crash, or a mistyped confirmation code, leaves
+     * exactly this behind: the secret record exists, `mfaEnabled` is false.
+     * The state carries the record's id precisely so the resume can ROTATE it
+     * rather than try to create a second record under the same ref.
+     */
+    expect(
+      classifyOwner({
+        owner: owner({ passwordHash: null, mfaEnabled: false, mfaSecretRef: null }),
+        sealed: { id: 'secret-1', status: 'ACTIVE' },
+        expectedRef: REF,
+      }),
+    ).toEqual({ kind: 'enrolment-pending', secretId: 'secret-1' });
+  });
+
+  describe('and the states that must fail closed', () => {
+    /**
+     * Every one of these describes an account whose MFA may be LIVE, or a
+     * vault entry whose provenance is unknown. Repairing either by guessing
+     * means replacing a working second factor — which is the difference
+     * between a bootstrap and an account-takeover primitive.
+     */
+    const DANGEROUS: [string, OwnerSnapshot][] = [
+      [
+        'a seed sealed for an address no account holds',
+        { owner: null, sealed: { id: 's1', status: 'ACTIVE' }, expectedRef: REF },
+      ],
+      [
+        'MFA enabled with no seed reference recorded',
+        {
+          owner: owner({ mfaSecretRef: null }),
+          sealed: { id: 's1', status: 'ACTIVE' },
+          expectedRef: REF,
+        },
+      ],
+      [
+        'MFA enabled against a seed filed under a different reference',
+        {
+          owner: owner({ mfaSecretRef: 'mfa-totp/platform/production/somebody-else' }),
+          sealed: { id: 's1', status: 'ACTIVE' },
+          expectedRef: REF,
+        },
+      ],
+      [
+        'MFA enabled and the sealed seed missing from the vault',
+        { owner: owner(), sealed: null, expectedRef: REF },
+      ],
+      [
+        'a seed reference recorded while MFA is switched off',
+        {
+          owner: owner({ mfaEnabled: false }),
+          sealed: { id: 's1', status: 'ACTIVE' },
+          expectedRef: REF,
+        },
+      ],
+      [
+        'an unconfirmed seed that is no longer active',
+        {
+          owner: owner({ passwordHash: null, mfaEnabled: false, mfaSecretRef: null }),
+          sealed: { id: 's1', status: 'REVOKED' },
+          expectedRef: REF,
+        },
+      ],
+    ];
+
+    it.each(DANGEROUS)('refuses: %s', (_name, snapshot) => {
+      const state = classifyOwner(snapshot);
+      expect(state.kind).toBe('inconsistent');
+    });
+
+    it('says what is wrong without naming an address, a seed or a password', () => {
+      for (const [, snapshot] of DANGEROUS) {
+        const state = classifyOwner(snapshot);
+        if (state.kind !== 'inconsistent') throw new Error('expected a refusal');
+        expect(state.reason.length).toBeGreaterThan(20);
+        expect(state.reason).not.toContain('@');
+        expect(state.reason).not.toContain(REF);
+      }
+    });
   });
 });

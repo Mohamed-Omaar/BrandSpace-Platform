@@ -6,11 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
+import { TOTP, URI } from 'otpauth';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bootstrapProductionOwner } from '../../packages/database/prisma/bootstrap-production-owner';
 import { BootstrapRefusal } from '../../packages/database/prisma/bootstrap-owner-guards';
 import { dropThrowawayDatabase } from './fixtures';
-import type { BootstrapResult } from '../../packages/database/prisma/bootstrap-production-owner';
+import type {
+  BootstrapResult,
+  EnrolmentChallenge,
+} from '../../packages/database/prisma/bootstrap-production-owner';
 
 /**
  * THE PRODUCTION PLATFORM OWNER BOOTSTRAP, AGAINST A DATABASE NOBODY ELSE TOUCHED.
@@ -30,25 +34,26 @@ import type { BootstrapResult } from '../../packages/database/prisma/bootstrap-p
  * what it should" is not a property you can spot-check; it is a property you
  * enumerate.
  *
- * WHAT ELSE IS PROVEN HERE, and could not be proven anywhere else:
+ * THE SUITE IS A STORY, IN ORDER, because the states it must prove are reached
+ * by living through them:
  *
- *   - the owner gets `platform_owner`, read back from the database rather than
- *     from the constant that was used to write it;
- *   - no plaintext password, TOTP seed, otpauth URI or recovery code exists
- *     ANYWHERE in the database afterwards — every row of every table is cast to
- *     text and searched, so a future column that stored one would be caught
- *     without anybody remembering to add an assertion for it;
- *   - nor in anything the command printed;
- *   - a second run is inert: same hash, same seed, same recovery codes, no new
- *     rows, and it reports `already-bootstrapped`;
- *   - a second run with a DIFFERENT password does not become a password reset;
- *   - a different existing Platform Owner stops the command, without printing
- *     who that owner is.
+ *   1. an empty database, enrolled by an operator whose authenticator works;
+ *   2. everything that write did, and everything it did not;
+ *   3. no plaintext anywhere — every row of every table, and the transcript;
+ *   4. a re-run that is INERT: not one row, in any table, including the audit
+ *      trail;
+ *   5. a crash mid-enrolment, reproduced, then a mistyped code that must NOT
+ *      enable MFA, then a resume that must not collide with the seed already
+ *      sealed — the defect this rewrite exists to fix;
+ *   6. a dangerous inconsistency that must fail closed rather than repair
+ *      itself by guessing;
+ *   7. a different Platform Owner, refused without naming them.
  *
  * The CLI guards — production-only, TTY-only, placeholder refusal — are pure
  * functions over an environment and are proven in `tests/unit/
- * bootstrap-owner-guards.test.ts`. This suite exercises the half that needs a
- * real PostgreSQL with real row-level security.
+ * bootstrap-owner-guards.test.ts`, alongside the state machine's truth table.
+ * This suite exercises the half that needs a real PostgreSQL with real
+ * row-level security.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -122,7 +127,8 @@ function applyMigration(url: string, name: string): void {
  * subject to RLS, so the command under test still runs under the real regime on
  * its own platform connection.
  *
- * It happens in a database that exists for ninety seconds and is then dropped.
+ * It happens in a database that exists for a couple of minutes and is then
+ * dropped.
  */
 async function letTheOwnerSeeEverything(migrator: Client): Promise<void> {
   const { rows } = await migrator.query<{ relname: string }>(
@@ -223,11 +229,19 @@ const CUSTOMER_TABLES = [
   'social_connection',
 ];
 
-/** The TOTP seed, recovered from the URI the command showed the operator. */
-function secretFromOtpauthUri(uri: string): string {
-  const value = new URL(uri).searchParams.get('secret');
-  if (!value) throw new Error('the otpauth URI carried no secret');
-  return value;
+/**
+ * An authenticator app, as far as this command can tell.
+ *
+ * Parsing the otpauth URI and generating from it is exactly what a phone does,
+ * so this exercises the real contract rather than reaching past it for the
+ * seed. It also means a change to the issuer, the period or the digit count
+ * would break this suite — which is correct, because it would break every
+ * operator's phone too.
+ */
+function codeFrom(otpauthUri: string): string {
+  const totp = URI.parse(otpauthUri);
+  if (!(totp instanceof TOTP)) throw new Error('the enrolment URI is not a TOTP URI');
+  return totp.generate();
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +265,34 @@ describe('the production Platform Owner bootstrap', () => {
   /** Everything the command printed, for the "never logs a secret" assertion. */
   const printed: string[] = [];
   const log = (line: string): void => void printed.push(line);
+
+  /** Every enrolment URI the command ever showed, in order. */
+  const scanned: string[] = [];
+
+  /** An operator whose authenticator works. */
+  const goodAuthenticator = async ({ otpauthUri }: EnrolmentChallenge): Promise<string> => {
+    scanned.push(otpauthUri);
+    return codeFrom(otpauthUri);
+  };
+
+  /** An operator who mistyped, or whose clock is wrong, or who scanned nothing. */
+  const wrongCode = async ({ otpauthUri }: EnrolmentChallenge): Promise<string> => {
+    scanned.push(otpauthUri);
+    // Well-formed and wrong. The comparison keeps it wrong in the one-in-a-
+    // million run where the real code happens to be all zeroes.
+    return codeFrom(otpauthUri) === '000000' ? '111111' : '000000';
+  };
+
+  function run(over: Partial<Parameters<typeof bootstrapProductionOwner>[0]> = {}) {
+    return bootstrapProductionOwner({
+      prisma,
+      ownerEmail,
+      password,
+      log,
+      confirmEnrolment: goodAuthenticator,
+      ...over,
+    });
+  }
 
   let firstRun: BootstrapResult;
   let totpSecret: string;
@@ -293,18 +335,20 @@ describe('the production Platform Owner bootstrap', () => {
     expect(await nonEmptyTables(migrator)).toEqual({});
   });
 
-  it('bootstraps the owner on the first run', async () => {
-    firstRun = await bootstrapProductionOwner({ prisma, ownerEmail, password, log });
+  it('bootstraps the owner once a live code from their authenticator verifies', async () => {
+    firstRun = await run();
 
     expect(firstRun.outcome.kind).toBe('bootstrapped');
-    expect(firstRun.enrolment).not.toBeNull();
+    expect(firstRun.recoveryCodes).not.toBeNull();
+    expect(scanned).toHaveLength(1);
 
     // Captured here rather than re-derived later: this is the only moment the
     // plaintext exists outside the operator's authenticator.
-    const enrolment = firstRun.enrolment;
-    if (!enrolment) throw new Error('the first run must produce an enrolment');
-    totpSecret = secretFromOtpauthUri(enrolment.otpauthUri);
-    recoveryCodes = enrolment.recoveryCodes;
+    const shown = firstRun.recoveryCodes;
+    const uri = scanned[0];
+    if (!shown || !uri) throw new Error('the first run must produce an enrolment');
+    recoveryCodes = shown;
+    totpSecret = new URL(uri.replace('otpauth://', 'https://')).searchParams.get('secret') ?? '';
 
     expect(totpSecret.length).toBeGreaterThanOrEqual(16);
     expect(recoveryCodes.length).toBeGreaterThanOrEqual(8);
@@ -390,12 +434,12 @@ describe('the production Platform Owner bootstrap', () => {
      * exist in the database or in the transcript.
      */
     function needles(): { label: string; value: string }[] {
-      const enrolment = firstRun.enrolment;
-      if (!enrolment) throw new Error('the first run must produce an enrolment');
+      const uri = scanned[0];
+      if (!uri) throw new Error('the first run must have shown an enrolment');
       return [
         { label: 'the password', value: password },
         { label: 'the TOTP secret', value: totpSecret },
-        { label: 'the otpauth URI', value: enrolment.otpauthUri },
+        { label: 'the otpauth URI', value: uri },
         ...recoveryCodes.map((code, i) => ({ label: `recovery code ${i}`, value: code })),
       ];
     }
@@ -412,6 +456,12 @@ describe('the production Platform Owner bootstrap', () => {
     });
 
     it('appears in nothing the command printed', () => {
+      /*
+       * The otpauth URI IS shown to the operator — that is the point of
+       * enrolment — but by the interactive command's own disclosure, not by
+       * the progress log this captures. Anything reaching `log` reaches the
+       * scrollback of whoever ran it and, eventually, a support thread.
+       */
       const transcript = printed.join('\n');
       expect(transcript.length).toBeGreaterThan(0);
       for (const { label, value } of needles()) {
@@ -431,7 +481,7 @@ describe('the production Platform Owner bootstrap', () => {
     });
   });
 
-  describe('re-running it', () => {
+  describe('re-running it against a finished owner', () => {
     let before: Record<string, number>;
     let ownerBefore: { passwordHash: string | null; mfaSecretRef: string | null };
     let hashesBefore: string[];
@@ -446,30 +496,27 @@ describe('the production Platform Owner bootstrap', () => {
     });
 
     it('reports that the owner is already bootstrapped, and discloses nothing', async () => {
-      const again = await bootstrapProductionOwner({ prisma, ownerEmail, password, log });
+      const again = await run({
+        confirmEnrolment: async () => {
+          throw new Error('a finished owner must never be asked to confirm an enrolment');
+        },
+      });
       expect(again.outcome.kind).toBe('already-bootstrapped');
       // There is deliberately no way to show the seed a second time: it is
       // sealed, and this command has no business unsealing one.
-      expect(again.enrolment).toBeNull();
+      expect(again.recoveryCodes).toBeNull();
     }, 120_000);
 
-    it('writes no new row anywhere except the audit trail', async () => {
-      const after = await nonEmptyTables(migrator);
-
+    it('writes NO row, in any table — including the audit trail', async () => {
       /*
-       * THE TRAIL IS THE ONE THING THAT MUST GROW. Somebody opened a shell on
-       * the production platform and ran a full-privilege command; that it
-       * turned out to be a no-op is not a reason for the database to forget it
-       * happened. The catalogue sync runs on every invocation — which is what
-       * makes re-running this command the right way to pick up a permission a
-       * deploy added — and it goes through `asPlatform`, so it is audited.
-       *
-       * Exactly one new event, and nothing else in the schema moves.
+       * TRULY INERT, and that is a change. The first version synchronised the
+       * catalogue and appended an audit event before it asked whether there was
+       * anything to do, so "nothing was changed" was not true: roles were
+       * rewritten and the trail grew on every invocation. The documentation
+       * said one thing and the code did another, and the code was the one that
+       * had to move.
        */
-      const { audit_event: auditAfter, ...restAfter } = after;
-      const { audit_event: auditBefore, ...restBefore } = before;
-      expect(restAfter).toEqual(restBefore);
-      expect(auditAfter).toBe((auditBefore ?? 0) + 1);
+      expect(await nonEmptyTables(migrator)).toEqual(before);
     });
 
     it('does not replace the password, the seed or the recovery codes', async () => {
@@ -490,16 +537,149 @@ describe('the production Platform Owner bootstrap', () => {
        * anybody who can open a shell on the platform — no existing credential
        * required. It must decline, quietly and completely.
        */
-      const again = await bootstrapProductionOwner({
-        prisma,
-        ownerEmail,
-        password: 'an-entirely-different-passphrase-4b81',
-        log,
-      });
+      const again = await run({ password: 'an-entirely-different-passphrase-4b81' });
       expect(again.outcome.kind).toBe('already-bootstrapped');
 
       const owner = await prisma.platformUser.findUniqueOrThrow({ where: { email: ownerEmail } });
       expect(owner.passwordHash).toBe(ownerBefore.passwordHash);
+    }, 120_000);
+  });
+
+  describe('an enrolment that was never confirmed', () => {
+    let passwordHashBefore: string | null;
+
+    beforeAll(async () => {
+      /*
+       * REPRODUCING THE CRASH, EXACTLY.
+       *
+       * A seed sealed under this owner's ref with MFA switched off is what a
+       * process killed mid-enrolment leaves behind — and, now, what a mistyped
+       * confirmation code leaves behind on purpose. It used to be unrecoverable:
+       * the command took the enrolment branch anyway and called `createSecret`
+       * for a ref that already existed, which conflicts on the unique index, so
+       * the only command able to finish the account was guaranteed to fail on
+       * it.
+       *
+       * The sealed secret is deliberately LEFT IN PLACE. That is the whole
+       * point of the state.
+       */
+      const owner = await prisma.platformUser.findUniqueOrThrow({ where: { email: ownerEmail } });
+      passwordHashBefore = owner.passwordHash;
+      await prisma.platformMfaRecoveryCode.deleteMany({ where: { platformUserId: owner.id } });
+      await prisma.platformUser.update({
+        where: { id: owner.id },
+        data: { mfaEnabled: false, mfaSecretRef: null, mfaEnrolledAt: null },
+      });
+    });
+
+    it('is exactly one sealed record, which is what used to make it unrecoverable', async () => {
+      expect(await prisma.secretRecord.count()).toBe(1);
+      expect(await prisma.platformMfaRecoveryCode.count()).toBe(0);
+    });
+
+    it('A WRONG CODE ENABLES NOTHING', async () => {
+      const refusal = await run({ confirmEnrolment: wrongCode }).then(
+        () => {
+          throw new Error('a wrong code was expected to refuse, and did not');
+        },
+        (caught: unknown) => caught,
+      );
+
+      expect(refusal).toBeInstanceOf(BootstrapRefusal);
+      if (!(refusal instanceof BootstrapRefusal)) throw refusal;
+      expect(refusal.message).toMatch(/did not verify/i);
+
+      const owner = await prisma.platformUser.findUniqueOrThrow({ where: { email: ownerEmail } });
+      expect(owner.mfaEnabled, 'MFA must stay off').toBe(false);
+      expect(owner.mfaSecretRef).toBeNull();
+      expect(await prisma.platformMfaRecoveryCode.count(), 'no codes may be issued').toBe(0);
+    }, 120_000);
+
+    it('rotated the existing seed rather than colliding with it', async () => {
+      /*
+       * ONE RECORD, TWO VERSIONS. The record is the same row it always was —
+       * which is why there is no unique-constraint violation — and the seed
+       * inside it is new, which is why the operator can be shown a fresh URI
+       * without anything ever unsealing the old one.
+       */
+      expect(await prisma.secretRecord.count()).toBe(1);
+      expect(await prisma.secretVersion.count()).toBe(2);
+
+      const active = await prisma.secretVersion.findMany({ where: { status: 'ACTIVE' } });
+      expect(active, 'exactly one version may be active').toHaveLength(1);
+    });
+
+    it('resumes and completes when a live code finally verifies', async () => {
+      const resumed = await run();
+      expect(resumed.outcome.kind).toBe('resumed');
+      expect(resumed.recoveryCodes).not.toBeNull();
+
+      const owner = await prisma.platformUser.findUniqueOrThrow({ where: { email: ownerEmail } });
+      expect(owner.mfaEnabled).toBe(true);
+      expect(owner.mfaSecretRef).toMatch(/^mfa-totp\/platform\/production\//);
+      expect(await prisma.platformMfaRecoveryCode.count()).toBe(resumed.recoveryCodes?.length);
+
+      // Still one record; still no second row under the same ref.
+      expect(await prisma.secretRecord.count()).toBe(1);
+      expect(await prisma.secretVersion.count()).toBe(3);
+    }, 120_000);
+
+    it('left the existing password alone while resuming', async () => {
+      const owner = await prisma.platformUser.findUniqueOrThrow({ where: { email: ownerEmail } });
+      expect(owner.passwordHash).toBe(passwordHashBefore);
+    });
+
+    it('still created no customer data along the way', async () => {
+      const counts = await nonEmptyTables(migrator);
+      expect(CUSTOMER_TABLES.filter((table) => counts[table] !== undefined)).toEqual([]);
+      expect(Object.keys(counts).sort()).toEqual([...PERMITTED_TABLES].sort());
+    });
+  });
+
+  describe('a dangerous inconsistency', () => {
+    let before: Record<string, number>;
+
+    beforeAll(async () => {
+      /*
+       * AN ACCOUNT THAT BELIEVES IT HAS MFA, WITH NO SEED IN THE VAULT.
+       *
+       * However it arose — a restore that replayed one table and not another,
+       * a hand-edited row — the owner may still be carrying a working
+       * authenticator. Re-enrolling would replace their second factor with one
+       * only the person at this shell holds, which is an account takeover
+       * wearing a recovery script's clothes.
+       */
+      await prisma.secretVersion.deleteMany({});
+      await prisma.secretRecord.deleteMany({});
+      before = await nonEmptyTables(migrator);
+    });
+
+    it('refuses rather than re-enrolling an owner whose MFA may be live', async () => {
+      const refusal = await run().then(
+        () => {
+          throw new Error('an inconsistent state was expected to refuse, and did not');
+        },
+        (caught: unknown) => caught,
+      );
+
+      expect(refusal).toBeInstanceOf(BootstrapRefusal);
+      if (!(refusal instanceof BootstrapRefusal)) throw refusal;
+      expect(refusal.message).toMatch(/refusing to bootstrap/i);
+      expect(refusal.message).toMatch(/nothing was written/i);
+    }, 120_000);
+
+    it('wrote nothing while refusing — not a role, not an audit event', async () => {
+      expect(await nonEmptyTables(migrator)).toEqual(before);
+    });
+
+    it('never asked for a confirmation code, because it never got that far', async () => {
+      const scannedBefore = scanned.length;
+      await run({
+        confirmEnrolment: async () => {
+          throw new Error('an inconsistent state must never reach enrolment');
+        },
+      }).catch(() => undefined);
+      expect(scanned.length).toBe(scannedBefore);
     }, 120_000);
   });
 
@@ -520,12 +700,7 @@ describe('the production Platform Owner bootstrap', () => {
         data: { email: intruderEmail, name: 'Other Owner', status: 'ACTIVE', roleId: ownerRole.id },
       });
 
-      const error = await bootstrapProductionOwner({
-        prisma,
-        ownerEmail: newcomerEmail,
-        password,
-        log,
-      }).then(
+      const error = await run({ ownerEmail: newcomerEmail }).then(
         () => {
           throw new Error('the bootstrap was expected to refuse, and did not');
         },

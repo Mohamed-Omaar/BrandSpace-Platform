@@ -256,3 +256,135 @@ export function assertVaultCanSeal(env: NodeJS.ProcessEnv = process.env): void {
       'Nothing was written.',
   );
 }
+
+// ---------------------------------------------------------------------------
+// The recovery state machine
+// ---------------------------------------------------------------------------
+
+/**
+ * What state the Platform Owner account is in, and therefore what may be done
+ * to it.
+ *
+ * WHY THIS IS A TOTAL FUNCTION OVER A SNAPSHOT rather than a chain of `if`s
+ * inside the command. The first version of this command asked three separate
+ * questions in three separate places — is there an owner, is MFA enabled, is
+ * there a sealed seed — and acted on each in turn. That reads fine and hides a
+ * real defect: with a seed already sealed and MFA not yet enabled, it took the
+ * enrolment branch and called `createSecret` for a `ref` that already existed,
+ * which conflicts on the unique index. The half-finished account could not be
+ * finished by the only command able to finish it.
+ *
+ * Enumerating the states makes the gaps visible, makes each one testable
+ * without a database, and makes "which states are dangerous" a question with a
+ * written answer rather than an emergent one.
+ */
+export type OwnerState =
+  /** No account, no seed. The ordinary first run. */
+  | { readonly kind: 'absent' }
+  /** The account exists but nothing has been sealed for it yet. */
+  | { readonly kind: 'needs-enrolment' }
+  /**
+   * A seed is sealed and MFA was never enabled — the state a crash or a failed
+   * code confirmation leaves behind. Resumable, and the id is what lets the
+   * resume ROTATE the existing record instead of colliding with it.
+   */
+  | { readonly kind: 'enrolment-pending'; readonly secretId: string }
+  /** MFA is complete and working; only the password was never set. */
+  | { readonly kind: 'needs-password' }
+  /** Nothing to do. */
+  | { readonly kind: 'complete' }
+  /**
+   * Something that this command cannot have produced and must not repair by
+   * guessing. Always a refusal.
+   */
+  | { readonly kind: 'inconsistent'; readonly reason: string };
+
+export interface OwnerSnapshot {
+  readonly owner: {
+    readonly passwordHash: string | null;
+    readonly mfaEnabled: boolean;
+    readonly mfaSecretRef: string | null;
+  } | null;
+  readonly sealed: { readonly id: string; readonly status: string } | null;
+  /** The `ref` this command would seal the seed under. */
+  readonly expectedRef: string;
+}
+
+/**
+ * Classify the account, fail-closed by default.
+ *
+ * THE RULE BEHIND EVERY `inconsistent` BELOW: an account whose MFA is ACTIVE is
+ * never re-enrolled, never re-sealed and never repaired by this command. Doing
+ * so would silently replace a working second factor — which is the difference
+ * between a bootstrap and an account-takeover primitive. Every such state gets
+ * a human instead.
+ *
+ * None of the reasons name the owner, the seed, the password or any value.
+ */
+export function classifyOwner({ owner, sealed, expectedRef }: OwnerSnapshot): OwnerState {
+  if (owner === null) {
+    if (sealed === null) return { kind: 'absent' };
+    /*
+     * A seed filed under an address no account holds. This command creates the
+     * account BEFORE it seals anything, so it cannot have produced this — and
+     * sealing a second seed over it, or adopting one whose provenance is
+     * unknown, are both worse than stopping.
+     */
+    return {
+      kind: 'inconsistent',
+      reason:
+        'a sealed MFA seed exists for this address but no Platform Owner account holds it. ' +
+        'This command creates the account before it seals a seed, so it did not produce this ' +
+        'state. Resolve the orphaned secret in the Control Center first.',
+    };
+  }
+
+  if (owner.mfaEnabled) {
+    if (owner.mfaSecretRef === null) {
+      return {
+        kind: 'inconsistent',
+        reason: 'the account has MFA enabled with no seed reference recorded.',
+      };
+    }
+    if (owner.mfaSecretRef !== expectedRef) {
+      return {
+        kind: 'inconsistent',
+        reason:
+          'the account has MFA enabled against a seed filed under a different reference than ' +
+          'this command would use. Re-enrolling would replace a working second factor.',
+      };
+    }
+    if (sealed === null) {
+      return {
+        kind: 'inconsistent',
+        reason:
+          'the account has MFA enabled but its sealed seed is not in the vault. Re-enrolling ' +
+          'would replace a second factor the owner may still be using; recovering the account ' +
+          'is a Control Center operation, not a bootstrap.',
+      };
+    }
+    return owner.passwordHash === null ? { kind: 'needs-password' } : { kind: 'complete' };
+  }
+
+  // --- MFA is NOT enabled from here down. -----------------------------------
+
+  if (owner.mfaSecretRef !== null) {
+    /*
+     * Enabling MFA and recording its reference happen in one write, so this
+     * pair cannot diverge by accident. That it has diverged means something
+     * else edited the row.
+     */
+    return {
+      kind: 'inconsistent',
+      reason: 'the account records a seed reference while MFA is switched off.',
+    };
+  }
+  if (sealed === null) return { kind: 'needs-enrolment' };
+  if (sealed.status !== 'ACTIVE') {
+    return {
+      kind: 'inconsistent',
+      reason: `a seed is sealed for this address but is ${sealed.status.toLowerCase()} rather than active.`,
+    };
+  }
+  return { kind: 'enrolment-pending', secretId: sealed.id };
+}
