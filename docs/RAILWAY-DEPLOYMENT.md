@@ -1157,7 +1157,9 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 14. **Verify health.** `/health/live` and `/health/ready` on the API; the
     worker's probe; each Next.js app renders.
 15. **Smoke test.** `docs/RAILWAY-SMOKE-TEST.md`, every item.
-16. **Bootstrap the platform owner** and sign in to the Control Center with MFA.
+16. **Bootstrap the platform owner** — the exact command and the one-time MFA
+    enrolment are §24 — and sign in to the Control Center with MFA. §25 must
+    be done first, or the owner's TOTP seed cannot be sealed.
 17. **Custom domains** (§10), then update the six public URL variables and
     redeploy so callbacks are built from the real origins.
 18. **Re-run the smoke test** against the custom domains.
@@ -1227,11 +1229,187 @@ in the repository.
     the bucket will now hold real customer media.
 12. **If a Railway Bucket was created from the earlier revision of this
     blueprint, delete it.** It is no longer referenced and holds nothing (§6.1).
-13. **Approve the deployment itself**, after reviewing this blueprint.
+13. **Configure AWS KMS for the platform secret vault.** §25. Nothing in
+    production can seal a secret until this is done — not a provider credential
+    in the Integrations Hub, and not the Platform Owner's second factor. It
+    therefore comes before item 14, and item 14 refuses if it was skipped.
+14. **Bootstrap the Platform Owner**, interactively, over `railway ssh`. §24 is
+    the whole procedure; it takes about two minutes and produces a TOTP seed and
+    a set of recovery codes that are shown exactly once. Have an authenticator
+    app and a password manager open before you start.
+15. **Approve the deployment itself**, after reviewing this blueprint.
 
 > The two follow-ups the previous revision listed here are **done**: `tsx` is a
 > runtime dependency of `apps/api` and `apps/worker`, and the S3 object store
 > adapter exists. Neither is an owner action any more.
+
+---
+
+## 24. Creating the production Platform Owner
+
+The platform ships with **no accounts at all**. This is the one command that
+brings the first one into existence, and it is run exactly once, by a person, at
+a real terminal.
+
+### 24.1 It is not the seed, and it must never be confused with one
+
+`pnpm db:seed` builds a development world — two workspaces, Sample Brand, North
+Star, customer users, memberships, wallets, campaigns, content. Every one of
+those rows is fiction, and fiction in a production database is indistinguishable
+from a customer's real data the moment anybody looks at a table. **Never run the
+seed against production.**
+
+The bootstrap is a separate file with a separate entry point
+(`packages/database/prisma/bootstrap-production-owner.ts`). The only rows it
+writes are:
+
+| Written                                 | Why                                                 |
+| --------------------------------------- | --------------------------------------------------- |
+| `permission`, `role`, `role_permission` | The catalogue the product defines. Configuration.   |
+| `platform_user` — **exactly one**       | The real owner, with the `platform_owner` role.     |
+| `secret_record`, `secret_version`       | Their TOTP seed, sealed through the Secret Service. |
+| `platform_mfa_recovery_code`            | Hashes of their recovery codes. Never the codes.    |
+| `audit_event`                           | The trail. Its absence would be the defect.         |
+
+It writes **no** workspace, brand, customer user, membership, wallet, credit
+transaction, subscription, campaign, content item or asset.
+`tests/isolation/bootstrap-production-owner.test.ts` runs the command against a
+freshly migrated database and then reads **every table in the schema**, failing
+if any table outside the list above holds a single row.
+
+### 24.2 Before you start
+
+- ☐ Migrations are applied (§22, owner action 6). The command creates no tables.
+- ☐ **AWS KMS is configured (§25).** Without `SECRET_VAULT_KMS_KEY_ARN` the
+  vault cannot seal anything in a production process, and the command
+  refuses up front rather than creating an owner whose second factor then
+  fails to save.
+- ☐ `DATABASE_PLATFORM_URL` is set on the service you will SSH into, and points
+  at `brandspace_platform`. The command asks PostgreSQL who it is connected
+  as and refuses anything else.
+- ☐ `APP_ENV=production` **and** `NODE_ENV=production` (D-97 — both, because a
+  built Next.js app sets `NODE_ENV=production` regardless, so only `APP_ENV`
+  proves the deployment believes it is production).
+- ☐ You have chosen the owner's password — **at least 16 characters** — and it
+  is already in your password manager. You will type it, never paste it from
+  a file, and it is never stored anywhere in Railway.
+- ☐ Your authenticator app is open on your phone, ready to scan.
+- ☐ You are at a **real terminal**. If stdout or stdin is not a TTY the command
+  refuses, because the one-time enrolment must not be printed into a pipe, a
+  log or a `tee`.
+
+### 24.3 The command
+
+```bash
+# 1. From your own machine, in a checkout of this repository.
+railway link                       # choose the project, then the PRODUCTION environment
+railway ssh --service api          # an interactive shell inside the running service
+
+# 2. Inside that shell. The address is passed INLINE, for this one process.
+BOOTSTRAP_PLATFORM_OWNER_EMAIL='mohamed.mostafa.omaar@gmail.com' \
+  pnpm bootstrap:production-owner
+```
+
+`--service admin` works identically; both services carry the platform database
+credential and the vault key (§25.4). `web`, `dashboard` and `worker` do not,
+and the command will refuse from them.
+
+> **`BOOTSTRAP_PLATFORM_OWNER_EMAIL` is deliberately not a Railway variable.**
+> It is read for one process and then gone. The address is never hard-coded in
+> source (CLAUDE.md §2.2), and nothing in the running product reads it.
+
+#### If a terminal genuinely cannot prompt
+
+`BOOTSTRAP_PLATFORM_OWNER_PASSWORD` is supported as a **process-local** escape
+hatch, set inline for one command and never added to Railway's variables, where
+it would sit readable by everybody with project access for as long as nobody
+thought to remove it. The command prints a warning every time it takes this
+path. Prefer typing the password; a typed password exists in your head and in
+that process, an exported one exists in the shell history and in `/proc`.
+
+### 24.4 What happens, and what you must capture
+
+```
+BrandSpace — production Platform Owner bootstrap
+  Owner address: mohamed.mostafa.omaar@gmail.com
+  This creates NO workspace, brand, customer or sample data.
+
+  New Platform Owner password (not echoed):        ← you type it; nothing appears
+  Confirm it:                                      ← again
+  permission catalogue: 72 entries
+  system roles: 14 entries
+  MFA enrolled, seed sealed through the Secret Service.
+  Password set (Argon2id, never printed).
+
+✔ Platform Owner created.
+
+  ── SHOWN ONCE. Nothing below can be recovered. ──────────────────────
+  otpauth URI    : otpauth://totp/...
+  recovery codes : ····· ····· ····· ····· ····· ····· ····· ····· ····· ·····
+  ─────────────────────────────────────────────────────────────────────
+```
+
+**Do these before you close the window, in this order:**
+
+1. **Scan the otpauth URI** into your authenticator and confirm it produces a
+   code. There is no second chance: the seed is sealed and this command has no
+   business unsealing one.
+2. **Store the recovery codes** in your password manager. Only their hashes are
+   in the database.
+3. **Exit the SSH session, then clear your local terminal's scrollback.** The
+   disclosure lived in your terminal, not in the server's logs — but a scrollback
+   buffer is still a place a TOTP seed can be read from, screenshotted or pasted.
+4. **Sign in at the Control Center** with the address, the password and a code
+   from the authenticator, and confirm all three work together.
+
+Nothing on those lines is recoverable afterwards. A lost authenticator is
+recovered with a recovery code — not by re-running this command.
+
+### 24.5 The refusals, and what each one means
+
+Every one of these leaves the database untouched.
+
+| It says                                          | What is wrong                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------ |
+| `APP_ENV must be exactly "production"`           | You are not on the production deployment. Check `railway link`.          |
+| `NODE_ENV must be exactly "production"`          | The shell was started by a tool that reset it.                           |
+| `the platform secret vault cannot seal anything` | §25 is not done. Set `SECRET_VAULT_KMS_KEY_ARN` and the IAM credentials. |
+| `must connect as brandspace_platform`            | `DATABASE_PLATFORM_URL` holds the wrong role's credential.               |
+| `this is not an interactive terminal`            | You are in a pipe, a CI step or a redirect. Use `railway ssh` directly.  |
+| `still holds a placeholder value`                | A template value (`change-me`, `example`, `localhost`, …) was left in.   |
+| `must be at least 16 characters`                 | Choose a longer password. The value is never printed back at you.        |
+| `A different Platform Owner already exists`      | See §24.6. Do not work around this.                                      |
+
+### 24.6 Running it again
+
+Re-running is **safe and inert**. The command reports
+`Already bootstrapped. No row was created, changed or replaced.` and exits.
+
+It specifically **never**:
+
+- replaces an existing password — a re-run is not a password reset, because a
+  bootstrap that reset passwords would be a standing account-takeover primitive
+  for anybody who can open a shell;
+- re-seals or re-shows the TOTP seed;
+- regenerates the recovery codes.
+
+It **does** write one audit event each time, because somebody ran a
+full-privilege command against production and the trail should say so. It also
+re-synchronises the permission catalogue and the system roles, which makes a
+re-run the correct way to pick up a permission that a deploy added.
+
+**If it refuses with `A different Platform Owner already exists`,** stop. Either
+the address was mistyped, or somebody else has already bootstrapped this
+platform. The other owner's address is deliberately not printed — whoever is at
+this shell does not necessarily have standing to learn who else administers the
+platform. Resolve it in the Control Center, or ask somebody who can see it.
+
+### 24.7 What this command still does not give you
+
+An owner account, and nothing else. There is no workspace, no customer and no
+demo content, which is the point. The first real customer arrives through
+signup; plans, prices, AI providers and models are configured from the Control
+Center, never seeded (CLAUDE.md §2.2).
 
 ---
 

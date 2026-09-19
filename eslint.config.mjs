@@ -389,7 +389,16 @@ export default tseslint.config(
 
   // --- Config, scripts and tests are allowed to be noisier ----------------
   {
-    files: ['**/*.config.{ts,mts,js,mjs}', 'scripts/**/*.ts', 'tests/**/*.ts', '**/seed.ts'],
+    files: [
+      '**/*.config.{ts,mts,js,mjs}',
+      'scripts/**/*.ts',
+      'tests/**/*.ts',
+      '**/seed.ts',
+      // The production Platform Owner bootstrap is an interactive
+      // operator command: its entire interface is what it prints to a
+      // terminal, including the one-time MFA enrolment.
+      '**/bootstrap-production-owner.ts',
+    ],
     rules: {
       'no-console': 'off',
       'no-restricted-syntax': 'off',

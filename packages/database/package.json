@@ -19,7 +19,8 @@
     "seed": "tsx prisma/seed.ts",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --emitDeclarationOnly --declarationDir dist"
+    "build": "tsc --emitDeclarationOnly --declarationDir dist",
+    "bootstrap:production-owner": "tsx prisma/bootstrap-production-owner.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -30,12 +31,12 @@
     "@prisma/client": "7.10.0",
     "pg": "8.23.0",
     "@brandspace/auth": "workspace:*",
-    "@brandspace/secrets": "workspace:*"
+    "@brandspace/secrets": "workspace:*",
+    "tsx": "4.23.13"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
     "prisma": "7.10.0",
-    "tsx": "4.23.13",
     "typescript": "5.9.3"
   }
 }

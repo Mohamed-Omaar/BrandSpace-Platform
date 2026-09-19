@@ -36,6 +36,23 @@ import type { TenantScopedClient } from './tenant-client';
  * the tenant application role no longer grants cross-tenant access.
  */
 
+/**
+ * Re-exported from the platform pool, deliberately.
+ *
+ * `platform-pool.ts` is the module that OPENS the cross-tenant connection, so
+ * almost nothing may import it. `assertPlatformRole` is the opposite kind of
+ * thing: it opens nothing and hands out nothing. Given a client somebody else
+ * already holds, it asks PostgreSQL who that connection actually is and refuses
+ * a superuser, a BYPASSRLS role, or anything that is not `brandspace_platform`.
+ *
+ * It is re-exported here so that a caller which legitimately builds its own
+ * platform client — the production Platform Owner bootstrap does, because it
+ * runs before any service has started — can verify it with the SAME check the
+ * pool applies, rather than with a second copy of the query that would be one
+ * refactor away from disagreeing with this one.
+ */
+export { assertPlatformRole } from './platform-pool';
+
 export interface PlatformActorRef {
   readonly platformUserId: string;
   readonly roleKey: string;

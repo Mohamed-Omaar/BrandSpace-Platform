@@ -2,7 +2,7 @@
   "name": "brandspace",
   "version": "0.1.0",
   "private": true,
-  "description": "BrandSpace — bilingual multi-tenant AI brand and social media operating system",
+  "description": "BrandSpace \u2014 bilingual multi-tenant AI brand and social media operating system",
   "engines": {
     "node": ">=20.11.0",
     "pnpm": ">=9"
@@ -21,6 +21,7 @@
     "db:migrate:deploy": "pnpm --filter @brandspace/database migrate:deploy",
     "db:reset": "pnpm --filter @brandspace/database reset",
     "db:seed": "pnpm --filter @brandspace/database seed",
+    "bootstrap:production-owner": "pnpm --filter @brandspace/database bootstrap:production-owner",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:isolation": "vitest run --project isolation",
