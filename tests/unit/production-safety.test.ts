@@ -50,10 +50,25 @@ const KMS = {
   customerMfa: 'arn:aws:kms:eu-west-1:111122223333:key/33333333-3333-3333-3333-333333333333',
 } as const;
 
-/** The AWS identity a service presents to KMS. Its own, never shared. */
+/**
+ * The AWS identity a service presents to KMS. Its own, never shared.
+ *
+ * DELIBERATELY NOT SHAPED LIKE A REAL KEY PAIR. The first version of this
+ * fixture used `AKIA` followed by sixteen characters, which is exactly the
+ * pattern the repository's secret scan refuses — and it refused it, correctly,
+ * in CI. Nothing here parses or validates the format: `assertKeyDomainBoundaries`
+ * only asks whether the variables are PRESENT, so a realistic-looking value
+ * bought nothing and cost a guard that exists to stop a real key being
+ * committed by somebody in a hurry.
+ *
+ * The allowlist in that scan is for files that must hold credential-shaped
+ * strings because they are testing redaction or masking. This file is not one
+ * of them, and widening the allowlist to accommodate a fixture that never
+ * needed the shape would be weakening the check rather than fixing the test.
+ */
 const AWS_IDENTITY = {
-  AWS_ACCESS_KEY_ID: 'AKIA1111111111111111',
-  AWS_SECRET_ACCESS_KEY: 'w'.repeat(40),
+  AWS_ACCESS_KEY_ID: 'aws-key-id-for-tests-not-a-real-one',
+  AWS_SECRET_ACCESS_KEY: 'aws-secret-for-tests-not-a-real-one',
 } as const;
 
 const COMPLETE = {
