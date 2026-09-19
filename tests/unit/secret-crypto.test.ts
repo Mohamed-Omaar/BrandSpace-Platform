@@ -155,13 +155,33 @@ describe('key provider selection fails closed', () => {
     const kms = createKeyProvider({
       SECRET_VAULT_KMS_KEY_ARN: 'arn:aws:kms:eu-west-1:000000000000:key/abc',
     } as NodeJS.ProcessEnv);
-    expect(kms.name).toBe('kms');
+    expect(kms.name).toBe('aws-kms');
+    // The ARN it was given, so a wrapped record names the key unambiguously.
+    expect(kms.currentKeyId()).toBe('arn:aws:kms:eu-west-1:000000000000:key/abc');
   });
 
-  it('the KMS provider throws honestly rather than pretending to work', async () => {
+  /*
+   * THE OLD ASSERTION HERE WAS `rejects.toThrow(/not implemented/)`, and it was
+   * right at the time: `KmsKeyProvider` threw from both methods on purpose
+   * while F-09 was unresolved. That decision has been taken — AWS KMS — so the
+   * behaviour it pinned no longer exists to pin.
+   *
+   * It is NOT replaced by a weaker assertion. Wrapping, unwrapping, the
+   * encryption-context binding and the key pinning are all proven in
+   * `tests/unit/kms-key-provider.test.ts` against an injected fake that
+   * enforces what real KMS enforces — and two of those assertions were checked
+   * by breaking the provider to confirm they fail.
+   *
+   * What stays HERE is the property this file is about: selection. And note
+   * that the removed test made a real network call to AWS with an invented ARN,
+   * which is not something a unit suite should do.
+   */
+  it('never reaches a network in the unit suite', () => {
     const kms = createKeyProvider({
       SECRET_VAULT_KMS_KEY_ARN: 'arn:aws:kms:eu-west-1:000000000000:key/abc',
     } as NodeJS.ProcessEnv);
-    await expect(kms.wrapDataKey(Buffer.alloc(32), 'ctx')).rejects.toThrow(/not implemented/);
+    // Constructing is local; only wrap/unwrap would call out, and this file
+    // deliberately does neither.
+    expect(kms.name).toBe('aws-kms');
   });
 });

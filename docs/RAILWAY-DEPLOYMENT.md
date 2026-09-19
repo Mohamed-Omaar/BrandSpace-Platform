@@ -1235,6 +1235,123 @@ in the repository.
 
 ---
 
+## 25. The platform secret vault and AWS KMS (F-09)
+
+### 25.1 Why this is not optional
+
+Every platform secret — a provider credential entered in the Integrations Hub,
+a Platform Owner's TOTP seed — is sealed with envelope encryption: a random
+32-byte data key encrypts the value with AES-256-GCM, and a key provider wraps
+that data key.
+
+`createKeyProvider()` **refuses the local development provider when
+`NODE_ENV=production`**, because that provider derives its key from
+`SECRET_VAULT_KEK` and therefore keeps the key in the same environment as the
+data it protects — no hardware protection, no access policy, no independent
+audit trail.
+
+Until this was resolved, the alternative provider threw from both methods, so a
+production deployment **could not seal a single platform secret**. The vault
+existed and could not hold anything. That is now fixed: `KmsKeyProvider` wraps
+through AWS KMS.
+
+**Consequence: production needs `SECRET_VAULT_KMS_KEY_ARN`.** Without it the
+Control Center and the API cannot construct a `SecretService` at all — the
+Integrations Hub cannot store the Resend key, and platform sign-in cannot
+resolve the owner's TOTP seed.
+
+### 25.2 Create one key per environment
+
+Staging and production get **different keys**, for the same reason they get
+different database credentials: a staging incident must not be able to decrypt
+production secrets.
+
+```bash
+# Once per environment. Symmetric, used for Encrypt/Decrypt only.
+aws kms create-key \
+  --description "BrandSpace platform secret vault (production)" \
+  --key-usage ENCRYPT_DECRYPT \
+  --key-spec SYMMETRIC_DEFAULT
+
+# Note the KeyMetadata.Arn from the output — that is SECRET_VAULT_KMS_KEY_ARN.
+# An alias is convenient for humans but the ARN is what BrandSpace stores, so a
+# repointed alias can never silently change which key wrapped existing data.
+aws kms create-alias \
+  --alias-name alias/brandspace-vault-production \
+  --target-key-id <key-id>
+```
+
+**Enable automatic key rotation** (`aws kms enable-key-rotation --key-id <id>`).
+KMS keeps previous key material, so existing ciphertexts continue to decrypt;
+nothing in BrandSpace needs to change.
+
+### 25.3 An IAM user scoped to that key alone
+
+Railway runs no AWS instance role, so there is no ambient identity to inherit
+and a key pair is the only option. **Scope it to the one key.** A broader policy
+turns a leaked pair into access to every key in the account, which is exactly
+the blast radius the three separate key domains (D-136, D-206) exist to prevent.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"],
+      "Resource": "arn:aws:kms:<region>:<account>:key/<key-id>"
+    }
+  ]
+}
+```
+
+`kms:GenerateDataKey` is deliberately **absent**: BrandSpace generates the data
+key locally and asks KMS only to wrap it, so the permission would be unused.
+
+### 25.4 Railway variables
+
+On **`admin`** and **`api`** — the two services that hold the platform vault key:
+
+| Variable                   | Value                     |
+| -------------------------- | ------------------------- |
+| `SECRET_VAULT_KMS_KEY_ARN` | The ARN from §25.2        |
+| `AWS_ACCESS_KEY_ID`        | The IAM key id from §25.3 |
+| `AWS_SECRET_ACCESS_KEY`    | Its secret half           |
+
+`AWS_REGION` is **not required**: an ARN carries its region, and the provider
+reads it from there. Set it only if you deliberately want to override.
+
+`SECRET_VAULT_KEK` stays declared for staging and local use. In production it is
+present but unused — the KMS provider takes precedence whenever the ARN is set.
+
+### 25.5 Confirm it works before relying on it
+
+- ☐ Control Center → Integrations → Transactional email → **Resend** → enter a
+  key → **Save** succeeds. Before this fix that save failed with a key-provider
+  error; it is the cheapest end-to-end proof that the vault can seal.
+- ☐ `aws kms describe-key --key-id <arn>` from a shell with the same IAM
+  credentials returns the key, confirming the policy is not too narrow.
+- ☐ Check CloudTrail for `Encrypt` events on that key after the save — the
+  independent audit trail the development provider could not offer.
+
+**If a save fails with `AccessDeniedException`,** the IAM policy is wrong.
+**If it fails with `IncorrectKeyException`,** a value was sealed under a
+different key — do not repoint the ARN to make it go away; find out which key
+the ciphertext belongs to first.
+
+### 25.6 What did NOT change
+
+- The envelope. The payload is still AES-256-GCM locally; **KMS only ever sees
+  the 32-byte data key**, never a secret value.
+- The encryption context. It is now passed as a KMS `EncryptionContext`, which
+  binds it into the ciphertext exactly as `setAAD` did locally: a wrapped key
+  cannot be moved to another secret, environment or version.
+- The refusal to use the development provider in production. That rule stands;
+  only its error message changed, to name a configuration rather than an
+  unresolved decision.
+
+---
+
 ## 23. Open questions for the owner
 
 1. **GCC residency vs Railway's regions.** §1.4. The only question here that

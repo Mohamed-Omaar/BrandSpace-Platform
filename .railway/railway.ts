@@ -141,8 +141,38 @@ export default defineRailway((ctx, project) => {
     ),
   };
 
-  /** The three key domains. Separate keys so one leak cannot unwrap the others. */
+  /**
+   * The three key domains. Separate keys so one leak cannot unwrap the others.
+   *
+   * IN PRODUCTION THE KEK VARIABLES ARE NOT WHAT ENCRYPTS. `createKeyProvider`
+   * refuses the local development provider when `NODE_ENV=production` — it
+   * keeps the key beside the data it protects — so each domain that must seal
+   * anything in production needs a managed KMS key instead (F-09, resolved with
+   * AWS KMS). The KEK variables remain declared because staging and any
+   * non-production environment built from this file still use them.
+   *
+   * THE PLATFORM DOMAIN IS THE ONE THAT BLOCKS PRODUCTION TODAY: without
+   * `SECRET_VAULT_KMS_KEY_ARN` the Integrations Hub cannot store a provider
+   * credential and platform sign-in cannot resolve an owner's TOTP seed. The
+   * other two domains are declared alongside it so the same decision is made
+   * once, per environment, rather than discovered twice more later.
+   */
   const vaultEnv = {
+    SECRET_VAULT_KMS_KEY_ARN: ownerSetting(
+      'AWS KMS key ARN for the platform secret vault. REQUIRED in production (F-09): the KEK below drives the development-only provider, which refuses to run there.',
+    ),
+    /*
+     * HOW THE PROCESS AUTHENTICATES TO KMS. Railway runs no AWS instance role,
+     * so there is no ambient identity to inherit and a key pair is the only
+     * option. Scope the IAM user to `kms:Encrypt` and `kms:Decrypt` on THIS KEY
+     * ONLY — a wider policy turns a leaked pair into access to every key in the
+     * account, which is the blast radius the separate key domains exist to
+     * avoid.
+     */
+    AWS_ACCESS_KEY_ID: ownerSecret(
+      'IAM key id, scoped to kms:Encrypt and kms:Decrypt on the vault key alone.',
+    ),
+    AWS_SECRET_ACCESS_KEY: ownerSecret('The secret half of that IAM key pair.'),
     SECRET_VAULT_KEK: ownerSecret('Key-encryption key for the platform secret vault (D-136).'),
     SOCIAL_TOKEN_VAULT_KEK: ownerSecret(
       'Key-encryption key for customers’ own social OAuth tokens (D-136).',
@@ -367,6 +397,11 @@ export default defineRailway((ctx, project) => {
         'Signing key for the PLATFORM session realm. Must differ from CUSTOMER_SESSION_SECRET.',
       ),
       SECRET_VAULT_KEK: vaultEnv.SECRET_VAULT_KEK,
+      // The key that actually wraps in production. Without it this service
+      // cannot construct a SecretService at all (F-09).
+      SECRET_VAULT_KMS_KEY_ARN: vaultEnv.SECRET_VAULT_KMS_KEY_ARN,
+      AWS_ACCESS_KEY_ID: vaultEnv.AWS_ACCESS_KEY_ID,
+      AWS_SECRET_ACCESS_KEY: vaultEnv.AWS_SECRET_ACCESS_KEY,
       /*
        * FOR SECURITY AND ACCOUNT MAIL THE CONTROL CENTER ORIGINATES. It could
        * arguably resolve the provider itself — it already holds the vault key —
