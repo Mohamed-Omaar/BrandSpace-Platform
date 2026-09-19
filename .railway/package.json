@@ -1,0 +1,9 @@
+{
+  "name": "brandspace-railway-iac",
+  "private": true,
+  "type": "module",
+  "description": "Pins the Railway IaC authoring DSL. Not a pnpm workspace member: pnpm-workspace.yaml lists apps/*, packages/* and tests only, so nothing here reaches the application dependency graph.",
+  "dependencies": {
+    "railway": "3.11.0"
+  }
+}
