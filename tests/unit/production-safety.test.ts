@@ -35,6 +35,21 @@ import { INTEGRATION_DEFINITIONS, selectionRefusal } from '@brandspace/integrati
 
 const PRODUCTION = { APP_ENV: 'production' } as const;
 
+const COMPLETE = {
+  NODE_ENV: 'production',
+  APP_ENV: 'production',
+  DATABASE_URL: 'postgresql://app:pw@db:5432/brandspace',
+  DATABASE_PLATFORM_URL: 'postgresql://platform:pw@db:5432/brandspace',
+  CUSTOMER_SESSION_SECRET: 'a'.repeat(48),
+  PLATFORM_SESSION_SECRET: 'b'.repeat(48),
+  SECRET_VAULT_KEK: 'c'.repeat(48),
+  SOCIAL_TOKEN_VAULT_KEK: 'd'.repeat(48),
+  CUSTOMER_MFA_VAULT_KEK: 'e'.repeat(48),
+  PUBLIC_WEB_URL: 'https://brandspace.example',
+  PUBLIC_API_BASE_URL: 'https://api.brandspace.example',
+  PUBLIC_DASHBOARD_BASE_URL: 'https://app.brandspace.example',
+} satisfies NodeJS.ProcessEnv;
+
 function inProduction<T>(work: () => T): T {
   const previous = process.env['APP_ENV'];
   process.env['APP_ENV'] = 'production';
@@ -99,21 +114,6 @@ describe('development doubles cannot run in production', () => {
 });
 
 describe('the production configuration contract', () => {
-  const COMPLETE = {
-    NODE_ENV: 'production',
-    APP_ENV: 'production',
-    DATABASE_URL: 'postgresql://app:pw@db:5432/brandspace',
-    DATABASE_PLATFORM_URL: 'postgresql://platform:pw@db:5432/brandspace',
-    CUSTOMER_SESSION_SECRET: 'a'.repeat(48),
-    PLATFORM_SESSION_SECRET: 'b'.repeat(48),
-    SECRET_VAULT_KEK: 'c'.repeat(48),
-    SOCIAL_TOKEN_VAULT_KEK: 'd'.repeat(48),
-    CUSTOMER_MFA_VAULT_KEK: 'e'.repeat(48),
-    PUBLIC_WEB_URL: 'https://brandspace.example',
-    PUBLIC_API_BASE_URL: 'https://api.brandspace.example',
-    PUBLIC_DASHBOARD_BASE_URL: 'https://app.brandspace.example',
-  } as unknown as NodeJS.ProcessEnv;
-
   it('accepts a complete production environment', () => {
     expect(() => parseEnv({ ...COMPLETE })).not.toThrow();
   });
@@ -191,11 +191,11 @@ describe('startup validation', () => {
   });
 
   it('accepts the API profile without either session signing key', () => {
-    const { CUSTOMER_SESSION_SECRET: _customer, PLATFORM_SESSION_SECRET: _platform, ...apiEnv } =
-      COMPLETE as Record<string, string>;
-    expect(() =>
-      validateStartupConfiguration(apiEnv as NodeJS.ProcessEnv, 'api'),
-    ).not.toThrow();
+    const apiEnv: NodeJS.ProcessEnv = { ...COMPLETE };
+    delete apiEnv['CUSTOMER_SESSION_SECRET'];
+    delete apiEnv['PLATFORM_SESSION_SECRET'];
+
+    expect(() => validateStartupConfiguration(apiEnv, 'api')).not.toThrow();
   });
 
   it('accepts the worker profile with only the social-token key domain', () => {
@@ -211,17 +211,17 @@ describe('startup validation', () => {
   });
 
   it('still refuses a missing service-required key', () => {
-    const { SOCIAL_TOKEN_VAULT_KEK: _social, ...workerEnv } = {
+    const workerEnv: NodeJS.ProcessEnv = {
       NODE_ENV: 'production',
       APP_ENV: 'production',
-      DATABASE_URL: COMPLETE['DATABASE_URL'],
-      SOCIAL_TOKEN_VAULT_KEK: COMPLETE['SOCIAL_TOKEN_VAULT_KEK'],
-      PUBLIC_WEB_URL: COMPLETE['PUBLIC_WEB_URL'],
-      PUBLIC_API_BASE_URL: COMPLETE['PUBLIC_API_BASE_URL'],
+      DATABASE_URL: COMPLETE.DATABASE_URL,
+      PUBLIC_WEB_URL: COMPLETE.PUBLIC_WEB_URL,
+      PUBLIC_API_BASE_URL: COMPLETE.PUBLIC_API_BASE_URL,
     };
-    expect(() =>
-      validateStartupConfiguration(workerEnv as NodeJS.ProcessEnv, 'worker'),
-    ).toThrow(/SOCIAL_TOKEN_VAULT_KEK/);
+
+    expect(() => validateStartupConfiguration(workerEnv, 'worker')).toThrow(
+      /SOCIAL_TOKEN_VAULT_KEK/,
+    );
   });
 
   it('refuses credentials that are outside the worker blast-radius boundary', () => {
@@ -240,14 +240,14 @@ describe('startup validation', () => {
   });
 
   it('refuses session signing keys on the API process', () => {
-    const { CUSTOMER_SESSION_SECRET: _customer, PLATFORM_SESSION_SECRET: _platform, ...apiEnv } =
-      COMPLETE as Record<string, string>;
-    expect(() =>
-      validateStartupConfiguration(
-        { ...apiEnv, CUSTOMER_SESSION_SECRET: 'x'.repeat(48) } as NodeJS.ProcessEnv,
-        'api',
-      ),
-    ).toThrow(/CUSTOMER_SESSION_SECRET.*must not be present/i);
+    const apiEnv: NodeJS.ProcessEnv = { ...COMPLETE };
+    delete apiEnv['CUSTOMER_SESSION_SECRET'];
+    delete apiEnv['PLATFORM_SESSION_SECRET'];
+    apiEnv['CUSTOMER_SESSION_SECRET'] = 'x'.repeat(48);
+
+    expect(() => validateStartupConfiguration(apiEnv, 'api')).toThrow(
+      /CUSTOMER_SESSION_SECRET.*must not be present/i,
+    );
   });
 
   it('reports instead of throwing outside production', () => {
