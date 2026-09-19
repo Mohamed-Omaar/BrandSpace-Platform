@@ -148,20 +148,14 @@ export type Env = z.infer<typeof envSchema>;
  */
 export type StartupServiceProfile = 'complete' | 'api' | 'worker';
 
-function requireProductionValue(
-  env: Env,
-  name: keyof Env,
-): void {
+function requireProductionValue(env: Env, name: keyof Env): void {
   const value = env[name];
   if (value === undefined || value === '') {
     throw new Error(`${String(name)} is required in production for this service.`);
   }
 }
 
-function forbidProductionValue(
-  env: Env,
-  name: keyof Env,
-): void {
+function forbidProductionValue(env: Env, name: keyof Env): void {
   const value = env[name];
   if (value !== undefined && value !== '') {
     throw new Error(
