@@ -190,6 +190,40 @@ describe('startup validation', () => {
     ).toThrow();
   });
 
+  it('accepts the API profile without either session signing key', () => {
+    const { CUSTOMER_SESSION_SECRET: _customer, PLATFORM_SESSION_SECRET: _platform, ...apiEnv } =
+      COMPLETE as Record<string, string>;
+    expect(() =>
+      validateStartupConfiguration(apiEnv as NodeJS.ProcessEnv, 'api'),
+    ).not.toThrow();
+  });
+
+  it('accepts the worker profile with only the social-token key domain', () => {
+    const workerEnv = {
+      NODE_ENV: 'production',
+      APP_ENV: 'production',
+      DATABASE_URL: COMPLETE['DATABASE_URL'],
+      SOCIAL_TOKEN_VAULT_KEK: COMPLETE['SOCIAL_TOKEN_VAULT_KEK'],
+      PUBLIC_WEB_URL: COMPLETE['PUBLIC_WEB_URL'],
+      PUBLIC_API_BASE_URL: COMPLETE['PUBLIC_API_BASE_URL'],
+    } as NodeJS.ProcessEnv;
+    expect(() => validateStartupConfiguration(workerEnv, 'worker')).not.toThrow();
+  });
+
+  it('still refuses a missing service-required key', () => {
+    const { SOCIAL_TOKEN_VAULT_KEK: _social, ...workerEnv } = {
+      NODE_ENV: 'production',
+      APP_ENV: 'production',
+      DATABASE_URL: COMPLETE['DATABASE_URL'],
+      SOCIAL_TOKEN_VAULT_KEK: COMPLETE['SOCIAL_TOKEN_VAULT_KEK'],
+      PUBLIC_WEB_URL: COMPLETE['PUBLIC_WEB_URL'],
+      PUBLIC_API_BASE_URL: COMPLETE['PUBLIC_API_BASE_URL'],
+    };
+    expect(() =>
+      validateStartupConfiguration(workerEnv as NodeJS.ProcessEnv, 'worker'),
+    ).toThrow(/SOCIAL_TOKEN_VAULT_KEK/);
+  });
+
   it('reports instead of throwing outside production', () => {
     // A developer with half an environment should get a readable warning and a
     // running process, not a refusal to start.
