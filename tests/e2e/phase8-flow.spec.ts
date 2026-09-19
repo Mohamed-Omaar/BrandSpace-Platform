@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { deterministicPng } from '@brandspace/ai-gateway';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
@@ -49,6 +49,42 @@ import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from '.
  * ceiling rather than the product.
  */
 test.describe.configure({ mode: 'serial', timeout: 240_000 });
+
+/**
+ * Press something, and wait for what pressing it provoked to have HAPPENED.
+ *
+ * `page.waitForLoadState('networkidle')` on its own does not do that, and the
+ * difference is the whole reason this exists. A click returns as soon as the
+ * event is dispatched; the request it causes - a server action POST, or the
+ * navigation a link starts - leaves the browser a moment later. If the page
+ * happens to be quiet in that gap, `networkidle` resolves IMMEDIATELY, before
+ * anything has been sent, and the next line reads a page that predates the
+ * click. Under load the gap widens and the test fails somewhere else entirely:
+ * a campaign missing from a list it was just added to, an analysis that
+ * produced no finding, a link that "went" to the page it was already on.
+ *
+ * Arming the wait BEFORE the click closes the gap: the response cannot be
+ * missed because we are already listening when it is sent. The
+ * `networkidle` that follows is still useful - it lets the revalidation the
+ * action triggered land before anything is asserted - it is just no longer
+ * the only thing being waited for.
+ *
+ * The catch is deliberate. A control that legitimately sends nothing must not
+ * turn into a thirty-second stall; in that case this degrades to exactly the
+ * `networkidle` wait it replaced, and never to less.
+ */
+async function clickAndSettle(target: Locator, page: Page): Promise<void> {
+  const sent = page
+    .waitForResponse(
+      (response) =>
+        response.request().isNavigationRequest() || response.request().method() === 'POST',
+      { timeout: 30_000 },
+    )
+    .catch(() => undefined);
+  await target.click();
+  await sent;
+  await page.waitForLoadState('networkidle');
+}
 
 function credentials(): E2eAdminCredentials {
   try {
@@ -144,8 +180,7 @@ test('2 · the brand profile can be edited and reads back', async ({ page }) => 
 
   const description = `A speciality roastery. Journey ${RUN}.`;
   await page.locator('textarea[name="description"], input[name="description"]').fill(description);
-  await page.getByTestId('brand-profile-save').click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(page.getByTestId('brand-profile-save'), page);
 
   // READ BACK FROM THE SERVER, not from the field we just typed into: a save
   // that did not persist looks identical on an unreloaded page.
@@ -178,8 +213,7 @@ test('4 · a strategy can be asked for, and answers or refuses honestly', async 
   const form = page.getByTestId('strategy-form');
   await expect(form).toBeVisible();
   await form.locator('input[name="objective"]').fill(`Grow the launch audience. ${RUN}`);
-  await form.locator('button[type="submit"]').first().click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(form.locator('button[type="submit"]').first(), page);
 
   /*
    * EITHER OUTCOME IS THE PRODUCT WORKING. A proposal carries its evidence; a
@@ -317,8 +351,7 @@ test('6 · content is created and filed under the campaign', async ({ page }) =>
 
   // FILE IT UNDER THE CAMPAIGN, through the control the composer offers.
   await page.getByTestId('content-campaign').selectOption(state.campaignId as string);
-  await page.getByTestId('content-campaign-save').click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(page.getByTestId('content-campaign-save'), page);
   await expect(page.getByTestId('content-campaign')).toHaveValue(state.campaignId as string);
 });
 
@@ -350,8 +383,7 @@ test('7 · a picture is uploaded from the composer into the one library', async 
      */
     buffer: Buffer.from(deterministicPng(`journey-upload-${RUN}`, '64x64').bytes),
   });
-  await page.getByTestId('composer-upload-submit').click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(page.getByTestId('composer-upload-submit'), page);
 
   /*
    * IT LANDS IN THE ASSET LIBRARY — the SAME library, which is the point of
@@ -419,8 +451,7 @@ test('8 · an image is generated and lands in the Asset Library', async ({ page 
     'the studio links the generated asset into the library',
   ).toBeTruthy();
 
-  await link.click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(link, page);
   expect(new URL(page.url()).pathname).toBe('/en/assets');
 });
 
@@ -445,8 +476,7 @@ test('9 · media is attached to the variant and shows in the social preview', as
   const options = picker.locator('input[type="checkbox"]');
   await expect.poll(async () => options.count(), { timeout: 60_000 }).toBeGreaterThan(0);
   await options.first().check();
-  await variantForm.locator('button[type="submit"]').first().click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(variantForm.locator('button[type="submit"]').first(), page);
 
   // SAVED, AND SHOWN. The preview is the approved `SocialPostPreview` fed the
   // real caption and the real picture — what will actually be published.
@@ -490,13 +520,11 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   const wasAllowed = await selfToggle.isChecked();
   if (!wasAllowed) {
     await selfToggle.check();
-    await page.locator(`[data-testid="policy-save-${brandId}"]`).click();
-    await page.waitForLoadState('networkidle');
+    await clickAndSettle(page.locator(`[data-testid="policy-save-${brandId}"]`), page);
   }
 
   await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${state.itemId}`);
-  await page.getByTestId('submit-for-review').click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(page.getByTestId('submit-for-review'), page);
 
   /*
    * OPEN THE REVIEW THE WAY A REVIEWER DOES — by following the queue's own link
@@ -515,8 +543,7 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
     .first();
   const link = (await queued.count()) > 0 ? queued : mine;
   await expect(link).toBeVisible();
-  await link.click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(link, page);
 
   const review = page.getByTestId('review-variants');
   await expect(review).toBeVisible();
@@ -537,8 +564,7 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   // SCOPED TO THE REVIEW SUBJECT: the same control is offered on the queue row
   // and inside the opened review, so an unscoped locator is ambiguous by design.
   await expect(approve).toBeVisible();
-  await approve.click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(approve, page);
 
   // THE QUEUE NO LONGER HOLDS IT: a decided review is a decision, not a task.
   await expect(
@@ -550,8 +576,7 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   if (!wasAllowed) {
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
     await page.locator(`[data-testid="policy-self-${brandId}"]`).uncheck();
-    await page.locator(`[data-testid="policy-save-${brandId}"]`).click();
-    await page.waitForLoadState('networkidle');
+    await clickAndSettle(page.locator(`[data-testid="policy-save-${brandId}"]`), page);
   }
 });
 
@@ -615,8 +640,7 @@ test('11 · the post is scheduled and the calendar states its context', async ({
 
   await page.getByTestId('schedule-date').fill(`${part('year')}-${part('month')}-${part('day')}`);
   await page.getByTestId('schedule-time').fill(`${part('hour')}:${part('minute')}`);
-  await page.getByTestId('schedule-submit').click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(page.getByTestId('schedule-submit'), page);
 
   // THE SLOT IS ON THE MONTH, and opening it states the facts a planner scans
   // for — the campaign it belongs to, its publishing state, its media count.
@@ -737,8 +761,10 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
       .fill(
         `Which coffee topics are we not covering — our roastery positioning, mission, brewing notes and tone of voice? ${RUN}`,
       );
-    await page.getByTestId('content-gap-form').locator('button[type="submit"]').first().click();
-    await page.waitForLoadState('networkidle');
+    await clickAndSettle(
+      page.getByTestId('content-gap-form').locator('button[type="submit"]').first(),
+      page,
+    );
   }
 
   const propose = page.getByTestId('propose-learnings').first();
@@ -747,8 +773,7 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
     'Marketing Intelligence has no finding to draw a learning from, and commissioning one produced none',
   ).toBeGreaterThan(0);
 
-  await propose.click();
-  await page.waitForLoadState('networkidle');
+  await clickAndSettle(propose, page);
 
   /*
    * THE CANDIDATE IS IN THE GOVERNED QUEUE, and nothing was written into the
