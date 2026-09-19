@@ -45,7 +45,7 @@ export async function buildServer() {
    * developer with half an environment should get a readable warning and a
    * running server.
    */
-  const configuration = validateStartupConfiguration();
+  const configuration = validateStartupConfiguration(process.env, 'api');
   if (!configuration.ok) {
     log.warn('configuration is incomplete', {
       environment: configuration.environment,
