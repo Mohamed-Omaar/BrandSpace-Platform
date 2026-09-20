@@ -638,10 +638,7 @@ function FilterGroup({
   readonly hrefFor: (value: string | undefined) => string;
 }) {
   return (
-    <nav
-      aria-label={label}
-      style={{ display: 'grid', gap: spacingTokens.xs, minInlineSize: 0 }}
-    >
+    <nav aria-label={label} style={{ display: 'grid', gap: spacingTokens.xs, minInlineSize: 0 }}>
       <span
         style={{
           ...typographyTokens.overline,
