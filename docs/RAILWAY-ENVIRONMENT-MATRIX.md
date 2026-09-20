@@ -148,26 +148,54 @@ on nobody having set the wrong variable.
 | `APP_ENV`                   | all       |   no   |   yes    | `production` \| `staging`                | **This** is the deployment environment (D-97). Drives every production guard.                                                    |
 | `DATA_REGION`               | all       |   no   |   yes    | `eu-west`                                | Where the data actually is. See the residency note in the deployment doc §1.4.                                                   |
 | `LOG_LEVEL`                 | all       |   no   |    no    | `info` in production, `debug` in staging | Default `info`.                                                                                                                  |
-| `PUBLIC_WEB_URL`            | W D A P K |   no   | **yes**  | `https://www.example.com`                | **Must be https in production** — the parser throws on `http://`.                                                                |
+| `PUBLIC_WEB_URL`            | W D A P K |   no   |    no    | `https://www.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it. Https-checked if set. See the profile note below.       |
 | `DASHBOARD_URL`             | W D A P K |   no   |   yes    | `https://app.example.com`                |                                                                                                                                  |
 | `ADMIN_URL`                 | D A P K   |   no   |   yes    | `https://admin.example.com`              |                                                                                                                                  |
 | `API_URL`                   | D A P K   |   no   |   yes    | `https://api.example.com`                |                                                                                                                                  |
-| `PUBLIC_API_BASE_URL`       | D A P K   |   no   | **yes**  | `https://api.example.com`                | **Must be https in production.** Every OAuth callback and webhook URL is built from it at request time.                          |
-| `PUBLIC_DASHBOARD_BASE_URL` | D A P K   |   no   |   yes    | `https://app.example.com`                | Where customers are returned to.                                                                                                 |
+| `PUBLIC_API_BASE_URL`       | D A P K   |   no   | **A P**  | `https://api.example.com`                | **Required by `admin` and `api`** — they read it. Every OAuth callback and webhook URL is built from it. Https-checked if set.   |
+| `PUBLIC_DASHBOARD_BASE_URL` | D A P K   |   no   | **D P**  | `https://app.example.com`                | **Required by `dashboard` and `api`** — every customer return URL and email link is built from it. Https-checked if set.         |
 | `BRANDSPACE_API_URL`        | D A       |   no   |   yes    | `http://api.railway.internal:3003`       | **Internal only.** `http://` is correct: Railway's private network is already WireGuard-encrypted.                               |
 | `WORKER_PORT`               | K         |   no   |   yes    | `3004`                                   | The worker serves its liveness endpoint here, not on `PORT`. Set both to the same value or Railway's probe hits a closed socket. |
 | `OTEL_SERVICE_NAME`         | all       |   no   |    no    | `brandspace`                             | Default `brandspace`.                                                                                                            |
 | `BRANDSPACE_WEBFONTS`       | D A       |   no   |    no    | `google`                                 | Opt-in. Unset keeps rendering hermetic. Leave unset unless the owner wants Google-hosted fonts.                                  |
 
-### The https constraint is a deployment-order constraint
+### The https constraint is a deployment-order constraint, and it is now per service
 
-`PUBLIC_WEB_URL` and `PUBLIC_API_BASE_URL` default to `http://localhost:…` and
-production refuses `http://`. The API and worker call
-`validateStartupConfiguration()` at boot and **throw** in production.
+Every service calls `validateStartupConfiguration()` at boot and **throws** in
+production, so the origins a service requires must hold real https values before
+its first production boot can succeed. That is why domain generation moves to
+step 9 of the deployment order, before any service is expected to start.
 
-So these must hold real https origins before the first production boot can
-succeed — which is why domain generation moves to step 9 of the deployment
-order, before any service is expected to start.
+**WHICH origins a service requires is now decided per profile**, by
+`PROFILE_PUBLIC_URLS` in `packages/shared/src/env.ts`, beside the table that
+already did this for key domains:
+
+| Service     | Public URLs it must carry                          |
+| ----------- | -------------------------------------------------- |
+| `web`       | **none** — it reads no environment variable at all |
+| `dashboard` | `PUBLIC_DASHBOARD_BASE_URL`                        |
+| `admin`     | `PUBLIC_API_BASE_URL`                              |
+| `api`       | `PUBLIC_API_BASE_URL`, `PUBLIC_DASHBOARD_BASE_URL` |
+| `worker`    | **none**                                           |
+
+**This fixed a production outage.** The rule used to name two variables by hand
+and apply them to all five services. `web` reads neither, the blueprint
+correctly did not set `PUBLIC_API_BASE_URL` on it, and the schema defaulted the
+absent variable to `http://localhost:3003` — so the marketing service refused to
+boot with a message about OAuth callbacks it does not have, while CI stayed
+green. The three `PUBLIC_*` variables no longer carry localhost defaults: an
+absent one is absent, which is what makes "required" and "present but wrong"
+distinguishable.
+
+Any of the three that IS set must still be https, on every service. A stray
+`http://` origin is a misconfiguration wherever it appears.
+
+**This table is now machine-checked.** `tests/unit/railway-blueprint-contract.test.ts`
+parses `.railway/railway.ts`, builds each service's environment from the
+variables the blueprint actually gives it, and runs the real validator over it.
+A variable that the contract requires but the blueprint omits fails CI, and so
+does the reverse. The two sources of truth can no longer drift apart silently,
+which is how the outage above survived a green build.
 
 ---
 
