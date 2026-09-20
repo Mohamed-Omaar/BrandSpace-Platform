@@ -324,6 +324,12 @@ h4 {
  * so no contrast ratio depends on where an orb happens to have drifted.
  * ---------------------------------------------------------------------------
  */
+.bs-ambient-host {
+  position: relative;
+  isolation: isolate;
+  min-block-size: 100vh;
+}
+
 .bs-ambient {
   position: fixed;
   inset: 0;
