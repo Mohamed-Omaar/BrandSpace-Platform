@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Banner, Field, colorTokens, spacingTokens } from '@brandspace/ui';
 import {
+  customerLandingPath,
   getCustomer,
-  getCustomerAuth,
   getSessionToken,
 } from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
@@ -35,16 +35,7 @@ export default async function SignInPage({
   const existing = await getCustomer().catch(() => null);
   if (existing) {
     const token = await getSessionToken();
-    const workspaces = token
-      ? await getCustomerAuth()
-          .listWorkspaces(token)
-          .catch(() => [])
-      : [];
-    redirect(
-      workspaces.length === 0
-        ? `/${locale}/onboarding/workspace`
-        : `/${locale}/workspaces`,
-    );
+    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
   }
 
   const next = typeof query['next'] === 'string' ? query['next'] : '';
