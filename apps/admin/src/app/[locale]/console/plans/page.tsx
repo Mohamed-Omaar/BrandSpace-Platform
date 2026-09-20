@@ -147,6 +147,7 @@ export default async function PlansPage({
         </Banner>
       ) : null}
 
+      <div className="bs-section-stack">
       {/* ---- The live catalogue ------------------------------------------ */}
       <Card>
         <SectionHeader
@@ -435,6 +436,7 @@ export default async function PlansPage({
           </DataTable>
         )}
       </Card>
+      </div>
     </>
   );
 }
