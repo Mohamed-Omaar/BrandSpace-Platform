@@ -187,6 +187,19 @@ export async function getSessionToken(): Promise<string | null> {
   return store.get(CUSTOMER_REALM.cookieName)?.value ?? null;
 }
 
+/**
+ * Default post-auth destination.
+ *
+ * A verified customer with no workspace is still onboarding; sending them to
+ * the workspace picker only creates a dead-end empty state.
+ */
+export async function customerLandingPath(locale: string, token: string): Promise<string> {
+  const workspaces = await getCustomerAuth()
+    .listWorkspaces(token)
+    .catch(() => []);
+  return workspaces.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
+}
+
 /** The signed-in customer, or a redirect to sign-in. */
 export async function requireCustomer(locale: string): Promise<AuthenticatedCustomer> {
   const customer = await getCustomer().catch(() => null);
