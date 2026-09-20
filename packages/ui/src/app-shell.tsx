@@ -578,6 +578,7 @@ export function AppShell({
 
   return (
     <div
+      className="bs-ambient-host"
       data-testid="app-shell"
       data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
     >
