@@ -326,7 +326,11 @@ export function DropdownMenu({
         {trigger === 'card' && placement === 'block-start' ? (
           // `.more { color: var(--muted); font-size: 11px }` — the demo's
           // profile affordance is an ellipsis, not a chevron.
-          <span aria-hidden="true" style={{ color: colorTokens.textMuted, fontSize: '0.6875rem' }}>
+          <span
+            aria-hidden="true"
+            className="bs-dropdown-affordance"
+            style={{ color: colorTokens.textMuted, fontSize: '0.6875rem', flexShrink: 0 }}
+          >
             {'\u2022\u2022\u2022'}
           </span>
         ) : (
