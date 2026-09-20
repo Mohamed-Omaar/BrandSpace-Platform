@@ -80,9 +80,7 @@ async function defaultCustomerDestination(locale: string, token: string): Promis
   const workspaces = await getCustomerAuth()
     .listWorkspaces(token)
     .catch(() => []);
-  return workspaces.length === 0
-    ? `/${locale}/onboarding/workspace`
-    : `/${locale}/workspaces`;
+  return workspaces.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
 }
 
 export async function signInAction(formData: FormData): Promise<void> {
