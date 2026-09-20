@@ -612,6 +612,30 @@ h4 {
 }
 
 /*
+ * SELECTS USE ONE GLOBAL CHEVRON.
+ *
+ * Native arrows sit against the physical edge and vary by browser. That made
+ * the dropdown marker look cramped in both the customer dashboard and Control
+ * Center. Replacing it once here keeps every select aligned, gives the label
+ * enough trailing room, and mirrors the marker for RTL without per-page CSS.
+ */
+select.bs-control,
+select.bs-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.75rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234d4c53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9375rem center;
+  background-size: 0.875rem;
+}
+
+html[dir='rtl'] select.bs-control,
+html[dir='rtl'] select.bs-select {
+  background-position: left 0.9375rem center;
+}
+
+/*
  * The filled dark button's hover and active states.
  *
  * `bs-control` covers the soft neutral fills; an ink-filled or purple-filled
