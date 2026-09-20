@@ -11,6 +11,7 @@ import {
   toPublicErrorCode,
 } from '@brandspace/shared';
 import {
+  customerLandingPath,
   getCustomerAuth,
   getUnscopedEmailProvider,
   inWorkspace,
@@ -76,13 +77,6 @@ function signInUrl(locale: string, params: Record<string, string> = {}): string 
   return `/${locale}/sign-in${search ? `?${search}` : ''}`;
 }
 
-async function defaultCustomerDestination(locale: string, token: string): Promise<string> {
-  const workspaces = await getCustomerAuth()
-    .listWorkspaces(token)
-    .catch(() => []);
-  return workspaces.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
-}
-
 export async function signInAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const next = String(formData.get('next') ?? '');
@@ -117,7 +111,7 @@ export async function signInAction(formData: FormData): Promise<void> {
       destination =
         next.startsWith('/') && !next.startsWith('//')
           ? next
-          : await defaultCustomerDestination(locale, session.token);
+          : await customerLandingPath(locale, session.token);
     }
   } catch (error: unknown) {
     const correlationId = randomUUID();
@@ -421,7 +415,7 @@ export async function verifyMfaAction(formData: FormData): Promise<void> {
       code: String(formData.get('code') ?? ''),
       verify: (userId, code) => service.verifyMfa(userId, code),
     });
-    destination = await defaultCustomerDestination(locale, token!);
+    destination = await customerLandingPath(locale, token!);
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
