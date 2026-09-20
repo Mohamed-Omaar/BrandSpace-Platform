@@ -279,9 +279,77 @@ export default async function ConfigurationPage({
                       : '—'}
                   </Cell>
                   <Cell>
-                    {version.impactPreview
-                      ? `${version.impactPreview.changes.length} (${high} high)`
-                      : '—'}
+                    {version.impactPreview ? (
+                      <details data-testid={`impact-${version.versionNumber}`}>
+                        <summary style={{ cursor: 'pointer', ...typographyTokens.caption }}>
+                          {`${version.impactPreview.changes.length} (${high} high)`}
+                        </summary>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gap: spacingTokens.xs,
+                            marginBlockStart: spacingTokens.sm,
+                            minInlineSize: '18rem',
+                          }}
+                        >
+                          {version.impactPreview.changes.length === 0 ? (
+                            <span style={{ color: colorTokens.textMuted }}>
+                              {isArabic ? 'لا توجد تغييرات.' : 'No changes.'}
+                            </span>
+                          ) : (
+                            version.impactPreview.changes.map((change, index) => (
+                              <div
+                                key={`${change.path}-${index}`}
+                                style={{
+                                  display: 'grid',
+                                  gap: spacingTokens['3xs'],
+                                  paddingBlockEnd: spacingTokens.xs,
+                                  borderBlockEnd:
+                                    index === version.impactPreview!.changes.length - 1
+                                      ? 'none'
+                                      : `1px solid ${colorTokens.hairline}`,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    ...typographyTokens.caption,
+                                    fontWeight: 700,
+                                    color:
+                                      change.severity === 'high'
+                                        ? colorTokens.danger
+                                        : colorTokens.textPrimary,
+                                  }}
+                                >
+                                  {change.severity.toUpperCase()} · {change.kind} · {change.path}
+                                </span>
+                                <span
+                                  style={{
+                                    ...typographyTokens.caption,
+                                    color: colorTokens.textSecondary,
+                                  }}
+                                >
+                                  {change.summary}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                          {version.impactPreview.affected ? (
+                            <span
+                              style={{
+                                ...typographyTokens.caption,
+                                color: colorTokens.textSecondary,
+                              }}
+                            >
+                              {isArabic
+                                ? `${version.impactPreview.affected.totalOnChangedPlans} مساحة عمل على الخطط المتغيرة · ${version.impactPreview.affected.overLimit.length} فوق الحدود الجديدة`
+                                : `${version.impactPreview.affected.totalOnChangedPlans} workspace(s) on changed plans · ${version.impactPreview.affected.overLimit.length} over new limits`}
+                            </span>
+                          ) : null}
+                        </div>
+                      </details>
+                    ) : (
+                      '—'
+                    )}
                   </Cell>
                   <Cell>
                     <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
