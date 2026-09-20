@@ -262,7 +262,7 @@ describe('credit packs are configuration and are priced server-side', () => {
   });
 
   it('omits a pack with no price in the chosen currency rather than converting it', () => {
-    expect(packOffers(POLICY, 'US', 'USD')).toEqual([]);
+    expect(packOffers(POLICY, 'BH', 'BHD')).toEqual([]);
   });
 
   it('looks the price up from configuration, so a browser cannot supply one', () => {
@@ -274,7 +274,7 @@ describe('credit packs are configuration and are priced server-side', () => {
   });
 
   it('refuses a pack that is not on sale here', () => {
-    expect(() => priceOfPack(POLICY, 'fixture-pack-small', 'US', 'USD')).toThrow(/not on sale/i);
+    expect(() => priceOfPack(POLICY, 'fixture-pack-small', 'BH', 'BHD')).toThrow(/not on sale/i);
   });
 });
 
