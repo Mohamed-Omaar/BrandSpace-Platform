@@ -668,11 +668,14 @@ export function AppShell({
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
-              // `.topbar { min-height: 88px; gap: 16px; padding-bottom: 12px }`.
+              // Keep the title block clear of the shell's rounded top edge.
+              // The description can make the bar taller than its minimum height, so relying on
+              // vertical centring alone lets the eyebrow sit against the top on content-heavy pages.
               gap: layoutTokens.topbarGap,
               rowGap: spacingTokens.sm,
               minBlockSize: layoutTokens.headerHeight,
               paddingInline: layoutTokens.panelPadInline,
+              paddingBlockStart: spacingTokens.md,
               paddingBlockEnd: '0.75rem',
             }}
           >
