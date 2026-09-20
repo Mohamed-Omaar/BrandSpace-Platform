@@ -872,11 +872,7 @@ export function AppShell({
 }
 
 /** The production BrandSpace mark, shared by shell, auth and metadata surfaces. */
-export function BrandGlyph({
-  size = layoutTokens.brandMark,
-}: {
-  readonly size?: string;
-}) {
+export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: string }) {
   return (
     <span
       aria-hidden="true"
@@ -888,13 +884,7 @@ export function BrandGlyph({
         flexShrink: 0,
       }}
     >
-      <svg
-        viewBox="0 0 32 32"
-        width="100%"
-        height="100%"
-        focusable="false"
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 32 32" width="100%" height="100%" focusable="false" aria-hidden="true">
         <rect width="32" height="32" rx="8" fill="#7935FE" />
         <path
           d="M10 8h6.6c3 0 4.9 1.5 4.9 4 0 1.7-.9 2.9-2.4 3.4 1.9.4 3.1 1.8 3.1 3.8 0 2.8-2.1 4.4-5.4 4.4H10V8Zm3.3 6.4h2.9c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-2.9v3.2Zm0 6.4h3.3c1.4 0 2.2-.6 2.2-1.7s-.8-1.7-2.2-1.7h-3.3v3.4Z"
