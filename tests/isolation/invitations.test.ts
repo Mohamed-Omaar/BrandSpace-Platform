@@ -647,6 +647,10 @@ describe('the invitation service authorises its own caller', () => {
         inviter: {
           kind: 'member',
           userId: fixtures.a.userId,
+          // An owner, so the PERMISSION check is the only thing that can
+          // refuse this. Using a role that also fails the ladder would pass on
+          // the wrong guard and prove nothing about this one.
+          roleKey: 'workspace_owner',
           permissionKeys: ['workspace.read', 'member.read'],
         },
       }),
@@ -682,6 +686,7 @@ describe('the invitation service authorises its own caller', () => {
       invitations.resend(fixtures.a.workspaceId, issued.invitationId, {
         kind: 'member',
         userId: fixtures.a.userId,
+        roleKey: 'workspace_owner',
         permissionKeys: ['member.read'],
       }),
     ).rejects.toThrow('member.invite');
@@ -690,6 +695,7 @@ describe('the invitation service authorises its own caller', () => {
       invitations.revoke(fixtures.a.workspaceId, issued.invitationId, 'no authority', {
         kind: 'member',
         userId: fixtures.a.userId,
+        roleKey: 'workspace_owner',
         permissionKeys: ['member.read'],
       }),
     ).rejects.toThrow('member.invite');
@@ -1434,5 +1440,163 @@ describe('every invitation lifecycle step is audited', () => {
         where: { workspaceId: fixtures.a.workspaceId, action: 'workspace.invitation.created' },
       }),
     ).toBe(before);
+  });
+});
+
+/**
+ * P0 — THE INVITATION PATH ENFORCES THE ROLE-ASSIGNMENT LADDER.
+ *
+ * THE DEFECT. `InvitationService.create` checked that the inviter held
+ * `member.invite` and never compared the REQUESTED ROLE against what that
+ * inviter may grant. `MembershipService.changeRole` had always made that
+ * comparison; the invitation path, which is the other way a role reaches a
+ * person, did not. `workspace_admin` holds `member.invite`, so editing one
+ * hidden `<option>` in the members form issued an invitation for
+ * `workspace_owner` — acquiring billing management, workspace deletion and
+ * ownership transfer, the exact three authorities that role is denied.
+ *
+ * The members page filtered its `<select>` and its comment claimed "the service
+ * refuses anything else, so the list cannot be used to escalate by editing an
+ * option value". These tests are that claim, made true and then kept true: they
+ * call the SERVICE directly with a crafted `roleId`, which is what a hand-built
+ * form post does and what the UI filter cannot prevent.
+ *
+ * Both grant paths now read one table (`packages/auth/src/role-assignment.ts`),
+ * so they cannot drift apart again.
+ */
+describe('the invitation path enforces the role-assignment ladder (P0)', () => {
+  const memberInviter = (roleKey: string) => ({
+    kind: 'member' as const,
+    userId: fixtures.a.userId,
+    roleKey,
+    permissionKeys: ['member.read', 'member.invite', 'member.assign_role'],
+  });
+
+  it('an ADMIN may not invite a WORKSPACE OWNER, even with a crafted roleId', async () => {
+    // The escalation, exactly as it would be attempted: a real admin actor, a
+    // real owner role id, straight past any UI.
+    await expect(
+      invitations.create({
+        workspaceId: fixtures.a.workspaceId,
+        email: uniqueEmail('escalation'),
+        roleId: ownerRoleId,
+        inviter: memberInviter('workspace_admin'),
+      }),
+    ).rejects.toThrow(/may not assign "workspace_owner"/);
+  });
+
+  it('an ADMIN may not invite another ADMIN', async () => {
+    // "Below own level" (docs/SECURITY.md §4.3) excludes the actor's own role,
+    // otherwise an admin mints unlimited peers.
+    await expect(
+      invitations.create({
+        workspaceId: fixtures.a.workspaceId,
+        email: uniqueEmail('peer'),
+        roleId: adminRoleId,
+        inviter: memberInviter('workspace_admin'),
+      }),
+    ).rejects.toThrow(/may not assign "workspace_admin"/);
+  });
+
+  it('writes no invitation row when the ladder refuses', async () => {
+    // A refusal that left a PENDING row behind would be a second defect: the
+    // token would be mintable by a resend.
+    const email = uniqueEmail('norow');
+    await expect(
+      invitations.create({
+        workspaceId: fixtures.a.workspaceId,
+        email,
+        roleId: ownerRoleId,
+        inviter: memberInviter('workspace_admin'),
+      }),
+    ).rejects.toThrow(/may not assign/);
+
+    const rows = await platform.invitation.count({
+      where: { workspaceId: fixtures.a.workspaceId, email },
+    });
+    expect(rows).toBe(0);
+  });
+
+  it('an ADMIN may still invite an ANALYST', async () => {
+    // The control must not have become a blanket refusal. This is the ordinary
+    // case the product depends on.
+    const issued = await invitations.create({
+      workspaceId: fixtures.a.workspaceId,
+      email: uniqueEmail('analyst-ok'),
+      roleId: analystRoleId,
+      inviter: memberInviter('workspace_admin'),
+    });
+    expect(issued.token).toBeTruthy();
+  });
+
+  it('an OWNER may still invite a WORKSPACE OWNER', async () => {
+    // Product policy permits it, and the fix must not have taken it away.
+    const issued = await invitations.create({
+      workspaceId: fixtures.a.workspaceId,
+      email: uniqueEmail('owner-ok'),
+      roleId: ownerRoleId,
+      inviter: memberInviter('workspace_owner'),
+    });
+    expect(issued.token).toBeTruthy();
+  });
+
+  it('a role the ladder does not name may assign nothing', async () => {
+    // Fail-closed: a role absent from the table grants nothing, so a role added
+    // to the seed later does not silently acquire the authority to mint owners.
+    await expect(
+      invitations.create({
+        workspaceId: fixtures.a.workspaceId,
+        email: uniqueEmail('unknown-role'),
+        roleId: analystRoleId,
+        inviter: memberInviter('analyst'),
+      }),
+    ).rejects.toThrow(/may not assign "analyst"/);
+  });
+
+  it('a RESEND cannot re-issue a live token for a role the resender may not grant', async () => {
+    /*
+     * The same control, one step removed. A resend does not change the role —
+     * it supersedes the pending row and mints a FRESH token for the same
+     * `roleId`. Without this an admin could keep re-issuing an owner invitation
+     * an owner had created, indefinitely extending a grant they cannot make.
+     */
+    const issued = await invitations.create({
+      workspaceId: fixtures.a.workspaceId,
+      email: uniqueEmail('resend-owner'),
+      roleId: ownerRoleId,
+      inviter: memberInviter('workspace_owner'),
+    });
+
+    await expect(
+      invitations.resend(
+        fixtures.a.workspaceId,
+        issued.invitationId,
+        memberInviter('workspace_admin'),
+      ),
+    ).rejects.toThrow(/may not assign "workspace_owner"/);
+
+    // And the owner may still resend their own invitation.
+    const again = await invitations.resend(
+      fixtures.a.workspaceId,
+      issued.invitationId,
+      memberInviter('workspace_owner'),
+    );
+    expect(again.token).toBeTruthy();
+  });
+
+  it('a PLATFORM inviter is not ranked against a workspace ladder', async () => {
+    /*
+     * A platform actor holds no workspace role, so ranking it against an empty
+     * ladder would refuse every platform invitation — a different bug. Its
+     * authority is the platform permission plus verified MFA (D-27), checked
+     * separately and tested above.
+     */
+    const issued = await invitations.create({
+      workspaceId: fixtures.a.workspaceId,
+      email: uniqueEmail('platform-owner'),
+      roleId: ownerRoleId,
+      inviter: platformInviter(),
+    });
+    expect(issued.token).toBeTruthy();
   });
 });

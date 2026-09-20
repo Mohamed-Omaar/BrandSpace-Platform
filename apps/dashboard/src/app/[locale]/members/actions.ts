@@ -52,6 +52,10 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
         inviter: {
           kind: 'member',
           userId: session.customer.userId,
+          // The role the inviter holds, so the service can apply the
+          // role-assignment ladder. Taken from the resolved session, never
+          // from the form.
+          roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
         },
       });
@@ -88,6 +92,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
         {
           kind: 'member',
           userId: session.customer.userId,
+          roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
         },
       );
@@ -121,6 +126,7 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
         {
           kind: 'member',
           userId: session.customer.userId,
+          roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
         },
       ),
