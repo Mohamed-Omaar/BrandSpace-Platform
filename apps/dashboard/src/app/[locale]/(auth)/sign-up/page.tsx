@@ -32,10 +32,9 @@ export const dynamic = 'force-dynamic';
  * A minimum restated as a constant here would be a minimum the owner cannot
  * actually change (CLAUDE.md §2.2).
  *
- * THE TIMEZONE IS ASKED FOR, NEVER ASSUMED (D-194). The browser prefills the
- * control with its own zone because that is a courtesy to the person filling the
- * form; the VALUE submitted is theirs, and an empty one is refused rather than
- * replaced by a platform default.
+ * THE TIMEZONE IS ASKED FOR, NEVER ASSUMED (D-194). The searchable control is
+ * populated from the runtime's IANA inventory and posts only the canonical zone
+ * the customer selected; an empty value is refused rather than defaulted.
  */
 export default async function SignUpPage({
   params,
