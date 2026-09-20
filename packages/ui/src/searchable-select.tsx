@@ -2,12 +2,7 @@
 
 import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronDownIcon } from './icons';
-import {
-  colorTokens,
-  spacingTokens,
-  typographyTokens,
-  zIndexTokens,
-} from './tokens';
+import { colorTokens, spacingTokens, typographyTokens, zIndexTokens } from './tokens';
 import { inputStyle } from './primitives';
 
 export interface SearchableOption {
