@@ -92,7 +92,8 @@ async function createWorkspace(
 
   await page.fill('#name', 'Journey Workspace');
   await page.fill('#slug', `journey-${crypto.randomUUID().slice(0, 8)}`);
-  const countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(input.country) ?? input.country;
+  const countryName =
+    new Intl.DisplayNames(['en'], { type: 'region' }).of(input.country) ?? input.country;
   await page.fill('[data-testid="country-select"]', countryName);
   await expect(page.locator('[data-testid="currency-select"]')).toHaveCount(0);
   await page.selectOption('#defaultLocale', locale === 'ar' ? 'AR' : 'EN');
