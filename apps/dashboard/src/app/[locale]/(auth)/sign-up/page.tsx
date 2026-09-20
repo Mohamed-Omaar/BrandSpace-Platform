@@ -46,6 +46,10 @@ export default async function SignUpPage({
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const required = policy.legalDocuments.filter((document) => document.required);
+  const supportedValuesOf = (
+    Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }
+  ).supportedValuesOf;
+  const timezones = supportedValuesOf ? supportedValuesOf('timeZone') : ['UTC'];
 
   if (!policy.signup.open) {
     return (
@@ -132,9 +136,16 @@ export default async function SignUpPage({
             required
             maxLength={64}
             defaultValue=""
-            placeholder="Europe/London"
+            list="signup-timezones"
+            placeholder="Asia/Riyadh"
+            autoComplete="off"
             style={authInputStyle()}
           />
+          <datalist id="signup-timezones">
+            {timezones.map((timezone) => (
+              <option key={timezone} value={timezone} />
+            ))}
+          </datalist>
         </Field>
 
         {required.map((document) => (
