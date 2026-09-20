@@ -88,9 +88,7 @@ export function CreateWorkspaceForm({
         }).catch(() => null);
 
         if (!response?.ok) {
-          const payload = response
-            ? await response.json().catch(() => null)
-            : null;
+          const payload = response ? await response.json().catch(() => null) : null;
           const code =
             payload &&
             typeof payload === 'object' &&
