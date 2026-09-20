@@ -1,11 +1,14 @@
 /**
  * Creating a workspace from the customer's own answers — Phase 9 §12, §14.
  *
- * FOUR ANSWERS, NONE OF THEM GUESSED (D-194). Country, locale, timezone and
- * currency are required inputs with no fallback anywhere in this file. The
- * market MAY narrow which currencies the customer is offered, and the form shows
- * that narrowed list — but the customer still chooses, and a request naming a
- * currency the market does not offer is refused rather than corrected.
+ * Workspace identity and commercial checkout are separate concerns. Country,
+ * locale and timezone are persisted from explicit customer answers. Currency is
+ * supplied by the caller (USD in the launch onboarding route) and remains an
+ * explicit field so the billing engine can stay multi-currency without making
+ * currency a signup question.
+ *
+ * Payment-market and provider routing are NOT prerequisites for workspace
+ * creation. They are enforced when the customer attempts a commercial action.
  *
  * ONE TRIAL, ONCE, EVER (D-09). The trial and its credit grant commit in the
  * SAME transaction as the workspace, keyed on the workspace id. A retried
@@ -32,12 +35,12 @@ export interface CreateWorkspaceFromOnboardingInput {
   readonly name: string;
   readonly slug: string;
   readonly type?: string;
-  /** ISO 3166-1 alpha-2, chosen by the customer from the configured markets. */
+  /** ISO 3166-1 alpha-2, chosen by the customer. */
   readonly country: string;
   readonly defaultLocale: 'AR' | 'EN';
   /** An IANA zone, chosen by the customer. Validated, never defaulted. */
   readonly timezone: string;
-  /** Chosen by the customer from the currencies this market offers. */
+  /** Billing currency assigned by the caller's product policy. */
   readonly currency: string;
   readonly billingEmail: string;
   readonly legalName?: string | null;
@@ -65,14 +68,8 @@ export class WorkspaceOnboardingService {
     this.#clock = options.clock ?? systemClock;
   }
 
-  /**
-   * Validate the four answers against the configured commercial geography.
-   *
-   * SEPARATE FROM CREATION so the form can ask the same question the writer
-   * will, and a customer learns their currency is not offered while they are
-   * still on the page rather than after their workspace exists.
-   */
-  assertCommercialAnswers(
+  /** Validate the onboarding facts this service must persist safely. */
+  assertOnboardingAnswers(
     _policy: CommercePolicy,
     input: { readonly country: string; readonly currency: string; readonly timezone: string },
   ): void {
@@ -116,7 +113,7 @@ export class WorkspaceOnboardingService {
     const name = input.name.trim();
     if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A workspace name is required.');
 
-    this.assertCommercialAnswers(commerce, input);
+    this.assertOnboardingAnswers(commerce, input);
 
     const owner = await db.user.findUnique({
       where: { id: input.ownerUserId },
