@@ -619,18 +619,56 @@ describe('dunning starts one clock and does not restart it', () => {
   });
 });
 
-describe('workspace creation asks, and never assumes (D-194)', () => {
-  it('refuses a currency the chosen market does not offer', async () => {
-    // Kuwait offers KWD and USD in the fixture catalogue. Not SAR.
-    await expect(createWorkspace({ country: 'KW', currency: 'SAR' })).rejects.toThrow(
-      /not offered in that country/i,
-    );
+describe('workspace creation is independent from checkout availability', () => {
+  it('creates a workspace in a country that has no configured commerce market', async () => {
+    const workspaceId = await createWorkspace({ country: 'DE', currency: 'USD' });
+    const workspace = await platform.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { country: true, currency: true },
+    });
+    expect(workspace).toMatchObject({ country: 'DE', currency: 'USD' });
   });
 
-  it('refuses a country the platform is not configured to sell in', async () => {
-    await expect(createWorkspace({ country: 'ZZ', currency: 'USD' })).rejects.toThrow(
-      /not available in that country/i,
+  it('creates before any payment-provider route exists', async () => {
+    const noProviderPolicy = { ...policy, providerRouting: [] } as CommercePolicy;
+    const created = await new WorkspaceOnboardingService().create(
+      platform as unknown as TenantScopedClient,
+      {
+        ownerUserId,
+        name: 'Pre-payment workspace',
+        slug: `p9-no-provider-${crypto.randomUUID().slice(0, 8)}`,
+        country: 'SA',
+        defaultLocale: 'EN',
+        timezone: 'UTC',
+        currency: 'USD',
+        billingEmail: `billing-${crypto.randomUUID().slice(0, 8)}@example.local`,
+      },
+      noProviderPolicy,
+      findPlan(plans, 'fixture-starter'),
+      null,
     );
+    expect(created.workspaceId).toBeTruthy();
+  });
+
+  it('still refuses an invalid timezone', async () => {
+    await expect(
+      new WorkspaceOnboardingService().create(
+        platform as unknown as TenantScopedClient,
+        {
+          ownerUserId,
+          name: 'Bad timezone',
+          slug: `p9-bad-zone-${crypto.randomUUID().slice(0, 8)}`,
+          country: 'SA',
+          defaultLocale: 'EN',
+          timezone: 'Not/A_Timezone',
+          currency: 'USD',
+          billingEmail: 'timezone@example.local',
+        },
+        policy,
+        findPlan(plans, 'fixture-starter'),
+        null,
+      ),
+    ).rejects.toThrow(/recognised timezone/i);
   });
 
   it('grants the trial and its credits exactly once, in the same transaction', async () => {
