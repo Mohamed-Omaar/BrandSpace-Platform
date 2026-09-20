@@ -826,9 +826,11 @@ html[dir='rtl'] select.bs-select {
  * guess their own card-to-card spacing; this stack is shared by Admin and the
  * customer dashboard wherever multiple peer sections are composed.
  */
-.bs-section-stack {
+.bs-section-stack,
+.bs-page-flow {
   display: grid;
   gap: var(--bs-space-lg);
+  align-content: start;
 }
 
 .bs-form-row {
