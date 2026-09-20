@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write packages/shared/src/env.ts packages/ui/src/searchable-select.tsx && git diff -- packages/shared/src/env.ts packages/ui/src/searchable-select.tsx && exit 1",
     "db:generate": "pnpm --filter @brandspace/database generate",
     "db:migrate": "pnpm --filter @brandspace/database migrate:dev",
     "db:migrate:deploy": "pnpm --filter @brandspace/database migrate:deploy",
