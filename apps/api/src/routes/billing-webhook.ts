@@ -20,13 +20,38 @@ import { commercePolicy, planCatalogue, providerFor, reconciler } from './phase9
  * DIFFERENT document, which is a well-worn way to accept a forgery that happens
  * to round-trip.
  *
- * ALWAYS 200 ONCE VERIFIED. A provider retries on any non-2xx, so an event we
- * recorded and could not apply must not be re-delivered forever — the row says
- * FAILED or UNRESOLVED and an operator can see it. An event that FAILS
- * VERIFICATION gets a 400 and leaves nothing behind at all.
+ * 200 FOR A DECIDED EVENT; 503 FOR ONE THAT ASKS TO BE SENT AGAIN. A provider
+ * retries on any non-2xx with its own backoff, and that retry is the transport
+ * this system uses for a transient failure (D-222) — there is no second queue
+ * hop between the delivery and the settlement.
+ *
+ * The distinction is the outcome, not the fact of failure. `FAILED` is a
+ * DECISION about the money — the amount or currency does not match our row
+ * (§20) — and every redelivery would reach it again, so it is answered 200 and
+ * audited CRITICAL. `UNRESOLVED` and `STALE` are decisions too. `RETRYABLE`
+ * means the settlement did not finish for a reason that is not about the money
+ * at all, and nothing was applied because the settlement is atomic, so the
+ * honest answer is "send it again". `DEAD_LETTER` means we have said that
+ * `maxAttempts` times already: 200, so the provider stops, plus a CRITICAL
+ * audit so somebody looks.
+ *
+ * WHAT THIS FIXED. Every failure used to be `FAILED`, and `FAILED` was answered
+ * 200, so a dropped connection mid-settlement was permanent: charged at the
+ * provider, nothing applied here, and no retry anywhere in the system.
+ *
+ * An event that FAILS VERIFICATION still gets a 400 and leaves nothing behind
+ * at all.
  */
 
 const log = createLogger({ context: { component: 'api.billing-webhook' } });
+
+/** Outcomes where the event exists and the money did not move. Worth a line. */
+const UNAPPLIED_OUTCOMES: ReadonlySet<string> = new Set([
+  'FAILED',
+  'UNRESOLVED',
+  'RETRYABLE',
+  'DEAD_LETTER',
+]);
 
 const providerParamSchema = z.object({ provider: z.string().min(1).max(64) });
 
@@ -111,7 +136,7 @@ export async function registerBillingWebhookRoutes(app: FastifyInstance): Promis
         }
 
         for (const event of result.results) {
-          if (event.outcome === 'FAILED' || event.outcome === 'UNRESOLVED') {
+          if (UNAPPLIED_OUTCOMES.has(event.outcome)) {
             log.error('billing event not applied', {
               provider: adapter.key,
               outcome: event.outcome,
@@ -121,12 +146,25 @@ export async function registerBillingWebhookRoutes(app: FastifyInstance): Promis
           }
         }
 
-        return reply.code(200).send({
+        const body = {
           received: result.results.length,
           // The outcomes, so a provider's delivery log and ours can be compared.
           // No workspace id and no amount: this response goes to the provider.
           outcomes: result.results.map((event) => event.outcome),
-        });
+        };
+
+        /*
+         * ONE RETRYABLE EVENT MAKES THE WHOLE DELIVERY RETRYABLE, and that is
+         * safe rather than merely convenient: a redelivery re-sends every event
+         * in the batch, and the ones already settled answer DUPLICATE without
+         * touching anything. Under-asking would lose money; over-asking costs a
+         * replayed batch that no-ops.
+         */
+        if (result.results.some((event) => event.outcome === 'RETRYABLE')) {
+          return reply.code(503).send(body);
+        }
+
+        return reply.code(200).send(body);
       },
     );
   });

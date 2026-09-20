@@ -5093,6 +5093,12 @@ enum CreditPackPurchaseStatus {
 /// How far a received provider event has got.
 enum BillingEventStatus {
   RECEIVED
+  /// CLAIMED BY A DELIVERY THAT IS APPLYING IT RIGHT NOW. The settlement runs
+  /// outside the inbox row's own transaction, so the claim — not a database
+  /// lock — is what stops two deliveries of one event applying it twice
+  /// (D-221). A claim carries a token and a lease; a holder that dies leaves a
+  /// claim that expires rather than a row stuck here for ever.
+  PROCESSING
   PROCESSED
   /// Applied earlier; this delivery changed nothing (§28 — replays are no-ops).
   DUPLICATE
@@ -5100,7 +5106,18 @@ enum BillingEventStatus {
   STALE
   /// Could not be tied to a workspace through a trusted stored relationship.
   UNRESOLVED
+  /// TERMINAL, AND DETERMINISTIC. The amount or currency does not match our own
+  /// row (§20), so every redelivery would reach the same answer. Not applied,
+  /// audited CRITICAL, and never retried.
   FAILED
+  /// TRANSIENT. The apply threw something that is not a decision about the
+  /// money — a lost connection, a deadlock, a timeout. Nothing was applied,
+  /// because the settlement is atomic, so a later delivery must re-apply it.
+  RETRYABLE
+  /// RETRIES EXHAUSTED. The dead-letter state: an operator has to look. Reached
+  /// only after `maxAttempts` transient failures, and audited CRITICAL so the
+  /// alert exists rather than being inferred from a row nobody reads.
+  DEAD_LETTER
 }
 
 /// TENANT-OWNED. The workspace's commercial identity and its provider reference.
@@ -5518,12 +5535,24 @@ model BillingEvent {
   failureReason       String?
   attempts            Int                @default(0)
 
+  /// THE PROCESSING CLAIM (D-221). Set together with `status = PROCESSING` by a
+  /// conditional UPDATE that exactly one concurrent delivery can win. The token
+  /// is what makes the claim's OWNER identifiable: a delivery writes its final
+  /// status only while its own token is still on the row, so a late writer
+  /// whose lease expired and was taken over cannot overwrite the winner.
+  claimToken String?   @db.Uuid
+  /// When the current claim was taken. A claim older than the lease is assumed
+  /// to belong to a process that died and may be taken over.
+  claimedAt  DateTime? @db.Timestamptz(6)
+
   receivedAt  DateTime  @default(now()) @db.Timestamptz(6)
   processedAt DateTime? @db.Timestamptz(6)
 
   @@unique([providerKey, externalEventId])
   @@index([status, receivedAt])
   @@index([resolvedWorkspaceId, occurredAt])
+  /// Finding a stuck claim, and listing the dead-letter queue for an operator.
+  @@index([status, claimedAt])
   @@map("billing_event")
 }
 

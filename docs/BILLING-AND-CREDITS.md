@@ -176,14 +176,15 @@ credits granted for it (configurable, default: no revocation for goodwill refund
 
 ## 5. Billing Webhooks
 
-| Rule           | Detail                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| Verification   | Signature + timestamp on the raw body, before parsing                                                     |
-| Idempotency    | `unique(providerKey, externalEventId)`; replays are no-ops                                                |
-| Async          | Acknowledge fast, process on the `billing-events` queue                                                   |
-| Ordering       | Events may arrive out of order; state transitions compare event timestamps/versions and ignore stale ones |
-| Failure        | Failed processing retries with backoff, then dead-letters with an alert and an admin replay tool          |
-| Reconciliation | A daily job compares provider subscription/invoice state against ours and reports drift                   |
+| Rule           | Detail                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Verification   | Signature + timestamp on the raw body, before parsing                                                                |
+| Idempotency    | `unique(providerKey, externalEventId)`; replays are no-ops                                                           |
+| Async          | Acknowledge fast. Implemented SYNCHRONOUSLY, with the provider's own redelivery as the retry transport — §5.1, D-222 |
+| Concurrency    | One delivery at a time per event, enforced by a processing claim with a lease (D-221)                                |
+| Ordering       | Events may arrive out of order; state transitions compare event timestamps/versions and ignore stale ones            |
+| Failure        | TRANSIENT processing retries with backoff, then dead-letters with an alert and an admin replay tool                  |
+| Reconciliation | A daily job compares provider subscription/invoice state against ours and reports drift                              |
 
 Normalized events: `subscription.created` · `subscription.updated` · `subscription.cancelled` ·
 `invoice.created` · `invoice.paid` · `invoice.payment_failed` · `charge.refunded` · `dispute.created` ·
@@ -191,6 +192,42 @@ Normalized events: `subscription.created` · `subscription.updated` · `subscrip
 
 **A webhook never grants entitlements directly.** It updates our `Subscription`, and entitlements are then
 resolved from our own model — so a spoofed or malformed event cannot escalate access.
+
+### 5.1 How retry, dead-lettering and replay actually work
+
+The table above has always asked for three things. This is where each of them lives.
+
+**Retry with backoff — the provider's redelivery is the transport.** A `RETRYABLE` outcome answers
+**503**, and every payment provider retries a non-2xx on its own exponential schedule. There is no
+second hop through the `billing-events` queue between the delivery and the settlement, which is the one
+place this implementation departs from the "process on the queue" line above; D-222 records why. The
+retry BUDGET is still the queue's — `QUEUE_DEFINITIONS['billing-events'].maxAttempts` — bound to the
+reconciler by `tests/unit/billing-retry-policy.test.ts` so the two cannot drift.
+
+**The distinction that makes this safe is `FAILED` versus `RETRYABLE`.** `FAILED` is a decision about
+the money, reached by comparing rows we hold against an event we were sent; every redelivery reaches it
+again, so retrying is noise rather than resilience. `RETRYABLE` is a dropped connection, a deadlock, a
+timeout — nothing was applied, because the settlement is atomic, so a redelivery must re-apply it.
+Classification DEFAULTS TO `RETRYABLE`: misreading a transient failure as terminal loses a customer's
+money silently, while the reverse costs at most `maxAttempts` redeliveries before the row dead-letters
+with an alert on it.
+
+**Dead-letter with an alert.** `DEAD_LETTER` is terminal and writes a CRITICAL `AuditEvent`
+(`billing.event.dead_lettered`) — an alert that is emitted, rather than a row somebody would have to go
+looking for.
+
+**Admin replay.** `BillingReconciler.replay()` reconstructs the normalized event from the inbox row's
+own stored payload and re-runs the settlement. It replays only from `DEAD_LETTER`, `FAILED`,
+`UNRESOLVED`, `RETRYABLE` or `RECEIVED` — never from `PROCESSED`, `DUPLICATE` or `STALE`, so the tool
+cannot turn one payment into two — and it records the operator who asked
+(`billing.event.replayed`, `PLATFORM_USER`). An operator cannot supply an event, amend an amount, or
+replay anything that was not signed on arrival. **The Control Center screen for it is not built yet**;
+the service method is, and it is what such a screen would call.
+
+**One delivery at a time.** Settlement runs outside the inbox row's own transaction, deliberately, so a
+rolled-back apply still leaves the receipt visible. A processing claim — a conditional `UPDATE` carrying
+a token and a lease — is therefore what serializes two deliveries of the same event, rather than a
+database lock. D-221.
 
 ---
 
@@ -501,14 +538,17 @@ legitimately "confirming your payment".
 
 ### 20. Webhook authority (D-208)
 
-| Outcome      | When                                         | Effect                                |
-| ------------ | -------------------------------------------- | ------------------------------------- |
-| _(refused)_  | signature does not verify                    | **nothing is written**                |
-| `PROCESSED`  | verified, resolved, in order, amount matches | applied                               |
-| `DUPLICATE`  | the provider's event id was already recorded | nothing; original outcome kept        |
-| `STALE`      | older than the state it describes            | recorded, not applied                 |
-| `UNRESOLVED` | no trusted mapping ties it to a workspace    | recorded, visible, applied to nothing |
-| `FAILED`     | amount or currency does not match our row    | CRITICAL audit; not applied           |
+| Outcome       | When                                         | Effect                                     |
+| ------------- | -------------------------------------------- | ------------------------------------------ |
+| _(refused)_   | signature does not verify                    | **nothing is written**                     |
+| `PROCESSED`   | verified, resolved, in order, amount matches | applied                                    |
+| `DUPLICATE`   | the provider's event id was already recorded | nothing; original outcome kept             |
+| `STALE`       | older than the state it describes            | recorded, not applied                      |
+| `UNRESOLVED`  | no trusted mapping ties it to a workspace    | recorded, visible, applied to nothing      |
+| `FAILED`      | amount or currency does not match our row    | CRITICAL audit; not applied, never retried |
+| `RETRYABLE`   | settlement did not finish, transiently       | nothing applied; 503 asks for redelivery   |
+| `IN_PROGRESS` | another delivery holds the processing claim  | nothing; that delivery owns the retry      |
+| `DEAD_LETTER` | transient failures exhausted the budget      | CRITICAL audit; an operator must replay it |
 
 The inbox is **platform-owned**: an event arrives before anyone knows whose it is, and one workspace
 being able to count another's payment events would be a disclosure in itself.
