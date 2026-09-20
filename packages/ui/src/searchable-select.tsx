@@ -24,11 +24,12 @@ export interface SearchableOption {
 }
 
 /**
- * A searchable single-select that posts only a canonical option value.
+ * A searchable single-select that still posts a plain scalar value.
  *
- * Long controlled vocabularies such as countries and IANA time zones should be
- * searchable without turning into free-text storage. The visible input is only
- * a filter; the hidden field carries the selected option's value.
+ * Used for long controlled vocabularies such as countries and IANA time zones,
+ * where a native select is technically complete but painful to scan. The
+ * browser receives only the option value in the hidden form field; free text
+ * never becomes stored data.
  */
 export function SearchableSelect({
   id,
@@ -121,9 +122,6 @@ export function SearchableSelect({
         aria-controls={listId}
         aria-autocomplete="list"
         aria-required={required}
-        aria-activedescendant={
-          open && filtered[activeIndex] ? `${listId}-option-${activeIndex}` : undefined
-        }
         autoComplete="off"
         required={required}
         disabled={disabled}
@@ -136,7 +134,7 @@ export function SearchableSelect({
         }}
         onBlur={() => {
           setOpen(false);
-          setQuery(selected?.label ?? '');
+          if (!selected) setQuery('');
         }}
         onChange={(event) => {
           const next = event.target.value;
@@ -199,7 +197,6 @@ export function SearchableSelect({
           ) : (
             filtered.map((option, index) => (
               <button
-                id={`${listId}-option-${index}`}
                 key={option.value}
                 type="button"
                 role="option"
