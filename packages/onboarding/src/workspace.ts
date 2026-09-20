@@ -160,11 +160,11 @@ export class WorkspaceOnboardingService {
     const now = this.#clock.now();
 
     const trialDays = trialPlan?.trialDays ?? 0;
-    const offersTrial = trialPlan !== null && trialDays > 0;
-    const trialEndsAt = offersTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
     const pricing = trialPlan
       ? trialPlan.prices.find((p) => normaliseCurrency(p.currency) === currency)
       : undefined;
+    const offersTrial = trialPlan !== null && trialDays > 0 && pricing !== undefined;
+    const trialEndsAt = offersTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
 
     try {
       /*

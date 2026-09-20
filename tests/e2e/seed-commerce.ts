@@ -39,9 +39,11 @@ const REASON = 'Development fixture: a fake commercial catalogue so Phase 9 can 
 /**
  * The onboarding rules the signup form and the checklist read.
  *
- * NO COUNTRY, LOCALE, TIMEZONE OR CURRENCY (D-194) — onboarding asks for all
- * four, and a default here would be exactly the assumption that decision
- * removed. The legal document is a fixture: a version string, not a document.
+ * NO COUNTRY, LOCALE OR TIMEZONE DEFAULTS — onboarding asks the customer for
+ * those identity facts. Customer-facing billing currently uses the product USD
+ * default; the multi-currency fixture remains here to exercise checkout and
+ * accounting internals. The legal document is a fixture: a version string, not
+ * a document.
  */
 const ONBOARDING_FIXTURE = {
   signup: {

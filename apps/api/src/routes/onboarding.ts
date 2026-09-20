@@ -27,7 +27,7 @@ const createWorkspaceSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(3).max(50),
   type: z.enum(['STARTUP', 'SME', 'ENTERPRISE', 'CREATOR', 'AGENCY']).optional(),
-  /** ISO 3166-1 alpha-2, chosen from the configured markets. */
+  /** ISO 3166-1 alpha-2, chosen by the customer. */
   country: z.string().length(2),
   defaultLocale: z.enum(['AR', 'EN']),
   timezone: z.string().min(1).max(64),
@@ -163,7 +163,12 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
       const catalogue = await planCatalogue();
       const trialPlan =
         [...catalogue.plans]
-          .filter((plan) => plan.status === 'active' && plan.trialDays > 0)
+          .filter(
+            (plan) =>
+              plan.status === 'active' &&
+              plan.trialDays > 0 &&
+              plan.prices.some((price) => price.currency === DEFAULT_BILLING_CURRENCY),
+          )
           .sort((a, b) => a.tier - b.tier)[0] ?? null;
       if (!trialPlan) return await reply.send({ offered: false });
       return await reply.send({

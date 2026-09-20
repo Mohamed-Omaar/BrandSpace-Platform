@@ -160,6 +160,7 @@ export const CATALOGUE = {
       prices: [
         { currency: 'SAR', amountMinor: 9900 },
         { currency: 'KWD', amountMinor: 9900 },
+        { currency: 'USD', amountMinor: 2600 },
       ],
       countries: null,
       expiryDays: 365,
