@@ -356,6 +356,7 @@ export function DropdownMenu({
                 : items[(index - 1 + items.length) % items.length];
             next?.focus();
           }}
+          className="bs-dropdown-menu bs-dropdown-panel"
           style={{
             position: 'absolute',
             insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
@@ -364,12 +365,7 @@ export function DropdownMenu({
             insetInlineStart: align === 'start' ? 0 : undefined,
             zIndex: zIndexTokens.overlay,
             minInlineSize: '13rem',
-            padding: spacingTokens.xs,
-            background: colorTokens.surface,
-            // A soft floating panel: shadow and radius, no outline (D-54).
-            border: '1px solid transparent',
-            borderRadius: radiusTokens.lg,
-            boxShadow: shadowTokens.overlay,
+            maxBlockSize: '18rem',
             display: 'grid',
             gap: spacingTokens['3xs'],
           }}

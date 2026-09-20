@@ -406,7 +406,7 @@ export function AdminShell({
           {actions}
         </div>
       ) : null}
-      {children}
+      <div className="bs-section-stack">{children}</div>
     </AppShell>
   );
 }
@@ -442,7 +442,6 @@ export function PageIntro({ description }: { readonly description: string }) {
       data-testid="description"
       style={{
         margin: 0,
-        marginBlockEnd: spacingTokens.md,
         maxInlineSize: '68ch',
         ...typographyTokens.bodySm,
         color: colorTokens.textSecondary,

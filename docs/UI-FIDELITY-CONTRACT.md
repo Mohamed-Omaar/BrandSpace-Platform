@@ -143,6 +143,37 @@ Recorded under rule 9. Nothing else deviates.
 
 ---
 
+## 4.2 Authorised deviation for the brand lockup (every route)
+
+Recorded under rule 9. The lockup appears in the shell rail, the Control Center
+and the auth card, so this deviation is platform-wide rather than per route.
+
+| Deviation                                                    | Authority     | Reason                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The demo's CSS mark becomes the OFFICIAL BrandSpace logo** | Owner, PR #32 | The demo draws `.brand-mark` as an ink square with `border-radius: 11px` around a 15px/850 letter "B" — a placeholder standing in for a logo the prototype did not have. The product ships the real one. This is the one case where the demo is NOT the authority: a prototype's placeholder cannot outrank the company's actual mark |
+
+**What is unchanged, and is still asserted.** The logo occupies the demo's slot
+exactly — 34×34 inside `.brand { gap: 10px }` — and its artwork cuts the same
+silhouette: the corner radius is 261.09 of an 877.07 viewBox, which renders at
+~10.1px against the demo's 11px. The rhythm of the lockup is the demo's.
+
+**What stopped being meaningful.** `border-radius`, `font-size` and
+`font-weight` described a container that drew a square and typeset a letter. The
+container now holds artwork: no radius, no background, no text. `tests/e2e/
+design-system.spec.ts` → "the brand lockup" asserted all three and was updated
+to the contract above — geometry, the artwork filling its slot, `flex-shrink: 0`,
+the official black/white two-tone, and `aria-hidden` on both the span and the
+SVG so the wordmark alone carries the accessible name.
+
+**The artwork's `#000000` and `#FFFFFF` are not component colour literals.**
+`CLAUDE.md` §4 forbids colour literals in components because a component must
+take its colours from the design system. These are inside the logo's own `path`
+fills — the mark's identity, fixed by the brand and not a token the platform may
+re-theme. Routing them through tokens would let a palette change silently
+repaint the company's logo.
+
+---
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

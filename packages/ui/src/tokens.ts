@@ -486,7 +486,7 @@ export const radiusTokens = {
   sm: '0.5rem',
   /** Controls: `.filter-row button`, `.segmented button`, 10px. */
   md: '0.625rem',
-  /** `.search-field`, 11px; `.brand-mark`, 11px. */
+  /** `.search-field`, 11px. */
   lg: '0.6875rem',
   /**
    * THE DEMO'S DEFAULT CONTROL RADIUS, 12px. `.icon-button`, `.nav-item`,
@@ -649,9 +649,18 @@ export const layoutTokens = {
   drawerWidth: '26.875rem',
   /** `.command-dialog { width: min(570px, calc(100% - 30px)) }`. */
   commandDialogWidth: '35.625rem',
-  /** `.brand-mark { width: 34px; height: 34px; font-size: 15px }`. */
+  /**
+   * `.brand-mark { width: 34px; height: 34px }` — the slot the official
+   * BrandSpace logo fills.
+   *
+   * THE DEMO'S OTHER MARK PROPERTIES ARE GONE FROM CSS, not lost: it drew an
+   * ink square with `border-radius: 11px` around a 15px/850 "B", and the
+   * official artwork carries the rounded square and the letterform in its own
+   * paths. A `brandMarkGlyph` font size lived here to size that letter and had
+   * no consumer left, which is exactly the kind of leftover that later reads
+   * as a contract somebody should restore.
+   */
   brandMark: '2.125rem',
-  brandMarkGlyph: '0.9375rem',
   /** `.brand { gap: 10px }`. */
   brandGap: '0.625rem',
   /** `.hero-card { min-height: 330px }`, `.hero-copy { padding: 48px }`. */

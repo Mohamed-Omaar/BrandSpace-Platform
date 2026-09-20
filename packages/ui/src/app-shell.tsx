@@ -668,11 +668,14 @@ export function AppShell({
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
-              // `.topbar { min-height: 88px; gap: 16px; padding-bottom: 12px }`.
+              // Keep the title block clear of the shell's rounded top edge.
+              // The description can make the bar taller than its minimum height, so relying on
+              // vertical centring alone lets the eyebrow sit against the top on content-heavy pages.
               gap: layoutTokens.topbarGap,
               rowGap: spacingTokens.sm,
               minBlockSize: layoutTokens.headerHeight,
               paddingInline: layoutTokens.panelPadInline,
+              paddingBlockStart: spacingTokens.md,
               paddingBlockEnd: '0.75rem',
             }}
           >
@@ -788,7 +791,12 @@ export function AppShell({
               paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >
-            <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
+            <div
+              className="bs-page-flow"
+              style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}
+            >
+              {children}
+            </div>
           </main>
         </div>
       </div>
@@ -871,7 +879,7 @@ export function AppShell({
   );
 }
 
-/** The production BrandSpace mark, shared by shell, auth and metadata surfaces. */
+/** The official BrandSpace mark, shared by shell, auth and metadata surfaces. */
 export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: string }) {
   return (
     <span
@@ -881,19 +889,24 @@ export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: 
         display: 'inline-flex',
         inlineSize: size,
         blockSize: size,
-        borderRadius: radiusTokens.lg,
-        fontSize: layoutTokens.brandMarkGlyph,
-        fontWeight: 850,
         flexShrink: 0,
       }}
     >
-      <svg viewBox="0 0 32 32" width="100%" height="100%" focusable="false" aria-hidden="true">
-        <rect width="32" height="32" rx="8" fill="#7935FE" />
+      <svg
+        viewBox="0 0 877.07 877.07"
+        width="100%"
+        height="100%"
+        focusable="false"
+        aria-hidden="true"
+      >
         <path
-          d="M10 8h6.6c3 0 4.9 1.5 4.9 4 0 1.7-.9 2.9-2.4 3.4 1.9.4 3.1 1.8 3.1 3.8 0 2.8-2.1 4.4-5.4 4.4H10V8Zm3.3 6.4h2.9c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-2.9v3.2Zm0 6.4h3.3c1.4 0 2.2-.6 2.2-1.7s-.8-1.7-2.2-1.7h-3.3v3.4Z"
-          fill="#FFFFFF"
+          fill="#000000"
+          d="M615.98 877.07H261.09C116.89 877.07 0 760.18 0 615.98V261.09C0 116.89 116.89 0 261.09 0h354.89c144.2 0 261.09 116.89 261.09 261.09v354.89c0 144.2-116.89 261.09-261.09 261.09z"
         />
-        <circle cx="25" cy="7" r="3" fill="#FFDD15" />
+        <path
+          fill="#FFFFFF"
+          d="M555.77 680.25c-112.22 0-224.43 0-336.65 0-.16-.99-.45-1.99-.45-2.98-.06-159.21-.09-318.42-.12-477.63 0-.9.08-1.8.13-2.83h3.94c104.11.03 208.22.02 312.34.13 13.4.01 26.69 1.43 39.65 5.12 22.03 6.27 40.24 18.01 52.92 37.44 13.44 20.59 17.97 43.61 18.03 67.78 0 .83-.55 1.8-1.12 2.48-6.09 7.23-12.25 14.39-18.35 21.61-18.58 21.99-37.14 44-55.7 66.01-.48.57-1.11 1.28-1.13 1.94-.11 3.74-.05 7.49-.05 11.37h5.23c13.8-.04 26.95 2.88 39.11 9.43 22.82 12.29 37.3 31.07 42.94 56.47.88 3.98 1.36 8.04 2.03 12.07v86.24c-.13.58-.29 1.15-.39 1.73-1.16 7.1-1.75 14.35-3.57 21.27-6.18 23.48-18.97 42.81-37.9 58.03-15.24 12.26-32.56 19.84-51.88 22.87-3 .47-6.01.97-9.01 1.45zM366.47 390.4c.73.04 1.24.08 1.75.08 40.44.02 80.87.05 121.31.03 8.77 0 16.33-5.65 18.14-14.27.97-4.63.51-9.56.74-14.36.52-11.1-8.64-19.85-19.78-19.8-39.75.16-79.5.11-119.25.13h-2.91v48.19zm-.08 144.65c.61.03 1.1.08 1.6.08 40.61-.02 81.22 0 121.83-.08 9.65-.02 17.77-7.82 18.39-17.42.23-3.51-.02-7.06.17-10.58.61-11.46-8.23-20.47-20.26-20.44-39.66.1-79.33.01-118.99-.01h-2.74v48.45z"
+        />
       </svg>
     </span>
   );

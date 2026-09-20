@@ -538,7 +538,7 @@ export function WorkspaceShell({
           {actions}
         </div>
       ) : null}
-      {children}
+      <div className="bs-section-stack">{children}</div>
     </AppShell>
   );
 }
