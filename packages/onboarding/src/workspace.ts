@@ -20,12 +20,7 @@
  */
 
 import type { TenantScopedClient } from '@brandspace/database';
-import {
-  currenciesForCountry,
-  findMarket,
-  providerKeyFor,
-  type CommercePolicy,
-} from '@brandspace/billing';
+import type { CommercePolicy } from '@brandspace/billing';
 import type { PlanDetail } from '@brandspace/entitlements';
 import { AppError, normaliseCurrency, type Clock, systemClock } from '@brandspace/shared';
 
@@ -78,40 +73,23 @@ export class WorkspaceOnboardingService {
    * still on the page rather than after their workspace exists.
    */
   assertCommercialAnswers(
-    policy: CommercePolicy,
+    _policy: CommercePolicy,
     input: { readonly country: string; readonly currency: string; readonly timezone: string },
   ): void {
-    const country = input.country.trim().toUpperCase();
-    const market = findMarket(policy, country);
-    if (!market) {
-      // Honest: we are not configured to sell there. Not "we picked somewhere
-      // for you", and not a silent success.
-      throw new AppError('VALIDATION_FAILED', 'BrandSpace is not available in that country yet.', {
-        country,
-      });
-    }
-
-    const currency = normaliseCurrency(input.currency);
-    const offered = currenciesForCountry(policy, country).map((c) => normaliseCurrency(c.code));
-    if (!offered.includes(currency)) {
-      throw new AppError('VALIDATION_FAILED', 'That currency is not offered in that country.', {
-        country,
-        currency,
-        offered: offered.join(','),
-      });
-    }
-
+    /*
+     * Workspace creation is identity/onboarding, not checkout.
+     *
+     * A customer may create a workspace before a payment provider or a market
+     * routing rule exists. Commercial availability is enforced when they try
+     * to buy something; blocking the workspace here made a missing payment
+     * integration look like a broken signup flow.
+     *
+     * Country and currency are still stored explicitly so later billing can
+     * evaluate the right policy. The route controls the customer-facing
+     * defaults; this service only validates the timezone it must persist.
+     */
     if (!isValidTimezone(input.timezone)) {
       throw new AppError('VALIDATION_FAILED', 'That is not a recognised timezone.');
-    }
-
-    if (!providerKeyFor(policy, country, currency)) {
-      // Refused rather than routed somewhere the owner did not choose. A
-      // workspace that cannot ever be billed is not a workspace worth creating.
-      throw new AppError('VALIDATION_FAILED', 'No payment provider serves that market yet.', {
-        country,
-        currency,
-      });
     }
   }
 
@@ -167,11 +145,11 @@ export class WorkspaceOnboardingService {
     const now = this.#clock.now();
 
     const trialDays = trialPlan?.trialDays ?? 0;
-    const offersTrial = trialPlan !== null && trialDays > 0;
-    const trialEndsAt = offersTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
     const pricing = trialPlan
       ? trialPlan.prices.find((p) => normaliseCurrency(p.currency) === currency)
       : undefined;
+    const offersTrial = trialPlan !== null && trialDays > 0 && pricing !== undefined;
+    const trialEndsAt = offersTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
 
     try {
       /*
