@@ -13,10 +13,11 @@ import { commercePolicy, onboardingPolicy, planCatalogue } from './phase9-contex
 /**
  * Creating the first workspace, and reporting where the customer has got to.
  *
- * THE FOUR ANSWERS ARE REQUIRED IN THE SCHEMA (D-194). Country, locale, timezone
- * and currency have no defaults here and none anywhere behind here. A request
- * missing any of them is a validation failure, not a request that quietly
- * becomes Saudi.
+ * Country, interface locale and timezone are explicit customer answers. Country
+ * is validated against the complete ISO inventory rather than the subset with a
+ * payment route. Billing currency is deliberately not a customer-facing answer
+ * at launch: the API assigns the platform default (USD) so every entry surface
+ * behaves the same way.
  *
  * THE PROGRESS ENDPOINT DERIVES, IT DOES NOT REMEMBER. There is no stored step
  * counter to drift from reality — see packages/onboarding/src/state.ts for why
@@ -27,7 +28,7 @@ const createWorkspaceSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(3).max(50),
   type: z.enum(['STARTUP', 'SME', 'ENTERPRISE', 'CREATOR', 'AGENCY']).optional(),
-  /** ISO 3166-1 alpha-2, chosen from the configured markets. */
+  /** ISO 3166-1 alpha-2, chosen from the complete country inventory. */
   country: z.string().trim().toUpperCase().refine(isIsoCountryCode, 'Choose a valid country.'),
   defaultLocale: z.enum(['AR', 'EN']),
   timezone: z.string().min(1).max(64),
@@ -75,8 +76,9 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
 
         /*
          * WHICH PLAN OFFERS THE TRIAL IS A CONFIGURATION FACT. The lowest-tier
-         * active plan with a trial, priced in the chosen currency. Nothing here
-         * names a plan, and if none qualifies the workspace is created without a
+         * active plan with a trial. The service only starts it when that plan
+         * has a price in the platform default currency; otherwise the workspace
+         * is created without a
          * trial rather than with an invented one.
          */
         const trialPlan =
