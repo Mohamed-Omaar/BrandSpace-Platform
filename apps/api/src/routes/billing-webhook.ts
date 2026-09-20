@@ -77,9 +77,22 @@ export async function registerBillingWebhookRoutes(app: FastifyInstance): Promis
         const [policy, catalogue] = await Promise.all([commercePolicy(), planCatalogue()]);
 
         const result = await reconciler().receive(
-          // THE PLATFORM CLIENT, because the inbox is platform-owned and the
-          // workspace is not known until it is resolved from a mapping we wrote.
-          getPlatformClient() as never,
+          /*
+           * THE PLATFORM CLIENT, because the inbox is platform-owned, the
+           * workspace is not known until it is resolved from a mapping we
+           * wrote, and the reconciler must be able to OPEN the settlement
+           * transaction.
+           *
+           * NO CAST. This argument used to be `getPlatformClient() as never`
+           * against a parameter typed `TenantScopedClient` — a type whose whole
+           * meaning is "you are already inside a transaction". The cast made
+           * the mismatch compile, and the settlement autocommitted statement by
+           * statement for as long as it survived. `receive` now names what it
+           * actually needs (`ReconcilerClient`), so the types agree and the
+           * next person to change this gets a compile error instead of silent
+           * partial settlements.
+           */
+          getPlatformClient(),
           {
             providerKey: adapter.key,
             raw,

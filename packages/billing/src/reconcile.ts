@@ -32,7 +32,7 @@
  * away (§22).
  */
 
-import type { Prisma, TenantScopedClient } from '@brandspace/database';
+import type { Prisma, PrismaClient, TenantScopedClient } from '@brandspace/database';
 import { writeAuditEvent } from '@brandspace/database';
 import type { PlanDetail } from '@brandspace/entitlements';
 import { findPlan, termsFor } from '@brandspace/entitlements';
@@ -43,7 +43,56 @@ import { InvoiceService, type InvoiceLineInput } from './invoices';
 import type { TaxAssessment } from './tax';
 import { nextDunningStep, normaliseFailureCode } from './dunning';
 
+/**
+ * The client `receive` needs, and why it is not a `TenantScopedClient`.
+ *
+ * THE INBOX AND THE SETTLEMENT RUN ON DIFFERENT TRANSACTION BOUNDARIES, on
+ * purpose (see `#ingest`), so this method is the one place in the billing
+ * package that must be able to OPEN a transaction. `TenantScopedClient` hides
+ * `$transaction` precisely to say "you are already inside one" — which was true
+ * of every method below and false of this one. The route papered over the
+ * difference with `as never`, and the result was a settlement that autocommitted
+ * statement by statement while two comments in this file asserted it was atomic.
+ *
+ * Naming the real requirement in the type is the fix. Everything `#apply`
+ * reaches still takes a `TenantScopedClient`, because everything `#apply`
+ * reaches genuinely is inside the transaction this opens.
+ */
+export type ReconcilerClient = PrismaClient;
+
 export type EventOutcome = 'PROCESSED' | 'DUPLICATE' | 'STALE' | 'UNRESOLVED' | 'FAILED';
+
+/**
+ * How long one settlement may take.
+ *
+ * A settlement is several writes plus an invoice-number allocation that takes a
+ * row lock, so Prisma's 5s interactive-transaction default is the wrong budget.
+ * Fifteen seconds is long enough for a slow allocation under contention and far
+ * short of any provider's delivery timeout.
+ */
+const SETTLEMENT_TIMEOUT_MS = 15_000;
+
+/**
+ * Inbox statuses that mean "this event reached a decision".
+ *
+ * `RECEIVED` and `FAILED` are deliberately absent: the first means a delivery
+ * did not finish, the second means it finished by rolling back. Both are
+ * re-attemptable, and both used to be answered as DUPLICATE for ever.
+ *
+ * `UNRESOLVED` AND `STALE` STAY TERMINAL, and that is a decision rather than an
+ * omission. An unresolved event is one we could not tie to a workspace through
+ * a mapping we wrote; the header's rule is that guessing would be worse than
+ * losing it, and the row is kept visible for an operator precisely so somebody
+ * decides. A stale event describes state older than what we already applied, so
+ * re-applying it is the thing staleness exists to prevent. Neither is made
+ * worse by this change: both were terminal before it.
+ */
+const SETTLED_INBOX_STATUSES: ReadonlySet<string> = new Set([
+  'PROCESSED',
+  'STALE',
+  'UNRESOLVED',
+  'DUPLICATE',
+]);
 
 export interface DeliveryRejected {
   readonly accepted: false;
@@ -77,6 +126,11 @@ export type DeliveryResult = DeliveryAccepted | DeliveryRejected;
  * handing over one function does not.
  */
 export interface CreditGrantPort {
+  /**
+   * `db` IS THE SETTLEMENT TRANSACTION. That was always the contract and is now
+   * also the fact: `#ingest` opens one and threads it here, so the grant, the
+   * invoice and the purchase row commit together or not at all.
+   */
   grantPackCredits(
     db: TenantScopedClient,
     input: {
@@ -126,7 +180,7 @@ export class BillingReconciler {
    * refused to the tenant role. This is not a convenience: an event arrives
    * before anyone knows whose it is, so there is no tenant context to run it in.
    */
-  async receive(db: TenantScopedClient, input: ReceiveInput): Promise<DeliveryResult> {
+  async receive(db: ReconcilerClient, input: ReceiveInput): Promise<DeliveryResult> {
     const provider = this.#providers.get(input.providerKey);
     if (!provider) {
       return { accepted: false, reason: 'unknown_provider' };
@@ -158,7 +212,7 @@ export class BillingReconciler {
   // ---------------------------------------------------------------------------
 
   async #ingest(
-    db: TenantScopedClient,
+    db: ReconcilerClient,
     input: ReceiveInput,
     event: NormalizedBillingEvent,
   ): Promise<EventResult> {
@@ -171,9 +225,10 @@ export class BillingReconciler {
       },
       select: { id: true, status: true, resolvedWorkspaceId: true },
     });
-    if (existing) {
-      // A REPLAY CHANGES NOTHING. Not the state, and not the record of what the
-      // first delivery did — the row keeps its original status.
+    if (existing && SETTLED_INBOX_STATUSES.has(existing.status)) {
+      // A REPLAY OF A SETTLED EVENT CHANGES NOTHING. Not the state, and not the
+      // record of what the first delivery did — the row keeps its original
+      // status.
       return {
         billingEventId: existing.id,
         externalEventId: event.externalEventId,
@@ -184,18 +239,62 @@ export class BillingReconciler {
       };
     }
 
-    const row = await db.billingEvent.create({
-      data: {
-        providerKey: input.providerKey,
+    /*
+     * AN UNSETTLED ROW IS RETRIED, AND THIS IS THE HALF OF THE FIX THAT IS NOT
+     * ABOUT TRANSACTIONS.
+     *
+     * `RECEIVED` means a previous delivery wrote the inbox row and then did not
+     * finish — the process was killed between the record and the apply, or
+     * between the apply and the status update. `FAILED` means the apply ran and
+     * threw. In both cases the settlement transaction below rolled back, so
+     * NOTHING was applied.
+     *
+     * Treating those as DUPLICATE, which is what this method used to do, is how
+     * a half-settled purchase became permanent: the provider redelivers, we
+     * answer "already seen", and the customer is charged with nothing granted,
+     * for ever, with no retry anywhere in the system. The inbox row is a record
+     * of receipt, not proof of settlement, and only the four terminal statuses
+     * are proof.
+     *
+     * Re-applying is safe BECAUSE the apply is atomic and the business paths
+     * are individually idempotent (the checkout status guard, the `creditGrantId`
+     * uniqueness on a pack purchase, the invoice's own state machine). A retry
+     * that finds the work already done still lands on those guards.
+     */
+    const row = existing
+      ? await db.billingEvent.update({
+          where: { id: existing.id },
+          data: { attempts: { increment: 1 }, failureReason: null },
+          select: { id: true },
+        })
+      : await this.#recordReceipt(db, input, event);
+    if (!row) {
+      // The winner's row, so the caller gets a real id rather than a blank.
+      const winner = await db.billingEvent.findUnique({
+        where: {
+          providerKey_externalEventId: {
+            providerKey: input.providerKey,
+            externalEventId: event.externalEventId,
+          },
+        },
+        select: { id: true, resolvedWorkspaceId: true },
+      });
+      /*
+       * A CONCURRENT DELIVERY OF THE SAME EVENT WON THE INSERT. Two deliveries
+       * of one provider event both missed the `findUnique`, and the unique index
+       * on (providerKey, externalEventId) refused the second. That is the index
+       * doing its job; the honest answer is DUPLICATE rather than a 500 that
+       * makes the provider retry a race it will lose again.
+       */
+      return {
+        billingEventId: winner?.id ?? '',
         externalEventId: event.externalEventId,
-        eventType: event.type,
-        occurredAt: event.occurredAt,
-        signatureVerified: true,
-        payload: serialisePayload(event),
-        status: 'RECEIVED',
-        attempts: 1,
-      },
-    });
+        type: event.type,
+        outcome: 'DUPLICATE',
+        workspaceId: winner?.resolvedWorkspaceId ?? null,
+        failureReason: null,
+      };
+    }
 
     const workspaceId = await this.#resolveWorkspace(db, input.providerKey, event);
     if (!workspaceId) {
@@ -217,10 +316,39 @@ export class BillingReconciler {
       };
     }
 
+    /*
+     * THE SETTLEMENT TRANSACTION — the fix this method existed to need.
+     *
+     * Everything `#apply` touches commits together or not at all: the checkout
+     * row's status, the invoice and its lines, the subscription or the pack
+     * purchase, the credit transaction, the credit grant bucket and the wallet
+     * balance. Before this, each of those autocommitted on its own against a
+     * top-level client, so a failure part-way left the customer charged and
+     * invoiced with no credits, and the ledger holding a transaction row whose
+     * bucket was never written — permanent drift that `credits.reconcile()`
+     * would report for ever.
+     *
+     * THE INBOX ROW IS DELIBERATELY OUTSIDE IT. Two reasons, and they point the
+     * same way. A rolled-back settlement must still leave the receipt visible,
+     * or an operator cannot see that the event arrived at all. And the unique
+     * index on (providerKey, externalEventId) is the replay guard; rolling it
+     * back with a failed apply would let a redelivery start from nothing, which
+     * is only safe because the apply is atomic — and belt-and-braces is cheaper
+     * here than reasoning about it.
+     *
+     * THE TIMEOUT IS RAISED because this transaction now spans a whole
+     * settlement, including invoice-number allocation, rather than one
+     * statement. The default 5s is generous for that and unhelpful when a
+     * provider redelivers a burst.
+     */
     let outcome: EventOutcome = 'PROCESSED';
     let failureReason: string | null = null;
     try {
-      outcome = await this.#apply(db, input, event, workspaceId, row.id);
+      outcome = await db.$transaction(
+        async (tx) =>
+          this.#apply(tx as unknown as TenantScopedClient, db, input, event, workspaceId, row.id),
+        { timeout: SETTLEMENT_TIMEOUT_MS },
+      );
     } catch (error: unknown) {
       outcome = 'FAILED';
       failureReason = error instanceof AppError ? error.code : 'apply_failed';
@@ -247,6 +375,39 @@ export class BillingReconciler {
   }
 
   /**
+   * Write the inbox row, or report that a concurrent delivery already did.
+   *
+   * `findUnique` then `create` is a check-then-act, and two simultaneous
+   * deliveries of one event both pass the check. The unique index is the real
+   * arbiter, so the loser is caught here and answered as a duplicate rather
+   * than escaping as a 500 the provider would retry.
+   */
+  async #recordReceipt(
+    db: ReconcilerClient,
+    input: ReceiveInput,
+    event: NormalizedBillingEvent,
+  ): Promise<{ readonly id: string } | null> {
+    try {
+      return await db.billingEvent.create({
+        data: {
+          providerKey: input.providerKey,
+          externalEventId: event.externalEventId,
+          eventType: event.type,
+          occurredAt: event.occurredAt,
+          signatureVerified: true,
+          payload: serialisePayload(event),
+          status: 'RECEIVED',
+          attempts: 1,
+        },
+        select: { id: true },
+      });
+    } catch (error: unknown) {
+      if (isUniqueViolation(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
    * Find the workspace through a relationship WE wrote.
    *
    * FOUR TRUSTED MAPPINGS, tried in order of how directly we own them. Not one
@@ -255,7 +416,7 @@ export class BillingReconciler {
    * for even by accident.
    */
   async #resolveWorkspace(
-    db: TenantScopedClient,
+    db: ReconcilerClient,
     providerKey: string,
     event: NormalizedBillingEvent,
   ): Promise<string | null> {
@@ -290,8 +451,20 @@ export class BillingReconciler {
     return null;
   }
 
+  /**
+   * `db` IS THE SETTLEMENT TRANSACTION. `auditDb` is the OUTER client — a
+   * different connection, deliberately.
+   *
+   * Almost everything belongs in the transaction: an audit of a change that
+   * rolled back would describe something that never happened. The exception is
+   * a refusal, where the audit is the only record that an attempt was made at
+   * all, and the rollback is the point. `asPlatform()` in @brandspace/database
+   * solves the same problem the same way, and says so: the audit "is written on
+   * a separate connection" precisely so a rollback cannot take it.
+   */
   async #apply(
     db: TenantScopedClient,
+    auditDb: ReconcilerClient,
     input: ReceiveInput,
     event: NormalizedBillingEvent,
     workspaceId: string,
@@ -299,7 +472,7 @@ export class BillingReconciler {
   ): Promise<EventOutcome> {
     switch (event.type) {
       case 'checkout.completed':
-        return this.#applyCheckoutCompleted(db, input, event, workspaceId, billingEventId);
+        return this.#applyCheckoutCompleted(db, auditDb, input, event, workspaceId, billingEventId);
       case 'checkout.cancelled':
         return this.#applyCheckoutCancelled(db, event, workspaceId);
       case 'invoice.paid':
@@ -330,6 +503,7 @@ export class BillingReconciler {
    */
   async #applyCheckoutCompleted(
     db: TenantScopedClient,
+    auditDb: ReconcilerClient,
     input: ReceiveInput,
     event: NormalizedBillingEvent,
     workspaceId: string,
@@ -359,7 +533,14 @@ export class BillingReconciler {
       event.amountMinor !== session.totalMinor ||
       (event.currency ?? '').toUpperCase() !== session.currency.toUpperCase()
     ) {
-      await writeAuditEvent(db, workspaceId, {
+      /*
+       * ON THE OUTER CONNECTION, because the next statement throws and the
+       * settlement transaction rolls back. An amount that does not match what
+       * we priced is the single most security-relevant thing this file detects
+       * (§37), and an audit that vanishes with the rollback would leave the
+       * attempt invisible — exactly the evidence an operator needs.
+       */
+      await writeAuditEvent(auditDb, workspaceId, {
         action: 'billing.reconcile.amount-mismatch',
         actorType: 'SYSTEM',
         resourceType: 'CheckoutSession',
@@ -915,6 +1096,22 @@ function addMonths(from: Date, months: number): Date {
  * becomes a decimal string because JSON has no integer wide enough to be trusted
  * with money.
  */
+/**
+ * A unique-constraint violation, in the one shape every driver agrees on.
+ *
+ * Matched on the Prisma error CODE and nothing else. F-56 records that where
+ * Prisma names the offending constraint moves between drivers, so matching the
+ * constraint name is how this check silently stops working.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'P2002'
+  );
+}
+
 function serialisePayload(event: NormalizedBillingEvent): Prisma.InputJsonValue {
   return {
     type: event.type,

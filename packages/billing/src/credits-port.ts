@@ -24,6 +24,14 @@ import type { CreditGrantPort } from './reconcile';
  * (you are already inside one), the second hides `$use`. Neither path calls
  * either. Converting here keeps every other call site honest about which client
  * it holds.
+ *
+ * AND THE PREMISE IS NOW TRUE, which it was not. "You are already inside one"
+ * described an intention rather than a fact: the reconciler was handed a
+ * top-level client through a second cast at the route, so `grantWithin`'s three
+ * writes autocommitted separately and could leave a credit transaction with no
+ * bucket. `BillingReconciler` opens the settlement transaction, so this cast
+ * now converts one transaction client into another rather than converting a
+ * promise into a hope.
  */
 export function creditLedgerPort(ledger: CreditLedgerService): CreditGrantPort {
   return {
