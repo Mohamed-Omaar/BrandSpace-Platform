@@ -430,13 +430,14 @@ describe('each service holds exactly the key domains it uses', () => {
   });
 
   it('the marketing site holds no key domain and no AWS identity at all', () => {
-    const webEnv = { ...DEPLOYED, ...PUBLIC_URLS, DATABASE_URL: COMPLETE.DATABASE_URL };
+    const webEnv = { ...DEPLOYED, ...PUBLIC_URLS };
     expect(() => validateStartupConfiguration(webEnv as NodeJS.ProcessEnv, 'web')).not.toThrow();
 
     const forbidden: [string, string][] = [
       ['SECRET_VAULT_KMS_KEY_ARN', KMS.platform],
       ['CUSTOMER_MFA_VAULT_KMS_KEY_ARN', KMS.customerMfa],
       ['AWS_ACCESS_KEY_ID', AWS_IDENTITY.AWS_ACCESS_KEY_ID],
+      ['DATABASE_URL', COMPLETE.DATABASE_URL],
       ['DATABASE_PLATFORM_URL', COMPLETE.DATABASE_PLATFORM_URL],
       ['PLATFORM_SESSION_SECRET', COMPLETE.PLATFORM_SESSION_SECRET],
     ];
@@ -451,6 +452,14 @@ describe('each service holds exactly the key domains it uses', () => {
 });
 
 describe('startup validation, continued', () => {
+  it('the marketing web profile does not require a database outside production either', () => {
+    const result = validateStartupConfiguration(
+      { APP_ENV: 'development' } as NodeJS.ProcessEnv,
+      'web',
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it('reports instead of throwing outside production', () => {
     // A developer with half an environment should get a readable warning and a
     // running process, not a refusal to start.

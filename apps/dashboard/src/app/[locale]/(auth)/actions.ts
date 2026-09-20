@@ -11,6 +11,7 @@ import {
   toPublicErrorCode,
 } from '@brandspace/shared';
 import {
+  customerLandingPath,
   getCustomerAuth,
   getUnscopedEmailProvider,
   inWorkspace,
@@ -107,7 +108,10 @@ export async function signInAction(formData: FormData): Promise<void> {
     } else {
       // Only a relative in-app path is honoured, so `?next=` cannot be turned
       // into an open redirect to another origin (docs/SECURITY.md §9).
-      destination = next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/workspaces`;
+      destination =
+        next.startsWith('/') && !next.startsWith('//')
+          ? next
+          : await customerLandingPath(locale, session.token);
     }
   } catch (error: unknown) {
     const correlationId = randomUUID();
@@ -411,7 +415,7 @@ export async function verifyMfaAction(formData: FormData): Promise<void> {
       code: String(formData.get('code') ?? ''),
       verify: (userId, code) => service.verifyMfa(userId, code),
     });
-    destination = `/${locale}/workspaces`;
+    destination = await customerLandingPath(locale, token!);
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();

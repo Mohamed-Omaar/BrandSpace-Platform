@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Banner, Field, colorTokens, spacingTokens } from '@brandspace/ui';
-import { getCustomer } from '../../../../server/customer-context';
+import {
+  customerLandingPath,
+  getCustomer,
+  getSessionToken,
+} from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signInAction } from '../actions';
@@ -29,7 +33,10 @@ export default async function SignInPage({
 
   // Already signed in: there is nothing to do here.
   const existing = await getCustomer().catch(() => null);
-  if (existing) redirect(`/${locale}/workspaces`);
+  if (existing) {
+    const token = await getSessionToken();
+    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
+  }
 
   const next = typeof query['next'] === 'string' ? query['next'] : '';
   const error = typeof query['error'] === 'string' ? query['error'] : null;

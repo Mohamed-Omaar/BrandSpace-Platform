@@ -324,6 +324,12 @@ h4 {
  * so no contrast ratio depends on where an orb happens to have drifted.
  * ---------------------------------------------------------------------------
  */
+.bs-ambient-host {
+  position: relative;
+  isolation: isolate;
+  min-block-size: 100vh;
+}
+
 .bs-ambient {
   position: fixed;
   inset: 0;
@@ -612,6 +618,30 @@ h4 {
 }
 
 /*
+ * SELECTS USE ONE GLOBAL CHEVRON.
+ *
+ * Native arrows sit against the physical edge and vary by browser. That made
+ * the dropdown marker look cramped in both the customer dashboard and Control
+ * Center. Replacing it once here keeps every select aligned, gives the label
+ * enough trailing room, and mirrors the marker for RTL without per-page CSS.
+ */
+select.bs-control,
+select.bs-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.75rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234d4c53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9375rem center;
+  background-size: 0.875rem;
+}
+
+html[dir='rtl'] select.bs-control,
+html[dir='rtl'] select.bs-select {
+  background-position: left 0.9375rem center;
+}
+
+/*
  * The filled dark button's hover and active states.
  *
  * `bs-control` covers the soft neutral fills; an ink-filled or purple-filled
@@ -791,6 +821,16 @@ h4 {
  * `.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }`,
  * with the demo's own `@media(max-width:640px) { grid-template-columns: 1fr }`.
  */
+/*
+ * Major page sections use one vertical rhythm. Individual pages should not
+ * guess their own card-to-card spacing; this stack is shared by Admin and the
+ * customer dashboard wherever multiple peer sections are composed.
+ */
+.bs-section-stack {
+  display: grid;
+  gap: var(--bs-space-lg);
+}
+
 .bs-form-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -874,7 +914,7 @@ h4 {
  * `aria-label`, so the workspace is still named when its text is not shown.
  */
 [data-sidebar-state='collapsed'] .bs-rail-copy {
-  display: none;
+  display: none !important;
 }
 
 /*
@@ -883,7 +923,16 @@ h4 {
  * the rail headed by nothing but a chevron.
  */
 [data-sidebar-state='collapsed'] .bs-brand-text {
+  display: none !important;
+}
+
+[data-sidebar-state='collapsed'] .bs-sidebar .bs-dropdown-affordance {
   display: none;
+}
+
+[data-sidebar-state='collapsed'] .bs-sidebar [data-testid='profile-menu'] {
+  justify-content: center;
+  padding-inline: 0;
 }
 
 /*

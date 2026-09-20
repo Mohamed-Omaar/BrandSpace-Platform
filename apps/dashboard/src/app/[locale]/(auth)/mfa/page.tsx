@@ -1,6 +1,10 @@
 import { redirect } from 'next/navigation';
 import { Banner, Field } from '@brandspace/ui';
-import { getCustomer } from '../../../../server/customer-context';
+import {
+  customerLandingPath,
+  getCustomer,
+  getSessionToken,
+} from '../../../../server/customer-context';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { verifyMfaAction } from '../actions';
@@ -32,7 +36,10 @@ export default async function MfaChallengePage({
   const query = await searchParams;
 
   const resolved = await getCustomer().catch(() => null);
-  if (resolved) redirect(`/${locale}/workspaces`);
+  if (resolved) {
+    const token = await getSessionToken();
+    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
+  }
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
 

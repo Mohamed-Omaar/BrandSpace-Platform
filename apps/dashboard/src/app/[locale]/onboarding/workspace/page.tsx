@@ -1,13 +1,9 @@
 import { redirect } from 'next/navigation';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
-import {
-  TenantCommercePolicySource,
-  activeMarkets,
-  currenciesForCountry,
-} from '@brandspace/billing';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { parseConfigPayload } from '@brandspace/config';
 import { spacingTokens, typographyTokens, colorTokens } from '@brandspace/ui';
+import { countryOptions, timeZoneOptions } from '@brandspace/shared';
 import {
   currentEnvironment,
   getCustomerAuth,
@@ -16,24 +12,22 @@ import {
 } from '../../../../server/customer-context';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard } from '../../../../components/auth-card';
-import { CreateWorkspaceForm, type MarketOption } from './form';
+import { CreateWorkspaceForm } from './form';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * The first workspace.
  *
- * WHAT THIS PAGE IS FOR: asking the four questions D-194 refuses to answer on a
- * customer's behalf — country, interface language, timezone and billing
- * currency — and offering the configured markets to choose between.
+ * WHAT THIS PAGE IS FOR: asking the customer for workspace identity facts we
+ * must not guess — country, interface language and timezone. Country comes from
+ * the complete ISO inventory, not the payment-market catalogue, because creating
+ * a workspace must not depend on whether checkout has been configured there.
  *
- * NO WORKSPACE CONTEXT EXISTS YET, so the commercial catalogue is read with none
- * set. The projection is readable that way; every tenant-owned table stays
- * empty, which is exactly right for a person who is not yet in a workspace.
- *
- * AN EMPTY MARKET LIST IS STATED, NOT PAPERED OVER. Before an owner activates a
- * commerce document there is nowhere to sell, and the page says so rather than
- * offering a country nobody approved.
+ * Billing currency is intentionally absent from the form. Launch billing is USD
+ * and the API owns that default; the billing engine remains multi-currency for a
+ * future product decision. The only platform catalogue read here is the plan
+ * snapshot, solely to state trial terms before a trial starts.
  */
 export default async function CreateWorkspacePage({
   params,
@@ -53,9 +47,8 @@ export default async function CreateWorkspacePage({
     : [];
   if (existing.length > 0) redirect(`/${locale}/onboarding`);
 
-  const { markets, trial } = await withoutTenantContext(
+  const trial = await withoutTenantContext(
     async (db) => {
-      const policy = await new TenantCommercePolicySource(db, currentEnvironment()).load();
       const snapshot = await db.entitlementCatalogueSnapshot.findUnique({
         where: {
           domain_environment: { domain: 'plans', environment: currentEnvironment() },
@@ -68,67 +61,56 @@ export default async function CreateWorkspacePage({
         [...plans]
           .filter((plan) => plan.status === 'active' && plan.trialDays > 0)
           .sort((a, b) => a.tier - b.tier)[0] ?? null;
-      return {
-        markets: activeMarkets(policy).map((market): MarketOption => ({
-          country: market.country,
-          name: locale === 'ar' ? market.name.ar : market.name.en,
-          currencies: currenciesForCountry(policy, market.country).map((currency) => ({
-            code: currency.code,
-            name: locale === 'ar' ? currency.name.ar : currency.name.en,
-          })),
-        })),
-        trial: trialPlan ? { days: trialPlan.trialDays, credits: trialPlan.trialCredits } : null,
-      };
+      return trialPlan ? { days: trialPlan.trialDays, credits: trialPlan.trialCredits } : null;
     },
     { prisma: getPrisma() },
   );
 
+  const countries = countryOptions(locale);
+  const timezones = timeZoneOptions(locale);
+
   return (
     <AuthCard locale={locale} heading={t('createWorkspace.title')}>
-      {markets.length === 0 ? (
-        <p data-testid="no-markets">{t('createWorkspace.noMarkets')}</p>
-      ) : (
-        <>
-          {trial ? (
-            /* THE TRIAL'S TERMS BEFORE IT STARTS (§14) — how long, how many
-               credits, no card, and what happens when it ends. */
-            <p
-              data-testid="trial-terms"
-              style={{
-                marginBlockEnd: spacingTokens.md,
-                ...typographyTokens.caption,
-                color: colorTokens.textMuted,
-              }}
-            >
-              {t('createWorkspace.trialNotice')
-                .replace('{days}', String(trial.days))
-                .replace('{credits}', String(trial.credits))}
-            </p>
-          ) : null}
-          <CreateWorkspaceForm
-            locale={locale}
-            markets={markets}
-            labels={{
-              name: t('createWorkspace.name'),
-              slug: t('createWorkspace.slug'),
-              country: t('createWorkspace.country'),
-              countryHint: t('createWorkspace.countryHint'),
-              currency: t('createWorkspace.currency'),
-              currencyHint: t('createWorkspace.currencyHint'),
-              interfaceLocale: t('createWorkspace.locale'),
-              timezone: t('createWorkspace.timezone'),
-              billingEmail: t('createWorkspace.billingEmail'),
-              legalName: t('createWorkspace.legalName'),
-              choose: t('createWorkspace.choose'),
-              submit: t('createWorkspace.submit'),
-              submitting: t('createWorkspace.creating'),
-              failed: t('createWorkspace.failed'),
-              localeAr: t('brandProfile.localeAr'),
-              localeEn: t('brandProfile.localeEn'),
-            }}
-          />
-        </>
-      )}
+      {trial ? (
+        <p
+          data-testid="trial-terms"
+          style={{
+            marginBlockEnd: spacingTokens.md,
+            ...typographyTokens.caption,
+            color: colorTokens.textMuted,
+          }}
+        >
+          {t('createWorkspace.trialNotice')
+            .replace('{days}', String(trial.days))
+            .replace('{credits}', String(trial.credits))}
+        </p>
+      ) : null}
+      <CreateWorkspaceForm
+        locale={locale}
+        countries={countries}
+        timezones={timezones}
+        labels={{
+          name: t('createWorkspace.name'),
+          slug: t('createWorkspace.slug'),
+          country: t('createWorkspace.country'),
+          countryHint: t('createWorkspace.countryHint'),
+          interfaceLocale: t('createWorkspace.locale'),
+          timezone: t('createWorkspace.timezone'),
+          billingEmail: t('createWorkspace.billingEmail'),
+          legalName: t('createWorkspace.legalName'),
+          choose: t('createWorkspace.choose'),
+          submit: t('createWorkspace.submit'),
+          submitting: t('createWorkspace.creating'),
+          failed: t('createWorkspace.failed'),
+          invalid: t('createWorkspace.invalid'),
+          invalidFields: t('createWorkspace.invalidFields'),
+          noResults: t('common.noResults'),
+          conflict: t('createWorkspace.conflict'),
+          forbidden: t('createWorkspace.forbidden'),
+          localeAr: t('brandProfile.localeAr'),
+          localeEn: t('brandProfile.localeEn'),
+        }}
+      />
     </AuthCard>
   );
 }

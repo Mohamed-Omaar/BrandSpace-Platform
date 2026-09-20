@@ -147,294 +147,313 @@ export default async function PlansPage({
         </Banner>
       ) : null}
 
-      {/* ---- The live catalogue ------------------------------------------ */}
-      <Card>
-        <SectionHeader
-          title={isArabic ? 'الخطط المُفعّلة' : 'Active plans'}
-          description={
-            isArabic
-              ? 'ما يحلّه العملاء الآن. تغيير السعر هنا لا يعيد تسعير اشتراك قائم.'
-              : 'What customers resolve against right now. Changing a price here never reprices an existing subscription.'
-          }
-        />
-        {activePlans.length === 0 ? (
-          <EmptyState
-            message={
+      <div className="bs-section-stack">
+        {/* ---- The live catalogue ------------------------------------------ */}
+        <Card>
+          <SectionHeader
+            title={isArabic ? 'الخطط المُفعّلة' : 'Active plans'}
+            description={
               isArabic
-                ? 'لم تُفعَّل أي خطة بعد. أنشئ خطة في المسودة أدناه ثم فعّلها.'
-                : 'No plan has been activated yet. Create one in the draft below, then activate it.'
+                ? 'ما يحلّه العملاء الآن. تغيير السعر هنا لا يعيد تسعير اشتراك قائم.'
+                : 'What customers resolve against right now. Changing a price here never reprices an existing subscription.'
             }
           />
-        ) : (
-          <PlanTable plans={activePlans} currencies={currencies} locale={locale} editable={false} />
-        )}
-      </Card>
-
-      {/* ---- The draft ---------------------------------------------------- */}
-      <Card>
-        <SectionHeader
-          title={isArabic ? 'المسودة' : 'Draft'}
-          description={
-            state.draft
-              ? isArabic
-                ? `الإصدار ${state.draft.versionNumber} — ${state.draft.status}`
-                : `Version ${state.draft.versionNumber} — ${state.draft.status}`
-              : isArabic
-                ? 'لا توجد مسودة مفتوحة. حفظ خطة يفتح واحدة من الإصدار المُفعّل.'
-                : 'No draft is open. Saving a plan opens one from the active version.'
-          }
-        />
-
-        {state.draft ? (
-          <>
+          {activePlans.length === 0 ? (
+            <EmptyState
+              message={
+                isArabic
+                  ? 'لم تُفعَّل أي خطة بعد. أنشئ خطة في المسودة أدناه ثم فعّلها.'
+                  : 'No plan has been activated yet. Create one in the draft below, then activate it.'
+              }
+            />
+          ) : (
             <PlanTable
-              plans={draftPlans}
+              plans={activePlans}
               currencies={currencies}
               locale={locale}
-              editable={mayEdit}
+              editable={false}
             />
+          )}
+        </Card>
 
-            {state.validation && state.validation.issues.length > 0 ? (
-              <div data-testid="validation-report" style={{ marginBlockStart: spacingTokens.md }}>
-                <SectionHeader title={isArabic ? 'نتيجة التحقق' : 'Validation report'} />
-                <ul style={{ margin: 0, paddingInlineStart: spacingTokens.lg }}>
-                  {state.validation.issues.map((issue, index) => (
-                    <li
-                      key={`${issue.path}-${index}`}
-                      data-testid={`issue-${issue.severity}`}
+        {/* ---- The draft ---------------------------------------------------- */}
+        <Card>
+          <SectionHeader
+            title={isArabic ? 'المسودة' : 'Draft'}
+            description={
+              state.draft
+                ? isArabic
+                  ? `الإصدار ${state.draft.versionNumber} — ${state.draft.status}`
+                  : `Version ${state.draft.versionNumber} — ${state.draft.status}`
+                : isArabic
+                  ? 'لا توجد مسودة مفتوحة. حفظ خطة يفتح واحدة من الإصدار المُفعّل.'
+                  : 'No draft is open. Saving a plan opens one from the active version.'
+            }
+          />
+
+          {state.draft ? (
+            <>
+              <PlanTable
+                plans={draftPlans}
+                currencies={currencies}
+                locale={locale}
+                editable={mayEdit}
+              />
+
+              {state.validation && state.validation.issues.length > 0 ? (
+                <div data-testid="validation-report" style={{ marginBlockStart: spacingTokens.md }}>
+                  <SectionHeader title={isArabic ? 'نتيجة التحقق' : 'Validation report'} />
+                  <ul style={{ margin: 0, paddingInlineStart: spacingTokens.lg }}>
+                    {state.validation.issues.map((issue, index) => (
+                      <li
+                        key={`${issue.path}-${index}`}
+                        data-testid={`issue-${issue.severity}`}
+                        style={{
+                          color:
+                            issue.severity === 'error'
+                              ? colorTokens.danger
+                              : colorTokens.textSecondary,
+                          fontSize: typographyTokens.bodySm.fontSize,
+                        }}
+                      >
+                        <code>{issue.path}</code> — {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {state.impact?.affected ? (
+                <div data-testid="impact-preview" style={{ marginBlockStart: spacingTokens.md }}>
+                  <SectionHeader
+                    title={isArabic ? 'معاينة الأثر' : 'Impact preview'}
+                    description={
+                      isArabic
+                        ? `${state.impact.affected.totalOnChangedPlans} مساحة عمل على الخطط المتغيرة.`
+                        : `${state.impact.affected.totalOnChangedPlans} workspace(s) on the changed plans.`
+                    }
+                  />
+                  {state.impact.affected.overLimit.length === 0 ? (
+                    <p
+                      data-testid="none-over-limit"
                       style={{
-                        color:
-                          issue.severity === 'error'
-                            ? colorTokens.danger
-                            : colorTokens.textSecondary,
+                        color: colorTokens.textSecondary,
                         fontSize: typographyTokens.bodySm.fontSize,
                       }}
                     >
-                      <code>{issue.path}</code> — {issue.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {state.impact?.affected ? (
-              <div data-testid="impact-preview" style={{ marginBlockStart: spacingTokens.md }}>
-                <SectionHeader
-                  title={isArabic ? 'معاينة الأثر' : 'Impact preview'}
-                  description={
-                    isArabic
-                      ? `${state.impact.affected.totalOnChangedPlans} مساحة عمل على الخطط المتغيرة.`
-                      : `${state.impact.affected.totalOnChangedPlans} workspace(s) on the changed plans.`
-                  }
-                />
-                {state.impact.affected.overLimit.length === 0 ? (
+                      {isArabic
+                        ? 'لا توجد مساحة عمل تتجاوز حدًا جديدًا في الأبعاد التي لدينا بيانات عنها.'
+                        : 'No workspace exceeds a new limit, in the dimensions we have data for.'}
+                    </p>
+                  ) : (
+                    <DataTable
+                      headers={
+                        isArabic
+                          ? ['مساحة العمل', 'الخطة', 'البُعد', 'الحالي', 'الحد الجديد']
+                          : ['Workspace', 'Plan', 'Dimension', 'Current', 'New limit']
+                      }
+                    >
+                      {state.impact.affected.overLimit.map((row) => (
+                        <tr
+                          key={`${row.workspaceId}-${row.dimension}`}
+                          data-testid="over-limit-row"
+                        >
+                          <Cell>{row.slug}</Cell>
+                          <Cell>{row.planKey}</Cell>
+                          <Cell>{row.dimension}</Cell>
+                          <Cell>{row.current}</Cell>
+                          <Cell>{row.newLimit}</Cell>
+                        </tr>
+                      ))}
+                    </DataTable>
+                  )}
                   <p
-                    data-testid="none-over-limit"
                     style={{
                       color: colorTokens.textSecondary,
-                      fontSize: typographyTokens.bodySm.fontSize,
+                      fontSize: typographyTokens.caption.fontSize,
+                      marginBlockStart: spacingTokens.sm,
                     }}
                   >
                     {isArabic
-                      ? 'لا توجد مساحة عمل تتجاوز حدًا جديدًا في الأبعاد التي لدينا بيانات عنها.'
-                      : 'No workspace exceeds a new limit, in the dimensions we have data for.'}
+                      ? 'لا يُحذف أي مورد للعميل عند التخفيض (D-12) — ما يتجاوز الحد يصبح للقراءة فقط.'
+                      : 'A downgrade never deletes a customer resource (D-12) — anything over the limit becomes read-only.'}
                   </p>
-                ) : (
-                  <DataTable
-                    headers={
-                      isArabic
-                        ? ['مساحة العمل', 'الخطة', 'البُعد', 'الحالي', 'الحد الجديد']
-                        : ['Workspace', 'Plan', 'Dimension', 'Current', 'New limit']
-                    }
-                  >
-                    {state.impact.affected.overLimit.map((row) => (
-                      <tr key={`${row.workspaceId}-${row.dimension}`} data-testid="over-limit-row">
-                        <Cell>{row.slug}</Cell>
-                        <Cell>{row.planKey}</Cell>
-                        <Cell>{row.dimension}</Cell>
-                        <Cell>{row.current}</Cell>
-                        <Cell>{row.newLimit}</Cell>
-                      </tr>
-                    ))}
-                  </DataTable>
-                )}
-                <p
-                  style={{
-                    color: colorTokens.textSecondary,
-                    fontSize: typographyTokens.caption.fontSize,
-                    marginBlockStart: spacingTokens.sm,
-                  }}
-                >
-                  {isArabic
-                    ? 'لا يُحذف أي مورد للعميل عند التخفيض (D-12) — ما يتجاوز الحد يصبح للقراءة فقط.'
-                    : 'A downgrade never deletes a customer resource (D-12) — anything over the limit becomes read-only.'}
-                </p>
+                </div>
+              ) : null}
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: spacingTokens.sm,
+                  marginBlockStart: spacingTokens.md,
+                }}
+              >
+                {mayEdit ? (
+                  <form action={validatePlansAction}>
+                    <input className="bs-control" type="hidden" name="locale" value={locale} />
+                    <input
+                      className="bs-control"
+                      type="hidden"
+                      name="versionId"
+                      value={state.draft.id}
+                    />
+                    <button
+                      type="submit"
+                      style={secondaryButtonStyle()}
+                      data-testid="validate-plans"
+                    >
+                      {isArabic ? 'تحقق وعاين الأثر' : 'Validate and preview impact'}
+                    </button>
+                  </form>
+                ) : null}
+
+                {mayActivate ? (
+                  <form action={activatePlansAction}>
+                    <input className="bs-control" type="hidden" name="locale" value={locale} />
+                    <input
+                      className="bs-control"
+                      type="hidden"
+                      name="versionId"
+                      value={state.draft.id}
+                    />
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: spacingTokens.xs,
+                        fontSize: typographyTokens.caption.fontSize,
+                        marginInlineEnd: spacingTokens.sm,
+                      }}
+                    >
+                      <input
+                        className="bs-control"
+                        type="checkbox"
+                        name="acknowledge"
+                        value="yes"
+                      />
+                      {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
+                    </label>
+                    <button type="submit" style={primaryButtonStyle()} data-testid="activate-plans">
+                      {isArabic ? 'تفعيل' : 'Activate'}
+                    </button>
+                  </form>
+                ) : null}
+
+                {mayEdit ? (
+                  <form action={discardPlanDraftAction}>
+                    <input className="bs-control" type="hidden" name="locale" value={locale} />
+                    <input
+                      className="bs-control"
+                      type="hidden"
+                      name="versionId"
+                      value={state.draft.id}
+                    />
+                    <input
+                      className="bs-control"
+                      type="hidden"
+                      name="reason"
+                      value="Draft discarded from the Control Center."
+                    />
+                    <button
+                      type="submit"
+                      style={dangerButtonStyle()}
+                      data-testid="discard-plan-draft"
+                    >
+                      {isArabic ? 'تجاهل المسودة' : 'Discard draft'}
+                    </button>
+                  </form>
+                ) : null}
               </div>
-            ) : null}
-
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: spacingTokens.sm,
-                marginBlockStart: spacingTokens.md,
-              }}
-            >
-              {mayEdit ? (
-                <form action={validatePlansAction}>
-                  <input className="bs-control" type="hidden" name="locale" value={locale} />
-                  <input
-                    className="bs-control"
-                    type="hidden"
-                    name="versionId"
-                    value={state.draft.id}
-                  />
-                  <button type="submit" style={secondaryButtonStyle()} data-testid="validate-plans">
-                    {isArabic ? 'تحقق وعاين الأثر' : 'Validate and preview impact'}
-                  </button>
-                </form>
-              ) : null}
-
-              {mayActivate ? (
-                <form action={activatePlansAction}>
-                  <input className="bs-control" type="hidden" name="locale" value={locale} />
-                  <input
-                    className="bs-control"
-                    type="hidden"
-                    name="versionId"
-                    value={state.draft.id}
-                  />
-                  <label
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: spacingTokens.xs,
-                      fontSize: typographyTokens.caption.fontSize,
-                      marginInlineEnd: spacingTokens.sm,
-                    }}
-                  >
-                    <input className="bs-control" type="checkbox" name="acknowledge" value="yes" />
-                    {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
-                  </label>
-                  <button type="submit" style={primaryButtonStyle()} data-testid="activate-plans">
-                    {isArabic ? 'تفعيل' : 'Activate'}
-                  </button>
-                </form>
-              ) : null}
-
-              {mayEdit ? (
-                <form action={discardPlanDraftAction}>
-                  <input className="bs-control" type="hidden" name="locale" value={locale} />
-                  <input
-                    className="bs-control"
-                    type="hidden"
-                    name="versionId"
-                    value={state.draft.id}
-                  />
-                  <input
-                    className="bs-control"
-                    type="hidden"
-                    name="reason"
-                    value="Draft discarded from the Control Center."
-                  />
-                  <button
-                    type="submit"
-                    style={dangerButtonStyle()}
-                    data-testid="discard-plan-draft"
-                  >
-                    {isArabic ? 'تجاهل المسودة' : 'Discard draft'}
-                  </button>
-                </form>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <EmptyState message={isArabic ? 'لا توجد مسودة مفتوحة.' : 'No draft is open.'} />
-        )}
-      </Card>
-
-      {/* ---- The editor --------------------------------------------------- */}
-      {mayEdit ? (
-        <Card>
-          <SectionHeader
-            title={
-              editing
-                ? isArabic
-                  ? `تحرير «${editing.nameEn || editing.key}»`
-                  : `Edit "${editing.nameEn || editing.key}"`
-                : isArabic
-                  ? 'خطة جديدة'
-                  : 'New plan'
-            }
-            description={
-              isArabic
-                ? 'اترك حدًا فارغًا ليعني «غير محدود / متفاوض عليه» — وليس صفرًا.'
-                : 'Leave a limit blank to mean unlimited / negotiated — not zero.'
-            }
-          />
-          <PlanForm
-            plan={editing}
-            currencies={currencies}
-            locale={locale}
-            lockVersion={state.draft?.lockVersion ?? null}
-          />
+            </>
+          ) : (
+            <EmptyState message={isArabic ? 'لا توجد مسودة مفتوحة.' : 'No draft is open.'} />
+          )}
         </Card>
-      ) : null}
 
-      {/* ---- Version history ---------------------------------------------- */}
-      <Card>
-        <SectionHeader title={isArabic ? 'سجل الإصدارات' : 'Version history'} />
-        {state.versions.length === 0 ? (
-          <EmptyState message={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
-        ) : (
-          <DataTable
-            headers={
-              isArabic
-                ? ['الإصدار', 'الحالة', 'أُنشئ', 'فُعِّل', '']
-                : ['Version', 'Status', 'Created', 'Activated', '']
-            }
-          >
-            {state.versions.map((version) => (
-              <tr key={version.id} data-testid={`version-${version.versionNumber}`}>
-                <Cell>{version.versionNumber}</Cell>
-                <Cell>
-                  <StatusPill status={version.status} />
-                </Cell>
-                <Cell>{version.createdAt.toISOString().slice(0, 10)}</Cell>
-                <Cell>{version.activatedAt?.toISOString().slice(0, 10) ?? '—'}</Cell>
-                <Cell>
-                  {mayActivate && version.status === 'SUPERSEDED' ? (
-                    <form action={rollbackPlansAction}>
-                      <input className="bs-control" type="hidden" name="locale" value={locale} />
-                      <input
-                        className="bs-control"
-                        type="hidden"
-                        name="versionId"
-                        value={version.id}
-                      />
-                      <input
-                        className="bs-control"
-                        type="hidden"
-                        name="reason"
-                        value="Rolled back from the Control Center."
-                      />
-                      <button
-                        type="submit"
-                        style={{ ...secondaryButtonStyle(), ...compactButton }}
-                        data-testid={`rollback-${version.versionNumber}`}
-                      >
-                        {isArabic ? 'استرجاع' : 'Roll back'}
-                      </button>
-                    </form>
-                  ) : (
-                    '—'
-                  )}
-                </Cell>
-              </tr>
-            ))}
-          </DataTable>
-        )}
-      </Card>
+        {/* ---- The editor --------------------------------------------------- */}
+        {mayEdit ? (
+          <Card>
+            <SectionHeader
+              title={
+                editing
+                  ? isArabic
+                    ? `تحرير «${editing.nameEn || editing.key}»`
+                    : `Edit "${editing.nameEn || editing.key}"`
+                  : isArabic
+                    ? 'خطة جديدة'
+                    : 'New plan'
+              }
+              description={
+                isArabic
+                  ? 'اترك حدًا فارغًا ليعني «غير محدود / متفاوض عليه» — وليس صفرًا.'
+                  : 'Leave a limit blank to mean unlimited / negotiated — not zero.'
+              }
+            />
+            <PlanForm
+              plan={editing}
+              currencies={currencies}
+              locale={locale}
+              lockVersion={state.draft?.lockVersion ?? null}
+            />
+          </Card>
+        ) : null}
+
+        {/* ---- Version history ---------------------------------------------- */}
+        <Card>
+          <SectionHeader title={isArabic ? 'سجل الإصدارات' : 'Version history'} />
+          {state.versions.length === 0 ? (
+            <EmptyState message={isArabic ? 'لا توجد إصدارات بعد.' : 'No versions yet.'} />
+          ) : (
+            <DataTable
+              headers={
+                isArabic
+                  ? ['الإصدار', 'الحالة', 'أُنشئ', 'فُعِّل', '']
+                  : ['Version', 'Status', 'Created', 'Activated', '']
+              }
+            >
+              {state.versions.map((version) => (
+                <tr key={version.id} data-testid={`version-${version.versionNumber}`}>
+                  <Cell>{version.versionNumber}</Cell>
+                  <Cell>
+                    <StatusPill status={version.status} />
+                  </Cell>
+                  <Cell>{version.createdAt.toISOString().slice(0, 10)}</Cell>
+                  <Cell>{version.activatedAt?.toISOString().slice(0, 10) ?? '—'}</Cell>
+                  <Cell>
+                    {mayActivate && version.status === 'SUPERSEDED' ? (
+                      <form action={rollbackPlansAction}>
+                        <input className="bs-control" type="hidden" name="locale" value={locale} />
+                        <input
+                          className="bs-control"
+                          type="hidden"
+                          name="versionId"
+                          value={version.id}
+                        />
+                        <input
+                          className="bs-control"
+                          type="hidden"
+                          name="reason"
+                          value="Rolled back from the Control Center."
+                        />
+                        <button
+                          type="submit"
+                          style={{ ...secondaryButtonStyle(), ...compactButton }}
+                          data-testid={`rollback-${version.versionNumber}`}
+                        >
+                          {isArabic ? 'استرجاع' : 'Roll back'}
+                        </button>
+                      </form>
+                    ) : (
+                      '—'
+                    )}
+                  </Cell>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+        </Card>
+      </div>
     </>
   );
 }

@@ -578,6 +578,7 @@ export function AppShell({
 
   return (
     <div
+      className="bs-ambient-host"
       data-testid="app-shell"
       data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
     >
@@ -870,6 +871,34 @@ export function AppShell({
   );
 }
 
+/** The production BrandSpace mark, shared by shell, auth and metadata surfaces. */
+export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="brand-mark"
+      style={{
+        display: 'inline-flex',
+        inlineSize: size,
+        blockSize: size,
+        borderRadius: radiusTokens.lg,
+        fontSize: layoutTokens.brandMarkGlyph,
+        fontWeight: 850,
+        flexShrink: 0,
+      }}
+    >
+      <svg viewBox="0 0 32 32" width="100%" height="100%" focusable="false" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#7935FE" />
+        <path
+          d="M10 8h6.6c3 0 4.9 1.5 4.9 4 0 1.7-.9 2.9-2.4 3.4 1.9.4 3.1 1.8 3.1 3.8 0 2.8-2.1 4.4-5.4 4.4H10V8Zm3.3 6.4h2.9c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-2.9v3.2Zm0 6.4h3.3c1.4 0 2.2-.6 2.2-1.7s-.8-1.7-2.2-1.7h-3.3v3.4Z"
+          fill="#FFFFFF"
+        />
+        <circle cx="25" cy="7" r="3" fill="#FFDD15" />
+      </svg>
+    </span>
+  );
+}
+
 /** The BrandSpace wordmark used in both shells. */
 export function BrandMark({
   title,
@@ -889,35 +918,7 @@ export function BrandMark({
         minInlineSize: 0,
       }}
     >
-      <span
-        aria-hidden="true"
-        data-testid="brand-mark"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          /*
-           * `.brand-mark { width: 34px; height: 34px; border-radius: 11px;
-           *  background: var(--ink); color: #fff; font-size: 15px }` with
-           * `.brand { font-weight: 850 }` inherited by the glyph.
-           *
-           * PURPOSE-SPECIFIC TOKENS, not the type scale: routing the "B"
-           * through a generic label token rendered it visibly smaller than the
-           * demo, which is exactly the substitution §4 rules out.
-           */
-          inlineSize: layoutTokens.brandMark,
-          blockSize: layoutTokens.brandMark,
-          borderRadius: radiusTokens.lg,
-          background: colorTokens.ink,
-          color: colorTokens.inkInk,
-          fontSize: layoutTokens.brandMarkGlyph,
-          lineHeight: 1,
-          fontWeight: 850,
-          flexShrink: 0,
-        }}
-      >
-        B
-      </span>
+      <BrandGlyph />
       {/* Tagged so a collapsed rail can drop the wordmark and keep the mark,
           like `.app-shell.sidebar-collapsed .brand-name`. A class rather than a
           positional selector: `> span:last-child` is a guess about structure,

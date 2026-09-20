@@ -1,9 +1,22 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Banner, Field, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  Banner,
+  Field,
+  SearchableSelect,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
+import { timeZoneOptions } from '@brandspace/shared';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
-import { currentEnvironment, getCustomer } from '../../../../server/customer-context';
+import {
+  customerLandingPath,
+  currentEnvironment,
+  getCustomer,
+  getSessionToken,
+} from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signUpAction } from '../actions';
@@ -19,10 +32,9 @@ export const dynamic = 'force-dynamic';
  * A minimum restated as a constant here would be a minimum the owner cannot
  * actually change (CLAUDE.md §2.2).
  *
- * THE TIMEZONE IS ASKED FOR, NEVER ASSUMED (D-194). The browser prefills the
- * control with its own zone because that is a courtesy to the person filling the
- * form; the VALUE submitted is theirs, and an empty one is refused rather than
- * replaced by a platform default.
+ * THE TIMEZONE IS ASKED FOR, NEVER ASSUMED (D-194). The searchable control is
+ * populated from the runtime's IANA inventory and posts only the canonical zone
+ * the customer selected; an empty value is refused rather than defaulted.
  */
 export default async function SignUpPage({
   params,
@@ -36,7 +48,10 @@ export default async function SignUpPage({
   const query = await searchParams;
 
   const existing = await getCustomer().catch(() => null);
-  if (existing) redirect(`/${locale}/workspaces`);
+  if (existing) {
+    const token = await getSessionToken();
+    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
+  }
 
   const policy = await withoutTenantContext(
     async (db) => new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
@@ -46,6 +61,7 @@ export default async function SignUpPage({
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const required = policy.legalDocuments.filter((document) => document.required);
+  const timezones = timeZoneOptions(locale);
 
   if (!policy.signup.open) {
     return (
@@ -120,19 +136,13 @@ export default async function SignUpPage({
         </Field>
 
         <Field label={t('signUp.timezone')} htmlFor="timezone" required>
-          {/*
-            Prefilled by the browser as a COURTESY, and still the person's own
-            answer. `defaultValue` rather than a server-side guess: the server
-            has no business inventing a zone (D-194).
-          */}
-          <input
-            className="bs-control"
+          <SearchableSelect
             id="timezone"
             name="timezone"
+            options={timezones}
+            placeholder={t('createWorkspace.choose')}
+            noResultsLabel={t('common.noResults')}
             required
-            maxLength={64}
-            defaultValue=""
-            placeholder="Europe/London"
             style={authInputStyle()}
           />
         </Field>

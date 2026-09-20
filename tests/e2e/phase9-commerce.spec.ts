@@ -46,6 +46,7 @@ async function signUpAndVerify(page: Page, locale = 'en'): Promise<NewCustomer> 
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
   await page.fill('#timezone', 'Europe/London');
+  await page.press('#timezone', 'Enter');
   // THE TERMS CHECKBOX IS REQUIRED AND VERSIONED. The form renders it from the
   // activated document, so the version travels with the acceptance.
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
@@ -78,13 +79,13 @@ async function signIn(page: Page, email: string, locale = 'en'): Promise<void> {
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
   await page.click('[data-testid="signin-submit"]');
-  await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  await page.waitForURL(new RegExp(`/${locale}/onboarding/workspace$`));
 }
 
-/** Create the first workspace through the REAL form, answering all four. */
+/** Create the first workspace through the REAL form. Billing is USD by policy. */
 async function createWorkspace(
   page: Page,
-  input: { country: string; currency: string },
+  input: { country: string },
   locale = 'en',
 ): Promise<void> {
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/onboarding/workspace`);
@@ -92,10 +93,14 @@ async function createWorkspace(
 
   await page.fill('#name', 'Journey Workspace');
   await page.fill('#slug', `journey-${crypto.randomUUID().slice(0, 8)}`);
-  await page.selectOption('[data-testid="country-select"]', input.country);
-  await page.selectOption('[data-testid="currency-select"]', input.currency);
+  const countryName =
+    new Intl.DisplayNames(['en'], { type: 'region' }).of(input.country) ?? input.country;
+  await page.fill('[data-testid="country-select"]', countryName);
+  await page.press('[data-testid="country-select"]', 'Enter');
+  await expect(page.locator('[data-testid="currency-select"]')).toHaveCount(0);
   await page.selectOption('#defaultLocale', locale === 'ar' ? 'AR' : 'EN');
-  await page.fill('#timezone', 'Europe/London');
+  await page.fill('[data-testid="timezone-select"]', 'Europe/London');
+  await page.press('[data-testid="timezone-select"]', 'Enter');
   await page.fill('#billingEmail', `finance-${crypto.randomUUID().slice(0, 8)}@example.local`);
   await page.click('[data-testid="create-workspace-submit"]');
 
@@ -146,7 +151,7 @@ test.describe('a stranger becomes a paying customer', () => {
 
     const customer = await signUpAndVerify(page);
     await signIn(page, customer.email);
-    await createWorkspace(page, { country: 'SA', currency: 'SAR' });
+    await createWorkspace(page, { country: 'SA' });
 
     // --- The first-run checklist is DERIVED, so the workspace step is already
     // done and the plan step is not.
@@ -159,13 +164,13 @@ test.describe('a stranger becomes a paying customer', () => {
       'false',
     );
 
-    // --- Billing, priced in the currency the customer chose.
+    // --- Billing, priced in the platform's launch currency (USD).
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     await expect(page.locator('[data-testid="plans-card"]')).toBeVisible();
 
-    // 99.00 SAR, from the activated fixture catalogue. Nothing converted.
-    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('99.00');
-    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('SAR');
+    // 26.00 USD, from the activated fixture catalogue. Nothing converted.
+    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('26.00');
+    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('USD');
 
     // The trial gave 200 credits, and the page says they are prepaid.
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
@@ -179,7 +184,7 @@ test.describe('a stranger becomes a paying customer', () => {
     expect(await page.locator('input[autocomplete*="cc-"]').count()).toBe(0);
     await expect(page.locator('[data-testid="dev-checkout-pay"]')).toBeVisible();
     // It shows the total from OUR row — including the market's configured tax.
-    await expect(page.locator('body')).toContainText('113.85');
+    await expect(page.locator('body')).toContainText('29.90');
 
     await page.click('[data-testid="dev-checkout-pay"]');
 
@@ -188,7 +193,7 @@ test.describe('a stranger becomes a paying customer', () => {
       timeout: 30_000,
     });
     await expect(page.locator('[data-testid="checkout-completed"]')).toBeVisible();
-    await expect(page.locator('[data-testid="checkout-total"]')).toContainText('113.85');
+    await expect(page.locator('[data-testid="checkout-total"]')).toContainText('29.90');
 
     // --- The invoice exists, is numbered, and opens.
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
@@ -197,8 +202,8 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(invoiceRow).toContainText(/BS-\d{4}-\d{6}/);
     await invoiceRow.getByRole('link').click();
 
-    await expect(page.locator('[data-testid="invoice-total"]')).toContainText('113.85');
-    await expect(page.locator('[data-testid="invoice-tax"]')).toContainText('14.85');
+    await expect(page.locator('[data-testid="invoice-total"]')).toContainText('29.90');
+    await expect(page.locator('[data-testid="invoice-tax"]')).toContainText('3.90');
     await expect(page.locator('[data-testid="invoice-status"]')).toHaveText('Paid');
 
     /*
@@ -212,7 +217,7 @@ test.describe('a stranger becomes a paying customer', () => {
     const invoiceUrl = page.url();
     await page.getByTestId('invoice-open-document').click();
     await expect(page.getByTestId('invoice-document')).toBeVisible();
-    await expect(page.getByTestId('document-total')).toContainText('113.85');
+    await expect(page.getByTestId('document-total')).toContainText('29.90');
     // A document, not a screen: no application navigation anywhere on it.
     await expect(page.locator('nav')).toHaveCount(0);
     await expect(page.getByTestId('document-seller')).toBeVisible();
@@ -222,7 +227,7 @@ test.describe('a stranger becomes a paying customer', () => {
     await page.goto(invoiceUrl.replace('/en/', '/ar/') + '/document');
     const document = page.getByTestId('invoice-document');
     await expect(document).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByTestId('document-total')).toContainText('113.85');
+    await expect(page.getByTestId('document-total')).toContainText('29.90');
 
     /*
      * THE SERVER-RENDERED PDF IS ENGLISH ONLY, AND SAYS SO (D-216). Arabic
@@ -269,8 +274,8 @@ test.describe('a stranger becomes a paying customer', () => {
     expect(csv.status).toBe(200);
     expect(csv.text).toContain('"INVOICE"');
     // The exact integer AND the scaled decimal, which is the point of both.
-    expect(csv.text).toContain('"11385"');
-    expect(csv.text).toContain('"113.85"');
+    expect(csv.text).toContain('"2990"');
+    expect(csv.text).toContain('"29.90"');
   });
 
   test('buys a prepaid pack and the balance rises by exactly the pack', async ({ page }) => {
@@ -278,7 +283,7 @@ test.describe('a stranger becomes a paying customer', () => {
 
     const customer = await signUpAndVerify(page);
     await signIn(page, customer.email);
-    await createWorkspace(page, { country: 'SA', currency: 'SAR' });
+    await createWorkspace(page, { country: 'SA' });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
@@ -299,7 +304,7 @@ test.describe('a stranger becomes a paying customer', () => {
 
     const customer = await signUpAndVerify(page);
     await signIn(page, customer.email);
-    await createWorkspace(page, { country: 'SA', currency: 'SAR' });
+    await createWorkspace(page, { country: 'SA' });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     await buyAndFollow(page, 'plan-buy-fixture-starter');
@@ -316,24 +321,19 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(page.locator('[data-testid="invoices-table"]')).toHaveCount(0);
   });
 
-  test('a market that does not offer a plan says so, and does not convert one', async ({
-    page,
-  }) => {
+  test('creates a workspace for a country that has no payment market yet', async ({ page }) => {
     test.slow();
 
     const customer = await signUpAndVerify(page);
     await signIn(page, customer.email);
-    // Kuwait, in KWD. `fixture-growth` has no KWD price on purpose.
-    await createWorkspace(page, { country: 'KW', currency: 'KWD' });
+    // Germany is deliberately absent from the fixture commerce markets. That
+    // must not block identity/onboarding; checkout policy is a later concern.
+    await createWorkspace(page, { country: 'DE' });
 
-    await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
-    // The starter plan IS offered, at three decimal places.
-    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('7.900');
-    // The other one is shown with its REASON rather than omitted or converted.
-    await expect(page.locator('[data-testid="plan-unavailable-fixture-growth"]')).toContainText(
-      'KWD',
+    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
+      'data-complete',
+      'true',
     );
-    expect(await page.locator('[data-testid="plan-buy-fixture-growth"]').count()).toBe(0);
   });
 });
 
@@ -345,7 +345,7 @@ test.describe('the commercial screens work in both languages', () => {
 
     const customer = await signUpAndVerify(page);
     await signIn(page, customer.email, 'en');
-    await createWorkspace(page, { country: 'SA', currency: 'SAR' }, 'en');
+    await createWorkspace(page, { country: 'SA' }, 'en');
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/billing`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

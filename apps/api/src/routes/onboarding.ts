@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CustomerAuthService } from '@brandspace/auth';
 import { WorkspaceOnboardingService, onboardingStateFor } from '@brandspace/onboarding';
 import { findPlan } from '@brandspace/entitlements';
+import { DEFAULT_BILLING_CURRENCY, isIsoCountryCode } from '@brandspace/shared';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { route } from '../route-contract';
@@ -12,10 +13,11 @@ import { commercePolicy, onboardingPolicy, planCatalogue } from './phase9-contex
 /**
  * Creating the first workspace, and reporting where the customer has got to.
  *
- * THE FOUR ANSWERS ARE REQUIRED IN THE SCHEMA (D-194). Country, locale, timezone
- * and currency have no defaults here and none anywhere behind here. A request
- * missing any of them is a validation failure, not a request that quietly
- * becomes Saudi.
+ * Country, interface locale and timezone are explicit customer answers. Country
+ * is validated against the complete ISO inventory rather than the subset with a
+ * payment route. Billing currency is deliberately not a customer-facing answer
+ * at launch: the API assigns the platform default (USD) so every entry surface
+ * behaves the same way.
  *
  * THE PROGRESS ENDPOINT DERIVES, IT DOES NOT REMEMBER. There is no stored step
  * counter to drift from reality — see packages/onboarding/src/state.ts for why
@@ -26,13 +28,12 @@ const createWorkspaceSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(3).max(50),
   type: z.enum(['STARTUP', 'SME', 'ENTERPRISE', 'CREATOR', 'AGENCY']).optional(),
-  /** ISO 3166-1 alpha-2, chosen from the configured markets. */
-  country: z.string().length(2),
+  /** ISO 3166-1 alpha-2, chosen from the complete country inventory. */
+  country: z.string().trim().toUpperCase().refine(isIsoCountryCode, 'Choose a valid country.'),
   defaultLocale: z.enum(['AR', 'EN']),
   timezone: z.string().min(1).max(64),
-  /** Chosen from the currencies that market offers. Never inferred from country. */
-  currency: z.string().length(3),
-  billingEmail: z.string().min(3).max(320),
+  // Billing currency is a platform launch default, not a customer-facing choice.
+  billingEmail: z.string().email().max(320),
   legalName: z.string().max(200).optional(),
 });
 
@@ -59,15 +60,25 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
       if (!customer) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
 
       const parsed = createWorkspaceSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      if (!parsed.success) {
+        return reply.code(422).send({
+          error: {
+            code: 'VALIDATION_FAILED',
+            details: {
+              fields: parsed.error.issues.map((issue) => issue.path.join('.')).filter(Boolean),
+            },
+          },
+        });
+      }
 
       try {
         const [commerce, catalogue] = await Promise.all([commercePolicy(), planCatalogue()]);
 
         /*
          * WHICH PLAN OFFERS THE TRIAL IS A CONFIGURATION FACT. The lowest-tier
-         * active plan with a trial, priced in the chosen currency. Nothing here
-         * names a plan, and if none qualifies the workspace is created without a
+         * active plan with a trial. The service only starts it when that plan
+         * has a price in the platform default currency; otherwise the workspace
+         * is created without a
          * trial rather than with an invented one.
          */
         const trialPlan =
@@ -85,7 +96,7 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
             country: parsed.data.country,
             defaultLocale: parsed.data.defaultLocale,
             timezone: parsed.data.timezone,
-            currency: parsed.data.currency,
+            currency: DEFAULT_BILLING_CURRENCY,
             billingEmail: parsed.data.billingEmail,
             legalName: parsed.data.legalName ?? null,
             ip: req.ip || undefined,
