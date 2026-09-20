@@ -668,7 +668,10 @@ describe('workspace creation is independent from checkout availability', () => {
         findPlan(plans, 'fixture-starter'),
         null,
       ),
-    ).rejects.toThrow(/recognised timezone/i);
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      publicDetails: { field: 'timezone' },
+    });
   });
 
   it('grants the trial and its credits exactly once, in the same transaction', async () => {
