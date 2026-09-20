@@ -163,17 +163,13 @@ export function SearchableSelect({
         <div
           id={listId}
           role="listbox"
+          className="bs-dropdown-panel"
           style={{
             position: 'absolute',
             insetInline: 0,
             insetBlockStart: 'calc(100% + 0.375rem)',
             zIndex: zIndexTokens.overlay,
             maxBlockSize: '18rem',
-            overflowY: 'auto',
-            padding: spacingTokens.xs,
-            borderRadius: radiusTokens.lg,
-            background: colorTokens.surface,
-            boxShadow: shadowTokens.overlay,
           }}
           onMouseDown={(event) => event.preventDefault()}
         >
@@ -197,19 +193,15 @@ export function SearchableSelect({
                 aria-selected={option.value === value}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option)}
+                className="bs-dropdown-option"
+                data-active={index === activeIndex ? 'true' : undefined}
                 style={{
                   display: 'flex',
                   inlineSize: '100%',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: spacingTokens.sm,
-                  padding: `${spacingTokens.sm} ${spacingTokens.md}`,
                   border: 0,
-                  borderRadius: radiusTokens.md,
-                  background:
-                    index === activeIndex || option.value === value
-                      ? colorTokens.surfaceLavender
-                      : 'transparent',
                   color: colorTokens.textPrimary,
                   fontFamily: 'inherit',
                   ...typographyTokens.bodySm,
