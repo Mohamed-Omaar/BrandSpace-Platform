@@ -881,6 +881,9 @@ export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: 
         display: 'inline-flex',
         inlineSize: size,
         blockSize: size,
+        borderRadius: radiusTokens.lg,
+        fontSize: layoutTokens.brandMarkGlyph,
+        fontWeight: 850,
         flexShrink: 0,
       }}
     >
