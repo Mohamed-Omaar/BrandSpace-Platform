@@ -16,7 +16,6 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  Toolbar,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -299,79 +298,99 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         </div>
       </div>
 
-      <Toolbar>
-        {/*
-          A GET FORM, so search is a link the browser makes. It works with
-          JavaScript disabled, the result is bookmarkable, and the back button
-          returns to the previous query rather than to an empty grid.
-        */}
-        <form method="get" action={`/${props.locale}/assets`} style={{ display: 'contents' }}>
-          <SearchField
-            id="assets-search"
-            label={t('assets.search')}
-            placeholder={t('assets.search')}
-            defaultValue={filters.search ?? ''}
-          />
-          {/* The other filters ride along, so searching does not reset them. */}
-          {filters.kind ? <input type="hidden" name="kind" value={filters.kind} /> : null}
-          {filters.status ? <input type="hidden" name="status" value={filters.status} /> : null}
-          {filters.tag ? <input type="hidden" name="tag" value={filters.tag} /> : null}
-          {filters.folder ? <input type="hidden" name="folder" value={filters.folder} /> : null}
-          {filters.scope ? <input type="hidden" name="scope" value={filters.scope} /> : null}
-          <input type="hidden" name="sort" value={filters.sort} />
-        </form>
+      <Card testId="assets-filters">
+        <div style={{ display: 'grid', gap: spacingTokens.lg }}>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: spacingTokens.md,
+              alignItems: 'end',
+              justifyContent: 'space-between',
+            }}
+          >
+            {/* Search gets its own lane instead of competing visually with every facet. */}
+            <form
+              method="get"
+              action={`/${props.locale}/assets`}
+              style={{ display: 'flex', flex: '1 1 18rem', minInlineSize: 0 }}
+            >
+              <SearchField
+                id="assets-search"
+                label={t('assets.search')}
+                placeholder={t('assets.search')}
+                defaultValue={filters.search ?? ''}
+              />
+              {/* The other filters ride along, so searching does not reset them. */}
+              {filters.kind ? <input type="hidden" name="kind" value={filters.kind} /> : null}
+              {filters.status ? <input type="hidden" name="status" value={filters.status} /> : null}
+              {filters.tag ? <input type="hidden" name="tag" value={filters.tag} /> : null}
+              {filters.folder ? <input type="hidden" name="folder" value={filters.folder} /> : null}
+              {filters.scope ? <input type="hidden" name="scope" value={filters.scope} /> : null}
+              <input type="hidden" name="sort" value={filters.sort} />
+            </form>
 
-        {/*
-          ALL ASSETS · SHARED · EACH ACCESSIBLE BRAND — in the `FilterGroup` the
-          kind, status and sort filters beside it already use. A tab strip here
-          would be a second navigation pattern for a filter, which §4.2 rule 5
-          rules out, and the brands offered are the ones the rail offers because
-          both come from the same scoped list.
-        */}
-        <FilterGroup
-          label={t('assets.filter.context')}
-          allLabel={t('assets.filter.allAssets')}
-          current={filters.scope}
-          options={[
-            { value: 'shared', label: t('assets.filter.shared') },
-            ...props.brands.map((brand) => ({ value: brand.id, label: brand.name })),
-          ]}
-          hrefFor={(value) => filterHref(props.locale, filters, { scope: value })}
-        />
+            <div style={{ flex: '0 1 auto', minInlineSize: '12rem' }}>
+              <FilterGroup
+                label={t('assets.sort')}
+                allLabel={t('assets.sort.newest')}
+                current={filters.sort === 'createdAt' ? undefined : filters.sort}
+                options={[
+                  { value: 'name', label: t('assets.sort.name') },
+                  { value: 'sizeBytes', label: t('assets.sort.size') },
+                ]}
+                hrefFor={(value) =>
+                  filterHref(props.locale, filters, { sort: value ?? 'createdAt' })
+                }
+              />
+            </div>
+          </div>
 
-        <FilterGroup
-          label={t('assets.filter.kind')}
-          allLabel={t('assets.filter.all')}
-          current={filters.kind}
-          options={(Object.keys(KIND_LABEL) as AssetKind[]).map((kind) => ({
-            value: kind,
-            label: t(KIND_LABEL[kind]),
-          }))}
-          hrefFor={(value) => filterHref(props.locale, filters, { kind: value })}
-        />
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
+              gap: spacingTokens.md,
+              alignItems: 'start',
+            }}
+          >
+            {/* One visual group per decision. This keeps scope/type/status scannable
+                instead of rendering them as one long sentence of chips. */}
+            <FilterGroup
+              label={t('assets.filter.context')}
+              allLabel={t('assets.filter.allAssets')}
+              current={filters.scope}
+              options={[
+                { value: 'shared', label: t('assets.filter.shared') },
+                ...props.brands.map((brand) => ({ value: brand.id, label: brand.name })),
+              ]}
+              hrefFor={(value) => filterHref(props.locale, filters, { scope: value })}
+            />
 
-        <FilterGroup
-          label={t('assets.filter.status')}
-          allLabel={t('assets.filter.all')}
-          current={filters.status}
-          options={(Object.keys(STATE_LABEL) as AssetStatus[]).map((status) => ({
-            value: status,
-            label: t(STATE_LABEL[status]),
-          }))}
-          hrefFor={(value) => filterHref(props.locale, filters, { status: value })}
-        />
+            <FilterGroup
+              label={t('assets.filter.kind')}
+              allLabel={t('assets.filter.all')}
+              current={filters.kind}
+              options={(Object.keys(KIND_LABEL) as AssetKind[]).map((kind) => ({
+                value: kind,
+                label: t(KIND_LABEL[kind]),
+              }))}
+              hrefFor={(value) => filterHref(props.locale, filters, { kind: value })}
+            />
 
-        <FilterGroup
-          label={t('assets.sort')}
-          allLabel={t('assets.sort.newest')}
-          current={filters.sort === 'createdAt' ? undefined : filters.sort}
-          options={[
-            { value: 'name', label: t('assets.sort.name') },
-            { value: 'sizeBytes', label: t('assets.sort.size') },
-          ]}
-          hrefFor={(value) => filterHref(props.locale, filters, { sort: value ?? 'createdAt' })}
-        />
-      </Toolbar>
+            <FilterGroup
+              label={t('assets.filter.status')}
+              allLabel={t('assets.filter.all')}
+              current={filters.status}
+              options={(Object.keys(STATE_LABEL) as AssetStatus[]).map((status) => ({
+                value: status,
+                label: t(STATE_LABEL[status]),
+              }))}
+              hrefFor={(value) => filterHref(props.locale, filters, { status: value })}
+            />
+          </div>
+        </div>
+      </Card>
 
       <div
         style={{
@@ -621,54 +640,66 @@ function FilterGroup({
   return (
     <nav
       aria-label={label}
-      style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens['3xs'], alignItems: 'center' }}
+      style={{ display: 'grid', gap: spacingTokens.xs, minInlineSize: 0 }}
     >
       <span
         style={{
           ...typographyTokens.overline,
           textTransform: 'uppercase',
           color: colorTokens.textMuted,
-          marginInlineEnd: spacingTokens['3xs'],
         }}
       >
         {label}
       </span>
-      {[{ value: undefined, label: allLabel }, ...options].map((option) => {
-        const active = option.value === current;
-        return (
-          <a
-            key={option.value ?? '__all__'}
-            href={hrefFor(option.value)}
-            className={CONTROL_CLASS}
-            {...(active ? { 'aria-current': 'true' as const } : {})}
-            style={{
-              ...typographyTokens.label,
-              textDecoration: 'none',
-              /*
-               * A 24px MINIMUM TOUCH TARGET — WCAG 2.2 AA 2.5.8.
-               *
-               * These were 27.5 x 20px, which reads fine on a desktop pointer
-               * and fails on a phone: axe reported 268 violations on a 390px
-               * viewport, all of them these links. Padding alone does not fix
-               * it, because a short label gives the box nothing to pad around;
-               * the minimum has to be stated, and the flex centring is what
-               * keeps the label in the middle of the larger box.
-               */
-              display: 'inline-flex',
-              alignItems: 'center',
-              minBlockSize: '24px',
-              minInlineSize: '24px',
-              justifyContent: 'center',
-              padding: `${spacingTokens['3xs']} ${spacingTokens.xs}`,
-              borderRadius: radiusTokens.sm,
-              color: active ? colorTokens.brandPurple : colorTokens.textSecondary,
-              background: active ? colorTokens.surfaceMuted : 'transparent',
-            }}
-          >
-            {option.label}
-          </a>
-        );
-      })}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: spacingTokens['3xs'],
+          alignItems: 'center',
+          padding: spacingTokens['3xs'],
+          borderRadius: radiusTokens.md,
+          background: colorTokens.surfaceMuted,
+          minInlineSize: 0,
+        }}
+      >
+        {[{ value: undefined, label: allLabel }, ...options].map((option) => {
+          const active = option.value === current;
+          return (
+            <a
+              key={option.value ?? '__all__'}
+              href={hrefFor(option.value)}
+              className={CONTROL_CLASS}
+              {...(active ? { 'aria-current': 'true' as const } : {})}
+              style={{
+                ...typographyTokens.label,
+                textDecoration: 'none',
+                /*
+                 * A 24px MINIMUM TOUCH TARGET — WCAG 2.2 AA 2.5.8.
+                 *
+                 * These were 27.5 x 20px, which reads fine on a desktop pointer
+                 * and fails on a phone: axe reported 268 violations on a 390px
+                 * viewport, all of them these links. Padding alone does not fix
+                 * it, because a short label gives the box nothing to pad around;
+                 * the minimum has to be stated, and the flex centring is what
+                 * keeps the label in the middle of the larger box.
+                 */
+                display: 'inline-flex',
+                alignItems: 'center',
+                minBlockSize: '28px',
+                minInlineSize: '28px',
+                justifyContent: 'center',
+                padding: `${spacingTokens['3xs']} ${spacingTokens.sm}`,
+                borderRadius: radiusTokens.sm,
+                color: active ? colorTokens.brandPurple : colorTokens.textSecondary,
+                background: active ? colorTokens.surfaceLavender : 'transparent',
+              }}
+            >
+              {option.label}
+            </a>
+          );
+        })}
+      </div>
     </nav>
   );
 }
