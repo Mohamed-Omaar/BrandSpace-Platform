@@ -19,17 +19,15 @@ export const dynamic = 'force-dynamic';
 /**
  * The first workspace.
  *
- * WHAT THIS PAGE IS FOR: asking the four questions D-194 refuses to answer on a
- * customer's behalf — country, interface language, timezone and billing
- * currency — and offering the configured markets to choose between.
+ * WHAT THIS PAGE IS FOR: asking the customer for workspace identity facts we
+ * must not guess — country, interface language and timezone. Country comes from
+ * the complete ISO inventory, not the payment-market catalogue, because creating
+ * a workspace must not depend on whether checkout has been configured there.
  *
- * NO WORKSPACE CONTEXT EXISTS YET, so the commercial catalogue is read with none
- * set. The projection is readable that way; every tenant-owned table stays
- * empty, which is exactly right for a person who is not yet in a workspace.
- *
- * AN EMPTY MARKET LIST IS STATED, NOT PAPERED OVER. Before an owner activates a
- * commerce document there is nowhere to sell, and the page says so rather than
- * offering a country nobody approved.
+ * Billing currency is intentionally absent from the form. Launch billing is USD
+ * and the API owns that default; the billing engine remains multi-currency for a
+ * future product decision. The only platform catalogue read here is the plan
+ * snapshot, solely to state trial terms before a trial starts.
  */
 export default async function CreateWorkspacePage({
   params,
