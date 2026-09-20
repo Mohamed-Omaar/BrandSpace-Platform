@@ -3,7 +3,7 @@ import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { parseConfigPayload } from '@brandspace/config';
 import { spacingTokens, typographyTokens, colorTokens } from '@brandspace/ui';
-import { ISO_COUNTRY_CODES } from '@brandspace/shared';
+import { countryOptions, timeZoneOptions } from '@brandspace/shared';
 import {
   currentEnvironment,
   getCustomerAuth,
@@ -66,16 +66,8 @@ export default async function CreateWorkspacePage({
     { prisma: getPrisma() },
   );
 
-  const displayNames = new Intl.DisplayNames([locale === 'ar' ? 'ar' : 'en'], { type: 'region' });
-  const countries = ISO_COUNTRY_CODES.map((code) => ({
-    code,
-    name: displayNames.of(code) ?? code,
-  })).sort((a, b) => a.name.localeCompare(b.name, locale === 'ar' ? 'ar' : 'en'));
-
-  const supportedValuesOf = (
-    Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }
-  ).supportedValuesOf;
-  const timezones = supportedValuesOf ? supportedValuesOf('timeZone') : ['UTC'];
+  const countries = countryOptions(locale);
+  const timezones = timeZoneOptions(locale);
 
   return (
     <AuthCard locale={locale} heading={t('createWorkspace.title')}>
@@ -111,6 +103,8 @@ export default async function CreateWorkspacePage({
           submitting: t('createWorkspace.creating'),
           failed: t('createWorkspace.failed'),
           invalid: t('createWorkspace.invalid'),
+          invalidFields: t('createWorkspace.invalidFields'),
+          noResults: t('common.noResults'),
           conflict: t('createWorkspace.conflict'),
           forbidden: t('createWorkspace.forbidden'),
           localeAr: t('brandProfile.localeAr'),
