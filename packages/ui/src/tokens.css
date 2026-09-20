@@ -150,7 +150,7 @@
   --bs-rail-pad-block: 1.25rem;
   --bs-panel-pad-inline: 1.75rem;
   --bs-panel-pad-block-end: 2.25rem;
-  --bs-section-gap: 0.875rem;
+  --bs-section-gap: 1.125rem;
 
   /* The ambient orbs. Full-saturation brand colour appears ONLY here, at 24–38%
      opacity behind a 100px blur, where it reads as light rather than as a
@@ -874,7 +874,7 @@ h4 {
  * `aria-label`, so the workspace is still named when its text is not shown.
  */
 [data-sidebar-state='collapsed'] .bs-rail-copy {
-  display: none;
+  display: none !important;
 }
 
 /*
@@ -883,7 +883,64 @@ h4 {
  * the rail headed by nothing but a chevron.
  */
 [data-sidebar-state='collapsed'] .bs-brand-text {
-  display: none;
+  display: none !important;
+}
+
+[data-sidebar-state='collapsed'] .bs-card-affordance {
+  display: none !important;
+}
+
+[data-sidebar-state='collapsed'] .bs-sidebar-card-trigger {
+  justify-content: center !important;
+  gap: 0 !important;
+  padding-inline: var(--bs-space-sm) !important;
+}
+
+.bs-page-stack {
+  display: grid;
+  gap: var(--bs-section-gap);
+  align-content: start;
+}
+
+/*
+ * The ambient layer used to sit at z-index -1, behind the root canvas, so the
+ * floating shell exposed flat grey instead of the approved purple/yellow light.
+ * Each application root now creates its own stacking context: atmosphere at 0,
+ * readable UI at 1.
+ */
+.bs-app-root,
+.bs-auth-root,
+.bs-platform-auth-root {
+  position: relative;
+  isolation: isolate;
+  min-block-size: 100vh;
+}
+
+.bs-app-root > .bs-ambient,
+.bs-auth-root > .bs-ambient,
+.bs-platform-auth-root > .bs-ambient {
+  z-index: 0;
+}
+
+.bs-app-root > .bs-shell,
+.bs-auth-foreground {
+  position: relative;
+  z-index: 1;
+}
+
+/* Native selects use a shared chevron with breathing room on both directions. */
+select.bs-control {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.75rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6b73' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 1rem 1rem;
+  background-position: right 1rem center;
+}
+
+[dir='rtl'] select.bs-control {
+  background-position: left 1rem center;
 }
 
 /*

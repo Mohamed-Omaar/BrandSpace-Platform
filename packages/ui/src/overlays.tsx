@@ -281,7 +281,7 @@ export function DropdownMenu({
         aria-controls={open ? id : undefined}
         data-testid={testId}
         onClick={() => setOpen((value) => !value)}
-        className={trigger === 'card' ? 'bs-pressable' : undefined}
+        className={trigger === 'card' ? 'bs-pressable bs-sidebar-card-trigger' : undefined}
         /*
          * A CARD TRIGGER IS NAMED EXPLICITLY, because its visible copy can be
          * hidden. In a collapsed 78px rail the reference shows only the avatar,
@@ -323,15 +323,17 @@ export function DropdownMenu({
         }
       >
         {triggerContent}
-        {trigger === 'card' && placement === 'block-start' ? (
-          // `.more { color: var(--muted); font-size: 11px }` — the demo's
-          // profile affordance is an ellipsis, not a chevron.
-          <span aria-hidden="true" style={{ color: colorTokens.textMuted, fontSize: '0.6875rem' }}>
-            {'\u2022\u2022\u2022'}
-          </span>
-        ) : (
-          <ChevronDownIcon size={16} />
-        )}
+        <span
+          className="bs-card-affordance"
+          aria-hidden="true"
+          style={{ display: 'inline-flex', color: colorTokens.textMuted, flexShrink: 0 }}
+        >
+          {trigger === 'card' && placement === 'block-start' ? (
+            <span style={{ fontSize: '0.6875rem' }}>{'\u2022\u2022\u2022'}</span>
+          ) : (
+            <ChevronDownIcon size={16} />
+          )}
+        </span>
       </button>
       {open ? (
         <div

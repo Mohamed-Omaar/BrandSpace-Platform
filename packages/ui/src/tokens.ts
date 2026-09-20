@@ -663,7 +663,7 @@ export const layoutTokens = {
   metricRowMargin: '0.875rem',
   /** `.surface-card { padding: 22px }`, `.dashboard-grid { gap: 14px }`. */
   surfacePad: '1.375rem',
-  sectionGap: '0.875rem',
+  sectionGap: '1.125rem',
   /** `.section-head { margin-bottom: 15px; gap: 15px }`. */
   sectionHeadGap: '0.9375rem',
   /** `.view-toolbar { min-height: 74px; margin-bottom: 12px }`. */

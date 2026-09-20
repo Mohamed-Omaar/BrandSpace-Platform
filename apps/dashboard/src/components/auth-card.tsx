@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import {
   AmbientBackground,
+  BrandGlyph,
   BrandMark,
   LanguageSwitcher,
   buttonStyle,
@@ -32,6 +33,7 @@ export function AuthCard({
   const other = locale === 'ar' ? 'en' : 'ar';
   return (
     <div
+      className="bs-auth-root"
       style={{
         minBlockSize: '100vh',
         display: 'flex',
@@ -42,6 +44,7 @@ export function AuthCard({
           recognisably the same product rather than a plain white front door. */}
       <AmbientBackground />
       <header
+        className="bs-auth-foreground"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -72,6 +75,7 @@ export function AuthCard({
       */}
       <main
         id="main"
+        className="bs-auth-foreground"
         style={{
           flex: 1,
           display: 'flex',
@@ -122,24 +126,10 @@ export function AuthCard({
                 makes it the product's front door rather than a bare form.
               */}
               <span
-                aria-hidden="true"
                 data-testid="auth-brand-mark"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  inlineSize: layoutTokens.brandMark,
-                  blockSize: layoutTokens.brandMark,
-                  borderRadius: radiusTokens.lg,
-                  background: colorTokens.ink,
-                  color: colorTokens.inkInk,
-                  fontSize: layoutTokens.brandMarkGlyph,
-                  lineHeight: 1,
-                  fontWeight: 850,
-                  marginBlockEnd: spacingTokens.sm,
-                }}
+                style={{ display: 'inline-flex', marginBlockEnd: spacingTokens.sm }}
               >
-                B
+                <BrandGlyph />
               </span>
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
                 <p

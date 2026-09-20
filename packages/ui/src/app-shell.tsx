@@ -578,6 +578,7 @@ export function AppShell({
 
   return (
     <div
+      className="bs-app-root"
       data-testid="app-shell"
       data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
     >
@@ -787,7 +788,12 @@ export function AppShell({
               paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >
-            <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
+            <div
+              className="bs-page-stack"
+              style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}
+            >
+              {children}
+            </div>
           </main>
         </div>
       </div>
@@ -870,6 +876,25 @@ export function AppShell({
   );
 }
 
+/** The BrandSpace mark shared by auth, dashboard and admin surfaces. */
+export function BrandGlyph({ size = layoutTokens.brandMark }: { readonly size?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      data-testid="brand-mark"
+      viewBox="0 0 32 32"
+      style={{ inlineSize: size, blockSize: size, flexShrink: 0, display: 'block' }}
+    >
+      <rect width="32" height="32" rx="8" fill={colorTokens.brandPurple} />
+      <path
+        d="M10 8h6.6c3 0 4.9 1.5 4.9 4 0 1.7-.9 2.9-2.4 3.4 1.9.4 3.1 1.8 3.1 3.8 0 2.8-2.1 4.4-5.4 4.4H10V8Zm3.3 6.4h2.9c1.3 0 2-.6 2-1.6s-.7-1.6-2-1.6h-2.9v3.2Zm0 6.4h3.3c1.4 0 2.2-.6 2.2-1.7s-.8-1.7-2.2-1.7h-3.3v3.4Z"
+        fill={colorTokens.brandPurpleInk}
+      />
+      <circle cx="25" cy="7" r="3" fill={colorTokens.brandYellow} />
+    </svg>
+  );
+}
+
 /** The BrandSpace wordmark used in both shells. */
 export function BrandMark({
   title,
@@ -884,48 +909,14 @@ export function BrandMark({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        // `.brand { gap: 10px }`.
         gap: layoutTokens.brandGap,
         minInlineSize: 0,
       }}
     >
-      <span
-        aria-hidden="true"
-        data-testid="brand-mark"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          /*
-           * `.brand-mark { width: 34px; height: 34px; border-radius: 11px;
-           *  background: var(--ink); color: #fff; font-size: 15px }` with
-           * `.brand { font-weight: 850 }` inherited by the glyph.
-           *
-           * PURPOSE-SPECIFIC TOKENS, not the type scale: routing the "B"
-           * through a generic label token rendered it visibly smaller than the
-           * demo, which is exactly the substitution §4 rules out.
-           */
-          inlineSize: layoutTokens.brandMark,
-          blockSize: layoutTokens.brandMark,
-          borderRadius: radiusTokens.lg,
-          background: colorTokens.ink,
-          color: colorTokens.inkInk,
-          fontSize: layoutTokens.brandMarkGlyph,
-          lineHeight: 1,
-          fontWeight: 850,
-          flexShrink: 0,
-        }}
-      >
-        B
-      </span>
-      {/* Tagged so a collapsed rail can drop the wordmark and keep the mark,
-          like `.app-shell.sidebar-collapsed .brand-name`. A class rather than a
-          positional selector: `> span:last-child` is a guess about structure,
-          and it was wrong. */}
+      <BrandGlyph />
       <span className="bs-brand-text" style={{ display: 'grid', minInlineSize: 0 }}>
         <span
           style={{
-            // `.brand { font-size: 16px; font-weight: 850 }`, no tracking.
             ...typographyTokens.wordmark,
             color: colorTokens.textPrimary,
             whiteSpace: 'nowrap',

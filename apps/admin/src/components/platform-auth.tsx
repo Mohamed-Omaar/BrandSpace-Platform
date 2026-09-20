@@ -43,6 +43,7 @@ export function PlatformAuthShell({
   return (
     <main
       id="main"
+      className="bs-platform-auth-root"
       style={{
         minBlockSize: '100vh',
         display: 'flex',
@@ -55,6 +56,7 @@ export function PlatformAuthShell({
           the realms stay visually distinct, which is the point of D-58. */}
       <AmbientBackground />
       <div
+        className="bs-auth-foreground"
         style={{
           inlineSize: '100%',
           maxInlineSize: '24rem',
