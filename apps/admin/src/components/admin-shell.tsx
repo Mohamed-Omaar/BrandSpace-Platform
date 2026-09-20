@@ -406,7 +406,7 @@ export function AdminShell({
           {actions}
         </div>
       ) : null}
-      {children}
+      <div className="bs-section-stack">{children}</div>
     </AppShell>
   );
 }
