@@ -49,8 +49,10 @@ export function CreateWorkspaceForm({
   };
 }) {
   const [country, setCountry] = useState('');
+  const [countryQuery, setCountryQuery] = useState('');
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   const [failure, setFailure] = useState<FailureKind>('generic');
+  const countryListId = useId();
   const timezoneListId = useId();
 
   const failureText =
@@ -142,23 +144,34 @@ export function CreateWorkspaceForm({
       </Field>
 
       <Field label={labels.country} htmlFor="country" required hint={labels.countryHint}>
-        <select
-          className="bs-control bs-select"
+        <input
+          className="bs-control"
           id="country"
-          name="country"
+          name="countryDisplay"
           required
-          value={country}
+          value={countryQuery}
+          list={countryListId}
           data-testid="country-select"
-          onChange={(event) => setCountry(event.target.value)}
+          placeholder={labels.choose}
+          autoComplete="off"
+          onChange={(event) => {
+            const value = event.target.value;
+            setCountryQuery(value);
+            const normalised = value.trim().toLocaleLowerCase();
+            const match = countries.find(
+              (option) =>
+                option.code.toLocaleLowerCase() === normalised ||
+                option.name.toLocaleLowerCase() === normalised,
+            );
+            setCountry(match?.code ?? '');
+          }}
           style={authInputStyle()}
-        >
-          <option value="">{labels.choose}</option>
+        />
+        <datalist id={countryListId}>
           {countries.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.name}
-            </option>
+            <option key={option.code} value={option.name} label={option.code} />
           ))}
-        </select>
+        </datalist>
       </Field>
 
       <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
