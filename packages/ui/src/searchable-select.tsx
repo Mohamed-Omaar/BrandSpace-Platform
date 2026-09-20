@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  useId,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-} from 'react';
+import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronDownIcon } from './icons';
 import {
   colorTokens,
@@ -125,7 +119,7 @@ export function SearchableSelect({
         autoComplete="off"
         required={required}
         disabled={disabled}
-        value={open ? query : selected?.label ?? ''}
+        value={open ? query : (selected?.label ?? '')}
         placeholder={placeholder}
         onFocus={() => {
           setQuery(selected?.label ?? '');
