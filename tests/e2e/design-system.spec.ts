@@ -830,16 +830,78 @@ test.describe('the shell reproduces the demo geometry', () => {
   });
 
   test('the brand lockup', async ({ page }) => {
-    // `.brand-mark { width:34px; height:34px; border-radius:11px; font-size:15px }`
-    // inside `.brand { gap: 10px; font-weight: 850 }`.
+    /*
+     * THE OFFICIAL MARK IS ARTWORK, NOT A STYLED LETTER.
+     *
+     * The demo drew `.brand-mark` as a 34px ink square with
+     * `border-radius: 11px` holding a 15px/850 "B", and this test asserted all
+     * three. The product now ships the official BrandSpace logo, so the
+     * rounded square and the letterform are PATHS inside the SVG: the corner
+     * is cut by the artwork at 261.09 of an 877.07 viewBox, which renders as
+     * ~10.1px at 34px and keeps the demo's silhouette.
+     *
+     * So `border-radius`, `font-size` and `font-weight` stopped describing
+     * anything. The container has no radius, no background and no text of its
+     * own — `font-size` only still read 15px by inheriting `body`, which is a
+     * coincidence rather than a contract. Those three assertions pinned the
+     * OLD mark's implementation; what follows pins the lockup's visual and
+     * accessible contract instead, which is the thing worth defending.
+     */
     const mark = page.getByTestId('brand-mark').first();
+    const brand = page.getByTestId('brand').first();
+
+    // GEOMETRY, UNCHANGED. `.brand-mark { width: 34px; height: 34px }` inside
+    // `.brand { gap: 10px }` — the demo's lockup rhythm, which the new mark
+    // occupies exactly.
     const box = await mark.boundingBox();
     expect(box?.width).toBe(34);
     expect(box?.height).toBe(34);
-    await expect(mark).toHaveCSS('border-radius', '11px');
-    await expect(mark).toHaveCSS('font-size', '15px');
-    await expect(mark).toHaveCSS('font-weight', '850');
-    await expect(page.getByTestId('brand').first()).toHaveCSS('gap', '10px');
+    await expect(brand).toHaveCSS('gap', '10px');
+
+    /*
+     * THE ARTWORK FILLS THE SLOT IT IS GIVEN.
+     *
+     * Measured separately from the container on purpose: an SVG that failed to
+     * inherit its box collapses to nothing while the span it sits in still
+     * measures 34x34, so every assertion above would pass over an invisible
+     * logo.
+     */
+    const logo = mark.locator('svg');
+    const logoBox = await logo.boundingBox();
+    expect(logoBox?.width).toBe(34);
+    expect(logoBox?.height).toBe(34);
+    await expect(logo).toHaveAttribute('viewBox', '0 0 877.07 877.07');
+
+    // IT NEVER SQUASHES. The rail is a flex row and the wordmark beside it
+    // grows with the workspace name; without this the mark is what gives way.
+    await expect(mark).toHaveCSS('flex-shrink', '0');
+
+    /*
+     * THE OFFICIAL TWO-TONE: a black field carrying a white letterform.
+     *
+     * Compared as a SET rather than per path, so re-exporting the same logo
+     * with its paths in a different order stays green while a tinted or
+     * recoloured variant — which is not the official mark — does not.
+     */
+    const fills = await logo
+      .locator('path')
+      .evaluateAll((paths) => paths.map((path) => getComputedStyle(path).fill).sort());
+    expect(fills).toEqual(['rgb(0, 0, 0)', 'rgb(255, 255, 255)']);
+
+    /*
+     * DECORATIVE AT BOTH LEVELS, and the wordmark carries the name.
+     *
+     * The mark repeats what the text beside it already says, so a screen
+     * reader that announced both would read the product's name twice. Asserted
+     * on the span AND the SVG because hiding only one leaves the other
+     * reachable.
+     */
+    await expect(mark).toHaveAttribute('aria-hidden', 'true');
+    await expect(logo).toHaveAttribute('aria-hidden', 'true');
+    await expect(mark).toHaveText('');
+    // Locale-independent: the lockup still has a name, and none of it comes
+    // from the mark.
+    expect(((await brand.textContent()) ?? '').trim().length).toBeGreaterThan(0);
   });
 
   test('the navigation rows', async ({ page }) => {
