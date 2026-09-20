@@ -162,7 +162,11 @@ describe('THE KEY DOMAINS ARE SEPARATE, AND THAT IS THE WHOLE POINT (D-136)', ()
   it('the local provider is refused in production, for the social domain too', () => {
     expect(() =>
       createKeyProvider(
-        { NODE_ENV: 'production', SOCIAL_TOKEN_VAULT_KEK: KEK } as NodeJS.ProcessEnv,
+        {
+          APP_ENV: 'production',
+          NODE_ENV: 'production',
+          SOCIAL_TOKEN_VAULT_KEK: KEK,
+        } as NodeJS.ProcessEnv,
         SOCIAL_TOKEN_DOMAIN,
       ),
     ).toThrow(/SOCIAL_TOKEN_VAULT_KMS_KEY_ARN/);
