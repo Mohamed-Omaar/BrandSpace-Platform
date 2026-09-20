@@ -1305,7 +1305,7 @@ export const messages = {
     'createWorkspace.slug': 'العنوان المختصر',
     'createWorkspace.country': 'الدولة',
     'createWorkspace.countryHint':
-      'تحدّد الدولة العملات المتاحة والقواعد الضريبية. لا يوجد اختيار افتراضي.',
+      'اختر الدولة التي تعمل منها مساحة العمل. هذا الاختيار لا يمنع إنشاء الحساب أو مساحة العمل.',
     'createWorkspace.currency': 'عملة الفوترة',
     'createWorkspace.currencyHint':
       'اختر العملة بنفسك. لا نختارها نيابة عنك ولا نحوّل بين العملات.',
@@ -1319,7 +1319,10 @@ export const messages = {
     'createWorkspace.noMarkets': 'لم تُفعَّل أي أسواق بعد. تواصل مع مالك المنصة.',
     'createWorkspace.trialNotice':
       'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها يتوقّف الوصول إلى المزايا المدفوعة ولا يُحذف أي شيء.',
-    'createWorkspace.failed': 'تعذّر إنشاء مساحة العمل.',
+    'createWorkspace.failed': 'تعذّر إنشاء مساحة العمل. حاول مجددًا.',
+    'createWorkspace.invalid': 'راجع البيانات المطلوبة وحاول مجددًا.',
+    'createWorkspace.conflict': 'عنوان مساحة العمل مستخدم بالفعل. اختر عنوانًا آخر.',
+    'createWorkspace.forbidden': 'لا يمكن لهذا الحساب إنشاء مساحة عمل حاليًا.',
     'signUp.title': 'أنشئ حسابك',
     'signUp.name': 'الاسم',
     'signUp.email': 'البريد الإلكتروني',
@@ -2698,7 +2701,7 @@ export const messages = {
     'createWorkspace.slug': 'Workspace address',
     'createWorkspace.country': 'Country',
     'createWorkspace.countryHint':
-      'Your country decides which currencies you can pick and which tax rules apply. There is no preselected answer.',
+      'Choose where this workspace operates. This does not block account or workspace creation.',
     'createWorkspace.currency': 'Billing currency',
     'createWorkspace.currencyHint':
       'You choose this. We do not pick it for you, and nothing is converted between currencies.',
@@ -2712,7 +2715,10 @@ export const messages = {
     'createWorkspace.noMarkets': 'No markets have been activated yet. Contact the platform owner.',
     'createWorkspace.trialNotice':
       'You start a {days}-day trial with {credits} credits and no card. When it ends, access to paid features stops and nothing is deleted.',
-    'createWorkspace.failed': 'The workspace could not be created.',
+    'createWorkspace.failed': 'The workspace could not be created. Please try again.',
+    'createWorkspace.invalid': 'Check the required details and try again.',
+    'createWorkspace.conflict': 'That workspace address is already taken. Choose another one.',
+    'createWorkspace.forbidden': 'This account cannot create a workspace right now.',
     'signUp.title': 'Create your account',
     'signUp.name': 'Name',
     'signUp.email': 'Email address',
