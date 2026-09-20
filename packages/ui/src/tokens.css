@@ -821,6 +821,16 @@ html[dir='rtl'] select.bs-select {
  * `.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }`,
  * with the demo's own `@media(max-width:640px) { grid-template-columns: 1fr }`.
  */
+/*
+ * Major page sections use one vertical rhythm. Individual pages should not
+ * guess their own card-to-card spacing; this stack is shared by Admin and the
+ * customer dashboard wherever multiple peer sections are composed.
+ */
+.bs-section-stack {
+  display: grid;
+  gap: var(--bs-space-lg);
+}
+
 .bs-form-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
