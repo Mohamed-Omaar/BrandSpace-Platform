@@ -1,47 +1,38 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useState } from 'react';
 import { Field, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 
-export interface MarketOption {
-  readonly country: string;
+export interface CountryOption {
+  readonly code: string;
   readonly name: string;
-  readonly currencies: ReadonlyArray<{ readonly code: string; readonly name: string }>;
 }
 
+type FailureKind = 'generic' | 'invalid' | 'conflict' | 'forbidden';
+
 /**
- * The four answers, asked plainly.
+ * First-workspace onboarding asks only for facts the customer actually owns.
  *
- * NOTHING IS PRESELECTED (D-194). Both selects open on an empty "Choose…"
- * option, so a customer who submits without looking cannot be given a country
- * and a currency by accident. That is the whole point: a default here IS the
- * assumption the decision removed.
- *
- * THE COUNTRY NARROWS THE CURRENCY LIST AND DOES NOT PICK FROM IT. Choosing a
- * country filters the currencies to the ones that market offers; the customer
- * still chooses. When the narrowed list holds exactly one, it is still theirs to
- * select — an automatic pick would be the same silent inference wearing a
- * convenience.
- *
- * AND THE RELATIONSHIP IS NOT IN THIS COMPONENT. It arrives as data from the
- * activated `commerce` document, so adding a market or a currency is a
- * configuration change (§4).
+ * Country is a complete ISO list, not the subset that happens to have a payment
+ * route today. Billing currency is deliberately absent: launch billing is USD
+ * and the API owns that default. Timezone uses a datalist so the customer can
+ * search the IANA inventory instead of typing an opaque identifier from memory.
  */
 export function CreateWorkspaceForm({
   locale,
-  markets,
+  countries,
+  timezones,
   labels,
 }: {
   locale: string;
-  markets: readonly MarketOption[];
+  countries: readonly CountryOption[];
+  timezones: readonly string[];
   labels: {
     name: string;
     slug: string;
     country: string;
     countryHint: string;
-    currency: string;
-    currencyHint: string;
     interfaceLocale: string;
     timezone: string;
     billingEmail: string;
@@ -50,18 +41,26 @@ export function CreateWorkspaceForm({
     submit: string;
     submitting: string;
     failed: string;
+    invalid: string;
+    conflict: string;
+    forbidden: string;
     localeAr: string;
     localeEn: string;
   };
 }) {
   const [country, setCountry] = useState('');
-  const [currency, setCurrency] = useState('');
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [failure, setFailure] = useState<FailureKind>('generic');
+  const timezoneListId = useId();
 
-  const currencies = useMemo(
-    () => markets.find((market) => market.country === country)?.currencies ?? [],
-    [markets, country],
-  );
+  const failureText =
+    failure === 'invalid'
+      ? labels.invalid
+      : failure === 'conflict'
+        ? labels.conflict
+        : failure === 'forbidden'
+          ? labels.forbidden
+          : labels.failed;
 
   return (
     <form
@@ -69,6 +68,8 @@ export function CreateWorkspaceForm({
       onSubmit={async (event) => {
         event.preventDefault();
         setState('busy');
+        setFailure('generic');
+
         const form = new FormData(event.currentTarget);
         const response = await fetch('/api/onboarding/workspace', {
           method: 'POST',
@@ -77,7 +78,6 @@ export function CreateWorkspaceForm({
             name: String(form.get('name') ?? ''),
             slug: String(form.get('slug') ?? ''),
             country,
-            currency,
             defaultLocale: String(form.get('defaultLocale') ?? ''),
             timezone: String(form.get('timezone') ?? ''),
             billingEmail: String(form.get('billingEmail') ?? ''),
@@ -86,9 +86,32 @@ export function CreateWorkspaceForm({
         }).catch(() => null);
 
         if (!response?.ok) {
+          const payload = response
+            ? await response.json().catch(() => null)
+            : null;
+          const code =
+            payload &&
+            typeof payload === 'object' &&
+            'error' in payload &&
+            payload.error &&
+            typeof payload.error === 'object' &&
+            'code' in payload.error
+              ? String(payload.error.code)
+              : '';
+
+          setFailure(
+            code === 'VALIDATION_FAILED'
+              ? 'invalid'
+              : code === 'CONFLICT'
+                ? 'conflict'
+                : code === 'FORBIDDEN'
+                  ? 'forbidden'
+                  : 'generic',
+          );
           setState('failed');
           return;
         }
+
         globalThis.location.assign(`/${locale}/onboarding`);
       }}
     >
@@ -99,6 +122,7 @@ export function CreateWorkspaceForm({
           name="name"
           required
           maxLength={120}
+          autoComplete="organization"
           style={authInputStyle()}
         />
       </Field>
@@ -111,51 +135,27 @@ export function CreateWorkspaceForm({
           required
           pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
           maxLength={50}
+          autoCapitalize="none"
+          spellCheck={false}
           style={authInputStyle()}
         />
       </Field>
 
       <Field label={labels.country} htmlFor="country" required hint={labels.countryHint}>
         <select
-          className="bs-control"
+          className="bs-control bs-select"
           id="country"
           name="country"
           required
           value={country}
           data-testid="country-select"
-          onChange={(event) => {
-            setCountry(event.target.value);
-            // The previous currency may not be offered here. Cleared rather
-            // than re-picked, so the customer answers again.
-            setCurrency('');
-          }}
+          onChange={(event) => setCountry(event.target.value)}
           style={authInputStyle()}
         >
           <option value="">{labels.choose}</option>
-          {markets.map((market) => (
-            <option key={market.country} value={market.country}>
-              {market.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label={labels.currency} htmlFor="currency" required hint={labels.currencyHint}>
-        <select
-          className="bs-control"
-          id="currency"
-          name="currency"
-          required
-          value={currency}
-          disabled={country === ''}
-          data-testid="currency-select"
-          onChange={(event) => setCurrency(event.target.value)}
-          style={authInputStyle()}
-        >
-          <option value="">{labels.choose}</option>
-          {currencies.map((option) => (
+          {countries.map((option) => (
             <option key={option.code} value={option.code}>
-              {option.code} — {option.name}
+              {option.name}
             </option>
           ))}
         </select>
@@ -163,7 +163,7 @@ export function CreateWorkspaceForm({
 
       <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
         <select
-          className="bs-control"
+          className="bs-control bs-select"
           id="defaultLocale"
           name="defaultLocale"
           required
@@ -182,9 +182,16 @@ export function CreateWorkspaceForm({
           name="timezone"
           required
           maxLength={64}
-          placeholder="Europe/London"
+          list={timezoneListId}
+          placeholder="Asia/Riyadh"
+          autoComplete="off"
           style={authInputStyle()}
         />
+        <datalist id={timezoneListId}>
+          {timezones.map((timezone) => (
+            <option key={timezone} value={timezone} />
+          ))}
+        </datalist>
       </Field>
 
       <Field label={labels.billingEmail} htmlFor="billingEmail" required>
@@ -194,6 +201,7 @@ export function CreateWorkspaceForm({
           name="billingEmail"
           type="email"
           required
+          autoComplete="email"
           style={authInputStyle()}
         />
       </Field>
@@ -211,7 +219,7 @@ export function CreateWorkspaceForm({
       <button
         type="submit"
         data-testid="create-workspace-submit"
-        disabled={state === 'busy' || country === '' || currency === ''}
+        disabled={state === 'busy' || country === ''}
         style={authButtonStyle()}
       >
         {state === 'busy' ? labels.submitting : labels.submit}
@@ -224,10 +232,10 @@ export function CreateWorkspaceForm({
           style={{
             marginBlockStart: spacingTokens.sm,
             ...typographyTokens.caption,
-            color: colorTokens.textMuted,
+            color: colorTokens.danger,
           }}
         >
-          {labels.failed}
+          {failureText}
         </p>
       ) : null}
     </form>
