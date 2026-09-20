@@ -171,6 +171,19 @@ export const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 /**
+ * Startup validation is service-aware. The public marketing site deliberately
+ * has no database connection, while every runtime service that touches product
+ * data does. Keep the general-purpose `envSchema` strict for callers of
+ * `parseEnv`, and widen only the startup parser so the web profile can prove
+ * that DATABASE_URL is absent rather than being forced to invent one.
+ */
+const startupEnvSchema = envSchema.extend({
+  DATABASE_URL: z.string().url().optional(),
+});
+
+type StartupEnv = z.infer<typeof startupEnvSchema>;
+
+/**
  * Guard rails that cannot be expressed in the schema alone.
  *
  * PHASE 10 §18 WIDENED THE GATE from `NODE_ENV` to "either NODE_ENV or APP_ENV
@@ -228,14 +241,14 @@ const PERMITTED_KEY_DOMAINS: Record<StartupServiceProfile, readonly KeyDomainNam
   worker: ['social'],
 };
 
-function requireProductionValue(env: Env, name: keyof Env): void {
+function requireProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
   const value = env[name];
   if (value === undefined || value === '') {
     throw new Error(`${String(name)} is required in production for this service.`);
   }
 }
 
-function forbidProductionValue(env: Env, name: keyof Env): void {
+function forbidProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
   const value = env[name];
   if (value !== undefined && value !== '') {
     throw new Error(
@@ -270,7 +283,7 @@ function forbidProductionValue(env: Env, name: keyof Env): void {
  *    to it: `createKeyProvider` prefers the ARN and throws rather than derive a
  *    local KEK when `NODE_ENV=production`.
  */
-function assertKeyDomainBoundaries(env: Env, profile: StartupServiceProfile): void {
+function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfile): void {
   const permitted = new Set(PERMITTED_KEY_DOMAINS[profile]);
 
   for (const domain of ALL_KEY_DOMAINS) {
@@ -318,7 +331,7 @@ function assertKeyDomainBoundaries(env: Env, profile: StartupServiceProfile): vo
 }
 
 /** Refuse when two of the named variables carry the same value. */
-function assertDistinct(env: Env, names: readonly (keyof Env)[], why: string): void {
+function assertDistinct(env: StartupEnv, names: readonly (keyof StartupEnv)[], why: string): void {
   const present = names
     .map((name) => env[name])
     .filter((value): value is string => typeof value === 'string' && value !== '');
@@ -330,7 +343,7 @@ function assertDistinct(env: Env, names: readonly (keyof Env)[], why: string): v
   );
 }
 
-function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'complete'): void {
+function assertProductionSafety(env: StartupEnv, profile: StartupServiceProfile = 'complete'): void {
   const deployment = currentEnvironment({ APP_ENV: env.APP_ENV });
   if (env.NODE_ENV !== 'production' && deployment !== 'PRODUCTION') return;
 
@@ -344,7 +357,11 @@ function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'comp
         'the two session realms must not share a signing key (docs/SECURITY.md §3).',
     );
   }
-  if (env.DATABASE_PLATFORM_URL !== undefined && env.DATABASE_PLATFORM_URL === env.DATABASE_URL) {
+  if (
+    env.DATABASE_PLATFORM_URL !== undefined &&
+    env.DATABASE_URL !== undefined &&
+    env.DATABASE_PLATFORM_URL === env.DATABASE_URL
+  ) {
     throw new Error(
       'DATABASE_PLATFORM_URL and DATABASE_URL must be different roles: the whole point ' +
         'of the two-pool model is that the tenant connection cannot reach cross-tenant data ' +
@@ -383,6 +400,8 @@ function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'comp
    * the minimum set each process is designed to hold while preserving the
    * blast-radius boundaries in docs/SECURITY.md and the Railway env matrix.
    */
+  if (profile !== 'web') requireProductionValue(env, 'DATABASE_URL');
+
   if (profile === 'complete') {
     requireProductionValue(env, 'CUSTOMER_SESSION_SECRET');
     requireProductionValue(env, 'PLATFORM_SESSION_SECRET');
@@ -404,6 +423,7 @@ function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'comp
      * credential it were given would be one an attacker who reached the most
      * exposed service in the fleet would inherit.
      */
+    forbidProductionValue(env, 'DATABASE_URL');
     forbidProductionValue(env, 'DATABASE_PLATFORM_URL');
     forbidProductionValue(env, 'CUSTOMER_SESSION_SECRET');
     forbidProductionValue(env, 'PLATFORM_SESSION_SECRET');
@@ -468,7 +488,7 @@ export function validateStartupConfiguration(
 ): StartupConfigurationResult {
   const environment = currentEnvironment(source as Record<string, string | undefined>);
   try {
-    const parsed = envSchema.safeParse(source);
+    const parsed = startupEnvSchema.safeParse(source);
     if (!parsed.success) {
       const issues = parsed.error.issues
         .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
