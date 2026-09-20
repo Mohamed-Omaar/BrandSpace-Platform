@@ -4,8 +4,6 @@ import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from
 import { ChevronDownIcon } from './icons';
 import {
   colorTokens,
-  radiusTokens,
-  shadowTokens,
   spacingTokens,
   typographyTokens,
   zIndexTokens,
