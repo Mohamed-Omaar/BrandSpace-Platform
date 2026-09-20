@@ -21,6 +21,7 @@ export * from './post-detail-drawer';
 export * from './primitives';
 export * from './social-post-preview';
 export * from './social-post-types';
+export * from './searchable-select';
 export * from './studio-presets';
 export * from './surfaces';
 export * from './switchers';

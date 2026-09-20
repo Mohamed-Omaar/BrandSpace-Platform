@@ -76,6 +76,13 @@ function signInUrl(locale: string, params: Record<string, string> = {}): string 
   return `/${locale}/sign-in${search ? `?${search}` : ''}`;
 }
 
+async function defaultSignedInDestination(locale: string, token: string): Promise<string> {
+  const workspaces = await getCustomerAuth()
+    .listWorkspaces(token)
+    .catch(() => null);
+  return workspaces?.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
+}
+
 export async function signInAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const next = String(formData.get('next') ?? '');
@@ -107,7 +114,10 @@ export async function signInAction(formData: FormData): Promise<void> {
     } else {
       // Only a relative in-app path is honoured, so `?next=` cannot be turned
       // into an open redirect to another origin (docs/SECURITY.md §9).
-      destination = next.startsWith('/') && !next.startsWith('//') ? next : `/${locale}/workspaces`;
+      destination =
+        next.startsWith('/') && !next.startsWith('//')
+          ? next
+          : await defaultSignedInDestination(locale, session.token);
     }
   } catch (error: unknown) {
     const correlationId = randomUUID();
@@ -411,7 +421,7 @@ export async function verifyMfaAction(formData: FormData): Promise<void> {
       code: String(formData.get('code') ?? ''),
       verify: (userId, code) => service.verifyMfa(userId, code),
     });
-    destination = `/${locale}/workspaces`;
+    destination = await defaultSignedInDestination(locale, token!);
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();

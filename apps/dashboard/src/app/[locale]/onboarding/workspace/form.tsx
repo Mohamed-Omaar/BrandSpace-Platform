@@ -1,47 +1,30 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Field, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { useState } from 'react';
+import {
+  Field,
+  SearchableSelect,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  type SearchableOption,
+} from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 
-export interface MarketOption {
-  readonly country: string;
-  readonly name: string;
-  readonly currencies: ReadonlyArray<{ readonly code: string; readonly name: string }>;
-}
-
-/**
- * The four answers, asked plainly.
- *
- * NOTHING IS PRESELECTED (D-194). Both selects open on an empty "Choose…"
- * option, so a customer who submits without looking cannot be given a country
- * and a currency by accident. That is the whole point: a default here IS the
- * assumption the decision removed.
- *
- * THE COUNTRY NARROWS THE CURRENCY LIST AND DOES NOT PICK FROM IT. Choosing a
- * country filters the currencies to the ones that market offers; the customer
- * still chooses. When the narrowed list holds exactly one, it is still theirs to
- * select — an automatic pick would be the same silent inference wearing a
- * convenience.
- *
- * AND THE RELATIONSHIP IS NOT IN THIS COMPONENT. It arrives as data from the
- * activated `commerce` document, so adding a market or a currency is a
- * configuration change (§4).
- */
 export function CreateWorkspaceForm({
   locale,
-  markets,
+  countries,
+  timezones,
   labels,
 }: {
   locale: string;
-  markets: readonly MarketOption[];
+  countries: readonly SearchableOption[];
+  timezones: readonly SearchableOption[];
   labels: {
     name: string;
     slug: string;
     country: string;
     countryHint: string;
-    currency: string;
-    currencyHint: string;
     interfaceLocale: string;
     timezone: string;
     billingEmail: string;
@@ -50,43 +33,55 @@ export function CreateWorkspaceForm({
     submit: string;
     submitting: string;
     failed: string;
+    invalid: string;
+    conflict: string;
+    forbidden: string;
     localeAr: string;
     localeEn: string;
   };
 }) {
   const [country, setCountry] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
-
-  const currencies = useMemo(
-    () => markets.find((market) => market.country === country)?.currencies ?? [],
-    [markets, country],
-  );
+  const [timezone, setTimezone] = useState('');
+  const [state, setState] = useState<{ busy: boolean; error: string | null }>({
+    busy: false,
+    error: null,
+  });
 
   return (
     <form
       data-testid="create-workspace-form"
       onSubmit={async (event) => {
         event.preventDefault();
-        setState('busy');
-        const form = new FormData(event.currentTarget);
+        setState({ busy: true, error: null });
+        const formData = new FormData(event.currentTarget);
         const response = await fetch('/api/onboarding/workspace', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            name: String(form.get('name') ?? ''),
-            slug: String(form.get('slug') ?? ''),
+            name: String(formData.get('name') ?? ''),
+            slug: String(formData.get('slug') ?? ''),
             country,
-            currency,
-            defaultLocale: String(form.get('defaultLocale') ?? ''),
-            timezone: String(form.get('timezone') ?? ''),
-            billingEmail: String(form.get('billingEmail') ?? ''),
-            legalName: String(form.get('legalName') ?? '') || undefined,
+            defaultLocale: String(formData.get('defaultLocale') ?? ''),
+            timezone,
+            billingEmail: String(formData.get('billingEmail') ?? ''),
+            legalName: String(formData.get('legalName') ?? '') || undefined,
           }),
         }).catch(() => null);
 
         if (!response?.ok) {
-          setState('failed');
+          const payload = (await response?.json().catch(() => null)) as
+            | { error?: { code?: string } }
+            | null;
+          const code = payload?.error?.code;
+          const message =
+            code === 'VALIDATION_FAILED'
+              ? labels.invalid
+              : code === 'CONFLICT'
+                ? labels.conflict
+                : code === 'FORBIDDEN'
+                  ? labels.forbidden
+                  : labels.failed;
+          setState({ busy: false, error: message });
           return;
         }
         globalThis.location.assign(`/${locale}/onboarding`);
@@ -116,49 +111,18 @@ export function CreateWorkspaceForm({
       </Field>
 
       <Field label={labels.country} htmlFor="country" required hint={labels.countryHint}>
-        <select
-          className="bs-control"
+        <SearchableSelect
           id="country"
           name="country"
-          required
+          options={countries}
           value={country}
-          data-testid="country-select"
-          onChange={(event) => {
-            setCountry(event.target.value);
-            // The previous currency may not be offered here. Cleared rather
-            // than re-picked, so the customer answers again.
-            setCurrency('');
-          }}
-          style={authInputStyle()}
-        >
-          <option value="">{labels.choose}</option>
-          {markets.map((market) => (
-            <option key={market.country} value={market.country}>
-              {market.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label={labels.currency} htmlFor="currency" required hint={labels.currencyHint}>
-        <select
-          className="bs-control"
-          id="currency"
-          name="currency"
+          onChange={setCountry}
+          placeholder={labels.choose}
+          noResultsLabel={labels.invalid}
           required
-          value={currency}
-          disabled={country === ''}
-          data-testid="currency-select"
-          onChange={(event) => setCurrency(event.target.value)}
+          testId="country-select"
           style={authInputStyle()}
-        >
-          <option value="">{labels.choose}</option>
-          {currencies.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.code} — {option.name}
-            </option>
-          ))}
-        </select>
+        />
       </Field>
 
       <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
@@ -176,13 +140,16 @@ export function CreateWorkspaceForm({
       </Field>
 
       <Field label={labels.timezone} htmlFor="timezone" required>
-        <input
-          className="bs-control"
+        <SearchableSelect
           id="timezone"
           name="timezone"
+          options={timezones}
+          value={timezone}
+          onChange={setTimezone}
+          placeholder={labels.choose}
+          noResultsLabel={labels.invalid}
           required
-          maxLength={64}
-          placeholder="Europe/London"
+          testId="timezone-select"
           style={authInputStyle()}
         />
       </Field>
@@ -211,23 +178,23 @@ export function CreateWorkspaceForm({
       <button
         type="submit"
         data-testid="create-workspace-submit"
-        disabled={state === 'busy' || country === '' || currency === ''}
+        disabled={state.busy || country === '' || timezone === ''}
         style={authButtonStyle()}
       >
-        {state === 'busy' ? labels.submitting : labels.submit}
+        {state.busy ? labels.submitting : labels.submit}
       </button>
 
-      {state === 'failed' ? (
+      {state.error ? (
         <p
           role="alert"
           data-testid="create-workspace-error"
           style={{
             marginBlockStart: spacingTokens.sm,
             ...typographyTokens.caption,
-            color: colorTokens.textMuted,
+            color: colorTokens.danger,
           }}
         >
-          {labels.failed}
+          {state.error}
         </p>
       ) : null}
     </form>

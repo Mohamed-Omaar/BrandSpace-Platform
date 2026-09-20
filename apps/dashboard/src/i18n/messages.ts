@@ -196,6 +196,7 @@ export const messages = {
     'common.reason': 'السبب',
     'common.empty': 'لا توجد بيانات بعد',
     'common.loading': 'جارٍ التحميل…',
+    'common.noResults': 'لا توجد نتائج.',
     // --- Phase 5B-1 — Asset Library ---
     'nav.assets': 'مكتبة الوسائط',
     'assets.title': 'مكتبة الوسائط',
@@ -1554,6 +1555,7 @@ export const messages = {
     'common.reason': 'Reason',
     'common.empty': 'No data yet',
     'common.loading': 'Loading…',
+    'common.noResults': 'No results.',
     // --- Phase 5B-1 — Asset Library ---
     'nav.assets': 'Media library',
     'assets.title': 'Media library',
