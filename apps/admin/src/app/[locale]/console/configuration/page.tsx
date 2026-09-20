@@ -279,9 +279,62 @@ export default async function ConfigurationPage({
                       : '—'}
                   </Cell>
                   <Cell>
-                    {version.impactPreview
-                      ? `${version.impactPreview.changes.length} (${high} high)`
-                      : '—'}
+                    {version.impactPreview ? (
+                      <details open={version.status === 'VALIDATED'}>
+                        <summary
+                          style={{
+                            cursor: 'pointer',
+                            ...typographyTokens.caption,
+                            fontWeight: 700,
+                            color: colorTokens.textPrimary,
+                          }}
+                        >
+                          {version.impactPreview.changes.length} ({high} high)
+                        </summary>
+                        {version.impactPreview.changes.length > 0 ? (
+                          <ul
+                            style={{
+                              margin: 0,
+                              marginBlockStart: spacingTokens.xs,
+                              paddingInlineStart: spacingTokens.lg,
+                              display: 'grid',
+                              gap: spacingTokens['3xs'],
+                              ...typographyTokens.caption,
+                              color: colorTokens.textSecondary,
+                            }}
+                          >
+                            {version.impactPreview.changes.map((change) => (
+                              <li key={`${change.kind}:${change.path}`}>
+                                <strong
+                                  style={{
+                                    color:
+                                      change.severity === 'high'
+                                        ? colorTokens.danger
+                                        : colorTokens.textPrimary,
+                                  }}
+                                >
+                                  {change.severity}
+                                </strong>{' '}
+                                — {change.summary}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p
+                            style={{
+                              margin: 0,
+                              marginBlockStart: spacingTokens.xs,
+                              ...typographyTokens.caption,
+                              color: colorTokens.textMuted,
+                            }}
+                          >
+                            {isArabic ? 'لا توجد تغييرات.' : 'No changes.'}
+                          </p>
+                        )}
+                      </details>
+                    ) : (
+                      '—'
+                    )}
                   </Cell>
                   <Cell>
                     <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>

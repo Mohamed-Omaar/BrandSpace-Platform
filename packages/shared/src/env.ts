@@ -170,6 +170,14 @@ export const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/*
+ * Startup validation is service-aware. The public web process intentionally has
+ * no database credential, while the typed application environment still
+ * requires one wherever parseEnv() is used by a data-bearing process.
+ */
+const startupEnvSchema = envSchema.extend({ DATABASE_URL: z.string().url().optional() });
+type StartupEnv = z.infer<typeof startupEnvSchema>;
+
 /**
  * Guard rails that cannot be expressed in the schema alone.
  *
@@ -228,14 +236,14 @@ const PERMITTED_KEY_DOMAINS: Record<StartupServiceProfile, readonly KeyDomainNam
   worker: ['social'],
 };
 
-function requireProductionValue(env: Env, name: keyof Env): void {
+function requireProductionValue(env: StartupEnv, name: keyof Env): void {
   const value = env[name];
   if (value === undefined || value === '') {
     throw new Error(`${String(name)} is required in production for this service.`);
   }
 }
 
-function forbidProductionValue(env: Env, name: keyof Env): void {
+function forbidProductionValue(env: StartupEnv, name: keyof Env): void {
   const value = env[name];
   if (value !== undefined && value !== '') {
     throw new Error(
@@ -270,7 +278,7 @@ function forbidProductionValue(env: Env, name: keyof Env): void {
  *    to it: `createKeyProvider` prefers the ARN and throws rather than derive a
  *    local KEK when `NODE_ENV=production`.
  */
-function assertKeyDomainBoundaries(env: Env, profile: StartupServiceProfile): void {
+function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfile): void {
   const permitted = new Set(PERMITTED_KEY_DOMAINS[profile]);
 
   for (const domain of ALL_KEY_DOMAINS) {
@@ -318,7 +326,7 @@ function assertKeyDomainBoundaries(env: Env, profile: StartupServiceProfile): vo
 }
 
 /** Refuse when two of the named variables carry the same value. */
-function assertDistinct(env: Env, names: readonly (keyof Env)[], why: string): void {
+function assertDistinct(env: StartupEnv, names: readonly (keyof Env)[], why: string): void {
   const present = names
     .map((name) => env[name])
     .filter((value): value is string => typeof value === 'string' && value !== '');
@@ -330,9 +338,15 @@ function assertDistinct(env: Env, names: readonly (keyof Env)[], why: string): v
   );
 }
 
-function assertProductionSafety(env: Env, profile: StartupServiceProfile = 'complete'): void {
+function assertProductionSafety(env: StartupEnv, profile: StartupServiceProfile = 'complete'): void {
   const deployment = currentEnvironment({ APP_ENV: env.APP_ENV });
   if (env.NODE_ENV !== 'production' && deployment !== 'PRODUCTION') return;
+
+  if (profile === 'web') {
+    forbidProductionValue(env, 'DATABASE_URL');
+  } else {
+    requireProductionValue(env, 'DATABASE_URL');
+  }
 
   if (
     env.CUSTOMER_SESSION_SECRET !== undefined &&
@@ -468,7 +482,7 @@ export function validateStartupConfiguration(
 ): StartupConfigurationResult {
   const environment = currentEnvironment(source as Record<string, string | undefined>);
   try {
-    const parsed = envSchema.safeParse(source);
+    const parsed = startupEnvSchema.safeParse(source);
     if (!parsed.success) {
       const issues = parsed.error.issues
         .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)

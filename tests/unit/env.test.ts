@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEnv } from '@brandspace/shared';
+import { parseEnv, validateStartupConfiguration } from '@brandspace/shared';
 
 const BASE = {
   DATABASE_URL: 'postgresql://app:pw@localhost:5432/db',
@@ -70,5 +70,38 @@ describe('environment parsing', () => {
         PLATFORM_SESSION_SECRET: shared,
       } as NodeJS.ProcessEnv),
     ).not.toThrow();
+  });
+
+  it('allows the production web profile to start with no database credential', () => {
+    expect(() =>
+      validateStartupConfiguration(
+        {
+          NODE_ENV: 'production',
+          APP_ENV: 'production',
+          PUBLIC_WEB_URL: 'https://www.brandspace.test',
+          PUBLIC_API_BASE_URL: 'https://api.brandspace.test',
+        } as NodeJS.ProcessEnv,
+        'web',
+      ),
+    ).not.toThrow();
+  });
+
+  it('still requires a database credential for data-bearing production services', () => {
+    expect(() =>
+      validateStartupConfiguration(
+        {
+          NODE_ENV: 'production',
+          APP_ENV: 'production',
+          PUBLIC_WEB_URL: 'https://www.brandspace.test',
+          PUBLIC_API_BASE_URL: 'https://api.brandspace.test',
+          CUSTOMER_SESSION_SECRET: 'c'.repeat(40),
+          CUSTOMER_MFA_VAULT_KMS_KEY_ARN:
+            'arn:aws:kms:eu-west-1:123456789012:key/customer-mfa-test',
+          AWS_ACCESS_KEY_ID: 'test-access-key',
+          AWS_SECRET_ACCESS_KEY: 'test-secret-key-that-is-long-enough',
+        } as NodeJS.ProcessEnv,
+        'dashboard',
+      ),
+    ).toThrow(/DATABASE_URL/);
   });
 });
