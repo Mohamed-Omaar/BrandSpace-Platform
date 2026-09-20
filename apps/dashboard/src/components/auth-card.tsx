@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import {
   AmbientBackground,
+  BrandGlyph,
   BrandMark,
   LanguageSwitcher,
   buttonStyle,
@@ -122,25 +123,8 @@ export function AuthCard({
                 overline and the heading. The mark inside the card is what
                 makes it the product's front door rather than a bare form.
               */}
-              <span
-                aria-hidden="true"
-                data-testid="auth-brand-mark"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  inlineSize: layoutTokens.brandMark,
-                  blockSize: layoutTokens.brandMark,
-                  borderRadius: radiusTokens.lg,
-                  background: colorTokens.ink,
-                  color: colorTokens.inkInk,
-                  fontSize: layoutTokens.brandMarkGlyph,
-                  lineHeight: 1,
-                  fontWeight: 850,
-                  marginBlockEnd: spacingTokens.sm,
-                }}
-              >
-                B
+              <span data-testid="auth-brand-mark">
+                <BrandGlyph size={layoutTokens.brandMark} />
               </span>
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
                 <p
