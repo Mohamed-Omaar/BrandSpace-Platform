@@ -33,7 +33,7 @@ const createWorkspaceSchema = z.object({
   defaultLocale: z.enum(['AR', 'EN']),
   timezone: z.string().min(1).max(64),
   // Billing currency is a platform launch default, not a customer-facing choice.
-  billingEmail: z.string().min(3).max(320),
+  billingEmail: z.string().email().max(320),
   legalName: z.string().max(200).optional(),
 });
 
