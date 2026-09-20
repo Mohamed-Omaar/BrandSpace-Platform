@@ -86,7 +86,9 @@ export class WorkspaceOnboardingService {
      * defaults; this service only validates the timezone it must persist.
      */
     if (!isValidTimezone(input.timezone)) {
-      throw new AppError('VALIDATION_FAILED', 'That is not a recognised timezone.');
+      throw new AppError('VALIDATION_FAILED', 'That is not a recognised timezone.', {
+        field: 'timezone',
+      });
     }
   }
 
@@ -108,10 +110,13 @@ export class WorkspaceOnboardingService {
       throw new AppError(
         'VALIDATION_FAILED',
         'A workspace address is 3–50 characters of lower-case letters, digits and hyphens.',
+        { field: 'slug' },
       );
     }
     const name = input.name.trim();
-    if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A workspace name is required.');
+    if (name.length < 2) {
+      throw new AppError('VALIDATION_FAILED', 'A workspace name is required.', { field: 'name' });
+    }
 
     this.assertOnboardingAnswers(commerce, input);
 
@@ -266,7 +271,9 @@ export class WorkspaceOnboardingService {
       };
     } catch (error: unknown) {
       if (isUniqueViolation(error)) {
-        throw new AppError('CONFLICT', 'That workspace address is already taken.');
+        throw new AppError('CONFLICT', 'That workspace address is already taken.', {
+          field: 'slug',
+        });
       }
       throw error;
     }
