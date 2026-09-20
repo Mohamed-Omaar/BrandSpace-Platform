@@ -954,3 +954,124 @@ html[dir='rtl'] select.bs-select {
   height: 15px;
   stroke-width: 1.55;
 }
+
+
+/*
+ * ONE DROPDOWN LANGUAGE, EVERYWHERE.
+ *
+ * The country picker established the approved treatment: a clean white floating
+ * sheet, compact rounded rows, a very pale lavender active row, muted secondary
+ * values on the trailing edge and a quiet scrollbar. Searchable selects,
+ * workspace/profile menus and native single-select pickers all inherit this
+ * visual language. Behaviour and form semantics stay unchanged.
+ */
+.bs-dropdown-panel {
+  padding: var(--bs-space-xs);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #9a9aa2 transparent;
+  border: 1px solid transparent;
+  border-radius: var(--bs-radius-control);
+  background: var(--bs-surface);
+  box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
+}
+
+.bs-dropdown-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bs-dropdown-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bs-dropdown-panel::-webkit-scrollbar-thumb {
+  background: #9a9aa2;
+  border: 2px solid var(--bs-surface);
+  border-radius: var(--bs-radius-full);
+}
+
+.bs-dropdown-option,
+.bs-dropdown-menu [role='menuitem'] {
+  min-block-size: 2.5rem;
+  padding: var(--bs-space-sm) var(--bs-space-md);
+  border-radius: var(--bs-radius-control);
+  background: transparent;
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    color var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+.bs-dropdown-option:hover,
+.bs-dropdown-option[data-active='true'],
+.bs-dropdown-option[aria-selected='true'],
+.bs-dropdown-menu [role='menuitem']:hover,
+.bs-dropdown-menu [role='menuitem']:focus-visible {
+  background: var(--bs-surface-lavender);
+}
+
+.bs-dropdown-menu [aria-current='true'] {
+  background: var(--bs-surface-lavender);
+}
+
+.bs-dropdown-menu form {
+  margin: 0;
+}
+
+.bs-dropdown-menu form > [role='menuitem'] {
+  inline-size: 100%;
+}
+
+/*
+ * Native selects keep their native semantics (and therefore all existing form
+ * actions/tests) while adopting the same picker surface in browsers that
+ * support customizable selects. Older browsers keep the platform-native popup
+ * but still inherit the BrandSpace type and colour treatment.
+ */
+select:not([multiple]) {
+  cursor: pointer;
+}
+
+select option {
+  background: var(--bs-surface);
+  color: var(--bs-text-primary);
+  font: inherit;
+}
+
+@supports (appearance: base-select) {
+  select:not([multiple]) {
+    appearance: base-select;
+  }
+
+  select:not([multiple])::picker(select) {
+    appearance: base-select;
+    margin-block-start: 0.375rem;
+    padding: var(--bs-space-xs);
+    max-block-size: 18rem;
+    overflow-y: auto;
+    border: 1px solid transparent;
+    border-radius: var(--bs-radius-control);
+    background: var(--bs-surface);
+    box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
+  }
+
+  select:not([multiple]) option {
+    min-block-size: 2.5rem;
+    padding: var(--bs-space-sm) var(--bs-space-md);
+    border-radius: var(--bs-radius-control);
+  }
+
+  select:not([multiple]) option:hover,
+  select:not([multiple]) option:focus,
+  select:not([multiple]) option:checked {
+    background: var(--bs-surface-lavender);
+  }
+
+  select:not([multiple]) option::checkmark {
+    display: none;
+  }
+
+  select:not([multiple])::picker-icon {
+    color: var(--bs-text-muted);
+  }
+}
