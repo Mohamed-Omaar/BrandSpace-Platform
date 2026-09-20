@@ -32,6 +32,7 @@ export function AuthCard({
   const other = locale === 'ar' ? 'en' : 'ar';
   return (
     <div
+      className="bs-ambient-host"
       style={{
         minBlockSize: '100vh',
         display: 'flex',
