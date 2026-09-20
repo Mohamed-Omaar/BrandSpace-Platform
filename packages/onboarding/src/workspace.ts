@@ -20,14 +20,15 @@
  */
 
 import type { TenantScopedClient } from '@brandspace/database';
-import {
-  currenciesForCountry,
-  findMarket,
-  providerKeyFor,
-  type CommercePolicy,
-} from '@brandspace/billing';
+import type { CommercePolicy } from '@brandspace/billing';
 import type { PlanDetail } from '@brandspace/entitlements';
-import { AppError, normaliseCurrency, type Clock, systemClock } from '@brandspace/shared';
+import {
+  AppError,
+  isIsoCountryCode,
+  normaliseCurrency,
+  type Clock,
+  systemClock,
+} from '@brandspace/shared';
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,48})[a-z0-9]$/;
 const MILLI_PER_CREDIT = 1_000n;
@@ -71,46 +72,38 @@ export class WorkspaceOnboardingService {
   }
 
   /**
-   * Validate the four answers against the configured commercial geography.
+   * Validate profile answers that belong to the workspace itself.
    *
-   * SEPARATE FROM CREATION so the form can ask the same question the writer
-   * will, and a customer learns their currency is not offered while they are
-   * still on the page rather than after their workspace exists.
+   * Workspace creation is deliberately independent of payment routing. Country
+   * and timezone describe the customer; they do not mean a payment provider is
+   * connected there. Checkout remains the boundary that refuses an unsupported
+   * market/currency combination.
+   *
+   * `policy` stays in this signature because the service is also used by the
+   * commercial isolation suite and other server callers. It is intentionally
+   * not consulted during creation.
    */
   assertCommercialAnswers(
-    policy: CommercePolicy,
+    _policy: CommercePolicy,
     input: { readonly country: string; readonly currency: string; readonly timezone: string },
   ): void {
     const country = input.country.trim().toUpperCase();
-    const market = findMarket(policy, country);
-    if (!market) {
-      // Honest: we are not configured to sell there. Not "we picked somewhere
-      // for you", and not a silent success.
-      throw new AppError('VALIDATION_FAILED', 'BrandSpace is not available in that country yet.', {
-        country,
+    if (!isIsoCountryCode(country)) {
+      throw new AppError('VALIDATION_FAILED', 'Choose a valid country.', {
+        field: 'country',
       });
     }
 
     const currency = normaliseCurrency(input.currency);
-    const offered = currenciesForCountry(policy, country).map((c) => normaliseCurrency(c.code));
-    if (!offered.includes(currency)) {
-      throw new AppError('VALIDATION_FAILED', 'That currency is not offered in that country.', {
-        country,
-        currency,
-        offered: offered.join(','),
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new AppError('VALIDATION_FAILED', 'That billing currency is not valid.', {
+        field: 'currency',
       });
     }
 
     if (!isValidTimezone(input.timezone)) {
-      throw new AppError('VALIDATION_FAILED', 'That is not a recognised timezone.');
-    }
-
-    if (!providerKeyFor(policy, country, currency)) {
-      // Refused rather than routed somewhere the owner did not choose. A
-      // workspace that cannot ever be billed is not a workspace worth creating.
-      throw new AppError('VALIDATION_FAILED', 'No payment provider serves that market yet.', {
-        country,
-        currency,
+      throw new AppError('VALIDATION_FAILED', 'That is not a recognised timezone.', {
+        field: 'timezone',
       });
     }
   }

@@ -56,6 +56,16 @@ export function moneyScales(
   return { scaleOf: (currency) => map.get(normaliseCurrency(currency)) ?? null };
 }
 
+/**
+ * Customer-facing billing uses one product currency today.
+ *
+ * This is a presentation/onboarding default, not a removal of the platform's
+ * multi-currency billing model. Plans and checkout can still carry explicit
+ * per-currency prices; a future product decision can expose another currency
+ * without changing the storage model.
+ */
+export const DEFAULT_BILLING_CURRENCY = 'USD' as const;
+
 export function normaliseCurrency(currency: string): string {
   return currency.trim().toUpperCase();
 }

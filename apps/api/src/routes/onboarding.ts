@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { DEFAULT_BILLING_CURRENCY } from '@brandspace/shared';
 import { CustomerAuthService } from '@brandspace/auth';
 import { WorkspaceOnboardingService, onboardingStateFor } from '@brandspace/onboarding';
 import { findPlan } from '@brandspace/entitlements';
@@ -12,10 +13,10 @@ import { commercePolicy, onboardingPolicy, planCatalogue } from './phase9-contex
 /**
  * Creating the first workspace, and reporting where the customer has got to.
  *
- * THE FOUR ANSWERS ARE REQUIRED IN THE SCHEMA (D-194). Country, locale, timezone
- * and currency have no defaults here and none anywhere behind here. A request
- * missing any of them is a validation failure, not a request that quietly
- * becomes Saudi.
+ * Country, locale and timezone are explicit customer answers. Billing currency
+ * is intentionally not exposed by this onboarding contract: the product uses
+ * USD for customer-facing billing today while the billing engine remains
+ * multi-currency internally.
  *
  * THE PROGRESS ENDPOINT DERIVES, IT DOES NOT REMEMBER. There is no stored step
  * counter to drift from reality — see packages/onboarding/src/state.ts for why
@@ -30,8 +31,6 @@ const createWorkspaceSchema = z.object({
   country: z.string().length(2),
   defaultLocale: z.enum(['AR', 'EN']),
   timezone: z.string().min(1).max(64),
-  /** Chosen from the currencies that market offers. Never inferred from country. */
-  currency: z.string().length(3),
   billingEmail: z.string().min(3).max(320),
   legalName: z.string().max(200).optional(),
 });
@@ -59,7 +58,14 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
       if (!customer) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED' } });
 
       const parsed = createWorkspaceSchema.safeParse(req.body);
-      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      if (!parsed.success) {
+        return reply.code(422).send({
+          error: {
+            code: 'VALIDATION_FAILED',
+            details: { fields: parsed.error.flatten().fieldErrors },
+          },
+        });
+      }
 
       try {
         const [commerce, catalogue] = await Promise.all([commercePolicy(), planCatalogue()]);
@@ -72,7 +78,12 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
          */
         const trialPlan =
           [...catalogue.plans]
-            .filter((plan) => plan.status === 'active' && plan.trialDays > 0)
+            .filter(
+              (plan) =>
+                plan.status === 'active' &&
+                plan.trialDays > 0 &&
+                plan.prices.some((price) => price.currency === DEFAULT_BILLING_CURRENCY),
+            )
             .sort((a, b) => a.tier - b.tier)[0] ?? null;
 
         const created = await new WorkspaceOnboardingService().create(
@@ -85,7 +96,7 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
             country: parsed.data.country,
             defaultLocale: parsed.data.defaultLocale,
             timezone: parsed.data.timezone,
-            currency: parsed.data.currency,
+            currency: DEFAULT_BILLING_CURRENCY,
             billingEmail: parsed.data.billingEmail,
             legalName: parsed.data.legalName ?? null,
             ip: req.ip || undefined,
