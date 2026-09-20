@@ -1,23 +1,29 @@
 'use client';
 
-import { useId, useState } from 'react';
-import { Field, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { useState } from 'react';
+import {
+  Field,
+  SearchableSelect,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+  type SearchableOption,
+} from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 
-export interface CountryOption {
-  readonly code: string;
-  readonly name: string;
-}
-
 type FailureKind = 'generic' | 'invalid' | 'conflict' | 'forbidden';
+
+interface FailureState {
+  readonly kind: FailureKind;
+  readonly fields: readonly string[];
+}
 
 /**
  * First-workspace onboarding asks only for facts the customer actually owns.
  *
- * Country is a complete ISO list, not the subset that happens to have a payment
- * route today. Billing currency is deliberately absent: launch billing is USD
- * and the API owns that default. Timezone uses a datalist so the customer can
- * search the IANA inventory instead of typing an opaque identifier from memory.
+ * Country and timezone are controlled vocabularies: the visible controls are
+ * searchable, but only the canonical ISO country code / IANA zone is submitted.
+ * Billing currency is deliberately absent; the API owns the launch USD default.
  */
 export function CreateWorkspaceForm({
   locale,
@@ -26,8 +32,8 @@ export function CreateWorkspaceForm({
   labels,
 }: {
   locale: string;
-  countries: readonly CountryOption[];
-  timezones: readonly string[];
+  countries: readonly SearchableOption[];
+  timezones: readonly SearchableOption[];
   labels: {
     name: string;
     slug: string;
@@ -42,25 +48,44 @@ export function CreateWorkspaceForm({
     submitting: string;
     failed: string;
     invalid: string;
+    invalidFields: string;
     conflict: string;
     forbidden: string;
+    noResults: string;
     localeAr: string;
     localeEn: string;
   };
 }) {
   const [country, setCountry] = useState('');
-  const [countryQuery, setCountryQuery] = useState('');
+  const [timezone, setTimezone] = useState('');
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
-  const [failure, setFailure] = useState<FailureKind>('generic');
-  const countryListId = useId();
-  const timezoneListId = useId();
+  const [failure, setFailure] = useState<FailureState>({ kind: 'generic', fields: [] });
+
+  const fieldLabels: Readonly<Record<string, string>> = {
+    name: labels.name,
+    slug: labels.slug,
+    country: labels.country,
+    defaultLocale: labels.interfaceLocale,
+    timezone: labels.timezone,
+    billingEmail: labels.billingEmail,
+    legalName: labels.legalName,
+  };
+
+  const invalidFieldNames = [...new Set(failure.fields)]
+    .map((field) => fieldLabels[field])
+    .filter((label): label is string => Boolean(label));
 
   const failureText =
-    failure === 'invalid'
-      ? labels.invalid
-      : failure === 'conflict'
+    failure.kind === 'invalid'
+      ? invalidFieldNames.length > 0
+        ? labels.invalidFields.replace(
+            '{fields}',
+            invalidFieldNames.join(locale === 'ar' ? '، ' : ', '),
+          )
+        : labels.invalid
+      : failure.kind === 'conflict'
         ? labels.conflict
-        : failure === 'forbidden'
+        : failure.kind === 'forbidden'
           ? labels.forbidden
           : labels.failed;
 
@@ -70,7 +95,7 @@ export function CreateWorkspaceForm({
       onSubmit={async (event) => {
         event.preventDefault();
         setState('busy');
-        setFailure('generic');
+        setFailure({ kind: 'generic', fields: [] });
 
         const form = new FormData(event.currentTarget);
         const response = await fetch('/api/onboarding/workspace', {
@@ -81,33 +106,45 @@ export function CreateWorkspaceForm({
             slug: String(form.get('slug') ?? ''),
             country,
             defaultLocale: String(form.get('defaultLocale') ?? ''),
-            timezone: String(form.get('timezone') ?? ''),
+            timezone,
             billingEmail: String(form.get('billingEmail') ?? ''),
             legalName: String(form.get('legalName') ?? '') || undefined,
           }),
         }).catch(() => null);
 
         if (!response?.ok) {
-          const payload = response ? await response.json().catch(() => null) : null;
-          const code =
-            payload &&
-            typeof payload === 'object' &&
-            'error' in payload &&
-            payload.error &&
-            typeof payload.error === 'object' &&
-            'code' in payload.error
-              ? String(payload.error.code)
-              : '';
+          const payload = (response ? await response.json().catch(() => null) : null) as
+            | {
+                error?: {
+                  code?: unknown;
+                  details?: {
+                    fields?: unknown;
+                    field?: unknown;
+                  };
+                };
+              }
+            | null;
 
-          setFailure(
-            code === 'VALIDATION_FAILED'
-              ? 'invalid'
-              : code === 'CONFLICT'
-                ? 'conflict'
-                : code === 'FORBIDDEN'
-                  ? 'forbidden'
-                  : 'generic',
-          );
+          const code = typeof payload?.error?.code === 'string' ? payload.error.code : '';
+          const detailFields = payload?.error?.details?.fields;
+          const detailField = payload?.error?.details?.field;
+          const fields = Array.isArray(detailFields)
+            ? detailFields.filter((field): field is string => typeof field === 'string')
+            : typeof detailField === 'string'
+              ? [detailField]
+              : [];
+
+          setFailure({
+            kind:
+              code === 'VALIDATION_FAILED'
+                ? 'invalid'
+                : code === 'CONFLICT'
+                  ? 'conflict'
+                  : code === 'FORBIDDEN'
+                    ? 'forbidden'
+                    : 'generic',
+            fields,
+          });
           setState('failed');
           return;
         }
@@ -142,34 +179,18 @@ export function CreateWorkspaceForm({
       </Field>
 
       <Field label={labels.country} htmlFor="country" required hint={labels.countryHint}>
-        <input
-          className="bs-control"
+        <SearchableSelect
           id="country"
-          name="countryDisplay"
-          required
-          value={countryQuery}
-          list={countryListId}
-          data-testid="country-select"
+          name="country"
+          options={countries}
+          value={country}
+          onChange={setCountry}
           placeholder={labels.choose}
-          autoComplete="off"
-          onChange={(event) => {
-            const value = event.target.value;
-            setCountryQuery(value);
-            const normalised = value.trim().toLocaleLowerCase();
-            const match = countries.find(
-              (option) =>
-                option.code.toLocaleLowerCase() === normalised ||
-                option.name.toLocaleLowerCase() === normalised,
-            );
-            setCountry(match?.code ?? '');
-          }}
+          noResultsLabel={labels.noResults}
+          required
+          testId="country-select"
           style={authInputStyle()}
         />
-        <datalist id={countryListId}>
-          {countries.map((option) => (
-            <option key={option.code} value={option.name} label={option.code} />
-          ))}
-        </datalist>
       </Field>
 
       <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
@@ -187,22 +208,18 @@ export function CreateWorkspaceForm({
       </Field>
 
       <Field label={labels.timezone} htmlFor="timezone" required>
-        <input
-          className="bs-control"
+        <SearchableSelect
           id="timezone"
           name="timezone"
+          options={timezones}
+          value={timezone}
+          onChange={setTimezone}
+          placeholder={labels.choose}
+          noResultsLabel={labels.noResults}
           required
-          maxLength={64}
-          list={timezoneListId}
-          placeholder="Asia/Riyadh"
-          autoComplete="off"
+          testId="timezone-select"
           style={authInputStyle()}
         />
-        <datalist id={timezoneListId}>
-          {timezones.map((timezone) => (
-            <option key={timezone} value={timezone} />
-          ))}
-        </datalist>
       </Field>
 
       <Field label={labels.billingEmail} htmlFor="billingEmail" required>
@@ -230,7 +247,7 @@ export function CreateWorkspaceForm({
       <button
         type="submit"
         data-testid="create-workspace-submit"
-        disabled={state === 'busy' || country === ''}
+        disabled={state === 'busy' || country === '' || timezone === ''}
         style={authButtonStyle()}
       >
         {state === 'busy' ? labels.submitting : labels.submit}
