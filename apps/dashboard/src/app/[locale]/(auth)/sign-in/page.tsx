@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Banner, Field, colorTokens, spacingTokens } from '@brandspace/ui';
-import { getCustomer, getCustomerAuth, getSessionToken } from '../../../../server/customer-context';
+import {
+  getCustomer,
+  getCustomerAuth,
+  getSessionToken,
+} from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signInAction } from '../actions';
