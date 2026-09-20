@@ -46,6 +46,7 @@ async function signUpAndVerify(page: Page, locale = 'en'): Promise<NewCustomer> 
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
   await page.fill('#timezone', 'Europe/London');
+  await page.press('#timezone', 'Enter');
   // THE TERMS CHECKBOX IS REQUIRED AND VERSIONED. The form renders it from the
   // activated document, so the version travels with the acceptance.
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
@@ -78,7 +79,7 @@ async function signIn(page: Page, email: string, locale = 'en'): Promise<void> {
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
   await page.click('[data-testid="signin-submit"]');
-  await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  await page.waitForURL(new RegExp(`/${locale}/onboarding/workspace$`));
 }
 
 /** Create the first workspace through the REAL form. Billing is USD by policy. */
@@ -95,9 +96,11 @@ async function createWorkspace(
   const countryName =
     new Intl.DisplayNames(['en'], { type: 'region' }).of(input.country) ?? input.country;
   await page.fill('[data-testid="country-select"]', countryName);
+  await page.press('[data-testid="country-select"]', 'Enter');
   await expect(page.locator('[data-testid="currency-select"]')).toHaveCount(0);
   await page.selectOption('#defaultLocale', locale === 'ar' ? 'AR' : 'EN');
-  await page.fill('#timezone', 'Europe/London');
+  await page.fill('[data-testid="timezone-select"]', 'Europe/London');
+  await page.press('[data-testid="timezone-select"]', 'Enter');
   await page.fill('#billingEmail', `finance-${crypto.randomUUID().slice(0, 8)}@example.local`);
   await page.click('[data-testid="create-workspace-submit"]');
 
