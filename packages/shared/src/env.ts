@@ -193,7 +193,13 @@ type StartupEnv = z.infer<typeof startupEnvSchema>;
  * are checked: a deployment is production if EITHER says so, which is the
  * cautious direction.
  */
-export type StartupServiceProfile = 'complete' | 'web' | 'dashboard' | 'admin' | 'api' | 'worker';
+export type StartupServiceProfile =
+  | 'complete'
+  | 'web'
+  | 'dashboard'
+  | 'admin'
+  | 'api'
+  | 'worker';
 
 /**
  * The three key domains, as the pair of variables each one is configured by.
@@ -331,7 +337,11 @@ function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfi
 }
 
 /** Refuse when two of the named variables carry the same value. */
-function assertDistinct(env: StartupEnv, names: readonly (keyof StartupEnv)[], why: string): void {
+function assertDistinct(
+  env: StartupEnv,
+  names: readonly (keyof StartupEnv)[],
+  why: string,
+): void {
   const present = names
     .map((name) => env[name])
     .filter((value): value is string => typeof value === 'string' && value !== '');
@@ -488,7 +498,8 @@ export function validateStartupConfiguration(
 ): StartupConfigurationResult {
   const environment = currentEnvironment(source as Record<string, string | undefined>);
   try {
-    const parsed = startupEnvSchema.safeParse(source);
+    const schema = profile === 'web' ? startupEnvSchema : envSchema;
+    const parsed = schema.safeParse(source);
     if (!parsed.success) {
       const issues = parsed.error.issues
         .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
