@@ -345,6 +345,11 @@ describe('each service holds exactly the key domains it uses', () => {
       env: {
         ...DEPLOYED,
         ...PUBLIC_URLS,
+        // The dashboard READS this one — every customer return URL and email
+        // link is built from it — so the per-profile contract requires it. The
+        // blueprint gives the dashboard the whole `publicUrlEnv` spread, so the
+        // deployment has always had it; this fixture simply did not.
+        PUBLIC_DASHBOARD_BASE_URL: COMPLETE.PUBLIC_DASHBOARD_BASE_URL,
         ...AWS_IDENTITY,
         DATABASE_URL: COMPLETE.DATABASE_URL,
         CUSTOMER_SESSION_SECRET: COMPLETE.CUSTOMER_SESSION_SECRET,
@@ -430,7 +435,24 @@ describe('each service holds exactly the key domains it uses', () => {
   });
 
   it('the marketing site holds no key domain and no AWS identity at all', () => {
-    const webEnv = { ...DEPLOYED, ...PUBLIC_URLS };
+    /*
+     * THE FIXTURE NO LONGER INCLUDES `PUBLIC_API_BASE_URL`, and that omission
+     * is the point.
+     *
+     * This test used to build `webEnv` from `PUBLIC_URLS`, which carries both
+     * public origins. It therefore asserted that `web` starts with a variable
+     * the blueprint never gives it — and passed happily for as long as the
+     * production `web` service was refusing to boot over exactly that variable.
+     * A fixture that is a superset of the real deployment cannot catch a
+     * requirement the real deployment does not satisfy.
+     *
+     * `web` reads no environment variable beyond `NEXT_RUNTIME`, so the
+     * environment below is what it actually has. The structural guarantee lives
+     * in `tests/unit/railway-blueprint-contract.test.ts`, which builds every
+     * service's environment from `.railway/railway.ts` itself rather than from
+     * a hand-written constant.
+     */
+    const webEnv = { ...DEPLOYED, PUBLIC_WEB_URL: COMPLETE.PUBLIC_WEB_URL };
     expect(() => validateStartupConfiguration(webEnv as NodeJS.ProcessEnv, 'web')).not.toThrow();
 
     const forbidden: [string, string][] = [
