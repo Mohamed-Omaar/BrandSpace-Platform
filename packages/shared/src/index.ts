@@ -5,6 +5,7 @@ export * from './security-headers';
 export * from './env';
 export * from './errors';
 export * from './file-signature';
+export * from './geography';
 export * from './logger';
 export * from './money';
 export * from './permissions';
