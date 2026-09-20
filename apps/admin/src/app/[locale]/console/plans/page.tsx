@@ -167,7 +167,12 @@ export default async function PlansPage({
               }
             />
           ) : (
-            <PlanTable plans={activePlans} currencies={currencies} locale={locale} editable={false} />
+            <PlanTable
+              plans={activePlans}
+              currencies={currencies}
+              locale={locale}
+              editable={false}
+            />
           )}
         </Card>
 
@@ -249,7 +254,10 @@ export default async function PlansPage({
                       }
                     >
                       {state.impact.affected.overLimit.map((row) => (
-                        <tr key={`${row.workspaceId}-${row.dimension}`} data-testid="over-limit-row">
+                        <tr
+                          key={`${row.workspaceId}-${row.dimension}`}
+                          data-testid="over-limit-row"
+                        >
                           <Cell>{row.slug}</Cell>
                           <Cell>{row.planKey}</Cell>
                           <Cell>{row.dimension}</Cell>
@@ -290,7 +298,11 @@ export default async function PlansPage({
                       name="versionId"
                       value={state.draft.id}
                     />
-                    <button type="submit" style={secondaryButtonStyle()} data-testid="validate-plans">
+                    <button
+                      type="submit"
+                      style={secondaryButtonStyle()}
+                      data-testid="validate-plans"
+                    >
                       {isArabic ? 'تحقق وعاين الأثر' : 'Validate and preview impact'}
                     </button>
                   </form>
@@ -314,7 +326,12 @@ export default async function PlansPage({
                         marginInlineEnd: spacingTokens.sm,
                       }}
                     >
-                      <input className="bs-control" type="checkbox" name="acknowledge" value="yes" />
+                      <input
+                        className="bs-control"
+                        type="checkbox"
+                        name="acknowledge"
+                        value="yes"
+                      />
                       {isArabic ? 'أقرّ بالتغييرات عالية الأثر' : 'Acknowledge high-impact changes'}
                     </label>
                     <button type="submit" style={primaryButtonStyle()} data-testid="activate-plans">
