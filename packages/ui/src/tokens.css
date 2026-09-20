@@ -898,7 +898,7 @@ html[dir='rtl'] select.bs-select {
  * `aria-label`, so the workspace is still named when its text is not shown.
  */
 [data-sidebar-state='collapsed'] .bs-rail-copy {
-  display: none;
+  display: none !important;
 }
 
 /*
@@ -907,7 +907,16 @@ html[dir='rtl'] select.bs-select {
  * the rail headed by nothing but a chevron.
  */
 [data-sidebar-state='collapsed'] .bs-brand-text {
+  display: none !important;
+}
+
+[data-sidebar-state='collapsed'] .bs-sidebar .bs-dropdown-affordance {
   display: none;
+}
+
+[data-sidebar-state='collapsed'] .bs-sidebar [data-testid='profile-menu'] {
+  justify-content: center;
+  padding-inline: 0;
 }
 
 /*
