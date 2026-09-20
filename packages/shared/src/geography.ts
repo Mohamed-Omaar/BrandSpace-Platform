@@ -265,6 +265,38 @@ export function isIsoCountryCode(value: string): value is IsoCountryCode {
   return ISO_COUNTRY_SET.has(value.trim().toUpperCase());
 }
 
+export interface LocalizedOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** Localised country labels, sorted for the current interface language. */
+export function countryOptions(locale: string): LocalizedOption[] {
+  const displayNames = new Intl.DisplayNames([locale], { type: 'region' });
+  const collator = new Intl.Collator(locale, { sensitivity: 'base' });
+  return ISO_COUNTRY_CODES.map((code) => ({
+    value: code,
+    label: displayNames.of(code) ?? code,
+  })).sort((a, b) => collator.compare(a.label, b.label));
+}
+
+/** Searchable IANA time-zone choices. Stored values stay canonical identifiers. */
+export function timeZoneOptions(locale: string): LocalizedOption[] {
+  const supportedValuesOf = (
+    Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }
+  ).supportedValuesOf;
+  const runtimeZones = supportedValuesOf ? supportedValuesOf('timeZone') : [];
+  const zones = runtimeZones.includes('UTC') ? runtimeZones : ['UTC', ...runtimeZones];
+  const collator = new Intl.Collator(locale, { sensitivity: 'base' });
+
+  return zones
+    .map((value) => {
+      const city = value.split('/').at(-1)?.replaceAll('_', ' ') ?? value;
+      return { value, label: city === value ? value : `${city} — ${value}` };
+    })
+    .sort((a, b) => collator.compare(a.label, b.label));
+}
+
 /**
  * Customer-facing billing is intentionally simple for launch. The billing
  * engine remains multi-currency internally; onboarding does not expose that
