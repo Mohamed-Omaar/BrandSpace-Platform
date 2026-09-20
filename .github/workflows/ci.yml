@@ -234,10 +234,10 @@ jobs:
           # defaulted: the provider registry fails closed without it, which is
           # how the first CI run found this line missing.
           BILLING_DEV_WEBHOOK_SECRET=ci-only-billing-webhook-secret-55555555
-          PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          PUBLIC_API_BASE_URL=http://127.0.0.1:3003
           # Phase 6 — where the OAuth callback sends the browser back (D-141).
           PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
-          BRANDSPACE_API_URL=http://127.0.0.1:3002
+          BRANDSPACE_API_URL=http://127.0.0.1:3003
           ENVEOF
 
       - name: Generate Prisma client (offline; migrations below use .env.test)
@@ -376,10 +376,10 @@ jobs:
           # defaulted: the provider registry fails closed without it, which is
           # how the first CI run found this line missing.
           BILLING_DEV_WEBHOOK_SECRET=ci-only-billing-webhook-secret-55555555
-          PUBLIC_API_BASE_URL=http://127.0.0.1:3002
+          PUBLIC_API_BASE_URL=http://127.0.0.1:3003
           # Phase 6 — where the OAuth callback sends the browser back (D-141).
           PUBLIC_DASHBOARD_BASE_URL=http://127.0.0.1:3001
-          BRANDSPACE_API_URL=http://127.0.0.1:3002
+          BRANDSPACE_API_URL=http://127.0.0.1:3003
           ENVEOF
 
       - name: Generate Prisma client (offline)
