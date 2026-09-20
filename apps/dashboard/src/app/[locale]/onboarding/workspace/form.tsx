@@ -11,11 +11,24 @@ import {
 } from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 
-type FailureKind = 'generic' | 'invalid' | 'conflict' | 'forbidden';
+interface ApiFailurePayload {
+  readonly error?: {
+    readonly code?: unknown;
+    readonly details?: {
+      readonly fields?: unknown;
+      readonly field?: unknown;
+    };
+  };
+}
 
-interface FailureState {
-  readonly kind: FailureKind;
-  readonly fields: readonly string[];
+/** Only safe, server-declared field names are ever reflected back into copy. */
+function validationFields(payload: ApiFailurePayload | null): string[] {
+  const fields = payload?.error?.details?.fields;
+  const field = payload?.error?.details?.field;
+  if (Array.isArray(fields)) {
+    return fields.filter((value): value is string => typeof value === 'string');
+  }
+  return typeof field === 'string' ? [field] : [];
 }
 
 /**
@@ -58,8 +71,10 @@ export function CreateWorkspaceForm({
 }) {
   const [country, setCountry] = useState('');
   const [timezone, setTimezone] = useState('');
-  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
-  const [failure, setFailure] = useState<FailureState>({ kind: 'generic', fields: [] });
+  const [state, setState] = useState<{ busy: boolean; error: string | null }>({
+    busy: false,
+    error: null,
+  });
 
   const fieldLabels: Readonly<Record<string, string>> = {
     name: labels.name,
@@ -71,81 +86,51 @@ export function CreateWorkspaceForm({
     legalName: labels.legalName,
   };
 
-  const invalidFieldNames = [...new Set(failure.fields)]
-    .map((field) => fieldLabels[field])
-    .filter((label): label is string => Boolean(label));
-
-  const failureText =
-    failure.kind === 'invalid'
-      ? invalidFieldNames.length > 0
-        ? labels.invalidFields.replace(
-            '{fields}',
-            invalidFieldNames.join(locale === 'ar' ? '، ' : ', '),
-          )
-        : labels.invalid
-      : failure.kind === 'conflict'
-        ? labels.conflict
-        : failure.kind === 'forbidden'
-          ? labels.forbidden
-          : labels.failed;
-
   return (
     <form
       data-testid="create-workspace-form"
       onSubmit={async (event) => {
         event.preventDefault();
-        setState('busy');
-        setFailure({ kind: 'generic', fields: [] });
+        setState({ busy: true, error: null });
 
-        const form = new FormData(event.currentTarget);
+        const formData = new FormData(event.currentTarget);
         const response = await fetch('/api/onboarding/workspace', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            name: String(form.get('name') ?? ''),
-            slug: String(form.get('slug') ?? ''),
+            name: String(formData.get('name') ?? ''),
+            slug: String(formData.get('slug') ?? ''),
             country,
-            defaultLocale: String(form.get('defaultLocale') ?? ''),
+            defaultLocale: String(formData.get('defaultLocale') ?? ''),
             timezone,
-            billingEmail: String(form.get('billingEmail') ?? ''),
-            legalName: String(form.get('legalName') ?? '') || undefined,
+            billingEmail: String(formData.get('billingEmail') ?? ''),
+            legalName: String(formData.get('legalName') ?? '') || undefined,
           }),
         }).catch(() => null);
 
         if (!response?.ok) {
-          const payload = (response ? await response.json().catch(() => null) : null) as
-            | {
-                error?: {
-                  code?: unknown;
-                  details?: {
-                    fields?: unknown;
-                    field?: unknown;
-                  };
-                };
-              }
-            | null;
-
+          const payload = (await response?.json().catch(() => null)) as ApiFailurePayload | null;
           const code = typeof payload?.error?.code === 'string' ? payload.error.code : '';
-          const detailFields = payload?.error?.details?.fields;
-          const detailField = payload?.error?.details?.field;
-          const fields = Array.isArray(detailFields)
-            ? detailFields.filter((field): field is string => typeof field === 'string')
-            : typeof detailField === 'string'
-              ? [detailField]
-              : [];
+          const invalidFieldNames = [...new Set(validationFields(payload))]
+            .map((field) => fieldLabels[field])
+            .filter((label): label is string => Boolean(label));
+          const invalidMessage =
+            invalidFieldNames.length > 0
+              ? labels.invalidFields.replace(
+                  '{fields}',
+                  invalidFieldNames.join(locale === 'ar' ? '، ' : ', '),
+                )
+              : labels.invalid;
+          const message =
+            code === 'VALIDATION_FAILED'
+              ? invalidMessage
+              : code === 'CONFLICT'
+                ? labels.conflict
+                : code === 'FORBIDDEN'
+                  ? labels.forbidden
+                  : labels.failed;
 
-          setFailure({
-            kind:
-              code === 'VALIDATION_FAILED'
-                ? 'invalid'
-                : code === 'CONFLICT'
-                  ? 'conflict'
-                  : code === 'FORBIDDEN'
-                    ? 'forbidden'
-                    : 'generic',
-            fields,
-          });
-          setState('failed');
+          setState({ busy: false, error: message });
           return;
         }
 
@@ -247,13 +232,13 @@ export function CreateWorkspaceForm({
       <button
         type="submit"
         data-testid="create-workspace-submit"
-        disabled={state === 'busy' || country === '' || timezone === ''}
+        disabled={state.busy || country === '' || timezone === ''}
         style={authButtonStyle()}
       >
-        {state === 'busy' ? labels.submitting : labels.submit}
+        {state.busy ? labels.submitting : labels.submit}
       </button>
 
-      {state === 'failed' ? (
+      {state.error ? (
         <p
           role="alert"
           data-testid="create-workspace-error"
@@ -263,7 +248,7 @@ export function CreateWorkspaceForm({
             color: colorTokens.danger,
           }}
         >
-          {failureText}
+          {state.error}
         </p>
       ) : null}
     </form>
