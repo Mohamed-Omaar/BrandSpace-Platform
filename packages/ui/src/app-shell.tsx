@@ -791,7 +791,12 @@ export function AppShell({
               paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >
-            <div style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}>{children}</div>
+            <div
+              className="bs-page-flow"
+              style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}
+            >
+              {children}
+            </div>
           </main>
         </div>
       </div>
