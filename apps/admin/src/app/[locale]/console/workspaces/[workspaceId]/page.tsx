@@ -130,7 +130,7 @@ export default async function WorkspaceDetailPage({
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
   return (
-    <div>
+    <div className="bs-section-stack">
       {/* Breadcrumbs, not a bare back-link: the directory is a real level in
           the hierarchy, and a reader arriving from a deep link needs to know
           where they are as well as how to leave. */}
