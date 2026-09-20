@@ -16,6 +16,7 @@ export const messages = {
     'nav.signOut': 'تسجيل الخروج',
     'nav.account': 'الحساب',
     'common.close': 'إغلاق',
+    'common.noResults': 'لا توجد نتائج مطابقة.',
     'topbar.search': 'ابحث عن أي شيء',
     'topbar.searchShortcut': '⌘ K',
     'topbar.notifications': 'الإشعارات',
@@ -1306,9 +1307,6 @@ export const messages = {
     'createWorkspace.country': 'الدولة',
     'createWorkspace.countryHint':
       'اختر الدولة التي تعمل منها مساحة العمل. هذا الاختيار لا يمنع إنشاء الحساب أو مساحة العمل.',
-    'createWorkspace.currency': 'عملة الفوترة',
-    'createWorkspace.currencyHint':
-      'اختر العملة بنفسك. لا نختارها نيابة عنك ولا نحوّل بين العملات.',
     'createWorkspace.locale': 'لغة الواجهة',
     'createWorkspace.timezone': 'المنطقة الزمنية',
     'createWorkspace.billingEmail': 'بريد الفوترة',
@@ -1316,11 +1314,11 @@ export const messages = {
     'createWorkspace.choose': 'اختر…',
     'createWorkspace.submit': 'إنشاء مساحة العمل',
     'createWorkspace.creating': 'جارٍ الإنشاء…',
-    'createWorkspace.noMarkets': 'لم تُفعَّل أي أسواق بعد. تواصل مع مالك المنصة.',
     'createWorkspace.trialNotice':
       'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها يتوقّف الوصول إلى المزايا المدفوعة ولا يُحذف أي شيء.',
     'createWorkspace.failed': 'تعذّر إنشاء مساحة العمل. حاول مجددًا.',
     'createWorkspace.invalid': 'راجع البيانات المطلوبة وحاول مجددًا.',
+    'createWorkspace.invalidFields': 'راجع الحقول التالية: {fields}.',
     'createWorkspace.conflict': 'عنوان مساحة العمل مستخدم بالفعل. اختر عنوانًا آخر.',
     'createWorkspace.forbidden': 'لا يمكن لهذا الحساب إنشاء مساحة عمل حاليًا.',
     'signUp.title': 'أنشئ حسابك',
@@ -1372,6 +1370,7 @@ export const messages = {
     'nav.signOut': 'Sign out',
     'nav.account': 'Account',
     'common.close': 'Close',
+    'common.noResults': 'No matching results.',
     'topbar.search': 'Search anything',
     'topbar.searchShortcut': '⌘ K',
     'topbar.notifications': 'Notifications',
@@ -2702,9 +2701,6 @@ export const messages = {
     'createWorkspace.country': 'Country',
     'createWorkspace.countryHint':
       'Choose where this workspace operates. This does not block account or workspace creation.',
-    'createWorkspace.currency': 'Billing currency',
-    'createWorkspace.currencyHint':
-      'You choose this. We do not pick it for you, and nothing is converted between currencies.',
     'createWorkspace.locale': 'Interface language',
     'createWorkspace.timezone': 'Timezone',
     'createWorkspace.billingEmail': 'Billing email',
@@ -2712,11 +2708,11 @@ export const messages = {
     'createWorkspace.choose': 'Choose…',
     'createWorkspace.submit': 'Create workspace',
     'createWorkspace.creating': 'Creating…',
-    'createWorkspace.noMarkets': 'No markets have been activated yet. Contact the platform owner.',
     'createWorkspace.trialNotice':
       'You start a {days}-day trial with {credits} credits and no card. When it ends, access to paid features stops and nothing is deleted.',
     'createWorkspace.failed': 'The workspace could not be created. Please try again.',
     'createWorkspace.invalid': 'Check the required details and try again.',
+    'createWorkspace.invalidFields': 'Check these fields: {fields}.',
     'createWorkspace.conflict': 'That workspace address is already taken. Choose another one.',
     'createWorkspace.forbidden': 'This account cannot create a workspace right now.',
     'signUp.title': 'Create your account',
