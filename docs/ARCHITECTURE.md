@@ -888,6 +888,20 @@ It also gained the timer for `sweepPublishing`, which Phase 6 wrote and left rea
 `runOnce` — so the publishing reconciliation sweep had never actually run on a schedule. Found while
 wiring the analytics sweep beside it.
 
+**And in Phase 2 it gained the step that gives the analytics sweep something to enumerate** (D-225).
+`ensureCursors()` was complete, correct and called by nothing outside the tests, so a workspace that
+connected an account had no `analytics_ingestion_cursor` rows and ingestion could never begin. The sweep
+now asks the question itself on every run, before enumerating due cursors: active connections with no
+cursor rows at all, distinct by workspace, bounded by the same batch size, then `withWorkspace(...)` per
+workspace so the enumeration is cross-tenant and every write is the tenant's own.
+
+Creating the cursors at CONNECTION time was the obvious alternative and is worse: it fixes tomorrow and
+not today, leaving every already-connected account permanently uncovered, and it has to be repeated in
+the connect, reconnect and re-authorisation paths — three places to forget. Ensuring from the sweep is
+idempotent by construction, self-heals after a newly registered metric, and costs one indexed query on a
+run that was already reading that table. A workspace whose ensure throws is logged and skipped: one
+tenant's broken state must not stop ingestion for everybody else.
+
 ---
 
 ## Phase 9 — Commerce & Onboarding

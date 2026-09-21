@@ -248,6 +248,13 @@ so output is explainable and correctable. Bilingual: each field can hold `ar` an
 Produces a `ContentItem` with per-platform `ContentVariant`s (character limits, hashtag rules, mention rules,
 link handling). Supports rewrite, shorten, expand, change tone, translate ar↔en with brand-preserving glossary.
 
+_A post can also be written by a person_ (Phase 2, D-224). Manual authoring produces the same
+`ContentItem` and `ContentVariant` rows and joins the same draft → review → approval → calendar →
+publish lifecycle, but **invokes no model and charges no AI credits**: the item carries
+`origin: 'HUMAN'` and no `aiRequestId`, so credit, margin and usage reporting can tell the two apart.
+It lives on the library service, which has no AI gateway at all, so the path cannot reach a provider
+even by accident.
+
 **Social Media Hub** — customers connect their own accounts via OAuth only. **BrandSpace never asks for a
 social account password.** Shows scopes granted, token expiry, health, and per-platform publishing capability.
 

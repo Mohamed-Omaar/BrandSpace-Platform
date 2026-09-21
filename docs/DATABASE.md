@@ -590,6 +590,29 @@ A trigger rather than a CHECK because the rule is about the TRANSITION — old r
 versus new row — and a CHECK sees only the new one. Test fixtures clean up as
 the PLATFORM role rather than the production grant being widened to suit them.
 
+### 4.8d `approvedFingerprint` — what the verdict was granted over (Phase 2, D-223)
+
+`20260921090000_approval_content_fingerprint` adds one nullable JSONB column to
+`approval`. It holds `{ item, variants: { [variantId]: hash } }`, computed from
+the variants as they stood at the moment of approval and written inside the same
+row lock that records the verdict.
+
+**It exists because an approval recorded a decision and nothing about the
+words.** A `SCHEDULED` item is deliberately not returned to `DRAFT` by an edit —
+the calendar owns that edge — so a caption changed after scheduling published
+under a verdict granted to different text. The publish preflight now recomputes
+the same hash from the variant it is about to send and refuses on a mismatch.
+
+**NULLABLE AND NOT BACKFILLED, on purpose.** An approval granted before this
+migration cannot prove what it covered, and deriving a fingerprint from today's
+rows would certify precisely the edit the column exists to catch. The comparison
+FAILS CLOSED on a null, so those approvals must be re-granted rather than
+trusted.
+
+The column is written by the same `UPDATE` that decides the cycle, so
+`approval_write_once` (§4.8c) governs it unchanged: a decided cycle's
+fingerprint never changes again.
+
 ### 9.3b The `notification` table — AS BUILT (Phase 5B-3)
 
 §9.3 above is the DESIGN. Three differences, each with a reason.

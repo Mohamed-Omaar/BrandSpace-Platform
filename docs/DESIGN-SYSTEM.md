@@ -229,6 +229,15 @@ row, and a non-wrapping header pushed the page sideways. The workspace switcher 
 would otherwise take its max-content width. The role name is hidden below `md` — it duplicates what the
 Roles & permissions page states in full.
 
+**The language switcher keeps the page** (Phase 2, D-227). Both links pointed at `/${locale}`, which
+returned a customer reading a post, a report or a half-filled form to the overview — in a product where
+one of the two languages is RTL and switching is the normal way half the audience reads anything. The
+dashboard middleware forwards the matched path and query as `x-brandspace-path`; the shell reads it and
+swaps only the leading locale segment, so the route, its query and the workspace and brand context all
+survive the switch. `switchLocalePath` is pure and falls back to `/${target}` when the header is absent
+or malformed, so the worst case is the old behaviour rather than a broken URL. The sign-out `next` value
+comes from the same helper, because the two answers must not disagree.
+
 ### Support Mode
 
 A persistent, sticky, full-width yellow band with near-black ink — the one place a yellow surface is

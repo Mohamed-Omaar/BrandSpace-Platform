@@ -540,12 +540,31 @@ This is the property the milestone exists to guarantee, so it is worth stating i
 5. `UNKNOWN` is neither retryable nor indeterminate. An unclassified failure we resend is how a caption
    goes out twice.
 
-### 14.7 The approval gate, checked twice
+### 14.7 The approval gate, checked twice — and against the words, not just the verdict
 
 Once when a due slot is materialised into jobs, and again inside the job immediately before the external
 call. Not because the first check is unreliable, but because approval can be **withdrawn in between** —
 and the check that matters is the last one. Content in `IN_REVIEW` or `CHANGES_REQUESTED` never publishes,
 checked against the item's own state rather than inferred from the slot's.
+
+**Both checks originally asked only whether an approval existed and said `APPROVED`** (corrected in
+Phase 2, D-223). Neither asked WHAT IT WAS APPROVED OVER, and a `SCHEDULED` item is deliberately left
+scheduled when its variant is edited — unscheduling somebody's post from an edit handler is worse, and
+the calendar owns that edge. So `submit → approve → schedule → edit the caption → publish` sent words
+nobody had reviewed.
+
+The preflight now recomputes the content fingerprint (`@brandspace/shared`) from the variant it is about
+to send and compares it to `Approval.approvedFingerprint`. A mismatch is `APPROVAL_REVOKED` — the
+existing refusal, because it is the same fact: the approval no longer covers this post. The fingerprint
+spans the fields that decide what gets published (body, hashtags, first comment, link, asset ids,
+platform, locale) and deliberately excludes title, tags, pillar and campaign, which are properties of
+the work rather than of the post.
+
+The gate reads `latestForItem`, not `openForItem`. `openForItem` returns only `PENDING` approvals, so the
+DECIDED approval a scheduled post actually publishes under was invisible to it.
+
+**A null fingerprint refuses.** Approvals granted before the column existed cannot prove what they
+covered, and they are not backfilled.
 
 ### 14.8 Not in this phase
 
