@@ -10,6 +10,7 @@ import { statusMessage, translator, type MessageKey } from '../../../../i18n/mes
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
   cancelReviewAction,
+  createManualDraftAction,
   setContentCampaignAction,
   uploadComposerMediaAction,
   saveVariantAction,
@@ -262,6 +263,7 @@ export default async function ComposePage({
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
+          createManualDraft: createManualDraftAction,
         }}
       />
     </WorkspaceShell>
@@ -367,6 +369,7 @@ const COMPOSER_KEYS = [
   'content.composer.contentType',
   'content.composer.estimate',
   'content.composer.generate',
+  'content.composer.write',
   'content.composer.generating',
   'content.composer.quoteLabel',
   'content.composer.quoteUnit',

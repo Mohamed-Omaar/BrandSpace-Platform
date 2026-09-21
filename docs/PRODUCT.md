@@ -253,7 +253,10 @@ _A post can also be written by a person_ (Phase 2, D-224). Manual authoring prod
 publish lifecycle, but **invokes no model and charges no AI credits**: the item carries
 `origin: 'HUMAN'` and no `aiRequestId`, so credit, margin and usage reporting can tell the two apart.
 It lives on the library service, which has no AI gateway at all, so the path cannot reach a provider
-even by accident.
+even by accident, and it is reached from the composer's own action row ("Save without AI") using the
+same brand, channels, language and text the generate button reads. Until it existed, generation was
+the only writer of a content item anywhere in the product — so with no provider selected (D-13,
+D-204) the customer product could not produce a single post through its own UI.
 
 **Social Media Hub** — customers connect their own accounts via OAuth only. **BrandSpace never asks for a
 social account password.** Shows scopes granted, token expiry, health, and per-platform publishing capability.

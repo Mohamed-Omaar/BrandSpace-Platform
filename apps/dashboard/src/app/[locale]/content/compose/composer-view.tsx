@@ -122,6 +122,17 @@ export interface ComposerViewProps {
     cancelReview(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
     uploadMedia(formData: FormData): Promise<void>;
+    /**
+     * WRITE THE POST YOURSELF — no model, no credits (D-224).
+     *
+     * A SERVER ACTION rather than a `fetch` to `/api/content`, unlike generate
+     * and quote beside it, and the difference is the point: those two need the
+     * AI Gateway, which lives in `apps/api` because F-07 keeps the platform
+     * database identity out of this app. This one needs nothing the dashboard
+     * does not already have, so it goes straight to `ContentLibraryService` —
+     * the class that has no gateway and therefore cannot charge a credit.
+     */
+    createManualDraft(formData: FormData): Promise<void>;
   };
 }
 
@@ -330,6 +341,21 @@ export function ComposerView({
   const briefTooLong = brief.length > maxBriefChars;
   const canGenerate =
     can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
+  /*
+   * THE SAME THREE ANSWERS, USED LITERALLY RATHER THAN AS A BRIEF.
+   *
+   * Writing a post needs a brand, at least one channel and some words — which
+   * is what the editor above already collects. A second textarea headed "or
+   * write it here" would be a second place for the same sentence to live, and
+   * the reader would have to guess which one the button they pressed was going
+   * to read.
+   *
+   * IT IS ALLOWED ONLY WHILE COMPOSING SOMETHING NEW. With a draft open the
+   * words on screen are the VARIANTS' and each has its own save form; making a
+   * second item out of the brief field at that point would be a surprise.
+   */
+  const canWrite = canGenerate && draft === null;
+  const manualFormId = `${fieldId}-manual`;
 
   return (
     <div className="content-page" data-testid="content-composer">
@@ -602,6 +628,15 @@ export function ComposerView({
               {t['content.composer.estimate']}
             </button>
             <button
+              type="submit"
+              form={manualFormId}
+              className="cs-ghost-button"
+              disabled={!canWrite || busy !== null}
+              data-testid="content-write-manual"
+            >
+              {t['content.composer.write']}
+            </button>
+            <button
               type="button"
               className="cs-dark-button"
               disabled={!canGenerate || busy !== null}
@@ -613,6 +648,30 @@ export function ComposerView({
                 : t['content.composer.generate']}
             </button>
           </div>
+
+          {/*
+            THE MANUAL FORM CARRIES NO FIELDS OF ITS OWN.
+
+            Every value in it is already on the screen above, in the controls
+            the generate button reads — so the two verbs act on ONE set of
+            answers and cannot drift apart. The button sits in the action row
+            through `form=`, which is what that attribute is for.
+
+            THE IDEMPOTENCY KEY IS THE COMPOSER'S OWN, unchanged: derived from
+            the brand, the words, the channels and the language, so a double
+            submit or a reloaded POST returns the first draft instead of making
+            a second (AC-11.2 applied to a path with no gateway in it).
+          */}
+          <form id={manualFormId} action={actions.createManualDraft} hidden>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="brandId" value={brandId} />
+            <input type="hidden" name="contentLocale" value={contentLocale} />
+            <input type="hidden" name="body" value={brief} />
+            <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+            {selected.map((platformKey) => (
+              <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
+            ))}
+          </form>
         </section>
 
         {/* ------------------------------------ the generated variants --- */}

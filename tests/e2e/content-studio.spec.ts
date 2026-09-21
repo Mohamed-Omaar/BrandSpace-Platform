@@ -328,6 +328,71 @@ test.describe('generation', () => {
   });
 });
 
+/**
+ * WRITING A POST WITHOUT A MODEL (PHASE 2, D-224).
+ *
+ * THE DEFECT THIS EXISTS FOR, and it is the sharpest one Phase 2 found:
+ * `ContentStudioService.generate()` was the ONLY writer of a content item
+ * anywhere in the product. Everything downstream of a draft — the calendar, the
+ * approval, the publish job, campaign performance — was therefore downstream of
+ * a provider. And as the generation block above records at length, there is no
+ * real provider: in a browser the grounded path reaches AC-11.9's honest
+ * refusal. So the customer product, as configured, could not produce a single
+ * piece of content through its own UI.
+ *
+ * A SERVER-ACTION PATH WITH NO GATEWAY IN IT closes that, and this is the test
+ * that the BUTTON EXISTS AND DOES SOMETHING — the isolation suite already
+ * proves the service writes `origin: 'HUMAN'`, moves no credit and replays a
+ * retried submit. An action with no caller is the same defect as a cursor
+ * helper with no caller, which is the other half of this phase.
+ */
+test.describe('writing a post by hand', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await ensureBrandWithKnowledge(page);
+  });
+
+  test('REACHES A DRAFT WITH NO MODEL — the one path that does not need a provider', async ({
+    page,
+  }) => {
+    await openComposer(page);
+    const body = `A post a person wrote, at ${new Date().toISOString()}.`;
+    await compose(page, body);
+
+    await page.getByTestId('content-write-manual').click();
+
+    // The composer reopens ON the new draft, which is what `?item=` means.
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    await expect(page.getByTestId('content-results')).toContainText(body);
+  });
+
+  test('A SECOND PRESS RETURNS THE SAME DRAFT rather than making another', async ({ page }) => {
+    await openComposer(page);
+    const body = `Written once, submitted twice, at ${new Date().toISOString()}.`;
+    await compose(page, body);
+
+    await page.getByTestId('content-write-manual').click();
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    const first = new URL(page.url()).searchParams.get('item');
+
+    /*
+     * BACK, THEN PRESS AGAIN. The idempotency key is derived from the brand,
+     * the words, the channels and the language — not from the click — so the
+     * second press is the SAME logical action and must return the first draft.
+     * A key minted per click would make this a second item, and a customer who
+     * double-submitted would find two copies of one post in their library.
+     */
+    await openComposer(page);
+    await compose(page, body);
+    await page.getByTestId('content-write-manual').click();
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+
+    expect(new URL(page.url()).searchParams.get('item')).toBe(first);
+  });
+});
+
 test.describe('the composer is the demo, in both directions', () => {
   test('two columns on desktop, one on a phone', async ({ page }) => {
     await signIn(page);
