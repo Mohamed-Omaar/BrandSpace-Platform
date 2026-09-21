@@ -47,12 +47,22 @@ function credentials(): E2eAdminCredentials {
   }
 }
 
+/**
+ * SIGNING IN IS NOT THE SAME AS BEING IN A WORKSPACE. The E2E customer is a
+ * member of two, so the password step lands on the CHOOSER — and every later
+ * `goto` bounces straight back to it until one is picked. The first version of
+ * this helper stopped at "the URL is no longer /sign-in", which the chooser
+ * satisfies, so the library rendered zero tiles for the most boring possible
+ * reason.
+ */
 async function signIn(page: Page, email: string, password: string): Promise<void> {
   await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
   await page.fill('#email', email);
   await page.fill('#password', password);
   await page.click('[data-testid="signin-submit"]');
   await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'), { timeout: 30_000 });
+  await page.click(`[data-testid="choose-workspace-${credentials().customer.workspaceSlug}"]`);
+  await page.waitForURL(/\/en\/overview$/, { timeout: 30_000 });
 }
 
 /** Names are zero-padded so the newest-first ordering is predictable. */
