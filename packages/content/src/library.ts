@@ -456,61 +456,6 @@ export class ContentLibraryService {
   }
 
   /**
-   * Update the item-level fields a draft's author may change.
-   *
-   * SEPARATE FROM `editVariant` BECAUSE THE SUBJECTS DIFFER. A variant is what
-   * goes out on one channel; these are properties of the work itself. Editing
-   * them is not a material change to any caption, so this deliberately does NOT
-   * revoke an approval — retitling a post a reviewer approved does not change
-   * what that reviewer approved.
-   */
-  async updateItemDetails(input: {
-    readonly itemId: string;
-    readonly title?: string;
-    readonly campaignId?: string | null;
-    readonly pillar?: string | null;
-    readonly tags?: readonly string[];
-    readonly actorUserId: string;
-    readonly actorBrandScope: readonly string[];
-  }): Promise<ContentItem> {
-    const item = await this.db.contentItem.findFirst({
-      where: {
-        id: input.itemId,
-        deletedAt: null,
-        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
-      },
-    });
-    if (!item) throw contentItemNotFound();
-
-    const campaignId =
-      input.campaignId === undefined
-        ? undefined
-        : await this.#resolveCampaign(input.campaignId, item.brandId);
-
-    const updated = await this.db.contentItem.update({
-      where: { id: item.id },
-      data: {
-        ...(input.title === undefined ? {} : { title: input.title.trim().slice(0, 200) }),
-        ...(campaignId === undefined ? {} : { campaignId }),
-        ...(input.pillar === undefined ? {} : { pillar: input.pillar }),
-        ...(input.tags === undefined ? {} : { tags: [...input.tags] }),
-      },
-    });
-
-    await writeAuditEvent(this.db, this.workspaceId, {
-      action: 'content.item.updated',
-      actorType: 'USER',
-      actorId: input.actorUserId,
-      resourceType: 'ContentItem',
-      resourceId: item.id,
-      brandId: item.brandId,
-      before: { title: item.title, campaignId: item.campaignId },
-      after: { title: updated.title, campaignId: updated.campaignId },
-    });
-    return updated;
-  }
-
-  /**
    * Resolve a campaign id through the tenant-scoped client, or refuse it.
    *
    * `campaignId` reaches this service from a form, so it is exactly the field a
