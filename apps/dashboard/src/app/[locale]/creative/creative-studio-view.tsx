@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import {
   AssetMedia,
   Card,
@@ -103,6 +103,33 @@ export function CreativeStudioView({
   const [brief, setBrief] = useState('');
   const [formatKey, setFormatKey] = useState(formats[0]?.key ?? 'square');
   const [busy, setBusy] = useState(false);
+  /*
+   * A SYNCHRONOUS GUARD, BECAUSE `busy` IS NOT ONE.
+   *
+   * `setBusy(true)` is a state update: two clicks in the same tick both read
+   * `busy === false`, both pass the check below and both fire. `disabled={busy}`
+   * has the same gap for the same reason. A ref changes on the line that sets
+   * it, which is what a double click actually needs.
+   */
+  const inFlight = useRef(false);
+  /*
+   * THE IDEMPOTENCY KEY FOR THE CURRENT ATTEMPT.
+   *
+   * THIS USED TO BE `crypto.randomUUID()` INLINE IN THE REQUEST BODY, under a
+   * comment that said "a double click reuses it and the gateway replays the
+   * first outcome rather than charging twice". It did the opposite: minted
+   * inside the handler, every invocation produced a DIFFERENT key, so two
+   * requests for one image were two unrelated requests to the gateway — two
+   * provider calls, two charges, two assets. The one case the key existed for
+   * was the one case it could not cover.
+   *
+   * The key is now held against the (brief, format) the reader asked for, so a
+   * repeat of the SAME attempt carries the SAME key and the gateway replays.
+   * Changing the brief or the format is a different image and mints a new one,
+   * and so does a success — "generate another" with the same brief means
+   * another image, exactly as the original comment intended.
+   */
+  const attempt = useRef<{ signature: string; key: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<string | null>(null);
   const [result, setResult] = useState<CreativeResultView | null>(initialResult);
@@ -168,22 +195,24 @@ export function CreativeStudioView({
    */
   const generate = useCallback(
     async (targetFormatKey: string) => {
-      if (brief.trim() === '' || busy) return;
+      if (brief.trim() === '' || busy || inFlight.current) return;
+      inFlight.current = true;
       setBusy(true);
       setFailure(null);
+
+      const signature = `${targetFormatKey}::${brief.trim()}`;
+      if (attempt.current?.signature !== signature) {
+        attempt.current = { signature, key: crypto.randomUUID() };
+      }
+      const idempotencyKey = attempt.current.key;
       try {
         const payload = await post('generate', {
           brandId,
           brief: brief.trim(),
           formatKey: targetFormatKey,
-          /*
-           * ONE KEY PER ATTEMPT, generated in the browser and sent with the
-           * request: a double click reuses it and the gateway replays the first
-           * outcome rather than charging twice (AC-28.6). A NEW attempt — the
-           * author pressing "generate another" — gets a new key, because they
-           * mean a new image.
-           */
-          idempotencyKey: crypto.randomUUID(),
+          // ONE KEY PER ATTEMPT — see `attempt` above for why it is held in a
+          // ref rather than minted here (AC-28.6).
+          idempotencyKey,
         });
         setResult({
           assetId: String(payload['assetId'] ?? ''),
@@ -194,11 +223,23 @@ export function CreativeStudioView({
         });
         // The library's storage figures and the asset list have both moved.
         router.refresh();
+        /*
+         * THE ATTEMPT IS OVER, SO ITS KEY IS SPENT. Pressing generate again on
+         * the same brief means another image and must reach the provider; a key
+         * kept past its success would replay the first one for ever.
+         *
+         * A FAILURE DELIBERATELY KEEPS THE KEY. Nothing was charged — the
+         * gateway releases the reservation — and the reader pressing the button
+         * again means "that one, again", so the same key lets the gateway
+         * answer for the attempt rather than opening a second one.
+         */
+        attempt.current = null;
       } catch (error: unknown) {
         const code = error instanceof Error ? error.message : 'INTERNAL';
         const key = FAILURE_KEYS[code];
         setFailure(key ? labels[key] : labels.failed);
       } finally {
+        inFlight.current = false;
         setBusy(false);
       }
     },

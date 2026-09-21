@@ -1097,3 +1097,148 @@ describe('configuration refusals happen before any charge', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 });
+
+describe('A TRANSIENT FAILURE DOES NOT POISON ITS IDEMPOTENCY KEY (PHASE 2)', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR.
+   *
+   * `#replayIfRecorded` replayed EVERY terminal status, failures included. So
+   * one provider timeout poisoned that idempotency key permanently: the caller
+   * retried, the gateway handed back the recorded failure without calling
+   * anybody, and the request could never succeed. Retrying was not slow or
+   * expensive — it was impossible.
+   *
+   * It stayed invisible because the Creative Studio minted a fresh key on every
+   * click, which hid this and introduced its own defect (a double click then
+   * charged twice). The rule was wrong for every caller of the gateway:
+   * content generation, Brand Brain, the Copilot and analytics explanations
+   * all shared it.
+   *
+   * RE-RUNNING CHARGES ONCE. A failed request releases its reservation, so
+   * nothing was taken for the attempt being superseded.
+   */
+
+  it('A RETRY AFTER A TIMEOUT ACTUALLY RUNS, and settles exactly once', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const before = await walletOf(workspaceId);
+    const input = request(workspaceId);
+
+    // The provider is down for this attempt. `times` is high enough to cover
+    // every model the route may try, so the request fails rather than falling
+    // back to a healthy one.
+    mock.program({ failWith: 'PROVIDER_UNAVAILABLE', times: 10 });
+    const failed = await gateway.execute(input);
+    expect(failed.status).toBe('FAILED');
+    expect(failed.creditsChargedMilli).toBe(0n);
+
+    // The provider recovers, and the customer presses generate again.
+    mock.reset();
+
+    // THE SAME KEY. Before the fix this returned the recorded failure and never
+    // reached the provider again, so the request could never succeed.
+    const retried = await gateway.execute(input);
+
+    expect(retried.status).toBe('SUCCEEDED');
+    expect(retried.replayed).toBe(false);
+    expect(retried.requestId).not.toBe(failed.requestId);
+    expect(mock.calls.length).toBeGreaterThan(0);
+
+    // SETTLED EXACTLY ONCE: the failure charged nothing, the success charged
+    // its own cost, and the wallet moved by that and no more.
+    const after = await walletOf(workspaceId);
+    expect(before.balance - after.balance).toBe(retried.creditsChargedMilli);
+    expect(after.reserved).toBe(0n);
+    expect(await openReservations(workspaceId)).toBe(0);
+  });
+
+  it('THE FAILED ATTEMPT IS KEPT, renamed rather than deleted', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const input = request(workspaceId);
+
+    mock.program({ failWith: 'NETWORK_ERROR', times: 10 });
+    const failed = await gateway.execute(input);
+    expect(failed.status).toBe('FAILED');
+    mock.reset();
+    await gateway.execute(input);
+
+    // Its cost, its classification and its timing are the record of what
+    // happened; only the key is moved aside, and suffixed with the row's own id
+    // so the new name cannot collide.
+    const superseded = await platform.aiRequest.findUniqueOrThrow({
+      where: { id: failed.requestId },
+    });
+    expect(superseded.status).toBe('FAILED');
+    expect(superseded.idempotencyKey).toBe(
+      `${input.idempotencyKey}#superseded:${failed.requestId}`,
+    );
+  });
+
+  it('A DETERMINISTIC REFUSAL IS STILL REPLAYED — it would only refuse again', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const before = await walletOf(workspaceId);
+    const input = request(workspaceId);
+
+    // A filtered prompt is filtered every time. Calling the provider again
+    // would spend a round trip to be told the same thing.
+    mock.program({ failWith: 'CONTENT_FILTERED', times: 10 });
+    const first = await gateway.execute(input);
+    expect(first.status).toBe('FAILED');
+    const callsAfterFirst = mock.calls.length;
+
+    const second = await gateway.execute(input);
+
+    expect(second.requestId).toBe(first.requestId);
+    expect(second.replayed).toBe(true);
+    expect(mock.calls).toHaveLength(callsAfterFirst);
+    expect((await walletOf(workspaceId)).balance).toBe(before.balance);
+  });
+
+  it('A SUCCESS IS STILL REPLAYED — the retry rule did not weaken that', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const input = request(workspaceId);
+
+    const first = await gateway.execute(input);
+    const callsAfterFirst = mock.calls.length;
+    const afterFirst = await walletOf(workspaceId);
+
+    const second = await gateway.execute(input);
+
+    expect(second.requestId).toBe(first.requestId);
+    expect(second.replayed).toBe(true);
+    expect(mock.calls).toHaveLength(callsAfterFirst);
+    expect(await walletOf(workspaceId)).toEqual(afterFirst);
+  });
+
+  it('TWO RETRIES OF ONE FAILED KEY PRODUCE ONE NEW REQUEST, not two', async () => {
+    mock.reset();
+    const workspaceId = await freshWorkspace(50);
+    const input = request(workspaceId);
+
+    mock.program({ failWith: 'RATE_LIMITED', times: 10 });
+    expect((await gateway.execute(input)).status).toBe('FAILED');
+    mock.reset();
+
+    /*
+     * BOTH RETRIES RACE THE SAME FREED KEY. The conditional rename lets exactly
+     * one move the failed row aside; the loser re-reads and finds either the
+     * winner's finished request or its in-flight one, and `allSettled` is used
+     * because "still running" is a documented answer rather than a failure.
+     */
+    const outcomes = await Promise.allSettled([gateway.execute(input), gateway.execute(input)]);
+
+    // ONE live row under the customer's key — never two charged generations.
+    const live = await platform.aiRequest.count({
+      where: { workspaceId, idempotencyKey: input.idempotencyKey },
+    });
+    expect(live).toBe(1);
+
+    const succeeded = outcomes.filter(
+      (o) => o.status === 'fulfilled' && o.value.status === 'SUCCEEDED',
+    );
+    expect(succeeded.length).toBeGreaterThanOrEqual(1);
+  });
+});
