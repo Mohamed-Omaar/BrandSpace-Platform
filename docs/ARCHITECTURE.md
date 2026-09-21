@@ -902,6 +902,16 @@ idempotent by construction, self-heals after a newly registered metric, and cost
 run that was already reading that table. A workspace whose ensure throws is logged and skipped: one
 tenant's broken state must not stop ingestion for everybody else.
 
+**AND THE ENUMERATION HAD TO ROTATE (D-229).** The first version asked for active connections with
+`analyticsCursors: { none: {} }` — no cursor AT ALL — which repairs "never provisioned" and nothing
+else. A connection holding a PARTIAL set no longer matched and was skipped for ever: an adapter that
+later declares `supportsPostMetrics`, a `supportedGranularities` that grows, one insert that failed, a
+row an operator removed. Dropping the filter alone would starve everything past `take: batch`, which is
+the defect D-182 names, so the sweep orders every ACTIVE connection by
+`social_connection.analyticsCursorsEnsuredAt ASC NULLS FIRST` and parks what it visited — inside the
+tenant's own transaction, beside the ensure it records, so the two commit together and a failed pass is
+not marked done.
+
 ---
 
 ## Phase 9 — Commerce & Onboarding

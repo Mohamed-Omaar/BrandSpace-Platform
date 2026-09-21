@@ -1109,6 +1109,154 @@ describe('a customer can write a post without a model (PHASE 2)', () => {
     expect(items).toBe(1);
   });
 
+  /**
+   * TWO SIMULTANEOUS SUBMITS, NOT TWO SEQUENTIAL ONES.
+   *
+   * The test above proves a RETRY replays, and a retry is the easy half: the
+   * second call reads the first call's committed row and returns it. It says
+   * nothing about the case the guarantee is actually about — two requests in
+   * flight at once under one idempotency key, which is what a double-clicked
+   * button and a browser that re-posts both produce.
+   *
+   * WHY IT WAS BROKEN. Both callers read "no such item", both then inserted.
+   * `create` compiles to a plain INSERT, so the loser took a P2002 — and the
+   * obvious repair, catching it and reading the winner's row, CANNOT WORK HERE:
+   * `withWorkspace` runs each call inside one PostgreSQL transaction, a
+   * constraint violation aborts that transaction, and every statement after it
+   * fails with `current transaction is aborted`. So the customer got a raw
+   * unique-constraint error for pressing a button twice.
+   *
+   * THE BARRIER IS WHAT MAKES THIS DETERMINISTIC. `Promise.all` over two calls
+   * usually interleaves the way this needs, and "usually" is not a test. The
+   * proxy below holds BOTH callers at `contentItem.createMany` until both have
+   * arrived — after both have done their pre-read — and only then lets them
+   * issue the statement. The race is therefore guaranteed rather than hoped
+   * for, and the thing being measured is PostgreSQL's arbitration of it.
+   *
+   * It touches no production code: the proxy wraps the tenant client the test
+   * hands the service, and delegates every call it does not hold.
+   */
+  it('TWO SIMULTANEOUS SUBMITS CONVERGE ON ONE DRAFT, and neither caller fails', async () => {
+    const idempotencyKey = key();
+    const input = {
+      brandId: fixtures.a.brandId,
+      title: 'Pressed twice at once',
+      locale: 'EN' as const,
+      variants: [
+        { platformKey: 'instagram', body: 'Simultaneous.' },
+        { platformKey: 'linkedin', body: 'Simultaneous, elsewhere.' },
+      ],
+      actorUserId: fixtures.a.userId,
+      actorBrandScope: [] as string[],
+      expiresAt: null,
+      idempotencyKey,
+    };
+
+    const PARTICIPANTS = 2;
+    let arrived = 0;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const barrier = async (): Promise<void> => {
+      arrived += 1;
+      if (arrived >= PARTICIPANTS) release();
+      await gate;
+    };
+
+    /** The tenant client, with the insert held at the barrier. */
+    function heldAtInsert(db: ScopedDb): ScopedDb {
+      return new Proxy(db, {
+        get(target, property, receiver) {
+          const value = Reflect.get(target, property, receiver);
+          if (property !== 'contentItem') return value;
+          const model = value as Record<string, unknown>;
+          return new Proxy(model, {
+            get(modelTarget, modelProperty, modelReceiver) {
+              const method = Reflect.get(modelTarget, modelProperty, modelReceiver);
+              if (modelProperty !== 'createMany' || typeof method !== 'function') return method;
+              return async (...args: unknown[]) => {
+                await barrier();
+                return (method as (...a: unknown[]) => Promise<unknown>).apply(modelTarget, args);
+              };
+            },
+          });
+        },
+      }) as ScopedDb;
+    }
+
+    const attempt = (): Promise<{ item: { id: string }; replayed: boolean }> => {
+      const workspaceId = fixtures.a.workspaceId;
+      return withWorkspace(
+        workspaceId,
+        async (db) =>
+          new ContentLibraryService({
+            db: heldAtInsert(db),
+            workspaceId,
+            policy: CONTENT_POLICY,
+          }).createManualItem(input),
+        { prisma: app },
+      );
+    };
+
+    const before = await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    const requestsBefore = await platform.aiRequest.count({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+
+    const settled = await Promise.allSettled([attempt(), attempt()]);
+
+    // BOTH CALLERS SUCCEED. No raw P2002 reaches anybody, and no caller is told
+    // to try again for having been second by a millisecond.
+    const rejected = settled.filter((outcome) => outcome.status === 'rejected');
+    expect(
+      rejected.map((outcome) => String((outcome as PromiseRejectedResult).reason)),
+    ).toStrictEqual([]);
+
+    const results = settled.map(
+      (outcome) =>
+        (outcome as PromiseFulfilledResult<{ item: { id: string }; replayed: boolean }>).value,
+    );
+
+    // BOTH RECEIVE THE SAME DRAFT.
+    expect(results[0]?.item.id).toBe(results[1]?.item.id);
+
+    // EXACTLY ONE OF THEM CREATED IT; the other is a replay and says so.
+    expect(results.filter((result) => result.replayed === false)).toHaveLength(1);
+    expect(results.filter((result) => result.replayed === true)).toHaveLength(1);
+
+    // ONE ROW, AND ONE SET OF VARIANTS. The loser wrote nothing at all.
+    const items = await platform.contentItem.findMany({
+      where: { workspaceId: fixtures.a.workspaceId, idempotencyKey },
+      select: { id: true },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(results[0]?.item.id);
+    const variants = await platform.contentVariant.findMany({
+      where: { contentItemId: items[0]?.id ?? '' },
+      select: { platformKey: true },
+    });
+    expect(variants).toHaveLength(2);
+    expect(variants.map((variant) => variant.platformKey).sort()).toStrictEqual([
+      'instagram',
+      'linkedin',
+    ]);
+
+    // AND THE ZERO-COST PROPERTIES SURVIVE THE RACE.
+    const item = await platform.contentItem.findUniqueOrThrow({ where: { id: items[0]!.id } });
+    expect(item.origin).toBe('HUMAN');
+    expect(item.aiRequestId).toBeNull();
+    const after = await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    expect(after.balanceMilliCredits).toBe(before.balanceMilliCredits);
+    expect(await platform.aiRequest.count({ where: { workspaceId: fixtures.a.workspaceId } })).toBe(
+      requestsBefore,
+    );
+  });
+
   it('ANOTHER WORKSPACE CANNOT READ IT, and cannot author into this brand', async () => {
     const created = await libraryIn('a', (library) =>
       library.createManualItem({

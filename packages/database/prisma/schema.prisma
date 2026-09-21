@@ -3442,11 +3442,23 @@ model SocialConnection {
   analyticsCursors   AnalyticsIngestionCursor[]
   analyticsRuns      AnalyticsIngestionRun[]
 
+  /// When the maintenance sweep last ensured this connection's INGESTION
+  /// CURSOR SET (D-229). Null means never, and the sweep orders `ASC NULLS
+  /// FIRST`, so a connection nobody has ensured is visited before one that was
+  /// ensured an hour ago and the bounded batch rotates instead of returning the
+  /// same head for ever (D-182).
+  ///
+  /// It is NOT ingestion state. Cursor progress, backoff and freshness live on
+  /// `analytics_ingestion_cursor` and are written only by ingestion; the ensure
+  /// statement is ON CONFLICT DO NOTHING and never resets an existing row.
+  analyticsCursorsEnsuredAt DateTime? @db.Timestamptz(6)
+
   /// The composite target its children point at (D-112).
   @@unique([workspaceId, id], name: "social_connection_workspace_scope")
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, provider, status])
   @@index([status, tokenExpiresAt])
+  @@index([status, analyticsCursorsEnsuredAt])
   @@map("social_connection")
 }
 

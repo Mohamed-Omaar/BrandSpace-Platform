@@ -125,12 +125,19 @@ export function readApprovedFingerprint(value: unknown): ApprovedFingerprint | n
  * FAILS CLOSED IN EVERY UNKNOWN CASE, and each of them is a real one:
  *
  *   - no fingerprint at all — an approval granted before this existed, or a
- *     column that failed to narrow. Refusing is the safe direction, and the
- *     migration backfills existing approvals so this is not a mass refusal.
+ *     column that failed to narrow. THERE IS NO BACKFILL: the migration adds a
+ *     nullable column and writes nothing into it, because a fingerprint derived
+ *     from today's rows would certify exactly the edit this exists to catch. An
+ *     approval predating the column cannot prove what it covered, so it does not
+ *     authorize a publish and the item has to be approved again.
  *   - the variant is absent from the record — it was created AFTER the
  *     approval, so nobody has reviewed it.
  *   - the hashes differ — the words, the hashtags, the link or the pictures
  *     changed after the verdict.
+ *
+ * THIS IS THE PER-VARIANT HALF ONLY. The publish gate calls
+ * `approvalCoversItem`, which asks this question AND the whole-item one; see
+ * that function for why one variant's hash matching is not sufficient.
  */
 export function approvalCoversVariant(
   approved: ApprovedFingerprint | null,
@@ -140,4 +147,53 @@ export function approvalCoversVariant(
   const recorded = approved.variants[variant.id];
   if (recorded === undefined) return false;
   return recorded === variantFingerprint(variant);
+}
+
+/**
+ * May this approval authorize publishing `variantId`, given the item's COMPLETE
+ * current variant set?
+ *
+ * THE VERDICT IS GRANTED OVER THE ITEM, NOT OVER ONE ROW OF IT (D-230). A
+ * reviewer opens a post and approves the post: the two channels it goes out on,
+ * the captions on each, and the fact that there are two of them. So the check
+ * has to be the same shape as the thing that was approved.
+ *
+ * THE DEFECT THIS CLOSES. `contentFingerprint` always stored an `item` hash
+ * that changes when a variant is ADDED or REMOVED — that is what it is for —
+ * and the publish gate compared only `variants[id]`. So the whole-item half was
+ * recorded and never enforced, and this sequence published under a verdict
+ * nobody gave:
+ *
+ *   submit -> approve two channels -> add a third -> publish the first two
+ *
+ * The two original variants are untouched, so their hashes still match; the
+ * reviewer has never seen the third channel, and nothing refuses. Removing a
+ * variant was the mirror image: a post approved as a three-channel campaign
+ * went out as a two-channel one, unchallenged.
+ *
+ * SO BOTH HALVES ARE ASKED, and either one failing is the same answer:
+ *
+ *   1. the item's fingerprint, recomputed over every variant that exists NOW,
+ *      must equal the one recorded at approval — which catches an addition, a
+ *      removal, and any edit to any sibling;
+ *   2. the variant being published must itself be covered — which is implied by
+ *      (1) today and is asked anyway, because it is the narrower statement and
+ *      a future `item` hash that stopped depending on a sibling's contents must
+ *      not silently widen what a verdict authorizes.
+ *
+ * `currentVariants` MUST be every variant of the content item, not a filtered
+ * view: passing only the one being sent would make (1) compare a one-variant
+ * hash against a two-variant one and refuse every legitimate publish.
+ */
+export function approvalCoversItem(
+  approved: ApprovedFingerprint | null,
+  currentVariants: readonly FingerprintedVariant[],
+  variantId: string,
+): boolean {
+  if (!approved) return false;
+  const now = contentFingerprint(currentVariants);
+  if (now.item !== approved.item) return false;
+  const variant = currentVariants.find((candidate) => candidate.id === variantId);
+  if (!variant) return false;
+  return approvalCoversVariant(approved, variant);
 }

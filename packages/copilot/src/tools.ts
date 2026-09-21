@@ -205,8 +205,10 @@ export const COPILOT_TOOLS = [
       locale: z.enum(['AR', 'EN']).default('EN'),
       campaignId: z.string().uuid().optional(),
     }),
-    // `content.create` rather than `content.edit`, because generating SPENDS
-    // CREDITS and that is the distinction the content permissions were split on.
+    // `content.create` rather than `content.edit`, because this tool brings a
+    // NEW draft into the library rather than changing one that already exists.
+    // That it also spends credits is a property of the generation path — see
+    // `spendsCredits` below, which is what the confirmation and the budget read.
     permission: 'content.create',
     brandScope: 'required',
     actionClass: 'INTERNAL_REVERSIBLE',

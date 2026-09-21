@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@brandspace/database';
 import {
   writeAuditEvent,
@@ -380,27 +381,89 @@ export class ContentLibraryService {
 
     const campaignId = await this.#resolveCampaign(input.campaignId ?? null, input.brandId);
 
-    const item = await this.db.contentItem.create({
-      data: {
-        workspaceId: this.workspaceId,
-        brandId: input.brandId,
-        title:
-          input.title.trim().slice(0, 200) || input.variants[0]?.body.slice(0, 120) || 'Untitled',
-        contentType: input.contentType ?? 'POST',
-        primaryLocale: input.locale,
-        status: 'DRAFT',
-        // HUMAN, and no `aiRequestId`. Nothing on this path can set either
-        // differently, which is what makes the zero-credit claim checkable.
-        origin: 'HUMAN',
-        createdByUserId: input.actorUserId,
-        ...(campaignId ? { campaignId } : {}),
-        ...(input.pillar ? { pillar: input.pillar } : {}),
-        ...(input.tags && input.tags.length > 0 ? { tags: [...input.tags] } : {}),
-        arabicDialect: input.locale === 'AR' ? dialect.key : null,
-        idempotencyKey: input.idempotencyKey,
-        expiresAt: input.expiresAt,
-      },
+    /*
+     * THE DATABASE DECIDES WHO WON, AND IT NEVER RAISES TO DO IT.
+     *
+     * The read above closes a SEQUENTIAL retry and nothing more: two requests
+     * carrying one idempotency key can both find no row, and then both insert.
+     * `create` compiles to a plain `INSERT`, so the loser takes a P2002 — and
+     * that is not a recoverable error HERE, because `withWorkspace` runs this
+     * whole callback inside ONE PostgreSQL transaction. A constraint violation
+     * aborts that transaction, so the obvious repair — catch the P2002, read
+     * the winner's row, return it as a replay — issues its read on a
+     * transaction PostgreSQL has already poisoned and fails with
+     * `current transaction is aborted`. Catch-and-re-read is correct only
+     * across transactions, which is not where this code runs.
+     *
+     * `createMany({ skipDuplicates: true })` compiles to
+     * `INSERT ... ON CONFLICT DO NOTHING`, which does not raise and does not
+     * abort anything. The loser's statement BLOCKS on the winner's speculative
+     * insertion lock, waits for that transaction to commit, and then reports
+     * zero rows — so `count === 0` is PROOF that somebody else created this
+     * item, decided by PostgreSQL rather than by timing. If the winner rolls
+     * back instead, the insert simply succeeds, so a crash mid-flight does not
+     * leave the key unusable. The same reasoning and the same arbiter as
+     * `recordAutomationEvent` in `@brandspace/database`.
+     *
+     * The id is generated HERE rather than by the default, so the winner knows
+     * its own row without a second read — and the loser re-reads by the unique
+     * key, which is the only handle it has.
+     */
+    const candidateId = randomUUID();
+    const created = await this.db.contentItem.createMany({
+      data: [
+        {
+          id: candidateId,
+          workspaceId: this.workspaceId,
+          brandId: input.brandId,
+          title:
+            input.title.trim().slice(0, 200) || input.variants[0]?.body.slice(0, 120) || 'Untitled',
+          contentType: input.contentType ?? 'POST',
+          primaryLocale: input.locale,
+          status: 'DRAFT',
+          // HUMAN, and no `aiRequestId`. Nothing on this path can set either
+          // differently, which is what makes the zero-credit claim checkable.
+          origin: 'HUMAN',
+          createdByUserId: input.actorUserId,
+          ...(campaignId ? { campaignId } : {}),
+          ...(input.pillar ? { pillar: input.pillar } : {}),
+          ...(input.tags && input.tags.length > 0 ? { tags: [...input.tags] } : {}),
+          arabicDialect: input.locale === 'AR' ? dialect.key : null,
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: input.expiresAt,
+        },
+      ],
+      skipDuplicates: true,
     });
+
+    if (created.count === 0) {
+      /*
+       * WE LOST, AND THE WINNER HAS COMMITTED — the insert above waited for it.
+       * So its variants are visible too: `withWorkspace` commits the item and
+       * its variants together, and there is no window in which one is readable
+       * without the other. This caller writes NOTHING: no variant, no audit
+       * event, no second row. It is a replay, and it says so.
+       */
+      const winner = await this.db.contentItem.findFirst({
+        where: {
+          brandId: input.brandId,
+          createdByUserId: input.actorUserId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
+      /* c8 ignore next -- the conflict we lost to is the row we just looked up. */
+      if (!winner) throw contentItemNotFound();
+      return {
+        item: winner,
+        variants: await this.db.contentVariant.findMany({
+          where: { contentItemId: winner.id },
+          orderBy: { createdAt: 'asc' },
+        }),
+        replayed: true,
+      };
+    }
+
+    const item = await this.db.contentItem.findUniqueOrThrow({ where: { id: candidateId } });
 
     const written: ContentVariant[] = [];
     for (const [index, variant] of input.variants.entries()) {

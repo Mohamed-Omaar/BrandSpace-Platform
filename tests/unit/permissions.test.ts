@@ -99,4 +99,48 @@ describe('role definitions', () => {
       for (const key of role.permissionKeys) expect(workspaceKeys.has(key)).toBe(false);
     }
   });
+
+  /**
+   * `content.create` IS THE RIGHT TO CREATE A DRAFT, NOT THE RIGHT TO SPEND
+   * (D-231).
+   *
+   * It was described as "Generate content with AI (spends credits)" because
+   * generation was the only way a `content_item` could come into being. Phase 2
+   * added manual authoring — no model, no reservation, no ledger entry — under
+   * this same key, and a description that tells an operator every use of a
+   * permission moves money, when half of them do not, is how a role gets
+   * withheld from somebody who needed it.
+   *
+   * THE GRANTS ARE PINNED, so relabelling can never be the cover for widening.
+   * This correction changed what the key SAYS and nothing about who holds it.
+   */
+  it('describes content.create by what it creates, and does not claim it always spends', () => {
+    const permission = WORKSPACE_PERMISSIONS.find((p) => p.key === 'content.create');
+    expect(permission).toBeDefined();
+    expect(permission?.description).not.toMatch(/spends credits/i);
+    expect(permission?.description).toMatch(/draft/i);
+
+    const holders = ROLE_DEFINITIONS.filter((role) =>
+      role.permissionKeys.includes('content.create'),
+    ).map((role) => role.key);
+    expect(holders).toEqual([
+      'workspace_owner',
+      'workspace_admin',
+      'marketing_manager',
+      'content_creator',
+      'copywriter',
+    ]);
+  });
+
+  /**
+   * And the keys that DO always spend still say so, so the correction above is
+   * a narrowing of one claim rather than the removal of a useful warning.
+   */
+  it('keeps the spending warning on the permissions that always spend', () => {
+    for (const key of ['analytics.explain', 'copilot.use']) {
+      const permission = WORKSPACE_PERMISSIONS.find((p) => p.key === key);
+      expect(permission, key).toBeDefined();
+      expect(permission?.description, key).toMatch(/spends credits/i);
+    }
+  });
 });

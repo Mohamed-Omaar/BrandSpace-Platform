@@ -650,28 +650,78 @@ export function ComposerView({
           </div>
 
           {/*
-            THE MANUAL FORM CARRIES NO FIELDS OF ITS OWN.
+            THE MANUAL FORM MIRRORS THE CONTROLS ABOVE; IT DOES NOT DUPLICATE
+            THEM.
 
-            Every value in it is already on the screen above, in the controls
+            Every hidden value here is already on the screen, in the controls
             the generate button reads — so the two verbs act on ONE set of
             answers and cannot drift apart. The button sits in the action row
             through `form=`, which is what that attribute is for.
+
+            `contentType` WAS BEING DROPPED (PHASE 2 correction). The selector
+            is right there and the service takes it, but the form did not send
+            it, so a person who chose REEL and wrote it themselves got a POST.
+
+            THE CAMPAIGN IS THE ONE FIELD THIS FORM OWNS, because it is the one
+            with a pre-draft meaning and no other pre-draft home: you file a
+            post under a campaign as you write it. The options are narrowed
+            server-side to the brand being composed for and to the member's
+            BrandScope, and `createManualItem` re-resolves the id against the
+            brand regardless — nothing here is an authorization. With no single
+            brand resolved there are no options and the control is not shown.
+
+            HASHTAGS AND MEDIA ARE DELIBERATELY NOT HERE. Both are properties
+            of a VARIANT, not of the item — the service takes them per variant,
+            each channel has its own media ceiling, and the picker is built to
+            live inside a variant's own form so the caption and its pictures
+            save in one submission (D-184). The draft this button creates opens
+            immediately in this same composer, where the per-variant hashtag
+            field and media picker already exist and already work. A single
+            pre-draft field applying one answer to every channel would be a
+            SECOND place to set one thing, and the first place to drift.
 
             THE IDEMPOTENCY KEY IS THE COMPOSER'S OWN, unchanged: derived from
             the brand, the words, the channels and the language, so a double
             submit or a reloaded POST returns the first draft instead of making
             a second (AC-11.2 applied to a path with no gateway in it).
           */}
-          <form id={manualFormId} action={actions.createManualDraft} hidden>
-            <input type="hidden" name="locale" value={locale} />
-            <input type="hidden" name="brandId" value={brandId} />
-            <input type="hidden" name="contentLocale" value={contentLocale} />
-            <input type="hidden" name="body" value={brief} />
-            <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-            {selected.map((platformKey) => (
-              <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
-            ))}
-          </form>
+          {draft === null ? (
+            <form
+              id={manualFormId}
+              action={actions.createManualDraft}
+              data-testid="content-manual-form"
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="brandId" value={brandId} />
+              <input type="hidden" name="contentLocale" value={contentLocale} />
+              <input type="hidden" name="contentType" value={contentType} />
+              <input type="hidden" name="body" value={brief} />
+              <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+              {selected.map((platformKey) => (
+                <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
+              ))}
+              {campaigns.length > 0 ? (
+                <div className="cs-field">
+                  <label htmlFor={`${fieldId}-manual-campaign`}>
+                    {t['campaigns.composerLabel']}
+                  </label>
+                  <select
+                    id={`${fieldId}-manual-campaign`}
+                    name="campaignId"
+                    defaultValue=""
+                    data-testid="content-manual-campaign"
+                  >
+                    <option value="">{t['campaigns.composerNone']}</option>
+                    {campaigns.map((campaign) => (
+                      <option key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </form>
+          ) : null}
         </section>
 
         {/* ------------------------------------ the generated variants --- */}
@@ -737,19 +787,32 @@ export function ComposerView({
                         {t[`content.validation.${variant.validationState}`]}
                       </span>
                     </div>
-                    {variant.hashtags.length > 0 ? (
-                      <>
-                        <label htmlFor={`${fieldId}-${variant.id}-tags`} className="cs-sr-only">
-                          {t['content.composer.hashtags']}
-                        </label>
-                        <input
-                          id={`${fieldId}-${variant.id}-tags`}
-                          name="hashtags"
-                          defaultValue={variant.hashtags.map((tag) => `#${tag}`).join(' ')}
-                          readOnly={!can.edit}
-                        />
-                      </>
-                    ) : null}
+                    {/*
+                      THE HASHTAG FIELD IS ALWAYS RENDERED (PHASE 2 correction).
+
+                      It used to appear only when the variant ALREADY had
+                      hashtags, which made it an editor for a value nothing
+                      could create: a draft that came back without any — every
+                      manually written post, and any generation the model left
+                      bare — had no way to gain one, ever. The field is the only
+                      hashtag input in the product, so hiding it on empty made
+                      the whole capability unreachable rather than tidy.
+
+                      Empty submits an empty string, which `saveVariantAction`
+                      already parses to an empty list — the same answer as
+                      before, for a variant nobody touched.
+                    */}
+                    <label htmlFor={`${fieldId}-${variant.id}-tags`} className="cs-sr-only">
+                      {t['content.composer.hashtags']}
+                    </label>
+                    <input
+                      id={`${fieldId}-${variant.id}-tags`}
+                      name="hashtags"
+                      defaultValue={variant.hashtags.map((tag) => `#${tag}`).join(' ')}
+                      placeholder={t['content.composer.hashtags']}
+                      readOnly={!can.edit}
+                      data-testid={`content-hashtags-${variant.platformKey}`}
+                    />
 
                     {/*
                       PHASE 8 — MEDIA, INSIDE THE VARIANT'S OWN FORM (AC-27.3).

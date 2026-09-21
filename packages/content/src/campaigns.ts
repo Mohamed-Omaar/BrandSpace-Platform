@@ -288,17 +288,6 @@ export class CampaignService {
      * The composer's campaign control submits with the rest of the draft form,
      * so "save this draft" re-sends whatever campaign it already had. Once that
      * campaign is ARCHIVED, `#require` below would refuse it — and the reader
-     * would be unable to save an unrelated edit until they detached the draft
-     * from a campaign they had not asked to leave. Returning early keeps an
-     * unchanged value harmless without letting an archived campaign be chosen:
-     * a DIFFERENT id still goes through the full check.
-     */
-    /*
-     * RE-ASSERTING THE CAMPAIGN A DRAFT IS ALREADY IN IS A NO-OP (PHASE 2).
-     *
-     * The composer's campaign control submits with the rest of the draft form,
-     * so "save this draft" re-sends whatever campaign it already had. Once that
-     * campaign is ARCHIVED, `#require` below would refuse it — and the reader
      * could not save an unrelated edit until they detached the draft from a
      * campaign they had not asked to leave. Returning early keeps an unchanged
      * value harmless without letting an archived campaign be CHOSEN: a

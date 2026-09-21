@@ -196,8 +196,9 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
        * NOT `analytics.export`: a file leaves the product and outlives every
        * permission change afterwards, and that is a different amount of trust
        * from looking at a chart. NOT `analytics.explain` either — it spends
-       * credits, and this role already has `content.create` for the spending it
-       * is meant to do. NOT `strategy.manage`: accepting a strategy is the
+       * credits, and the generation this role already reaches through
+       * `content.create` is the spending it is meant to do (that key is the
+       * right to create a draft, by hand or with a model — D-231). NOT `strategy.manage`: accepting a strategy is the
        * Marketing Manager decision. NOT `automation.manage`, for the same
        * reason `publishing.manage` is withheld.
        */
@@ -303,9 +304,9 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // role no asset authority at all, and `use` is a content decision rather
       // than an approval one.
       'assets.read',
-      // Phase 5B-2. Reviews content, so it READS drafts. It does not
-      // generate — that spends credits — and it does not edit: an approver
-      // who rewrites the thing they are approving is not approving it.
+      // Phase 5B-2. Reviews content, so it READS drafts. It does not CREATE
+      // one — by hand or with a model (D-231) — and it does not edit: an
+      // approver who rewrites the thing they are approving is not approving it.
       'content.read',
       // Phase 5B-3 — scope item 6, and the authority this role was named for.
       // `approve` WITHOUT `edit`, and without `submit`: judging a proposal and

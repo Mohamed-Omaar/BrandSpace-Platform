@@ -16,7 +16,13 @@ import {
   type AnalyticsPolicy,
   type ObservationInput,
 } from '@brandspace/analytics';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import { MaintenanceScheduler } from '../../apps/api/src/scheduler';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  platformRoleClient,
+  type IsolationFixtures,
+} from './fixtures';
 
 /**
  * Phase 7 — the analytics SERVICES, against real PostgreSQL.
@@ -42,17 +48,24 @@ import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from '
  */
 
 let app: PrismaClient;
+/**
+ * The PLATFORM identity, for the cross-tenant reads and the rotation stamp the
+ * scheduler's own enumeration uses. Tenant work still goes through `app`.
+ */
+let platform: PrismaClient;
 let fixtures: IsolationFixtures;
 let policy: AnalyticsPolicy;
 
 beforeAll(async () => {
   app = appRoleClient();
+  platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
   policy = parseAnalyticsPolicy(defaultPayload('analytics'));
 }, 60_000);
 
 afterAll(async () => {
   await app?.$disconnect();
+  await platform?.$disconnect();
 });
 
 const inA = <T>(fn: (db: TenantScopedClient) => Promise<T>) =>
@@ -712,5 +725,184 @@ describe('CURSORS ARE ACTUALLY CREATED FOR CONNECTED ACCOUNTS (PHASE 2)', () => 
       { prisma: app },
     );
     expect(await cursorCount(fixtures.b.workspaceId)).toBe(before);
+  });
+
+  /**
+   * A PARTIAL SET IS REPAIRED, and only the missing part of it is written.
+   *
+   * This is the state the first version of the sweep could not see at all: not
+   * "no cursors" but "some cursors", which is what a connection looks like
+   * after an adapter gains `supportsPostMetrics`, after `supportedGranularities`
+   * grows a value, or after any single insert failed. `ensureIngestionCursors`
+   * was always built to insert the COMPLETE required set idempotently — this
+   * measures that it does, and that the rows already present are untouched.
+   */
+  it('REPAIRS A PARTIAL CURSOR SET, creating only what is missing', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    );
+    const complete = await cursorCount(workspaceId);
+    expect(complete).toBeGreaterThan(1);
+
+    // Give the survivors progress, then remove ONE row — a cursor the adapter
+    // requires and the connection no longer has.
+    const moved = new Date('2026-08-15T00:00:00.000Z');
+    const removed = await withWorkspace(
+      workspaceId,
+      async (db) => {
+        await db.analyticsIngestionCursor.updateMany({
+          where: { workspaceId },
+          data: { lastCoveredPeriodEnd: moved, consecutiveFailureCount: 2 },
+        });
+        const victim = await db.analyticsIngestionCursor.findFirstOrThrow({
+          where: { workspaceId },
+          select: { id: true, socialConnectionId: true, subjectType: true, granularity: true },
+          orderBy: { id: 'asc' },
+        });
+        await db.analyticsIngestionCursor.delete({ where: { id: victim.id } });
+        return victim;
+      },
+      { prisma: app },
+    );
+    expect(await cursorCount(workspaceId)).toBe(complete - 1);
+
+    const repaired = (await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    )) as { created: number };
+
+    // EXACTLY THE MISSING ONE, and the set is whole again.
+    expect(repaired.created).toBe(1);
+    expect(await cursorCount(workspaceId)).toBe(complete);
+
+    const state = await withWorkspace(
+      workspaceId,
+      async (db) =>
+        db.analyticsIngestionCursor.findMany({
+          where: { workspaceId },
+          select: {
+            socialConnectionId: true,
+            subjectType: true,
+            granularity: true,
+            lastCoveredPeriodEnd: true,
+            consecutiveFailureCount: true,
+          },
+        }),
+      { prisma: app },
+    );
+    const replacement = state.find(
+      (row) =>
+        row.socialConnectionId === removed.socialConnectionId &&
+        row.subjectType === removed.subjectType &&
+        row.granularity === removed.granularity,
+    );
+    expect(replacement).toBeDefined();
+    // The replacement is NEW, so it starts from nothing …
+    expect(replacement?.lastCoveredPeriodEnd).toBeNull();
+    // … and every survivor kept its progress and its retry state. A repair pass
+    // that reset either would lose a window of history, or re-fetch one.
+    const survivors = state.filter((row: (typeof state)[number]) => row !== replacement);
+    expect(survivors.length).toBe(complete - 1);
+    expect(
+      survivors.every((row) => row.lastCoveredPeriodEnd?.toISOString() === moved.toISOString()),
+    ).toBe(true);
+    expect(survivors.every((row) => row.consecutiveFailureCount === 2)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * THE SWEEP'S OWN ENUMERATION, DRIVEN FOR REAL (PHASE 2 correction, D-229).
+ *
+ * The suite above proves `ensureIngestionCursors` repairs a partial set. That
+ * is only half the guarantee, and it was the half that already worked: the
+ * scheduler asked for ACTIVE connections with `analyticsCursors: { none: {} }`,
+ * so a connection holding ONE cursor stopped matching and the repair pass was
+ * never run for it again. The function could fix the state and the sweep could
+ * not see it.
+ *
+ * So these tests drive `MaintenanceScheduler.sweepAnalytics` itself rather than
+ * the function underneath it — the enumeration is the thing under test, and an
+ * assertion against a re-implementation of the query would pass against the
+ * defect.
+ */
+describe('THE ANALYTICS SWEEP REACHES A CONNECTION THAT ALREADY HAS CURSORS (PHASE 2)', () => {
+  const registry = createAnalyticsRegistry({ environment: 'DEVELOPMENT' });
+  const scheduler = () => new MaintenanceScheduler({ environment: 'DEVELOPMENT' });
+
+  /**
+   * Send every OTHER active connection to the back of the rotation, so a
+   * bounded batch is this test's connection rather than whatever another suite
+   * left behind. That is the cursor's own mechanism used deliberately — the
+   * same device `phase7-round4` uses for the automation queue — not a way
+   * around it.
+   */
+  async function parkEveryoneElse(connectionId: string): Promise<void> {
+    await platform.socialConnection.updateMany({
+      where: { id: { not: connectionId } },
+      data: { analyticsCursorsEnsuredAt: new Date('2099-01-01T00:00:00.000Z') },
+    });
+    await platform.socialConnection.updateMany({
+      where: { id: connectionId },
+      data: { analyticsCursorsEnsuredAt: null },
+    });
+  }
+
+  it('REPAIRS A PARTIAL SET THROUGH THE SWEEP — the `{ none: {} }` regression', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    const connectionId = fixtures.a.socialConnectionId;
+
+    await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    );
+
+    const before = await platform.analyticsIngestionCursor.findMany({
+      where: { socialConnectionId: connectionId },
+      select: { id: true, subjectType: true, granularity: true },
+      orderBy: { id: 'asc' },
+    });
+    expect(before.length).toBeGreaterThan(1);
+
+    // ONE cursor goes missing. The connection still has others, which is
+    // exactly what made it invisible to the old enumeration.
+    const victim = before[0]!;
+    await platform.analyticsIngestionCursor.delete({ where: { id: victim.id } });
+    await parkEveryoneElse(connectionId);
+
+    await scheduler().sweepAnalytics(50);
+
+    const after = await platform.analyticsIngestionCursor.findMany({
+      where: { socialConnectionId: connectionId },
+      select: { subjectType: true, granularity: true },
+    });
+    expect(after.length).toBe(before.length);
+    expect(
+      after.some(
+        (row) => row.subjectType === victim.subjectType && row.granularity === victim.granularity,
+      ),
+    ).toBe(true);
+  });
+
+  it('PARKS WHAT IT VISITED, so the bounded batch rotates instead of repeating', async () => {
+    const connectionId = fixtures.a.socialConnectionId;
+    await parkEveryoneElse(connectionId);
+
+    await scheduler().sweepAnalytics(50);
+
+    const visited = await platform.socialConnection.findUniqueOrThrow({
+      where: { id: connectionId },
+      select: { analyticsCursorsEnsuredAt: true, status: true },
+    });
+    expect(visited.status).toBe('ACTIVE');
+    // A null stamp after a successful pass would mean the sweep returns the
+    // same head of the queue for ever and never reaches the tail (D-182).
+    expect(visited.analyticsCursorsEnsuredAt).not.toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import {
-  approvalCoversVariant,
+  approvalCoversItem,
   brandIdQueryFilter,
   readApprovedFingerprint,
   systemClock,
@@ -1231,7 +1231,7 @@ export class PublishPipelineService {
       if (!approval || approval.status !== 'APPROVED') return 'APPROVAL_REVOKED';
 
       /*
-       * AND THE APPROVAL MUST COVER *THIS* VARIANT, AS IT STANDS NOW (D-223).
+       * AND THE APPROVAL MUST COVER THIS ITEM, AS IT STANDS NOW (D-223, D-230).
        *
        * Checking that an approval exists and says APPROVED was the whole gate,
        * and it is not enough: `editVariant` returns an APPROVED item to DRAFT
@@ -1241,15 +1241,21 @@ export class PublishPipelineService {
        * customer's channel under a genuine verdict, with every audit row
        * individually true.
        *
-       * The fingerprint is recomputed here from the row about to be sent and
-       * compared with what the reviewer approved. A difference, a variant that
-       * did not exist at approval time, or an approval too old to carry a
-       * fingerprint at all are all the same answer: this verdict does not
-       * authorize this post. It fails as APPROVAL_REVOKED rather than
-       * publishing, and the history screen already translates that class.
+       * EVERY VARIANT OF THE ITEM IS READ, not only the one being sent, because
+       * the verdict was granted over the POST: its channels, its captions, and
+       * the fact that there were that many of them. Comparing one row's hash
+       * would miss a channel ADDED after approval — the two original variants
+       * are untouched, so they still match — and a channel REMOVED from a
+       * campaign a reviewer approved as a whole.
+       *
+       * A difference anywhere in that set, a variant that did not exist at
+       * approval time, or an approval too old to carry a fingerprint at all are
+       * the same answer: this verdict does not authorize this post. It fails as
+       * APPROVAL_REVOKED rather than publishing, and the history screen already
+       * translates that class.
        */
-      const variantNow = await this.#db.contentVariant.findFirst({
-        where: { id: job.contentVariantId, workspaceId: this.#workspaceId },
+      const variantsNow = await this.#db.contentVariant.findMany({
+        where: { contentItemId: job.contentItemId, workspaceId: this.#workspaceId },
         select: {
           id: true,
           platformKey: true,
@@ -1261,9 +1267,15 @@ export class PublishPipelineService {
           assetIds: true,
         },
       });
-      if (!variantNow) return 'CONTENT_REJECTED';
+      if (!variantsNow.some((variant) => variant.id === job.contentVariantId)) {
+        return 'CONTENT_REJECTED';
+      }
       if (
-        !approvalCoversVariant(readApprovedFingerprint(approval.approvedFingerprint), variantNow)
+        !approvalCoversItem(
+          readApprovedFingerprint(approval.approvedFingerprint),
+          variantsNow,
+          job.contentVariantId,
+        )
       ) {
         return 'APPROVAL_REVOKED';
       }

@@ -4,6 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * The AI Content Studio, end to end, in a real browser.
@@ -366,6 +367,194 @@ test.describe('writing a post by hand', () => {
     // The composer reopens ON the new draft, which is what `?item=` means.
     await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
     await expect(page.getByTestId('content-results')).toContainText(body);
+  });
+
+  /**
+   * EVERY ANSWER THE COMPOSER ALREADY HOLDS REACHES THE DRAFT.
+   *
+   * The first version of the manual form sent five fields and dropped the rest,
+   * so a person who chose REEL got a POST and a person who picked a campaign
+   * got an unfiled draft — the service validated both and was never given
+   * either. This drives the controls a customer actually uses and then reads
+   * the draft back.
+   */
+  test('CARRIES THE CHANNELS, THE TYPE AND THE CAMPAIGN into the draft', async ({ page }) => {
+    await openComposer(page);
+    const body = `Two channels, one campaign, at ${new Date().toISOString()}.`;
+
+    // TWO channels, so the fan-out is observable rather than assumed.
+    const channels = page.getByTestId('content-channel');
+    const count = await channels.count();
+    const picked: string[] = [];
+    for (let index = 0; index < count && picked.length < 2; index += 1) {
+      const channel = channels.nth(index);
+      const key = await channel.getAttribute('data-platform');
+      if (!key) continue;
+      if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
+      picked.push(key);
+    }
+    expect(picked.length).toBe(2);
+
+    await page.getByTestId('content-brief').fill(body);
+    await page
+      .locator('select')
+      .filter({ hasText: /Reel|ريل/ })
+      .first()
+      .selectOption('REEL');
+
+    /*
+     * THE CAMPAIGN CONTROL EXISTS ONLY WHEN THE BRAND HAS ONE, which is a
+     * property of the seed rather than of the feature — so it is used when it
+     * is there and the rest of the assertions stand either way.
+     */
+    const campaignSelect = page.getByTestId('content-manual-campaign');
+    let chosenCampaign: string | null = null;
+    if (await campaignSelect.isVisible().catch(() => false)) {
+      const options = campaignSelect.locator('option');
+      if ((await options.count()) > 1) {
+        chosenCampaign = await options.nth(1).getAttribute('value');
+        if (chosenCampaign) await campaignSelect.selectOption(chosenCampaign);
+      }
+    }
+
+    await page.getByTestId('content-write-manual').click();
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+
+    // ONE VARIANT PER CHANNEL, and the words on both.
+    const variants = page.getByTestId('content-variant');
+    await expect(variants).toHaveCount(2);
+    for (const key of picked) {
+      await expect(
+        page.locator(`[data-testid="content-variant"][data-platform="${key}"]`),
+      ).toHaveCount(1);
+    }
+    await expect(page.getByTestId('content-results')).toContainText(body);
+
+    // THE TYPE THE COMPOSER ASKED FOR, read back off the stored row rather than
+    // off the screen — a screen can render a default and look right.
+    const itemId = new URL(page.url()).searchParams.get('item') ?? '';
+    const stored = await withPlatformPrisma(async (prisma) =>
+      prisma.contentItem.findUnique({
+        where: { id: itemId },
+        select: { contentType: true, campaignId: true, origin: true, aiRequestId: true },
+      }),
+    );
+    expect(stored?.contentType).toBe('REEL');
+    expect(stored?.origin).toBe('HUMAN');
+    expect(stored?.aiRequestId).toBeNull();
+    if (chosenCampaign) expect(stored?.campaignId).toBe(chosenCampaign);
+  });
+
+  /**
+   * HASHTAGS AND MEDIA ARE PER-VARIANT, so they are set on the draft this
+   * button creates — which opens immediately, in this same composer, through
+   * the controls that already exist. This proves that path works for a post a
+   * person wrote, and that a reload shows what was saved.
+   *
+   * The hashtag field is the reason this test exists at all: it used to render
+   * only when the variant ALREADY had hashtags, so a manually written post had
+   * no way to gain one, ever.
+   */
+  test('HASHTAGS AND MEDIA SET ON THE NEW DRAFT SURVIVE A RELOAD', async ({ page }) => {
+    const creds = credentials();
+    const { primaryBrandId } = brandFixtures(creds);
+    const tag = `manual${Date.now().toString(36)}`;
+
+    // One selectable picture for this brand, so the picker has something in it.
+    const assetName = `${tag}.png`;
+    await withPlatformPrisma(async (prisma) => {
+      await prisma.asset.create({
+        data: {
+          workspaceId: creds.customer.workspaceId,
+          brandId: primaryBrandId,
+          name: assetName,
+          kind: 'IMAGE',
+          mimeType: 'image/png',
+          sizeBytes: 2_048,
+          storageKey: `ws/${creds.customer.workspaceId}/manual/${tag}`,
+          checksumSha256: `${tag}-checksum`,
+          tags: [tag],
+          scanStatus: 'CLEAN',
+          scannedAt: new Date(),
+          status: 'READY',
+          currentVersion: 1,
+        },
+      });
+    });
+
+    try {
+      await openComposer(page);
+      const body = `Written by hand, decorated afterwards, at ${new Date().toISOString()}.`;
+      await compose(page, body);
+      await page.getByTestId('content-write-manual').click();
+      await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+
+      /*
+       * REOPEN THE DRAFT ON A CLEAN URL BEFORE EDITING IT.
+       *
+       * `createManualDraftAction` redirects to `?item=…&ok=SAVED`, and so does
+       * `saveVariantAction` — the same marker. So a wait for `ok=SAVED` after
+       * the edit matches the URL the CREATE already left behind and returns
+       * before the edit has run, which is how this test came to read the row
+       * before anything had been written to it. Dropping the marker first makes
+       * the later wait mean what it says.
+       */
+      const draftId = new URL(page.url()).searchParams.get('item') ?? '';
+      expect(draftId).not.toBe('');
+      await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${draftId}`);
+      await expect(page.getByTestId('content-composer')).toBeVisible();
+
+      const variant = page.getByTestId('content-variant').first();
+      const platformKey = await variant.getAttribute('data-platform');
+      expect(platformKey).toBeTruthy();
+
+      // THE FIELD IS THERE ON A DRAFT THAT HAS NO HASHTAGS. That is the fix.
+      const hashtags = page.getByTestId(`content-hashtags-${platformKey}`);
+      await expect(hashtags).toBeVisible();
+      await hashtags.fill('#launch #autumn');
+
+      const picker = variant.locator('input[type="checkbox"]');
+      const hasMedia = (await picker.count()) > 0;
+      if (hasMedia) await picker.first().check();
+
+      // The field still holds what was typed at the moment of submission.
+      await expect(hashtags).toHaveValue('#launch #autumn');
+      await expect(variant.locator('input[name="hashtags"]')).toHaveValue('#launch #autumn');
+
+      /*
+       * WAIT FOR THE SAVE, NOT FOR THE URL TO STILL HAVE `item` IN IT. The
+       * composer is already on `?item=…`, so a predicate that only checks for
+       * that matches the CURRENT page and returns before the action has run —
+       * which is how the first version of this test read the row back before
+       * anything had been written to it. `ok=SAVED` is what the action redirects
+       * to, so it is the thing that says the save finished.
+       */
+      await variant.locator('button[type="submit"]').first().click();
+      await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
+
+      // THE ROW FIRST — if the save did not happen, say so here rather than
+      // three assertions later in a sentence about rendering.
+      const itemId = draftId;
+      const saved = await withPlatformPrisma(async (prisma) =>
+        prisma.contentVariant.findFirst({
+          where: { contentItemId: itemId },
+          select: { hashtags: true, assetIds: true },
+        }),
+      );
+      expect(saved?.hashtags).toStrictEqual(['launch', 'autumn']);
+      if (hasMedia) expect(saved?.assetIds.length).toBeGreaterThan(0);
+
+      // RELOADED FROM THE SERVER, not from whatever the last render left behind.
+      await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+      await expect(page.getByTestId('content-composer')).toBeVisible();
+      await expect(page.getByTestId(`content-hashtags-${platformKey}`)).toHaveValue(
+        /#launch.*#autumn/,
+      );
+    } finally {
+      await withPlatformPrisma(async (prisma) => {
+        await prisma.asset.deleteMany({ where: { tags: { has: tag } } });
+      });
+    }
   });
 
   test('A SECOND PRESS RETURNS THE SAME DRAFT rather than making another', async ({ page }) => {

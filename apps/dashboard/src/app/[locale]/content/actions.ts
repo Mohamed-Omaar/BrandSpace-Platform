@@ -7,6 +7,7 @@ import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
 import { systemClock } from '@brandspace/shared';
+import { parseContentType } from './content-types';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
@@ -106,6 +107,17 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const brandId = String(formData.get('brandId') ?? '');
     const title = String(formData.get('title') ?? '');
     const contentLocale = String(formData.get('contentLocale') ?? 'AR') === 'EN' ? 'EN' : 'AR';
+    /*
+     * THE TYPE THE COMPOSER ALREADY ASKED FOR (PHASE 2 correction).
+     *
+     * The selector has been on the screen since Phase 5B-2 and the service has
+     * always taken a `contentType`, but this action did not read one — so a
+     * person who chose REEL and wrote the caption themselves got a POST, and
+     * every ceiling derived from the type was the wrong ceiling. Parsed against
+     * the list the selector was rendered from rather than trusted; a value that
+     * list does not carry is not passed on and the service's own default stands.
+     */
+    const contentType = parseContentType(formData.get('contentType'));
     const body = String(formData.get('body') ?? '');
     const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
     const campaignId = String(formData.get('campaignId') ?? '') || null;
@@ -129,6 +141,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
         brandId,
         title,
         locale: contentLocale,
+        ...(contentType ? { contentType } : {}),
         variants: platformKeys.map((platformKey) => ({
           platformKey,
           body,

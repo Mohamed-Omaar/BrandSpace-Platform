@@ -553,12 +553,18 @@ scheduled when its variant is edited — unscheduling somebody's post from an ed
 the calendar owns that edge. So `submit → approve → schedule → edit the caption → publish` sent words
 nobody had reviewed.
 
-The preflight now recomputes the content fingerprint (`@brandspace/shared`) from the variant it is about
-to send and compares it to `Approval.approvedFingerprint`. A mismatch is `APPROVAL_REVOKED` — the
-existing refusal, because it is the same fact: the approval no longer covers this post. The fingerprint
-spans the fields that decide what gets published (body, hashtags, first comment, link, asset ids,
-platform, locale) and deliberately excludes title, tags, pillar and campaign, which are properties of
-the work rather than of the post.
+The preflight now recomputes the content fingerprint (`@brandspace/shared`) and compares it to
+`Approval.approvedFingerprint`. A mismatch is `APPROVAL_REVOKED` — the existing refusal, because it is
+the same fact: the approval no longer covers this post. The fingerprint spans the fields that decide
+what gets published (body, hashtags, first comment, link, asset ids, platform, locale) and deliberately
+excludes title, tags, pillar and campaign, which are properties of the work rather than of the post.
+
+**IT READS EVERY VARIANT OF THE ITEM, NOT ONLY THE ONE BEING SENT (D-230).** The verdict was granted
+over the POST — its channels, its captions, and the fact that there were that many of them — so the
+check has the same shape. A first pass compared only `variants[id]`, which published under a verdict
+nobody gave: approve two channels, add a third, and the two originals are untouched, their hashes still
+match, and nothing refuses. Removing a channel was the mirror image. `approvalCoversItem` compares the
+whole-item hash AND the specific variant's, and either failing is `APPROVAL_REVOKED`.
 
 The gate reads `latestForItem`, not `openForItem`. `openForItem` returns only `PENDING` approvals, so the
 DECIDED approval a scheduled post actually publishes under was invisible to it.
