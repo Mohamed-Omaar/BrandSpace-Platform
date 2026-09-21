@@ -10,6 +10,7 @@ export * from './mfa';
 export * from './password';
 export * from './platform-session';
 export * from './realms';
+export * from './role-assignment';
 export * from './signup';
 export * from './support-mode';
 export * from './workspaces';

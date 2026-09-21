@@ -60,7 +60,7 @@ export const envSchema = z.object({
   STORAGE_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
 
   // --- Hostnames (D-04) -----------------------------------------------------
-  PUBLIC_WEB_URL: z.string().url().default('http://localhost:3000'),
+  PUBLIC_WEB_URL: z.string().url().optional(),
   DASHBOARD_URL: z.string().url().default('http://localhost:3001'),
   ADMIN_URL: z.string().url().default('http://localhost:3002'),
   API_URL: z.string().url().default('http://localhost:3003'),
@@ -132,8 +132,8 @@ export const envSchema = z.object({
    * time rather than written down in code, which is what lets staging use its
    * own hostnames with no code change.
    */
-  PUBLIC_API_BASE_URL: z.string().url().default('http://localhost:3003'),
-  PUBLIC_DASHBOARD_BASE_URL: z.string().url().default('http://localhost:3001'),
+  PUBLIC_API_BASE_URL: z.string().url().optional(),
+  PUBLIC_DASHBOARD_BASE_URL: z.string().url().optional(),
   /** Where the dashboard reaches the API server-side; internal, not browser-visible. */
   BRANDSPACE_API_URL: z.string().url().default('http://localhost:3003'),
 
@@ -214,6 +214,22 @@ export type KeyDomainName = keyof typeof KEY_DOMAIN_VARIABLES;
 const ALL_KEY_DOMAINS = Object.keys(KEY_DOMAIN_VARIABLES) as readonly KeyDomainName[];
 
 /**
+ * The browser-visible origins. `DASHBOARD_URL`, `ADMIN_URL` and `API_URL` are
+ * deliberately NOT here: no code in `apps/` or `packages/` reads any of them
+ * (verified by exhaustive grep), so requiring or https-checking them would be
+ * enforcing a contract nothing consumes. They remain in the schema as the
+ * documentation they currently are; giving them a consumer or removing them is
+ * a separate change.
+ */
+const PUBLIC_URL_NAMES = [
+  'PUBLIC_WEB_URL',
+  'PUBLIC_API_BASE_URL',
+  'PUBLIC_DASHBOARD_BASE_URL',
+] as const;
+
+type PublicUrlName = (typeof PUBLIC_URL_NAMES)[number];
+
+/**
  * Which key domains each production service is permitted to hold — and, by
  * omission, which it is refused.
  *
@@ -239,6 +255,52 @@ const PERMITTED_KEY_DOMAINS: Record<StartupServiceProfile, readonly KeyDomainNam
   admin: ['platform'],
   api: ALL_KEY_DOMAINS,
   worker: ['social'],
+};
+
+/**
+ * THE PUBLIC URLS EACH SERVICE ACTUALLY USES — the same shape as the table
+ * above, and for the same reason.
+ *
+ * WHAT THIS FIXES. The https rule used to be one line outside every profile
+ * branch:
+ *
+ *     if (env.PUBLIC_WEB_URL.startsWith('http://') ||
+ *         env.PUBLIC_API_BASE_URL.startsWith('http://')) throw
+ *
+ * Two variables, named by hand, applied to all five services. `web` reads
+ * NEITHER of them — `apps/web/src` reads no environment variable at all beyond
+ * `NEXT_RUNTIME` — and the blueprint correctly did not set
+ * `PUBLIC_API_BASE_URL` on it. But the schema defaulted the absent variable to
+ * `http://localhost:3003`, so the rule fired on a value nobody configured, and
+ * the production marketing service refused to boot with a message about OAuth
+ * callbacks it does not have.
+ *
+ * The defaults are gone (an absent URL is now `undefined`, not a localhost
+ * string), and the rule is driven by this table instead of by a hand-written
+ * pair. A service is required to carry exactly the origins it consumes:
+ *
+ *   web        NONE. It renders public pages and reads no URL variable.
+ *   dashboard  `PUBLIC_DASHBOARD_BASE_URL` — where its own links point.
+ *   admin      `PUBLIC_API_BASE_URL` — it calls the API's public origin.
+ *   api        both: every OAuth callback and webhook is built from the first,
+ *              and every customer return and email link from the second.
+ *   worker     NONE. It consumes queues; no package it imports reads a public
+ *              URL (verified by exhaustive grep over `packages/`).
+ *   complete   all three: the local and CI profile, which is not a deployment.
+ *
+ * SEPARATELY FROM REQUIREMENT, ANY OF THE THREE THAT IS SET MUST BE https IN
+ * PRODUCTION. Presence now means somebody configured it, so an `http://` value
+ * is a real misconfiguration wherever it appears rather than an artefact of a
+ * default — and a stray one on a service that does not need it is still worth
+ * refusing.
+ */
+const PROFILE_PUBLIC_URLS: Record<StartupServiceProfile, readonly PublicUrlName[]> = {
+  complete: ['PUBLIC_WEB_URL', 'PUBLIC_API_BASE_URL', 'PUBLIC_DASHBOARD_BASE_URL'],
+  web: [],
+  dashboard: ['PUBLIC_DASHBOARD_BASE_URL'],
+  admin: ['PUBLIC_API_BASE_URL'],
+  api: ['PUBLIC_API_BASE_URL', 'PUBLIC_DASHBOARD_BASE_URL'],
+  worker: [],
 };
 
 function requireProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
@@ -327,6 +389,46 @@ function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfi
   } else {
     forbidProductionValue(env, 'AWS_ACCESS_KEY_ID');
     forbidProductionValue(env, 'AWS_SECRET_ACCESS_KEY');
+  }
+}
+
+/**
+ * The public-URL contract, for one service.
+ *
+ * TWO RULES, AND THEY ANSWER DIFFERENT QUESTIONS.
+ *
+ * 1. EVERY URL THE PROFILE CONSUMES MUST BE PRESENT. A service that builds an
+ *    OAuth callback, a verification link or a checkout return from an origin it
+ *    was never given fails at the first customer who needs it, which is how
+ *    `PUBLIC_DASHBOARD_BASE_URL` could be absent from a green deployment and
+ *    surface as an INTERNAL error at the first signup. The message names the
+ *    variable and the service, because an operator reading a crash loop needs
+ *    to know which of five services to fix.
+ *
+ * 2. ANY OF THEM THAT IS SET MUST BE https. Not only the ones this profile
+ *    requires: an `http://` origin on a service that does not read it is still
+ *    a configuration error, and refusing it costs nothing now that an absent
+ *    variable is absent rather than silently `http://localhost`.
+ */
+function assertPublicUrlContract(env: StartupEnv, profile: StartupServiceProfile): void {
+  for (const name of PROFILE_PUBLIC_URLS[profile]) {
+    const value = env[name];
+    if (value === undefined || value === '') {
+      throw new Error(
+        `${name} is required in production for the ${profile} service: it is the origin ` +
+          'this process builds customer-visible links from. (No value is ever shown.)',
+      );
+    }
+  }
+
+  for (const name of PUBLIC_URL_NAMES) {
+    const value = env[name];
+    if (typeof value === 'string' && value.startsWith('http://')) {
+      throw new Error(
+        `${name} must use https in production. An OAuth callback or a session cookie ` +
+          'sent over http is readable by anything on the path.',
+      );
+    }
   }
 }
 
@@ -454,12 +556,7 @@ function assertProductionSafety(
     );
   }
 
-  if (env.PUBLIC_WEB_URL.startsWith('http://') || env.PUBLIC_API_BASE_URL.startsWith('http://')) {
-    throw new Error(
-      'Public URLs must use https in production. An OAuth callback or a session cookie ' +
-        'sent over http is readable by anything on the path.',
-    );
-  }
+  assertPublicUrlContract(env, profile);
 }
 
 /**

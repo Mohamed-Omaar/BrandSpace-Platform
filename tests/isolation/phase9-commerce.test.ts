@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
   BillingReconciler,
+  MAX_DELIVERY_ATTEMPTS as MAX_ATTEMPTS,
   CheckoutService,
   CreditNoteService,
   DEVELOPMENT_PROVIDER_KEY,
@@ -145,7 +146,7 @@ async function openSubscriptionCheckout(workspaceId: string, planKey = 'fixture-
 
 async function deliver(event: DevelopmentEventInput, at = new Date()) {
   const signed = signedDelivery(provider, event, at);
-  return reconciler.receive(platform as unknown as TenantScopedClient, {
+  return reconciler.receive(platform, {
     providerKey: DEVELOPMENT_PROVIDER_KEY,
     raw: signed.body,
     headers: signed.headers,
@@ -278,7 +279,7 @@ describe('the reconciler refuses what it should refuse', () => {
       }),
     );
 
-    const result = await reconciler.receive(platform as unknown as TenantScopedClient, {
+    const result = await reconciler.receive(platform, {
       providerKey: DEVELOPMENT_PROVIDER_KEY,
       raw: forged.body,
       headers: forged.headers,
@@ -796,4 +797,886 @@ describe('the invoice number series is gapless under concurrency', () => {
     expect(new Set(numbers).size).toBe(20);
     for (const number of numbers) expect(number).toMatch(/^BS-\d{4}-\d{6}$/);
   }, 60_000);
+});
+
+/**
+ * P0 — THE SETTLEMENT IS ATOMIC, AND AN UNSETTLED EVENT IS RETRYABLE.
+ *
+ * THE DEFECT. `BillingReconciler` opened no transaction. The webhook route
+ * handed it a top-level client through `getPlatformClient() as never`, against
+ * a parameter typed `TenantScopedClient` — a type whose entire meaning is "you
+ * are already inside one" — and `creditLedgerPort` passed that straight to
+ * `grantWithin`, the ledger method that assumes a caller-owned transaction. So
+ * the checkout completion, the invoice, the purchase row, the credit
+ * transaction, the grant bucket and the wallet update each autocommitted
+ * separately, while two comments in the file asserted they committed together.
+ *
+ * A failure part-way left the customer charged and invoiced with NO credits, or
+ * the ledger holding a transaction row whose bucket was never written. And it
+ * was self-concealing: the inbox row was already written, so the provider's
+ * redelivery answered DUPLICATE and nothing ever retried.
+ *
+ * These tests inject a failure in the middle of a real settlement, against a
+ * real PostgreSQL, and assert both halves of the fix — nothing partial
+ * survives, and the redelivery that follows settles cleanly.
+ */
+describe('settlement is atomic and recoverable (P0)', () => {
+  /** A reconciler whose credit grant throws, to fail mid-settlement. */
+  function failingReconciler(fail: () => boolean): BillingReconciler {
+    const real = creditLedgerPort(new CreditLedgerService({ prisma: platform }));
+    return new BillingReconciler({
+      providers,
+      credits: {
+        async grantPackCredits(db, input) {
+          // The invoice and the purchase row are already written by this point,
+          // which is exactly the window that used to leave money without
+          // entitlement.
+          if (fail()) throw new Error('injected failure mid-settlement');
+          return real.grantPackCredits(db, input);
+        },
+      },
+    });
+  }
+
+  async function openPack(workspaceId: string) {
+    return inTenant(workspaceId, (db) =>
+      new CheckoutService({ providers }).openCreditPack(db, {
+        workspaceId,
+        policy,
+        packKey: 'fixture-pack-small',
+        idempotencyKey: `pack-${crypto.randomUUID()}`,
+        successUrl: 'https://app.test/ok',
+        cancelUrl: 'https://app.test/no',
+        actorUserId: ownerUserId,
+      }),
+    );
+  }
+
+  it('a failure mid-settlement leaves no invoice, no purchase and no credits', async () => {
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    // A new workspace already carries its trial grant, so the question is the
+    // DELTA across the failed settlement rather than an absolute count.
+    const ledgerBefore = await platform.creditTransaction.count({ where: { workspaceId } });
+    const checkout = await openPack(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+
+    const event = paidCheckoutEvent({
+      eventId: `evt_${crypto.randomUUID()}`,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      amount: checkout.total,
+    });
+    const signed = signedDelivery(provider, event, new Date());
+
+    const result = await failingReconciler(() => true).receive(platform, {
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      raw: signed.body,
+      headers: signed.headers,
+      policy,
+      plans,
+      planVersionId: null,
+    });
+
+    expect(result.accepted).toBe(true);
+    if (!result.accepted) throw new Error('unreachable');
+    /*
+     * RETRYABLE, NOT FAILED. The injected fault is a plain `Error` — not a
+     * decision about the money — so it is transient by classification, and the
+     * row stays re-attemptable. `FAILED` now means only what §20 says it means.
+     */
+    expect(result.results[0]?.outcome).toBe('RETRYABLE');
+
+    // NOTHING PARTIAL SURVIVED — the four things that used to.
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(0);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(0);
+    expect(await platform.creditTransaction.count({ where: { workspaceId } })).toBe(ledgerBefore);
+
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits).toBe(before.balanceMilliCredits);
+
+    // And the checkout is still PENDING, so the purchase remains completable.
+    const session = await platform.checkoutSession.findUniqueOrThrow({
+      where: { id: checkout.id },
+    });
+    expect(session.status).toBe('PENDING');
+  });
+
+  it('the provider redelivery settles cleanly after a failed attempt', async () => {
+    /*
+     * THE HALF OF THE FIX THAT IS NOT ABOUT TRANSACTIONS. A `RETRYABLE` or
+     * `RECEIVED` inbox row means a delivery did not finish and nothing was
+     * applied. Answering DUPLICATE to its redelivery, which is what this code
+     * used to do, is how a half-settled purchase became permanent: charged,
+     * nothing granted, and no retry anywhere in the system.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const checkout = await openPack(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+
+    const event = paidCheckoutEvent({
+      eventId: `evt_${crypto.randomUUID()}`,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      amount: checkout.total,
+    });
+    const signed = signedDelivery(provider, event, new Date());
+    const delivery = {
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      raw: signed.body,
+      headers: signed.headers,
+      policy,
+      plans,
+      planVersionId: null,
+    };
+
+    // First attempt fails mid-settlement.
+    let shouldFail = true;
+    const flaky = failingReconciler(() => shouldFail);
+    const first = await flaky.receive(platform, delivery);
+    expect(first.accepted && first.results[0]?.outcome).toBe('RETRYABLE');
+
+    // The SAME provider event, redelivered, with the injected fault cleared.
+    shouldFail = false;
+    const second = await flaky.receive(platform, delivery);
+    expect(second.accepted && second.results[0]?.outcome).toBe('PROCESSED');
+
+    // Settled exactly once.
+    const purchase = await platform.creditPackPurchase.findFirstOrThrow({ where: { workspaceId } });
+    expect(purchase.status).toBe('COMPLETED');
+    expect(purchase.creditGrantId).not.toBeNull();
+
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(1);
+  });
+
+  it('a settled event is still answered DUPLICATE, and grants nothing further', async () => {
+    // The retry semantics must not have cost the replay guard. A PROCESSED row
+    // is proof of settlement; only RECEIVED and RETRYABLE are not.
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const checkout = await openPack(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const event = paidCheckoutEvent({
+      eventId: `evt_${crypto.randomUUID()}`,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      amount: checkout.total,
+    });
+
+    const first = await deliver(event);
+    expect(first.accepted && first.results[0]?.outcome).toBe('PROCESSED');
+
+    const wallet = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+
+    const replay = await deliver(event);
+    expect(replay.accepted && replay.results[0]?.outcome).toBe('DUPLICATE');
+
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits).toBe(wallet.balanceMilliCredits);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(1);
+  });
+});
+
+describe('concurrent deliveries of one unsettled event settle it exactly once', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR.
+   *
+   * Making an unsettled inbox row retryable was correct, and it opened a race:
+   * two deliveries of the SAME provider event could both read the row as
+   * unsettled and both enter settlement. The settlement runs outside the inbox
+   * row's transaction on purpose — a rolled-back apply must still leave the
+   * receipt visible — so the unique index guarded the ROW and nothing guarded
+   * the WORK.
+   *
+   * `invoice.payment_failed` is the sharpest case, because it writes a
+   * `PaymentAttempt` keyed `attempt:<externalEventId>` under
+   * `unique(workspaceId, idempotencyKey)`. Two concurrent retries collide
+   * there: one settles, the other takes a P2002 — and with an unconditional
+   * final status write, the loser's failure could land AFTER the winner's
+   * success, leaving the row saying FAILED over work that HAD been applied.
+   * The next delivery would read that and apply it again.
+   *
+   * THE INTERLEAVING IS FORCED, NOT HOPED FOR. Firing two deliveries with
+   * `Promise.all` and asserting on the result proves nothing: they can, and
+   * mostly do, serialize themselves, so such a test passes just as happily with
+   * the claim removed — which is how this suite was first written and why it
+   * is not written that way now. Each case below pins one delivery at a known
+   * point and drives the other past it.
+   */
+
+  function paymentFailedEvent(eventId: string, customer: string): DevelopmentEventInput {
+    return {
+      id: eventId,
+      type: 'invoice.payment_failed',
+      occurredAt: new Date('2026-08-01T00:00:00.000Z'),
+      data: { providerCustomerId: customer, failureCode: 'card_declined' },
+    };
+  }
+
+  async function subscribedWorkspace(): Promise<{ workspaceId: string; customer: string }> {
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const checkout = await openSubscriptionCheckout(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const paid = await deliver(
+      paidCheckoutEvent({
+        eventId: `evt_${crypto.randomUUID()}`,
+        checkoutSessionId: checkout.id,
+        providerSessionId: checkout.providerSessionId ?? '',
+        providerCustomerId: customer,
+        amount: checkout.total,
+      }),
+    );
+    expect(paid.accepted && paid.results[0]?.outcome).toBe('PROCESSED');
+    return { workspaceId, customer };
+  }
+
+  async function openPackFor(workspaceId: string) {
+    return inTenant(workspaceId, (db) =>
+      new CheckoutService({ providers }).openCreditPack(db, {
+        workspaceId,
+        policy,
+        packKey: 'fixture-pack-small',
+        idempotencyKey: `pack-${crypto.randomUUID()}`,
+        successUrl: 'https://app.test/ok',
+        cancelUrl: 'https://app.test/no',
+        actorUserId: ownerUserId,
+      }),
+    );
+  }
+
+  it('A SECOND DELIVERY ARRIVING MID-SETTLEMENT APPLIES NOTHING', async () => {
+    /*
+     * THE RACE, MADE DETERMINISTIC. Delivery A is held inside its settlement
+     * transaction, at the credit grant — after the invoice and the purchase row
+     * exist and before anything has committed. Delivery B is then run to
+     * completion against that exact state, which is the window the claim
+     * exists to close. Without the claim, B walks into a second settlement.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const checkout = await openPackFor(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const signed = signedDelivery(
+      provider,
+      paidCheckoutEvent({
+        eventId,
+        checkoutSessionId: checkout.id,
+        providerSessionId: checkout.providerSessionId ?? '',
+        providerCustomerId: customer,
+        amount: checkout.total,
+      }),
+      new Date(),
+    );
+    const delivery = {
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      raw: signed.body,
+      headers: signed.headers,
+      policy,
+      plans,
+      planVersionId: null,
+    };
+
+    let announceInside: () => void;
+    const inside = new Promise<void>((resolve) => {
+      announceInside = resolve;
+    });
+    let release: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const real = creditLedgerPort(new CreditLedgerService({ prisma: platform }));
+    let held = true;
+    const barrier = new BillingReconciler({
+      providers,
+      credits: {
+        async grantPackCredits(db, input) {
+          if (held) {
+            held = false;
+            announceInside();
+            await released;
+          }
+          return real.grantPackCredits(db, input);
+        },
+      },
+    });
+
+    // A enters and stops inside the settlement.
+    const a = barrier.receive(platform, delivery);
+    await inside;
+
+    // B runs to completion while A is still holding an open transaction.
+    const b = await barrier.receive(platform, delivery);
+    const bOutcome = b.accepted ? b.results[0]?.outcome : 'refused';
+
+    // B MUST NOT HAVE APPLIED ANYTHING. It is told the row is spoken for.
+    expect(bOutcome).toBe('IN_PROGRESS');
+
+    release!();
+    const aResult = await a;
+    expect(aResult.accepted && aResult.results[0]?.outcome).toBe('PROCESSED');
+
+    // ONE OF EVERYTHING, and the wallet moved exactly once.
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(1);
+
+    // AND THE ROW ENDS TERMINAL AND TRUE — never FAILED or RETRYABLE over work
+    // that was in fact applied, which is the shape of the defect.
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(row.status).toBe('PROCESSED');
+    expect(row.failureReason).toBeNull();
+    expect(row.claimToken).toBeNull();
+    expect(row.processedAt).not.toBeNull();
+  });
+
+  it('A LIVE CLAIM BLOCKS A CONCURRENT payment_failed DELIVERY, so no attempt collides', async () => {
+    /*
+     * THE `PaymentAttempt` COLLISION, directly. The inbox row is put into the
+     * state a mid-settlement delivery leaves it in — PROCESSING, claimed, lease
+     * live — and a second delivery of the same event is run against it. With
+     * the claim it is refused. Without it, it re-enters `#applyPaymentFailed`
+     * and collides on `unique(workspaceId, idempotencyKey)` for
+     * `attempt:<externalEventId>`.
+     */
+    const { workspaceId, customer } = await subscribedWorkspace();
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const event = paymentFailedEvent(eventId, customer);
+
+    const first = await deliver(event);
+    expect(first.accepted && first.results[0]?.outcome).toBe('PROCESSED');
+    const attempts = await platform.paymentAttempt.count({ where: { workspaceId } });
+    const subscriptionBefore = await platform.workspaceSubscription.findUniqueOrThrow({
+      where: { workspaceId },
+    });
+
+    // Re-open the row exactly as an in-flight settlement holds it.
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    await platform.billingEvent.update({
+      where: { id: row.id },
+      data: {
+        status: 'PROCESSING',
+        claimToken: crypto.randomUUID(),
+        claimedAt: new Date(),
+        processedAt: null,
+      },
+    });
+
+    const second = await deliver(event);
+    expect(second.accepted && second.results[0]?.outcome).toBe('IN_PROGRESS');
+
+    // NOTHING WAS WRITTEN A SECOND TIME.
+    expect(await platform.paymentAttempt.count({ where: { workspaceId } })).toBe(attempts);
+    const subscriptionAfter = await platform.workspaceSubscription.findUniqueOrThrow({
+      where: { workspaceId },
+    });
+    expect(subscriptionAfter.lastEventAt?.toISOString()).toBe(
+      subscriptionBefore.lastEventAt?.toISOString(),
+    );
+
+    // AND THE CLAIM IS UNTOUCHED — the blocked delivery did not release
+    // somebody else's row on its way out.
+    const stillClaimed = await platform.billingEvent.findUniqueOrThrow({ where: { id: row.id } });
+    expect(stillClaimed.status).toBe('PROCESSING');
+  });
+
+  it('A LATE WRITER WHOSE CLAIM WAS TAKEN OVER CANNOT OVERWRITE THE WINNER', async () => {
+    /*
+     * THE PRECISE DEFECT NAMED IN REVIEW: "one transaction can succeed while
+     * the other gets P2002 and later overwrites the shared billing_event row
+     * back to FAILED."
+     *
+     * WHY THIS IS STAGED RATHER THAN RUN AS TWO LIVE DELIVERIES. Pinning one
+     * delivery inside its settlement makes it hold the invoice-number counter,
+     * so a second delivery of the same event blocks on that lock and the pair
+     * only unwinds when the first hits its 15s transaction timeout. That is a
+     * slow test of PostgreSQL's lock manager, not a fast test of this fix. So
+     * the takeover is staged — a dead holder's row, exactly as the lease case
+     * below leaves one — and then the real release predicate is put to it.
+     *
+     * THE TOKEN IN THAT PREDICATE IS THE WHOLE GUARD. `#release` writes
+     * `WHERE id = $1 AND claimToken = $2`, so a delivery that no longer holds
+     * the claim matches zero rows. The unconditional `update` it replaced
+     * matched one, every time, which is how a settled row ended up describing
+     * a failure that had been rolled back.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const checkout = await openPackFor(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const event = paidCheckoutEvent({
+      eventId,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      amount: checkout.total,
+    });
+
+    // DELIVERY A: claimed the row, then its process died. Its token is what it
+    // would still be carrying when it woke up.
+    const staleToken = crypto.randomUUID();
+    await platform.billingEvent.create({
+      data: {
+        providerKey: DEVELOPMENT_PROVIDER_KEY,
+        externalEventId: eventId,
+        eventType: 'checkout.completed',
+        occurredAt: new Date(),
+        signatureVerified: true,
+        payload: {},
+        status: 'PROCESSING',
+        attempts: 1,
+        claimToken: staleToken,
+        claimedAt: new Date(Date.now() - 120_000),
+      },
+    });
+
+    // DELIVERY B takes the expired claim over and settles it for real.
+    const b = await deliver(event);
+    expect(b.accepted && b.results[0]?.outcome).toBe('PROCESSED');
+    const settled = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(settled.status).toBe('PROCESSED');
+    expect(settled.claimToken).toBeNull();
+
+    /*
+     * DELIVERY A NOW WAKES UP AND RELEASES, with the outcome its own rolled-back
+     * settlement produced. This is byte-for-byte the statement `#release`
+     * issues — same table, same predicate, same columns — carrying A's token.
+     */
+    const lateWrite = await platform.billingEvent.updateMany({
+      where: { id: settled.id, claimToken: staleToken },
+      data: {
+        status: 'RETRYABLE',
+        failureReason: 'apply_failed',
+        claimToken: null,
+        processedAt: null,
+      },
+    });
+
+    // IT CHANGED NOTHING.
+    expect(lateWrite.count).toBe(0);
+    const row = await platform.billingEvent.findUniqueOrThrow({ where: { id: settled.id } });
+    expect(row.status).toBe('PROCESSED');
+    expect(row.failureReason).toBeNull();
+    expect(row.processedAt).not.toBeNull();
+
+    // So a later delivery reads the truth and applies nothing further — which
+    // is the consequence the defect got wrong.
+    const later = await deliver(event);
+    expect(later.accepted && later.results[0]?.outcome).toBe('DUPLICATE');
+
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+  });
+
+  it('TWO SIMULTANEOUS DELIVERIES OF AN ALREADY-FAILED EVENT APPLY IT ONCE', async () => {
+    /*
+     * THE CASE AS REVIEW PUT IT: "two deliveries can both observe FAILED/RECEIVED
+     * and enter settlement." So the row starts in exactly that state — a
+     * previous attempt failed transiently and left it RETRYABLE — and two
+     * deliveries are then driven at it with one pinned inside the settlement,
+     * which is the interleaving `Promise.all` alone does not reliably produce.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const checkout = await openPackFor(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const signed = signedDelivery(
+      provider,
+      paidCheckoutEvent({
+        eventId,
+        checkoutSessionId: checkout.id,
+        providerSessionId: checkout.providerSessionId ?? '',
+        providerCustomerId: customer,
+        amount: checkout.total,
+      }),
+      new Date(),
+    );
+    const delivery = {
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      raw: signed.body,
+      headers: signed.headers,
+      policy,
+      plans,
+      planVersionId: null,
+    };
+
+    const real = creditLedgerPort(new CreditLedgerService({ prisma: platform }));
+
+    // A first attempt fails transiently, leaving the row RETRYABLE — the state
+    // both deliveries below will find it in.
+    const broken = new BillingReconciler({
+      providers,
+      credits: {
+        async grantPackCredits() {
+          throw new Error('injected transient failure');
+        },
+      },
+    });
+    const failed = await broken.receive(platform, delivery);
+    expect(failed.accepted && failed.results[0]?.outcome).toBe('RETRYABLE');
+    expect(
+      (await platform.billingEvent.findFirstOrThrow({ where: { externalEventId: eventId } }))
+        .status,
+    ).toBe('RETRYABLE');
+
+    let announceInside: () => void;
+    const inside = new Promise<void>((resolve) => {
+      announceInside = resolve;
+    });
+    let release: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = true;
+    const barrier = new BillingReconciler({
+      providers,
+      credits: {
+        async grantPackCredits(db, input) {
+          if (held) {
+            held = false;
+            announceInside();
+            await released;
+          }
+          return real.grantPackCredits(db, input);
+        },
+      },
+    });
+
+    const a = barrier.receive(platform, delivery);
+    await inside;
+    const b = await barrier.receive(platform, delivery);
+    release!();
+    const aResult = await a;
+
+    const outcomes = [
+      aResult.accepted ? aResult.results[0]?.outcome : 'refused',
+      b.accepted ? b.results[0]?.outcome : 'refused',
+    ];
+
+    // EXACTLY ONE APPLICATION.
+    expect(outcomes.filter((o) => o === 'PROCESSED')).toHaveLength(1);
+    expect(outcomes.filter((o) => o === 'IN_PROGRESS')).toHaveLength(1);
+
+    // A TERMINAL, CORRECT INBOX STATUS — not left describing a failure over
+    // work that was applied.
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(row.status).toBe('PROCESSED');
+    expect(row.failureReason).toBeNull();
+    expect(row.claimToken).toBeNull();
+    expect(row.processedAt).not.toBeNull();
+
+    // And the money moved once.
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(1);
+  });
+
+  it('AN EXPIRED LEASE IS TAKEN OVER, so a dead process cannot strand an event', async () => {
+    /*
+     * The other half of a claim. If the only way out of PROCESSING were a
+     * living holder releasing it, a killed container would leave the event
+     * stuck for ever — trading the double-apply defect for a lost-money one.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const checkout = await openPackFor(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const event = paidCheckoutEvent({
+      eventId,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      amount: checkout.total,
+    });
+
+    // A delivery that claimed the row and then died, two minutes ago.
+    await platform.billingEvent.create({
+      data: {
+        providerKey: DEVELOPMENT_PROVIDER_KEY,
+        externalEventId: eventId,
+        eventType: 'checkout.completed',
+        occurredAt: new Date(),
+        signatureVerified: true,
+        payload: {},
+        status: 'PROCESSING',
+        attempts: 1,
+        claimToken: crypto.randomUUID(),
+        claimedAt: new Date(Date.now() - 120_000),
+      },
+    });
+
+    const taken = await deliver(event);
+    expect(taken.accepted && taken.results[0]?.outcome).toBe('PROCESSED');
+
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(row.status).toBe('PROCESSED');
+    // The takeover spent an attempt of its own, on top of the dead one.
+    expect(row.attempts).toBe(2);
+  });
+
+  it('a delivery after settlement is a DUPLICATE and changes nothing', async () => {
+    const { workspaceId, customer } = await subscribedWorkspace();
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const event = paymentFailedEvent(eventId, customer);
+
+    await deliver(event);
+    const attempts = await platform.paymentAttempt.count({ where: { workspaceId } });
+
+    const again = await deliver(event);
+    expect(again.accepted && again.results[0]?.outcome).toBe('DUPLICATE');
+    expect(await platform.paymentAttempt.count({ where: { workspaceId } })).toBe(attempts);
+  });
+});
+
+describe('a transient failure is retried, exhausts, dead-letters and can be replayed', () => {
+  function flakyReconciler(fail: () => boolean): BillingReconciler {
+    const real = creditLedgerPort(new CreditLedgerService({ prisma: platform }));
+    return new BillingReconciler({
+      providers,
+      credits: {
+        async grantPackCredits(db, input) {
+          if (fail()) throw new Error('injected transient failure');
+          return real.grantPackCredits(db, input);
+        },
+      },
+    });
+  }
+
+  async function packDelivery(workspaceId: string) {
+    const checkout = await inTenant(workspaceId, (db) =>
+      new CheckoutService({ providers }).openCreditPack(db, {
+        workspaceId,
+        policy,
+        packKey: 'fixture-pack-small',
+        idempotencyKey: `pack-${crypto.randomUUID()}`,
+        successUrl: 'https://app.test/ok',
+        cancelUrl: 'https://app.test/no',
+        actorUserId: ownerUserId,
+      }),
+    );
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const signed = signedDelivery(
+      provider,
+      paidCheckoutEvent({
+        eventId,
+        checkoutSessionId: checkout.id,
+        providerSessionId: checkout.providerSessionId ?? '',
+        providerCustomerId: customer,
+        amount: checkout.total,
+      }),
+      new Date(),
+    );
+    return {
+      eventId,
+      delivery: {
+        providerKey: DEVELOPMENT_PROVIDER_KEY,
+        raw: signed.body,
+        headers: signed.headers,
+        policy,
+        plans,
+        planVersionId: null,
+      },
+    };
+  }
+
+  it('a transient failure is RETRYABLE, not FAILED, and the attempt count rises', async () => {
+    /*
+     * THE DEFECT: every exception became FAILED, FAILED is answered HTTP 200,
+     * and a provider does not redeliver a 200. A dropped connection during
+     * settlement was therefore permanent — charged at the provider, nothing
+     * applied here, no retry anywhere.
+     */
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const { eventId, delivery } = await packDelivery(workspaceId);
+    const flaky = flakyReconciler(() => true);
+
+    const first = await flaky.receive(platform, delivery);
+    expect(first.accepted && first.results[0]?.outcome).toBe('RETRYABLE');
+
+    const afterOne = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(afterOne.status).toBe('RETRYABLE');
+    expect(afterOne.attempts).toBe(1);
+    // Not finished, so it carries no processed time and holds no claim.
+    expect(afterOne.processedAt).toBeNull();
+    expect(afterOne.claimToken).toBeNull();
+
+    await flaky.receive(platform, delivery);
+    const afterTwo = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(afterTwo.attempts).toBe(2);
+  });
+
+  it('AN AMOUNT MISMATCH IS STILL TERMINAL — FAILED, once, never retried', async () => {
+    // The other half of the classification. §20's FAILED is a decision about
+    // the money that every redelivery would reach again, so retrying it would
+    // be noise rather than resilience.
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const checkout = await openSubscriptionCheckout(workspaceId);
+    const customer = await providerCustomerOf(workspaceId);
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const event = paidCheckoutEvent({
+      eventId,
+      checkoutSessionId: checkout.id,
+      providerSessionId: checkout.providerSessionId ?? '',
+      providerCustomerId: customer,
+      // A different amount from the one we priced.
+      amount: Money.ofMinor(
+        checkout.total.currency,
+        checkout.total.minorUnits + 100n,
+        checkout.total.scale,
+      ),
+    });
+
+    const first = await deliver(event);
+    expect(first.accepted && first.results[0]?.outcome).toBe('FAILED');
+
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(row.status).toBe('FAILED');
+    expect(row.processedAt).not.toBeNull();
+
+    // Terminal means terminal: a redelivery is a DUPLICATE, not a second try.
+    const second = await deliver(event);
+    expect(second.accepted && second.results[0]?.outcome).toBe('DUPLICATE');
+    expect(
+      (await platform.billingEvent.findFirstOrThrow({ where: { externalEventId: eventId } }))
+        .attempts,
+    ).toBe(row.attempts);
+  });
+
+  it('EXHAUSTING THE ATTEMPTS DEAD-LETTERS THE EVENT, with a CRITICAL audit', async () => {
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const { eventId, delivery } = await packDelivery(workspaceId);
+    const flaky = flakyReconciler(() => true);
+
+    let last: string | undefined;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const result = await flaky.receive(platform, delivery);
+      last = result.accepted ? result.results[0]?.outcome : 'refused';
+    }
+
+    expect(last).toBe('DEAD_LETTER');
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(row.status).toBe('DEAD_LETTER');
+    expect(row.attempts).toBe(MAX_ATTEMPTS);
+    expect(row.processedAt).not.toBeNull();
+
+    // THE ALERT EXISTS AND IS EMITTED, rather than being a row somebody would
+    // have to go looking for. §5 asks for "dead-letters with an alert".
+    const alert = await platform.auditEvent.findFirstOrThrow({
+      where: { workspaceId, action: 'billing.event.dead_lettered' },
+    });
+    expect(alert.severity).toBe('CRITICAL');
+    expect(alert.outcome).toBe('ERROR');
+
+    // AND IT STOPS ASKING. A dead-lettered row is terminal, so a further
+    // delivery is a DUPLICATE and the provider is not kept retrying forever.
+    const after = await flaky.receive(platform, delivery);
+    expect(after.accepted && after.results[0]?.outcome).toBe('DUPLICATE');
+  });
+
+  it('THE ADMIN REPLAY SETTLES A DEAD-LETTERED EVENT once the cause is fixed', async () => {
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const { eventId, delivery } = await packDelivery(workspaceId);
+
+    let broken = true;
+    const flaky = flakyReconciler(() => broken);
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      await flaky.receive(platform, delivery);
+    }
+    const dead = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+    expect(dead.status).toBe('DEAD_LETTER');
+
+    // The cause is fixed, and an operator replays it.
+    broken = false;
+    const replay = await flaky.replay(platform, {
+      billingEventId: dead.id,
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      policy,
+      plans,
+      planVersionId: null,
+      actorId: ownerUserId,
+    });
+
+    expect(replay.replayed).toBe(true);
+    if (!replay.replayed) throw new Error('unreachable');
+    expect(replay.result.outcome).toBe('PROCESSED');
+
+    // THE MONEY LANDED, exactly once.
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+    expect(await platform.invoice.count({ where: { workspaceId } })).toBe(1);
+
+    // AND IT NAMES WHO DID IT.
+    const audit = await platform.auditEvent.findFirstOrThrow({
+      where: { workspaceId, action: 'billing.event.replayed' },
+    });
+    expect(audit.actorType).toBe('PLATFORM_USER');
+    expect(audit.actorId).toBe(ownerUserId);
+  });
+
+  it('THE REPLAY REFUSES A SETTLED EVENT — it cannot make one payment into two', async () => {
+    const workspaceId = await createWorkspace({ country: 'SA', currency: 'SAR' });
+    const before = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    const { eventId, delivery } = await packDelivery(workspaceId);
+
+    const settled = await reconciler.receive(platform, delivery);
+    expect(settled.accepted && settled.results[0]?.outcome).toBe('PROCESSED');
+    const row = await platform.billingEvent.findFirstOrThrow({
+      where: { externalEventId: eventId },
+    });
+
+    const replay = await reconciler.replay(platform, {
+      billingEventId: row.id,
+      providerKey: DEVELOPMENT_PROVIDER_KEY,
+      policy,
+      plans,
+      planVersionId: null,
+      actorId: ownerUserId,
+    });
+    expect(replay.replayed).toBe(false);
+    if (replay.replayed) throw new Error('unreachable');
+    expect(replay.reason).toBe('not_replayable');
+
+    // Nothing moved a second time.
+    const after = await platform.creditWallet.findUniqueOrThrow({ where: { workspaceId } });
+    expect(after.balanceMilliCredits - before.balanceMilliCredits).toBe(500_000n);
+    expect(await platform.creditPackPurchase.count({ where: { workspaceId } })).toBe(1);
+  });
 });

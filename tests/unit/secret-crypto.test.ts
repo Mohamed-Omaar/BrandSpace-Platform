@@ -142,9 +142,27 @@ describe('key provider selection fails closed', () => {
   });
 
   it('refuses the local development provider in production', () => {
+    // `APP_ENV` names the deployment (D-97); `NODE_ENV` is the build mode and
+    // is `production` on every Railway service in BOTH environments, staging
+    // included. Asserted here with both set, which is what production runs.
     expect(() =>
-      createKeyProvider({ NODE_ENV: 'production', SECRET_VAULT_KEK: KEK } as NodeJS.ProcessEnv),
+      createKeyProvider({
+        APP_ENV: 'production',
+        NODE_ENV: 'production',
+        SECRET_VAULT_KEK: KEK,
+      } as NodeJS.ProcessEnv),
     ).toThrow(/must not be used in production/);
+  });
+
+  it('permits the development provider in staging, which is also a production build', () => {
+    // The staging blocker this guard used to create: `SecretService` constructs
+    // a key provider eagerly, so staging could not store a single credential.
+    const provider = createKeyProvider({
+      APP_ENV: 'staging',
+      NODE_ENV: 'production',
+      SECRET_VAULT_KEK: KEK,
+    } as NodeJS.ProcessEnv);
+    expect(provider).toBeInstanceOf(LocalDevelopmentKeyProvider);
   });
 
   it('rejects a key-encryption key that is too short', () => {

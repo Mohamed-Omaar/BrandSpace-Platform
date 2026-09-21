@@ -387,6 +387,35 @@ configuration.
 
 ---
 
+### 4.3 The live `db-setup` service — UNVERIFIED
+
+A service named `db-setup` exists in the live Railway project and has **no
+counterpart anywhere in this repository**: `grep -rni "db-setup"` over every
+tracked file returns nothing. Its start command, its variables and whether it
+holds Railway's provisioned superuser credential are all unknown from the
+repository alone, and this document will not guess.
+
+**What it plausibly runs**, given what the deployment needs and what the
+repository provides, is §3.2's role creation —
+`scripts/sql/setup-database-roles.sql` — which is otherwise a manual `psql` step
+and the one piece of provisioning that genuinely requires the instance owner.
+
+**Owner action required, before staging is built.** Report, from the Railway
+dashboard, `db-setup`'s start command and the NAMES of its variables (no
+values). Two outcomes matter:
+
+- If it holds Railway's own provisioned `DATABASE_URL`, that is the instance
+  owner — a superuser — living permanently in a service. §0.1 explains why that
+  credential must never sit in a deployed service; it should be deleted after
+  provisioning, not retained.
+- If it runs the role script, it belongs in this document and in the blueprint's
+  reasoning as a deliberate one-off job, exactly as the migration job in §4.1 is.
+
+Until that is answered, staging should create its roles by the manual §3.2
+procedure rather than by copying a service nobody has read.
+
+---
+
 ## 5. Redis and BullMQ
 
 ### 5.1 The queue architecture
@@ -580,10 +609,28 @@ realistic data it gets seeded data, not a restore: a restore brings customer
 personal data into an environment with weaker access control, which is a
 notifiable event in most of the jurisdictions BrandSpace intends to serve.
 
-`APP_ENV` is what separates them at runtime, not `NODE_ENV` (D-97). Staging's
-`APP_ENV=staging` means development doubles are _still_ refused — `selectionRefusal()`
-permits them only in development and test — so staging exercises the same
-fail-closed paths production will.
+`APP_ENV` is what separates them at runtime, not `NODE_ENV` (D-97).
+
+**CORRECTED — staging RUNS the development doubles, and that is what makes it
+useful.** An earlier revision of this section said the opposite: that
+`selectionRefusal()` "permits them only in development and test", so staging
+would exercise the same fail-closed paths production does. The code says
+otherwise. `DEVELOPMENT_AND_TEST` in `packages/integrations/src/registry.ts` is
+`['DEVELOPMENT', 'STAGING']` — the constant's NAME says test, its VALUE says
+staging — and `selectionRefusal()` refuses a development-only provider only when
+the environment is `PRODUCTION`. All five doubles declare that set.
+
+So a staging environment can activate the mock AI provider, the mock social
+connectors and the development payment adapter, and drive the whole journey from
+signup to publishing with no vendor account. That is the point of having one.
+
+**What staging therefore does NOT prove** is the production environment
+contract: `validateStartupConfiguration` re-throws only when `APP_ENV` says
+production, and merely logs its problems otherwise. A staging deployment would
+have logged the exact message that kept the production `web` service down and
+come up healthy. `tests/unit/railway-blueprint-contract.test.ts` is where that
+contract is now gated instead — it runs every service's blueprint variables
+through the real validator on every CI run.
 
 ---
 
@@ -1208,6 +1255,16 @@ in the repository.
 
    # The three KEKs are for STAGING and local development only. Production
    # seals through AWS KMS instead (§25) and never falls back to these.
+   #
+   # THIS IS NOW TRUE OF THE CODE AS WELL AS THE INTENTION. `createKeyProvider`
+   # used to refuse a KEK whenever `NODE_ENV=production` — which is set on every
+   # Railway service in BOTH environments, because a staging deployment is still
+   # a production BUILD. A staging environment configured exactly as this step
+   # prescribes could not construct a key provider at all, and `SecretService`
+   # calls it eagerly in its constructor: no Integrations Hub credential could be
+   # saved, no social account connected, no customer MFA enrolled, no platform
+   # owner bootstrapped. The guard now reads `APP_ENV` (D-97), so staging uses
+   # these and production still requires its KMS ARNs.
    openssl rand -base64 48    # SECRET_VAULT_KEK
    openssl rand -base64 48    # SOCIAL_TOKEN_VAULT_KEK    (must differ)
    openssl rand -base64 48    # CUSTOMER_MFA_VAULT_KEK    (must differ)

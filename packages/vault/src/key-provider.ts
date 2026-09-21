@@ -1,5 +1,6 @@
 import { createDecipheriv, createCipheriv, randomBytes, hkdfSync } from 'node:crypto';
 import { DecryptCommand, EncryptCommand, KMSClient } from '@aws-sdk/client-kms';
+import { currentEnvironment } from '@brandspace/shared';
 
 /**
  * Key-encryption-key (KEK) provider — the envelope-encryption seam.
@@ -309,12 +310,37 @@ export function createKeyProvider(
     );
   }
 
-  if (env['NODE_ENV'] === 'production') {
+  /*
+   * THE DEPLOYMENT ENVIRONMENT IS `APP_ENV`, NEVER `NODE_ENV` — D-97, and
+   * CLAUDE.md §2.2 states it as a rule this file was breaking.
+   *
+   * This guard used to read `env['NODE_ENV'] === 'production'`. Every built
+   * Next.js app sets `NODE_ENV=production`, and so does every Railway service
+   * in BOTH environments, because the blueprint's `commonEnv` sets it — a
+   * staging deployment is still a production BUILD. The guard therefore fired
+   * in staging, where the KEK is exactly the intended key material, and
+   * `SecretService` calls `createKeyProvider` eagerly in its constructor. The
+   * result: a staging environment built as docs/RAILWAY-DEPLOYMENT.md §22 item 4
+   * prescribes could not construct a key provider for any of the three domains,
+   * so it could not save an Integrations Hub credential, connect a social
+   * account, enrol customer MFA or bootstrap a platform owner.
+   *
+   * It also over-fired for a developer running `next build && next start`
+   * locally, which is the direction D-97 was written about.
+   *
+   * PRODUCTION IS NOT WEAKENED BY ONE BIT. `currentEnvironment()` returns
+   * PRODUCTION exactly when `APP_ENV=production`, and the environment contract
+   * independently REQUIRES each permitted domain's KMS ARN in production
+   * (`assertKeyDomainBoundaries` in @brandspace/shared), so a production
+   * service that reached this line without an ARN would already have been
+   * refused at boot. This is the second of two locks, and it still closes.
+   */
+  if (currentEnvironment(env as Record<string, string | undefined>) === 'PRODUCTION') {
     /*
-     * STILL A REFUSAL, AND NOW AN ACTIONABLE ONE. Until F-09 was resolved this
-     * was a dead end: the only alternative provider threw from both methods, so
-     * a production deployment simply could not seal a secret. The KMS provider
-     * is real now, so this says what to configure rather than naming a decision
+     * STILL A REFUSAL, AND AN ACTIONABLE ONE. Until F-09 was resolved this was
+     * a dead end: the only alternative provider threw from both methods, so a
+     * production deployment simply could not seal a secret. The KMS provider is
+     * real now, so this says what to configure rather than naming a decision
      * that had not been taken.
      */
     throw new Error(

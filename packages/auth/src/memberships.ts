@@ -2,6 +2,7 @@
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
+import { assignableRoleKeys as rolesAssignableBy, assertMayAssignRole } from './role-assignment';
 
 /**
  * Workspace membership management — docs/DATABASE.md §3.3.
@@ -43,31 +44,12 @@ async function runAtomically<T>(
   return fn(prisma);
 }
 
-/** Roles an actor holding `member.assign_role` may assign, by their own role. */
-const ASSIGNABLE_BY: Record<string, readonly string[]> = {
-  // The owner may appoint anyone, including another owner.
-  workspace_owner: [
-    'workspace_owner',
-    'workspace_admin',
-    'marketing_manager',
-    'content_creator',
-    'copywriter',
-    'designer',
-    'approver',
-    'analyst',
-    'client_viewer',
-  ],
-  // docs/SECURITY.md §4.3: "Assign roles — Admin: below own level."
-  workspace_admin: [
-    'marketing_manager',
-    'content_creator',
-    'copywriter',
-    'designer',
-    'approver',
-    'analyst',
-    'client_viewer',
-  ],
-};
+/*
+ * THE LADDER MOVED TO `./role-assignment`, and that is the fix for the
+ * invitation escalation: `InvitationService` is the other path by which a
+ * role reaches a person, and it was not consulting this table. One
+ * definition, imported by both, is what makes the two paths agree.
+ */
 
 export interface MemberSummary {
   readonly membershipId: string;
@@ -136,7 +118,7 @@ export class MembershipService {
    * check below is the control. Hiding an option is not authorization.
    */
   assignableRoleKeys(actorRoleKey: string): readonly string[] {
-    return ASSIGNABLE_BY[actorRoleKey] ?? [];
+    return rolesAssignableBy(actorRoleKey);
   }
 
   /**
@@ -177,13 +159,10 @@ export class MembershipService {
         throw new AppError('VALIDATION_FAILED', 'Unknown workspace role.');
       }
 
-      const allowed = ASSIGNABLE_BY[actor.roleKey] ?? [];
-      if (!allowed.includes(newRole.key)) {
-        throw new AppError('FORBIDDEN', `Your role may not assign "${newRole.key}".`);
-      }
+      assertMayAssignRole(actor.roleKey, newRole.key, 'Changing a member role');
       // Nor may an actor edit somebody who outranks what they can assign —
       // otherwise an admin could demote the owner and then take the workspace.
-      if (!allowed.includes(membership.role.key)) {
+      if (!rolesAssignableBy(actor.roleKey).includes(membership.role.key)) {
         throw new AppError('FORBIDDEN', 'Your role may not change that member.');
       }
 
@@ -237,7 +216,7 @@ export class MembershipService {
       });
       if (!membership) throw new AppError('NOT_FOUND', 'Member not found.');
 
-      const allowed = ASSIGNABLE_BY[actor.roleKey] ?? [];
+      const allowed = rolesAssignableBy(actor.roleKey);
       if (!allowed.includes(membership.role.key)) {
         throw new AppError('FORBIDDEN', 'Your role may not remove that member.');
       }

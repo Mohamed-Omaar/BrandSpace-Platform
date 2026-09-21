@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 // to import @prisma/client directly (docs/ARCHITECTURE.md §4.1).
 import { Prisma, type PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
+import { assertMayAssignRole } from './role-assignment';
 import { hashPassword } from './password';
 
 /**
@@ -138,6 +139,16 @@ export type Inviter =
   | {
       readonly kind: 'member';
       readonly userId: string;
+      /**
+       * The workspace role this inviter holds.
+       *
+       * REQUIRED, and required rather than optional deliberately. An optional
+       * field would let a call site omit it and fall through to whatever a
+       * missing key maps to; making it part of the type means every caller is
+       * a compile error until it supplies one, which is how this escalation
+       * stops being reachable from a new screen later.
+       */
+      readonly roleKey: string;
       readonly permissionKeys: readonly string[];
     }
   | {
@@ -288,6 +299,31 @@ export class InvitationService {
       throw new AppError('VALIDATION_FAILED', 'Unknown workspace role.');
     }
 
+    /*
+     * THE ROLE-ASSIGNMENT LADDER — the control this method was missing.
+     *
+     * Holding `member.invite` says the actor may invite SOMEBODY. It does not
+     * say which role they may hand out, and `workspace_admin` holds it. Without
+     * this line an admin edited the roleId in the invite form and issued an
+     * invitation for `workspace_owner`, acquiring billing management, workspace
+     * deletion and ownership transfer — the three authorities that role exists
+     * to withhold. The UI filtered its `<select>`, which is not authorization:
+     * the form is the attacker's to compose.
+     *
+     * `MembershipService.changeRole` has always enforced this. The two grant
+     * paths now share one implementation (`./role-assignment`) so they cannot
+     * drift apart again.
+     *
+     * A PLATFORM INVITER IS NOT RANKED HERE, deliberately. It holds no
+     * workspace role to compare, and its authority is a platform permission
+     * plus verified MFA (D-27), already checked by `assertMayInvite` above.
+     * Ranking it against an empty ladder would refuse every platform
+     * invitation, which is a different bug.
+     */
+    if (input.inviter.kind === 'member') {
+      assertMayAssignRole(input.inviter.roleKey, role.key, 'Inviting a member');
+    }
+
     // Already a member? Re-inviting would create a second membership path.
     const existingMember = await this.#prisma.membership.findFirst({
       where: { workspaceId: input.workspaceId, status: { not: 'REMOVED' }, user: { email } },
@@ -359,6 +395,30 @@ export class InvitationService {
     if (!existing) throw new AppError('NOT_FOUND', 'Invitation not found.');
     if (existing.status !== 'PENDING') {
       throw new AppError('CONFLICT', 'Only a pending invitation can be resent.');
+    }
+
+    /*
+     * THE LADDER APPLIES TO A RESEND TOO, and for a less obvious reason than it
+     * applies to `create`.
+     *
+     * A resend does not change the role — it supersedes the pending row and
+     * mints a FRESH, LIVE token for the same `roleId`. So an admin who cannot
+     * issue a `workspace_owner` invitation could keep re-issuing one an owner
+     * had already created, indefinitely extending a grant they are not
+     * entitled to make. Narrower than the `create` hole, same control, same
+     * one-line answer.
+     *
+     * Revoking is deliberately NOT ranked: cancelling an invitation you could
+     * not have created takes authority away, never grants it.
+     */
+    if (inviter.kind === 'member') {
+      const role = await this.#prisma.role.findUnique({
+        where: { id: existing.roleId },
+        select: { key: true },
+      });
+      // A missing role is a NOT_FOUND-shaped refusal, not a silent pass.
+      if (!role) throw new AppError('NOT_FOUND', 'Invitation not found.');
+      assertMayAssignRole(inviter.roleKey, role.key, 'Resending an invitation');
     }
 
     return runAtomically(this.#prisma, async (tx) => {

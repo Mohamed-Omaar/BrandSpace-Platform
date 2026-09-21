@@ -207,10 +207,90 @@ describe('createKeyProvider chooses the right provider for the environment', () 
      * key in the same environment as the data it protects; that is why it is
      * refused, and that reason did not change. What changed is that the
      * refusal now names a configuration an operator can actually apply.
+     *
+     * THE FIXTURE MOVED FROM `NODE_ENV` TO `APP_ENV`, and that is the fix
+     * rather than a relaxation. "Production" is a DEPLOYMENT, and D-97 names
+     * `APP_ENV` as the only thing that says which deployment this is. The
+     * refusal is asserted below under `APP_ENV=production` alone AND under the
+     * combination a real Railway production service actually runs
+     * (`APP_ENV=production` with `NODE_ENV=production`), so the control is
+     * tested more tightly than it was, not less.
      */
     expect(() =>
-      createKeyProvider({ SECRET_VAULT_KEK: KEK, NODE_ENV: 'production' } as NodeJS.ProcessEnv),
+      createKeyProvider({ SECRET_VAULT_KEK: KEK, APP_ENV: 'production' } as NodeJS.ProcessEnv),
     ).toThrow(/must not be used in production/);
+
+    expect(() =>
+      createKeyProvider({
+        SECRET_VAULT_KEK: KEK,
+        APP_ENV: 'production',
+        NODE_ENV: 'production',
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/must not be used in production/);
+  });
+
+  /**
+   * THE STAGING BLOCKER THIS FIX EXISTS TO REMOVE.
+   *
+   * Every Railway service runs `NODE_ENV=production` in BOTH environments — the
+   * blueprint's `commonEnv` sets it, because a staging deployment is still a
+   * production BUILD. While this guard read `NODE_ENV`, a staging environment
+   * configured exactly as docs/RAILWAY-DEPLOYMENT.md §22 item 4 prescribes
+   * (the three KEKs, no KMS) could not construct a key provider at all, and
+   * `SecretService` calls this eagerly in its constructor. Staging could not
+   * save an Integrations Hub credential, connect a social account, enrol
+   * customer MFA, or bootstrap its platform owner.
+   */
+  it('permits the KEK in staging even though NODE_ENV says production', () => {
+    const provider = createKeyProvider({
+      SECRET_VAULT_KEK: KEK,
+      APP_ENV: 'staging',
+      NODE_ENV: 'production',
+    } as NodeJS.ProcessEnv);
+    expect(provider).toBeInstanceOf(LocalDevelopmentKeyProvider);
+  });
+
+  it('permits the KEK for a local production BUILD, which is not a deployment', () => {
+    // `next build && next start` on a laptop sets NODE_ENV=production. That is
+    // the over-fire direction D-97 was written about.
+    const provider = createKeyProvider({
+      SECRET_VAULT_KEK: KEK,
+      APP_ENV: 'development',
+      NODE_ENV: 'production',
+    } as NodeJS.ProcessEnv);
+    expect(provider).toBeInstanceOf(LocalDevelopmentKeyProvider);
+  });
+
+  it.each([
+    ['development', LocalDevelopmentKeyProvider],
+    ['test', LocalDevelopmentKeyProvider],
+    ['staging', LocalDevelopmentKeyProvider],
+  ] as const)(
+    'APP_ENV=%s with NODE_ENV=production returns the development provider',
+    (appEnv, expected) => {
+      const provider = createKeyProvider({
+        SECRET_VAULT_KEK: KEK,
+        APP_ENV: appEnv,
+        NODE_ENV: 'production',
+      } as NodeJS.ProcessEnv);
+      expect(provider).toBeInstanceOf(expected);
+    },
+  );
+
+  it('an ABSENT APP_ENV is treated as development, which is the safe direction', () => {
+    /*
+     * `currentEnvironment()` defaults to DEVELOPMENT when `APP_ENV` is unset.
+     * That is deliberate and documented: an unset variable makes the platform
+     * MORE cautious about what it will do, never less. It does NOT make a
+     * production deployment permissive, because the environment contract
+     * independently refuses to start a production service whose key-domain ARN
+     * is missing — this is the second of two locks.
+     */
+    const provider = createKeyProvider({
+      SECRET_VAULT_KEK: KEK,
+      NODE_ENV: 'production',
+    } as NodeJS.ProcessEnv);
+    expect(provider).toBeInstanceOf(LocalDevelopmentKeyProvider);
   });
 
   it('now succeeds in production when a key ARN is configured', () => {
@@ -275,12 +355,28 @@ describe('every key domain is production-capable, through one implementation', (
   });
 
   it.each(DOMAINS)('$domain.label still refuses a bare KEK in production', ({ domain }) => {
+    // `APP_ENV` for the same reason as above: production is a deployment, and
+    // this is the variable that names one (D-97).
     expect(() =>
       createKeyProvider(
-        { [domain.kekVar]: KEK, NODE_ENV: 'production' } as NodeJS.ProcessEnv,
+        {
+          [domain.kekVar]: KEK,
+          APP_ENV: 'production',
+          NODE_ENV: 'production',
+        } as NodeJS.ProcessEnv,
         domain,
       ),
     ).toThrow(/must not be used in production/);
+  });
+
+  it.each(DOMAINS)('$domain.label accepts its KEK in staging', ({ domain }) => {
+    // All three domains, because staging needs all three and the blocker hit
+    // every one of them.
+    const provider = createKeyProvider(
+      { [domain.kekVar]: KEK, APP_ENV: 'staging', NODE_ENV: 'production' } as NodeJS.ProcessEnv,
+      domain,
+    );
+    expect(provider).toBeInstanceOf(LocalDevelopmentKeyProvider);
   });
 
   it('names three DIFFERENT variables, so one value cannot serve all three', () => {
