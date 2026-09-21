@@ -70,6 +70,22 @@ export default async function AssetsPage({
   const sort = (single('sort') ?? 'createdAt') as 'createdAt' | 'name' | 'sizeBytes';
   const scopeParam = single('scope');
   const selectedId = single('asset');
+  /*
+   * THE PAGE CURSOR — the read that was missing (PHASE 2).
+   *
+   * `AssetLibraryService.browse` has always returned `nextCursor`, and the view
+   * has always rendered a "Load more" link carrying it as `?cursor=`. Nothing
+   * read it back. So the link went round in a circle: every press re-requested
+   * the FIRST page, the grid redrew the same 48 tiles, and a workspace with
+   * more than a page of assets had no way to reach the rest of them — the
+   * pagination was complete at both ends and disconnected in the middle.
+   *
+   * IT IS PASSED THROUGH UNINSPECTED, which is safe by construction: the cursor
+   * is opaque, carries no secret, and decodes to a sort value plus an id used
+   * only as a `WHERE` predicate. A forged one can move a reader within the rows
+   * RLS and their BrandScope already admit, and nowhere else.
+   */
+  const cursor = single('cursor');
 
   /*
    * THE MEMBER'S OWN BRANDS, not the workspace's.
@@ -135,6 +151,7 @@ export default async function AssetsPage({
       ...(tagFilter ? { tags: [tagFilter] } : {}),
       ...(search ? { search } : {}),
       sort,
+      ...(cursor ? { cursor } : {}),
       limit: 48,
       includeArchived: statusFilter === 'ARCHIVED',
     });
