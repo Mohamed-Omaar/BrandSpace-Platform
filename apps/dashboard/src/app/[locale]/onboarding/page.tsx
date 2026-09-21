@@ -23,7 +23,21 @@ export const dynamic = 'force-dynamic';
  */
 const STEP_ROUTES: Readonly<Record<string, string>> = {
   workspace: '/settings',
-  brand: '/settings/brand',
+  /*
+   * THE BRAND STEP POINTS WHERE A BRAND CAN ACTUALLY BE CREATED (PHASE 2).
+   *
+   * It used to point at `/settings/brand`, which EDITS a brand: the page calls
+   * `requiredBrand`, so a workspace with none of them has nothing for it to
+   * show and no way to make one. The first step of onboarding sent a new
+   * customer to a screen that could not complete it — they finished the wizard
+   * with a workspace and no brand, and every module downstream of a brand was
+   * unreachable.
+   *
+   * `/brand-brain` carries the no-brand branch with the creation form, which is
+   * the only path in the product that creates one. `brand_profile` still points
+   * at settings, because filling a profile in IS what that page is for.
+   */
+  brand: '/brand-brain',
   brand_profile: '/settings/brand',
   brand_brain: '/brand-brain',
   social: '/integrations',
