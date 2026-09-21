@@ -113,8 +113,8 @@ function actor() {
 let created: string[] = [];
 
 /** A workspace of this suite's own, with a wallet and nothing else. */
-async function freshWorkspace(planKey: string | null, explicitId?: string): Promise<string> {
-  const id = explicitId ?? crypto.randomUUID();
+async function freshWorkspace(planKey: string | null): Promise<string> {
+  const id = crypto.randomUUID();
   const user = await platform.user.create({
     data: {
       email: `p3-${id}@example.local`,
@@ -214,6 +214,22 @@ beforeAll(async () => {
     );
   }
   await configuration.activate(actor(), draft.id, { acknowledgeHighImpact: true });
+
+  /*
+   * EVERY OTHER SUBSCRIPTION IS PARKED OUT OF THE WAY.
+   *
+   * F-23, the same reason `phase7-round4` parks automation rules: other suites
+   * leave `workspace_subscription` rows in this database, `dueForCycle` is
+   * BOUNDED and ordered by the boundary being waited on, and a sweep asserted
+   * with `take: 200` proves nothing if the batch is full of somebody else's
+   * overdue rows. Parking them uses the sweep's own selection rule rather than
+   * a back door around it, and this suite creates every row it asserts on
+   * afterwards.
+   */
+  await platform.workspaceSubscription.updateMany({
+    where: { currentPeriodEnd: { lte: new Date(now.getTime() + 365 * 86_400_000) } },
+    data: { currentPeriodEnd: new Date('2099-01-01T00:00:00.000Z') },
+  });
 
   scheduler = new MaintenanceScheduler({ environment: ENV, clock });
 }, 60_000);
@@ -910,10 +926,13 @@ describe('a clean rotation means the whole rotation was clean', () => {
    * clean record written over the top of a CRITICAL one.
    */
   it('A/C/D — DRIFT ON AN EARLY PAGE SUPPRESSES THE CLEAN RECORD FOR THE WHOLE ROTATION', async () => {
-    // The lowest and highest ids the platform can hold, so one is certainly on
-    // an early page and the other is certainly on the last one.
-    const dirty = await freshWorkspace(null, '00000000-0000-4000-8000-000000000001');
-    await freshWorkspace(null, 'ffffffff-ffff-4fff-bfff-fffffffffffe');
+    /*
+     * ONE WALLET PER PAGE MAKES THE ROTATION END ON AN EMPTY PAGE, which by
+     * construction contains no drift. So the rotation is guaranteed to finish
+     * "clean" on its last page while having found drift earlier — exactly the
+     * sequence the defect turned into a clean record.
+     */
+    const dirty = await freshWorkspace(null);
     await platform.creditWallet.update({
       where: { workspaceId: dirty },
       data: { balanceMilliCredits: 77n * MILLI },
