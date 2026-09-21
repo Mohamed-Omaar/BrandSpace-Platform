@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace } from '@brandspace/database';
+import { QUOTA_FEATURES, createPlanQuota } from '@brandspace/entitlements';
 import { redact } from '@brandspace/shared';
 import {
   createConnectorRegistry,
@@ -20,6 +21,7 @@ import {
 import {
   appRoleClient,
   createIsolationFixtures,
+  grantUnlimitedQuota,
   FIXTURE_SOCIAL_KEK,
   type IsolationFixtures,
 } from './fixtures';
@@ -84,6 +86,15 @@ beforeAll(async () => {
   app = appRoleClient();
   fixtures = await createIsolationFixtures(app);
   policy = enabledPolicy();
+  // The plan's connected-account ceiling is real now, and a fixture workspace is
+  // on no plan — which the engine reads as "none". These suites are about OAuth
+  // security and token secrecy, not about that ceiling, so the dimension is
+  // granted the way an operator would grant it.
+  await grantUnlimitedQuota(app, {
+    workspaceId: fixtures.a.workspaceId,
+    platformUserId: fixtures.platformUserId,
+    featureKey: QUOTA_FEATURES.socialAccounts,
+  });
   await withWorkspace(
     fixtures.a.workspaceId,
     async (db) => {
@@ -173,6 +184,18 @@ describe('the audit trail records what happened, never the credential', () => {
           registry: createConnectorRegistry({ policy, environment: 'DEVELOPMENT' }),
           vault,
           applications,
+          // THE REAL QUOTA, not a permissive stand-in. `limit.social_accounts`
+          // is unconfigured in these fixtures, which the engine reads as
+          // unlimited — so the ceiling never fires here and the suite keeps
+          // testing what it is about, while still exercising the path that
+          // records the consumption.
+          quota: createPlanQuota({
+            db,
+            workspaceId: fixtures.a.workspaceId,
+            environment: 'DEVELOPMENT',
+            featureKey: QUOTA_FEATURES.socialAccounts,
+            period: 'total',
+          }),
         }).start({
           // TIKTOK: its mock offers ONE target, so the callback connects in one
           // step. This case is about what a credential row contains, not about
@@ -194,6 +217,18 @@ describe('the audit trail records what happened, never the credential', () => {
           registry: createConnectorRegistry({ policy, environment: 'DEVELOPMENT' }),
           vault,
           applications,
+          // THE REAL QUOTA, not a permissive stand-in. `limit.social_accounts`
+          // is unconfigured in these fixtures, which the engine reads as
+          // unlimited — so the ceiling never fires here and the suite keeps
+          // testing what it is about, while still exercising the path that
+          // records the consumption.
+          quota: createPlanQuota({
+            db,
+            workspaceId: fixtures.a.workspaceId,
+            environment: 'DEVELOPMENT',
+            featureKey: QUOTA_FEATURES.socialAccounts,
+            period: 'total',
+          }),
         }).complete({
           state: state.state,
           code: `code-${randomUUID()}`,
@@ -255,6 +290,18 @@ describe('the audit trail records what happened, never the credential', () => {
           registry: createConnectorRegistry({ policy, environment: 'DEVELOPMENT' }),
           vault,
           applications,
+          // THE REAL QUOTA, not a permissive stand-in. `limit.social_accounts`
+          // is unconfigured in these fixtures, which the engine reads as
+          // unlimited — so the ceiling never fires here and the suite keeps
+          // testing what it is about, while still exercising the path that
+          // records the consumption.
+          quota: createPlanQuota({
+            db,
+            workspaceId: fixtures.a.workspaceId,
+            environment: 'DEVELOPMENT',
+            featureKey: QUOTA_FEATURES.socialAccounts,
+            period: 'total',
+          }),
         }).start({
           provider: 'LINKEDIN',
           brandId: fixtures.a.brandId,

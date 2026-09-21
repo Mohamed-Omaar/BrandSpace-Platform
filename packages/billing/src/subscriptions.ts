@@ -261,14 +261,27 @@ export class SubscriptionLifecycleService {
     return row.currentPeriodEnd;
   }
 
-  /** Change their mind, any time before the period ends. */
+  /**
+   * Change their mind, any time before the period ends.
+   *
+   * BEFORE THE PERIOD ENDS IS A PREDICATE, NOT A SENTENCE IN A COMMENT. The
+   * cycle boundary now acts on `cancelAtPeriodEnd` and moves the subscription
+   * to CANCELLED, and the flag stays as the record of why. Without the status
+   * in the `where`, clearing it afterwards would report a resumption that
+   * restored no access at all — the subscription would still be CANCELLED and
+   * the customer would have been told otherwise.
+   */
   async resume(
     db: TenantScopedClient,
     workspaceId: string,
     actorUserId: string | null,
   ): Promise<void> {
     const { count } = await db.workspaceSubscription.updateMany({
-      where: { workspaceId, cancelAtPeriodEnd: true },
+      where: {
+        workspaceId,
+        cancelAtPeriodEnd: true,
+        status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
+      },
       data: { cancelAtPeriodEnd: false, cancelRequestedAt: null },
     });
     if (count === 0) return;
@@ -326,8 +339,27 @@ export class SubscriptionLifecycleService {
       resourceId: input.workspaceId,
       severity: 'CRITICAL',
       reason: 'Payment was not collected before the grace period ended.',
-      // Stated so the audit record cannot be misread later as a deletion.
-      after: { accessWithdrawn: true, dataRetained: true },
+      /*
+       * WHAT THIS RECORD MAY CLAIM.
+       *
+       * It used to say `accessWithdrawn: true`, and nothing withdrew any
+       * access. `WorkspaceSubscription.status` is not what the entitlements
+       * engine resolves against — `EntitlementService.contextFor` reads
+       * `Workspace.planKey` and never looks at the subscription's status — so a
+       * SUSPENDED subscription kept every capability it had, and the one row an
+       * operator would trust said otherwise.
+       *
+       * The fix is not to guess what suspension should take away. §3.5 says "AI
+       * + publishing stop; data retained; export available", and the platform's
+       * only existing suspension mechanism (`Workspace.status`) removes the
+       * workspace from the member's session entirely, which would also remove
+       * the export the same paragraph promises. Reconciling those two is a
+       * product decision, recorded as D-234 and deliberately not taken here.
+       *
+       * So the record says what actually happened. `dataRetained` stays,
+       * because nothing here deletes anything and that is worth stating.
+       */
+      after: { subscriptionSuspended: true, dataRetained: true, accessChanged: false },
     });
     return 'suspend';
   }

@@ -1214,3 +1214,60 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-44.7 | A credit note exports as a negative, so a period reconciles to what was actually billed                          | `invoice-document`   |
 | AC-44.8 | Jurisdiction fields are explicit columns; no country's tax law is encoded as universal                           | `invoice-document`   |
 | AC-44.9 | An invoice or an export belonging to another workspace is a 404, shaped like an id that never existed            | `phase10-production` |
+
+---
+
+## 28. Current execution Phase 3 — Billing & Entitlements Operations
+
+> Distinct from the older roadmap's delivered "Phase 3 — Plans, Entitlements and Credits". This phase
+> built no new machinery; it gave the existing machinery callers, and proved the financial and
+> entitlement paths end to end. See `docs/BILLING-AND-CREDITS.md` Part V.
+
+### AC-45 The financial maintenance actually runs
+
+| ID      | Criterion                                                                                                                | Settled by                  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| AC-45.1 | A subscription whose period has ended is advanced BY THE SCHEDULER, and receives the allowance its subscription pinned   | `phase3-billing-operations` |
+| AC-45.2 | A duplicated tick grants nothing more, and two simultaneous boundary crossings move the period exactly once              | `phase3-billing-operations` |
+| AC-45.3 | `cancelAtPeriodEnd` ends the subscription at the boundary, keeps its period end, and grants no allowance                 | `phase3-billing-operations` |
+| AC-45.4 | A trial reaching its boundary EXPIRES rather than becoming a paid subscription                                           | `phase3-billing-operations` |
+| AC-45.5 | A scheduled downgrade is applied at the boundary, with the target plan's price pinned                                    | `phase3-billing-operations` |
+| AC-45.6 | Lapsed credits are written off by a sweep, and a bucket whose remainder is entirely reserved neither moves nor blocks it | `phase3-billing-operations` |
+| AC-45.7 | A reservation whose request never returned is released, and the held balance comes back                                  | `phase3-billing-operations` |
+| AC-45.8 | A past-due subscription past its grace period is suspended once, with a CRITICAL audit record                            | `phase3-billing-operations` |
+| AC-45.9 | One workspace's failure does not stop the rest of the batch                                                              | `phase3-billing-operations` |
+
+### AC-46 Financial state can be proved not to have drifted
+
+| ID      | Criterion                                                                                                    | Settled by                  |
+| ------- | ------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| AC-46.1 | A wallet that disagrees with a replay of its ledger is REPORTED                                              | `phase3-billing-operations` |
+| AC-46.2 | A held amount that no open reservation or bucket accounts for is reported                                    | `phase3-billing-operations` |
+| AC-46.3 | A completed pack purchase whose grant is missing, foreign, or the wrong size is reported                     | `financial-reconciliation`  |
+| AC-46.4 | Drift is **never repaired**; the materialised value is still wrong after the pass, and an audit row names it | `phase3-billing-operations` |
+| AC-46.5 | The pass is bounded, stably ordered, and rotates so no workspace is permanently unexamined                   | `phase3-billing-operations` |
+| AC-46.6 | A clean workspace produces no finding                                                                        | `phase3-billing-operations` |
+
+### AC-47 Two more plan quotas are enforced where the resource is created
+
+| ID      | Criterion                                                                                                               | Settled by                                     |
+| ------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| AC-47.1 | A brand past the plan's `limit.brands` is refused through the product, and no brand row is created                      | `onboarding-first-brand` (E2E)                 |
+| AC-47.2 | A connected account past `limit.social_accounts` is refused, and the ceiling is read before the consent screen          | `phase3-connection-quota`                      |
+| AC-47.3 | The last slot cannot be taken twice: the atomic consumption at connection time refuses the second callback              | `phase3-connection-quota`                      |
+| AC-47.4 | Disconnecting returns the slot exactly once, however many times it is asked                                             | `phase3-connection-quota`                      |
+| AC-47.5 | A reconnection takes a FRESH slot rather than replaying a spent key                                                     | `phase3-connection-quota`                      |
+| AC-47.6 | A ceiling of zero is none, not unlimited                                                                                | `phase3-connection-quota`                      |
+| AC-47.7 | The consumption and the business mutation share one transaction, so neither can exist without the other                 | `phase3-connection-quota`, `quota-enforcement` |
+| AC-47.8 | `limit.seats` is documented as **configured but not currently consumed**, with the reason (D-233), not silently skipped | `docs/DECISIONS.md`                            |
+
+### AC-48 The billing inbox is operable
+
+| ID      | Criterion                                                                                                    | Settled by                                     |
+| ------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| AC-48.1 | The events needing a person (`DEAD_LETTER`, `FAILED`, `UNRESOLVED`) can be enumerated, bounded, oldest first | `phase3-billing-operations`                    |
+| AC-48.2 | The listing never returns the normalized payload                                                             | `phase3-billing-operations`                    |
+| AC-48.3 | A settled event is not listed and cannot be replayed                                                         | `phase3-billing-operations`, `phase9-commerce` |
+| AC-48.4 | Replay requires BOTH `platform.plan.assign` and `platform.credit.adjust`, re-checked in the action           | `apps/admin` health action                     |
+| AC-48.5 | The operator surface holds no webhook signing secret and cannot accept a delivery                            | `financial-reconciliation`, `reconcile`        |
+| AC-48.6 | A dead-letter and a drift each write an **audit record**, and the documentation calls it that, not an alert  | `docs/BILLING-AND-CREDITS.md` §5.1, §29        |

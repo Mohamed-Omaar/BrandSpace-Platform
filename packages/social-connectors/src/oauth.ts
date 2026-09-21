@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   Prisma,
   writeAuditEvent,
@@ -48,6 +48,31 @@ export interface OAuthActor {
   readonly brandScope: readonly string[];
 }
 
+/**
+ * The plan's ceiling on connected accounts (`limit.social_accounts`, D-10).
+ *
+ * A STRUCTURAL INTERFACE, satisfied by `createPlanQuota` in
+ * `@brandspace/entitlements` and handed in by the app that already knows the
+ * environment — the same seam the content calendar uses for its scheduling
+ * quota. This package therefore never constructs an entitlement engine, and the
+ * precedence that decides the number lives in exactly one place.
+ *
+ * IT IS REQUIRED, NOT OPTIONAL. `limit.social_accounts` had been in the plan
+ * catalogue, the quota projection, the Control Center's plan editor and the
+ * downgrade impact check since Phase 3, and no code path consulted it — the
+ * configuration comment beside `maxConnectionsPerWorkspace` said the plan limit
+ * "is enforced separately" and it was enforced nowhere. An optional field is how
+ * a caller silently goes back to that, so omitting it is a type error (F-74).
+ */
+export interface ConnectionQuota {
+  /** The plan's ceiling on connected accounts. `null` is unlimited. */
+  limit(): Promise<number | null>;
+  /** Take one. False means the plan refused it. */
+  consume(idempotencyKey: string): Promise<boolean>;
+  /** Give one back when a connection is disconnected. */
+  refund(idempotencyKey: string): Promise<void>;
+}
+
 export interface SocialOAuthOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -56,6 +81,7 @@ export interface SocialOAuthOptions {
   readonly vault: SocialTokenVault;
   /** Resolves the platform app's own credentials. Platform surfaces only. */
   readonly applications: ApplicationResolver;
+  readonly quota: ConnectionQuota;
   readonly clock?: Clock;
 }
 
@@ -158,11 +184,13 @@ export class SocialOAuthService {
   readonly #vault: SocialTokenVault;
   readonly #applications: ApplicationResolver;
   readonly #clock: Clock;
+  readonly #quota: ConnectionQuota;
 
   constructor(options: SocialOAuthOptions) {
     this.#db = options.db;
     this.#workspaceId = options.workspaceId;
     this.#policy = options.policy;
+    this.#quota = options.quota;
     this.#registry = options.registry;
     this.#vault = options.vault;
     this.#applications = options.applications;
@@ -207,6 +235,25 @@ export class SocialOAuthService {
       },
     });
     if (live >= this.#policy.oauth.maxConnectionsPerWorkspace) throw connectionLimitReached();
+
+    /*
+     * AND THE PLAN'S OWN CEILING, IN THE SAME PLACE AND FOR THE SAME REASON.
+     *
+     * TWO DIFFERENT LIMITS. `maxConnectionsPerWorkspace` is a platform safety
+     * ceiling an operator sets for everybody; `limit.social_accounts` is what
+     * this customer bought. The configuration schema has always said the second
+     * one "is enforced separately" — and it was enforced nowhere, so every
+     * workspace on every plan could connect accounts without end.
+     *
+     * THIS IS THE COURTESY CHECK, NOT THE ENFORCEMENT. The customer is refused
+     * before they are sent to a consent screen, because refusing the RESULT of
+     * one is the worst possible order. The authoritative check is the atomic
+     * consumption at `#connect`, where the connection actually comes into
+     * existence — a counter taken here would be charged for every authorization
+     * a customer abandoned.
+     */
+    const planLimit = await this.#quota.limit();
+    if (planLimit !== null && live >= planLimit) throw connectionLimitReached();
 
     const application = await this.#applications.resolve(input.provider);
 
@@ -627,8 +674,35 @@ export class SocialOAuthService {
         ? null
         : new Date(input.now.getTime() + input.bundle.expiresInSeconds * 1_000);
 
+    /*
+     * THE PLAN'S SLOT IS TAKEN AS THE CONNECTION IS CREATED, not before.
+     *
+     * ONE TRANSACTION. Every caller builds this service inside `withWorkspace`,
+     * which is one PostgreSQL transaction, and `UsageService` runs inline on it
+     * rather than opening its own — so the counter and the `social_connection`
+     * row commit together or not at all. There is no window in which the plan
+     * has been charged for a connection that does not exist, and none in which
+     * a connection exists uncounted. A retry whose transaction rolled back
+     * therefore has nothing to be idempotent ABOUT.
+     *
+     * THE KEY IS THE CONNECTION, WHICH IS WHY THE ID IS MINTED HERE. Keying the
+     * consumption on the provider's account id instead would have made a
+     * reconnection free: disconnecting refunds the slot, and the next connection
+     * of the same account would replay the old key and increment nothing. The
+     * refund at `disconnect` uses this same id, so the two are symmetric and a
+     * repeated disconnect returns the slot exactly once.
+     *
+     * A SECOND SUCCESSFUL RUN IS IMPOSSIBLE UPSTREAM. Both paths that reach here
+     * have already consumed a single-use row — the authorization state or the
+     * selection token — so this is not the place that stops a replay.
+     */
+    const connectionId = randomUUID();
+    const took = await this.#quota.consume(`social-account:${connectionId}`);
+    if (!took) throw connectionLimitReached();
+
     const connection = await this.#db.socialConnection.create({
       data: {
+        id: connectionId,
         workspaceId: this.#workspaceId,
         brandId: input.record.brandId,
         provider: input.record.provider,

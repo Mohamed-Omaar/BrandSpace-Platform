@@ -1,8 +1,7 @@
 import type { Environment } from '@brandspace/config';
-import type { PrismaClient, TenantScopedClient } from '@brandspace/database';
-import { AppError } from '@brandspace/shared';
-import { EntitlementService, TenantCatalogueSource } from './service';
-import { QUOTA_FEATURES, UsageService } from './usage';
+import type { TenantScopedClient } from '@brandspace/database';
+import { createPlanQuota, type PlanQuotaAdapter } from './plan-quota';
+import { QUOTA_FEATURES } from './usage';
 
 /**
  * THE PLAN'S MONTHLY SCHEDULING CEILING — one implementation, every caller.
@@ -20,6 +19,12 @@ import { QUOTA_FEATURES, UsageService } from './usage';
  * and the usage ledger are this package; the calendar consumes the result
  * through its own narrow `ScheduleQuota` interface, which this satisfies
  * structurally without either package importing the other.
+ *
+ * IT IS NOW `createPlanQuota` WITH THIS DIMENSION'S TWO ARGUMENTS. The body was
+ * generic apart from the feature key and the window, and the current execution
+ * Phase 3 needed the same twelve lines for `limit.brands` and
+ * `limit.social_accounts`. Copying them would have been three places for the
+ * "only a QUOTA_EXCEEDED may become a boolean" rule to be got wrong.
  *
  * D-10 PRECEDENCE IS NOT RE-IMPLEMENTED. `EntitlementService.limit` resolves
  * plan → override → flag → default, and the FEATURE KEY is the shared constant
@@ -39,44 +44,16 @@ export function createScheduleQuota(input: {
   workspaceId: string;
   environment: Environment;
 }): ScheduleQuotaAdapter {
-  const client = input.db as unknown as PrismaClient;
-  const usage = new UsageService({ prisma: client });
-  const entitlements = new EntitlementService({
-    prisma: client,
-    catalogueSource: new TenantCatalogueSource(client, input.environment),
+  const quota: PlanQuotaAdapter = createPlanQuota({
+    db: input.db,
+    workspaceId: input.workspaceId,
     environment: input.environment,
+    featureKey: QUOTA_FEATURES.scheduledPostsPerMonth,
+    period: 'month',
   });
-  const FEATURE = QUOTA_FEATURES.scheduledPostsPerMonth;
-  const workspaceId = input.workspaceId;
-
   return {
-    async limit(): Promise<number | null> {
-      return entitlements.limit(workspaceId, FEATURE);
-    },
-    async consume(idempotencyKey: string): Promise<boolean> {
-      try {
-        await usage.consume({
-          workspaceId,
-          featureKey: FEATURE,
-          limitValue: await entitlements.limit(workspaceId, FEATURE),
-          period: 'month',
-          idempotencyKey,
-        });
-        return true;
-      } catch (error: unknown) {
-        /*
-         * A REFUSAL IS A `QUOTA_EXCEEDED`, AND IT IS THE ONLY FAILURE THIS
-         * BOOLEAN MAY SWALLOW. Anything else — a connection fault, a conflicting
-         * key — is a real error and must not be reported to the caller as "the
-         * plan is full", which would send them to a billing page over a database
-         * hiccup.
-         */
-        if (error instanceof AppError && error.code === 'QUOTA_EXCEEDED') return false;
-        throw error;
-      }
-    },
-    async refund(idempotencyKey: string): Promise<void> {
-      await usage.refund({ workspaceId, featureKey: FEATURE, period: 'month', idempotencyKey });
-    },
+    limit: () => quota.limit(),
+    consume: (idempotencyKey: string) => quota.consume(idempotencyKey),
+    refund: (idempotencyKey: string) => quota.refund(idempotencyKey),
   };
 }

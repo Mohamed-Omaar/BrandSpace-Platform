@@ -153,4 +153,65 @@ test.describe('onboarding reaches a first real brand', () => {
 
     expect(brands).toBe(1);
   });
+
+  /*
+   * THE PLAN'S BRAND CEILING IS ENFORCED WHERE A BRAND IS CREATED.
+   *
+   * `limit.brands` was in the plan catalogue, the quota projection, the Control
+   * Center's plan editor and the downgrade impact check — and no code path
+   * consulted it, so every workspace on every plan could create brands without
+   * end. A limit that only appears in a form an operator fills in is not a
+   * limit, and only a test that CREATES A BRAND THROUGH THE PRODUCT can tell
+   * the difference.
+   *
+   * THE CEILING IS SET THE WAY AN OPERATOR WOULD SET IT: a workspace override,
+   * which the precedence engine resolves ahead of the plan. No plan, price or
+   * approved number is written anywhere (AC-04.3).
+   */
+  test('THE PLAN CEILING: a second brand past the limit is refused, and none is created', async ({
+    page,
+  }) => {
+    const email = await signUpVerifyAndSignIn(page);
+    await createWorkspace(page);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
+    await page.fill('[data-testid="new-brand-name"]', BRAND_NAME);
+    await page.getByTestId('create-brand').click();
+    await page.waitForLoadState('domcontentloaded');
+
+    const workspaceId = await withPlatformPrisma(async (prisma) => {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        select: { id: true, memberships: { select: { workspaceId: true }, take: 1 } },
+      });
+      const id = user.memberships[0]?.workspaceId ?? '';
+      const owner = await prisma.platformUser.findFirstOrThrow({ select: { id: true } });
+      await prisma.workspaceOverride.create({
+        data: {
+          workspaceId: id,
+          featureKey: 'limit.brands',
+          enabled: true,
+          // ONE, which this workspace has already used.
+          limitValue: 1,
+          reason: 'End-to-end fixture: an explicit brand ceiling.',
+          grantedByPlatformUserId: owner.id,
+        },
+      });
+      return id;
+    });
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
+    await page.fill('[data-testid="new-brand-name"]', 'A Second Brand');
+    await page.getByTestId('create-brand').click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // The customer is TOLD, in their own language, that a plan limit stopped
+    // them — not shown a page that reloaded unchanged.
+    await expect(page).toHaveURL(/error=QUOTA_EXCEEDED/);
+
+    const brands = await withPlatformPrisma(async (prisma) =>
+      prisma.brand.count({ where: { workspaceId, deletedAt: null } }),
+    );
+    expect(brands).toBe(1);
+  });
 });

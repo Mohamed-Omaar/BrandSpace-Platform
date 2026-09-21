@@ -221,8 +221,23 @@ own stored payload and re-runs the settlement. It replays only from `DEAD_LETTER
 `UNRESOLVED`, `RETRYABLE` or `RECEIVED` — never from `PROCESSED`, `DUPLICATE` or `STALE`, so the tool
 cannot turn one payment into two — and it records the operator who asked
 (`billing.event.replayed`, `PLATFORM_USER`). An operator cannot supply an event, amend an amount, or
-replay anything that was not signed on arrival. **The Control Center screen for it is not built yet**;
-the service method is, and it is what such a screen would call.
+replay anything that was not signed on arrival.
+
+**The operator can now see them and finish them** (current execution Phase 3, D-241).
+`eventsNeedingAttention()` lists the inbox rows in `DEAD_LETTER`, `FAILED` and `UNRESOLVED` — bounded,
+oldest first, and never returning the normalized payload — and the Control Center's **System health**
+page shows them with a replay control. Until that existed the queue had an index described as "listing
+the dead-letter queue for an operator" that no query used, and an operator's only route to a stuck
+payment was to already know its id.
+
+**The replay surface holds no provider secret.** `ReconcilerOptions.providers` is optional: it is
+consulted only by `receive()`, which verifies and parses a delivery. A reconciler built without it can
+re-apply an event the platform already verified and CANNOT accept a new one, so the Control Center
+never needs a webhook signing key (F-07).
+
+**The authority it requires is the union of what it can do.** A replay can activate a subscription and
+can grant purchased credits, so it requires BOTH `platform.plan.assign` and `platform.credit.adjust` —
+strictly narrower than either alone. Whether it should instead have a key of its own is D-236.
 
 **One delivery at a time.** Settlement runs outside the inbox row's own transaction, deliberately, so a
 rolled-back apply still leaves the receipt visible. A processing claim — a conditional `UPDATE` carrying
@@ -383,8 +398,9 @@ A sweeper finds reservations older than their request's timeout and releases the
 - **Monthly plan grant** on the subscription's billing-cycle boundary — not the calendar month — so a
   customer who subscribes on the 20th resets on the 20th.
 - **Rollover policy** per plan: `none` (unused expire), `capped` (roll over up to N), or `full`.
-- **Expiry:** each grant may carry `expiresAt`. A daily sweep writes `expiry` transactions.
-  Customers are warned 7 days before a material expiry.
+- **Expiry:** each grant may carry `expiresAt`. A sweep writes `expiry` transactions.
+  Customers are warned 7 days before a material expiry — **the warning is not implemented**;
+  `noteLowBalance` exists and has no caller, and nothing emails a customer about an expiry.
 - **Consumption order: FIFO by expiry** — soonest-expiring credits are consumed first, and each usage
   charge records which grant bucket it drew from.
 - **Promotional grants** are bulk-issuable from Admin to a cohort with an expiry and an affected-workspace
@@ -659,3 +675,110 @@ country's decision.
   export is the kind of thing a filing agent rejects.
 - **The period is required and bounded** to 400 days. An unbounded export of a commercial record is a
   query nobody bounded.
+
+---
+
+# Part V — Current execution Phase 3: Billing & Entitlements Operations
+
+> **Phase numbering.** `docs/ROADMAP.md` uses an older scheme in which "Phase 3 — Plans, Entitlements
+> and Credits" was delivered long ago. That history is unchanged. This part describes the **current
+> execution Phase 3**, which followed "Core Product Completeness" and built nothing new: it found the
+> operations that existed and had no caller, and gave them one.
+
+## 27. The gap this phase existed to close
+
+Every mechanism in Parts I–IV was implemented and tested. Between them, six of them had **no caller
+outside `tests/`**:
+
+| Operation                                        | What its absence meant in a running deployment                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `CreditLedgerService.runCycleReset`              | The monthly allowance was granted once, at plan assignment, and never again |
+| `CreditLedgerService.expireLapsedGrants`         | Credits never expired, whatever `expiresAt` said                            |
+| `CreditLedgerService.sweepAbandonedReservations` | A hold left by a died request reduced a customer's balance for ever         |
+| `SubscriptionService.advanceCycle`               | The billing period never moved; a scheduled downgrade never took effect     |
+| `SubscriptionService.dueForCycle`                | **No caller at all** — the method exists only to be a sweep's input         |
+| `SubscriptionLifecycleService.advanceDunning`    | A past-due subscription never escalated, so the ladder ended at PAST_DUE    |
+
+None of that is visible from reading the services, which are correct. It is visible only by asking who
+calls them — which is why the regression tests assert against `MaintenanceScheduler` and not against the
+helpers underneath it. A test against a helper would have passed before this phase and after it.
+
+## 28. `sweepFinance` — what runs, in what order, and why
+
+`MaintenanceScheduler.sweepFinance` runs five passes on the **retention-purge cadence**, which is the
+judgement every sweep before it made: work waiting to be dispatched answers to the reconcile cadence,
+and things that come due over time answer to the purge one. A billing boundary, an expiry date and a
+grace period are all measured in days.
+
+1. **Abandoned reservations** are released first, so the credits they were holding are spendable before
+   anything downstream decides what a balance is.
+2. **Lapsed grants** are written off. The candidate query excludes a bucket whose whole remainder is
+   reserved — `expireLapsedGrants` deliberately cannot touch one, so it would otherwise sit at the head
+   of an ordered scan for ever and keep later workspaces out of a bounded batch.
+3. **Cycle boundaries** are crossed and the new period's allowance granted. `dueForCycle` is ordered by
+   the boundary being waited on, oldest first; a bounded `take` with no order is a scan whose contents
+   the database may choose differently every pass.
+4. **The dunning ladder** advances for past-due subscriptions, oldest first, measured from the FIRST
+   failure so a sweep that runs late or twice cannot lengthen or shorten anyone's grace period.
+5. **Reconciliation** runs last, so it judges the state the other four produced.
+
+**Everything is idempotent and bounded.** `advanceCycle` writes conditionally on the period end it read,
+so two instances crossing one boundary move it once; `runCycleReset` is keyed on the period it grants
+for, so the loser of that race reads back `alreadyApplied`. One workspace's failure is logged and the
+loop continues — a single bad row must not become every customer's problem.
+
+**Which identity does what.** The ledger's write identity everywhere in the product is already the
+platform client (`reserve`, `settle` and `release` all run that way, and `#lockWallet` is raw SQL the
+tenant role is not granted), so the sweeps that maintain it use the same identity rather than inventing
+a second one. Dunning is the exception and runs inside `withWorkspace`: `advanceDunning` takes a
+tenant-scoped client and writes the tenant's own audit event, exactly as the commerce routes call it.
+
+## 29. Reconciliation: five invariants, no repairs
+
+`FinancialReconciler` reads at most `limit` wallets in a stable order, starting after the id it last
+saw, and reports where a materialised value disagrees with the record it derives from:
+
+| Invariant                                                                               | What a disagreement means                             |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| wallet balance == sum of the immutable ledger                                           | A balance moved without a transaction, or the reverse |
+| wallet balance == sum of what the buckets say is left                                   | FIFO consumption and the wallet have diverged         |
+| wallet held == sum of what the buckets say is held                                      | A reservation moved one and not the other             |
+| wallet held == sum of the reservations that are actually open                           | A hold outlived, or never reached, its reservation    |
+| a completed purchase's grant exists, is the customer's, and is the size that was bought | A payment that produced nothing, or the wrong thing   |
+
+**It repairs nothing.** A drift means an invariant that is supposed to hold by construction did not, and
+rewriting the materialised value to match would destroy the evidence and leave the cause in place. It
+writes a CRITICAL `AuditEvent` when it finds drift and a NOTICE one when a full rotation completes
+clean. **That is an audit record, not an external alert**: nothing pages anybody, and no notification
+platform was built for this phase.
+
+Its cursor is deliberately in memory, unlike the analytics cursor D-182 makes durable. The difference is
+what forgetting costs: an analytics cursor that resets can MISS data, while a reconciliation that starts
+again re-checks workspaces it has already checked, which is the safe direction.
+
+## 30. Quota enforcement reached two more dimensions
+
+`limit.brands` and `limit.social_accounts` were configured, projected, editable and consulted by nothing.
+Both are now consumed where the resource comes into existence — brand creation, and the OAuth callback
+that creates a connection — through `createPlanQuota`, which is `EntitlementService.limit` plus the same
+atomic `usage_counter` statement every other quota uses. The connected-account slot is returned on
+disconnection, keyed on the connection rather than on the provider's account id, so a reconnection takes
+a fresh slot instead of replaying a spent key.
+
+**The consumption and the business mutation share one transaction.** Both call sites run inside
+`withWorkspace`, and `UsageService` runs inline on that transaction rather than opening its own, so a
+creation that fails takes the consumption with it. There is no window in which the plan is charged for a
+resource that does not exist, and none in which one exists uncounted.
+
+`limit.seats` is **configured but not currently consumed**, and that is recorded rather than papered
+over: what counts as a seat, and the fact that the founder's own membership is written by the
+transaction that creates the workspace before any plan can exist, make it a product decision (D-233).
+
+## 31. What this phase did NOT do
+
+- **No production payment provider was chosen, named or activated** (D-204 stands). The only adapter is
+  still the deterministic development one, and nothing here simulates a collection.
+- **No proration or refund economics were invented.** Nothing beyond what §3 already approves.
+- **No notification platform.** A dead-letter and a drift each write an audit row, and the docs above say
+  so in those words rather than calling it an alert.
+- **No Control Center redesign.** One read-only list and one button on a page that already existed.

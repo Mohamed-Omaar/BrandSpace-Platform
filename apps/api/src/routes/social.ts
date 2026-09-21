@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ConfigurationService } from '@brandspace/config';
+import { ConfigurationService, type Environment } from '@brandspace/config';
 import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
-import { getPrisma, withWorkspace, type SocialProvider } from '@brandspace/database';
+import {
+  getPrisma,
+  withWorkspace,
+  type SocialProvider,
+  type TenantScopedClient,
+} from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { SecretService } from '@brandspace/secrets';
 import {
@@ -15,7 +20,9 @@ import {
   SOCIAL_PROVIDERS,
   type AdapterApplication,
   type ApplicationResolver,
+  type ConnectionQuota,
 } from '@brandspace/social-connectors';
+import { QUOTA_FEATURES, createPlanQuota } from '@brandspace/entitlements';
 import {
   createLogger,
   currentEnvironment,
@@ -234,6 +241,28 @@ async function resolveCaller(
   };
 }
 
+/**
+ * The plan's connected-account ceiling, for one workspace inside its own scope.
+ *
+ * `createPlanQuota` IS THE ONE IMPLEMENTATION. D-10 precedence — plan, override,
+ * flag, default — is resolved by the entitlements engine, and the counter is the
+ * same atomic `usage_counter` every other quota uses, so two concurrent
+ * connections at the last slot cannot both succeed.
+ */
+function connectionQuota(
+  db: TenantScopedClient,
+  workspaceId: string,
+  environment: Environment,
+): ConnectionQuota {
+  return createPlanQuota({
+    db,
+    workspaceId,
+    environment,
+    featureKey: QUOTA_FEATURES.socialAccounts,
+    period: 'total',
+  });
+}
+
 async function oauthServiceFor<T>(
   workspaceId: string,
   fn: (service: SocialOAuthService) => Promise<T>,
@@ -249,6 +278,11 @@ async function oauthServiceFor<T>(
         registry: createConnectorRegistry({ policy, environment }),
         vault: new SocialTokenVault(),
         applications: applicationResolver(),
+        // THE PLAN'S CEILING ON CONNECTED ACCOUNTS (`limit.social_accounts`),
+        // resolved by the entitlements engine. Handed in rather than built
+        // inside the connector package, which has no business knowing about
+        // configuration environments — the same seam the calendar uses.
+        quota: connectionQuota(db, workspaceId, environment),
       }),
     ),
   );
@@ -270,6 +304,9 @@ async function connectionServiceFor<T>(
         // THE RESOLVER IS PRESENT HERE and absent in the dashboard. That is the
         // whole reason disconnection lives on this surface.
         applications: applicationResolver(),
+        // And so is the quota, for the same reason: this is the surface that
+        // disconnects, and a disconnection must return the plan's slot.
+        quota: connectionQuota(db, workspaceId, environment),
       }),
     ),
   );

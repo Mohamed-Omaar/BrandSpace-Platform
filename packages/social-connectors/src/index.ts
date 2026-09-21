@@ -52,6 +52,7 @@ export { SocialOAuthService } from './oauth';
 export type {
   ApplicationResolver,
   CompleteConnectionResult,
+  ConnectionQuota,
   OAuthActor,
   PendingSelectionView,
   SocialOAuthOptions,

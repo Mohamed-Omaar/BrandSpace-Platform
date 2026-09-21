@@ -223,10 +223,34 @@ export class SubscriptionService {
   }
 
   /**
-   * Move the cycle forward, applying any scheduled downgrade.
+   * Move the cycle forward, applying any scheduled downgrade or cancellation.
    *
-   * Returns the plan key now in force, which the caller needs in order to grant
-   * the right allowance for the new period.
+   * Returns the subscription as it stands after the boundary, which the caller
+   * needs in order to grant the right allowance for the new period — and to
+   * know whether there is a new period at all.
+   *
+   * THREE OUTCOMES, AND ONLY ONE OF THEM RENEWS.
+   *
+   *   - A TRIAL that reaches its boundary without payment EXPIRES. It does not
+   *     silently become a paid subscription.
+   *   - A subscription the customer asked to CANCEL at period end reaches that
+   *     end here. `cancelAtPeriodEnd` used to be a flag nothing ever acted on:
+   *     the customer was told access continued until the period end, and then
+   *     the period rolled over for ever.
+   *   - Everything else renews into the next period, applying any pending
+   *     downgrade (docs/BILLING-AND-CREDITS.md §3.3).
+   *
+   * A TERMINAL OUTCOME LEAVES THE PERIOD WHERE IT IS, deliberately. The row
+   * then says when access ended rather than claiming a period the customer
+   * neither paid for nor holds, and `dueForCycle` stops offering it because it
+   * filters on the serving statuses.
+   *
+   * IDEMPOTENT ON THE BOUNDARY ITSELF — the requirement a scheduled caller
+   * makes of it. The write is conditional on the period end this call read, so
+   * two ticks racing, or one tick retried, move the cycle EXACTLY ONCE: the
+   * loser matches no row, re-reads, and returns the state the winner left. A
+   * second advance is not a harmless repeat — it is a month of access and a
+   * month of credits nobody paid for.
    */
   async advanceCycle(workspaceId: string, nextTerms: PlanTerms | null): Promise<SubscriptionView> {
     const existing = await this.#prisma.workspaceSubscription.findUnique({
@@ -240,16 +264,21 @@ export class SubscriptionService {
         ? addMonthsClamped(start, 12)
         : addMonthsClamped(start, 1);
 
-    const applyPending = existing.pendingPlanKey !== null && nextTerms !== null;
+    const status = existing.cancelAtPeriodEnd
+      ? 'CANCELLED'
+      : existing.status === 'TRIALING'
+        ? 'EXPIRED'
+        : existing.status;
+    const renews = status !== 'CANCELLED' && status !== 'EXPIRED';
+    const applyPending = renews && existing.pendingPlanKey !== null && nextTerms !== null;
 
-    const updated = await this.#prisma.workspaceSubscription.update({
-      where: { workspaceId },
+    await this.#prisma.workspaceSubscription.updateMany({
+      // THE PERIOD END THIS CALL READ. Any other value means somebody else
+      // already crossed this boundary.
+      where: { workspaceId, currentPeriodEnd: existing.currentPeriodEnd },
       data: {
-        currentPeriodStart: start,
-        currentPeriodEnd: end,
-        // A trial that reaches its boundary without payment expires. It does
-        // not silently become a paid subscription.
-        status: existing.status === 'TRIALING' ? 'EXPIRED' : existing.status,
+        ...(renews ? { currentPeriodStart: start, currentPeriodEnd: end } : {}),
+        status,
         ...(applyPending && nextTerms
           ? {
               planKey: nextTerms.planKey,
@@ -260,10 +289,29 @@ export class SubscriptionService {
           : {}),
       },
     });
-    return toView(updated);
+
+    /*
+     * RE-READ, ALWAYS, AND RETURN THAT. Matching no row is not an error — a
+     * duplicated tick is the normal cost of a sweep that is safe to run twice
+     * — so the caller is told what is true NOW rather than what this call
+     * intended. A grant keyed on the period it reads back therefore cannot be
+     * made twice for one boundary.
+     */
+    const after = await this.#prisma.workspaceSubscription.findUnique({ where: { workspaceId } });
+    if (!after) throw new AppError('NOT_FOUND', 'This workspace has no subscription.');
+    return toView(after);
   }
 
-  /** Subscriptions whose period has ended — the cycle sweep's input. */
+  /**
+   * Subscriptions whose period has ended — the cycle sweep's input.
+   *
+   * ORDERED BY THE BOUNDARY THEY ARE WAITING ON, oldest first, then by id to
+   * break ties. `take` without an order is a bounded scan whose contents the
+   * database is free to choose differently every pass, so a workspace whose
+   * boundary keeps failing could sit behind others for ever while they were
+   * re-offered — the starvation D-182 records for the analytics queue, in the
+   * one sweep where the cost of never being reached is a month of credits.
+   */
   async dueForCycle(limit = 200): Promise<ReadonlyArray<{ workspaceId: string; planKey: string }>> {
     const rows = await this.#prisma.workspaceSubscription.findMany({
       where: {
@@ -271,6 +319,7 @@ export class SubscriptionService {
         status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
       },
       select: { workspaceId: true, planKey: true },
+      orderBy: [{ currentPeriodEnd: 'asc' }, { workspaceId: 'asc' }],
       take: limit,
     });
     return rows;

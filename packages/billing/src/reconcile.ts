@@ -258,9 +258,91 @@ export interface CreditGrantPort {
 }
 
 export interface ReconcilerOptions {
-  readonly providers: ProviderRegistry;
+  /**
+   * The provider adapters, for VERIFYING AND PARSING a delivery.
+   *
+   * OPTIONAL, AND ITS ABSENCE IS A CAPABILITY DIFFERENCE rather than a
+   * convenience — the same shape `SocialConnectionService` uses for its vault.
+   * `receive` is the only method that consults it; `replay` re-applies an event
+   * we already stored and already verified, and needs no adapter and therefore
+   * no webhook signing secret.
+   *
+   * So an OPERATOR surface constructs this WITHOUT a registry. It can finish an
+   * event the platform already accepted and it cannot accept a new one, because
+   * it holds nothing that could verify a signature (F-07). Handing the Control
+   * Center a signing secret so that a replay button could exist would have been
+   * a real credential deployed to a process with no use for it.
+   */
+  readonly providers?: ProviderRegistry | undefined;
   readonly credits: CreditGrantPort;
   readonly clock?: Clock;
+}
+
+/**
+ * The inbox statuses that mean a PERSON has to decide something.
+ *
+ * `DEAD_LETTER` has exhausted its retries, `FAILED` is a deterministic refusal
+ * about the money, and `UNRESOLVED` is an event we could not tie to a workspace
+ * through a mapping we wrote. None of them will ever change on their own.
+ */
+export const ATTENTION_INBOX_STATUSES = ['DEAD_LETTER', 'FAILED', 'UNRESOLVED'] as const;
+
+export type AttentionInboxStatus = (typeof ATTENTION_INBOX_STATUSES)[number];
+
+/** One inbox row as an operator sees it. Never the payload. */
+export interface AttentionEvent {
+  readonly id: string;
+  readonly providerKey: string;
+  readonly externalEventId: string;
+  readonly eventType: string;
+  readonly status: string;
+  readonly resolvedWorkspaceId: string | null;
+  readonly failureReason: string | null;
+  readonly attempts: number;
+  readonly occurredAt: Date;
+  readonly receivedAt: Date;
+}
+
+/**
+ * The events waiting for somebody — the dead-letter queue, enumerated.
+ *
+ * WHY THIS DID NOT EXIST. `DEAD_LETTER` was reachable, terminal, audited and
+ * replayable, and nothing could LIST it: the schema even carries an index
+ * described as "finding a stuck claim, and listing the dead-letter queue for an
+ * operator", and no query used the second half of it. An operator's only route
+ * to a stuck payment was to know its id already.
+ *
+ * IT NEVER RETURNS THE PAYLOAD. An operator needs to know which event, whose,
+ * why it stopped and how many times it was tried. The normalized body is the
+ * input to a replay, not a thing to render, and leaving it out means this list
+ * cannot become the place provider data leaks from.
+ *
+ * BOUNDED AND ORDERED, OLDEST FIRST, because the oldest stuck payment is the one
+ * that has been wrong for longest.
+ */
+export async function eventsNeedingAttention(
+  db: ReconcilerClient,
+  input: { readonly limit?: number; readonly statuses?: readonly AttentionInboxStatus[] } = {},
+): Promise<readonly AttentionEvent[]> {
+  const limit = Math.min(Math.max(1, input.limit ?? 50), 200);
+  const statuses = input.statuses ?? ATTENTION_INBOX_STATUSES;
+  return db.billingEvent.findMany({
+    where: { status: { in: [...statuses] } },
+    select: {
+      id: true,
+      providerKey: true,
+      externalEventId: true,
+      eventType: true,
+      status: true,
+      resolvedWorkspaceId: true,
+      failureReason: true,
+      attempts: true,
+      occurredAt: true,
+      receivedAt: true,
+    },
+    orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
 }
 
 /**
@@ -316,13 +398,13 @@ const REPLAYABLE_INBOX_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 export class BillingReconciler {
-  readonly #providers: ProviderRegistry;
+  readonly #providers: ProviderRegistry | null;
   readonly #credits: CreditGrantPort;
   readonly #clock: Clock;
   readonly #invoices: InvoiceService;
 
   constructor(options: ReconcilerOptions) {
-    this.#providers = options.providers;
+    this.#providers = options.providers ?? null;
     this.#credits = options.credits;
     this.#clock = options.clock ?? systemClock;
     this.#invoices = new InvoiceService({ clock: this.#clock });
@@ -337,6 +419,11 @@ export class BillingReconciler {
    * before anyone knows whose it is, so there is no tenant context to run it in.
    */
   async receive(db: ReconcilerClient, input: ReceiveInput): Promise<DeliveryResult> {
+    if (!this.#providers) {
+      // A reconciler built without adapters cannot accept a delivery, by
+      // construction. See `ReconcilerOptions.providers`.
+      return { accepted: false, reason: 'no_provider_registry' };
+    }
     const provider = this.#providers.get(input.providerKey);
     if (!provider) {
       return { accepted: false, reason: 'unknown_provider' };

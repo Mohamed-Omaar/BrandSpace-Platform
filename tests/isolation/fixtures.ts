@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { asPlatform } from '@brandspace/database';
+import { asPlatform, withWorkspace } from '@brandspace/database';
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
 import { SocialTokenVault } from '@brandspace/social-connectors';
 
@@ -506,7 +506,26 @@ async function createTenant(
         },
       });
       const wallet = await db.creditWallet.create({
-        data: { workspaceId: id, balanceMilliCredits: 5000n },
+        data: {
+          workspaceId: id,
+          balanceMilliCredits: 5000n,
+          /*
+           * THE WALLET RECORDS THE HOLD ITS BUCKET AND ITS RESERVATION BOTH
+           * RECORD.
+           *
+           * The grant below already carries `reservedMilliCredits: 1000n` for
+           * the open reservation below that, and this row carried nothing — so
+           * the fixture described a state the product cannot produce: a
+           * reservation and a bucket that both know credits are held, and a
+           * wallet that does not. `reserve()` moves all three together.
+           *
+           * Nothing noticed until the current execution Phase 3 added a
+           * reconciliation pass, which found it in every fixture workspace ever
+           * created. A fixture that fabricates an impossible state makes the one
+           * sweep whose job is to detect impossible states report noise.
+           */
+          reservedMilliCredits: 1000n,
+        },
       });
       const creditTransaction = await db.creditTransaction.create({
         data: {
@@ -1592,7 +1611,12 @@ async function createTenant(
         data: {
           workspaceId: id,
           packKey: 'fixture-pack',
-          credits: 500,
+          // FIVE CREDITS, BECAUSE THE GRANT IT NAMES IS 5000 MILLI-CREDITS.
+          // It said 500, pointing at the same 5000-milli bucket — a purchase
+          // claiming to have bought a hundred times what it produced. Same
+          // reason as the wallet above: the reconciliation pass reads this pair
+          // and a fixture must not describe a state a payment cannot produce.
+          credits: 5,
           currency: 'SAR',
           currencyScale: 2,
           amountMinor: 9900n,
@@ -1846,4 +1870,42 @@ export async function dropThrowawayDatabase(
   }
   // Best effort, without FORCE: by now every backend should have gone.
   await client.query(`DROP DATABASE IF EXISTS "${name}"`).catch(() => undefined);
+}
+
+/**
+ * Grant one quota feature to a fixture workspace, with no ceiling.
+ *
+ * WHY A SUITE EVER NEEDS THIS. The entitlements engine fails CLOSED: a quota
+ * feature nothing grants resolves to `enabled: false`, and `limit()` reports 0
+ * for a disabled feature — "not unlimited, none". That is right in production
+ * and it means a fixture workspace, which is on no configured plan, may do
+ * nothing that consumes a quota. A suite about OAuth security then fails on the
+ * connected-account ceiling, which is not what it is testing.
+ *
+ * A WORKSPACE OVERRIDE, WHICH IS THE PRODUCT'S OWN MECHANISM, not a stub and not
+ * a relaxed service. `enabled: true` with `limitValue: null` is exactly what an
+ * operator granting an unlimited dimension from the Control Center writes, and
+ * the precedence engine resolves it the same way for a test as for a customer.
+ * NO PLAN, NO PRICE AND NO NUMBER is written anywhere by it (CLAUDE.md §2.2).
+ */
+export async function grantUnlimitedQuota(
+  prisma: PrismaClient,
+  input: { workspaceId: string; platformUserId: string; featureKey: string },
+): Promise<void> {
+  await withWorkspace(
+    input.workspaceId,
+    async (db) => {
+      await db.workspaceOverride.create({
+        data: {
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          enabled: true,
+          limitValue: null,
+          reason: 'Isolation fixture: this suite is not about this ceiling.',
+          grantedByPlatformUserId: input.platformUserId,
+        },
+      });
+    },
+    { prisma },
+  );
 }

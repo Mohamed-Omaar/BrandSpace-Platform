@@ -912,6 +912,25 @@ the defect D-182 names, so the sweep orders every ACTIVE connection by
 tenant's own transaction, beside the ensure it records, so the two commit together and a failed pass is
 not marked done.
 
+### The financial sweeps (current execution Phase 3)
+
+`MaintenanceScheduler.sweepFinance` is the caller six financial operations never had. It releases
+abandoned credit reservations, expires lapsed grants, crosses billing-cycle boundaries and grants the
+new period's allowance, advances the dunning ladder, and reconciles the materialised financial numbers
+against the records they derive from — in that order, because each pass changes what the next one sees.
+
+It rides the **retention-purge cadence** rather than introducing a seventh operator setting: work
+waiting to be dispatched answers to the reconcile cadence, and a boundary, an expiry date and a grace
+period are all measured in days.
+
+**It is the same enumeration seam as every sweep above.** The credit ledger's WRITE identity everywhere
+in the product is already the platform client, so the passes that maintain it use that identity rather
+than inventing a second one; dunning takes a tenant-scoped client and runs inside `withWorkspace`,
+exactly as the commerce routes call it. One workspace's failure is logged and the loop continues.
+
+Why it was missing, what each absence meant, and what each pass guarantees is
+`docs/BILLING-AND-CREDITS.md` Part V.
+
 ---
 
 ## Phase 9 — Commerce & Onboarding

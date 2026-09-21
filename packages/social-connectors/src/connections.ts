@@ -7,7 +7,7 @@ import {
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import { socialConnectionNotFound } from './errors';
 import type { ConnectorRegistry } from './registry';
-import type { ApplicationResolver } from './oauth';
+import type { ApplicationResolver, ConnectionQuota } from './oauth';
 import type { SocialTokenVault } from './token-vault';
 
 /**
@@ -84,6 +84,19 @@ export interface ConnectionServiceOptions {
    * remember.
    */
   readonly applications?: ApplicationResolver | undefined;
+  /**
+   * The plan's ceiling on connected accounts, so `disconnect` can give the slot
+   * back — OPTIONAL, for exactly the reason `vault` and `applications` are.
+   *
+   * A surface built for READING holds no quota adapter because reading consumes
+   * nothing. `disconnect` is the only method here that moves the counter, and a
+   * caller that can disconnect is a caller that must supply one: the refund is
+   * not optional where a disconnection is possible, because a slot that is never
+   * returned means a customer who disconnects an account is charged for it for
+   * ever. `disconnect` therefore refuses rather than silently skipping the
+   * refund — see the guard there.
+   */
+  readonly quota?: ConnectionQuota | undefined;
   readonly clock?: Clock;
 }
 
@@ -122,6 +135,7 @@ export class SocialConnectionService {
   readonly #registry: ConnectorRegistry;
   readonly #vault: SocialTokenVault | undefined;
   readonly #applications: ApplicationResolver | undefined;
+  readonly #quota: ConnectionQuota | undefined;
   readonly #clock: Clock;
 
   constructor(options: ConnectionServiceOptions) {
@@ -130,6 +144,7 @@ export class SocialConnectionService {
     this.#registry = options.registry;
     this.#vault = options.vault;
     this.#applications = options.applications;
+    this.#quota = options.quota;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -237,6 +252,31 @@ export class SocialConnectionService {
     await this.#db.socialCredential.deleteMany({
       where: { workspaceId: this.#workspaceId, socialConnectionId: connection.id },
     });
+
+    /*
+     * THE PLAN'S SLOT GOES BACK.
+     *
+     * `limit.social_accounts` counts CONNECTIONS THAT EXIST, not connections
+     * ever made, so a disconnection must return the slot or a customer who
+     * rotates an account eventually cannot connect anything. The key is the
+     * connection's own id — the same one `#connect` consumed on, under its own
+     * prefix — so disconnect twice, or retry it, and the slot comes back exactly
+     * once, while a later reconnection of the same account takes a fresh slot
+     * rather than replaying a spent key. THE PREFIX IS NOT DECORATION: consume
+     * and refund share one unique index on the usage event, and reusing the
+     * consumption's key here would be refused as a conflicting movement.
+     *
+     * A CALLER THAT CAN DISCONNECT MUST BE ABLE TO REFUND. Skipping the refund
+     * silently because no adapter was supplied would charge the customer for an
+     * account they no longer have, so this refuses instead. Read-only surfaces
+     * never reach here.
+     */
+    if (!this.#quota) {
+      throw new Error(
+        'SocialConnectionService.disconnect needs a quota adapter to return the plan slot.',
+      );
+    }
+    await this.#quota.refund(`social-account-refund:${connection.id}`);
 
     const now = this.#clock.now();
     const updated = await this.#db.socialConnection.update({

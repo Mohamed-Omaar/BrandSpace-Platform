@@ -51,7 +51,23 @@ import {
   SocialTokenVault,
 } from '@brandspace/social-connectors';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
-import { UsageService } from '@brandspace/entitlements';
+import {
+  CreditLedgerService,
+  SubscriptionService,
+  UsageService,
+  creditPolicyFrom,
+  findPlan,
+  readPlanCatalogue,
+  termsFor,
+  type CreditPolicy,
+  type PlanDetail,
+} from '@brandspace/entitlements';
+import {
+  FinancialReconciler,
+  SubscriptionLifecycleService,
+  commercePolicyFrom,
+  type CommercePolicy,
+} from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
 import { createLogger, internalErrorFields, systemClock, type Clock } from '@brandspace/shared';
 
@@ -139,6 +155,20 @@ export interface MaintenanceResult {
   readonly automationEventsProduced: number;
   readonly automationEventsDispatched: number;
   readonly automationProposalsExpired: number;
+  /**
+   * Current execution Phase 3 — the financial sweeps.
+   *
+   * Every one of these numbers was previously unreachable in a running
+   * deployment: the operations behind them existed, were tested, and had no
+   * caller anywhere outside a test file. A monthly allowance nothing grants is
+   * not a monthly allowance.
+   */
+  readonly creditReservationsSwept: number;
+  readonly creditExpiryWorkspaces: number;
+  readonly billingCyclesAdvanced: number;
+  readonly cycleAllowancesGranted: number;
+  readonly dunningSuspensions: number;
+  readonly financialDriftsFound: number;
 }
 
 export interface SchedulerOptions {
@@ -1179,6 +1209,396 @@ export class MaintenanceScheduler {
     return dispatched;
   }
 
+  // ---------------------------------------------------------------------------
+  // Current execution Phase 3 — Billing & Entitlements Operations.
+  //
+  // WHAT WAS ACTUALLY MISSING. The credit ledger, the subscription lifecycle
+  // and the dunning ladder were all implemented and all tested, and between
+  // them they had ZERO callers outside `tests/`. `SubscriptionService.dueForCycle`
+  // — a method whose whole purpose is to be the input to a sweep — had no caller
+  // at all. So in a running deployment: lapsed credits never expired, an
+  // abandoned reservation held a customer's balance for ever, the monthly
+  // allowance was granted once at plan assignment and never again, a scheduled
+  // downgrade never took effect, `cancelAtPeriodEnd` never ended anything, and a
+  // past-due subscription never escalated. None of that is visible from reading
+  // the services, which are correct; it is visible only by asking who calls them.
+  //
+  // WHY THE PLATFORM CLIENT. The credit tables are tenant-owned, and the ledger's
+  // WRITE identity everywhere in the product is already the platform client —
+  // `apps/api/src/routes/content.ts`, `phase7-context.ts` and `phase9-context.ts`
+  // all construct it that way, because reserve/settle/release run on behalf of a
+  // request the tenant cannot be inside (and `#lockWallet` is raw SQL the tenant
+  // role is not granted). This sweep uses the same identity as the code path it
+  // maintains rather than inventing a second one. Dunning is the exception and
+  // runs under `withWorkspace`: `advanceDunning` takes a `TenantScopedClient` and
+  // writes the tenant's own audit event, exactly as the commerce routes call it.
+  //
+  // EVERY PASS IS BOUNDED, STABLY ORDERED AND SAFE TO REPEAT. One workspace's
+  // failure is logged and the loop continues — a single bad row must not stop
+  // every other customer's billing — and every operation underneath is keyed so
+  // that a duplicated tick, or two API instances sweeping at once, changes
+  // nothing the first one already did.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Where the reconciliation pass got to.
+   *
+   * DELIBERATELY IN MEMORY, unlike the analytics cursor D-182 makes durable. The
+   * difference is what is lost by forgetting: an analytics cursor that resets
+   * re-reads a provider window and can MISS data it already passed, while a
+   * reconciliation that starts again from the beginning merely re-checks
+   * workspaces it has already checked. Re-checking is the safe direction, and it
+   * buys the rotation without a migration for a table that would hold one row.
+   */
+  #reconciliationCursor: string | null = null;
+
+  /**
+   * The commercial configuration one financial pass needs.
+   *
+   * READ PER PASS, not cached: an owner activating a new credits policy or plan
+   * catalogue must take effect on the next sweep, and a cache with no
+   * invalidation is how a customer keeps being granted last month's allowance.
+   */
+  async #commercial(): Promise<{
+    readonly policy: CreditPolicy;
+    readonly plans: readonly PlanDetail[];
+    readonly planVersionId: string | null;
+    readonly commerce: CommercePolicy;
+  }> {
+    const configuration = new ConfigurationService({ prisma: getPlatformClient() });
+    const [credits, plans, planVersionId, commerce] = await Promise.all([
+      configuration.get('credits', this.#environment),
+      configuration.get('plans', this.#environment),
+      configuration.activeVersionId('plans', this.#environment),
+      configuration.get('commerce', this.#environment),
+    ]);
+    return {
+      policy: creditPolicyFrom(credits as Record<string, unknown>),
+      plans: readPlanCatalogue(plans as Record<string, unknown>),
+      planVersionId,
+      commerce: commercePolicyFrom(commerce as Record<string, unknown>),
+    };
+  }
+
+  /**
+   * Release reservations whose request never came back.
+   *
+   * A reservation holds spendable balance. A process that dies between `reserve`
+   * and `settle` leaves the hold in place for ever, and the customer's balance
+   * silently shrinks with no transaction anywhere explaining it. The sweep is the
+   * only thing that returns it, and `failed` is a correctness alert about the
+   * ledger rather than a reason to stop: the rest of the batch is still released.
+   */
+  async sweepCreditReservations(limit: number): Promise<number> {
+    const ledger = new CreditLedgerService({ prisma: getPlatformClient(), clock: this.#clock });
+    const result = await ledger.sweepAbandonedReservations(limit);
+    if (result.failed.length > 0) {
+      log.error('abandoned credit reservations could not be released', {
+        sweep: 'credit-reservations',
+        failed: result.failed.length,
+        attempted: result.attempted,
+      });
+    }
+    if (!result.exhausted) {
+      // Not an error: the bound did its job. Said out loud so "the leak metric
+      // is zero" is never confused with "the sweep stopped early".
+      log.info('abandoned-reservation sweep stopped at its bound', {
+        sweep: 'credit-reservations',
+        swept: result.swept,
+      });
+    }
+    return result.swept;
+  }
+
+  /**
+   * Write off credits that have passed their expiry — §11's "daily sweep".
+   *
+   * THE CANDIDATE SET EXCLUDES BUCKETS THAT CANNOT MOVE. A lapsed bucket whose
+   * whole remainder is reserved against a request in flight is deliberately not
+   * written off by `expireLapsedGrants`, so it would stay at the head of an
+   * ordered scan for ever and could keep later workspaces out of a bounded
+   * batch. Comparing the two columns removes it from the candidates until the
+   * reservation settles or is swept, which is the pass above.
+   */
+  async expireCredits(limit: number): Promise<number> {
+    const platform = getPlatformClient();
+    const lapsed = await platform.creditGrant.findMany({
+      where: {
+        expiresAt: { lt: this.#clock.now() },
+        remainingMilliCredits: { gt: platform.creditGrant.fields.reservedMilliCredits },
+      },
+      select: { workspaceId: true },
+      distinct: ['workspaceId'],
+      orderBy: { workspaceId: 'asc' },
+      take: limit,
+    });
+    if (lapsed.length === 0) return 0;
+
+    const { policy } = await this.#commercial();
+    const ledger = new CreditLedgerService({
+      prisma: platform,
+      clock: this.#clock,
+      policy,
+    });
+
+    let touched = 0;
+    for (const { workspaceId } of lapsed) {
+      try {
+        const expired = await ledger.expireLapsedGrants(workspaceId);
+        if (expired > 0n) touched += 1;
+      } catch (error: unknown) {
+        // ONE WORKSPACE, NOT THE PLATFORM. A row that cannot be expired is a
+        // problem for that customer; stopping here would make it everyone's.
+        log.error('credit expiry failed for one workspace', {
+          sweep: 'credit-expiry',
+          workspaceId,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return touched;
+  }
+
+  /**
+   * Cross the billing-cycle boundary and grant the new period's allowance.
+   *
+   * TWO OPERATIONS, ONE ORDER, AND BOTH IDEMPOTENT. `advanceCycle` moves the
+   * period conditionally on the period end it read, so two instances crossing
+   * the same boundary move it once. `runCycleReset` is keyed on the period it is
+   * granting for, so the loser of that race — and any retry of this pass —
+   * reads back `alreadyApplied` instead of granting a second allowance.
+   *
+   * THE ALLOWANCE IS THE PINNED ONE (AC-04.7). `pinnedMonthlyCredits` is what the
+   * customer agreed to; a later catalogue edit changes what new customers are
+   * offered and nothing here. The ROLLOVER policy is read from the live plan,
+   * because it is a policy rather than a price.
+   *
+   * A TERMINAL BOUNDARY GRANTS NOTHING. A trial that ended, or a subscription the
+   * customer cancelled, has no next period — granting it credits would be the
+   * product paying for itself.
+   */
+  async advanceBillingCycles(limit: number): Promise<{ advanced: number; granted: number }> {
+    const platform = getPlatformClient();
+    const subscriptions = new SubscriptionService({ prisma: platform, clock: this.#clock });
+    const due = await subscriptions.dueForCycle(limit);
+    if (due.length === 0) return { advanced: 0, granted: 0 };
+
+    const { policy, plans, planVersionId } = await this.#commercial();
+    const ledger = new CreditLedgerService({ prisma: platform, clock: this.#clock, policy });
+
+    let advanced = 0;
+    let granted = 0;
+
+    for (const row of due) {
+      try {
+        const before = await subscriptions.get(row.workspaceId);
+        if (!before) continue;
+
+        // A scheduled downgrade needs the terms of the plan it is moving TO,
+        // priced in the currency this subscription is already billed in. No
+        // price in that currency means nothing to pin (D-08), so the downgrade
+        // waits rather than being applied at a converted number.
+        const pending = findPlan(plans, before.pendingPlanKey);
+        const nextTerms = pending ? termsFor(pending, before.currency, planVersionId) : null;
+
+        const after = await subscriptions.advanceCycle(row.workspaceId, nextTerms);
+        if (
+          after.currentPeriodStart.getTime() !== before.currentPeriodStart.getTime() ||
+          after.status !== before.status
+        ) {
+          advanced += 1;
+        }
+        if (after.status === 'CANCELLED' || after.status === 'EXPIRED') continue;
+
+        const plan = findPlan(plans, after.planKey);
+        if (!plan) {
+          // A subscription on a plan the catalogue no longer defines. Granting
+          // an invented allowance would be worse than granting none, and an
+          // operator needs to know rather than a sweep deciding.
+          log.error('billing cycle reached a plan the catalogue does not define', {
+            sweep: 'billing-cycle',
+            workspaceId: row.workspaceId,
+          });
+          continue;
+        }
+
+        const reset = await ledger.runCycleReset({
+          workspaceId: row.workspaceId,
+          monthlyCredits: after.pinnedMonthlyCredits,
+          rolloverPolicy: plan.rolloverPolicy,
+          rolloverCapMultiplier: plan.rolloverCapMultiplier,
+          // THE PERIOD IT IS GRANTING FOR, and the workspace it belongs to.
+          // `runCycleReset` refuses a cycle key that was used for a different
+          // workspace, so the id is not decoration.
+          cycleKey: `${row.workspaceId}:${after.currentPeriodStart.toISOString()}`,
+          nextResetAt: after.currentPeriodEnd,
+        });
+        if (!reset.alreadyApplied) granted += 1;
+        if (reset.unforfeitable > 0n) {
+          log.info('rollover cap could not be fully applied', {
+            sweep: 'billing-cycle',
+            workspaceId: row.workspaceId,
+          });
+        }
+      } catch (error: unknown) {
+        log.error('billing cycle failed for one workspace', {
+          sweep: 'billing-cycle',
+          workspaceId: row.workspaceId,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return { advanced, granted };
+  }
+
+  /**
+   * Advance the dunning ladder for past-due subscriptions.
+   *
+   * MEASURED FROM THE FIRST FAILURE (§22), which is what makes a sweep that runs
+   * late, or twice, unable to lengthen or shorten anybody's grace period. The
+   * escalation ends at SUSPENDED and nothing is ever deleted.
+   *
+   * ORDERED BY HOW LONG THEY HAVE BEEN PAST DUE. The customer closest to the end
+   * of their grace period is the one a bounded batch must not miss, and reaching
+   * `suspend` moves the row out of the candidate set, so the queue drains.
+   */
+  async advanceDunning(limit: number): Promise<number> {
+    const platform = getPlatformClient();
+    const due = await platform.workspaceSubscription.findMany({
+      where: { status: 'PAST_DUE', pastDueSince: { not: null } },
+      select: { workspaceId: true },
+      orderBy: [{ pastDueSince: 'asc' }, { workspaceId: 'asc' }],
+      take: limit,
+    });
+    if (due.length === 0) return 0;
+
+    const { commerce } = await this.#commercial();
+    const lifecycle = new SubscriptionLifecycleService({ clock: this.#clock });
+    const tenantPrisma = getPrisma();
+
+    let suspensions = 0;
+    for (const { workspaceId } of due) {
+      try {
+        const step = await withWorkspace(
+          workspaceId,
+          async (db) => lifecycle.advanceDunning(db, { workspaceId, policy: commerce }),
+          { prisma: tenantPrisma },
+        );
+        if (step === 'suspend') suspensions += 1;
+      } catch (error: unknown) {
+        log.error('dunning failed for one workspace', {
+          sweep: 'dunning',
+          workspaceId,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return suspensions;
+  }
+
+  /**
+   * Ask the rows whether the financial invariants still hold.
+   *
+   * IT REPAIRS NOTHING. A drift means an invariant that is supposed to hold by
+   * construction did not, and rewriting the materialised value to match would
+   * destroy the evidence and leave the cause in place.
+   *
+   * WHAT IT WRITES. A CRITICAL `AuditEvent` when it finds drift, and a NOTICE one
+   * when a full rotation of the platform completes clean — so the record shows
+   * both "something is wrong" and "everything was checked and was right",
+   * without a row every fifteen minutes for ever. THIS IS AN AUDIT RECORD, NOT AN
+   * EXTERNAL ALERT: nothing pages anybody, and docs/BILLING-AND-CREDITS.md says
+   * so in the same words.
+   */
+  async reconcileFinancials(limit: number): Promise<number> {
+    const platform = getPlatformClient();
+    const result = await new FinancialReconciler({ prisma: platform }).run({
+      limit,
+      after: this.#reconciliationCursor,
+    });
+    // Wrap at the end of the platform so every workspace is visited in a bounded
+    // number of passes rather than the first `limit` of them for ever.
+    this.#reconciliationCursor = result.exhausted ? null : result.cursor;
+
+    if (result.drifts.length > 0) {
+      await platform.auditEvent.create({
+        data: {
+          workspaceId: null,
+          actorType: 'SYSTEM',
+          action: 'platform.billing.reconciliation.drift',
+          resourceType: 'credit_wallet',
+          severity: 'CRITICAL',
+          outcome: 'ERROR',
+          reason: 'A materialised financial value disagrees with the record it derives from.',
+          // The kinds and the workspaces, and no amounts a customer could be
+          // identified by beyond their own id. This row is platform-scoped: the
+          // tenant role has no policy that returns it.
+          after: {
+            walletsChecked: result.walletsChecked,
+            purchasesChecked: result.purchasesChecked,
+            drifts: result.drifts.map((drift) => ({
+              workspaceId: drift.workspaceId,
+              kind: drift.kind,
+              subjectId: drift.subjectId,
+            })),
+          },
+        },
+      });
+      log.error('financial reconciliation found drift', {
+        sweep: 'financial-reconciliation',
+        drifts: result.drifts.length,
+      });
+    } else if (result.exhausted) {
+      await platform.auditEvent.create({
+        data: {
+          workspaceId: null,
+          actorType: 'SYSTEM',
+          action: 'platform.billing.reconciliation.clean',
+          resourceType: 'credit_wallet',
+          severity: 'INFO',
+          outcome: 'SUCCESS',
+          reason: 'Every financial invariant held on the wallets examined.',
+          after: {
+            walletsChecked: result.walletsChecked,
+            purchasesChecked: result.purchasesChecked,
+          },
+        },
+      });
+    }
+    return result.drifts.length;
+  }
+
+  /** Every financial pass, in the order their dependencies run. */
+  async sweepFinance(batch: number): Promise<{
+    reservationsSwept: number;
+    expiryWorkspaces: number;
+    cyclesAdvanced: number;
+    allowancesGranted: number;
+    dunningSuspensions: number;
+    driftsFound: number;
+  }> {
+    /*
+     * THE ORDER IS NOT ARBITRARY. Releasing abandoned reservations first frees
+     * the buckets that expiry and the rollover cap would otherwise have to leave
+     * alone, so a boundary crossed in the same pass applies the cap to the real
+     * spendable balance rather than to one an dead request was still holding.
+     * Reconciliation runs LAST, so it judges the state this pass produced.
+     */
+    const reservationsSwept = await this.sweepCreditReservations(batch);
+    const expiryWorkspaces = await this.expireCredits(batch);
+    const cycle = await this.advanceBillingCycles(batch);
+    const dunningSuspensions = await this.advanceDunning(batch);
+    const driftsFound = await this.reconcileFinancials(batch);
+    return {
+      reservationsSwept,
+      expiryWorkspaces,
+      cyclesAdvanced: cycle.advanced,
+      allowancesGranted: cycle.granted,
+      dunningSuspensions,
+      driftsFound,
+    };
+  }
+
   /** Every workspace's zone, in one query rather than one per rule. */
   async #timezonesFor(
     platform: PrismaClient,
@@ -1204,6 +1624,7 @@ export class MaintenanceScheduler {
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
+    const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -1220,6 +1641,12 @@ export class MaintenanceScheduler {
       automationEventsProduced: automations.produced,
       automationEventsDispatched: automations.dispatched,
       automationProposalsExpired: automations.expired,
+      creditReservationsSwept: finance.reservationsSwept,
+      creditExpiryWorkspaces: finance.expiryWorkspaces,
+      billingCyclesAdvanced: finance.cyclesAdvanced,
+      cycleAllowancesGranted: finance.allowancesGranted,
+      dunningSuspensions: finance.dunningSuspensions,
+      financialDriftsFound: finance.driftsFound,
     };
   }
 
@@ -1311,6 +1738,33 @@ export class MaintenanceScheduler {
     every(cadence.ingestionReconcileSeconds, 'automation-sweep', async () => {
       const swept = await this.sweepAutomations(cadence.ingestionReconcileBatch);
       return swept.produced + swept.dispatched + swept.expired;
+    });
+
+    /*
+     * THE FINANCIAL SWEEPS (current execution Phase 3).
+     *
+     * THEY RIDE THE PURGE CADENCE, which is the same judgement every sweep
+     * before them made: work waiting to be dispatched answers to the reconcile
+     * cadence, and things that come due over time answer to the purge one. A
+     * billing boundary, an expiry date and a grace period are all measured in
+     * days, so noticing them within the purge interval is punctual, and adding a
+     * seventh operator setting for the same pressure is not.
+     *
+     * THEY RUN AS ONE TIMER, in the order `sweepFinance` fixes, because they are
+     * not independent: a released reservation changes what expiry and the
+     * rollover cap can take, and the reconciliation must judge the state the
+     * others left.
+     */
+    every(cadence.retentionPurgeSeconds, 'finance-sweep', async () => {
+      const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
+      return (
+        finance.reservationsSwept +
+        finance.expiryWorkspaces +
+        finance.cyclesAdvanced +
+        finance.allowancesGranted +
+        finance.dunningSuspensions +
+        finance.driftsFound
+      );
     });
 
     log.info('maintenance scheduler started', {
