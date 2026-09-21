@@ -1250,16 +1250,16 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 
 ### AC-47 Two more plan quotas are enforced where the resource is created
 
-| ID      | Criterion                                                                                                               | Settled by                                     |
-| ------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| AC-47.1 | A brand past the plan's `limit.brands` is refused through the product, and no brand row is created                      | `onboarding-first-brand` (E2E)                 |
-| AC-47.2 | A connected account past `limit.social_accounts` is refused, and the ceiling is read before the consent screen          | `phase3-connection-quota`                      |
-| AC-47.3 | The last slot cannot be taken twice: the atomic consumption at connection time refuses the second callback              | `phase3-connection-quota`                      |
-| AC-47.4 | Disconnecting returns the slot exactly once, however many times it is asked                                             | `phase3-connection-quota`                      |
-| AC-47.5 | A reconnection takes a FRESH slot rather than replaying a spent key                                                     | `phase3-connection-quota`                      |
-| AC-47.6 | A ceiling of zero is none, not unlimited                                                                                | `phase3-connection-quota`                      |
-| AC-47.7 | The consumption and the business mutation share one transaction, so neither can exist without the other                 | `phase3-connection-quota`, `quota-enforcement` |
-| AC-47.8 | `limit.seats` is documented as **configured but not currently consumed**, with the reason (D-233), not silently skipped | `docs/DECISIONS.md`                            |
+| ID      | Criterion                                                                                                                                                                                                                                                       | Settled by                                     |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| AC-47.1 | A brand past the plan's `limit.brands` is refused through the product, and no brand row is created. The product has ONE brand-creation path, reachable only from the empty state (D-243), so the reachable refusal is the first brand against a ceiling of none | `onboarding-first-brand` (E2E)                 |
+| AC-47.2 | A connected account past `limit.social_accounts` is refused, and the ceiling is read before the consent screen                                                                                                                                                  | `phase3-connection-quota`                      |
+| AC-47.3 | The last slot cannot be taken twice: the atomic consumption at connection time refuses the second callback                                                                                                                                                      | `phase3-connection-quota`                      |
+| AC-47.4 | Disconnecting returns the slot exactly once, however many times it is asked                                                                                                                                                                                     | `phase3-connection-quota`                      |
+| AC-47.5 | A reconnection takes a FRESH slot rather than replaying a spent key                                                                                                                                                                                             | `phase3-connection-quota`                      |
+| AC-47.6 | A ceiling of zero is none, not unlimited                                                                                                                                                                                                                        | `phase3-connection-quota`                      |
+| AC-47.7 | The consumption and the business mutation share one transaction, so neither can exist without the other                                                                                                                                                         | `phase3-connection-quota`, `quota-enforcement` |
+| AC-47.8 | `limit.seats` is documented as **configured but not currently consumed**, with the reason (D-233), not silently skipped                                                                                                                                         | `docs/DECISIONS.md`                            |
 
 ### AC-48 The billing inbox is operable
 

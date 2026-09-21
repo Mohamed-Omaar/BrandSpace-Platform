@@ -158,26 +158,31 @@ test.describe('onboarding reaches a first real brand', () => {
    * THE PLAN'S BRAND CEILING IS ENFORCED WHERE A BRAND IS CREATED.
    *
    * `limit.brands` was in the plan catalogue, the quota projection, the Control
-   * Center's plan editor and the downgrade impact check — and no code path
-   * consulted it, so every workspace on every plan could create brands without
-   * end. A limit that only appears in a form an operator fills in is not a
-   * limit, and only a test that CREATES A BRAND THROUGH THE PRODUCT can tell
-   * the difference.
+   * Center's plan editor and the downgrade impact check, and no code path
+   * consulted it. A limit that only appears in a form an operator fills in is
+   * not a limit, and only a test that tries to CREATE A BRAND THROUGH THE
+   * PRODUCT can tell the difference.
+   *
+   * THE CEILING IS ZERO AND THE BRAND IS THE FIRST ONE, which is not an
+   * arbitrary choice of numbers. There is exactly ONE brand-creation path in
+   * the product — the empty state on Brand Brain — and it is reachable only
+   * while the workspace has no brand at all: once one exists, the form is
+   * replaced by the brand's own screen and nothing else offers to make another.
+   * So "the first brand, refused" is the only refusal this product can
+   * currently reach, and a test that set the ceiling to one and asked for a
+   * second would be asserting against a screen that does not exist. That the
+   * product cannot create a second brand is recorded separately (D-243); it is
+   * a gap in the customer UX, not in the enforcement.
    *
    * THE CEILING IS SET THE WAY AN OPERATOR WOULD SET IT: a workspace override,
    * which the precedence engine resolves ahead of the plan. No plan, price or
    * approved number is written anywhere (AC-04.3).
    */
-  test('THE PLAN CEILING: a second brand past the limit is refused, and none is created', async ({
+  test('THE PLAN CEILING: a brand past the limit is refused, and none is created', async ({
     page,
   }) => {
     const email = await signUpVerifyAndSignIn(page);
     await createWorkspace(page);
-
-    await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-    await page.fill('[data-testid="new-brand-name"]', BRAND_NAME);
-    await page.getByTestId('create-brand').click();
-    await page.waitForLoadState('domcontentloaded');
 
     const workspaceId = await withPlatformPrisma(async (prisma) => {
       const user = await prisma.user.findUniqueOrThrow({
@@ -191,9 +196,11 @@ test.describe('onboarding reaches a first real brand', () => {
           workspaceId: id,
           featureKey: 'limit.brands',
           enabled: true,
-          // ONE, which this workspace has already used.
-          limitValue: 1,
-          reason: 'End-to-end fixture: an explicit brand ceiling.',
+          // NONE. Not unlimited — the two are different numbers, and a caller
+          // that collapses them locks out exactly the customers who negotiated
+          // no limit.
+          limitValue: 0,
+          reason: 'End-to-end fixture: a brand ceiling of none.',
           grantedByPlatformUserId: owner.id,
         },
       });
@@ -201,7 +208,7 @@ test.describe('onboarding reaches a first real brand', () => {
     });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-    await page.fill('[data-testid="new-brand-name"]', 'A Second Brand');
+    await page.fill('[data-testid="new-brand-name"]', BRAND_NAME);
     await page.getByTestId('create-brand').click();
     await page.waitForLoadState('domcontentloaded');
 
@@ -212,6 +219,6 @@ test.describe('onboarding reaches a first real brand', () => {
     const brands = await withPlatformPrisma(async (prisma) =>
       prisma.brand.count({ where: { workspaceId, deletedAt: null } }),
     );
-    expect(brands).toBe(1);
+    expect(brands).toBe(0);
   });
 });

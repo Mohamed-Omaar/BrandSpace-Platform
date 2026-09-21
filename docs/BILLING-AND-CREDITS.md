@@ -774,6 +774,13 @@ resource that does not exist, and none in which one exists uncounted.
 over: what counts as a seat, and the fact that the founder's own membership is written by the
 transaction that creates the workspace before any plan can exist, make it a product decision (D-233).
 
+`limit.brands` is enforced at the one path that creates a brand — and that path is reachable only while
+the workspace has none, because the create form lives in Brand Brain's empty state and nothing else in
+the product offers to make another (D-243). So the ceiling is enforced correctly and the only refusal
+the product can currently reach is the first brand against a ceiling of none. The missing piece is a
+customer surface for a second brand, which belongs to the Phase 6 customer UX work; inventing one here
+would have been adding product rather than operating it.
+
 ## 31. What this phase did NOT do
 
 - **No production payment provider was chosen, named or activated** (D-204 stands). The only adapter is
