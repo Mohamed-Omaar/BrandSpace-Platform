@@ -169,6 +169,7 @@ export class BrandBrainChatService {
       conversationId: input.conversationId,
       area: input.area,
       actorUserId: input.actorUserId,
+      actorBrandScope: input.actorBrandScope,
       expiresAt,
     });
 
@@ -327,11 +328,35 @@ export class BrandBrainChatService {
     conversationId?: string | undefined;
     area?: BrandKnowledgeArea | undefined;
     actorUserId: string;
+    actorBrandScope: readonly string[];
     expiresAt: Date;
   }): Promise<BrandBrainConversation> {
     if (input.conversationId) {
-      const found = await this.#db.brandBrainConversation.findUnique({
-        where: { id: input.conversationId },
+      /*
+       * THE BRAND IS PART OF THE LOOKUP (PHASE 2, BRAND-06).
+       *
+       * This was `findUnique({ where: { id } })`. RLS made another TENANT's
+       * conversation invisible, and the comment stopped there — but a workspace
+       * holds many brands, and nothing compared the conversation's brand with
+       * the one the request named or with the member's own BrandScope. A member
+       * working in Brand A could pass a Brand B conversation id and carry on
+       * that thread: reading its history back through the reply, and appending
+       * to it under B's name. The tenant boundary held; the brand boundary,
+       * which D-132 makes a predicate everywhere else in this file, did not
+       * exist here.
+       *
+       * A PREDICATE RATHER THAN A CHECK AFTER THE READ, matching the rest of
+       * the module: the row is never retrieved, so a conversation outside the
+       * member's scope is NOT FOUND to the database — the same answer a
+       * conversation that never existed gives, which is what stops the error
+       * shape from confirming that somebody else's thread exists.
+       */
+      const found = await this.#db.brandBrainConversation.findFirst({
+        where: {
+          id: input.conversationId,
+          brandId: input.brandId,
+          ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+        },
       });
       // RLS already returned null for another tenant; both land on the same 404.
       if (!found) throw conversationNotFound();

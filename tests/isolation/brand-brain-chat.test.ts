@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -477,5 +478,123 @@ describe('retention', () => {
       where: { aiRequestId: turn.aiRequestId ?? '' },
     });
     expect(ledgerRows).toHaveLength(1);
+  });
+});
+
+describe('A CONVERSATION BELONGS TO ITS BRAND, NOT JUST ITS TENANT (PHASE 2)', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR (BRAND-06).
+   *
+   * `#resolveConversation` read `findUnique({ where: { id } })`, and the
+   * comment beside it observed that RLS had already made another TENANT's row
+   * invisible — which was true, and stopped one step short. A workspace holds
+   * many brands. Nothing compared the conversation's brand with the brand the
+   * request named, or with the member's own BrandScope, so a member could pass
+   * another brand's conversation id and carry on that thread: its history read
+   * back through the reply, and new messages appended under a brand they were
+   * not working in.
+   *
+   * The tenant boundary held throughout. The BRAND boundary — which D-132
+   * makes a query predicate everywhere else in this module — simply was not
+   * there.
+   */
+
+  /** A second brand in tenant A, with a conversation of its own. */
+  async function otherBrandConversation(): Promise<{ brandId: string; conversationId: string }> {
+    return inA(async (_chat, db) => {
+      const brand = await db.brand.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          name: `Second brand ${randomUUID().slice(0, 8)}`,
+          slug: `second-${randomUUID().slice(0, 8)}`,
+          status: 'ACTIVE',
+        },
+      });
+      const conversation = await db.brandBrainConversation.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: brand.id,
+          startedByUserId: fixtures.a.userId,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+      return { brandId: brand.id, conversationId: conversation.id };
+    });
+  }
+
+  it("REFUSES ANOTHER BRAND'S CONVERSATION, inside the same tenant", async () => {
+    const other = await otherBrandConversation();
+
+    await expect(
+      inA((chat) =>
+        chat.send({
+          // The brand the member is working in…
+          brandId: fixtures.a.brandId,
+          // …and a conversation belonging to a different one.
+          conversationId: other.conversationId,
+          message: 'What is our positioning?',
+          idempotencyKey: key(),
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          planKey: null,
+        }),
+      ),
+    ).rejects.toThrow(/Conversation not found/);
+  });
+
+  it("REFUSES A CONVERSATION OUTSIDE THE MEMBER'S BrandScope", async () => {
+    const other = await otherBrandConversation();
+
+    await expect(
+      inA((chat) =>
+        chat.send({
+          brandId: other.brandId,
+          conversationId: other.conversationId,
+          message: 'What is our positioning?',
+          idempotencyKey: key(),
+          actorUserId: fixtures.a.userId,
+          // Scoped to the FIXTURE brand only, so this member may not work in
+          // the brand the conversation belongs to.
+          actorBrandScope: [fixtures.a.brandId],
+          planKey: null,
+        }),
+      ),
+      /*
+       * REFUSED AT THE BRAND, WHICH IS EARLIER AND STRONGER. `assertBrandInScope`
+       * rejects the named brand before any conversation is read at all, so the
+       * message is "Brand not found" rather than the conversation's. Asserted
+       * as it actually behaves rather than as the sibling case does: a test
+       * that demanded the later refusal would be asserting that the earlier
+       * guard had been removed.
+       */
+    ).rejects.toThrow(/Brand not found/);
+  });
+
+  it('still continues a conversation in the brand it belongs to', async () => {
+    // The guard must refuse the foreign case without breaking the ordinary one.
+    const first = await inA((chat) =>
+      chat.send({
+        brandId: fixtures.a.brandId,
+        message: 'What is our positioning?',
+        idempotencyKey: key(),
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        planKey: null,
+      }),
+    );
+
+    const second = await inA((chat) =>
+      chat.send({
+        brandId: fixtures.a.brandId,
+        conversationId: first.conversationId,
+        message: 'And our tone of voice?',
+        idempotencyKey: key(),
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        planKey: null,
+      }),
+    );
+
+    expect(second.conversationId).toBe(first.conversationId);
   });
 });
