@@ -456,6 +456,7 @@ export const messages = {
     'content.composer.title': 'منشور جديد',
     'content.composer.back': 'العودة إلى المكتبة',
     'content.composer.brand': 'العلامة',
+    'content.composer.brandPlaceholder': 'اختر العلامة التجارية',
     'content.composer.channels': 'النشر إلى',
     'content.composer.channelsHint': 'اختر قناة واحدة على الأقل. تُدار القنوات من إعدادات المنصة.',
     'content.composer.brief': 'ماذا تريد أن تنشر؟',
@@ -1818,6 +1819,7 @@ export const messages = {
     'content.composer.title': 'New post',
     'content.composer.back': 'Back to the library',
     'content.composer.brand': 'Brand',
+    'content.composer.brandPlaceholder': 'Select a brand',
     'content.composer.channels': 'Publish to',
     'content.composer.channelsHint':
       'Choose at least one channel. Channels are configured by the platform.',

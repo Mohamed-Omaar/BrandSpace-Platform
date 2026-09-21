@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { generationKeyFor, manualKeyFor } from './idempotency';
 import { MediaPicker, type MediaOptionView, type MediaPickerLabels } from './media-picker';
 import { VariantPreview, previewLabels } from './variant-preview';
 
@@ -303,38 +304,35 @@ export function ComposerView({
   const [toneArgument, setToneArgument] = useState('');
 
   /*
-   * ONE IDEMPOTENCY KEY PER BRIEF, NOT PER CLICK.
+   * TWO KEYS, BECAUSE THE COMPOSER MAKES TWO DIFFERENT ASKS.
    *
-   * AC-11.2: a retried request must return the first draft and make no second
-   * gateway call. A key minted inside the click handler would make every retry
-   * a NEW request and bill twice for a response the browser simply lost. So the
-   * key is derived from what was asked for — the brand, the brief, the channels
-   * and the language — and changes only when the ask does.
+   * Both are derived from WHAT WAS ASKED FOR rather than minted per click, so a
+   * retry returns the first result instead of billing twice for a response the
+   * browser lost (AC-11.2). They differ in one field, and the difference is the
+   * correction: the campaign belongs to the MANUAL ask, which sends and
+   * persists it, and not to the GENERATION ask, which does neither. Sharing one
+   * key made a change to the campaign selector move the generation key too — so
+   * pressing Generate again became a new `ai_request` and a new credit charge
+   * for an ask the server could not tell had changed.
+   *
+   * `idempotency.ts` holds the derivation, and holds it as a pure function
+   * because that is what makes this property provable without a browser.
    */
-  const idempotencyKey = useMemo(() => {
-    const material = JSON.stringify([
+  const ask = useMemo(
+    () => ({
       brandId,
       brief,
-      [...selected].sort(),
+      platformKeys: selected,
       contentLocale,
       contentType,
-      /*
-       * THE CAMPAIGN IS PART OF THE ASK (PHASE 2 correction).
-       *
-       * Without it, "the same post, filed under Campaign B" hashed to the key
-       * the same post filed under Campaign A already owned — so the second
-       * submission replayed the FIRST draft and the customer's new choice was
-       * silently discarded. The key has to change when the request changes, and
-       * a different campaign is a different request.
-       */
-      campaignId,
-    ]);
-    let hash = 0;
-    for (let i = 0; i < material.length; i += 1) {
-      hash = (Math.imul(31, hash) + material.charCodeAt(i)) | 0;
-    }
-    return `ui:${draft?.id ?? 'new'}:${(hash >>> 0).toString(36)}:${material.length}`;
-  }, [brandId, brief, selected, contentLocale, contentType, campaignId, draft?.id]);
+    }),
+    [brandId, brief, selected, contentLocale, contentType],
+  );
+  const generationIdempotencyKey = useMemo(
+    () => generationKeyFor(ask, draft?.id ?? null),
+    [ask, draft?.id],
+  );
+  const manualIdempotencyKey = useMemo(() => manualKeyFor(ask, campaignId), [ask, campaignId]);
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
@@ -384,7 +382,7 @@ export function ComposerView({
       platformKeys: selected,
       locale: contentLocale,
       contentType,
-      idempotencyKey,
+      idempotencyKey: generationIdempotencyKey,
     });
     setBusy(null);
     if (payload) {
@@ -405,7 +403,7 @@ export function ComposerView({
       ...(tool === 'translate'
         ? { targetLocale: draftVariantLocale(draft, variantId) === 'AR' ? 'EN' : 'AR' }
         : {}),
-      idempotencyKey: `${idempotencyKey}:${tool}:${variantId}`,
+      idempotencyKey: `${generationIdempotencyKey}:${tool}:${variantId}`,
     });
     setBusy(null);
     if (payload) router.refresh();
@@ -589,6 +587,25 @@ export function ComposerView({
                   setQuote(null);
                 }}
               >
+                {/*
+                  THE EMPTY OPTION IS LOAD-BEARING, not decoration.
+
+                  `brandId` starts as '' here — D-191's rule that a brand-scoped
+                  screen names its brand rather than guessing one — and a
+                  `<select>` whose options do not include the current value does
+                  NOT render as empty: the browser shows the first option while
+                  React still holds ''. So the screen said "Northwind" and the
+                  state said nothing, and the customer's next move depended on
+                  which of the two they believed. Every consequence of an empty
+                  brand — the disabled buttons, the absent campaign list —
+                  looked like a bug against a control that appeared to have an
+                  answer in it.
+
+                  Giving '' a real option makes the control show what the state
+                  actually is. It is NOT a brand and cannot be submitted as one:
+                  `canGenerate` already requires a non-empty brand.
+                */}
+                <option value="">{t['content.composer.brandPlaceholder']}</option>
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
                     {brand.name}
@@ -715,6 +732,16 @@ export function ComposerView({
               className="cs-dark-button"
               disabled={!canGenerate || busy !== null}
               data-testid="content-generate"
+              /*
+                THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
+                It is the only way a browser test can see WHICH of the two keys
+                the composer wired to generation — the defect being that the
+                manual key, which moves with the campaign, was reaching an
+                endpoint that neither sends nor stores one. It discloses
+                nothing: a hash of the customer's own inputs, already present in
+                this form as the manual submission's hidden field.
+              */
+              data-generation-key={generationIdempotencyKey}
               onClick={runGenerate}
             >
               {busy === 'generate'
@@ -770,7 +797,7 @@ export function ComposerView({
               <input type="hidden" name="contentLocale" value={contentLocale} />
               <input type="hidden" name="contentType" value={contentType} />
               <input type="hidden" name="body" value={brief} />
-              <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+              <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
               {selected.map((platformKey) => (
                 <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
               ))}

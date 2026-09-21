@@ -394,6 +394,7 @@ const COMPOSER_KEYS = [
   'content.composer.title',
   'content.composer.back',
   'content.composer.brand',
+  'content.composer.brandPlaceholder',
   'content.composer.channels',
   'content.composer.channelsHint',
   'content.composer.brief',

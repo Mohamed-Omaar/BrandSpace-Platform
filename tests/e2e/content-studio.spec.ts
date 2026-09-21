@@ -729,6 +729,132 @@ test.describe('filing a manual post under a campaign', () => {
     expect(await storedCampaignName(itemId)).toBe(PRIMARY_CAMPAIGN);
   });
 
+  /**
+   * NOTHING IS CHOSEN UNTIL SOMEBODY CHOOSES IT.
+   *
+   * THE DEFECT THIS EXISTS FOR. `brandId` starts as '' on "All brands" — D-191's
+   * rule that a brand-scoped screen names its brand rather than guessing one —
+   * but the local selector's options were the brands and nothing else. A
+   * `<select>` whose options do not contain its value does not render empty:
+   * the browser shows the FIRST option. So the screen said "Northwind" while
+   * the state said nothing, and every consequence of the empty state — the
+   * disabled buttons, the absent campaign list — looked like a bug against a
+   * control that appeared to have an answer in it.
+   *
+   * AND IT CHOOSES THE FIRST BRAND, not the second. A test that only ever
+   * picked `brands[1]` could not tell a real selection from the silent guess;
+   * choosing the brand the defect would itself have picked is what makes this
+   * measure the state rather than the coincidence.
+   */
+  test('A2 — on "All brands" nothing is preselected, and the FIRST brand works', async ({
+    page,
+  }) => {
+    const creds = credentials();
+    const { primaryBrandId } = brandFixtures(creds);
+
+    await signInAllBrands(page);
+    await openComposer(page);
+
+    const brandSelect = page.getByTestId('content-brand');
+    await expect(brandSelect).toBeVisible();
+
+    // THE STATE AND THE SCREEN AGREE: empty, and visibly so.
+    await expect(brandSelect).toHaveValue('');
+    await expect(brandSelect.locator('option[value=""]')).toHaveCount(1);
+
+    // NOTHING DOWNSTREAM OF A BRAND IS OFFERED YET.
+    await expect(page.getByTestId('content-manual-campaign')).toHaveCount(0);
+
+    // AND NOTHING THAT NEEDS A BRAND CAN BE PRESSED, even with words written.
+    await compose(page, `Written before a brand was chosen, at ${new Date().toISOString()}.`);
+    await expect(page.getByTestId('content-write-manual')).toBeDisabled();
+    await expect(page.getByTestId('content-generate')).toBeDisabled();
+    await expect(page.getByTestId('content-estimate')).toBeDisabled();
+
+    // NOW CHOOSE THE FIRST BRAND — the one a silent guess would have taken.
+    await brandSelect.selectOption(primaryBrandId);
+    await expect(brandSelect).toHaveValue(primaryBrandId);
+
+    // ITS campaigns arrive, and the workflow opens up.
+    const selector = page.getByTestId('content-manual-campaign');
+    await expect(selector).toBeVisible();
+    await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(1);
+    await expect(page.getByTestId('content-write-manual')).toBeEnabled();
+
+    await selector.selectOption({ label: PRIMARY_CAMPAIGN });
+    const itemId = await writeManualPost(page, 'first brand');
+    expect(await storedCampaignName(itemId)).toBe(PRIMARY_CAMPAIGN);
+    const stored = await withPlatformPrisma(async (prisma) =>
+      prisma.contentItem.findUnique({ where: { id: itemId }, select: { brandId: true } }),
+    );
+    expect(stored?.brandId).toBe(primaryBrandId);
+  });
+
+  /**
+   * THE CAMPAIGN BELONGS TO THE MANUAL ASK, AND NOT TO THE GENERATION ASK.
+   *
+   * One shared key served both. Putting the campaign in its material was right
+   * for manual creation and wrong for generation, which neither sends a
+   * campaign nor persists one — so changing only the selector moved the
+   * generation key, and pressing Generate again would have become a new
+   * `ai_request` and a new credit charge for an ask the endpoint could not tell
+   * had changed.
+   *
+   * The unit suite proves the two DERIVATIONS are separate. This proves the
+   * composer wired each to the right place, which a pure function cannot.
+   */
+  test('D2 — changing the campaign moves the manual key, not the generation key', async ({
+    page,
+  }) => {
+    const creds = credentials();
+    await signIn(page);
+    await openComposer(page);
+    await compose(page, `One brief, two campaigns, at ${new Date().toISOString()}.`);
+
+    const manualKey = page.locator(
+      '[data-testid="content-manual-form"] input[name="idempotencyKey"]',
+    );
+    const generateButton = page.getByTestId('content-generate');
+
+    const selector = page.getByTestId('content-manual-campaign');
+    await selector.selectOption({ label: PRIMARY_CAMPAIGN });
+    const manualBefore = await manualKey.inputValue();
+    const generationBefore = await generateButton.getAttribute('data-generation-key');
+    expect(manualBefore).not.toBe('');
+    expect(generationBefore).toBeTruthy();
+
+    const countRequests = async (): Promise<number> =>
+      withPlatformPrisma(async (prisma) =>
+        prisma.aiRequest.count({ where: { workspaceId: creds.customer.workspaceId } }),
+      );
+    const readBalance = async (): Promise<bigint> =>
+      withPlatformPrisma(async (prisma) => {
+        const wallet = await prisma.creditWallet.findUniqueOrThrow({
+          where: { workspaceId: creds.customer.workspaceId },
+          select: { balanceMilliCredits: true },
+        });
+        return wallet.balanceMilliCredits;
+      });
+
+    const requestsBefore = await countRequests();
+    const balanceBefore = await readBalance();
+
+    // CHANGE ONLY THE CAMPAIGN.
+    await selector.selectOption('');
+
+    /*
+     * THE ASSERTION THAT FAILS AGAINST THE DEFECT. With one shared key the
+     * generation key moved here too — a different AI identity for a field the
+     * generation endpoint never receives.
+     */
+    expect(await generateButton.getAttribute('data-generation-key')).toBe(generationBefore);
+    // … while the MANUAL key did move, because for that ask it is a real change.
+    expect(await manualKey.inputValue()).not.toBe(manualBefore);
+
+    // AND TOUCHING THE SELECTOR SPENT NOTHING. No request, no credit.
+    expect(await countRequests()).toBe(requestsBefore);
+    expect(await readBalance()).toBe(balanceBefore);
+  });
   test('B — on "All brands", the composer\'s own brand decides the options', async ({ page }) => {
     const creds = credentials();
     const { secondBrandId, secondBrandName } = brandFixtures(creds);
