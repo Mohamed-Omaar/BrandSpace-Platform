@@ -590,6 +590,59 @@ A trigger rather than a CHECK because the rule is about the TRANSITION — old r
 versus new row — and a CHECK sees only the new one. Test fixtures clean up as
 the PLATFORM role rather than the production grant being widened to suit them.
 
+### 4.8d `approvedFingerprint` — what the verdict was granted over (Phase 2, D-223)
+
+`20260921090000_approval_content_fingerprint` adds one nullable JSONB column to
+`approval`. It holds `{ item, variants: { [variantId]: hash } }`, computed from
+the variants as they stood at the moment of approval and written inside the same
+row lock that records the verdict.
+
+**It exists because an approval recorded a decision and nothing about the
+words.** A `SCHEDULED` item is deliberately not returned to `DRAFT` by an edit —
+the calendar owns that edge — so a caption changed after scheduling published
+under a verdict granted to different text. The publish preflight now recomputes
+the same hash from the variant it is about to send and refuses on a mismatch.
+
+**NULLABLE AND NOT BACKFILLED, on purpose.** An approval granted before this
+migration cannot prove what it covered, and deriving a fingerprint from today's
+rows would certify precisely the edit the column exists to catch. The comparison
+FAILS CLOSED on a null, so those approvals must be re-granted rather than
+trusted.
+
+The column is written by the same `UPDATE` that decides the cycle, so
+`approval_write_once` (§4.8c) governs it unchanged: a decided cycle's
+fingerprint never changes again — which is also why a test that needs a
+pre-migration approval INSERTS one rather than clearing an existing row.
+
+**BOTH HALVES OF THE VALUE ARE ENFORCED (D-230).** `item` is a hash over the
+whole variant set and changes when one is added or removed; `variants[id]` is
+one row's own. The publish preflight compares BOTH, reading every variant of
+the item rather than only the one being sent — a check against a single row
+would pass while a channel the reviewer never saw went out beside it.
+
+### 4.8e `social_connection.analyticsCursorsEnsuredAt` (Phase 2, D-229)
+
+`20260921120000_social_connection_cursor_sweep_rotation` adds one nullable
+`TIMESTAMPTZ` to `social_connection`, plus an index on
+`("status", "analyticsCursorsEnsuredAt")`.
+
+It exists because the analytics sweep enumerated ACTIVE connections with **no
+cursor at all**, which repairs "never provisioned" and nothing else: a
+connection holding a partial cursor set stopped matching and was skipped for
+ever. Dropping the filter alone would starve everything past `take: batch`
+(D-182), so the sweep now rotates over a durable cursor — `ASC NULLS FIRST`,
+parked to `now` inside the tenant's own transaction after a successful pass.
+
+**NULLABLE AND NOT BACKFILLED**, deliberately: NULL means "never ensured" and
+sorts first, so every connection that exists today is at the front of the queue
+on the first tick after the migration. A backfill would say they had all just
+been checked.
+
+**IT IS NOT INGESTION STATE.** Cursor progress, retry backoff and freshness
+live on `analytics_ingestion_cursor` and are written only by ingestion; the
+ensure statement remains `ON CONFLICT DO NOTHING` and cannot reset an existing
+row.
+
 ### 9.3b The `notification` table — AS BUILT (Phase 5B-3)
 
 §9.3 above is the DESIGN. Three differences, each with a reason.

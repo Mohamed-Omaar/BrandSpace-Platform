@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { headers } from 'next/headers';
+import type { ReactNode } from 'react';
 import {
   AppShell,
   BrandMark,
@@ -28,17 +29,13 @@ import {
   BrandSwitcher,
   Banner,
   StateMessage,
-  buttonStyle,
-  inputStyle,
   spacingTokens,
-  typographyTokens,
-  tdStyle,
-  thStyle,
   type ShellNavSection,
   type Tone,
   type WorkspaceOption,
   initialsFrom,
 } from '@brandspace/ui';
+import { switchLocalePath } from '../i18n/locale-path';
 import { translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
@@ -281,7 +278,7 @@ function brandTrigger(
   }
 }
 
-export function WorkspaceShell({
+export async function WorkspaceShell({
   locale,
   heading,
   description,
@@ -345,6 +342,25 @@ export function WorkspaceShell({
 }) {
   const t = translator(locale);
   const other = locale === 'ar' ? 'en' : 'ar';
+
+  /*
+   * THE SAME PAGE, IN THE OTHER LANGUAGE (PHASE 2).
+   *
+   * This used to be `/${other}${activePath ?? '/overview'}`. `activePath` is
+   * the NAV ITEM's path, which is a different thing from the route: on
+   * `/en/content/compose?item=…` it is `/content`, so switching to Arabic
+   * dropped the composer and the draft being edited, and on the routes that
+   * pass no `activePath` at all it fell back to `/overview` — changing language
+   * moved the reader to a page they had not asked for. The query string went
+   * too, and with it every filter, the asset cursor and the selected row.
+   *
+   * The middleware puts the real path and query on the request, so the switch
+   * is now the same route with one segment changed. `activePath` remains the
+   * fallback for anything that reaches this component without the header.
+   */
+  const requestPath = (await headers()).get('x-brandspace-path');
+  const localeHref = (target: string): string =>
+    switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
   const identity = customerName ?? workspaceName;
 
   const sections: readonly ShellNavSection[] = [
@@ -433,7 +449,7 @@ export function WorkspaceShell({
                 current: brandContext.selectedValue === brand.id,
               }))}
               action={selectBrandAction}
-              hiddenFields={{ locale, next: `/${locale}${activePath ?? '/overview'}` }}
+              hiddenFields={{ locale, next: localeHref(locale) }}
               {...(brandContext.aggregateAllowed
                 ? {
                     allOption: {
@@ -473,7 +489,7 @@ export function WorkspaceShell({
           }}
           language={
             <LanguageSwitcher
-              href={`/${other}${activePath ?? '/overview'}`}
+              href={localeHref(other)}
               targetLocale={other}
               targetLabel={other === 'ar' ? 'العربية' : 'English'}
               ariaLabel={t('nav.language')}
@@ -579,17 +595,16 @@ export function CustomerBanner({
   return <Banner tone={tone}>{children}</Banner>;
 }
 
-export const customerTableStyle = (): CSSProperties => ({
-  inlineSize: '100%',
-  borderCollapse: 'collapse',
-  fontSize: typographyTokens.bodySm.fontSize,
-  textAlign: 'start',
-});
-export const customerThStyle = thStyle;
-export const customerTdStyle = tdStyle;
-export const customerButtonStyle = (): CSSProperties => buttonStyle('primary');
-export const customerSecondaryButtonStyle = (): CSSProperties => buttonStyle('neutral');
-export const customerInputStyle = (): CSSProperties => ({
-  ...inputStyle(),
-  maxInlineSize: '24rem',
-});
+/*
+ * RE-EXPORTED, NOT DEFINED HERE. They live in `customer-styles.ts` so a client
+ * component can reach them without importing this server shell — see that
+ * file's note. Server callers keep their existing import path.
+ */
+export {
+  customerButtonStyle,
+  customerInputStyle,
+  customerSecondaryButtonStyle,
+  customerTableStyle,
+  customerTdStyle,
+  customerThStyle,
+} from './customer-styles';

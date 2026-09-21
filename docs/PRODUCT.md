@@ -248,6 +248,27 @@ so output is explainable and correctable. Bilingual: each field can hold `ar` an
 Produces a `ContentItem` with per-platform `ContentVariant`s (character limits, hashtag rules, mention rules,
 link handling). Supports rewrite, shorten, expand, change tone, translate ar↔en with brand-preserving glossary.
 
+_A post can also be written by a person_ (Phase 2, D-224). Manual authoring produces the same
+`ContentItem` and `ContentVariant` rows and joins the same draft → review → approval → calendar →
+publish lifecycle, but **invokes no model and charges no AI credits**: the item carries
+`origin: 'HUMAN'` and no `aiRequestId`, so credit, margin and usage reporting can tell the two apart.
+It lives on the library service, which has no AI gateway at all, so the path cannot reach a provider
+even by accident, and it is reached from the composer's own action row ("Save without AI"). Until it
+existed, generation was the only writer of a content item anywhere in the product — so with no
+provider selected (D-13, D-204) the customer product could not produce a single post through its own
+UI.
+
+_What the create carries_: the brand, the channels, the caption, the language, the content type and —
+for a member who holds `campaigns.manage`, the permission that already governs filing content under a
+campaign — the campaign, whose options follow the brand the COMPOSER holds rather than the one the
+rail selected (D-232). All of it is read from the controls the generate button already reads, so the
+two verbs cannot disagree. _What is set on the draft that opens immediately afterwards_:
+hashtags and media, which are properties of a VARIANT rather than of the item (each channel has its
+own media ceiling, and the picker saves in one submission with the caption it belongs to — D-184).
+Both are edited through the per-variant controls that already exist on that screen; the hashtag field
+used to render only when a variant already had hashtags, which made it an editor for a value nothing
+could create, and it is now always present.
+
 **Social Media Hub** — customers connect their own accounts via OAuth only. **BrandSpace never asks for a
 social account password.** Shows scopes granted, token expiry, health, and per-platform publishing capability.
 

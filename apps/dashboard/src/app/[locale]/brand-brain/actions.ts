@@ -92,6 +92,32 @@ export async function createBrandAction(formData: FormData): Promise<void> {
     if (name.length === 0 || name.length > 120) throw new Error('invalid brand name');
 
     await inBrandBrain(session.workspace.workspaceId, async ({ db }) => {
+      /*
+       * CREATING A BRAND IS IDEMPOTENT ON ITS NAME (PHASE 2).
+       *
+       * This is the only path in the product that creates a brand, and it is
+       * the step a new customer takes first. It had no replay guard at all: a
+       * double submit, a browser retry, or somebody walking the onboarding
+       * checklist a second time each made ANOTHER brand — same name, different
+       * slug, and now a workspace with two identical-looking brands whose
+       * content, knowledge and analytics are split between them. Nothing in the
+       * product merges those afterwards.
+       *
+       * The name is the key a person would use, so it is the key this uses:
+       * asking for a brand that already exists returns the one that exists.
+       * Comparison is case-insensitive and trimmed because "Acme" and "acme "
+       * are the same request typed twice, not two brands.
+       */
+      const existing = await db.brand.findFirst({
+        where: {
+          workspaceId: session.workspace.workspaceId,
+          deletedAt: null,
+          name: { equals: name, mode: 'insensitive' },
+        },
+        select: { id: true },
+      });
+      if (existing) return;
+
       // A slug derived from the name, with a short suffix so two brands called
       // the same thing do not collide and so a soft-deleted brand does not hold
       // its slug hostage. The unique index is per workspace.

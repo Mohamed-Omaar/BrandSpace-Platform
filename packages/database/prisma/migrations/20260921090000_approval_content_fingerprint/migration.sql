@@ -1,0 +1,21 @@
+-- AN APPROVAL RECORDS WHAT IT WAS GRANTED OVER (D-223).
+--
+-- Before this, an approval stored a verdict and nothing about the content. The
+-- publish pipeline read the caption LIVE at send time and checked only that an
+-- approval existed and said APPROVED, so this sequence published unreviewed
+-- text under a real verdict:
+--
+--   submit -> approve -> schedule -> edit the caption -> publish
+--
+-- `editVariant` returns an APPROVED item to DRAFT, but a SCHEDULED one is
+-- deliberately untouched there — the calendar owns that edge, and unscheduling
+-- somebody's post from inside an edit handler would be a worse surprise. So the
+-- gap was real and sat exactly where nobody owned it.
+--
+-- ADDITIVE AND NULLABLE. Existing approvals keep their history untouched and
+-- carry NULL, which `approvalCoversVariant` treats as covering nothing: an
+-- approval granted before this column existed cannot authorize a publish until
+-- the item is approved again. That is the fail-closed direction, and it is a
+-- deliberate choice over backfilling a fingerprint nobody actually reviewed.
+
+ALTER TABLE "approval" ADD COLUMN "approvedFingerprint" JSONB;

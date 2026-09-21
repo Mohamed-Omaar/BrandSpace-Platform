@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@brandspace/database';
 import {
   writeAuditEvent,
@@ -6,8 +7,13 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { brandIdQueryFilter } from '@brandspace/shared';
-import { contentItemNotFound, transitionNotAllowed, unsupportedPlatform } from './errors';
-import { findPlatform, type ContentPolicy } from './policy';
+import {
+  contentItemNotFound,
+  draftLimitReached,
+  transitionNotAllowed,
+  unsupportedPlatform,
+} from './errors';
+import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
 
@@ -190,6 +196,345 @@ export class ContentLibraryService {
    * tenant boundary for `assetIds` exists — the column is a uuid array and
    * cannot carry a composite foreign key.
    */
+  /**
+   * CREATE A POST BY WRITING IT — the path that does not involve a model.
+   *
+   * WHY THIS EXISTS. Until now `ContentStudioService.generate()` was the ONLY
+   * writer of a `ContentItem` anywhere in the product: one `contentItem.create`
+   * in the whole repository, inside the generation path, behind an AI provider.
+   * A customer with no AI provider configured — or one who simply wants to type
+   * their own caption — could not create a single piece of content, and every
+   * module downstream of a content item (the calendar, approvals, publishing,
+   * campaign performance) was therefore unreachable too. A product whose only
+   * way in is a model is not a social media tool with AI in it; it is an AI demo.
+   *
+   * IT LIVES HERE, IN THE CLASS WITH NO GATEWAY, and that is the whole point of
+   * the split described at the top of this file. The dashboard cannot construct
+   * a gateway (F-07), so a manual authoring path that lived on the studio class
+   * would be a path the dashboard could not call. Being unable to reach a model
+   * from here is what makes "this charges no credits" a fact about the type
+   * rather than a promise in a comment.
+   *
+   * EVERYTHING ELSE IS THE SAME CONTENT. Same item, same variants, same
+   * validation against the activated platform policy, same draft ceiling, same
+   * retention resolution, same brand scope. `origin` is HUMAN and `aiRequestId`
+   * is null, so provenance stays honest in both directions (D-65) — a customer
+   * is entitled to know whether a model wrote the words, and that answer must be
+   * "no" here without anyone having to check a flag.
+   */
+  /*
+   * THE GUARDS THE AUTHORING PATHS SHARE.
+   *
+   * `protected` and on the base class, not duplicated on the subclass, for the
+   * reason the class comment gives about the constructor fields: two copies of
+   * one rule is how the two copies end up disagreeing. Manual authoring and
+   * generation must answer "is this platform supported?" and "has this brand
+   * room for another draft?" identically, or the ceiling becomes a function of
+   * which button the customer pressed.
+   */
+  protected assertPlatforms(keys: readonly string[]) {
+    if (keys.length === 0 || keys.length > this.policy.generation.maxVariantsPerRequest) {
+      throw unsupportedPlatform();
+    }
+    return keys.map((key) => {
+      const platform = findPlatform(this.policy, key);
+      if (!platform) throw unsupportedPlatform();
+      return platform;
+    });
+  }
+
+  protected async assertDraftHeadroom(brandId: string): Promise<void> {
+    const live = await this.db.contentItem.count({
+      where: { brandId, deletedAt: null, status: { notIn: ['ARCHIVED'] } },
+    });
+    if (live >= this.policy.generation.maxDraftsPerBrand) throw draftLimitReached();
+  }
+
+  /**
+   * D-115, resolved per authored item.
+   *
+   * Reads the brand and its workspace rather than trusting a caller-supplied
+   * dialect: a dialect that arrived in a request body would be a customer
+   * choosing per-request what their brand sounds like, which is not what the
+   * decision approved.
+   */
+  protected async resolveDialectFor(brandId: string): Promise<ContentDialect> {
+    const brand = await this.db.brand.findUnique({
+      where: { id: brandId },
+      select: { arabicDialect: true, workspace: { select: { arabicDialect: true } } },
+    });
+    return resolveDialect(this.policy, {
+      brandDialect: brand?.arabicDialect ?? null,
+      workspaceDialect: brand?.workspace.arabicDialect ?? null,
+    });
+  }
+
+  /**
+   * The brand must be inside the member's scope before anything is written.
+   *
+   * NOT `brandIdQueryFilter`, because that helper narrows a `brandId` COLUMN and
+   * the brand table's own key is `id`. Written out rather than bent: an empty
+   * scope is unrestricted (D-132), and the refusal is the same not-found a
+   * genuine miss gives, so a scoped member cannot learn which brands exist by
+   * the shape of the error.
+   */
+  protected async requireItemForBrandScope(
+    brandId: string,
+    brandScope: readonly string[],
+  ): Promise<void> {
+    const brand = await this.db.brand.findFirst({
+      where: {
+        id: brandId,
+        deletedAt: null,
+        // AND, NOT A SPREAD. Spreading a second `id` key would REPLACE the one
+        // above, so a scoped member would have been checked against the scope
+        // and not against the brand they actually named — which is the
+        // opposite of the intended narrowing.
+        ...(brandScope.length > 0 ? { AND: [{ id: { in: [...brandScope] } }] } : {}),
+      },
+      select: { id: true },
+    });
+    if (!brand) throw contentItemNotFound();
+  }
+
+  async createManualItem(input: {
+    readonly brandId: string;
+    readonly title: string;
+    readonly contentType?: ContentItem['contentType'];
+    readonly locale: ContentItem['primaryLocale'];
+    /** One variant per platform key. Each must be in the activated policy. */
+    readonly variants: readonly {
+      readonly platformKey: string;
+      readonly body: string;
+      readonly hashtags?: readonly string[];
+      readonly firstComment?: string | null;
+      readonly linkUrl?: string | null;
+      readonly assetIds?: readonly string[];
+    }[];
+    readonly campaignId?: string | null;
+    readonly pillar?: string | null;
+    readonly tags?: readonly string[];
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly expiresAt: Date | null;
+    /**
+     * Client idempotency key. A retried submit returns the first draft rather
+     * than making a second, exactly as a replayed generation does — the unique
+     * index on (workspaceId, brandId, createdByUserId, idempotencyKey) is the
+     * arbiter, not a check-then-act in this method.
+     */
+    readonly idempotencyKey: string;
+  }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
+    await this.requireItemForBrandScope(input.brandId, input.actorBrandScope);
+
+    const platforms = this.assertPlatforms(input.variants.map((variant) => variant.platformKey));
+    if (new Set(input.variants.map((v) => v.platformKey)).size !== input.variants.length) {
+      // One variant per platform per locale is a unique index; refusing here
+      // names the mistake instead of surfacing a constraint violation.
+      throw unsupportedPlatform();
+    }
+
+    const existing = await this.db.contentItem.findFirst({
+      where: {
+        brandId: input.brandId,
+        createdByUserId: input.actorUserId,
+        idempotencyKey: input.idempotencyKey,
+      },
+    });
+    if (existing) {
+      return {
+        item: existing,
+        variants: await this.db.contentVariant.findMany({
+          where: { contentItemId: existing.id },
+          orderBy: { createdAt: 'asc' },
+        }),
+        replayed: true,
+      };
+    }
+
+    await this.assertDraftHeadroom(input.brandId);
+    const dialect = await this.resolveDialectFor(input.brandId);
+
+    /*
+     * MEDIA IS RESOLVED BEFORE ANYTHING IS WRITTEN, for the reason `editVariant`
+     * gives: an inadmissible asset must refuse the whole creation rather than
+     * save the captions and drop the pictures. The resolver is also what proves
+     * the asset ids belong to this workspace and this brand — `assetIds` is a
+     * uuid array with no foreign key, so the service IS the tenant boundary.
+     */
+    const resolver = new ContentMediaResolver({ db: this.db, workspaceId: this.workspaceId });
+    const resolvedMedia = new Map<string, string[]>();
+    for (const variant of input.variants) {
+      if (!variant.assetIds || variant.assetIds.length === 0) continue;
+      const media = await resolver.resolveForPlatform({
+        assetIds: variant.assetIds,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+        platformKey: variant.platformKey,
+        policy: this.policy,
+      });
+      resolvedMedia.set(
+        variant.platformKey,
+        media.map((asset) => asset.id),
+      );
+    }
+
+    const campaignId = await this.#resolveCampaign(input.campaignId ?? null, input.brandId);
+
+    /*
+     * THE DATABASE DECIDES WHO WON, AND IT NEVER RAISES TO DO IT.
+     *
+     * The read above closes a SEQUENTIAL retry and nothing more: two requests
+     * carrying one idempotency key can both find no row, and then both insert.
+     * `create` compiles to a plain `INSERT`, so the loser takes a P2002 — and
+     * that is not a recoverable error HERE, because `withWorkspace` runs this
+     * whole callback inside ONE PostgreSQL transaction. A constraint violation
+     * aborts that transaction, so the obvious repair — catch the P2002, read
+     * the winner's row, return it as a replay — issues its read on a
+     * transaction PostgreSQL has already poisoned and fails with
+     * `current transaction is aborted`. Catch-and-re-read is correct only
+     * across transactions, which is not where this code runs.
+     *
+     * `createMany({ skipDuplicates: true })` compiles to
+     * `INSERT ... ON CONFLICT DO NOTHING`, which does not raise and does not
+     * abort anything. The loser's statement BLOCKS on the winner's speculative
+     * insertion lock, waits for that transaction to commit, and then reports
+     * zero rows — so `count === 0` is PROOF that somebody else created this
+     * item, decided by PostgreSQL rather than by timing. If the winner rolls
+     * back instead, the insert simply succeeds, so a crash mid-flight does not
+     * leave the key unusable. The same reasoning and the same arbiter as
+     * `recordAutomationEvent` in `@brandspace/database`.
+     *
+     * The id is generated HERE rather than by the default, so the winner knows
+     * its own row without a second read — and the loser re-reads by the unique
+     * key, which is the only handle it has.
+     */
+    const candidateId = randomUUID();
+    const created = await this.db.contentItem.createMany({
+      data: [
+        {
+          id: candidateId,
+          workspaceId: this.workspaceId,
+          brandId: input.brandId,
+          title:
+            input.title.trim().slice(0, 200) || input.variants[0]?.body.slice(0, 120) || 'Untitled',
+          contentType: input.contentType ?? 'POST',
+          primaryLocale: input.locale,
+          status: 'DRAFT',
+          // HUMAN, and no `aiRequestId`. Nothing on this path can set either
+          // differently, which is what makes the zero-credit claim checkable.
+          origin: 'HUMAN',
+          createdByUserId: input.actorUserId,
+          ...(campaignId ? { campaignId } : {}),
+          ...(input.pillar ? { pillar: input.pillar } : {}),
+          ...(input.tags && input.tags.length > 0 ? { tags: [...input.tags] } : {}),
+          arabicDialect: input.locale === 'AR' ? dialect.key : null,
+          idempotencyKey: input.idempotencyKey,
+          expiresAt: input.expiresAt,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    if (created.count === 0) {
+      /*
+       * WE LOST, AND THE WINNER HAS COMMITTED — the insert above waited for it.
+       * So its variants are visible too: `withWorkspace` commits the item and
+       * its variants together, and there is no window in which one is readable
+       * without the other. This caller writes NOTHING: no variant, no audit
+       * event, no second row. It is a replay, and it says so.
+       */
+      const winner = await this.db.contentItem.findFirst({
+        where: {
+          brandId: input.brandId,
+          createdByUserId: input.actorUserId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      });
+      /* c8 ignore next -- the conflict we lost to is the row we just looked up. */
+      if (!winner) throw contentItemNotFound();
+      return {
+        item: winner,
+        variants: await this.db.contentVariant.findMany({
+          where: { contentItemId: winner.id },
+          orderBy: { createdAt: 'asc' },
+        }),
+        replayed: true,
+      };
+    }
+
+    const item = await this.db.contentItem.findUniqueOrThrow({ where: { id: candidateId } });
+
+    const written: ContentVariant[] = [];
+    for (const [index, variant] of input.variants.entries()) {
+      const platform = platforms[index];
+      /* c8 ignore next -- assertPlatforms threw for anything unresolvable. */
+      if (!platform) continue;
+      const validation = validateVariant(platform, {
+        body: variant.body,
+        ...(variant.hashtags ? { hashtags: variant.hashtags } : {}),
+        firstComment: variant.firstComment ?? null,
+      });
+      written.push(
+        await this.db.contentVariant.create({
+          data: {
+            workspaceId: this.workspaceId,
+            brandId: input.brandId,
+            contentItemId: item.id,
+            platformKey: variant.platformKey,
+            locale: input.locale,
+            body: variant.body,
+            hashtags: variant.hashtags ? [...variant.hashtags] : [],
+            firstComment: variant.firstComment ?? null,
+            linkUrl: variant.linkUrl ?? null,
+            assetIds: resolvedMedia.get(variant.platformKey) ?? [],
+            characterCount: validation.characterCount,
+            validationState: validation.state,
+            ...(validation.errors.length > 0
+              ? { validationErrors: validation.errors as unknown as Prisma.InputJsonValue }
+              : {}),
+            origin: 'HUMAN',
+            arabicDialect: input.locale === 'AR' ? dialect.key : null,
+            expiresAt: input.expiresAt,
+          },
+        }),
+      );
+    }
+
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'content.item.authored',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'ContentItem',
+      resourceId: item.id,
+      brandId: item.brandId,
+      after: {
+        origin: 'HUMAN',
+        variants: written.length,
+        platformKeys: input.variants.map((v) => v.platformKey),
+      },
+    });
+
+    return { item, variants: written, replayed: false };
+  }
+
+  /**
+   * Resolve a campaign id through the tenant-scoped client, or refuse it.
+   *
+   * `campaignId` reaches this service from a form, so it is exactly the field a
+   * hand-built post would put another workspace's id in. Reading it back under
+   * RLS is what makes a foreign id a not-found rather than a link.
+   */
+  async #resolveCampaign(campaignId: string | null, brandId: string): Promise<string | null> {
+    if (!campaignId) return null;
+    const campaign = await this.db.campaign.findFirst({
+      where: { id: campaignId, brandId },
+      select: { id: true },
+    });
+    if (!campaign) throw contentItemNotFound();
+    return campaign.id;
+  }
+
   async editVariant(input: {
     variantId: string;
     body: string;
@@ -301,7 +646,38 @@ export class ContentLibraryService {
       where: { id: contentItemId },
       select: { id: true, status: true },
     });
-    if (item?.status !== 'APPROVED') return;
+    if (!item) return;
+
+    /*
+     * A SCHEDULED ITEM IS RECORDED, NOT MOVED (D-223).
+     *
+     * The comment above says why this handler does not unschedule: the calendar
+     * owns that edge, and silently cancelling somebody's plan from inside an
+     * edit is a worse surprise than the one being prevented. What was missing
+     * is that it also said nothing — so a caption edited after scheduling left
+     * no trace, and the mismatch surfaced only when the publish failed.
+     *
+     * The fingerprint on the approval is what actually stops the send. This
+     * event is what makes it legible beforehand, at WARNING rather than NOTICE
+     * because a scheduled post that will now refuse to publish is something
+     * somebody has to act on.
+     */
+    if (item.status === 'SCHEDULED') {
+      await writeAuditEvent(this.db, this.workspaceId, {
+        action: 'content.scheduled_item_edited',
+        actorType: 'USER',
+        actorId: actorUserId,
+        resourceType: 'ContentItem',
+        resourceId: item.id,
+        brandId,
+        severity: 'WARNING',
+        reason: 'edited_after_scheduling',
+        after: { status: 'SCHEDULED', approvalStillCovers: false },
+      });
+      return;
+    }
+
+    if (item.status !== 'APPROVED') return;
     await this.db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
     await writeAuditEvent(this.db, this.workspaceId, {
       action: 'content.approval_revoked',

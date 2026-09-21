@@ -125,19 +125,31 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
    * meant "content" would collapse four different amounts of trust into one.
    *
    *   - `read` is the library of drafts. A reviewer needs it and nothing else.
-   *   - `create` SPENDS AI CREDITS. That is the distinction that matters most
-   *     here and it has no parallel in the Asset Library: every other write on
-   *     this list is free, and this one moves money. A role that may edit a
-   *     caption is not thereby a role that may run up a bill.
-   *   - `edit` is changing words that already exist — free, and a different
-   *     act from generating new ones.
+   *   - `create` is BRINGING A NEW DRAFT INTO THE LIBRARY, by whichever route.
+   *     It was written as "generate with AI, spends credits", because when this
+   *     list was drawn generation was the only way a `content_item` could come
+   *     into being. Phase 2 added manual authoring — a person writing their own
+   *     caption, no model, no reservation, no ledger entry — and it is a create
+   *     in every sense that matters here: a new row in the brand's library,
+   *     against the draft ceiling, attributed to its author. It takes this same
+   *     key, so the description had to stop claiming that every use of it moves
+   *     money (D-231).
+   *
+   *     SPENDING IS A PROPERTY OF THE GENERATION PATH, NOT OF THIS KEY. What
+   *     reserves and settles credits is the AI Gateway, and what decides whether
+   *     a caller may reach it is the entitlement and the wallet, both checked
+   *     there. Splitting a second permission out to carry the money would put
+   *     the guard somewhere the money is not, and would silently drop manual
+   *     authoring for every role that has this key today.
+   *   - `edit` is changing words that already exist — a different act from
+   *     bringing new ones into the library, whoever or whatever wrote them.
    *   - `submit` moves a draft into review. It is the point at which one
    *     person's work becomes another person's queue.
    *   - `archive` is reversible removal; `delete` is not, and stays with the
    *     admins exactly as `assets.delete` and `brand_brain.delete` do.
    */
   def('content.read', 'workspace', 'View content drafts and variants'),
-  def('content.create', 'workspace', 'Generate content with AI (spends credits)'),
+  def('content.create', 'workspace', 'Create a content draft, by hand or with AI'),
   def('content.edit', 'workspace', 'Edit content drafts and captions'),
   def('content.submit', 'workspace', 'Submit content for review'),
   def('content.archive', 'workspace', 'Archive a content draft'),

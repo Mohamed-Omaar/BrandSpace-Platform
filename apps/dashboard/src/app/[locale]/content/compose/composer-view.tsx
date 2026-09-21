@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { generationKeyFor, manualKeyFor } from './idempotency';
 import { MediaPicker, type MediaOptionView, type MediaPickerLabels } from './media-picker';
 import { VariantPreview, previewLabels } from './variant-preview';
 
@@ -122,6 +123,30 @@ export interface ComposerViewProps {
     cancelReview(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
     uploadMedia(formData: FormData): Promise<void>;
+    /**
+     * WRITE THE POST YOURSELF — no model, no credits (D-224).
+     *
+     * A SERVER ACTION rather than a `fetch` to `/api/content`, unlike generate
+     * and quote beside it, and the difference is the point: those two need the
+     * AI Gateway, which lives in `apps/api` because F-07 keeps the platform
+     * database identity out of this app. This one needs nothing the dashboard
+     * does not already have, so it goes straight to `ContentLibraryService` —
+     * the class that has no gateway and therefore cannot charge a credit.
+     */
+    createManualDraft(formData: FormData): Promise<void>;
+    /**
+     * The campaigns a new post could be filed under, for ONE brand.
+     *
+     * A CALL RATHER THAN A PROP, because the answer depends on a choice made
+     * in the browser: with the rail on "All brands" the composer shows its own
+     * brand selector, and the server had already fixed the campaign list before
+     * that choice existed. It is permission-guarded server-side, so a caller
+     * who may not file a post is never handed a name.
+     */
+    listCampaignOptions(
+      locale: string,
+      brandId: string,
+    ): Promise<readonly { id: string; name: string }[]>;
   };
 }
 
@@ -223,34 +248,91 @@ export function ComposerView({
   const [brief, setBrief] = useState('');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(locale === 'ar' ? 'AR' : 'EN');
   const [contentType, setContentType] = useState(contentTypes[0] ?? 'POST');
+
+  /*
+   * THE CAMPAIGN THIS POST WOULD BE FILED UNDER, and the options for the brand
+   * it would be filed against.
+   *
+   * SEEDED FROM THE SERVER for the brand the page resolved — the ordinary case,
+   * where the rail has a brand selected and no request is needed at all. The
+   * effect below replaces the list only when the composer's own brand selector
+   * moves to a DIFFERENT brand, which is the case the first version could not
+   * serve: the options were decided server-side before the customer had chosen.
+   *
+   * THE SELECTION IS CLEARED WHENEVER THE BRAND CHANGES. A campaign belongs to
+   * one brand, so carrying a choice across a brand switch would either be
+   * refused by `createManualItem` or — worse if the ids ever collided — file
+   * the post somewhere nobody asked for. Clearing is the honest reset.
+   */
+  const [campaignId, setCampaignId] = useState('');
+  const [campaignOptions, setCampaignOptions] =
+    useState<readonly { id: string; name: string }[]>(campaigns);
+
+  useEffect(() => {
+    // Only the pre-draft form owns this; an existing draft has its own campaign
+    // control, with its own action and its own list.
+    if (draft !== null || !can.manageCampaigns) return;
+    setCampaignId('');
+    if (brandId === '') {
+      setCampaignOptions([]);
+      return;
+    }
+    if (brandId === defaultBrandId) {
+      // The server already answered for this brand. No request.
+      setCampaignOptions(campaigns);
+      return;
+    }
+    let current = true;
+    actions
+      .listCampaignOptions(locale, brandId)
+      .then((options) => {
+        if (current) setCampaignOptions(options);
+      })
+      .catch(() => {
+        // A refusal or a lost response leaves NO options rather than the
+        // previous brand's: an empty list cannot file a post under the wrong
+        // brand, and a stale one could.
+        if (current) setCampaignOptions([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [brandId, defaultBrandId, draft, can.manageCampaigns, campaigns, actions, locale]);
   const [busy, setBusy] = useState<null | 'quote' | 'generate' | string>(null);
   const [quote, setQuote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [toneArgument, setToneArgument] = useState('');
 
   /*
-   * ONE IDEMPOTENCY KEY PER BRIEF, NOT PER CLICK.
+   * TWO KEYS, BECAUSE THE COMPOSER MAKES TWO DIFFERENT ASKS.
    *
-   * AC-11.2: a retried request must return the first draft and make no second
-   * gateway call. A key minted inside the click handler would make every retry
-   * a NEW request and bill twice for a response the browser simply lost. So the
-   * key is derived from what was asked for — the brand, the brief, the channels
-   * and the language — and changes only when the ask does.
+   * Both are derived from WHAT WAS ASKED FOR rather than minted per click, so a
+   * retry returns the first result instead of billing twice for a response the
+   * browser lost (AC-11.2). They differ in one field, and the difference is the
+   * correction: the campaign belongs to the MANUAL ask, which sends and
+   * persists it, and not to the GENERATION ask, which does neither. Sharing one
+   * key made a change to the campaign selector move the generation key too — so
+   * pressing Generate again became a new `ai_request` and a new credit charge
+   * for an ask the server could not tell had changed.
+   *
+   * `idempotency.ts` holds the derivation, and holds it as a pure function
+   * because that is what makes this property provable without a browser.
    */
-  const idempotencyKey = useMemo(() => {
-    const material = JSON.stringify([
+  const ask = useMemo(
+    () => ({
       brandId,
       brief,
-      [...selected].sort(),
+      platformKeys: selected,
       contentLocale,
       contentType,
-    ]);
-    let hash = 0;
-    for (let i = 0; i < material.length; i += 1) {
-      hash = (Math.imul(31, hash) + material.charCodeAt(i)) | 0;
-    }
-    return `ui:${draft?.id ?? 'new'}:${(hash >>> 0).toString(36)}:${material.length}`;
-  }, [brandId, brief, selected, contentLocale, contentType, draft?.id]);
+    }),
+    [brandId, brief, selected, contentLocale, contentType],
+  );
+  const generationIdempotencyKey = useMemo(
+    () => generationKeyFor(ask, draft?.id ?? null),
+    [ask, draft?.id],
+  );
+  const manualIdempotencyKey = useMemo(() => manualKeyFor(ask, campaignId), [ask, campaignId]);
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
@@ -300,7 +382,7 @@ export function ComposerView({
       platformKeys: selected,
       locale: contentLocale,
       contentType,
-      idempotencyKey,
+      idempotencyKey: generationIdempotencyKey,
     });
     setBusy(null);
     if (payload) {
@@ -321,7 +403,7 @@ export function ComposerView({
       ...(tool === 'translate'
         ? { targetLocale: draftVariantLocale(draft, variantId) === 'AR' ? 'EN' : 'AR' }
         : {}),
-      idempotencyKey: `${idempotencyKey}:${tool}:${variantId}`,
+      idempotencyKey: `${generationIdempotencyKey}:${tool}:${variantId}`,
     });
     setBusy(null);
     if (payload) router.refresh();
@@ -330,6 +412,21 @@ export function ComposerView({
   const briefTooLong = brief.length > maxBriefChars;
   const canGenerate =
     can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
+  /*
+   * THE SAME THREE ANSWERS, USED LITERALLY RATHER THAN AS A BRIEF.
+   *
+   * Writing a post needs a brand, at least one channel and some words — which
+   * is what the editor above already collects. A second textarea headed "or
+   * write it here" would be a second place for the same sentence to live, and
+   * the reader would have to guess which one the button they pressed was going
+   * to read.
+   *
+   * IT IS ALLOWED ONLY WHILE COMPOSING SOMETHING NEW. With a draft open the
+   * words on screen are the VARIANTS' and each has its own save form; making a
+   * second item out of the brief field at that point would be a surprise.
+   */
+  const canWrite = canGenerate && draft === null;
+  const manualFormId = `${fieldId}-manual`;
 
   return (
     <div className="content-page" data-testid="content-composer">
@@ -483,12 +580,32 @@ export function ComposerView({
               <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
               <select
                 id={`${fieldId}-brand`}
+                data-testid="content-brand"
                 value={brandId}
                 onChange={(event) => {
                   setBrandId(event.target.value);
                   setQuote(null);
                 }}
               >
+                {/*
+                  THE EMPTY OPTION IS LOAD-BEARING, not decoration.
+
+                  `brandId` starts as '' here — D-191's rule that a brand-scoped
+                  screen names its brand rather than guessing one — and a
+                  `<select>` whose options do not include the current value does
+                  NOT render as empty: the browser shows the first option while
+                  React still holds ''. So the screen said "Northwind" and the
+                  state said nothing, and the customer's next move depended on
+                  which of the two they believed. Every consequence of an empty
+                  brand — the disabled buttons, the absent campaign list —
+                  looked like a bug against a control that appeared to have an
+                  answer in it.
+
+                  Giving '' a real option makes the control show what the state
+                  actually is. It is NOT a brand and cannot be submitted as one:
+                  `canGenerate` already requires a non-empty brand.
+                */}
+                <option value="">{t['content.composer.brandPlaceholder']}</option>
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
                     {brand.name}
@@ -602,10 +719,29 @@ export function ComposerView({
               {t['content.composer.estimate']}
             </button>
             <button
+              type="submit"
+              form={manualFormId}
+              className="cs-ghost-button"
+              disabled={!canWrite || busy !== null}
+              data-testid="content-write-manual"
+            >
+              {t['content.composer.write']}
+            </button>
+            <button
               type="button"
               className="cs-dark-button"
               disabled={!canGenerate || busy !== null}
               data-testid="content-generate"
+              /*
+                THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
+                It is the only way a browser test can see WHICH of the two keys
+                the composer wired to generation — the defect being that the
+                manual key, which moves with the campaign, was reaching an
+                endpoint that neither sends nor stores one. It discloses
+                nothing: a hash of the customer's own inputs, already present in
+                this form as the manual submission's hidden field.
+              */
+              data-generation-key={generationIdempotencyKey}
               onClick={runGenerate}
             >
               {busy === 'generate'
@@ -613,6 +749,97 @@ export function ComposerView({
                 : t['content.composer.generate']}
             </button>
           </div>
+
+          {/*
+            THE MANUAL FORM MIRRORS THE CONTROLS ABOVE; IT DOES NOT DUPLICATE
+            THEM.
+
+            Every hidden value here is already on the screen, in the controls
+            the generate button reads — so the two verbs act on ONE set of
+            answers and cannot drift apart. The button sits in the action row
+            through `form=`, which is what that attribute is for.
+
+            `contentType` WAS BEING DROPPED (PHASE 2 correction). The selector
+            is right there and the service takes it, but the form did not send
+            it, so a person who chose REEL and wrote it themselves got a POST.
+
+            THE CAMPAIGN IS THE ONE FIELD THIS FORM OWNS, because it is the one
+            with a pre-draft meaning and no other pre-draft home: you file a
+            post under a campaign as you write it. The options are narrowed
+            server-side to the brand being composed for and to the member's
+            BrandScope, and `createManualItem` re-resolves the id against the
+            brand regardless — nothing here is an authorization. With no single
+            brand resolved there are no options and the control is not shown.
+
+            HASHTAGS AND MEDIA ARE DELIBERATELY NOT HERE. Both are properties
+            of a VARIANT, not of the item — the service takes them per variant,
+            each channel has its own media ceiling, and the picker is built to
+            live inside a variant's own form so the caption and its pictures
+            save in one submission (D-184). The draft this button creates opens
+            immediately in this same composer, where the per-variant hashtag
+            field and media picker already exist and already work. A single
+            pre-draft field applying one answer to every channel would be a
+            SECOND place to set one thing, and the first place to drift.
+
+            THE IDEMPOTENCY KEY IS THE COMPOSER'S OWN, unchanged: derived from
+            the brand, the words, the channels and the language, so a double
+            submit or a reloaded POST returns the first draft instead of making
+            a second (AC-11.2 applied to a path with no gateway in it).
+          */}
+          {draft === null ? (
+            <form
+              id={manualFormId}
+              action={actions.createManualDraft}
+              data-testid="content-manual-form"
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="brandId" value={brandId} />
+              <input type="hidden" name="contentLocale" value={contentLocale} />
+              <input type="hidden" name="contentType" value={contentType} />
+              <input type="hidden" name="body" value={brief} />
+              <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
+              {selected.map((platformKey) => (
+                <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
+              ))}
+              {/*
+                THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
+                ASSOCIATION, not merely on having campaigns to show.
+
+                `setContentCampaignAction` has required `campaigns.manage` since
+                Phase 8. Offering this selector to a member without it would
+                have let them establish a link they could never change
+                afterwards — and would have put campaign names on the screen for
+                a role that holds no campaign authority. The server enforces the
+                same permission on the submission, so hiding the control is
+                courtesy rather than security.
+
+                CONTROLLED, because the idempotency key has to include the
+                choice: two posts identical but for the campaign are two
+                requests, not a retry of one.
+              */}
+              {can.manageCampaigns && campaignOptions.length > 0 ? (
+                <div className="cs-field">
+                  <label htmlFor={`${fieldId}-manual-campaign`}>
+                    {t['campaigns.composerLabel']}
+                  </label>
+                  <select
+                    id={`${fieldId}-manual-campaign`}
+                    name="campaignId"
+                    value={campaignId}
+                    onChange={(event) => setCampaignId(event.target.value)}
+                    data-testid="content-manual-campaign"
+                  >
+                    <option value="">{t['campaigns.composerNone']}</option>
+                    {campaignOptions.map((campaign) => (
+                      <option key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </form>
+          ) : null}
         </section>
 
         {/* ------------------------------------ the generated variants --- */}
@@ -678,19 +905,32 @@ export function ComposerView({
                         {t[`content.validation.${variant.validationState}`]}
                       </span>
                     </div>
-                    {variant.hashtags.length > 0 ? (
-                      <>
-                        <label htmlFor={`${fieldId}-${variant.id}-tags`} className="cs-sr-only">
-                          {t['content.composer.hashtags']}
-                        </label>
-                        <input
-                          id={`${fieldId}-${variant.id}-tags`}
-                          name="hashtags"
-                          defaultValue={variant.hashtags.map((tag) => `#${tag}`).join(' ')}
-                          readOnly={!can.edit}
-                        />
-                      </>
-                    ) : null}
+                    {/*
+                      THE HASHTAG FIELD IS ALWAYS RENDERED (PHASE 2 correction).
+
+                      It used to appear only when the variant ALREADY had
+                      hashtags, which made it an editor for a value nothing
+                      could create: a draft that came back without any — every
+                      manually written post, and any generation the model left
+                      bare — had no way to gain one, ever. The field is the only
+                      hashtag input in the product, so hiding it on empty made
+                      the whole capability unreachable rather than tidy.
+
+                      Empty submits an empty string, which `saveVariantAction`
+                      already parses to an empty list — the same answer as
+                      before, for a variant nobody touched.
+                    */}
+                    <label htmlFor={`${fieldId}-${variant.id}-tags`} className="cs-sr-only">
+                      {t['content.composer.hashtags']}
+                    </label>
+                    <input
+                      id={`${fieldId}-${variant.id}-tags`}
+                      name="hashtags"
+                      defaultValue={variant.hashtags.map((tag) => `#${tag}`).join(' ')}
+                      placeholder={t['content.composer.hashtags']}
+                      readOnly={!can.edit}
+                      data-testid={`content-hashtags-${variant.platformKey}`}
+                    />
 
                     {/*
                       PHASE 8 — MEDIA, INSIDE THE VARIANT'S OWN FORM (AC-27.3).

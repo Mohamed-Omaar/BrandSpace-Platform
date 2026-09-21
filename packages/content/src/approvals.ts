@@ -11,6 +11,7 @@ import {
   brandIdQueryFilter,
   brandIdScopeFilter,
   brandInScope,
+  contentFingerprint,
   systemClock,
   type Clock,
 } from '@brandspace/shared';
@@ -607,6 +608,40 @@ export class ContentApprovalService {
           : 'DRAFT';
 
     const now = this.#clock.now();
+
+    /*
+     * WHAT THIS VERDICT IS BEING GRANTED OVER (D-223).
+     *
+     * Read INSIDE the lock, from the variants as they stand at the moment of
+     * the decision, so the value records what the reviewer could have seen
+     * rather than what anyone claims they saw. The publisher recomputes the
+     * same hash from what it is about to send and refuses on a difference —
+     * which is what makes "edited after approval" detectable on the SCHEDULED
+     * path, where `editVariant` deliberately does not intervene because the
+     * calendar owns that edge.
+     *
+     * ONLY ON APPROVE. A rejection or a changes-requested verdict authorizes
+     * nothing, so recording what it did not authorize would be noise.
+     */
+    const fingerprint =
+      input.verdict === 'APPROVE'
+        ? contentFingerprint(
+            await this.#db.contentVariant.findMany({
+              where: { contentItemId: item.id },
+              select: {
+                id: true,
+                platformKey: true,
+                locale: true,
+                body: true,
+                hashtags: true,
+                firstComment: true,
+                linkUrl: true,
+                assetIds: true,
+              },
+            }),
+          )
+        : null;
+
     /*
      * CONDITIONAL ON `PENDING` AS WELL AS LOCKED — belt and braces, and the
      * braces are what a future caller outside a transaction would be left with.
@@ -619,6 +654,7 @@ export class ContentApprovalService {
         decidedByUserId: input.actor.userId,
         decidedAt: now,
         decisionNote: note,
+        ...(fingerprint ? { approvedFingerprint: fingerprint as never } : {}),
       },
     });
     if (moved.count === 0) throw approvalAlreadyDecided();
@@ -1000,6 +1036,35 @@ export class ContentApprovalService {
   async openForItem(itemId: string): Promise<Approval | null> {
     return this.#db.approval.findFirst({
       where: { workspaceId: this.#workspaceId, contentItemId: itemId, status: 'PENDING' },
+    });
+  }
+
+  /**
+   * THE LATEST VERDICT FOR AN ITEM, whatever it was — which is the question the
+   * publish gate has always needed to ask and never did.
+   *
+   * THE DEFECT THIS FIXES. `PublishApprovalGate` called `openForItem` and then
+   * required `status === 'APPROVED'`. But `openForItem` returns only PENDING
+   * rows, by design and by name: an APPROVED item has no PENDING row, so it
+   * answered `null`, and `null` was read as "no approval" — APPROVAL_REVOKED.
+   *
+   * The consequence is the wrong way round from an ordinary bug. With
+   * `requireApprovalBeforeScheduling` left at its default of `false` nothing
+   * happens, so the product looks fine. The customer who TURNS APPROVALS ON —
+   * the one who cares most about them — gets content that can be written,
+   * reviewed, approved and scheduled, and can then never publish, failing with
+   * a class that says the approval was revoked when it was granted. Every
+   * publish-pipeline test injects a fake gate answering `{ status: 'APPROVED' }`,
+   * so no suite ever ran the real method through that path.
+   *
+   * HIGHEST CYCLE WINS, because cycles are the history: an item whose cycle 1
+   * was APPROVED and whose cycle 2 is PENDING is back under review, and the
+   * live answer is PENDING rather than the older approval.
+   */
+  async latestForItem(itemId: string): Promise<Approval | null> {
+    return this.#db.approval.findFirst({
+      where: { workspaceId: this.#workspaceId, contentItemId: itemId },
+      orderBy: { cycle: 'desc' },
     });
   }
 

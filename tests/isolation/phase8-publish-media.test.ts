@@ -91,7 +91,7 @@ function openGate(): PublishApprovalGate {
     async policyForBrand() {
       return { requireApprovalBeforeScheduling: false };
     },
-    async openForItem() {
+    async latestForItem() {
       return { status: 'APPROVED' };
     },
   };

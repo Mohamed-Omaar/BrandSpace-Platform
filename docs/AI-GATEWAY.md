@@ -403,6 +403,14 @@ All four phases are idempotent on `AIRequest.idempotencyKey` and `CreditTransact
    cost incurred on failed attempts is recorded for margin analysis but never billed to the customer.
 2. **No duplicate charge on retry.** Retries reuse the same `AIRequest` and the same reservation. A duplicate
    inbound request with the same idempotency key returns the original result without touching the wallet.
+   **A recorded FAILURE is replayed only when re-running it would reach the same answer** (D-226):
+   `MODERATION_BLOCKED` and the deterministic classes (`CONTENT_FILTERED`, `INVALID_REQUEST`,
+   `CONTEXT_TOO_LONG`) replay, so the customer gets that verdict immediately instead of paying for the
+   same refusal on a loop. Everything else — a timeout, a rate limit, a briefly unavailable provider,
+   `UNKNOWN` — is transient: the failed row keeps its cost and classification, its key is moved aside,
+   and the retry runs for real. Replaying a transient failure for ever made one lost connection poison
+   that idempotency key permanently. Re-running charges ONCE, because a failed request has already
+   released its reservation.
 3. **No negative balance.** Wallet row lock + database `CHECK` constraint + reservation-before-execution.
    Under concurrency, the second request sees the reserved amount and is rejected with `insufficient_credits`.
 

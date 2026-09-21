@@ -4,7 +4,9 @@ import {
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
   contentToolRequestSchema,
+  readRetentionFacts,
   resolveContentPolicy,
+  type WorkspaceRetentionFacts,
 } from '@brandspace/content';
 import { AiGateway, MockProviderAdapter, type AiProviderAdapter } from '@brandspace/ai-gateway';
 import { ConfigurationAiSource } from '@brandspace/ai-gateway';
@@ -172,45 +174,19 @@ async function resolveCaller(
  * taken at sign-in: a plan change or a cancellation since then has to take
  * effect now, not at the member's next sign-in.
  */
-async function workspaceFacts(workspaceId: string): Promise<{
-  planKey: string | null;
-  subscriptionActive: boolean;
-  cancelledAt: Date | null;
-  workspaceRetentionDays: number | null;
-}> {
-  const row = await withWorkspace(
-    workspaceId,
-    async (db) =>
-      db.workspace.findUnique({
-        where: { id: workspaceId },
-        select: {
-          planKey: true,
-          status: true,
-          aiContentRetentionDays: true,
-          subscription: { select: { status: true, cancelledAt: true } },
-        },
-      }),
-    { prisma: getPrisma() },
-  );
-
-  const subscription = row?.subscription ?? null;
-  /*
-   * D-116: retained while the workspace has an ACTIVE SUBSCRIPTION.
-   *
-   * TRIALING and PAST_DUE count as active, and that is a decision rather than a
-   * looseness: a trial is a workspace the platform is currently serving, and a
-   * failed card is a billing problem rather than consent to start deleting the
-   * customer's drafts. CANCELLED, PAUSED and EXPIRED do not count, and neither
-   * does a workspace with no subscription row at all — a trial that never
-   * started is not the same as a trial in progress.
-   */
-  const ACTIVE: readonly string[] = ['ACTIVE', 'TRIALING', 'PAST_DUE'];
-  return {
-    planKey: row?.planKey ?? null,
-    subscriptionActive: subscription !== null && ACTIVE.includes(subscription.status),
-    cancelledAt: subscription?.cancelledAt ?? null,
-    workspaceRetentionDays: row?.aiContentRetentionDays ?? null,
-  };
+/**
+ * ONE READER FOR THE RETENTION FACTS.
+ *
+ * This used to transcribe the "which subscription states still retain content"
+ * rule inline. Manual authoring in the dashboard needs the same answer, and a
+ * second transcription is a second answer — one that nobody would notice
+ * diverging until somebody's drafts were purged early. `readRetentionFacts`
+ * in `@brandspace/content` is now the only copy; D-116's reasoning lives with it.
+ */
+async function workspaceFacts(workspaceId: string): Promise<WorkspaceRetentionFacts> {
+  return withWorkspace(workspaceId, async (db) => readRetentionFacts(db, workspaceId), {
+    prisma: getPrisma(),
+  });
 }
 
 /** A brand outside the caller's scope, or absent, or archived: the same 404. */
@@ -347,11 +323,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
               actorUserId: caller.userId,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,
-              retention: {
-                subscriptionActive: facts.subscriptionActive,
-                cancelledAt: facts.cancelledAt,
-                workspaceRetentionDays: facts.workspaceRetentionDays,
-              },
+              retention: facts,
             }),
           { prisma: getPrisma() },
         );

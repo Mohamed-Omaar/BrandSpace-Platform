@@ -7,7 +7,13 @@ import {
   type SocialProvider,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
+import {
+  approvalCoversItem,
+  brandIdQueryFilter,
+  readApprovedFingerprint,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 import type { AdapterCredentials, PublishMedia, PublishOutcome } from './adapter';
 import {
   FAILURE_BEHAVIOUR,
@@ -58,8 +64,17 @@ import type { SocialTokenVault } from './token-vault';
 export interface PublishApprovalGate {
   /** Does this brand require approval before anything of its goes out? */
   policyForBrand(brandId: string): Promise<{ requireApprovalBeforeScheduling: boolean }>;
-  /** The live approval for an item, if a cycle is open or was decided. */
-  openForItem(itemId: string): Promise<{ status: string } | null>;
+  /**
+   * The live approval for an item, if a cycle is open or was decided.
+   *
+   * `approvedFingerprint` IS WHAT THE VERDICT WAS GRANTED OVER (D-223) — see
+   * `@brandspace/shared`'s `content-fingerprint`. It is part of this port
+   * rather than something the pipeline reads off the row itself because the
+   * approval table belongs to the Approvals module, and a publisher that read
+   * another module's columns directly would be a second reader of a meaning it
+   * does not own.
+   */
+  latestForItem(itemId: string): Promise<{ status: string; approvedFingerprint?: unknown } | null>;
 }
 
 /**
@@ -256,7 +271,7 @@ export class PublishPipelineService {
 
     const gate = await this.#approvals.policyForBrand(slot.brandId);
     if (gate.requireApprovalBeforeScheduling) {
-      const approval = await this.#approvals.openForItem(item.id);
+      const approval = await this.#approvals.latestForItem(item.id);
       if (!approval || approval.status !== 'APPROVED') return empty('approval_required');
     }
 
@@ -1212,8 +1227,58 @@ export class PublishPipelineService {
 
     const gate = await this.#approvals.policyForBrand(job.brandId);
     if (gate.requireApprovalBeforeScheduling) {
-      const approval = await this.#approvals.openForItem(job.contentItemId);
+      const approval = await this.#approvals.latestForItem(job.contentItemId);
       if (!approval || approval.status !== 'APPROVED') return 'APPROVAL_REVOKED';
+
+      /*
+       * AND THE APPROVAL MUST COVER THIS ITEM, AS IT STANDS NOW (D-223, D-230).
+       *
+       * Checking that an approval exists and says APPROVED was the whole gate,
+       * and it is not enough: `editVariant` returns an APPROVED item to DRAFT
+       * but deliberately leaves a SCHEDULED one alone — the calendar owns that
+       * edge — while the send below reads `variant.body` live. So
+       * submit → approve → schedule → edit → publish put unreviewed words on a
+       * customer's channel under a genuine verdict, with every audit row
+       * individually true.
+       *
+       * EVERY VARIANT OF THE ITEM IS READ, not only the one being sent, because
+       * the verdict was granted over the POST: its channels, its captions, and
+       * the fact that there were that many of them. Comparing one row's hash
+       * would miss a channel ADDED after approval — the two original variants
+       * are untouched, so they still match — and a channel REMOVED from a
+       * campaign a reviewer approved as a whole.
+       *
+       * A difference anywhere in that set, a variant that did not exist at
+       * approval time, or an approval too old to carry a fingerprint at all are
+       * the same answer: this verdict does not authorize this post. It fails as
+       * APPROVAL_REVOKED rather than publishing, and the history screen already
+       * translates that class.
+       */
+      const variantsNow = await this.#db.contentVariant.findMany({
+        where: { contentItemId: job.contentItemId, workspaceId: this.#workspaceId },
+        select: {
+          id: true,
+          platformKey: true,
+          locale: true,
+          body: true,
+          hashtags: true,
+          firstComment: true,
+          linkUrl: true,
+          assetIds: true,
+        },
+      });
+      if (!variantsNow.some((variant) => variant.id === job.contentVariantId)) {
+        return 'CONTENT_REJECTED';
+      }
+      if (
+        !approvalCoversItem(
+          readApprovedFingerprint(approval.approvedFingerprint),
+          variantsNow,
+          job.contentVariantId,
+        )
+      ) {
+        return 'APPROVAL_REVOKED';
+      }
     }
 
     const connection = await this.#db.socialConnection.findFirst({

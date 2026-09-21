@@ -6,7 +6,7 @@ import {
   customerButtonStyle,
   customerInputStyle,
   customerSecondaryButtonStyle,
-} from '../../../components/workspace-shell';
+} from '../../../components/customer-styles';
 
 /**
  * The commercial actions, as client components.

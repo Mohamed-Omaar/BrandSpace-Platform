@@ -888,6 +888,30 @@ It also gained the timer for `sweepPublishing`, which Phase 6 wrote and left rea
 `runOnce` — so the publishing reconciliation sweep had never actually run on a schedule. Found while
 wiring the analytics sweep beside it.
 
+**And in Phase 2 it gained the step that gives the analytics sweep something to enumerate** (D-225).
+`ensureCursors()` was complete, correct and called by nothing outside the tests, so a workspace that
+connected an account had no `analytics_ingestion_cursor` rows and ingestion could never begin. The sweep
+now asks the question itself on every run, before enumerating due cursors: active connections with no
+cursor rows at all, distinct by workspace, bounded by the same batch size, then `withWorkspace(...)` per
+workspace so the enumeration is cross-tenant and every write is the tenant's own.
+
+Creating the cursors at CONNECTION time was the obvious alternative and is worse: it fixes tomorrow and
+not today, leaving every already-connected account permanently uncovered, and it has to be repeated in
+the connect, reconnect and re-authorisation paths — three places to forget. Ensuring from the sweep is
+idempotent by construction, self-heals after a newly registered metric, and costs one indexed query on a
+run that was already reading that table. A workspace whose ensure throws is logged and skipped: one
+tenant's broken state must not stop ingestion for everybody else.
+
+**AND THE ENUMERATION HAD TO ROTATE (D-229).** The first version asked for active connections with
+`analyticsCursors: { none: {} }` — no cursor AT ALL — which repairs "never provisioned" and nothing
+else. A connection holding a PARTIAL set no longer matched and was skipped for ever: an adapter that
+later declares `supportsPostMetrics`, a `supportedGranularities` that grows, one insert that failed, a
+row an operator removed. Dropping the filter alone would starve everything past `take: batch`, which is
+the defect D-182 names, so the sweep orders every ACTIVE connection by
+`social_connection.analyticsCursorsEnsuredAt ASC NULLS FIRST` and parks what it visited — inside the
+tenant's own transaction, beside the ensure it records, so the two commit together and a failed pass is
+not marked done.
+
 ---
 
 ## Phase 9 — Commerce & Onboarding

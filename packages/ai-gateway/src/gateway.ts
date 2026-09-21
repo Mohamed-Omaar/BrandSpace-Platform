@@ -206,6 +206,35 @@ function isTerminal(status: string): boolean {
   return status === 'SUCCEEDED' || (FAILED_STATUSES as readonly string[]).includes(status);
 }
 
+/**
+ * Failure classes where RUNNING IT AGAIN WOULD REACH THE SAME ANSWER.
+ *
+ * A filtered prompt is filtered every time; a request the provider calls
+ * malformed is malformed every time; a context over the model's limit is over
+ * it every time. Replaying those is right — the customer gets the verdict
+ * immediately instead of paying for the same refusal on a loop.
+ *
+ * EVERYTHING ELSE IS TRANSIENT and must be allowed to run again: a timeout, a
+ * network error, a rate limit, a provider or model that was briefly
+ * unavailable, an auth error an operator has since fixed, a quota that resets.
+ * `UNKNOWN` is transient by default for the same reason the billing reconciler
+ * defaults that way (D-222): misreading a transient failure as terminal is the
+ * expensive direction, because it makes a customer's request permanently
+ * unfulfillable, while the reverse costs one more provider call.
+ */
+const DETERMINISTIC_FAILURE_CLASSES: ReadonlySet<string> = new Set([
+  'CONTENT_FILTERED',
+  'INVALID_REQUEST',
+  'CONTEXT_TOO_LONG',
+]);
+
+function isDeterministicFailure(row: { status: string; failureClass: string | null }): boolean {
+  // MODERATION_BLOCKED is a decision about the input, so it is deterministic
+  // whatever class accompanies it.
+  if (row.status === 'MODERATION_BLOCKED') return true;
+  return row.failureClass !== null && DETERMINISTIC_FAILURE_CLASSES.has(row.failureClass);
+}
+
 export class AiGateway {
   readonly #prisma: PrismaClient;
   readonly #ledger: CreditLedgerService;
@@ -392,20 +421,57 @@ export class AiGateway {
    * again after the first call finished.
    */
   async #replayIfRecorded(request: AiGatewayRequest): Promise<AiGatewayResult | null> {
-    const existing = await this.#prisma.aiRequest.findUnique({
-      where: { idempotencyKey: request.idempotencyKey },
-    });
-    if (!existing) return null;
-    this.#assertSameWorkspace(existing.workspaceId, request.workspaceId);
-    if (!isTerminal(existing.status)) {
-      // Still running. Charging again or calling the provider again would both
-      // be wrong, so the caller is told to wait rather than given a half answer.
-      throw new AppError(
-        'CONFLICT',
-        'A request with this idempotency key is still running. Retry once it completes.',
-      );
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const existing = await this.#prisma.aiRequest.findUnique({
+        where: { idempotencyKey: request.idempotencyKey },
+      });
+      if (!existing) return null;
+      this.#assertSameWorkspace(existing.workspaceId, request.workspaceId);
+      if (!isTerminal(existing.status)) {
+        // Still running. Charging again or calling the provider again would both
+        // be wrong, so the caller is told to wait rather than given a half answer.
+        throw new AppError(
+          'CONFLICT',
+          'A request with this idempotency key is still running. Retry once it completes.',
+        );
+      }
+      if (existing.status === 'SUCCEEDED' || isDeterministicFailure(existing)) {
+        return toResult(existing, true);
+      }
+
+      /*
+       * A TRANSIENT FAILURE IS NOT AN ANSWER, SO IT IS NOT REPLAYED.
+       *
+       * Every terminal status used to be replayed, which meant one provider
+       * timeout POISONED THAT IDEMPOTENCY KEY FOR EVER: the customer pressed
+       * generate again, the gateway handed back the recorded failure without
+       * calling anybody, and the request could never succeed. The Creative
+       * Studio hid it by minting a fresh key per click — which is its own
+       * defect, since a double click then charged twice — but the underlying
+       * rule was wrong for every caller.
+       *
+       * RE-RUNNING CHARGES ONCE, not twice. A failed request RELEASES its
+       * reservation (`#releaseAndRecord`), so nothing was taken for the attempt
+       * being superseded and the retry settles on its own merits.
+       *
+       * THE FAILED ROW IS KEPT AND RENAMED, never deleted. Its cost, its
+       * classification and its timing are the record of what happened, and the
+       * key is moved aside — suffixed with the row's own id, so the new name
+       * cannot collide — purely to free the name for the next attempt. The
+       * conditional `updateMany` is what makes two racing retries safe: exactly
+       * one moves the row, and the loser re-reads.
+       */
+      const freed = await this.#prisma.aiRequest.updateMany({
+        where: { id: existing.id, idempotencyKey: request.idempotencyKey },
+        data: { idempotencyKey: `${request.idempotencyKey}#superseded:${existing.id}` },
+      });
+      if (freed.count === 1) return null;
     }
-    return toResult(existing, true);
+    /* c8 ignore next 5 -- three lost races on one key is not a reachable state. */
+    throw new AppError(
+      'CONFLICT',
+      'A request with this idempotency key is being retried. Try again in a moment.',
+    );
   }
 
   /**

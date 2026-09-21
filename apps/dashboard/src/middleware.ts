@@ -44,6 +44,25 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
         const forwarded = new Headers(request.headers);
         forwarded.set('x-nonce', nonce);
         forwarded.set('Content-Security-Policy', headers['Content-Security-Policy'] ?? '');
+        /*
+         * THE ROUTE THE READER IS ACTUALLY ON, so the language switcher can
+         * send them to the SAME PAGE in the other language.
+         *
+         * A server component cannot see its own URL, so the shell built the
+         * switcher's href from `activePath` — the NAV item's path, which is a
+         * different thing. On `/en/content/compose?item=…` that is `/content`,
+         * so switching to Arabic lost the composer and the draft it was
+         * editing; on the twelve routes that pass no `activePath` at all it
+         * fell back to `/overview`, so changing language moved the reader to a
+         * page they had not asked for. Losing the query string also lost every
+         * filter, the asset cursor and the selected row.
+         *
+         * A HEADER RATHER THAN A PROP ON TWENTY-NINE PAGES: the path is a fact
+         * about the request, the middleware is the one place that sees every
+         * request, and a prop each page has to remember is a prop a new page
+         * will forget.
+         */
+        forwarded.set('x-brandspace-path', `${request.nextUrl.pathname}${request.nextUrl.search}`);
         return NextResponse.next({ request: { headers: forwarded } });
       })();
 

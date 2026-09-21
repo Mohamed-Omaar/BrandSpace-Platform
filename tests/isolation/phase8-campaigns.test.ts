@@ -394,3 +394,145 @@ describe('AC-26.2: an edit made against a stale version is refused', () => {
     expect(row?.name).toBe('First writer wins');
   });
 });
+
+describe('AN ARCHIVED CAMPAIGN DOES NOT SILENTLY LOSE ITS CONTENT (PHASE 2)', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR.
+   *
+   * `archive` is a soft delete that deliberately keeps the content in the
+   * campaign, and `#require` excludes archived campaigns so a new draft cannot
+   * be filed into one. Both correct. What neither covers is the draft that was
+   * ALREADY in the campaign when it was archived.
+   *
+   * The composer renders its campaign control as `defaultValue={campaignId}`
+   * over the list of LIVE campaigns. Once the campaign is archived there is no
+   * matching option, the browser falls back to the first, and the screen reads
+   * "No campaign" — which is false. Saving the draft then posts the empty value
+   * and detaches it from a campaign nobody asked to leave. The relationship is
+   * destroyed by a form the reader thought they were leaving alone.
+   */
+
+  // A FUNCTION, NOT A CONST. `fixtures` is assigned in `beforeAll`, so reading
+  // it while the describe body is evaluated is reading it before it exists.
+  const actor = () => ({ userId: fixtures.a.userId, brandScope: [] as string[] });
+
+  /*
+   * A CAMPAIGN AND A DRAFT OF ITS OWN, PER TEST.
+   *
+   * Deliberately not the shared fixture campaign: archiving is not reversible
+   * within a run, so a helper that archived the fixture would work once and
+   * break every test after it — which is exactly what the first version of this
+   * suite did, passing alone and failing in the file.
+   */
+  async function archivedCampaignWithContent(): Promise<{
+    campaignId: string;
+    itemId: string;
+  }> {
+    return inA(async (db) => {
+      const service = serviceA(db);
+      const campaign = await service.create({
+        brandId: fixtures.a.brandId,
+        name: `Archived ${randomUUID().slice(0, 8)}`,
+        objective: 'AWARENESS',
+        actor: actor(),
+      });
+      const item = await db.contentItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          title: `Draft ${randomUUID().slice(0, 8)}`,
+          status: 'DRAFT',
+          primaryLocale: 'EN',
+          createdByUserId: fixtures.a.userId,
+        },
+      });
+      await service.setContentCampaign({
+        contentItemId: item.id,
+        campaignId: campaign.id,
+        actor: actor(),
+      });
+      await service.archive({ campaignId: campaign.id, actor: actor() });
+      return { campaignId: campaign.id, itemId: item.id };
+    });
+  }
+
+  it('ARCHIVING KEEPS THE LINK — the content is not detached and not deleted', async () => {
+    const { campaignId, itemId } = await archivedCampaignWithContent();
+
+    const row = await inA((db) =>
+      db.contentItem.findFirst({
+        where: { id: itemId },
+        select: { campaignId: true, deletedAt: true },
+      }),
+    );
+    expect(row?.campaignId).toBe(campaignId);
+    expect(row?.deletedAt).toBeNull();
+  });
+
+  it('RE-SAVING THE UNCHANGED CAMPAIGN IS A NO-OP, not a refusal', async () => {
+    const { campaignId, itemId } = await archivedCampaignWithContent();
+
+    /*
+     * THE ASSERTION THAT FAILS AGAINST THE DEFECT. `#require` refuses an
+     * archived campaign, so re-sending the draft's own unchanged value threw —
+     * and the reader could not save an unrelated edit until they detached the
+     * draft from a campaign they had not asked to leave.
+     */
+    await expect(
+      inA((db) =>
+        serviceA(db).setContentCampaign({
+          contentItemId: itemId,
+          campaignId,
+          actor: actor(),
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    const row = await inA((db) =>
+      db.contentItem.findFirst({ where: { id: itemId }, select: { campaignId: true } }),
+    );
+    expect(row?.campaignId).toBe(campaignId);
+  });
+
+  it('the archived campaign is still findable, so the screen can name it', async () => {
+    const { campaignId } = await archivedCampaignWithContent();
+
+    const live = await inA((db) => serviceA(db).list({ brandScope: [], take: 200 }));
+    expect(live.some((c) => c.id === campaignId)).toBe(false);
+
+    const withArchived = await inA((db) =>
+      serviceA(db).list({ brandScope: [], includeArchived: true, take: 200 }),
+    );
+    expect(withArchived.some((c) => c.id === campaignId)).toBe(true);
+  });
+
+  it('MOVING TO A DIFFERENT CAMPAIGN IS STILL CHECKED — archived is not a way in', async () => {
+    const { campaignId } = await archivedCampaignWithContent();
+
+    // A SECOND draft, not currently in that campaign, cannot be filed into it:
+    // the no-op only covers a value that is already the item's own.
+    const otherItem = await inA(async (db) => {
+      const created = await db.contentItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          title: 'Another draft',
+          status: 'DRAFT',
+          primaryLocale: 'EN',
+          createdByUserId: fixtures.a.userId,
+        },
+      });
+      return created.id;
+    });
+
+    await expect(
+      inA((db) =>
+        serviceA(db).setContentCampaign({
+          contentItemId: otherItem,
+          campaignId,
+          actor: actor(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});

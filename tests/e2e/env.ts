@@ -119,6 +119,15 @@ export interface E2eAdminCredentials {
     /** A read-only member, for the RBAC assertions. */
     readonly viewerEmail: string;
     readonly viewerPassword: string;
+    /**
+     * A member who may WRITE content and may NOT manage campaigns
+     * (`copywriter`). The manual-authoring path accepts a campaign, and the
+     * permission that authorizes the association is the one the existing
+     * refile action requires — so proving the gate needs an account that holds
+     * one of those authorities and not the other.
+     */
+    readonly copywriterEmail: string;
+    readonly copywriterPassword: string;
     /** A live invitation token, for the acceptance flow. */
     readonly invitationToken: string;
     readonly invitedEmail: string;

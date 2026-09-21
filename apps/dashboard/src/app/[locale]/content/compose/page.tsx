@@ -8,8 +8,11 @@ import { inContentStudio } from '../../../../server/content-context';
 import { listMediaOptions } from '../../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
+import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
+  createManualDraftAction,
+  listCampaignOptionsAction,
   setContentCampaignAction,
   uploadComposerMediaAction,
   saveVariantAction,
@@ -38,7 +41,6 @@ export const dynamic = 'force-dynamic';
  * length arrive through `entitlement_catalogue_snapshot`, so an owner who adds
  * a channel in Platform Admin adds it to this screen (CLAUDE.md §2.2).
  */
-const CONTENT_TYPES = ['POST', 'CAROUSEL', 'STORY', 'REEL', 'VIDEO', 'ARTICLE', 'THREAD'] as const;
 
 export default async function ComposePage({
   params,
@@ -71,6 +73,16 @@ export default async function ComposePage({
     }),
   );
 
+  const brandContext = await brandContextFor(workspace, '/content');
+  /*
+   * THE BRAND A NEW POST WOULD BE WRITTEN FOR, when there is exactly one
+   * answer (PHASE 2 correction). Null means the rail is on "All brands" with
+   * several to choose from, and the composer shows its own brand select in
+   * that case — so there is no single brand to read a campaign list for, and
+   * the pre-draft campaign control is correctly not offered.
+   */
+  const composingBrandId = defaultBrandFor(brandContext);
+
   const { policy, draft, openApprovalId, campaigns } = await inContentStudio(
     workspace.workspaceId,
     async (services) => {
@@ -82,11 +94,34 @@ export default async function ComposePage({
        * (docs/SECURITY.md §4.2).
        */
       if (itemId === undefined) {
+        /*
+         * A POST CAN BE FILED UNDER A CAMPAIGN WHEN IT IS WRITTEN, not only
+         * afterwards (PHASE 2 correction).
+         *
+         * This branch returned an empty list, so the composer had no campaign
+         * options before a draft existed and the manual create — which accepts
+         * a `campaignId` and validates it against the brand — was never given
+         * one. Filing happened on the second screen at the earliest.
+         *
+         * Narrowed to the brand being composed for and to the member's
+         * BrandScope by the service, exactly as the existing-draft branch
+         * below: another brand's campaign is never sent to the page at all.
+         * With no single brand resolved there is nothing to narrow to, and the
+         * list stays empty.
+         */
+        const options =
+          composingBrandId === null || !workspace.permissionKeys.includes('campaigns.manage')
+            ? []
+            : await services.campaigns().list({
+                brandId: composingBrandId,
+                brandScope: workspace.brandScope,
+                take: 100,
+              });
         return {
           policy: resolved,
           draft: null,
           openApprovalId: null as string | null,
-          campaigns: [] as readonly { id: string; name: string }[],
+          campaigns: options.map((campaign) => ({ id: campaign.id, name: campaign.name })),
         };
       }
       const item = await (
@@ -105,11 +140,41 @@ export default async function ComposePage({
        * ones this member may act on. Narrowed HERE rather than in the browser,
        * so another brand's campaign is never sent to the page at all.
        */
-      const campaigns = await services.campaigns().list({
+      const campaignService = services.campaigns();
+      const live = await campaignService.list({
         brandId: item.brandId,
         brandScope: workspace.brandScope,
         take: 100,
       });
+      /*
+       * THE DRAFT'S OWN CAMPAIGN IS ALWAYS AN OPTION, even once it is archived
+       * (PHASE 2).
+       *
+       * `list` excludes archived campaigns, which is right for CHOOSING one.
+       * But the control is rendered as `defaultValue={draft.campaignId}` over
+       * these options, so a draft whose campaign had since been archived had no
+       * matching option — the browser fell back to the first, the screen said
+       * "No campaign", and that was false. Worse, saving the form then posted
+       * an empty value and DETACHED the draft from a campaign nobody had asked
+       * to leave, destroying a relationship silently.
+       *
+       * Adding the current one back makes the screen tell the truth. It is not
+       * a way to file new work into an archived campaign: `setContentCampaign`
+       * still refuses any id that is not live, and re-sending the unchanged one
+       * is a no-op there.
+       */
+      const archivedCurrent =
+        item.campaignId && !live.some((campaign) => campaign.id === item.campaignId)
+          ? (
+              await campaignService.list({
+                brandId: item.brandId,
+                brandScope: workspace.brandScope,
+                includeArchived: true,
+                take: 200,
+              })
+            ).find((campaign) => campaign.id === item.campaignId)
+          : undefined;
+      const campaigns = archivedCurrent ? [...live, archivedCurrent] : live;
       return {
         policy: resolved,
         draft: item,
@@ -188,8 +253,6 @@ export default async function ComposePage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
-  const brandContext = await brandContextFor(workspace, '/content');
-
   return (
     <WorkspaceShell
       brandContext={brandContext}
@@ -208,7 +271,7 @@ export default async function ComposePage({
         locale={locale}
         t={dictionaryFor(translate)}
         brands={brands}
-        defaultBrandId={defaultBrandFor(brandContext)}
+        defaultBrandId={composingBrandId}
         platforms={platforms}
         contentTypes={CONTENT_TYPES}
         maxBriefChars={policy.generation.maxBriefChars}
@@ -232,6 +295,8 @@ export default async function ComposePage({
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
+          createManualDraft: createManualDraftAction,
+          listCampaignOptions: listCampaignOptionsAction,
         }}
       />
     </WorkspaceShell>
@@ -329,6 +394,7 @@ const COMPOSER_KEYS = [
   'content.composer.title',
   'content.composer.back',
   'content.composer.brand',
+  'content.composer.brandPlaceholder',
   'content.composer.channels',
   'content.composer.channelsHint',
   'content.composer.brief',
@@ -337,6 +403,7 @@ const COMPOSER_KEYS = [
   'content.composer.contentType',
   'content.composer.estimate',
   'content.composer.generate',
+  'content.composer.write',
   'content.composer.generating',
   'content.composer.quoteLabel',
   'content.composer.quoteUnit',

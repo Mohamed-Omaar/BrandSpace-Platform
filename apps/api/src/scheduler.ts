@@ -6,7 +6,9 @@ import {
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import {
+  createAnalyticsRegistry,
   createMetricWindowPort,
+  ensureIngestionCursors,
   pruneAnalytics,
   resolveAnalyticsPolicy,
 } from '@brandspace/analytics';
@@ -535,6 +537,96 @@ export class MaintenanceScheduler {
   async sweepAnalytics(batch: number): Promise<{ dispatched: number; backfills: number }> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
+
+    /*
+     * ENSURE THE CURSORS BEFORE LOOKING FOR DUE ONES — the wiring that did not
+     * exist, and then the half of it that did not self-heal.
+     *
+     * `ensureIngestionCursors` was written, correct and unreachable: nothing in
+     * the product called it, so no `analytics_ingestion_cursor` row was ever
+     * created, so the enumeration below found an empty set on every tick and
+     * analytics ingestion never ran. The module was complete down to its retry
+     * backoff and had no way in.
+     *
+     * THE SWEEP IS THE RIGHT ENTRY POINT rather than the moment a connection is
+     * activated. `@brandspace/social-connectors` cannot call analytics — the
+     * dependency runs the other way, and reversing it is a cycle — and a
+     * connect-time hook would also be a one-shot: a provider that gains a
+     * capability, a connection reactivated after a disconnect, and every
+     * account connected before this existed would all be left without cursors
+     * for ever. A housekeeping pass is self-healing by construction.
+     *
+     * THE FIRST ENUMERATION WAS NOT (D-229). It asked for ACTIVE connections
+     * with `analyticsCursors: { none: {} }` — no cursor AT ALL — which repairs
+     * "never provisioned" and nothing else. A connection holding a PARTIAL set
+     * stopped matching and was skipped for ever: an adapter that later declares
+     * `supportsPostMetrics`, a `supportedGranularities` that grows a value, one
+     * insert that failed, a row an operator removed. `ensureIngestionCursors`
+     * always inserted the COMPLETE required set; only the question was too
+     * narrow.
+     *
+     * SO THE SWEEP ROTATES OVER EVERY ACTIVE CONNECTION instead, ordered by
+     * `analyticsCursorsEnsuredAt ASC NULLS FIRST` and bounded by the same
+     * `batch` as the rest of this sweep. Never-ensured first, then
+     * least-recently-ensured — the ordering R4-2 established two queries below,
+     * and the durable cursor D-182 requires: dropping the filter without one
+     * would return the same head of the queue on every tick and starve the tail
+     * past `batch`.
+     *
+     * THE PARK IS WRITTEN INSIDE THE TENANT'S OWN TRANSACTION, with the ensure
+     * it records, so the two commit together (D-186's shape). A workspace whose
+     * ensure throws is NOT parked, so it comes back at the front of the queue
+     * rather than being marked done.
+     *
+     * NOTHING HERE RESETS INGESTION STATE. The insert is ON CONFLICT DO NOTHING,
+     * so a cursor that already exists keeps its progress, its backoff and its
+     * freshness untouched; this pass can only ADD the rows that are missing.
+     *
+     * THE ENUMERATION IS CROSS-TENANT AND THE WORK IS NOT, exactly as the rest
+     * of this sweep. The platform identity answers WHICH connections are due a
+     * pass; the cursors and the park are written inside that tenant's own
+     * `withWorkspace` context, on the tenant client, under RLS.
+     */
+    const dueForEnsure = await platform.socialConnection.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, workspaceId: true },
+      orderBy: [{ analyticsCursorsEnsuredAt: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
+      take: batch,
+    });
+    if (dueForEnsure.length > 0) {
+      const registry = createAnalyticsRegistry({ environment: this.#environment });
+      // One pass per WORKSPACE, because `ensureIngestionCursors` covers a whole
+      // workspace in one statement; the ids are what gets parked afterwards.
+      const byWorkspace = new Map<string, string[]>();
+      for (const row of dueForEnsure) {
+        const seen = byWorkspace.get(row.workspaceId);
+        if (seen) seen.push(row.id);
+        else byWorkspace.set(row.workspaceId, [row.id]);
+      }
+      for (const [workspaceId, connectionIds] of byWorkspace) {
+        try {
+          await withWorkspace(
+            workspaceId,
+            async (db) => {
+              await ensureIngestionCursors({ db, workspaceId, registry });
+              await db.socialConnection.updateMany({
+                where: { id: { in: connectionIds } },
+                data: { analyticsCursorsEnsuredAt: now },
+              });
+            },
+            { prisma: getPrisma() },
+          );
+        } catch (error: unknown) {
+          // ONE WORKSPACE'S FAILURE IS NOT THE SWEEP'S. Its connections keep a
+          // null or older stamp, so the next tick reaches them first, and the
+          // workspaces after this one still get their cursors.
+          log.warn('could not ensure analytics cursors', {
+            workspaceId,
+            ...internalErrorFields(error),
+          });
+        }
+      }
+    }
 
     const due = await platform.analyticsIngestionCursor.findMany({
       where: {
