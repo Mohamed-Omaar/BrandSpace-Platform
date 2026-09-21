@@ -12,6 +12,7 @@ import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
   createManualDraftAction,
+  listCampaignOptionsAction,
   setContentCampaignAction,
   uploadComposerMediaAction,
   saveVariantAction,
@@ -109,7 +110,7 @@ export default async function ComposePage({
          * list stays empty.
          */
         const options =
-          composingBrandId === null
+          composingBrandId === null || !workspace.permissionKeys.includes('campaigns.manage')
             ? []
             : await services.campaigns().list({
                 brandId: composingBrandId,
@@ -295,6 +296,7 @@ export default async function ComposePage({
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
           createManualDraft: createManualDraftAction,
+          listCampaignOptions: listCampaignOptionsAction,
         }}
       />
     </WorkspaceShell>

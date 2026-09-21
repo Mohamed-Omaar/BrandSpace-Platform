@@ -202,9 +202,11 @@ async function seedCustomerEstate(
 
   const ownerEmail = 'e2e-owner@brandspace.test';
   const viewerEmail = 'e2e-viewer@brandspace.test';
+  const copywriterEmail = 'e2e-copywriter@brandspace.test';
   const invitedEmail = 'e2e-invitee@brandspace.test';
   const password = `e2e-${randomBytes(18).toString('base64url')}`;
   const viewerPassword = `e2e-${randomBytes(18).toString('base64url')}`;
+  const copywriterPassword = `e2e-${randomBytes(18).toString('base64url')}`;
 
   const primarySlug = 'e2e-primary';
   const secondSlug = 'e2e-secondary';
@@ -242,6 +244,19 @@ async function seedCustomerEstate(
   });
   const viewerRole = await prisma.role.findFirstOrThrow({
     where: { key: 'client_viewer', workspaceId: null },
+  });
+  /*
+   * A ROLE THAT MAY WRITE CONTENT AND MAY NOT MANAGE CAMPAIGNS.
+   *
+   * `copywriter` holds `content.create` and neither `campaigns.manage` nor
+   * `campaigns.read`, which is exactly the shape the manual-authoring RBAC
+   * assertions need: a member who can author a post but may not file it under
+   * a campaign. Read from the catalogue rather than asserted from memory, so a
+   * future change to the role's grants fails the test that depends on them
+   * instead of quietly making it vacuous.
+   */
+  const copywriterRole = await prisma.role.findFirstOrThrow({
+    where: { key: 'copywriter', workspaceId: null },
   });
 
   // The owner: ACTIVE, with a fresh password, and an ACTIVE membership in both
@@ -300,6 +315,38 @@ async function seedCustomerEstate(
       brandScope: [],
     },
     update: { status: 'ACTIVE', roleId: viewerRole.id },
+  });
+
+  // A member who may WRITE content but may not manage campaigns — the role the
+  // manual-authoring permission assertions are about.
+  const copywriter = await prisma.user.upsert({
+    where: { email: copywriterEmail },
+    create: {
+      email: copywriterEmail,
+      name: 'E2E Copywriter',
+      status: 'ACTIVE',
+      timezone: 'UTC',
+      emailVerifiedAt: new Date(),
+      passwordHash: await hashPassword(copywriterPassword),
+    },
+    update: {
+      status: 'ACTIVE',
+      passwordHash: await hashPassword(copywriterPassword),
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+  await prisma.membership.upsert({
+    where: { workspaceId_userId: { workspaceId: primary.id, userId: copywriter.id } },
+    create: {
+      workspaceId: primary.id,
+      userId: copywriter.id,
+      roleId: copywriterRole.id,
+      status: 'ACTIVE',
+      acceptedAt: new Date(),
+      brandScope: [],
+    },
+    update: { status: 'ACTIVE', roleId: copywriterRole.id },
   });
 
   // One live invitation. Any earlier pending one is revoked first, because the
@@ -379,6 +426,8 @@ async function seedCustomerEstate(
     secondWorkspaceSlug: secondSlug,
     viewerEmail,
     viewerPassword,
+    copywriterEmail,
+    copywriterPassword,
     invitationToken: issued.token,
     invitedEmail,
     newcomerToken: newcomerInvitation.token,

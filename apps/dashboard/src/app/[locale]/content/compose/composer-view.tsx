@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { MediaPicker, type MediaOptionView, type MediaPickerLabels } from './media-picker';
 import { VariantPreview, previewLabels } from './variant-preview';
 
@@ -133,6 +133,19 @@ export interface ComposerViewProps {
      * the class that has no gateway and therefore cannot charge a credit.
      */
     createManualDraft(formData: FormData): Promise<void>;
+    /**
+     * The campaigns a new post could be filed under, for ONE brand.
+     *
+     * A CALL RATHER THAN A PROP, because the answer depends on a choice made
+     * in the browser: with the rail on "All brands" the composer shows its own
+     * brand selector, and the server had already fixed the campaign list before
+     * that choice existed. It is permission-guarded server-side, so a caller
+     * who may not file a post is never handed a name.
+     */
+    listCampaignOptions(
+      locale: string,
+      brandId: string,
+    ): Promise<readonly { id: string; name: string }[]>;
   };
 }
 
@@ -234,6 +247,56 @@ export function ComposerView({
   const [brief, setBrief] = useState('');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(locale === 'ar' ? 'AR' : 'EN');
   const [contentType, setContentType] = useState(contentTypes[0] ?? 'POST');
+
+  /*
+   * THE CAMPAIGN THIS POST WOULD BE FILED UNDER, and the options for the brand
+   * it would be filed against.
+   *
+   * SEEDED FROM THE SERVER for the brand the page resolved — the ordinary case,
+   * where the rail has a brand selected and no request is needed at all. The
+   * effect below replaces the list only when the composer's own brand selector
+   * moves to a DIFFERENT brand, which is the case the first version could not
+   * serve: the options were decided server-side before the customer had chosen.
+   *
+   * THE SELECTION IS CLEARED WHENEVER THE BRAND CHANGES. A campaign belongs to
+   * one brand, so carrying a choice across a brand switch would either be
+   * refused by `createManualItem` or — worse if the ids ever collided — file
+   * the post somewhere nobody asked for. Clearing is the honest reset.
+   */
+  const [campaignId, setCampaignId] = useState('');
+  const [campaignOptions, setCampaignOptions] =
+    useState<readonly { id: string; name: string }[]>(campaigns);
+
+  useEffect(() => {
+    // Only the pre-draft form owns this; an existing draft has its own campaign
+    // control, with its own action and its own list.
+    if (draft !== null || !can.manageCampaigns) return;
+    setCampaignId('');
+    if (brandId === '') {
+      setCampaignOptions([]);
+      return;
+    }
+    if (brandId === defaultBrandId) {
+      // The server already answered for this brand. No request.
+      setCampaignOptions(campaigns);
+      return;
+    }
+    let current = true;
+    actions
+      .listCampaignOptions(locale, brandId)
+      .then((options) => {
+        if (current) setCampaignOptions(options);
+      })
+      .catch(() => {
+        // A refusal or a lost response leaves NO options rather than the
+        // previous brand's: an empty list cannot file a post under the wrong
+        // brand, and a stale one could.
+        if (current) setCampaignOptions([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [brandId, defaultBrandId, draft, can.manageCampaigns, campaigns, actions, locale]);
   const [busy, setBusy] = useState<null | 'quote' | 'generate' | string>(null);
   const [quote, setQuote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -255,13 +318,23 @@ export function ComposerView({
       [...selected].sort(),
       contentLocale,
       contentType,
+      /*
+       * THE CAMPAIGN IS PART OF THE ASK (PHASE 2 correction).
+       *
+       * Without it, "the same post, filed under Campaign B" hashed to the key
+       * the same post filed under Campaign A already owned — so the second
+       * submission replayed the FIRST draft and the customer's new choice was
+       * silently discarded. The key has to change when the request changes, and
+       * a different campaign is a different request.
+       */
+      campaignId,
     ]);
     let hash = 0;
     for (let i = 0; i < material.length; i += 1) {
       hash = (Math.imul(31, hash) + material.charCodeAt(i)) | 0;
     }
     return `ui:${draft?.id ?? 'new'}:${(hash >>> 0).toString(36)}:${material.length}`;
-  }, [brandId, brief, selected, contentLocale, contentType, draft?.id]);
+  }, [brandId, brief, selected, contentLocale, contentType, campaignId, draft?.id]);
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
@@ -509,6 +582,7 @@ export function ComposerView({
               <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
               <select
                 id={`${fieldId}-brand`}
+                data-testid="content-brand"
                 value={brandId}
                 onChange={(event) => {
                   setBrandId(event.target.value);
@@ -700,7 +774,23 @@ export function ComposerView({
               {selected.map((platformKey) => (
                 <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
               ))}
-              {campaigns.length > 0 ? (
+              {/*
+                THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
+                ASSOCIATION, not merely on having campaigns to show.
+
+                `setContentCampaignAction` has required `campaigns.manage` since
+                Phase 8. Offering this selector to a member without it would
+                have let them establish a link they could never change
+                afterwards — and would have put campaign names on the screen for
+                a role that holds no campaign authority. The server enforces the
+                same permission on the submission, so hiding the control is
+                courtesy rather than security.
+
+                CONTROLLED, because the idempotency key has to include the
+                choice: two posts identical but for the campaign are two
+                requests, not a retry of one.
+              */}
+              {can.manageCampaigns && campaignOptions.length > 0 ? (
                 <div className="cs-field">
                   <label htmlFor={`${fieldId}-manual-campaign`}>
                     {t['campaigns.composerLabel']}
@@ -708,11 +798,12 @@ export function ComposerView({
                   <select
                     id={`${fieldId}-manual-campaign`}
                     name="campaignId"
-                    defaultValue=""
+                    value={campaignId}
+                    onChange={(event) => setCampaignId(event.target.value)}
                     data-testid="content-manual-campaign"
                   >
                     <option value="">{t['campaigns.composerNone']}</option>
-                    {campaigns.map((campaign) => (
+                    {campaignOptions.map((campaign) => (
                       <option key={campaign.id} value={campaign.id}>
                         {campaign.name}
                       </option>

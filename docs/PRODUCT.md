@@ -259,8 +259,10 @@ provider selected (D-13, D-204) the customer product could not produce a single 
 UI.
 
 _What the create carries_: the brand, the channels, the caption, the language, the content type and —
-when the brand has campaigns — the campaign, all read from the controls the generate button already
-reads, so the two verbs cannot disagree. _What is set on the draft that opens immediately afterwards_:
+for a member who holds `campaigns.manage`, the permission that already governs filing content under a
+campaign — the campaign, whose options follow the brand the COMPOSER holds rather than the one the
+rail selected (D-232). All of it is read from the controls the generate button already reads, so the
+two verbs cannot disagree. _What is set on the draft that opens immediately afterwards_:
 hashtags and media, which are properties of a VARIANT rather than of the item (each channel has its
 own media ceiling, and the picker saves in one submission with the caption it belongs to — D-184).
 Both are edited through the per-variant controls that already exist on that screen; the hashtag field

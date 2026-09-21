@@ -3,6 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
+/*
+ * The literal the brand selector writes for the aggregate, imported from the
+ * module that defines it rather than retyped — a test that hard-coded 'all'
+ * would keep passing if the product changed the value.
+ */
+import { ALL_BRANDS } from '../../apps/dashboard/src/server/brand-selection';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 import { withPlatformPrisma } from './platform-prisma';
 
@@ -42,6 +48,52 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
    * — the same brand the seeds attached their fixtures to.
    */
   await useBrand(page, customer.workspaceId, brandFixtures(loaded).primaryBrandId);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', customer.email);
+  await page.fill('#password', customer.password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL(
+    (url) => !url.pathname.endsWith('/sign-in') || url.searchParams.has('error'),
+  );
+  await page.click(`[data-testid="choose-workspace-${customer.workspaceSlug}"]`);
+  await page.waitForURL(new RegExp(`/${locale}/overview$`));
+}
+
+/**
+ * Sign in as SOMEBODY ELSE, for the permission assertions.
+ *
+ * The brand is still established the way `signIn` establishes it, because a
+ * brand on the rail is a PRECONDITION rather than the subject: with none, the
+ * composer correctly offers its own selector and preselects nothing (D-191), so
+ * the authoring button is disabled for a reason that has nothing to do with the
+ * permission under test. Only the ROLE changes here.
+ */
+async function signInAs(page: Page, email: string, password: string, locale = 'en'): Promise<void> {
+  const loaded = credentials();
+  const { customer } = loaded;
+  await useBrand(page, customer.workspaceId, brandFixtures(loaded).primaryBrandId);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL(
+    (url) => !url.pathname.endsWith('/sign-in') || url.searchParams.has('error'),
+  );
+  await page.click(`[data-testid="choose-workspace-${customer.workspaceSlug}"]`);
+  await page.waitForURL(new RegExp(`/${locale}/overview$`));
+}
+
+/**
+ * Sign in with the rail on "ALL BRANDS" rather than on one.
+ *
+ * This is a legitimate, ordinary state — and it is the one the campaign
+ * options got wrong, because the page resolves no single brand and the
+ * composer therefore shows its own brand selector instead.
+ */
+async function signInAllBrands(page: Page, locale = 'en'): Promise<void> {
+  const loaded = credentials();
+  const { customer } = loaded;
+  await useBrand(page, customer.workspaceId, ALL_BRANDS);
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
   await page.fill('#email', customer.email);
   await page.fill('#password', customer.password);
@@ -378,7 +430,7 @@ test.describe('writing a post by hand', () => {
    * either. This drives the controls a customer actually uses and then reads
    * the draft back.
    */
-  test('CARRIES THE CHANNELS, THE TYPE AND THE CAMPAIGN into the draft', async ({ page }) => {
+  test('CARRIES THE CHANNELS AND THE TYPE into the draft', async ({ page }) => {
     await openComposer(page);
     const body = `Two channels, one campaign, at ${new Date().toISOString()}.`;
 
@@ -403,20 +455,11 @@ test.describe('writing a post by hand', () => {
       .selectOption('REEL');
 
     /*
-     * THE CAMPAIGN CONTROL EXISTS ONLY WHEN THE BRAND HAS ONE, which is a
-     * property of the seed rather than of the feature — so it is used when it
-     * is there and the rest of the assertions stand either way.
+     * THE CAMPAIGN IS NOT ASSERTED HERE. It used to be, conditionally — "if the
+     * selector happens to exist" — which is a test that passes when the feature
+     * is missing. It has its own suite below, with its own fixtures, where the
+     * selector is REQUIRED rather than tolerated.
      */
-    const campaignSelect = page.getByTestId('content-manual-campaign');
-    let chosenCampaign: string | null = null;
-    if (await campaignSelect.isVisible().catch(() => false)) {
-      const options = campaignSelect.locator('option');
-      if ((await options.count()) > 1) {
-        chosenCampaign = await options.nth(1).getAttribute('value');
-        if (chosenCampaign) await campaignSelect.selectOption(chosenCampaign);
-      }
-    }
-
     await page.getByTestId('content-write-manual').click();
     await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
 
@@ -436,13 +479,12 @@ test.describe('writing a post by hand', () => {
     const stored = await withPlatformPrisma(async (prisma) =>
       prisma.contentItem.findUnique({
         where: { id: itemId },
-        select: { contentType: true, campaignId: true, origin: true, aiRequestId: true },
+        select: { contentType: true, origin: true, aiRequestId: true },
       }),
     );
     expect(stored?.contentType).toBe('REEL');
     expect(stored?.origin).toBe('HUMAN');
     expect(stored?.aiRequestId).toBeNull();
-    if (chosenCampaign) expect(stored?.campaignId).toBe(chosenCampaign);
   });
 
   /**
@@ -579,6 +621,311 @@ test.describe('writing a post by hand', () => {
     await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
 
     expect(new URL(page.url()).searchParams.get('item')).toBe(first);
+  });
+});
+
+/**
+ * FILING A MANUALLY WRITTEN POST UNDER A CAMPAIGN (PHASE 2 correction).
+ *
+ * THREE DEFECTS THIS SUITE EXISTS FOR, and the first is why the others were
+ * invisible: the original assertion was "if the campaign selector happens to
+ * exist, check it", which passes when the feature is absent. These tests CREATE
+ * the campaigns they need and REQUIRE the control where the role is authorized.
+ *
+ *   1. The options followed the RAIL's brand, not the composer's. With the rail
+ *      on "All brands" the page resolved no brand, sent an empty list, and the
+ *      composer's own brand selector could not change it — so choosing Brand A
+ *      there left Brand A's campaigns unavailable for ever.
+ *   2. `createManualDraftAction` required only `content.create` and accepted a
+ *      `campaignId`, while `setContentCampaignAction` requires
+ *      `campaigns.manage` — a member could therefore CREATE an association they
+ *      could never change, through a crafted submission whether or not the
+ *      control was rendered.
+ *   3. The idempotency key did not include the campaign, so "the same post,
+ *      filed under Campaign B" replayed the draft already filed under A.
+ */
+test.describe('filing a manual post under a campaign', () => {
+  test.describe.configure({ mode: 'serial', timeout: 180_000 });
+
+  const PRIMARY_CAMPAIGN = 'E2E Manual — Primary Campaign';
+  const SECOND_CAMPAIGN = 'E2E Manual — Second Campaign';
+
+  /**
+   * ONE LIVE CAMPAIGN PER BRAND, deliberately, because the whole point is that
+   * each brand's options are its own.
+   *
+   * Upserted on a fixed key rather than created per run: a fixture that grows
+   * every run eventually tests the take limit instead of the feature, which is
+   * the lesson D-203 records.
+   */
+  test.beforeAll(async () => {
+    const creds = credentials();
+    const { primaryBrandId, secondBrandId } = brandFixtures(creds);
+    await withPlatformPrisma(async (prisma) => {
+      for (const [brandId, name, key] of [
+        [primaryBrandId, PRIMARY_CAMPAIGN, 'e2e-manual-campaign-primary'],
+        [secondBrandId, SECOND_CAMPAIGN, 'e2e-manual-campaign-second'],
+      ] as const) {
+        const existing = await prisma.campaign.findFirst({
+          where: { workspaceId: creds.customer.workspaceId, brandId, idempotencyKey: key },
+          select: { id: true },
+        });
+        if (existing) {
+          await prisma.campaign.update({
+            where: { id: existing.id },
+            data: { name, status: 'ACTIVE', deletedAt: null },
+          });
+          continue;
+        }
+        await prisma.campaign.create({
+          data: {
+            workspaceId: creds.customer.workspaceId,
+            brandId,
+            name,
+            objective: 'AWARENESS',
+            status: 'ACTIVE',
+            idempotencyKey: key,
+          },
+        });
+      }
+    });
+  });
+
+  /** The stored campaign of a draft, by the id the composer's URL carries. */
+  async function storedCampaignName(itemId: string): Promise<string | null> {
+    return withPlatformPrisma(async (prisma) => {
+      const item = await prisma.contentItem.findUnique({
+        where: { id: itemId },
+        select: { campaign: { select: { name: true } } },
+      });
+      return item?.campaign?.name ?? null;
+    });
+  }
+
+  /** Fill the composer and press the no-AI button, returning the new item id. */
+  async function writeManualPost(page: Page, body: string): Promise<string> {
+    await page.getByTestId('content-write-manual').click();
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    const itemId = new URL(page.url()).searchParams.get('item') ?? '';
+    expect(itemId, body).not.toBe('');
+    return itemId;
+  }
+
+  test('A — with a brand on the rail, the selector is there and the choice is stored', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await openComposer(page);
+
+    const selector = page.getByTestId('content-manual-campaign');
+    // REQUIRED, not tolerated. The fixture above created this brand's campaign.
+    await expect(selector).toBeVisible();
+    await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(1);
+
+    await compose(page, `Filed as I wrote it, at ${new Date().toISOString()}.`);
+    await selector.selectOption({ label: PRIMARY_CAMPAIGN });
+    const itemId = await writeManualPost(page, 'rail brand');
+
+    expect(await storedCampaignName(itemId)).toBe(PRIMARY_CAMPAIGN);
+  });
+
+  test('B — on "All brands", the composer\'s own brand decides the options', async ({ page }) => {
+    const creds = credentials();
+    const { secondBrandId, secondBrandName } = brandFixtures(creds);
+
+    await signInAllBrands(page);
+    await openComposer(page);
+
+    /*
+     * THE COMPOSER'S OWN BRAND SELECTOR, which exists exactly in this case:
+     * a NEW item, no brand on the rail, and more than one brand to choose
+     * between. This is the workflow the first version could not serve.
+     */
+    const brandSelect = page.getByTestId('content-brand');
+    await expect(brandSelect).toBeVisible();
+
+    // NOTHING IS PRESELECTED, so there is nothing to file against yet.
+    await expect(page.getByTestId('content-manual-campaign')).toHaveCount(0);
+
+    await brandSelect.selectOption(secondBrandId);
+
+    const selector = page.getByTestId('content-manual-campaign');
+    await expect(selector).toBeVisible();
+    // THE SECOND BRAND'S CAMPAIGN, AND ONLY IT.
+    await expect(selector.locator('option', { hasText: SECOND_CAMPAIGN })).toHaveCount(1);
+    await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(0);
+
+    await compose(page, `Second brand, chosen here, at ${new Date().toISOString()}.`);
+    await selector.selectOption({ label: SECOND_CAMPAIGN });
+    const itemId = await writeManualPost(page, 'composer brand');
+
+    expect(await storedCampaignName(itemId)).toBe(SECOND_CAMPAIGN);
+    const stored = await withPlatformPrisma(async (prisma) =>
+      prisma.contentItem.findUnique({ where: { id: itemId }, select: { brandId: true } }),
+    );
+    expect(stored?.brandId).toBe(secondBrandId);
+    expect(secondBrandName).toBeTruthy();
+  });
+
+  test("C — switching the brand takes the previous brand's campaigns away", async ({ page }) => {
+    const creds = credentials();
+    const { primaryBrandId, secondBrandId } = brandFixtures(creds);
+
+    await signInAllBrands(page);
+    await openComposer(page);
+    const brandSelect = page.getByTestId('content-brand');
+
+    await brandSelect.selectOption(secondBrandId);
+    const selector = page.getByTestId('content-manual-campaign');
+    await expect(selector.locator('option', { hasText: SECOND_CAMPAIGN })).toHaveCount(1);
+    await selector.selectOption({ label: SECOND_CAMPAIGN });
+
+    // NOW MOVE TO THE OTHER BRAND.
+    await brandSelect.selectOption(primaryBrandId);
+    await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(1);
+    // The previous brand's campaign is gone from the control …
+    await expect(selector.locator('option', { hasText: SECOND_CAMPAIGN })).toHaveCount(0);
+    // … and the SELECTION went with it, so the next submit cannot carry it.
+    await expect(selector).toHaveValue('');
+
+    await compose(page, `Switched brands before saving, at ${new Date().toISOString()}.`);
+    const itemId = await writeManualPost(page, 'after switching');
+    expect(await storedCampaignName(itemId)).toBeNull();
+  });
+
+  test('D — content.create without campaigns.manage: no selector, and a crafted id is refused', async ({
+    page,
+  }) => {
+    const creds = credentials();
+    await signInAs(page, creds.customer.copywriterEmail, creds.customer.copywriterPassword);
+    await openComposer(page);
+
+    // THE CONTROL IS NOT THERE, and neither is any campaign name.
+    await expect(page.getByTestId('content-manual-campaign')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText(PRIMARY_CAMPAIGN);
+
+    // AUTHORING STILL WORKS. The permission gates the FILING, not the writing.
+    await compose(page, `A copywriter's own words, at ${new Date().toISOString()}.`);
+    const itemId = await writeManualPost(page, 'copywriter');
+    expect(await storedCampaignName(itemId)).toBeNull();
+
+    /*
+     * AND THE SERVER REFUSES A CRAFTED SUBMISSION. The campaign id is injected
+     * into the manual form directly, which is precisely what a hand-built POST
+     * would carry — the UI gate is courtesy, the server check is the rule.
+     */
+    const campaignId = await withPlatformPrisma(async (prisma) => {
+      const campaign = await prisma.campaign.findFirstOrThrow({
+        where: { workspaceId: creds.customer.workspaceId, name: PRIMARY_CAMPAIGN },
+        select: { id: true },
+      });
+      return campaign.id;
+    });
+
+    await openComposer(page);
+    await compose(page, `Crafted, at ${new Date().toISOString()}.`);
+    await page.evaluate((id) => {
+      const form = document.querySelector('[data-testid="content-manual-form"]');
+      if (!form) throw new Error('no manual form');
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'campaignId';
+      input.value = id;
+      form.appendChild(input);
+    }, campaignId);
+
+    const before = await withPlatformPrisma(async (prisma) =>
+      prisma.contentItem.count({ where: { workspaceId: creds.customer.workspaceId } }),
+    );
+    await page.getByTestId('content-write-manual').click();
+    /*
+     * REFUSED, AND NAMED AS A MISS. `NOT_FOUND` is the same code a campaign in
+     * another brand gets, so the refusal does not confirm that a campaign by
+     * that id exists — and the screen says so rather than showing a generic
+     * failure.
+     */
+    await page.waitForURL((url) => url.searchParams.has('error'), { timeout: 60_000 });
+    expect(new URL(page.url()).searchParams.get('error')).toBe('NOT_FOUND');
+    expect(new URL(page.url()).searchParams.has('item')).toBe(false);
+    const after = await withPlatformPrisma(async (prisma) =>
+      prisma.contentItem.count({ where: { workspaceId: creds.customer.workspaceId } }),
+    );
+    // NOTHING WAS WRITTEN — not the item, and certainly not the association.
+    expect(after).toBe(before);
+  });
+
+  test('E — the same post filed the same way twice is one draft', async ({ page }) => {
+    await signIn(page);
+    await openComposer(page);
+    const body = `Filed once, submitted twice, at ${new Date().toISOString()}.`;
+    await compose(page, body);
+    await page.getByTestId('content-manual-campaign').selectOption({ label: PRIMARY_CAMPAIGN });
+    const first = await writeManualPost(page, 'first');
+
+    await openComposer(page);
+    await compose(page, body);
+    await page.getByTestId('content-manual-campaign').selectOption({ label: PRIMARY_CAMPAIGN });
+    const second = await writeManualPost(page, 'second');
+
+    expect(second).toBe(first);
+    expect(await storedCampaignName(first)).toBe(PRIMARY_CAMPAIGN);
+  });
+
+  test('F — the same post filed under a DIFFERENT campaign is a different request', async ({
+    page,
+  }) => {
+    const creds = credentials();
+    const { primaryBrandId } = brandFixtures(creds);
+    const other = `E2E Manual — Primary Alternate`;
+    await withPlatformPrisma(async (prisma) => {
+      const existing = await prisma.campaign.findFirst({
+        where: {
+          workspaceId: creds.customer.workspaceId,
+          brandId: primaryBrandId,
+          idempotencyKey: 'e2e-manual-campaign-primary-alt',
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.campaign.update({
+          where: { id: existing.id },
+          data: { name: other, status: 'ACTIVE', deletedAt: null },
+        });
+        return;
+      }
+      await prisma.campaign.create({
+        data: {
+          workspaceId: creds.customer.workspaceId,
+          brandId: primaryBrandId,
+          name: other,
+          objective: 'AWARENESS',
+          status: 'ACTIVE',
+          idempotencyKey: 'e2e-manual-campaign-primary-alt',
+        },
+      });
+    });
+
+    await signIn(page);
+    await openComposer(page);
+    const body = `One post, two campaigns, at ${new Date().toISOString()}.`;
+
+    await compose(page, body);
+    await page.getByTestId('content-manual-campaign').selectOption({ label: PRIMARY_CAMPAIGN });
+    const first = await writeManualPost(page, 'campaign one');
+
+    await openComposer(page);
+    await compose(page, body);
+    await page.getByTestId('content-manual-campaign').selectOption({ label: other });
+    const second = await writeManualPost(page, 'campaign two');
+
+    /*
+     * THE ASSERTION THAT FAILS AGAINST THE DEFECT. With the campaign outside
+     * the key material, this second submission hashed to the first's key and
+     * replayed it — the customer's new choice discarded, silently.
+     */
+    expect(second).not.toBe(first);
+    expect(await storedCampaignName(first)).toBe(PRIMARY_CAMPAIGN);
+    expect(await storedCampaignName(second)).toBe(other);
   });
 });
 

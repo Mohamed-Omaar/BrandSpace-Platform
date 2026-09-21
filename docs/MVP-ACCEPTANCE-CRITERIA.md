@@ -264,7 +264,9 @@ only covered the second: two requests in flight under one key both found no row,
 loser took a raw unique-constraint error — which `withWorkspace`'s single transaction makes
 unrecoverable in place, since a constraint violation aborts the transaction the recovery read would run
 in. The insert is now `ON CONFLICT DO NOTHING`, so the loser blocks on the winner, sees zero rows, and
-returns the winner's draft as a replay having written nothing.
+returns the winner's draft as a replay having written nothing. **The key's material includes the
+CAMPAIGN** (D-232): without it, the same post filed under a second campaign hashed to the first's key
+and replayed that draft, discarding the choice.
 
 **AND THE CONSEQUENCE PHASE 2 CLOSED (D-224).** That limitation was not confined to step 11: until
 Phase 2, `generate()` was the ONLY writer of a `ContentItem` anywhere in the product, so steps 14

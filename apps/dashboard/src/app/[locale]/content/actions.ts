@@ -79,6 +79,64 @@ function approvalActorOf(session: WorkspaceSession) {
 }
 
 /**
+ * THE PERMISSION THAT LETS CONTENT BE FILED UNDER A CAMPAIGN.
+ *
+ * `setContentCampaignAction` has required `campaigns.manage` since Phase 8, so
+ * that is the EXISTING contract for associating a content item with a campaign
+ * and manual creation aligns with it rather than inventing a second rule. The
+ * alternative reading — that `campaigns.read` should be enough, because filing
+ * a post does not edit the campaign — is a real product question, and changing
+ * it here would silently widen RBAC for a path nobody reviewed: `campaigns.read`
+ * is held by three more roles than `campaigns.manage`, so it would hand
+ * `content_creator`, `approver` and `analyst` an authority the screen that
+ * already does this refuses them.
+ *
+ * A NAMED CONSTANT, so the UI gate, the create path and the option list cannot
+ * drift apart — the defect this correction exists for was exactly that kind of
+ * gap between a control and its server check.
+ */
+const CAMPAIGN_ASSOCIATION_PERMISSION = 'campaigns.manage';
+
+/**
+ * The campaigns a NEW post could be filed under, for one brand.
+ *
+ * WHY A SERVER ACTION AND NOT A PROP. The compose page renders the options for
+ * the brand the rail has selected — and with the rail on "All brands" there is
+ * no such brand, so the composer shows its own brand selector instead. Choosing
+ * a brand there is client state, and the server had already decided what the
+ * campaign list was: the customer picked Brand A and Brand A's campaigns were
+ * still unavailable, which made the feature true only for the narrower half of
+ * the workflow.
+ *
+ * ONE BRAND'S CAMPAIGNS, ASKED FOR WHEN THAT BRAND IS CHOSEN. The alternative —
+ * shipping every brand's campaigns to the browser and filtering there — would
+ * put another brand's campaign names in the page for the sake of a dropdown,
+ * which is the thing the existing draft path is careful never to do.
+ *
+ * IT IS A READ AND IT IS STILL GUARDED. Campaign names are tenant data, and the
+ * permission asked for here is the same one that authorizes the association
+ * itself, so a caller who could not use an option is never shown one.
+ * `assertBrandInScope` inside `list` refuses a brand outside the member's
+ * BrandScope, and `brandIdQueryFilter` makes that a predicate rather than a
+ * filter applied afterwards (D-132).
+ */
+export async function listCampaignOptionsAction(
+  locale: string,
+  brandId: string,
+): Promise<readonly { id: string; name: string }[]> {
+  if (brandId.trim() === '') return [];
+  const session = await requireWorkspace(locale, CAMPAIGN_ASSOCIATION_PERMISSION);
+  const campaigns = await inContentStudio(session.workspace.workspaceId, async (services) =>
+    services.campaigns().list({
+      brandId,
+      brandScope: session.workspace.brandScope,
+      take: 100,
+    }),
+  );
+  return campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name }));
+}
+
+/**
  * WRITE A POST YOURSELF — the authoring path that never involves a model.
  *
  * WHY THIS ACTION EXISTS AT ALL. `ContentStudioService.generate()` was the only
@@ -121,6 +179,36 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const body = String(formData.get('body') ?? '');
     const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
     const campaignId = String(formData.get('campaignId') ?? '') || null;
+    /*
+     * FILING A NEW POST UNDER A CAMPAIGN NEEDS THE SAME AUTHORITY AS REFILING
+     * AN EXISTING ONE.
+     *
+     * `content.create` alone reached this action, and it accepted a
+     * `campaignId` — so a member who may write a draft but not manage campaigns
+     * could establish an association that `setContentCampaignAction` would then
+     * refuse to CHANGE. A right to create a link that cannot be edited is a
+     * worse grant than either half of it, and it was reachable by a crafted
+     * POST whether or not the selector was on the screen.
+     *
+     * CHECKED ONLY WHEN THERE IS A CAMPAIGN. A member without the permission
+     * keeps the whole authoring path; they simply cannot file the post, which
+     * is exactly the authority they hold elsewhere.
+     *
+     * SHAPED LIKE A MISS, AND THROWN AS A TYPED ERROR rather than `notFound()`.
+     * An unauthorized association must not announce that a campaign by that id
+     * exists, which is why the code is `NOT_FOUND` — the same refusal
+     * `#resolveCampaign` gives for a campaign in another brand. It is thrown as
+     * an `AppError` because this action's `catch` maps a typed error to a public
+     * code the screen can name; `notFound()` throws a framework control-flow
+     * error that the same `catch` would swallow into "something went wrong",
+     * which tells the customer nothing and tells a reader of the log less.
+     */
+    if (
+      campaignId !== null &&
+      !session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION)
+    ) {
+      throw new AppError('NOT_FOUND', 'Campaign not found.');
+    }
     const hashtags = String(formData.get('hashtags') ?? '')
       .split(/[\s,]+/)
       .map((tag) => tag.replace(/^#/, '').trim())
