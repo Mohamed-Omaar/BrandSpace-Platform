@@ -6,7 +6,9 @@ import {
 import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import {
+  createAnalyticsRegistry,
   createMetricWindowPort,
+  ensureIngestionCursors,
   pruneAnalytics,
   resolveAnalyticsPolicy,
 } from '@brandspace/analytics';
@@ -535,6 +537,60 @@ export class MaintenanceScheduler {
   async sweepAnalytics(batch: number): Promise<{ dispatched: number; backfills: number }> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
+
+    /*
+     * CREATE THE CURSORS BEFORE LOOKING FOR DUE ONES — the wiring that did not
+     * exist.
+     *
+     * `ensureIngestionCursors` was written, correct and unreachable: nothing in
+     * the product called it, so no `analytics_ingestion_cursor` row was ever
+     * created, so the enumeration below found an empty set on every tick and
+     * analytics ingestion never ran. The module was complete down to its retry
+     * backoff and had no way in.
+     *
+     * THE SWEEP IS THE RIGHT ENTRY POINT rather than the moment a connection is
+     * activated. `@brandspace/social-connectors` cannot call analytics — the
+     * dependency runs the other way, and reversing it is a cycle — and a
+     * connect-time hook would also be a one-shot: a provider that gains a
+     * capability, a connection reactivated after a disconnect, and every
+     * account connected before this existed would all be left without cursors
+     * for ever. A housekeeping pass is self-healing by construction.
+     *
+     * ONLY WORKSPACES THAT NEED ONE. The enumeration asks for ACTIVE
+     * connections with NO cursor at all, which is exactly the "never been set
+     * up" case; the insert is `ON CONFLICT DO NOTHING`, so a workspace already
+     * provisioned costs one cheap statement and changes nothing.
+     *
+     * THE ENUMERATION IS CROSS-TENANT AND THE WORK IS NOT, exactly as the rest
+     * of this sweep. The platform identity answers WHICH workspaces need a
+     * pass; the cursors themselves are written inside that tenant's own
+     * `withWorkspace` context, on the tenant client, under RLS.
+     */
+    const uncovered = await platform.socialConnection.findMany({
+      where: { status: 'ACTIVE', analyticsCursors: { none: {} } },
+      select: { workspaceId: true },
+      distinct: ['workspaceId'],
+      take: batch,
+    });
+    if (uncovered.length > 0) {
+      const registry = createAnalyticsRegistry({ environment: this.#environment });
+      for (const { workspaceId } of uncovered) {
+        try {
+          await withWorkspace(
+            workspaceId,
+            async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+            { prisma: getPrisma() },
+          );
+        } catch (error: unknown) {
+          // ONE WORKSPACE'S FAILURE IS NOT THE SWEEP'S. The next tick tries
+          // again, and the workspaces after this one still get their cursors.
+          log.warn('could not ensure analytics cursors', {
+            workspaceId,
+            ...internalErrorFields(error),
+          });
+        }
+      }
+    }
 
     const due = await platform.analyticsIngestionCursor.findMany({
       where: {

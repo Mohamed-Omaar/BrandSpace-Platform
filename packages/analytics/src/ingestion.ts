@@ -153,48 +153,17 @@ export class AnalyticsIngestionService {
   /**
    * Make sure every ACTIVE connection has the cursors it needs.
    *
-   * IDEMPOTENT BY `ON CONFLICT DO NOTHING`, the D-144 discipline: two callers
-   * racing the same new connection each insert what they can and neither aborts
-   * the other. A cursor that already exists is left exactly as it is — its
-   * progress is the thing that must not be reset by a housekeeping pass.
+   * DELEGATES to the standalone `ensureIngestionCursors` so the housekeeping
+   * pass that actually calls it does not have to construct a whole ingestion
+   * service — credentials and a rate limiter included — to run a statement that
+   * uses neither.
    */
   async ensureCursors(): Promise<{ created: number }> {
-    const connections = await this.#db.socialConnection.findMany({
-      where: { workspaceId: this.#workspaceId, status: 'ACTIVE' },
-      select: { id: true, brandId: true, provider: true },
+    return ensureIngestionCursors({
+      db: this.#db,
+      workspaceId: this.#workspaceId,
+      registry: this.#registry,
     });
-
-    const rows: Prisma.Sql[] = [];
-    for (const connection of connections) {
-      if (!this.#registry.has(connection.provider)) continue;
-      const adapter = this.#registry.get(connection.provider);
-      for (const subjectType of ['ACCOUNT', 'POST'] as const) {
-        if (subjectType === 'POST' && !adapter.capabilities.supportsPostMetrics) continue;
-        for (const granularity of adapter.capabilities.supportedGranularities) {
-          // LIFETIME is a running total rather than a window, and a cursor that
-          // walked it would walk nothing. It is fetched alongside the DAY pull.
-          if (granularity === 'LIFETIME') continue;
-          rows.push(Prisma.sql`(
-            gen_random_uuid(), ${this.#workspaceId}::uuid, ${connection.brandId}::uuid,
-            ${connection.id}::uuid, ${connection.provider}::"SocialProvider",
-            ${subjectType}::"MetricSubjectType", ${granularity}::"MetricGranularity",
-            'UNAVAILABLE'::"AnalyticsFreshness", now(), now(), now()
-          )`);
-        }
-      }
-    }
-    if (rows.length === 0) return { created: 0 };
-
-    const created = await this.#db.$executeRaw`
-      INSERT INTO "analytics_ingestion_cursor" (
-        "id", "workspaceId", "brandId", "socialConnectionId", "provider",
-        "subjectType", "granularity", "freshness", "nextAttemptAt", "createdAt", "updatedAt"
-      )
-      VALUES ${Prisma.join(rows, ',')}
-      ON CONFLICT ("workspaceId", "socialConnectionId", "subjectType", "granularity")
-      DO NOTHING
-    `;
-    return { created };
   }
 
   /**
@@ -886,3 +855,72 @@ export function newCorrelationId(): string {
 /** Narrowing helper used by the scheduler and the worker. */
 export type { CursorRow as IngestionCursorRow };
 export type { MetricSubjectType, MetricGranularity };
+
+/**
+ * MAKE SURE EVERY ACTIVE CONNECTION HAS THE CURSORS IT NEEDS.
+ *
+ * THIS FUNCTION HAD NO CALLER. It was written, tested in isolation, correct —
+ * and nothing in the product ever ran it, so no `analytics_ingestion_cursor`
+ * row was ever created. The scheduler's analytics sweep enumerates cursors that
+ * are DUE and dispatches a message for each; with none in existence it
+ * enumerated an empty set every tick and analytics ingestion never happened at
+ * all. A whole module, complete down to its retry backoff, sat behind a
+ * housekeeping pass nobody had wired.
+ *
+ * A FUNCTION RATHER THAN A METHOD, so the caller that needs it does not have to
+ * build a whole `AnalyticsIngestionService` — credential resolver and rate
+ * limiter included — to run a statement that uses neither. What it actually
+ * depends on is now what it asks for.
+ *
+ * IDEMPOTENT BY `ON CONFLICT DO NOTHING`, the D-144 discipline: two callers
+ * racing the same new connection each insert what they can and neither aborts
+ * the other. A cursor that already exists is left exactly as it is — its
+ * progress is the thing that must not be reset by a housekeeping pass.
+ *
+ * TENANT-SCOPED BY CONSTRUCTION. `db` is a `TenantScopedClient`, so this runs
+ * inside one workspace's RLS context; the caller decides WHICH workspaces need
+ * a pass, and does that enumeration on the platform identity without ever
+ * reading or writing a tenant row with it.
+ */
+export async function ensureIngestionCursors(options: {
+  readonly db: TenantScopedClient;
+  readonly workspaceId: string;
+  readonly registry: AnalyticsRegistry;
+}): Promise<{ created: number }> {
+  const connections = await options.db.socialConnection.findMany({
+    where: { workspaceId: options.workspaceId, status: 'ACTIVE' },
+    select: { id: true, brandId: true, provider: true },
+  });
+
+  const rows: Prisma.Sql[] = [];
+  for (const connection of connections) {
+    if (!options.registry.has(connection.provider)) continue;
+    const adapter = options.registry.get(connection.provider);
+    for (const subjectType of ['ACCOUNT', 'POST'] as const) {
+      if (subjectType === 'POST' && !adapter.capabilities.supportsPostMetrics) continue;
+      for (const granularity of adapter.capabilities.supportedGranularities) {
+        // LIFETIME is a running total rather than a window, and a cursor that
+        // walked it would walk nothing. It is fetched alongside the DAY pull.
+        if (granularity === 'LIFETIME') continue;
+        rows.push(Prisma.sql`(
+          gen_random_uuid(), ${options.workspaceId}::uuid, ${connection.brandId}::uuid,
+          ${connection.id}::uuid, ${connection.provider}::"SocialProvider",
+          ${subjectType}::"MetricSubjectType", ${granularity}::"MetricGranularity",
+          'UNAVAILABLE'::"AnalyticsFreshness", now(), now(), now()
+        )`);
+      }
+    }
+  }
+  if (rows.length === 0) return { created: 0 };
+
+  const created = await options.db.$executeRaw`
+    INSERT INTO "analytics_ingestion_cursor" (
+      "id", "workspaceId", "brandId", "socialConnectionId", "provider",
+      "subjectType", "granularity", "freshness", "nextAttemptAt", "createdAt", "updatedAt"
+    )
+    VALUES ${Prisma.join(rows, ',')}
+    ON CONFLICT ("workspaceId", "socialConnectionId", "subjectType", "granularity")
+    DO NOTHING
+  `;
+  return { created };
+}

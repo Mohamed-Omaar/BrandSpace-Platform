@@ -56,6 +56,7 @@ export type { ObservationInput, UpsertResult } from './observations';
 
 export {
   AnalyticsIngestionService,
+  ensureIngestionCursors,
   normalizeReadings,
   newCorrelationId,
   runIdempotencyKeyFor,

@@ -9,6 +9,7 @@ import {
   AnalyticsIngestionService,
   AnalyticsQueryService,
   createAnalyticsRegistry,
+  ensureIngestionCursors,
   observationKeyFor,
   parseAnalyticsPolicy,
   upsertObservations,
@@ -564,5 +565,152 @@ describe('two schedulers cannot claim the same cursor', () => {
       }),
     );
     expect(untouched.claimedAt).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('CURSORS ARE ACTUALLY CREATED FOR CONNECTED ACCOUNTS (PHASE 2)', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR.
+   *
+   * `ensureCursors` was written, correct, and had NO CALLER anywhere in the
+   * repository. No `analytics_ingestion_cursor` row was therefore ever created
+   * in the product, and the scheduler's analytics sweep — which enumerates
+   * cursors that are DUE and dispatches a message for each — enumerated an
+   * empty set on every tick. Analytics ingestion never ran at all: a module
+   * complete down to its retry backoff, with no way in.
+   *
+   * These tests drive the standalone `ensureIngestionCursors` that the
+   * scheduler now calls, against real PostgreSQL and the real registry.
+   */
+
+  const registry = createAnalyticsRegistry({ environment: 'DEVELOPMENT' });
+
+  async function cursorCount(workspaceId: string): Promise<number> {
+    return withWorkspace(
+      workspaceId,
+      async (db) => db.analyticsIngestionCursor.count({ where: { workspaceId } }),
+      { prisma: app },
+    ) as Promise<number>;
+  }
+
+  it('CREATES CURSORS FOR AN ACTIVE CONNECTION THAT HAS NONE', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    // Start from nothing, so "created" is measured rather than assumed.
+    await withWorkspace(
+      workspaceId,
+      async (db) => db.analyticsIngestionCursor.deleteMany({ where: { workspaceId } }),
+      { prisma: app },
+    );
+    expect(await cursorCount(workspaceId)).toBe(0);
+
+    const result = (await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    )) as { created: number };
+
+    expect(result.created).toBeGreaterThan(0);
+    expect(await cursorCount(workspaceId)).toBe(result.created);
+
+    // AND THEY POINT AT THE ACTIVE CONNECTION, with a granularity the adapter
+    // actually supports — never LIFETIME, which is a running total rather than
+    // a window and would make a cursor that walked nothing.
+    const rows = await withWorkspace(
+      workspaceId,
+      async (db) =>
+        db.analyticsIngestionCursor.findMany({
+          where: { workspaceId },
+          select: { socialConnectionId: true, granularity: true, freshness: true },
+        }),
+      { prisma: app },
+    );
+    /*
+     * COVERS THE FIXTURE CONNECTION — and not ONLY it. Another suite in this
+     * file creates a second ACTIVE connection for the same workspace, and
+     * cursors for that one are correct rather than a leak: the pass is supposed
+     * to cover every active connection it finds.
+     */
+    expect(rows.some((r) => r.socialConnectionId === fixtures.a.socialConnectionId)).toBe(true);
+    expect(rows.some((r) => r.granularity === 'LIFETIME')).toBe(false);
+    expect(rows.every((r) => r.freshness === 'UNAVAILABLE')).toBe(true);
+  });
+
+  it('IS IDEMPOTENT — a second pass creates nothing and resets no progress', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    );
+    const before = await cursorCount(workspaceId);
+
+    // Give one cursor some progress, which a housekeeping pass must not undo.
+    const moved = new Date('2026-09-01T00:00:00.000Z');
+    await withWorkspace(
+      workspaceId,
+      async (db) =>
+        db.analyticsIngestionCursor.updateMany({
+          where: { workspaceId },
+          data: { lastCoveredPeriodEnd: moved, consecutiveFailureCount: 3 },
+        }),
+      { prisma: app },
+    );
+
+    const again = (await withWorkspace(
+      workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+      { prisma: app },
+    )) as { created: number };
+
+    expect(again.created).toBe(0);
+    expect(await cursorCount(workspaceId)).toBe(before);
+
+    const kept = await withWorkspace(
+      workspaceId,
+      async (db) =>
+        db.analyticsIngestionCursor.findFirst({
+          where: { workspaceId },
+          select: { lastCoveredPeriodEnd: true, consecutiveFailureCount: true },
+        }),
+      { prisma: app },
+    );
+    expect(kept?.lastCoveredPeriodEnd?.toISOString()).toBe(moved.toISOString());
+    expect(kept?.consecutiveFailureCount).toBe(3);
+  });
+
+  it('CONCURRENT PASSES DO NOT DUPLICATE — ON CONFLICT DO NOTHING is the arbiter', async () => {
+    const workspaceId = fixtures.a.workspaceId;
+    await withWorkspace(
+      workspaceId,
+      async (db) => db.analyticsIngestionCursor.deleteMany({ where: { workspaceId } }),
+      { prisma: app },
+    );
+
+    const passes = await Promise.all(
+      [1, 2, 3].map(() =>
+        withWorkspace(
+          workspaceId,
+          async (db) => ensureIngestionCursors({ db, workspaceId, registry }),
+          { prisma: app },
+        ),
+      ),
+    );
+
+    const totalClaimed = (passes as { created: number }[]).reduce((n, p) => n + p.created, 0);
+    const actual = await cursorCount(workspaceId);
+    // Every row that exists was created exactly once, whichever pass won it.
+    expect(totalClaimed).toBe(actual);
+  });
+
+  it('DOES NOT REACH ANOTHER WORKSPACE — the pass is tenant-scoped', async () => {
+    const before = await cursorCount(fixtures.b.workspaceId);
+    await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) => ensureIngestionCursors({ db, workspaceId: fixtures.a.workspaceId, registry }),
+      { prisma: app },
+    );
+    expect(await cursorCount(fixtures.b.workspaceId)).toBe(before);
   });
 });
