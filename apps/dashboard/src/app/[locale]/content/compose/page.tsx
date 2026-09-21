@@ -105,11 +105,41 @@ export default async function ComposePage({
        * ones this member may act on. Narrowed HERE rather than in the browser,
        * so another brand's campaign is never sent to the page at all.
        */
-      const campaigns = await services.campaigns().list({
+      const campaignService = services.campaigns();
+      const live = await campaignService.list({
         brandId: item.brandId,
         brandScope: workspace.brandScope,
         take: 100,
       });
+      /*
+       * THE DRAFT'S OWN CAMPAIGN IS ALWAYS AN OPTION, even once it is archived
+       * (PHASE 2).
+       *
+       * `list` excludes archived campaigns, which is right for CHOOSING one.
+       * But the control is rendered as `defaultValue={draft.campaignId}` over
+       * these options, so a draft whose campaign had since been archived had no
+       * matching option — the browser fell back to the first, the screen said
+       * "No campaign", and that was false. Worse, saving the form then posted
+       * an empty value and DETACHED the draft from a campaign nobody had asked
+       * to leave, destroying a relationship silently.
+       *
+       * Adding the current one back makes the screen tell the truth. It is not
+       * a way to file new work into an archived campaign: `setContentCampaign`
+       * still refuses any id that is not live, and re-sending the unchanged one
+       * is a no-op there.
+       */
+      const archivedCurrent =
+        item.campaignId && !live.some((campaign) => campaign.id === item.campaignId)
+          ? (
+              await campaignService.list({
+                brandId: item.brandId,
+                brandScope: workspace.brandScope,
+                includeArchived: true,
+                take: 200,
+              })
+            ).find((campaign) => campaign.id === item.campaignId)
+          : undefined;
+      const campaigns = archivedCurrent ? [...live, archivedCurrent] : live;
       return {
         policy: resolved,
         draft: item,
