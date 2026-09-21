@@ -1,3 +1,4 @@
+import type { TenantScopedClient } from '@brandspace/database';
 import type { Clock } from '@brandspace/shared';
 import type { ContentPolicy } from './policy';
 
@@ -163,4 +164,58 @@ export function resolveContentExpiry(
   // The EARLIEST wins: every candidate is a promise to delete by then, and
   // honouring the latest would break the others.
   return candidates.reduce((earliest, d) => (d < earliest ? d : earliest));
+}
+
+/**
+ * The workspace facts retention depends on, read once and in one place.
+ *
+ * WHY THIS IS NOT LEFT AT THE CALL SITE. `apps/api` resolved these inline for
+ * generation, and the rule it encodes — that TRIALING and PAST_DUE still count
+ * as an active subscription — is a decision about when the platform may start
+ * deleting a customer's drafts (D-116). Manual authoring needs the same answer,
+ * from a different app, and a second transcription of that list is a second
+ * answer that nobody would notice diverging until somebody's content was purged
+ * early.
+ *
+ * TRIALING AND PAST_DUE COUNT AS ACTIVE, deliberately: a trial is a workspace
+ * the platform is currently serving, and a failed card is a billing problem
+ * rather than consent to delete work. CANCELLED, PAUSED and EXPIRED do not, and
+ * neither does a workspace with no subscription row at all — a trial that never
+ * started is not a trial in progress.
+ */
+const SUBSCRIPTION_RETAINS: readonly string[] = ['ACTIVE', 'TRIALING', 'PAST_DUE'];
+
+/**
+ * Stated concretely rather than `extends RetentionInput`, because the optional
+ * fields on that input are optional for CALLERS who may not know them. This
+ * reader always knows, so a `Date | null` here is the honest type — and under
+ * `exactOptionalPropertyTypes` an inherited `?` would make the result
+ * unassignable to the very input it is meant to satisfy.
+ */
+export interface WorkspaceRetentionFacts {
+  readonly planKey: string | null;
+  readonly subscriptionActive: boolean;
+  readonly cancelledAt: Date | null;
+  readonly workspaceRetentionDays: number | null;
+}
+
+export async function readRetentionFacts(
+  db: TenantScopedClient,
+  workspaceId: string,
+): Promise<WorkspaceRetentionFacts> {
+  const row = await db.workspace.findUnique({
+    where: { id: workspaceId },
+    select: {
+      planKey: true,
+      aiContentRetentionDays: true,
+      subscription: { select: { status: true, cancelledAt: true } },
+    },
+  });
+  const subscription = row?.subscription ?? null;
+  return {
+    planKey: row?.planKey ?? null,
+    subscriptionActive: subscription !== null && SUBSCRIPTION_RETAINS.includes(subscription.status),
+    cancelledAt: subscription?.cancelledAt ?? null,
+    workspaceRetentionDays: row?.aiContentRetentionDays ?? null,
+  };
 }

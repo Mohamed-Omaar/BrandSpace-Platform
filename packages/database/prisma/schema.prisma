@@ -3145,6 +3145,21 @@ model Approval {
   /// orderable without depending on clock resolution.
   cycle Int @default(1)
 
+  /// WHAT THE VERDICT WAS GRANTED OVER — `{ item, variants: { id: hash } }`,
+  /// written when the decision is APPROVE (D-223).
+  ///
+  /// An approval used to record a verdict and nothing about the words. Editing
+  /// a SCHEDULED item's caption was deliberately left alone by
+  /// `editVariant` (the calendar owns that edge), and the publisher read
+  /// `variant.body` live while checking only that an approval existed and said
+  /// APPROVED — so submit → approve → schedule → edit → publish sent text
+  /// nobody had reviewed, under a verdict granted to different text.
+  ///
+  /// Comparing this at publish time is what closes that, without either side
+  /// having to know the other's edge cases. NULL means "granted before this
+  /// existed", and the publisher treats it as not covering anything.
+  approvedFingerprint Json?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 

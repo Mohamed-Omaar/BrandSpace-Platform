@@ -68,9 +68,14 @@ export type { ContentDialect, ContentPlatform, ContentPolicy } from './policy';
 export {
   AI_OUTPUT_RETENTION_REGISTRY,
   RETENTION_EXCLUDED_TABLES,
+  readRetentionFacts,
   resolveContentExpiry,
 } from './retention';
-export type { AiOutputRetentionDeclaration, RetentionInput } from './retention';
+export type {
+  AiOutputRetentionDeclaration,
+  RetentionInput,
+  WorkspaceRetentionFacts,
+} from './retention';
 
 export { countCharacters, validateVariant } from './validation';
 export type { VariantValidation } from './validation';

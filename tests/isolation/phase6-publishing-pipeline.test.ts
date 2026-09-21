@@ -13,6 +13,11 @@ import {
   type PublishingPolicy,
 } from '@brandspace/social-connectors';
 import {
+  ContentApprovalService,
+  ContentLibraryService,
+  type ContentPolicy,
+} from '@brandspace/content';
+import {
   appRoleClient,
   createIsolationFixtures,
   FIXTURE_SOCIAL_KEK,
@@ -80,7 +85,7 @@ function gate(options: { required: boolean; status?: string | null }): PublishAp
     async policyForBrand() {
       return { requireApprovalBeforeScheduling: options.required };
     },
-    async openForItem() {
+    async latestForItem() {
       return options.status === undefined
         ? { status: 'APPROVED' }
         : options.status === null
@@ -921,7 +926,7 @@ describe('P6-R4 — concurrent materialisation of one slot', () => {
         await open;
         return { requireApprovalBeforeScheduling: false };
       },
-      async openForItem() {
+      async latestForItem() {
         return { status: 'APPROVED' };
       },
     };
@@ -1090,5 +1095,220 @@ describe('P6-R4 — concurrent materialisation of one slot', () => {
     );
     expect(second.created).toBe(0);
     expect(second.existing).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A content policy sufficient for the approvals service, with the brand gate ON.
+ *
+ * THE GATE IS THE POINT. Every other test in this file runs with it off and
+ * injects a fake answering `{ status: 'APPROVED' }` — which is exactly why the
+ * two defects below survived: the real gate was never on the path.
+ */
+const APPROVAL_CONTENT_POLICY = {
+  dialects: { defaultKey: 'msa', supported: [{ key: 'msa', labelKey: 'd', bcp47: 'ar' }] },
+  platforms: [
+    // The FIXTURE variant is an Instagram one; the publish job targets LinkedIn.
+    // Both have to be in the policy or `editVariant` refuses the channel it is
+    // editing, which is a refusal about the test's setup rather than the
+    // property under test.
+    {
+      key: 'instagram',
+      labelKey: 'content.platform.instagram',
+      maxBodyChars: 2_200,
+      maxHashtags: 30,
+      allowsFirstComment: true,
+      maxMediaItems: 10,
+    },
+    {
+      key: 'linkedin',
+      labelKey: 'content.platform.linkedin',
+      maxBodyChars: 3_000,
+      maxHashtags: 10,
+      allowsFirstComment: false,
+      maxMediaItems: 10,
+    },
+  ],
+  generation: {
+    maxVariantsPerRequest: 4,
+    maxDraftsPerBrand: 500,
+    maxContextItems: 12,
+    maxContextChunks: 8,
+    maxContextChars: 12_000,
+    maxBriefChars: 2_000,
+  },
+  retention: { cancellationGraceDays: 30, minCustomerRetentionDays: 7 },
+  calendar: {
+    weekStartsOn: 0,
+    maxDaysAhead: 365,
+    minLeadMinutes: 5,
+    maxSlotsPerDay: 25,
+    requireApprovalBeforeScheduling: true,
+  },
+  approvals: {
+    requireApprovalBeforeScheduling: true,
+    // Self-approval is permitted HERE so the fixture's single user can carry
+    // both roles. The rule itself has its own suite; this one is about whether
+    // a granted verdict can authorize a publish, and whose verdict it is does
+    // not change that question.
+    allowSelfApproval: true,
+    clientApprovalEnabled: false,
+    maxNoteLength: 1_000,
+    maxCyclesPerItem: 25,
+  },
+} as unknown as ContentPolicy;
+
+describe('AN APPROVAL AUTHORIZES THE WORDS IT WAS GRANTED OVER (PHASE 2, D-223)', () => {
+  /*
+   * TWO DEFECTS, BOTH REACHED THROUGH THE SAME THREE LINES OF PREFLIGHT.
+   *
+   * 1. `openForItem` RETURNS ONLY PENDING ROWS. The gate called it and then
+   *    required `status === 'APPROVED'` — a condition it can never satisfy,
+   *    because an APPROVED item has no PENDING row and the call answers `null`.
+   *    With the brand gate at its default of OFF nothing happens, so the
+   *    product looks fine; the customer who TURNS APPROVALS ON gets content
+   *    that can be written, reviewed, approved and scheduled and can then never
+   *    publish, failing with a class that says the approval was revoked when it
+   *    had been granted.
+   *
+   * 2. AN APPROVAL RECORDED A VERDICT AND NOTHING ABOUT THE WORDS.
+   *    `editVariant` returns an APPROVED item to DRAFT, but a SCHEDULED one is
+   *    deliberately left alone — the calendar owns that edge — while the send
+   *    reads `variant.body` live. So submit → approve → schedule → edit →
+   *    publish put unreviewed text on a customer's channel under a genuine
+   *    verdict, with every audit row individually true.
+   */
+
+  function approvalsFor(db: unknown): ContentApprovalService {
+    return new ContentApprovalService({
+      db: db as never,
+      workspaceId: fixtures.a.workspaceId,
+      policy: APPROVAL_CONTENT_POLICY,
+    });
+  }
+
+  function pipelineWithRealGate(jobId: string) {
+    return withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) =>
+        new PublishPipelineService({
+          db: db as never,
+          workspaceId: fixtures.a.workspaceId,
+          policy,
+          registry: createConnectorRegistry({ policy, environment: 'DEVELOPMENT' }),
+          vault,
+          approvals: approvalsFor(db),
+        }).execute(jobId),
+      { prisma: app },
+    );
+  }
+
+  /** Put the fixture item through a real submit-and-approve cycle. */
+  async function approveFixtureItem(): Promise<void> {
+    await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) => {
+        await db.contentItem.update({
+          where: { id: fixtures.a.contentItemId },
+          data: { status: 'DRAFT', createdByUserId: fixtures.a.userId },
+        });
+        const approvals = approvalsFor(db);
+        const actor = {
+          userId: fixtures.a.userId,
+          roleKey: 'workspace_owner',
+          permissionKeys: ['content.submit_for_approval', 'content.approve'],
+          brandScope: [] as string[],
+        };
+        const submitted = await approvals.submit({
+          itemId: fixtures.a.contentItemId,
+          actor,
+        });
+        await approvals.decide({ approvalId: submitted.id, verdict: 'APPROVE', actor });
+      },
+      { prisma: app },
+    );
+  }
+
+  it('AN APPROVED ITEM IS NOT REFUSED — the real gate answers, where it used to say null', async () => {
+    await approveFixtureItem();
+    const jobId = await seedJob(`approval-live-${randomUUID()}`);
+
+    const result = await pipelineWithRealGate(jobId);
+
+    /*
+     * THE ASSERTION THAT FAILS AGAINST THE DEFECT. With `openForItem` the gate
+     * answered `null` for an item that WAS approved, and preflight turned that
+     * into APPROVAL_REVOKED — so this brand could never publish anything.
+     */
+    expect(result.failureClass).not.toBe('APPROVAL_REVOKED');
+  });
+
+  it('EDITING AFTER APPROVAL STOPS THE PUBLISH, even once the item is scheduled', async () => {
+    await approveFixtureItem();
+
+    await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) => {
+        // Scheduled: `editVariant` deliberately does not unschedule it, which
+        // is precisely the gap the fingerprint closes.
+        await db.contentItem.update({
+          where: { id: fixtures.a.contentItemId },
+          data: { status: 'SCHEDULED' },
+        });
+        await new ContentLibraryService({
+          db: db as never,
+          workspaceId: fixtures.a.workspaceId,
+          policy: APPROVAL_CONTENT_POLICY,
+        }).editVariant({
+          variantId: fixtures.a.contentVariantId,
+          body: 'Completely different words that nobody reviewed.',
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+        });
+      },
+      { prisma: app },
+    );
+
+    const jobId = await seedJob(`approval-stale-${randomUUID()}`);
+    const result = await pipelineWithRealGate(jobId);
+
+    // THE WHOLE POINT: an old verdict cannot authorize new words.
+    expect(result.failureClass).toBe('APPROVAL_REVOKED');
+    expect(result.externalPostId).toBeNull();
+
+    // AND THE EDIT LEFT A TRACE, so it is legible before the publish fails.
+    const audited = await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) =>
+        db.auditEvent.count({
+          where: {
+            workspaceId: fixtures.a.workspaceId,
+            action: 'content.scheduled_item_edited',
+            resourceId: fixtures.a.contentItemId,
+          },
+        }),
+      { prisma: app },
+    );
+    expect(audited).toBeGreaterThan(0);
+  });
+
+  it('AN UNEDITED APPROVED ITEM STILL PUBLISHES — the check is not a blanket refusal', async () => {
+    await approveFixtureItem();
+    await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) => {
+        await db.contentItem.update({
+          where: { id: fixtures.a.contentItemId },
+          data: { status: 'SCHEDULED' },
+        });
+      },
+      { prisma: app },
+    );
+
+    const jobId = await seedJob(`approval-unchanged-${randomUUID()}`);
+    const result = await pipelineWithRealGate(jobId);
+    expect(result.failureClass).not.toBe('APPROVAL_REVOKED');
   });
 });

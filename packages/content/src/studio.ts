@@ -17,11 +17,10 @@ import { BrandBrainRetriever, fenceUntrusted, type Citation } from '@brandspace/
 import {
   briefTooLong,
   contentItemNotFound,
-  draftLimitReached,
   unsupportedPlatform,
 } from './errors';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
-import { findPlatform, resolveDialect, type ContentDialect } from './policy';
+import { findPlatform, type ContentDialect } from './policy';
 import { resolveContentExpiry, type RetentionInput } from './retention';
 import { validateVariant } from './validation';
 import { parseGeneratedContent, type GeneratedContent } from './schemas';
@@ -151,7 +150,7 @@ export class ContentStudioService extends ContentLibraryService {
   }): Promise<AiQuote> {
     assertBrandInScope(input.actorBrandScope, input.brandId);
     this.#assertBrief(input.brief);
-    this.#assertPlatforms(input.platformKeys);
+    this.assertPlatforms(input.platformKeys);
 
     const retrieval = await this.#retrieve(input.brandId, input.brief);
     return this.#gateway.quote({
@@ -175,7 +174,7 @@ export class ContentStudioService extends ContentLibraryService {
      */
     assertBrandInScope(input.actorBrandScope, input.brandId);
     this.#assertBrief(input.brief);
-    const platforms = this.#assertPlatforms(input.platformKeys);
+    const platforms = this.assertPlatforms(input.platformKeys);
 
     /*
      * AC-11.2's idempotency half: a retried request returns the first draft and
@@ -212,9 +211,9 @@ export class ContentStudioService extends ContentLibraryService {
       };
     }
 
-    await this.#assertDraftHeadroom(input.brandId);
+    await this.assertDraftHeadroom(input.brandId);
 
-    const dialect = await this.#resolveDialectFor(input.brandId);
+    const dialect = await this.resolveDialectFor(input.brandId);
     const expiresAt = resolveContentExpiry(this.policy, input.retention, this.#clock);
     const retrieval = await this.#retrieve(input.brandId, input.brief);
 
@@ -349,7 +348,7 @@ export class ContentStudioService extends ContentLibraryService {
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
 
-    const dialect = await this.#resolveDialectFor(variant.brandId);
+    const dialect = await this.resolveDialectFor(variant.brandId);
     const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
     const targetLocale = input.targetLocale ?? variant.locale;
 
@@ -441,43 +440,6 @@ export class ContentStudioService extends ContentLibraryService {
 
   #assertBrief(brief: string): void {
     if (brief.length > this.policy.generation.maxBriefChars) throw briefTooLong();
-  }
-
-  #assertPlatforms(keys: readonly string[]) {
-    if (keys.length === 0 || keys.length > this.policy.generation.maxVariantsPerRequest) {
-      throw unsupportedPlatform();
-    }
-    return keys.map((key) => {
-      const platform = findPlatform(this.policy, key);
-      if (!platform) throw unsupportedPlatform();
-      return platform;
-    });
-  }
-
-  async #assertDraftHeadroom(brandId: string): Promise<void> {
-    const live = await this.db.contentItem.count({
-      where: { brandId, deletedAt: null, status: { notIn: ['ARCHIVED'] } },
-    });
-    if (live >= this.policy.generation.maxDraftsPerBrand) throw draftLimitReached();
-  }
-
-  /**
-   * D-115, resolved per generation.
-   *
-   * Reads the brand and its workspace rather than trusting a caller-supplied
-   * dialect: a dialect that arrived in a request body would be a customer
-   * choosing per-request what their brand sounds like, which is not what the
-   * decision approved.
-   */
-  async #resolveDialectFor(brandId: string): Promise<ContentDialect> {
-    const brand = await this.db.brand.findUnique({
-      where: { id: brandId },
-      select: { arabicDialect: true, workspace: { select: { arabicDialect: true } } },
-    });
-    return resolveDialect(this.policy, {
-      brandDialect: brand?.arabicDialect ?? null,
-      workspaceDialect: brand?.workspace.arabicDialect ?? null,
-    });
   }
 
   #retrieve(brandId: string, text: string) {

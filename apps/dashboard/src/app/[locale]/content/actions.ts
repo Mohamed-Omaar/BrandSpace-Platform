@@ -5,6 +5,8 @@ import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
+import { systemClock } from '@brandspace/shared';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
@@ -73,6 +75,80 @@ function approvalActorOf(session: WorkspaceSession) {
     permissionKeys: session.workspace.permissionKeys,
     brandScope: session.workspace.brandScope,
   };
+}
+
+/**
+ * WRITE A POST YOURSELF — the authoring path that never involves a model.
+ *
+ * WHY THIS ACTION EXISTS AT ALL. `ContentStudioService.generate()` was the only
+ * writer of a content item anywhere in the product, and it lives behind the AI
+ * Gateway in `apps/api` because F-07 keeps the platform database identity out of
+ * this app. So a workspace with no AI provider configured could not create a
+ * single piece of content — and with no content item there is no calendar slot,
+ * no approval, no publish job and no campaign performance. The whole customer
+ * product was downstream of one `contentItem.create` behind a provider.
+ *
+ * IT IS A SERVER ACTION RATHER THAN A PROXY TO `apps/api`, and that is the
+ * point: nothing here needs a gateway, so nothing here should have to reach the
+ * service that has one. `ContentLibraryService` is the class the dashboard can
+ * construct, and it is the class that cannot charge a credit — the zero-credit
+ * property of manual authoring is enforced by the type, not by a promise.
+ *
+ * `content.create` RATHER THAN `content.edit`. Creating a draft and editing an
+ * existing one are different authorities; a member who may revise a caption is
+ * not thereby a member who may add to the brand's library.
+ */
+export async function createManualDraftAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'ar');
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.create');
+    const brandId = String(formData.get('brandId') ?? '');
+    const title = String(formData.get('title') ?? '');
+    const contentLocale = String(formData.get('contentLocale') ?? 'AR') === 'EN' ? 'EN' : 'AR';
+    const body = String(formData.get('body') ?? '');
+    const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
+    const campaignId = String(formData.get('campaignId') ?? '') || null;
+    const hashtags = String(formData.get('hashtags') ?? '')
+      .split(/[\s,]+/)
+      .map((tag) => tag.replace(/^#/, '').trim())
+      .filter((tag) => tag.length > 0);
+    const assetIds = formData.getAll('assetIds').map((value) => String(value));
+    /*
+     * THE KEY COMES FROM THE FORM, exactly as the generation path's does. A
+     * double submit — the browser's, or a customer's impatient second click —
+     * must return the first draft rather than make a second, and the unique
+     * index is what decides that rather than a check in this handler.
+     */
+    const idempotencyKey = String(formData.get('idempotencyKey') ?? '') || randomUUID();
+
+    const itemId = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const [library, policy] = await Promise.all([services.library(), services.policy()]);
+      const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
+      const created = await library.createManualItem({
+        brandId,
+        title,
+        locale: contentLocale,
+        variants: platformKeys.map((platformKey) => ({
+          platformKey,
+          body,
+          hashtags,
+          ...(assetIds.length > 0 ? { assetIds } : {}),
+        })),
+        campaignId,
+        idempotencyKey,
+        expiresAt: resolveContentExpiry(policy, facts, systemClock),
+        ...actorOf(session),
+      });
+      return created.item.id;
+    });
+
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'createManualDraft', '/compose');
+  }
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
 }
 
 /** Save a person's own edit to a caption. No gateway, no credits. */

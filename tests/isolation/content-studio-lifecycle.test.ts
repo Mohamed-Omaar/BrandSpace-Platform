@@ -12,7 +12,12 @@ import {
 import { CreditLedgerService, type CreditPolicy } from '@brandspace/entitlements';
 import { withWorkspace } from '@brandspace/database';
 
-import { ContentStudioService, purgeExpiredContent, type ContentPolicy } from '@brandspace/content';
+import {
+  ContentLibraryService,
+  ContentStudioService,
+  purgeExpiredContent,
+  type ContentPolicy,
+} from '@brandspace/content';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
 
 /**
@@ -974,5 +979,187 @@ describe('every state change is audited', () => {
     expect(events.some((e) => e.action === 'content.item.generated')).toBe(true);
     // docs/SECURITY.md §11 — counts, never content.
     expect(JSON.stringify(events)).not.toContain(brief);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/** The library service — the class with no gateway, and no way to charge. */
+function libraryIn<T>(
+  tenant: 'a' | 'b',
+  fn: (library: ContentLibraryService, db: ScopedDb) => Promise<T>,
+): Promise<T> {
+  const workspaceId = fixtures[tenant].workspaceId;
+  return withWorkspace(
+    workspaceId,
+    async (db) => fn(new ContentLibraryService({ db, workspaceId, policy: CONTENT_POLICY }), db),
+    { prisma: app },
+  );
+}
+
+describe('a customer can write a post without a model (PHASE 2)', () => {
+  /*
+   * THE DEFECT THIS SUITE EXISTS FOR.
+   *
+   * `ContentStudioService.generate()` was the ONLY writer of a `ContentItem`
+   * anywhere in the repository — one `contentItem.create`, inside the
+   * generation path, behind the AI Gateway. With no AI provider configured a
+   * customer could not create a single piece of content, and because the
+   * calendar, approvals, publishing and campaign performance are all downstream
+   * of an item with at least one variant, the entire customer product was
+   * unreachable. Manual authoring is not a convenience feature here; it is the
+   * floor the rest of the product stands on.
+   */
+
+  it('CREATES A DRAFT WITH NO GATEWAY AND NO CREDIT MOVEMENT', async () => {
+    const before = await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    const requestsBefore = await platform.aiRequest.count({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+
+    const created = await libraryIn('a', (library) =>
+      library.createManualItem({
+        brandId: fixtures.a.brandId,
+        title: 'Written by a person',
+        locale: 'EN',
+        variants: [
+          { platformKey: 'instagram', body: 'Our spring collection lands on Thursday.' },
+          { platformKey: 'x', body: 'Spring collection. Thursday.' },
+        ],
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        expiresAt: null,
+        idempotencyKey: key(),
+      }),
+    );
+
+    expect(created.item.status).toBe('DRAFT');
+    // PROVENANCE IS HONEST IN BOTH DIRECTIONS (D-65).
+    expect(created.item.origin).toBe('HUMAN');
+    expect(created.item.aiRequestId).toBeNull();
+    expect(created.variants).toHaveLength(2);
+    expect(created.variants.every((v) => v.origin === 'HUMAN')).toBe(true);
+    expect(created.variants.every((v) => v.aiRequestId === null)).toBe(true);
+
+    // ZERO CREDITS, AND NO AI REQUEST ROW. Not "a small charge" — none.
+    const after = await platform.creditWallet.findUniqueOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    expect(after.balanceMilliCredits).toBe(before.balanceMilliCredits);
+    expect(await platform.aiRequest.count({ where: { workspaceId: fixtures.a.workspaceId } })).toBe(
+      requestsBefore,
+    );
+  });
+
+  it('survives a reload, and an edit persists', async () => {
+    const created = await libraryIn('a', (library) =>
+      library.createManualItem({
+        brandId: fixtures.a.brandId,
+        title: 'Round trip',
+        locale: 'EN',
+        variants: [{ platformKey: 'instagram', body: 'First words.' }],
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        expiresAt: null,
+        idempotencyKey: key(),
+      }),
+    );
+
+    // RELOAD — a separate transaction, reading it back as a later request would.
+    const reloaded = await libraryIn('a', (library) => library.getItem(created.item.id, []));
+    expect(reloaded.title).toBe('Round trip');
+    expect(reloaded.variants[0]?.body).toBe('First words.');
+
+    await libraryIn('a', (library) =>
+      library.editVariant({
+        variantId: created.variants[0]!.id,
+        body: 'Second words.',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+
+    const again = await libraryIn('a', (library) => library.getItem(created.item.id, []));
+    expect(again.variants[0]?.body).toBe('Second words.');
+  });
+
+  it('A RETRIED SUBMIT RETURNS THE FIRST DRAFT rather than making a second', async () => {
+    const idempotencyKey = key();
+    const input = {
+      brandId: fixtures.a.brandId,
+      title: 'Double click',
+      locale: 'EN' as const,
+      variants: [{ platformKey: 'instagram', body: 'Only once.' }],
+      actorUserId: fixtures.a.userId,
+      actorBrandScope: [] as string[],
+      expiresAt: null,
+      idempotencyKey,
+    };
+
+    const first = await libraryIn('a', (library) => library.createManualItem(input));
+    const second = await libraryIn('a', (library) => library.createManualItem(input));
+
+    expect(second.replayed).toBe(true);
+    expect(second.item.id).toBe(first.item.id);
+    const items = await platform.contentItem.count({
+      where: { workspaceId: fixtures.a.workspaceId, idempotencyKey },
+    });
+    expect(items).toBe(1);
+  });
+
+  it('ANOTHER WORKSPACE CANNOT READ IT, and cannot author into this brand', async () => {
+    const created = await libraryIn('a', (library) =>
+      library.createManualItem({
+        brandId: fixtures.a.brandId,
+        title: 'Private to A',
+        locale: 'EN',
+        variants: [{ platformKey: 'instagram', body: 'A only.' }],
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        expiresAt: null,
+        idempotencyKey: key(),
+      }),
+    );
+
+    // RLS makes the read a miss, shaped exactly like a genuine one — the
+    // service throws not-found rather than returning another tenant's row.
+    await expect(
+      libraryIn('b', (library) => library.getItem(created.item.id, [])),
+    ).rejects.toThrow();
+
+    // And B cannot create content against A's brand id.
+    await expect(
+      libraryIn('b', (library) =>
+        library.createManualItem({
+          brandId: fixtures.a.brandId,
+          title: 'Reaching across',
+          locale: 'EN',
+          variants: [{ platformKey: 'instagram', body: 'Should not exist.' }],
+          actorUserId: fixtures.b.userId,
+          actorBrandScope: [],
+          expiresAt: null,
+          idempotencyKey: key(),
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('refuses a platform the activated policy does not carry', async () => {
+    await expect(
+      libraryIn('a', (library) =>
+        library.createManualItem({
+          brandId: fixtures.a.brandId,
+          title: 'Nowhere',
+          locale: 'EN',
+          variants: [{ platformKey: 'myspace', body: 'Hello.' }],
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          expiresAt: null,
+          idempotencyKey: key(),
+        }),
+      ),
+    ).rejects.toThrow();
   });
 });
