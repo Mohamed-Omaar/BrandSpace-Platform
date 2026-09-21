@@ -22,7 +22,7 @@ import {
   type ApplicationResolver,
   type ConnectionQuota,
 } from '@brandspace/social-connectors';
-import { QUOTA_FEATURES, createPlanQuota } from '@brandspace/entitlements';
+import { createTotalResourceQuota } from '@brandspace/entitlements';
 import {
   createLogger,
   currentEnvironment,
@@ -244,23 +244,18 @@ async function resolveCaller(
 /**
  * The plan's connected-account ceiling, for one workspace inside its own scope.
  *
- * `createPlanQuota` IS THE ONE IMPLEMENTATION. D-10 precedence — plan, override,
- * flag, default — is resolved by the entitlements engine, and the counter is the
- * same atomic `usage_counter` every other quota uses, so two concurrent
- * connections at the last slot cannot both succeed.
+ * `createTotalResourceQuota` IS THE ONE IMPLEMENTATION. D-10 precedence — plan,
+ * override, flag, default — is resolved by the entitlements engine; the counter
+ * is the same atomic `usage_counter` every other quota uses; and the population
+ * it counts against is declared once, beside the dimension, so this route, the
+ * dashboard and every suite agree about what occupies a slot.
  */
 function connectionQuota(
   db: TenantScopedClient,
   workspaceId: string,
   environment: Environment,
 ): ConnectionQuota {
-  return createPlanQuota({
-    db,
-    workspaceId,
-    environment,
-    featureKey: QUOTA_FEATURES.socialAccounts,
-    period: 'total',
-  });
+  return createTotalResourceQuota({ db, workspaceId, environment, dimension: 'socialAccounts' });
 }
 
 async function oauthServiceFor<T>(

@@ -251,6 +251,12 @@ export class SocialOAuthService {
      * consumption at `#connect`, where the connection actually comes into
      * existence — a counter taken here would be charged for every authorization
      * a customer abandoned.
+     *
+     * AND IT IS NOT LOAD-BEARING. It reads a live count outside any lock, so
+     * two flows started at once both see the same number; that is fine here and
+     * would not be at the moment of creation. The consumption at `#connect`
+     * takes the counter row's lock and re-reads this same population behind it,
+     * so the last slot cannot be taken twice however many flows are in the air.
      */
     const planLimit = await this.#quota.limit();
     if (planLimit !== null && live >= planLimit) throw connectionLimitReached();

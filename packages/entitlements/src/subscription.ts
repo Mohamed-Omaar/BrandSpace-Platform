@@ -65,6 +65,18 @@ export interface SubscriptionView {
   readonly cancelAtPeriodEnd: boolean;
 }
 
+/**
+ * The client one period transition needs.
+ *
+ * A `PrismaClient` or a transaction of one — the same shape `LedgerTx` names in
+ * the credit ledger, and for the same reason: the caller decides whether this
+ * write shares a transaction with the allowance that belongs to it.
+ */
+export type SubscriptionTx = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'
+>;
+
 export interface SubscriptionServiceOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -253,7 +265,29 @@ export class SubscriptionService {
    * month of credits nobody paid for.
    */
   async advanceCycle(workspaceId: string, nextTerms: PlanTerms | null): Promise<SubscriptionView> {
-    const existing = await this.#prisma.workspaceSubscription.findUnique({
+    return this.advanceCycleWithin(this.#prisma, workspaceId, nextTerms);
+  }
+
+  /**
+   * The body of `advanceCycle`, taking a transaction.
+   *
+   * SEPARATED SO THE PERIOD AND ITS ALLOWANCE COMMIT TOGETHER. The scheduler
+   * moved the period in one transaction and granted the period's credits in
+   * another; a failure between them left the period permanently advanced with
+   * no allowance, and `dueForCycle` selects on the period end, so the workspace
+   * stopped being due and nothing ever retried it. A month of credits was lost
+   * silently, which is the worst shape a billing bug can take.
+   *
+   * Everything below already used the client it was handed; naming it in the
+   * signature is what lets a caller hand it the same transaction the credit
+   * reset runs in.
+   */
+  async advanceCycleWithin(
+    db: SubscriptionTx,
+    workspaceId: string,
+    nextTerms: PlanTerms | null,
+  ): Promise<SubscriptionView> {
+    const existing = await db.workspaceSubscription.findUnique({
       where: { workspaceId },
     });
     if (!existing) throw new AppError('NOT_FOUND', 'This workspace has no subscription.');
@@ -272,7 +306,7 @@ export class SubscriptionService {
     const renews = status !== 'CANCELLED' && status !== 'EXPIRED';
     const applyPending = renews && existing.pendingPlanKey !== null && nextTerms !== null;
 
-    await this.#prisma.workspaceSubscription.updateMany({
+    await db.workspaceSubscription.updateMany({
       // THE PERIOD END THIS CALL READ. Any other value means somebody else
       // already crossed this boundary.
       where: { workspaceId, currentPeriodEnd: existing.currentPeriodEnd },
@@ -297,7 +331,7 @@ export class SubscriptionService {
      * intended. A grant keyed on the period it reads back therefore cannot be
      * made twice for one boundary.
      */
-    const after = await this.#prisma.workspaceSubscription.findUnique({ where: { workspaceId } });
+    const after = await db.workspaceSubscription.findUnique({ where: { workspaceId } });
     if (!after) throw new AppError('NOT_FOUND', 'This workspace has no subscription.');
     return toView(after);
   }

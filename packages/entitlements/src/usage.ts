@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@brandspace/database';
+import type { PrismaClient, TenantScopedClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 
 /**
@@ -31,6 +31,32 @@ import { AppError, type Clock, systemClock } from '@brandspace/shared';
  * IDEMPOTENCY is a second, independent mechanism: the `UsageEvent` row is
  * inserted in the same transaction and its key is unique, so a retried
  * recording aborts the transaction and leaves the counter untouched.
+ *
+ * THE BASELINE PROBLEM, and why a counter alone is not enough for a TOTAL
+ * quota.
+ *
+ * A counter records what has been consumed THROUGH IT. A `total` quota counts
+ * things that EXIST — brands, connected accounts — and those things predate the
+ * day their dimension was wired up. So a workspace with four connected accounts
+ * and a counter of zero was admitted four more under a limit of five, and two
+ * simultaneous callbacks could take the same last slot because the counter each
+ * of them incremented had never known about the other four.
+ *
+ * Counting the resources and comparing before creating is the read-then-write
+ * this file exists to avoid. So the count happens INSIDE the transaction,
+ * BEHIND THE COUNTER ROW'S OWN LOCK:
+ *
+ *   1. create-or-lock the counter row (`ON CONFLICT … DO UPDATE SET x = x`
+ *      locks the conflicting row, which is the whole point of writing it that
+ *      way rather than reading it);
+ *   2. ask the caller for the authoritative live count, on this transaction;
+ *   3. admit on `GREATEST(counter, live) + n <= limit`, in one statement.
+ *
+ * Two concurrent creates serialise on the lock, and the loser re-reads a live
+ * count that now includes the winner's row. `GREATEST` is what makes this
+ * idempotent and non-double-counting: a resource already represented in the
+ * counter is also in the live count, and the greater of the two is one of them,
+ * never their sum.
  */
 
 export const QUOTA_FEATURE_PREFIX = 'limit.';
@@ -122,6 +148,16 @@ export class QuotaExceededError extends AppError {
   }
 }
 
+/**
+ * The client one consumption runs on — a `PrismaClient` or a transaction of
+ * one. Named because the baseline path threads the same transaction through
+ * three statements and a caller-supplied count.
+ */
+export type UsageTx = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'
+>;
+
 export interface UsageServiceOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -153,6 +189,21 @@ export class UsageService {
     readonly amount?: number;
     readonly idempotencyKey: string;
     readonly cycle?: QuotaWindow | null;
+    /**
+     * The authoritative number of things that already exist, for a TOTAL
+     * resource quota.
+     *
+     * Supplied by the caller because only the caller knows what the dimension
+     * counts: this package must not learn about brands or social connections to
+     * answer "how many". It is called INSIDE the consuming transaction, on that
+     * transaction's client, and behind the counter row's lock — so what it
+     * returns cannot change between being read and being acted on.
+     *
+     * Absent for a quota that counts EVENTS rather than things (scheduled posts
+     * in a month): there is no live population to reconcile against, and the
+     * counter is the only record there has ever been.
+     */
+    readonly baselineCount?: (db: TenantScopedClient) => Promise<number>;
   }): Promise<QuotaConsumption> {
     const amount = input.amount ?? 1;
     if (!Number.isInteger(amount) || amount <= 0) {
@@ -208,6 +259,28 @@ export class UsageService {
 
     const used = await this.#prisma
       .$transaction(async (tx) => {
+        if (input.baselineCount) {
+          const row = await this.#consumeAgainstLive(tx, {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            limitValue: input.limitValue,
+            amount,
+            window,
+            baselineCount: input.baselineCount,
+          });
+          await tx.usageEvent.create({
+            data: {
+              workspaceId: input.workspaceId,
+              featureKey: input.featureKey,
+              idempotencyKey: input.idempotencyKey,
+              amount,
+              counterId: row.id,
+              occurredAt: now,
+            },
+          });
+          return row.usedValue;
+        }
+
         // ONE statement: the limit is in the WHERE, so the check and the
         // increment cannot be separated by another transaction.
         const rows =
@@ -424,6 +497,97 @@ export class UsageService {
         },
       });
     });
+  }
+
+  /**
+   * Consume one slot of a TOTAL resource quota, against what actually exists.
+   *
+   * THREE STATEMENTS, ONE LOCK, NO READ-THEN-WRITE.
+   *
+   * The first creates the counter row if it is not there and LOCKS it either
+   * way — `ON CONFLICT … DO UPDATE SET "usedValue" = "usage_counter"."usedValue"`
+   * writes the value back to itself, which is a no-op to the data and a row
+   * lock to every other transaction. That is deliberate: a plain read would not
+   * serialise two creates, and serialising them is the whole reason the live
+   * count can be trusted between being taken and being used.
+   *
+   * The second asks the caller how many of the thing exist RIGHT NOW, on this
+   * transaction. Behind the lock, and before the new one is created, so it is
+   * the population the new resource is about to join.
+   *
+   * The third admits on the GREATER of the counter and that population. A
+   * resource already represented in the counter is also in the live count, so
+   * taking the greater of the two counts it once — never twice — and repeating
+   * the whole operation converges on the same number.
+   */
+  async #consumeAgainstLive(
+    tx: UsageTx,
+    input: {
+      readonly workspaceId: string;
+      readonly featureKey: string;
+      readonly limitValue: number | null;
+      readonly amount: number;
+      readonly window: QuotaWindow;
+      readonly baselineCount: (db: TenantScopedClient) => Promise<number>;
+    },
+  ): Promise<{ id: string; usedValue: number }> {
+    await tx.$executeRaw`
+      INSERT INTO "usage_counter"
+        ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
+      VALUES
+        (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+         ${input.window.start}, ${input.window.end}, 0, now())
+      ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+      DO UPDATE SET "usedValue" = "usage_counter"."usedValue"`;
+
+    const live = await input.baselineCount(tx as unknown as TenantScopedClient);
+    if (!Number.isInteger(live) || live < 0) {
+      throw new AppError('INTERNAL', 'A live resource count must be a whole number of things.');
+    }
+
+    const rows =
+      input.limitValue === null
+        ? await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+            UPDATE "usage_counter"
+               SET "usedValue" = GREATEST("usedValue", ${live}) + ${input.amount},
+                   "updatedAt" = now()
+             WHERE "workspaceId" = ${input.workspaceId}::uuid
+               AND "featureKey"  = ${input.featureKey}
+               AND "periodStart" = ${input.window.start}
+            RETURNING "usedValue", "id"`
+        : await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+            UPDATE "usage_counter"
+               SET "usedValue" = GREATEST("usedValue", ${live}) + ${input.amount},
+                   "updatedAt" = now()
+             WHERE "workspaceId" = ${input.workspaceId}::uuid
+               AND "featureKey"  = ${input.featureKey}
+               AND "periodStart" = ${input.window.start}
+               AND GREATEST("usedValue", ${live}) + ${input.amount} <= ${input.limitValue}
+            RETURNING "usedValue", "id"`;
+
+    const row = rows[0];
+    if (row) return row;
+
+    /*
+     * REFUSED. The number reported is the EFFECTIVE usage — what exists, not
+     * what the counter happened to have recorded — because that is the figure
+     * the customer's own screen shows and the one that explains the refusal.
+     */
+    const counter = await tx.usageCounter.findUnique({
+      where: {
+        workspaceId_featureKey_periodStart: {
+          workspaceId: input.workspaceId,
+          featureKey: input.featureKey,
+          periodStart: input.window.start,
+        },
+      },
+      select: { usedValue: true },
+    });
+    throw new QuotaExceededError(
+      input.featureKey,
+      input.limitValue ?? 0,
+      Math.max(counter?.usedValue ?? 0, live),
+    );
   }
 
   /** Every counter for a workspace in the current windows — the usage view. */

@@ -336,6 +336,40 @@ export class EntitlementService {
     });
     if (!workspace) throw new AppError('NOT_FOUND', 'Workspace not found.');
 
+    /*
+     * A SUBSCRIPTION THAT HAS ENDED NO LONGER GRANTS ITS PLAN.
+     *
+     * `Workspace.planKey` is a denormalised copy of what the customer bought,
+     * and it is not cleared when a subscription reaches its end — deliberately,
+     * because the commercial record is history and history is not deleted. So
+     * this resolver read it and went on granting the paid plan after the
+     * subscription was CANCELLED or EXPIRED, while the cycle boundary, the
+     * billing screen and the audit trail all said the relationship was over.
+     * docs/BILLING-AND-CREDITS.md §3.4 says access continues UNTIL the period
+     * end, not after it.
+     *
+     * THE FIX IS TO STOP CLAIMING THE PLAN, NOT TO DELETE ANYTHING. The
+     * workspace resolves as one on no plan: quota dimensions become none rather
+     * than unlimited, plan-granted capabilities fall back to their declared
+     * defaults, and everything gated on a PERMISSION rather than on an
+     * entitlement — reading, the billing screen, the invoice documents and the
+     * accounting export — is untouched. That is what "data is retained and
+     * export remains available" requires of this layer.
+     *
+     * `PAST_DUE` IS ABSENT ON PURPOSE: §3.5 gives it full access while dunning
+     * runs. `SUSPENDED` IS ABSENT ON PURPOSE TOO: what a billing suspension
+     * withdraws is an open product decision (D-234), and guessing it here would
+     * be taking that decision rather than recording it.
+     */
+    const subscription = await this.#prisma.workspaceSubscription.findUnique({
+      where: { workspaceId },
+      select: { status: true },
+    });
+    const planKey =
+      subscription !== null && TERMINAL_SUBSCRIPTION_STATUSES.has(subscription.status)
+        ? null
+        : workspace.planKey;
+
     const overrides = await this.#prisma.workspaceOverride.findMany({
       where: { workspaceId, status: 'ACTIVE' },
       orderBy: { effectiveFrom: 'desc' },
@@ -351,7 +385,7 @@ export class EntitlementService {
 
     return {
       workspaceId: workspace.id,
-      planKey: workspace.planKey,
+      planKey,
       country: workspace.country,
       betaGroups: cohorts.map((c) => c.cohortKey),
       overrides: overrides.map((o) => ({
@@ -832,6 +866,17 @@ export function entitlementDenialReason(
   if (!actor.permissionKeys?.includes(permission)) return `${operation} requires ${permission}.`;
   return null;
 }
+
+/**
+ * Subscription statuses after which the plan no longer applies.
+ *
+ * ONLY THE ENDINGS. A cancelled subscription reached the end of the period the
+ * customer paid for; an expired one is a trial that was never converted. Both
+ * are terminal — `dueForCycle` stops offering them and no later boundary
+ * revives them — so continuing to resolve the paid plan would be the resolver
+ * disagreeing with every other record of the relationship.
+ */
+const TERMINAL_SUBSCRIPTION_STATUSES: ReadonlySet<string> = new Set(['CANCELLED', 'EXPIRED']);
 
 // ---------------------------------------------------------------------------
 // The plan-quota projection

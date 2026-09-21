@@ -727,6 +727,24 @@ so two instances crossing one boundary move it once; `runCycleReset` is keyed on
 for, so the loser of that race reads back `alreadyApplied`. One workspace's failure is logged and the
 loop continues — a single bad row must not become every customer's problem.
 
+**THE PERIOD AND ITS ALLOWANCE ARE ONE UNIT.** A non-terminal boundary runs the subscription's period
+transition and the credit reset that belongs to it inside ONE transaction —
+`advanceCycleWithin` and `runCycleResetWithin`, both taking the transaction the scheduler opens.
+
+They were two committed operations, and the gap between them was a hole a month of credits fell
+through: the period committed, the grant failed, and because `dueForCycle` selects on the period end the
+workspace was no longer due. Nothing retried it and nothing recorded that an allowance had been missed.
+"The period advanced, the grant failed" is not a degraded outcome; it is a silently wrong one, and the
+first version of this phase's own test asserted it as acceptable.
+
+So: either the customer has the new period AND its credits, or the period never moved and the next sweep
+tries again. A subscription on a plan the active catalogue does not define rolls the whole boundary back
+and stays due, so an operator who fixes the catalogue gets the missed cycle applied.
+
+**A TERMINAL BOUNDARY IS DIFFERENT BY NATURE** and commits on its own: a cancellation reaching its period
+end and a trial expiring have no next period, so there is no allowance to pair them with and they grant
+zero.
+
 **Which identity does what.** The ledger's write identity everywhere in the product is already the
 platform client (`reserve`, `settle` and `release` all run that way, and `#lockWallet` is raw SQL the
 tenant role is not granted), so the sweeps that maintain it use the same identity rather than inventing
@@ -748,9 +766,17 @@ saw, and reports where a materialised value disagrees with the record it derives
 
 **It repairs nothing.** A drift means an invariant that is supposed to hold by construction did not, and
 rewriting the materialised value to match would destroy the evidence and leave the cause in place. It
-writes a CRITICAL `AuditEvent` when it finds drift and a NOTICE one when a full rotation completes
+writes a CRITICAL `AuditEvent` when it finds drift and an INFO one when a full rotation completes
 clean. **That is an audit record, not an external alert**: nothing pages anybody, and no notification
 platform was built for this phase.
+
+**"CLEAN" MEANS THE WHOLE ROTATION, NOT THE LAST PAGE.** The pass reads a page at a time, and the clean
+record used to be written by whichever page happened to finish the rotation — so a rotation whose first
+page found drift and whose last did not wrote `reconciliation.clean` over the top of its own CRITICAL.
+The drift record survived, and the newest word on the platform's financial state said everything was
+fine. `foldRotation` carries "did any page of this rotation find drift" across the pages and resets it
+only when the cursor wraps, so a clean record is only ever written by a completed rotation that found
+none. A page that finds drift always records its own, wherever it falls.
 
 Its cursor is deliberately in memory, unlike the analytics cursor D-182 makes durable. The difference is
 what forgetting costs: an analytics cursor that resets can MISS data, while a reconciliation that starts
@@ -774,6 +800,24 @@ resource that does not exist, and none in which one exists uncounted.
 over: what counts as a seat, and the fact that the founder's own membership is written by the
 transaction that creates the workspace before any plan can exist, make it a product decision (D-233).
 
+**A TOTAL QUOTA COUNTS WHAT EXISTS, NOT WHAT IT WAS TOLD ABOUT.** A usage counter records what has been
+consumed through it, and the things a `total` dimension counts predate the day their dimension was
+wired up. A workspace with four connected accounts and a counter of zero was admitted four more under a
+limit of five, and two callbacks racing for the last slot could both be admitted because the counter
+neither of them incremented had ever known about the other four.
+
+So a total-resource consumption now takes the counter row's own lock, asks for the authoritative live
+count behind it, and admits on `GREATEST(counter, live) + n <= limit` in one statement. `GREATEST` is
+what makes it idempotent and non-double-counting: a resource already represented in the counter is also
+in the live count, and the greater of the two is one of them, never their sum. What "occupies a slot"
+means is declared once, beside the dimension (`TOTAL_RESOURCE_DIMENSIONS`), so the route, the server
+action and every suite cannot drift apart.
+
+`limit.storage_gb` is deliberately unchanged. It is a `total` dimension too, but it counts GIGABYTES
+rather than rows, and its counter rounds each upload up — so a sum-of-bytes baseline would not be the
+same number the counter holds and applying one would make it less correct, not more. It was wired in an
+earlier phase and is outside this correction.
+
 `limit.brands` is enforced at the one path that creates a brand — and that path is reachable only while
 the workspace has none, because the create form lives in Brand Brain's empty state and nothing else in
 the product offers to make another (D-243). So the ceiling is enforced correctly and the only refusal
@@ -781,7 +825,33 @@ the product can currently reach is the first brand against a ceiling of none. Th
 customer surface for a second brand, which belongs to the Phase 6 customer UX work; inventing one here
 would have been adding product rather than operating it.
 
-## 31. What this phase did NOT do
+## 31. A subscription that ended stops granting its plan
+
+`EntitlementService.contextFor` resolved the plan from `Workspace.planKey` and never looked at the
+subscription. `Workspace.planKey` is a denormalised copy of what the customer bought and is not cleared
+when a subscription ends — deliberately, because the commercial record is history and history is not
+deleted. So the cycle boundary, the billing screen and the audit trail all said the relationship was
+over while `can()` and `limit()` went on granting the paid plan. §3.4 says access continues UNTIL the
+period end, not after it.
+
+**CANCELLED and EXPIRED now resolve as a workspace on no plan.** Nothing is deleted and no data is
+touched: quota dimensions become none rather than unlimited, plan-granted capabilities fall back to
+their declared defaults, and everything gated on a PERMISSION rather than on an entitlement — reading,
+the billing screen, the invoice documents and the accounting export — is untouched. That is what "data
+is retained and export remains available" requires of this layer.
+
+**PAST_DUE is unchanged**: §3.5 gives it full access while dunning runs.
+
+**SUSPENDED is unchanged, and that is the open item.** D-234 records why: §3.5 promises "AI and
+publishing stop, data retained, export available", and the platform's only suspension mechanism
+(`Workspace.status`) removes the workspace from its members' sessions entirely, which would take the
+export with it. Reconciling those two is a product decision. Until it is taken, a SUSPENDED subscription
+resolves exactly as it did before, and the suspension audit record says `accessChanged: false` rather
+than claiming otherwise.
+
+---
+
+## 32. What this phase did NOT do
 
 - **No production payment provider was chosen, named or activated** (D-204 stands). The only adapter is
   still the deterministic development one, and nothing here simulates a collection.

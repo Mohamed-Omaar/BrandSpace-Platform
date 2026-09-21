@@ -18,7 +18,7 @@ import {
   mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
-import { QUOTA_FEATURES } from '@brandspace/entitlements';
+import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 
@@ -151,6 +151,22 @@ export async function createBrandAction(formData: FormData): Promise<void> {
         limitValue: await entitlements.limit(session.workspace.workspaceId, QUOTA_FEATURES.brands),
         period: 'total',
         idempotencyKey: `brand:${session.workspace.workspaceId}:${name.toLowerCase()}`,
+        /*
+         * THE BRANDS THAT ALREADY EXIST.
+         *
+         * A `total` quota counts things, and the things predate the day the
+         * dimension was wired up: every brand made before this call site
+         * existed is in the table and not in the counter, and would have been
+         * free. The count runs inside this transaction, behind the counter
+         * row's own lock, so it is the population the new brand is joining and
+         * not a number that could have moved since it was read.
+         *
+         * THE PREDICATE IS DECLARED ONCE, beside the dimension it belongs to,
+         * so this action, the connected-account route and every suite agree
+         * about what occupies a slot.
+         */
+        baselineCount: (scoped) =>
+          TOTAL_RESOURCE_DIMENSIONS.brands.live(scoped, session.workspace.workspaceId),
       });
 
       // A slug derived from the name, with a short suffix so two brands called

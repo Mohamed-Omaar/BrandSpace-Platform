@@ -64,12 +64,21 @@ import {
 } from '@brandspace/entitlements';
 import {
   FinancialReconciler,
+  ROTATION_START,
   SubscriptionLifecycleService,
   commercePolicyFrom,
+  foldRotation,
   type CommercePolicy,
+  type RotationState,
 } from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
-import { createLogger, internalErrorFields, systemClock, type Clock } from '@brandspace/shared';
+import {
+  AppError,
+  createLogger,
+  internalErrorFields,
+  systemClock,
+  type Clock,
+} from '@brandspace/shared';
 
 /**
  * Background maintenance.
@@ -133,6 +142,16 @@ const AUTOMATION_REDISPATCH_SECONDS = 120;
  * the batch, not the ordering, is what needs raising.
  */
 const AUTOMATION_RULE_PARK_MAX_SECONDS = 3_600;
+
+/**
+ * How long one billing-cycle boundary may hold its transaction.
+ *
+ * The boundary is now the subscription's period transition AND the credit
+ * reset that belongs to it, together. Twenty seconds is far longer than either
+ * needs and far shorter than the sweep's own cadence, so a genuinely stuck
+ * boundary fails and is retried rather than holding a connection.
+ */
+const CYCLE_BOUNDARY_TIMEOUT_MS = 20_000;
 
 export interface MaintenanceResult {
   readonly ingestionDispatched: number;
@@ -1250,7 +1269,7 @@ export class MaintenanceScheduler {
    * workspaces it has already checked. Re-checking is the safe direction, and it
    * buys the rotation without a migration for a table that would hold one row.
    */
-  #reconciliationCursor: string | null = null;
+  #rotation: RotationState = ROTATION_START;
 
   /**
    * The commercial configuration one financial pass needs.
@@ -1401,40 +1420,81 @@ export class MaintenanceScheduler {
         const pending = findPlan(plans, before.pendingPlanKey);
         const nextTerms = pending ? termsFor(pending, before.currency, planVersionId) : null;
 
-        const after = await subscriptions.advanceCycle(row.workspaceId, nextTerms);
-        if (
-          after.currentPeriodStart.getTime() !== before.currentPeriodStart.getTime() ||
-          after.status !== before.status
-        ) {
-          advanced += 1;
-        }
-        if (after.status === 'CANCELLED' || after.status === 'EXPIRED') continue;
+        /*
+         * THE PERIOD AND THE ALLOWANCE THAT BELONGS TO IT, IN ONE TRANSACTION.
+         *
+         * These were two committed operations, and the gap between them was a
+         * hole a month of credits fell through. `advanceCycle` committed the
+         * new period; if the grant then failed — an unresolvable plan, a lost
+         * connection, a cycle key already used — the workspace was no longer
+         * DUE, because `dueForCycle` selects on the period end. Nothing ever
+         * retried it, and nothing anywhere recorded that an allowance had been
+         * missed. "The period advanced, the grant failed" is not a degraded
+         * outcome; it is a silently wrong one.
+         *
+         * So a NON-TERMINAL boundary is atomic: either the customer has the new
+         * period AND its credits, or the period never moved and the next sweep
+         * tries again. A TERMINAL boundary is different by nature — there is no
+         * next period and therefore no allowance to pair with it — so it
+         * commits the ending and grants zero.
+         */
+        const outcome = await platform.$transaction(
+          async (tx) => {
+            const after = await subscriptions.advanceCycleWithin(tx, row.workspaceId, nextTerms);
+            const moved =
+              after.currentPeriodStart.getTime() !== before.currentPeriodStart.getTime() ||
+              after.status !== before.status;
 
-        const plan = findPlan(plans, after.planKey);
-        if (!plan) {
-          // A subscription on a plan the catalogue no longer defines. Granting
-          // an invented allowance would be worse than granting none, and an
-          // operator needs to know rather than a sweep deciding.
-          log.error('billing cycle reached a plan the catalogue does not define', {
-            sweep: 'billing-cycle',
-            workspaceId: row.workspaceId,
-          });
-          continue;
-        }
+            if (after.status === 'CANCELLED' || after.status === 'EXPIRED') {
+              return { moved, granted: false, unforfeitable: 0n };
+            }
 
-        const reset = await ledger.runCycleReset({
-          workspaceId: row.workspaceId,
-          monthlyCredits: after.pinnedMonthlyCredits,
-          rolloverPolicy: plan.rolloverPolicy,
-          rolloverCapMultiplier: plan.rolloverCapMultiplier,
-          // THE PERIOD IT IS GRANTING FOR, and the workspace it belongs to.
-          // `runCycleReset` refuses a cycle key that was used for a different
-          // workspace, so the id is not decoration.
-          cycleKey: `${row.workspaceId}:${after.currentPeriodStart.toISOString()}`,
-          nextResetAt: after.currentPeriodEnd,
-        });
-        if (!reset.alreadyApplied) granted += 1;
-        if (reset.unforfeitable > 0n) {
+            const plan = findPlan(plans, after.planKey);
+            if (!plan) {
+              /*
+               * A subscription on a plan the catalogue no longer defines.
+               * Granting an invented allowance would be worse than granting
+               * none — and so would keeping a period the customer was never
+               * given credits for. THROWING ROLLS THE BOUNDARY BACK, so the
+               * workspace stays due and an operator who fixes the catalogue
+               * gets the missed cycle applied by the next sweep.
+               */
+              log.error('billing cycle reached a plan the catalogue does not define', {
+                sweep: 'billing-cycle',
+                workspaceId: row.workspaceId,
+              });
+              throw new AppError(
+                'NOT_FOUND',
+                'The subscription names a plan the active catalogue does not define.',
+              );
+            }
+
+            const reset = await ledger.runCycleResetWithin(tx, {
+              workspaceId: row.workspaceId,
+              monthlyCredits: after.pinnedMonthlyCredits,
+              rolloverPolicy: plan.rolloverPolicy,
+              rolloverCapMultiplier: plan.rolloverCapMultiplier,
+              // THE PERIOD IT IS GRANTING FOR, and the workspace it belongs to.
+              // `runCycleReset` refuses a cycle key that was used for a
+              // different workspace, so the id is not decoration.
+              cycleKey: `${row.workspaceId}:${after.currentPeriodStart.toISOString()}`,
+              nextResetAt: after.currentPeriodEnd,
+            });
+            return {
+              moved,
+              granted: !reset.alreadyApplied,
+              unforfeitable: reset.unforfeitable,
+            };
+          },
+          // The boundary does the subscription transition, an expiry pass, a
+          // wallet lock, a FIFO forfeiture and a grant. Prisma's 5s interactive
+          // default is the wrong budget for that under contention.
+          { timeout: CYCLE_BOUNDARY_TIMEOUT_MS },
+        );
+
+        if (outcome.moved) advanced += 1;
+        if (outcome.granted) granted += 1;
+        if (outcome.unforfeitable > 0n) {
           log.info('rollover cap could not be fully applied', {
             sweep: 'billing-cycle',
             workspaceId: row.workspaceId,
@@ -1514,13 +1574,26 @@ export class MaintenanceScheduler {
     const platform = getPlatformClient();
     const result = await new FinancialReconciler({ prisma: platform }).run({
       limit,
-      after: this.#reconciliationCursor,
+      after: this.#rotation.cursor,
     });
-    // Wrap at the end of the platform so every workspace is visited in a bounded
-    // number of passes rather than the first `limit` of them for ever.
-    this.#reconciliationCursor = result.exhausted ? null : result.cursor;
+    /*
+     * THE ROTATION DECIDES WHAT IS RECORDED, NOT THE PAGE.
+     *
+     * `foldRotation` carries "did any page of this rotation find drift" across
+     * the pages and wraps the cursor at the end, so a clean record is only ever
+     * written by a COMPLETED rotation that found none. Its state is in memory,
+     * like the cursor it belongs to: a restart begins the rotation again from
+     * the top and re-checks, which is the safe direction, and it cannot lose a
+     * finding because a page with drift always records its own.
+     */
+    const { next, record } = foldRotation(this.#rotation, {
+      drifts: result.drifts.length,
+      exhausted: result.exhausted,
+      cursor: result.cursor,
+    });
+    this.#rotation = next;
 
-    if (result.drifts.length > 0) {
+    if (record === 'drift') {
       await platform.auditEvent.create({
         data: {
           workspaceId: null,
@@ -1548,7 +1621,7 @@ export class MaintenanceScheduler {
         sweep: 'financial-reconciliation',
         drifts: result.drifts.length,
       });
-    } else if (result.exhausted) {
+    } else if (record === 'rotation_clean') {
       await platform.auditEvent.create({
         data: {
           workspaceId: null,
@@ -1557,7 +1630,7 @@ export class MaintenanceScheduler {
           resourceType: 'credit_wallet',
           severity: 'INFO',
           outcome: 'SUCCESS',
-          reason: 'Every financial invariant held on the wallets examined.',
+          reason: 'Every financial invariant held across a complete rotation.',
           after: {
             walletsChecked: result.walletsChecked,
             purchasesChecked: result.purchasesChecked,

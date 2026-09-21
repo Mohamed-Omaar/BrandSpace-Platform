@@ -8,7 +8,13 @@ import {
   FinancialReconciler,
   eventsNeedingAttention,
 } from '@brandspace/billing';
-import { CreditLedgerService, SubscriptionService } from '@brandspace/entitlements';
+import {
+  ConfigurationCatalogueSource,
+  CreditLedgerService,
+  EntitlementService,
+  QUOTA_FEATURES,
+  SubscriptionService,
+} from '@brandspace/entitlements';
 import { MaintenanceScheduler } from '../../apps/api/src/scheduler';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
 
@@ -107,8 +113,8 @@ function actor() {
 let created: string[] = [];
 
 /** A workspace of this suite's own, with a wallet and nothing else. */
-async function freshWorkspace(planKey: string | null): Promise<string> {
-  const id = crypto.randomUUID();
+async function freshWorkspace(planKey: string | null, explicitId?: string): Promise<string> {
+  const id = explicitId ?? crypto.randomUUID();
   const user = await platform.user.create({
     data: {
       email: `p3-${id}@example.local`,
@@ -335,12 +341,22 @@ describe('the cycle boundary is crossed by the scheduler, exactly once', () => {
     expect(after.pinnedMonthlyCredits).toBe(SMALLER_PLAN.monthlyCredits);
   });
 
-  it('ONE WORKSPACE FAILING DOES NOT STOP THE NEXT', async () => {
-    // A subscription on a plan the catalogue does not define. The sweep cannot
-    // grant it an allowance it has no number for, and must not let that stop
-    // everyone behind it in the batch.
+  it('ONE WORKSPACE FAILING DOES NOT STOP THE NEXT — AND ITS OWN PERIOD DOES NOT MOVE', async () => {
+    /*
+     * A subscription on a plan the catalogue does not define. The sweep cannot
+     * grant an allowance it has no number for, and must not let that stop
+     * everyone behind it in the batch.
+     *
+     * IT MUST ALSO NOT ADVANCE THAT WORKSPACE'S PERIOD. This test used to
+     * assert the opposite — "the broken one still advanced its period, the
+     * failure was the grant" — which described the defect rather than the
+     * requirement: `dueForCycle` selects on the period end, so a period that
+     * moved without its allowance leaves the workspace no longer due and the
+     * missed month is never granted by any later sweep.
+     */
     const broken = await freshWorkspace('a-plan-that-does-not-exist');
     await dueSubscription(broken, { planKey: 'a-plan-that-does-not-exist' });
+    const brokenBefore = await subscription(broken);
     const healthy = await freshWorkspace(FIXTURE_PLAN.key);
     await dueSubscription(healthy);
 
@@ -349,9 +365,275 @@ describe('the cycle boundary is crossed by the scheduler, exactly once', () => {
     expect((await wallet(healthy)).balanceMilliCredits).toBe(
       BigInt(FIXTURE_PLAN.monthlyCredits) * MILLI,
     );
-    // The broken one still advanced its period — the failure was the grant, and
-    // the boundary is not held hostage to it.
+
+    const brokenAfter = await subscription(broken);
+    expect(brokenAfter.currentPeriodStart.getTime()).toBe(
+      brokenBefore.currentPeriodStart.getTime(),
+    );
+    expect(brokenAfter.currentPeriodEnd.getTime()).toBe(brokenBefore.currentPeriodEnd.getTime());
     expect((await wallet(broken)).balanceMilliCredits).toBe(0n);
+    // STILL DUE, so an operator who fixes the catalogue gets the missed cycle.
+    const due = await new SubscriptionService({ prisma: platform, clock }).dueForCycle(1000);
+    expect(due.map((row) => row.workspaceId)).toContain(broken);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The boundary and its allowance are one unit
+// ---------------------------------------------------------------------------
+
+describe('a period and the credits that belong to it cannot split', () => {
+  /**
+   * Make the credit reset fail PART WAY THROUGH, using nothing but data.
+   *
+   * A cycle reset expires lapsed buckets before it does anything else, and a
+   * write-off is refused by `CHECK (balanceMilliCredits >= 0)` if it would take
+   * the wallet below zero. A lapsed bucket that the wallet balance does not
+   * cover therefore fails INSIDE `runCycleReset`, after the period transition
+   * has already been written in the same transaction — which is exactly the
+   * window this test is about.
+   *
+   * NO SEAM IS ADDED TO PRODUCTION CODE to make this testable, and the cause is
+   * a row, so it can be cleared and the boundary retried.
+   */
+  async function plantUnpayableExpiry(workspaceId: string): Promise<string> {
+    const w = await wallet(workspaceId);
+    const transaction = await platform.creditTransaction.create({
+      data: {
+        workspaceId,
+        walletId: w.id,
+        type: 'PLAN_GRANT',
+        amountMilliCredits: 0n,
+        balanceAfterMilliCredits: 0n,
+        reason: 'phase 3 fixture: a bucket the wallet cannot pay for',
+        idempotencyKey: `p3-unpayable-${crypto.randomUUID()}`,
+        actorType: 'SYSTEM',
+      },
+    });
+    const bucket = await platform.creditGrant.create({
+      data: {
+        workspaceId,
+        walletId: w.id,
+        source: 'PLAN_GRANT',
+        amountMilliCredits: 9n * MILLI,
+        // Remaining, lapsed, and NOT reflected in the wallet balance: expiring
+        // it would drive the balance negative.
+        remainingMilliCredits: 9n * MILLI,
+        expiresAt: new Date(now.getTime() - 86_400_000),
+        sourceTransactionId: transaction.id,
+        reason: 'phase 3 fixture: a bucket the wallet cannot pay for',
+      },
+    });
+    return bucket.id;
+  }
+
+  it('A — A FAILURE DURING THE GRANT LEAVES THE PERIOD WHERE IT WAS', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId);
+    const before = await subscription(workspaceId);
+    const bucketId = await plantUnpayableExpiry(workspaceId);
+
+    await scheduler.advanceBillingCycles(200);
+
+    // THE PERIOD DID NOT MOVE. It was written inside the boundary transaction
+    // and rolled back with the failed reset — which is the whole property.
+    const after = await subscription(workspaceId);
+    expect(after.currentPeriodStart.getTime()).toBe(before.currentPeriodStart.getTime());
+    expect(after.currentPeriodEnd.getTime()).toBe(before.currentPeriodEnd.getTime());
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(0n);
+    expect(
+      await platform.creditTransaction.count({ where: { workspaceId, type: 'PLAN_GRANT' } }),
+      // Only the fixture's own marker row; no allowance was granted.
+    ).toBe(1);
+
+    // STILL DUE, so the next sweep will try again.
+    const stillDue = await new SubscriptionService({ prisma: platform, clock }).dueForCycle(1000);
+    expect(stillDue.map((row) => row.workspaceId)).toContain(workspaceId);
+
+    // B — THE SAME BOUNDARY SUCCEEDS ONCE THE CAUSE IS GONE, AND GRANTS ONCE.
+    await platform.creditGrant.update({
+      where: { id: bucketId },
+      data: { remainingMilliCredits: 0n },
+    });
+
+    await scheduler.advanceBillingCycles(200);
+    const recovered = await subscription(workspaceId);
+    expect(recovered.currentPeriodStart.getTime()).toBe(before.currentPeriodEnd.getTime());
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(
+      BigInt(FIXTURE_PLAN.monthlyCredits) * MILLI,
+    );
+
+    // And a third sweep, with nothing due, adds nothing further.
+    await scheduler.advanceBillingCycles(200);
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(
+      BigInt(FIXTURE_PLAN.monthlyCredits) * MILLI,
+    );
+    expect(
+      await platform.creditTransaction.count({
+        where: { workspaceId, type: 'PLAN_GRANT', reason: 'Monthly plan allowance.' },
+      }),
+    ).toBe(1);
+  });
+
+  it('C — TWO SCHEDULER INSTANCES RACING ONE BOUNDARY: one period, one allowance', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId);
+    const before = await subscription(workspaceId);
+
+    /*
+     * TWO INSTANCES, NOT TWO CALLS ON ONE. Each has its own state, which is
+     * what two API containers running the same sweep actually looks like, and
+     * both read the same due row before either commits.
+     */
+    const a = new MaintenanceScheduler({ environment: ENV, clock });
+    const b = new MaintenanceScheduler({ environment: ENV, clock });
+    const results = await Promise.allSettled([
+      a.advanceBillingCycles(200),
+      b.advanceBillingCycles(200),
+    ]);
+    // Neither instance is allowed to blow up; one of them simply finds nothing
+    // left to do.
+    expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+
+    const after = await subscription(workspaceId);
+    expect(after.currentPeriodStart.getTime()).toBe(before.currentPeriodEnd.getTime());
+    const months =
+      (after.currentPeriodEnd.getFullYear() - after.currentPeriodStart.getFullYear()) * 12 +
+      (after.currentPeriodEnd.getMonth() - after.currentPeriodStart.getMonth());
+    expect(months).toBe(1);
+
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(
+      BigInt(FIXTURE_PLAN.monthlyCredits) * MILLI,
+    );
+    expect(
+      await platform.creditTransaction.count({ where: { workspaceId, type: 'PLAN_GRANT' } }),
+    ).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A subscription that ended stops granting its plan
+// ---------------------------------------------------------------------------
+
+describe('the entitlement resolver agrees with the subscription that ended', () => {
+  /**
+   * The engine as the platform reads it.
+   *
+   * `limit.seats` is the dimension asserted on for a mundane reason: the
+   * development fixtures switch several quota features ON with a global flag so
+   * the product is usable on a fresh database, and a flag decides BEFORE the
+   * plan does. `limit.seats` is not one of them, so what comes back here is the
+   * plan's own answer and nothing else's.
+   */
+  function entitlements(): EntitlementService {
+    return new EntitlementService({
+      prisma: platform,
+      catalogueSource: new ConfigurationCatalogueSource(
+        new ConfigurationService({ prisma: platform, cacheTtlMs: 0 }),
+        ENV,
+      ),
+      environment: ENV,
+      clock,
+      cacheTtlMs: 0,
+    });
+  }
+
+  const seats = () => FIXTURE_PLAN.quotas.seats;
+
+  it('BEFORE THE PERIOD ENDS, a requested cancellation takes nothing away', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await platform.workspaceSubscription.create({
+      data: {
+        workspaceId,
+        planKey: FIXTURE_PLAN.key,
+        status: 'ACTIVE',
+        billingInterval: 'MONTH',
+        currency: 'SAR',
+        pinnedMonthlyMinor: 100,
+        pinnedAnnualMinor: 1000,
+        pinnedMonthlyCredits: FIXTURE_PLAN.monthlyCredits,
+        currentPeriodStart: new Date(now.getTime() - 86_400_000),
+        // NOT due: the period the customer paid for is still running.
+        currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
+        cancelAtPeriodEnd: true,
+        cancelRequestedAt: now,
+      },
+    });
+
+    // "Access continues until then" — docs/BILLING-AND-CREDITS.md §3.4.
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
+  });
+
+  it('AFTER THE BOUNDARY, a cancelled subscription no longer grants its plan', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, { cancelAtPeriodEnd: true, cancelRequestedAt: now });
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
+
+    await scheduler.advanceBillingCycles(200);
+    expect((await subscription(workspaceId)).status).toBe('CANCELLED');
+
+    /*
+     * THE COMMERCIAL RECORD IS UNTOUCHED AND THE PLAN NO LONGER APPLIES.
+     * `Workspace.planKey` still says what was bought — history is not deleted —
+     * and the resolver stops claiming it. Before this, the cycle boundary, the
+     * billing screen and the audit trail all said the relationship was over
+     * while `can()` and `limit()` went on granting the paid plan.
+     */
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(0);
+    const workspace = await platform.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+    expect(workspace.planKey).toBe(FIXTURE_PLAN.key);
+  });
+
+  it('a trial that expired behaves the same way', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      status: 'TRIALING',
+      trialStartedAt: new Date(now.getTime() - 30 * 86_400_000),
+      trialEndsAt: new Date(now.getTime() - 86_400_000),
+    });
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
+
+    await scheduler.advanceBillingCycles(200);
+    expect((await subscription(workspaceId)).status).toBe('EXPIRED');
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(0);
+  });
+
+  it('PAST_DUE keeps full access while dunning runs', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      status: 'PAST_DUE',
+      pastDueSince: new Date(now.getTime() - 86_400_000),
+      currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
+    });
+    // §3.5: "past_due (full access, banner + email)".
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
+  });
+
+  it('SUSPENDED IS LEFT EXACTLY AS IT WAS — D-234 has not been answered', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      status: 'SUSPENDED',
+      suspendedAt: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
+    });
+
+    /*
+     * DELIBERATE, AND ASSERTED SO IT CANNOT DRIFT. What a billing suspension
+     * withdraws is an open product decision: §3.5 promises "AI and publishing
+     * stop, export remains available", and the platform's only suspension
+     * mechanism removes the workspace from its members' sessions entirely,
+     * which would take the export with it. Guessing here would be taking that
+     * decision instead of recording it.
+     */
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
+  });
+
+  it('a workspace with no subscription at all is unaffected', async () => {
+    // An admin-assigned plan with no commercial relationship behind it still
+    // resolves: the rule is about subscriptions that ENDED, not about their
+    // absence.
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    expect(await entitlements().limit(workspaceId, QUOTA_FEATURES.seats)).toBe(seats());
   });
 });
 
@@ -618,6 +900,63 @@ describe('reconciliation reports drift and repairs nothing', () => {
     // Reported, not repaired.
     expect((await wallet(workspaceId)).balanceMilliCredits).toBe(13n * MILLI);
   });
+});
+
+describe('a clean rotation means the whole rotation was clean', () => {
+  /*
+   * ONE WALLET PER PAGE, so the rotation is many pages and its LAST page is
+   * guaranteed to contain no drift — the pass ends on an empty page. That is
+   * exactly the shape the defect needed: drift early, a clean ending, and a
+   * clean record written over the top of a CRITICAL one.
+   */
+  it('A/C/D — DRIFT ON AN EARLY PAGE SUPPRESSES THE CLEAN RECORD FOR THE WHOLE ROTATION', async () => {
+    // The lowest and highest ids the platform can hold, so one is certainly on
+    // an early page and the other is certainly on the last one.
+    const dirty = await freshWorkspace(null, '00000000-0000-4000-8000-000000000001');
+    await freshWorkspace(null, 'ffffffff-ffff-4fff-bfff-fffffffffffe');
+    await platform.creditWallet.update({
+      where: { workspaceId: dirty },
+      data: { balanceMilliCredits: 77n * MILLI },
+    });
+
+    const wallets = await platform.creditWallet.count();
+    // A FRESH INSTANCE, so the rotation starts at the top and this test is not
+    // reading somebody else's cursor.
+    const rotating = new MaintenanceScheduler({ environment: ENV, clock });
+    const before = new Date();
+
+    // Exactly one full rotation: one page per wallet, then the empty page that
+    // ends it.
+    for (let pass = 0; pass <= wallets; pass += 1) {
+      await rotating.reconcileFinancials(1);
+    }
+
+    const audits = await platform.auditEvent.findMany({
+      where: {
+        workspaceId: null,
+        action: {
+          in: ['platform.billing.reconciliation.drift', 'platform.billing.reconciliation.clean'],
+        },
+        occurredAt: { gte: before },
+      },
+      select: { action: true, severity: true, after: true },
+    });
+
+    // C — the page that found it still says so, at CRITICAL.
+    const drifts = audits.filter((row) => row.action === 'platform.billing.reconciliation.drift');
+    expect(drifts.length).toBeGreaterThanOrEqual(1);
+    expect(drifts.every((row) => row.severity === 'CRITICAL')).toBe(true);
+    expect(drifts.some((row) => JSON.stringify(row.after).includes(dirty))).toBe(true);
+
+    // A — and the rotation as a whole makes no clean claim, however clean its
+    // last page was. This is the assertion the defect failed.
+    expect(audits.filter((row) => row.action === 'platform.billing.reconciliation.clean')).toEqual(
+      [],
+    );
+
+    // D — and nothing was repaired.
+    expect((await wallet(dirty)).balanceMilliCredits).toBe(77n * MILLI);
+  }, 120_000);
 });
 
 // ---------------------------------------------------------------------------

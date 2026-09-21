@@ -923,6 +923,13 @@ It rides the **retention-purge cadence** rather than introducing a seventh opera
 waiting to be dispatched answers to the reconcile cadence, and a boundary, an expiry date and a grace
 period are all measured in days.
 
+**A CYCLE BOUNDARY IS ONE TRANSACTION.** The subscription's period transition and the credit reset that
+belongs to it commit together, because the two were separate and the gap between them lost a month of
+credits silently: `dueForCycle` selects on the period end, so a period that moved without its allowance
+left the workspace no longer due and nothing ever retried it. A terminal boundary — a cancellation
+reaching its period end, a trial expiring — commits on its own and grants zero, because there is no next
+period for an allowance to belong to.
+
 **It is the same enumeration seam as every sweep above.** The credit ledger's WRITE identity everywhere
 in the product is already the platform client, so the passes that maintain it use that identity rather
 than inventing a second one; dunning takes a tenant-scoped client and runs inside `withWorkspace`,

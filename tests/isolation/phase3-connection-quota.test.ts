@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { withWorkspace } from '@brandspace/database';
-import { QUOTA_FEATURES, createPlanQuota } from '@brandspace/entitlements';
+import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
+import { QUOTA_FEATURES, createTotalResourceQuota } from '@brandspace/entitlements';
 import {
   createConnectorRegistry,
   parsePublishingPolicy,
@@ -72,13 +72,21 @@ function singleTargetPolicy(): PublishingPolicy {
   });
 }
 
-function quotaFor(db: Parameters<typeof createPlanQuota>[0]['db'], workspaceId: string) {
-  return createPlanQuota({
+/**
+ * THE ADAPTER THE PRODUCT BUILDS, not one assembled here.
+ *
+ * An earlier version of this file constructed its own `createPlanQuota` with a
+ * feature key and a period and NO live population — so every assertion below
+ * ran against a quota that only knew what the counter had been told, which is
+ * the defect this suite exists to catch. `createTotalResourceQuota` is the only
+ * way to build one, and it carries the population with the dimension.
+ */
+function quotaFor(db: TenantScopedClient, workspaceId: string) {
+  return createTotalResourceQuota({
     db,
     workspaceId,
     environment: 'DEVELOPMENT',
-    featureKey: QUOTA_FEATURES.socialAccounts,
-    period: 'total',
+    dimension: 'socialAccounts',
   });
 }
 
@@ -203,25 +211,17 @@ beforeAll(async () => {
   policy = singleTargetPolicy();
 
   /*
-   * THE FIXTURE'S OWN CONNECTION IS RETIRED FIRST.
+   * THE FIXTURE'S OWN CONNECTION IS LEFT EXACTLY WHERE IT IS.
    *
    * `createIsolationFixtures` writes a row of every tenant-owned model so the
    * RLS suites have something to point at, and one of them is a live
-   * `social_connection` — created directly, so it counts towards the platform
-   * ceiling and does NOT appear in the plan counter. Starting a suite about a
-   * ceiling with one account already connected and uncounted would measure the
-   * fixture rather than the rule.
+   * `social_connection` created DIRECTLY — so it occupies a slot and has never
+   * been near the plan counter. That is not an inconvenience to be tidied away
+   * before the real assertions; it is precisely the production state this
+   * suite exists to test. An earlier version of this file revoked it in
+   * `beforeAll`, which made every assertion below start from a counter that
+   * happened to agree with reality and proved nothing about one that does not.
    */
-  await withWorkspace(
-    fixtures.a.workspaceId,
-    async (db) => {
-      await db.socialConnection.updateMany({
-        where: { workspaceId: fixtures.a.workspaceId },
-        data: { status: 'REVOKED', revokedAt: new Date() },
-      });
-    },
-    { prisma: app },
-  );
 }, 60_000);
 
 afterAll(async () => {
@@ -229,41 +229,107 @@ afterAll(async () => {
 });
 
 describe('the plan decides how many accounts a workspace may connect', () => {
-  it('counts a connection against the plan, and refuses the one past the ceiling', async () => {
-    await setCeiling(1);
+  it('B — A CONNECTION MADE BEFORE THE DIMENSION EXISTED IS STILL COUNTED', async () => {
+    await setCeiling(null);
+    const historical = await liveConnections();
+    // The fixture's own connection, made directly and never counted.
+    expect(historical).toBeGreaterThanOrEqual(1);
     expect(await counted()).toBe(0);
 
     await completeFlow(await startFlow());
-    expect(await counted()).toBe(1);
 
-    // REFUSED BEFORE THE CONSENT SCREEN. Sending somebody to a provider and
-    // then refusing the result is the worst possible order, so the ceiling is
-    // read at `start` too.
-    await expect(startFlow()).rejects.toThrow(/limit/i);
-    expect(await counted()).toBe(1);
+    // NOT 1. The counter reflects everything that occupies a slot, which is
+    // what a `total` quota is supposed to mean.
+    expect(await counted()).toBe(historical + 1);
+    expect(await liveConnections()).toBe(historical + 1);
   });
 
-  it('TWO CALLBACKS RACING FOR THE LAST SLOT: exactly one connects', async () => {
-    await setCeiling(2);
+  it('A — TWO CALLBACKS RACING FOR THE LAST SLOT, WITH HISTORY IN THE WAY', async () => {
+    const live = await liveConnections();
+    // One slot left, and the rows already there are what fills the rest of it.
+    await setCeiling(live + 1);
 
     /*
      * BOTH AUTHORIZATIONS ARE STARTED FIRST, while there is still room, so both
-     * pass the courtesy check at `start`. The ceiling is then reached by
-     * whichever callback commits first, and the ATOMIC consumption at the
-     * moment the connection is created is the only thing standing between the
-     * second one and a connection the plan does not allow.
+     * pass the courtesy check at `start`. Then both callbacks are completed at
+     * once: the atomic admission — the counter row's lock, the live count taken
+     * behind it, and the limit in the same statement — is the only thing
+     * standing between the second one and a connection the plan does not allow.
      *
-     * A sequential "call it twice" would not test this: the second call would
-     * read a counter the first had already moved.
+     * A sequential "call it twice" would not test this, and neither would a
+     * counter that had never heard of the rows already there: with a counter of
+     * zero both callbacks would have seen 0 then 1 against a limit of live + 1
+     * and BOTH would have been admitted.
      */
     const first = await startFlow();
     const second = await startFlow();
-    await completeFlow(first);
-    expect(await counted()).toBe(2);
+    const outcomes = await Promise.allSettled([completeFlow(first), completeFlow(second)]);
 
-    await expect(completeFlow(second)).rejects.toThrow(/limit/i);
-    expect(await counted()).toBe(2);
-    expect(await liveConnections()).toBe(2);
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    const rejected = outcomes.find((outcome) => outcome.status === 'rejected');
+    expect(String((rejected as PromiseRejectedResult).reason)).toMatch(/limit/i);
+
+    expect(await liveConnections()).toBe(live + 1);
+    expect(await counted()).toBe(live + 1);
+  });
+
+  it('refuses the one past the ceiling, before the consent screen', async () => {
+    const live = await liveConnections();
+    await setCeiling(live);
+    await expect(startFlow()).rejects.toThrow(/limit/i);
+    expect(await liveConnections()).toBe(live);
+  });
+
+  it('C — DISCONNECTING A CONNECTION THE COUNTER NEVER KNEW ABOUT DOES NOT CORRUPT IT', async () => {
+    await setCeiling(null);
+    /*
+     * The fixture's own connection: made directly, never consumed, and now
+     * disconnected. The refund finds nothing of its own to give back, and the
+     * counter must neither go negative nor start admitting past the ceiling.
+     */
+    const historical = await withWorkspace(
+      fixtures.a.workspaceId,
+      async (db) =>
+        db.socialConnection.findFirstOrThrow({
+          where: { workspaceId: fixtures.a.workspaceId, status: { not: 'REVOKED' } },
+          orderBy: { connectedAt: 'asc' },
+          select: { id: true },
+        }),
+      { prisma: app },
+    );
+
+    await connectionsIn((service) =>
+      service.disconnect({
+        connectionId: historical.id,
+        actorUserId: fixtures.a.userId,
+        brandScope: [],
+      }),
+    );
+
+    const live = await liveConnections();
+    expect(await counted()).toBeGreaterThanOrEqual(0);
+
+    // AND THE CEILING STILL HOLDS AGAINST WHAT EXISTS. One slot left by the
+    // live count is one slot, whatever the counter happens to say.
+    await setCeiling(live + 1);
+    await completeFlow(await startFlow());
+    expect(await counted()).toBe(live + 1);
+    await expect(startFlow()).rejects.toThrow(/limit/i);
+  });
+
+  it('D — CONSUMING AGAIN DOES NOT DOUBLE-COUNT WHAT IS ALREADY THERE', async () => {
+    await setCeiling(null);
+    const before = await liveConnections();
+    expect(await counted()).toBe(before);
+
+    await completeFlow(await startFlow());
+    expect(await counted()).toBe(before + 1);
+
+    await completeFlow(await startFlow());
+    // before + 2, not (before + 1) + (before + 2): the greater of the counter
+    // and the live population is one of them, never their sum.
+    expect(await counted()).toBe(before + 2);
+    expect(await counted()).toBe(await liveConnections());
   });
 
   it('DISCONNECTING RETURNS THE SLOT — once, however many times it is asked', async () => {
@@ -293,32 +359,24 @@ describe('the plan decides how many accounts a workspace may connect', () => {
   });
 
   it('a returned slot can be used again, and takes a FRESH slot', async () => {
-    await setCeiling(1);
-    // Everything connected so far is disconnected, so the workspace is at zero.
-    const live = await withWorkspace(
-      fixtures.a.workspaceId,
-      async (db) =>
-        db.socialConnection.findMany({
-          where: { workspaceId: fixtures.a.workspaceId, status: { not: 'REVOKED' } },
-          select: { id: true },
-        }),
-      { prisma: app },
+    await setCeiling(null);
+    const live = await liveConnections();
+    const connectionId = await completeFlow(await startFlow());
+    expect(await counted()).toBe(live + 1);
+
+    await connectionsIn((service) =>
+      service.disconnect({
+        connectionId,
+        actorUserId: fixtures.a.userId,
+        brandScope: [],
+      }),
     );
-    for (const connection of live) {
-      await connectionsIn((service) =>
-        service.disconnect({
-          connectionId: connection.id,
-          actorUserId: fixtures.a.userId,
-          brandScope: [],
-        }),
-      );
-    }
-    expect(await counted()).toBe(0);
+    expect(await counted()).toBe(live);
 
     // A reconnection is a NEW slot, not a replay of a spent key. Keying the
     // consumption on the provider's account id would have made this free.
     await completeFlow(await startFlow());
-    expect(await counted()).toBe(1);
+    expect(await counted()).toBe(live + 1);
   });
 
   it('A CEILING OF ZERO IS NONE, NOT UNLIMITED', async () => {

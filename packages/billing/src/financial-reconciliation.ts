@@ -79,6 +79,57 @@ export interface ReconciliationResult {
   readonly cursor: string | null;
 }
 
+/**
+ * What a caller remembers between pages of one rotation.
+ *
+ * A rotation is one trip through every wallet, a page at a time. The only thing
+ * that has to survive between pages is whether any of them found drift.
+ */
+export interface RotationState {
+  readonly cursor: string | null;
+  readonly hadDrift: boolean;
+}
+
+export const ROTATION_START: RotationState = { cursor: null, hadDrift: false };
+
+/** What the caller should record about the page it has just read. */
+export type RotationRecord = 'drift' | 'rotation_clean' | 'nothing';
+
+/**
+ * Fold one page into the rotation, and say what is worth recording.
+ *
+ * WHY THIS IS A FUNCTION AND NOT THREE LINES AT THE CALL SITE. "Clean" used to
+ * be decided per page: whichever page happened to finish the rotation wrote the
+ * clean record, so a rotation whose FIRST page found drift and whose last did
+ * not wrote `reconciliation.clean` over the top of its own CRITICAL. The drift
+ * record survived, and the newest word on the platform's financial state said
+ * everything was fine.
+ *
+ * The decision is now one place, and it is pure — so every sequence of pages
+ * that matters can be asserted without a database, including the one that was
+ * wrong.
+ *
+ * A PAGE WITH DRIFT ALWAYS RECORDS IT, whether or not the rotation is over. A
+ * CLEAN RECORD IS ONLY EVER WRITTEN BY A COMPLETED ROTATION THAT FOUND NONE.
+ * Anything else is silence, which is the honest answer to "we have not finished
+ * looking yet".
+ */
+export function foldRotation(
+  state: RotationState,
+  page: { readonly drifts: number; readonly exhausted: boolean; readonly cursor: string | null },
+): { readonly next: RotationState; readonly record: RotationRecord } {
+  const dirty = state.hadDrift || page.drifts > 0;
+  const next: RotationState = page.exhausted
+    ? // The rotation ended. Begin the next one from the top with a clean slate,
+      // so one rotation can never be described by another's findings.
+      ROTATION_START
+    : { cursor: page.cursor, hadDrift: dirty };
+
+  if (page.drifts > 0) return { next, record: 'drift' };
+  if (page.exhausted && !dirty) return { next, record: 'rotation_clean' };
+  return { next, record: 'nothing' };
+}
+
 export interface FinancialReconcilerOptions {
   readonly prisma: PrismaClient;
 }
