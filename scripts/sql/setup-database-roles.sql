@@ -149,4 +149,4 @@ BEGIN
       current_database();
   END IF;
 END
-$;
+$$;
