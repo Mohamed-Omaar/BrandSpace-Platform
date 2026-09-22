@@ -741,6 +741,17 @@ So: either the customer has the new period AND its credits, or the period never 
 tries again. A subscription on a plan the active catalogue does not define rolls the whole boundary back
 and stays due, so an operator who fixes the catalogue gets the missed cycle applied.
 
+**A SCHEDULED PLAN CHANGE THAT CANNOT BE RESOLVED IS THE SAME REFUSAL** (D-248). That sentence above used
+to be true only of the CURRENT plan. A subscription carrying a `pendingPlanKey` whose terms cannot be
+resolved at the boundary — the target plan is no longer in the active catalogue, or it has no price in
+this subscription's billing currency, which D-08 makes a real state because nothing converts currency at
+runtime — is refused in exactly the same way: nothing moves, the boundary stays due, and the operator
+repairs the catalogue. The old behaviour renewed the OLD terms, moved the period, granted the OLD plan's
+allowance and kept the pending plan pointing at something that would never arrive. What a customer should
+pay after a scheduled downgrade to a plan that no longer exists is a **product decision**; code
+substituting terms would be inventing billing economics. The scheduler logs which of the two causes it
+was, because an operator's repair differs between them.
+
 **A TERMINAL BOUNDARY IS DIFFERENT BY NATURE** and commits on its own: a cancellation reaching its period
 end and a trial expiring have no next period, so there is no allowance to pair them with and they grant
 zero.

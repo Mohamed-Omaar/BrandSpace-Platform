@@ -14,6 +14,8 @@ import {
   EntitlementService,
   QUOTA_FEATURES,
   SubscriptionService,
+  readPlanCatalogue,
+  termsFor,
 } from '@brandspace/entitlements';
 import { MaintenanceScheduler } from '../../apps/api/src/scheduler';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
@@ -489,6 +491,102 @@ describe('a period and the credits that belong to it cannot split', () => {
         where: { workspaceId, type: 'PLAN_GRANT', reason: 'Monthly plan allowance.' },
       }),
     ).toBe(1);
+  });
+
+  it('A SCHEDULED CHANGE THE CATALOGUE CANNOT RESOLVE DOES NOT RENEW THE OLD TERMS', async () => {
+    /*
+     * THE DEFECT THIS REPLACES. `applyPending` read `nextTerms !== null` and,
+     * when the scheduled plan could not be resolved, simply did not apply it —
+     * so the subscription RENEWED FOR ANOTHER PERIOD ON THE OLD PLAN, kept its
+     * unresolved `pendingPlanKey`, and was granted the OLD plan's allowance.
+     * The boundary was consumed, the change the customer asked for silently did
+     * not happen, and the more expensive terms carried on being charged.
+     *
+     * There is no correct terms to substitute, so the boundary is refused and
+     * the workspace stays due for an operator to fix the catalogue or withdraw
+     * the change — the same treatment an unresolvable CURRENT plan gets.
+     */
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      pendingPlanKey: `absent-from-the-catalogue-${RUN}`,
+      pendingPlanEffectiveAt: new Date(now.getTime() - 86_400_000),
+    });
+    const before = await subscription(workspaceId);
+
+    await scheduler.advanceBillingCycles(500);
+
+    const after = await subscription(workspaceId);
+    expect(after.currentPeriodStart.getTime()).toBe(before.currentPeriodStart.getTime());
+    expect(after.currentPeriodEnd.getTime()).toBe(before.currentPeriodEnd.getTime());
+    expect(after.planKey).toBe(FIXTURE_PLAN.key);
+    // The scheduled change is still scheduled — nothing was silently dropped.
+    expect(after.pendingPlanKey).toBe(`absent-from-the-catalogue-${RUN}`);
+    // AND NO ALLOWANCE. The old plan's credits for a period nobody agreed to.
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(0n);
+
+    const stillDue = await new SubscriptionService({ prisma: platform, clock }).dueForCycle(1000);
+    expect(stillDue.map((row) => row.workspaceId)).toContain(workspaceId);
+  });
+
+  it('THE SAME, when the scheduled plan has no price in the billing currency (D-08)', async () => {
+    /*
+     * The plan is in the catalogue; what is missing is a price in the currency
+     * this customer is billed in. D-08 forbids converting one at runtime, so
+     * there is nothing to pin and the boundary is refused identically. The two
+     * causes differ only in the line the sweep logs.
+     */
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      // The fixture plans carry a SAR price only.
+      currency: 'USD',
+      pendingPlanKey: SMALLER_PLAN.key,
+      pendingPlanEffectiveAt: new Date(now.getTime() - 86_400_000),
+    });
+    const before = await subscription(workspaceId);
+
+    await scheduler.advanceBillingCycles(500);
+
+    const after = await subscription(workspaceId);
+    expect(after.currentPeriodStart.getTime()).toBe(before.currentPeriodStart.getTime());
+    expect(after.planKey).toBe(FIXTURE_PLAN.key);
+    expect(after.pendingPlanKey).toBe(SMALLER_PLAN.key);
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(0n);
+  });
+
+  it('A RESOLVABLE scheduled change still applies, and grants the NEW plan', async () => {
+    // The control: the refusal above is about terms that cannot be resolved,
+    // not about scheduled changes in general.
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      pendingPlanKey: SMALLER_PLAN.key,
+      pendingPlanEffectiveAt: new Date(now.getTime() - 86_400_000),
+    });
+
+    await scheduler.advanceBillingCycles(500);
+
+    const after = await subscription(workspaceId);
+    expect(after.planKey).toBe(SMALLER_PLAN.key);
+    expect(after.pendingPlanKey).toBeNull();
+    expect(after.pinnedMonthlyCredits).toBe(SMALLER_PLAN.monthlyCredits);
+    expect((await wallet(workspaceId)).balanceMilliCredits).toBe(
+      BigInt(SMALLER_PLAN.monthlyCredits) * MILLI,
+    );
+  });
+
+  it('terms that are not the SCHEDULED plan’s are refused outright', async () => {
+    // A caller handing over some other plan's terms would move the customer
+    // onto a plan nobody scheduled. Asserted at the service, because that is
+    // where the rule lives and every caller gets it.
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      pendingPlanKey: SMALLER_PLAN.key,
+      pendingPlanEffectiveAt: new Date(now.getTime() - 86_400_000),
+    });
+    const subscriptions = new SubscriptionService({ prisma: platform, clock });
+    const wrong = termsFor(readPlanCatalogue({ plans: [FIXTURE_PLAN] })[0]!, 'SAR', null);
+
+    await expect(subscriptions.advanceCycle(workspaceId, wrong)).rejects.toThrow(/scheduled/i);
+    expect((await subscription(workspaceId)).planKey).toBe(FIXTURE_PLAN.key);
   });
 
   it('C — TWO SCHEDULER INSTANCES RACING ONE BOUNDARY: one period, one allowance', async () => {

@@ -1419,6 +1419,21 @@ export class MaintenanceScheduler {
         // waits rather than being applied at a converted number.
         const pending = findPlan(plans, before.pendingPlanKey);
         const nextTerms = pending ? termsFor(pending, before.currency, planVersionId) : null;
+        if (before.pendingPlanKey !== null && nextTerms === null) {
+          /*
+           * SAID PLAINLY BEFORE THE REFUSAL, because the two causes need
+           * different remedies and the exception cannot tell them apart: the
+           * plan is gone from the catalogue, or it is there and has no price in
+           * the currency this customer is billed in (D-08 forbids converting
+           * one at runtime). `advanceCycleWithin` refuses either way, so the
+           * period stays where it is and the workspace stays due.
+           */
+          log.error('a scheduled plan change cannot be resolved at its boundary', {
+            sweep: 'billing-cycle',
+            workspaceId: row.workspaceId,
+            reason: pending ? 'no price in the subscription currency' : 'plan not in the catalogue',
+          });
+        }
 
         /*
          * THE PERIOD AND THE ALLOWANCE THAT BELONGS TO IT, IN ONE TRANSACTION.

@@ -671,3 +671,280 @@ describe('refunds require a positive amount and their own key', () => {
     expect(events.map((e) => e.amount)).toEqual([4, -3]);
   });
 });
+
+/*
+ * A-9 ON THE CONCURRENT PATH.
+ *
+ * The pre-check enforced "a key names ONE request" whenever it SAW the stored
+ * event. Two requests that both looked before either wrote took a different
+ * path: one won the unique index, the other caught the violation and was told
+ * it had replayed successfully — and nothing on that path ever compared the
+ * two. So the sequential path refused what the concurrent path accepted, which
+ * is the worst combination: the rule appeared to hold every time it was tested.
+ *
+ * THE RACE IS FORCED, NOT HOPED FOR. A transaction is held open with the
+ * winning event already inserted and not yet committed. The second caller's
+ * pre-check sees nothing (the row is invisible), it proceeds, and its own
+ * insert BLOCKS on the uncommitted unique key until the holder commits — which
+ * is precisely the interleaving, every time, rather than a timing coincidence
+ * that may not reproduce.
+ */
+describe('a key raced by two DIFFERENT requests refuses the loser', () => {
+  /** Somewhere for the held event's `counterId` to point. */
+  async function seedCounter(workspaceId: string, featureKey: string): Promise<string> {
+    await usage.consume({
+      workspaceId,
+      featureKey,
+      limitValue: null,
+      period: 'month',
+      idempotencyKey: `seed-${crypto.randomUUID()}`,
+    });
+    const counter = await platform.usageCounter.findFirstOrThrow({
+      where: { workspaceId, featureKey },
+      select: { id: true },
+    });
+    return counter.id;
+  }
+
+  /**
+   * Hold an uncommitted `UsageEvent` for `key`, and return the lever that
+   * commits it. Everything the racer does in between blocks on the unique index.
+   */
+  async function holdWinner(input: {
+    workspaceId: string;
+    featureKey: string;
+    counterId: string;
+    key: string;
+    amount: number;
+  }): Promise<{ commit: () => void; done: Promise<unknown> }> {
+    let release: () => void = () => undefined;
+    let inserted: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      inserted = resolve;
+    });
+    const done = platform.$transaction(
+      async (tx) => {
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.key,
+            amount: input.amount,
+            counterId: input.counterId,
+          },
+        });
+        inserted();
+        await gate;
+      },
+      { timeout: 20_000 },
+    );
+    await ready;
+    return { commit: release, done };
+  }
+
+  /**
+   * The race is only a race while the winner is UNCOMMITTED. Committing on a
+   * bare `then()` let the loser's pre-check sometimes run after the commit, so
+   * it took the sequential path and these tests passed for the wrong reason —
+   * they missed a planted defect about one run in three. Block until the loser
+   * is genuinely waiting on the unique index.
+   */
+  async function racerIsBlocked(): Promise<void> {
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const waiting = await platform.$queryRaw<{ n: bigint }[]>`
+        SELECT count(*) AS n
+          FROM pg_stat_activity
+         WHERE datname = current_database()
+           AND wait_event_type = 'Lock'
+           AND query ILIKE '%usage_event%'`;
+      if ((waiting[0]?.n ?? 0n) > 0n) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error('the racing call never reached the unique index');
+  }
+
+  it('CONSUME: a different AMOUNT under the same key is a CONFLICT, not a replay', async () => {
+    const workspaceId = await freshWorkspace();
+    const featureKey = 'limit.scheduled_posts';
+    const counterId = await seedCounter(workspaceId, featureKey);
+    const key = `race-amount-${crypto.randomUUID()}`;
+
+    const winner = await holdWinner({ workspaceId, featureKey, counterId, key, amount: 1 });
+
+    // The loser's pre-check sees nothing and its insert blocks on the
+    // uncommitted key. Three is not one, so this is a different request.
+    const loser = usage.consume({
+      workspaceId,
+      featureKey,
+      limitValue: null,
+      period: 'month',
+      amount: 3,
+      idempotencyKey: key,
+    });
+    const settled = loser.then(
+      () => 'accepted',
+      (error: unknown) => String((error as { message?: string }).message ?? error),
+    );
+
+    await racerIsBlocked();
+    winner.commit();
+    await winner.done;
+
+    expect(await settled).toMatch(/different usage event/i);
+  });
+
+  it('CONSUME: a different FEATURE under the same key is a CONFLICT', async () => {
+    const workspaceId = await freshWorkspace();
+    const counterId = await seedCounter(workspaceId, 'limit.scheduled_posts');
+    const key = `race-feature-${crypto.randomUUID()}`;
+
+    const winner = await holdWinner({
+      workspaceId,
+      featureKey: 'limit.scheduled_posts',
+      counterId,
+      key,
+      amount: 1,
+    });
+
+    const settled = usage
+      .consume({
+        workspaceId,
+        featureKey: 'limit.brands',
+        limitValue: null,
+        period: 'total',
+        idempotencyKey: key,
+      })
+      .then(
+        () => 'accepted',
+        (error: unknown) => String((error as { message?: string }).message ?? error),
+      );
+
+    await racerIsBlocked();
+    winner.commit();
+    await winner.done;
+
+    expect(await settled).toMatch(/different usage event/i);
+    // AND NOTHING WAS RECORDED for the feature that lost.
+    expect(
+      await platform.usageCounter.findFirst({ where: { workspaceId, featureKey: 'limit.brands' } }),
+    ).toBeNull();
+  });
+
+  it('CONSUME: the SAME request racing itself is still a replay, not an error', async () => {
+    const workspaceId = await freshWorkspace();
+    const featureKey = 'limit.scheduled_posts';
+    const counterId = await seedCounter(workspaceId, featureKey);
+    const key = `race-same-${crypto.randomUUID()}`;
+
+    const winner = await holdWinner({ workspaceId, featureKey, counterId, key, amount: 2 });
+
+    const settled = usage
+      .consume({
+        workspaceId,
+        featureKey,
+        limitValue: null,
+        period: 'month',
+        amount: 2,
+        idempotencyKey: key,
+      })
+      .then(
+        (result) => `used:${result.used}`,
+        (error: unknown) => String((error as { message?: string }).message ?? error),
+      );
+
+    await racerIsBlocked();
+    winner.commit();
+    await winner.done;
+
+    // An ordinary duplicate submit must not surface as a failure for work that
+    // actually succeeded.
+    expect(await settled).toMatch(/^used:/);
+  });
+
+  it('REFUND: a different AMOUNT under the same key is a CONFLICT, not a no-op', async () => {
+    const workspaceId = await freshWorkspace();
+    const featureKey = 'limit.scheduled_posts';
+    await usage.consume({
+      workspaceId,
+      featureKey,
+      limitValue: null,
+      period: 'month',
+      amount: 9,
+      idempotencyKey: `refund-seed-${crypto.randomUUID()}`,
+    });
+    const counter = await platform.usageCounter.findFirstOrThrow({
+      where: { workspaceId, featureKey },
+      select: { id: true, usedValue: true },
+    });
+    const key = `race-refund-${crypto.randomUUID()}`;
+
+    // The winner gives back ONE.
+    const winner = await holdWinner({
+      workspaceId,
+      featureKey,
+      counterId: counter.id,
+      key,
+      amount: -1,
+    });
+
+    // The loser tries to give back FOUR under the same key.
+    const settled = usage
+      .refund({ workspaceId, featureKey, period: 'month', amount: 4, idempotencyKey: key })
+      .then(
+        () => 'accepted',
+        (error: unknown) => String((error as { message?: string }).message ?? error),
+      );
+
+    await racerIsBlocked();
+    winner.commit();
+    await winner.done;
+
+    expect(await settled).toMatch(/different movement/i);
+  });
+
+  it('REFUND: the SAME movement racing itself gives the slot back exactly once', async () => {
+    const workspaceId = await freshWorkspace();
+    const featureKey = 'limit.scheduled_posts';
+    await usage.consume({
+      workspaceId,
+      featureKey,
+      limitValue: null,
+      period: 'month',
+      amount: 5,
+      idempotencyKey: `refund-same-seed-${crypto.randomUUID()}`,
+    });
+    const counter = await platform.usageCounter.findFirstOrThrow({
+      where: { workspaceId, featureKey },
+      select: { id: true },
+    });
+    const key = `race-refund-same-${crypto.randomUUID()}`;
+
+    const winner = await holdWinner({
+      workspaceId,
+      featureKey,
+      counterId: counter.id,
+      key,
+      amount: -2,
+    });
+
+    const settled = usage
+      .refund({ workspaceId, featureKey, period: 'month', amount: 2, idempotencyKey: key })
+      .then(
+        () => 'accepted',
+        (error: unknown) => String((error as { message?: string }).message ?? error),
+      );
+
+    await racerIsBlocked();
+    winner.commit();
+    await winner.done;
+
+    // A retried disconnection must not report a database violation for work
+    // that had been recorded.
+    expect(await settled).toBe('accepted');
+    // And the slot came back once: the holder's own event is the only one.
+    expect(await platform.usageEvent.count({ where: { idempotencyKey: key } })).toBe(1);
+  });
+});

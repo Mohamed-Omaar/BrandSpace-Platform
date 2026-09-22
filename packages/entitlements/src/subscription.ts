@@ -304,6 +304,47 @@ export class SubscriptionService {
         ? 'EXPIRED'
         : existing.status;
     const renews = status !== 'CANCELLED' && status !== 'EXPIRED';
+
+    /*
+     * A SCHEDULED CHANGE THAT CANNOT BE RESOLVED STOPS THE BOUNDARY.
+     *
+     * This read `nextTerms !== null` and, when the terms could not be resolved,
+     * simply did not apply them — so a subscription with a scheduled downgrade
+     * whose target plan had been removed from the catalogue, or which has no
+     * price in the currency the customer is billed in, RENEWED FOR ANOTHER
+     * PERIOD ON THE OLD PLAN, kept its unresolved `pendingPlanKey`, and
+     * received the OLD plan's allowance. The boundary was consumed, the change
+     * the customer asked for silently did not happen, and the more expensive
+     * terms carried on being charged and granted.
+     *
+     * THERE IS NO CORRECT TERMS TO SUBSTITUTE, so this does not choose one.
+     * Renewing the old plan is a commercial decision nobody made; applying a
+     * plan with no price in this currency would be a conversion, which D-08
+     * forbids at runtime. The boundary is REFUSED instead: the caller rolls
+     * back, the period stays where it was, `dueForCycle` keeps offering the
+     * workspace, and an operator who restores the plan, adds the price, or
+     * withdraws the scheduled change gets the boundary applied by the next
+     * sweep. Exactly the treatment an unresolvable CURRENT plan already gets.
+     *
+     * THE TERMS MUST ALSO BE THE TERMS OF THE PLAN THAT WAS SCHEDULED. A caller
+     * handing over some other plan's terms would move the customer onto a plan
+     * nobody scheduled, which is the same class of silent repricing.
+     */
+    if (renews && existing.pendingPlanKey !== null) {
+      if (nextTerms === null) {
+        throw new AppError(
+          'CONFLICT',
+          'The scheduled plan change cannot be resolved, so this boundary was not applied.',
+        );
+      }
+      if (nextTerms.planKey !== existing.pendingPlanKey) {
+        throw new AppError(
+          'CONFLICT',
+          'The terms offered for this boundary are not the scheduled plan’s.',
+        );
+      }
+    }
+
     const applyPending = renews && existing.pendingPlanKey !== null && nextTerms !== null;
 
     await db.workspaceSubscription.updateMany({

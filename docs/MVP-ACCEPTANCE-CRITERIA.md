@@ -1295,3 +1295,18 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-48.4 | Replay requires BOTH `platform.plan.assign` and `platform.credit.adjust`, re-checked in the action           | `apps/admin` health action                     |
 | AC-48.5 | The operator surface holds no webhook signing secret and cannot accept a delivery                            | `financial-reconciliation`, `reconcile`        |
 | AC-48.6 | A dead-letter and a drift each write an **audit record**, and the documentation calls it that, not an alert  | `docs/BILLING-AND-CREDITS.md` §5.1, §29        |
+
+### AC-50 A boundary and an idempotency key each mean ONE thing
+
+| ID       | Criterion                                                                                                         | Settled by                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| AC-50.1  | A renewing subscription whose `pendingPlanKey` is absent from the active catalogue does NOT advance its period    | `phase3-billing-operations`                  |
+| AC-50.2  | It does not receive the old plan's allowance, and the whole boundary stays due for an operator                    | `phase3-billing-operations`                  |
+| AC-50.3  | The same holds when the target plan exists but has no price in the subscription's billing currency (D-08)         | `phase3-billing-operations`                  |
+| AC-50.4  | Terms offered for a boundary that are not the SCHEDULED plan's are refused outright rather than silently applied  | `phase3-billing-operations`                  |
+| AC-50.5  | The scheduler records WHICH cause it was, because the operator's repair differs                                   | `apps/api/src/scheduler.ts`                  |
+| AC-50.6  | Two DIFFERENT usage requests racing one idempotency key: the loser gets `CONFLICT`, not a replay                  | `quota-enforcement`                          |
+| AC-50.7  | Nothing is recorded for the losing request — no counter, no event                                                 | `quota-enforcement`                          |
+| AC-50.8  | The SAME request racing itself is still a replay, not an error                                                    | `quota-enforcement`                          |
+| AC-50.9  | `refund` obeys the same rule: a different movement under the key is `CONFLICT`, the same movement gives back once | `quota-enforcement`                          |
+| AC-50.10 | The sequential and concurrent paths ask ONE question of the stored event, not two subtly different ones           | `packages/entitlements/src/usage.ts` (D-249) |
