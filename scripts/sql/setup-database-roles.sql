@@ -66,7 +66,7 @@ ALTER SCHEMA public OWNER TO brandspace_migrator;
 -- own owner. Grant exactly the DDL capability migrations need without making
 -- the migrator a database owner, and explicitly keep it away from runtime
 -- identities.
-DO $
+DO $$
 BEGIN
   EXECUTE format(
     'GRANT CREATE ON DATABASE %I TO brandspace_migrator',
@@ -81,7 +81,7 @@ BEGIN
     current_database()
   );
 END
-$;
+$$;
 
 -- None of the three may ever bypass row-level security.
 ALTER ROLE brandspace_migrator NOBYPASSRLS NOSUPERUSER;
@@ -108,7 +108,7 @@ REVOKE brandspace_migrator FROM brandspace_platform;
 -- --------------------------------------------------------------------------
 -- Verification. Fails loudly rather than leaving a weak environment in place.
 -- --------------------------------------------------------------------------
-DO $
+DO $$
 DECLARE
   offending text;
   schema_owner text;
@@ -134,6 +134,19 @@ BEGIN
     RAISE EXCEPTION
       'public schema must be owned by brandspace_migrator, found %',
       COALESCE(schema_owner, '<missing>');
+  END IF;
+
+  IF NOT has_database_privilege('brandspace_migrator', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION
+      'brandspace_migrator must have CREATE on database %',
+      current_database();
+  END IF;
+
+  IF has_database_privilege('brandspace_app', current_database(), 'CREATE')
+     OR has_database_privilege('brandspace_platform', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION
+      'runtime roles must not have CREATE on database %',
+      current_database();
   END IF;
 END
 $;
