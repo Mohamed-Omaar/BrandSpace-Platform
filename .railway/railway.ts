@@ -378,7 +378,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/dashboard start',
-      healthcheckPath: '/',
+      healthcheckPath: '/en/reset',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
@@ -440,7 +440,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/admin start',
-      healthcheckPath: '/',
+      healthcheckPath: '/en/login',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
