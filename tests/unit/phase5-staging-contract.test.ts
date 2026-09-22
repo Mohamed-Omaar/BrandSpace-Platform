@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validateStartupConfiguration, type StartupServiceProfile } from '@brandspace/shared';
 
@@ -265,5 +267,31 @@ describe('the client-origin contract reaches staging unchanged', () => {
 
   it('staging carries no hop count under railway-edge', () => {
     expect(check('api', { TRUSTED_PROXY_HOPS: '1' }).ok).toBe(false);
+  });
+});
+
+
+describe('the database bootstrap makes the migration identity the schema owner', () => {
+  it('transfers public schema ownership to brandspace_migrator and verifies it', () => {
+    /*
+     * LIVE STAGING DEFECT. Railway provisions the database before BrandSpace
+     * creates its three roles, so the database and its public schema initially
+     * belong to Railway's provisioned owner. Creating brandspace_migrator with
+     * DDL intent is not enough: Prisma can authenticate and still cannot create
+     * _prisma_migrations. CI did not expose that because its test database is
+     * created WITH OWNER brandspace_migrator.
+     *
+     * The role bootstrap is therefore responsible for making the documented
+     * "migrator owns the schema" contract true on an already-created database.
+     */
+    const roleSql = readFileSync(
+      resolve(process.cwd(), 'scripts/sql/setup-database-roles.sql'),
+      'utf8',
+    );
+
+    expect(roleSql).toContain('ALTER SCHEMA public OWNER TO brandspace_migrator;');
+    expect(roleSql).toContain(
+      "IF schema_owner IS DISTINCT FROM 'brandspace_migrator' THEN",
+    );
   });
 });
