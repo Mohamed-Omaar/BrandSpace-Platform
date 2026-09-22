@@ -59,6 +59,30 @@ ALTER ROLE brandspace_platform WITH PASSWORD :'platform_password';
 -- environment instead of depending on how the database happened to be created.
 ALTER SCHEMA public OWNER TO brandspace_migrator;
 
+-- One migration creates the private `app` schema that holds tenant-context
+-- helpers. CREATE SCHEMA is a DATABASE-level privilege in PostgreSQL, not a
+-- schema-level privilege. CI hid this because its database is created WITH
+-- OWNER brandspace_migrator; Railway provisions the database first under its
+-- own owner. Grant exactly the DDL capability migrations need without making
+-- the migrator a database owner, and explicitly keep it away from runtime
+-- identities.
+DO $
+BEGIN
+  EXECUTE format(
+    'GRANT CREATE ON DATABASE %I TO brandspace_migrator',
+    current_database()
+  );
+  EXECUTE format(
+    'REVOKE CREATE ON DATABASE %I FROM brandspace_app',
+    current_database()
+  );
+  EXECUTE format(
+    'REVOKE CREATE ON DATABASE %I FROM brandspace_platform',
+    current_database()
+  );
+END
+$;
+
 -- None of the three may ever bypass row-level security.
 ALTER ROLE brandspace_migrator NOBYPASSRLS NOSUPERUSER;
 ALTER ROLE brandspace_app      NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
