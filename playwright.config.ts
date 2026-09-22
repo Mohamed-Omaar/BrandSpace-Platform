@@ -699,10 +699,32 @@ export default defineConfig({
        *
        * It leaves the environment as it found it, which is why the journey's
        * last step is a disable rather than an assertion.
+       *
+       * `fullyParallel: false` WAS NOT ENOUGH, AND THE COMMENT ABOVE USED TO
+       * CLAIM IT WAS — Phase 5. It serialises the tests INSIDE this project and
+       * does nothing about other PROJECTS, which Playwright is free to run at
+       * the same time on another worker. `phase10-platform` drives
+       * `/console/integrations/email/outbox` and clicks the same activate and
+       * disable controls, so the two could and did overlap: the full local suite
+       * failed this journey while passing it in isolation, which is the exact
+       * signature of shared mutable state rather than a product fault.
+       *
+       * `dependencies` is the mechanism that actually orders projects. Naming
+       * `phase10-platform` here makes this project start only once that one has
+       * finished, so the two never hold `integrations.email` at the same time —
+       * without serialising the twenty other projects that have no interest in
+       * it.
+       *
+       * IT IS AN ORDERING FIX, NOT A MASK. The product defect underneath the
+       * original CI failure — a provider cache that ignored the activated
+       * configuration — is fixed in `apps/api/src/email-provider.ts` and proven
+       * against real PostgreSQL (D-257). This is the separate, genuine harness
+       * defect that fix exposed (D-258).
        */
       name: 'production-email',
       testMatch: /production-email\.spec\.ts/,
       fullyParallel: false,
+      dependencies: ['phase10-platform'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
