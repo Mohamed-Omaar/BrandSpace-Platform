@@ -513,9 +513,30 @@ every one of these operations needs the same database one statement later; the a
 **The subject is stored as a SHA-256 hash**, never an address or an email: the limiter only asks whether
 two attempts belong together, and a dump of the table then names nobody.
 
-**`X-Forwarded-For` is read from the RIGHT**, skipping exactly the number of proxies `TRUSTED_PROXY_HOPS`
-declares. It is a list the client can start, so trusting its leftmost entry would let a caller choose the
-identity being counted. With no hop count configured the header is not read at all (D-251).
+**`X-Forwarded-For` is read from the RIGHT**, at `chain.length - TRUSTED_PROXY_HOPS`. It is a list the
+client can start, so trusting an entry the client could have written would let a caller choose the identity
+being counted — and therefore choose to have no limit.
+
+The selection follows the APPEND RULE, which is worth stating exactly because getting it one position wrong
+is silent. A proxy appends the address of the **peer that connected to it**, never its own. With trusted
+proxies P1…PN (P1 nearest the client) the header we receive is
+
+```
+<anything the client sent>, C, P1, …, P(N-1)
+```
+
+— exactly N entries appended by infrastructure we run, the **first** of which is the client. So with ONE
+trusted proxy the client is the **rightmost** entry, not the one before it.
+
+**Configuration is mandatory behind a proxy.** With no hop count the header is not read at all and the
+transport peer is used, which is correct for a direct connection and wrong for a load-balanced deployment:
+every caller then resolves to the balancer, or — on a Next.js server action, which has no transport peer —
+to nothing at all. A source dimension that cannot establish a subject is **skipped and logged** as a
+deployment defect; it is never pooled onto a constant, which would rate-limit the whole world as one caller.
+
+**When the chain is shorter than the configured hops**, the socket address is used and never an entry from
+the list: a request that did not traverse the expected chain is not one whose claimed origin we believe, and
+reaching left to produce _some_ address is exactly the control this must deny (D-251).
 
 **Abuse controls:** bot protection on sign-up and contact forms, disposable-email policy (configurable),
 velocity checks on invitations and trials, duplicate-account heuristics, automatic throttling on anomalous

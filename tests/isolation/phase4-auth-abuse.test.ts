@@ -11,6 +11,7 @@ import {
   isRateLimited,
   type AbuseCeilings,
 } from '@brandspace/auth';
+import { requestContext } from '@brandspace/shared';
 import { LocalDevelopmentKeyProvider } from '@brandspace/vault';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
 
@@ -495,5 +496,130 @@ describe('expired windows are discarded', () => {
     expect(
       await platform.authRateLimit.count({ where: { windowEnd: { gt: new Date() } } }),
     ).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A SPOOFED `X-Forwarded-For` MUST NOT BUY A FRESH BUDGET — Phase 4, review fix.
+ *
+ * WHY THIS IS HERE AND NOT ONLY IN THE UNIT TEST. The off-by-one that shipped in
+ * `requestContext` was invisible to every assertion about `requestContext`,
+ * because those assertions encoded the same wrong idea of what a proxy does. The
+ * property that actually matters is not "the helper returns address X" — it is
+ * "a caller who varies the header cannot get more attempts than the ceiling".
+ * That is a statement about the HELPER AND THE LIMITER TOGETHER, against a real
+ * database, so it is asserted here where both are real.
+ *
+ * THE HEADER IS BUILT THE WAY A PROXY BUILDS IT: the attacker's chosen value,
+ * then the address our own load balancer appends because that is the peer that
+ * connected to it.
+ */
+describe('a caller cannot mint identities with X-Forwarded-For', () => {
+  const ONE_PROXY = { TRUSTED_PROXY_HOPS: '1' } as NodeJS.ProcessEnv;
+
+  it('SPENDS ONE BUDGET however many addresses it claims', async () => {
+    const target = await customer();
+    const service = auth();
+    // The real client, as our load balancer sees it. Constant, because it is.
+    const realClient = freshIp();
+
+    const outcomes: string[] = [];
+    // One more attempt than the per-source ceiling allows, each with a
+    // different spoofed value prepended.
+    for (let attempt = 0; attempt <= CEILINGS.signInPerIp; attempt += 1) {
+      const spoofed = `${attempt + 1}.${attempt + 1}.${attempt + 1}.${attempt + 1}`;
+      const origin = requestContext({
+        headers: { 'x-forwarded-for': `${spoofed}, ${realClient}` },
+        socketAddress: '10.0.0.1',
+        env: ONE_PROXY,
+      });
+
+      // The helper must have resolved the caller to the SAME subject each time.
+      expect(origin.ip).toBe(realClient);
+
+      outcomes.push(
+        await service
+          .signIn({ email: target.email, password: 'wrong-password', ip: origin.ip })
+          .then(() => 'allowed')
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused')),
+      );
+    }
+
+    /*
+     * THE ASSERTION THE DEFECT FAILS. With `chain.length - hops - 1` every
+     * iteration resolved to its own spoofed value, so every attempt opened a
+     * fresh per-source window and NOTHING was ever rate-limited — an unbounded
+     * credential spray from one caller, which is exactly what the ceiling
+     * exists to stop.
+     */
+    expect(outcomes).toContain('rate-limited');
+    expect(outcomes.filter((outcome) => outcome === 'refused')).toHaveLength(CEILINGS.signInPerIp);
+  });
+
+  it('counts a DASHBOARD request, which has no socket address to fall back on', async () => {
+    const target = await customer();
+    const service = auth();
+    const realClient = freshIp();
+
+    /*
+     * A Next.js server action passes headers and no transport peer. Under the
+     * old index an ordinary one-entry chain looked too short, the fallback was
+     * undefined, and `enforce` skips a dimension with no subject — so the one
+     * path every customer browser takes was not rate limited at all.
+     */
+    const outcomes: string[] = [];
+    for (let attempt = 0; attempt <= CEILINGS.signInPerIp; attempt += 1) {
+      const origin = requestContext({
+        headers: { 'x-forwarded-for': realClient },
+        env: ONE_PROXY,
+      });
+      expect(origin.ip).toBe(realClient);
+
+      outcomes.push(
+        await service
+          .signIn({ email: target.email, password: 'wrong-password', ip: origin.ip })
+          .then(() => 'allowed')
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused')),
+      );
+    }
+
+    expect(outcomes).toContain('rate-limited');
+  });
+
+  it('gives two genuinely different clients their own budgets', async () => {
+    // The other half of the rule: the fix must not collapse everyone onto the
+    // proxy's address, which would rate-limit the whole world as one caller.
+    const target = await customer();
+    const service = auth();
+    const first = freshIp();
+    const second = freshIp();
+
+    for (let attempt = 0; attempt < CEILINGS.signInPerIp; attempt += 1) {
+      await service
+        .signIn({
+          email: target.email,
+          password: 'wrong-password',
+          ip: requestContext({
+            headers: { 'x-forwarded-for': `9.9.9.9, ${first}` },
+            env: ONE_PROXY,
+          }).ip,
+        })
+        .catch(() => undefined);
+    }
+
+    // The first client is now spent. The second must be untouched.
+    const secondOutcome = await service
+      .signIn({
+        email: target.email,
+        password: 'wrong-password',
+        ip: requestContext({
+          headers: { 'x-forwarded-for': `9.9.9.9, ${second}` },
+          env: ONE_PROXY,
+        }).ip,
+      })
+      .then(() => 'allowed')
+      .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
+
+    expect(secondOutcome).toBe('refused');
   });
 });

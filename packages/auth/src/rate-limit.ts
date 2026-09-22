@@ -234,14 +234,30 @@ export class AuthRateLimiter {
     windowSeconds: number,
   ): Promise<void> {
     /*
-     * NO SUBJECT MEANS NO COUNT, and that is correct rather than a hole. The
-     * per-source dimension is skipped when the deployment cannot establish a
-     * source address — which `requestContext` reports honestly rather than
-     * inventing — and the per-ACCOUNT dimension, which has a subject on every
-     * call, still applies. Fabricating a constant subject would instead put
-     * every caller in the world into one bucket and lock the product out.
+     * NO SUBJECT MEANS NO COUNT — but never in silence.
+     *
+     * The per-source dimension is skipped when the deployment cannot establish a
+     * source address, which `requestContext` reports honestly rather than
+     * inventing; the per-ACCOUNT dimension, which has a subject on every call,
+     * still applies. Fabricating a constant subject instead would put every
+     * caller in the world into one bucket and lock the product out, so the skip
+     * is the right behaviour — and it is still a deployment DEFECT every time it
+     * happens on a source dimension, because it means `TRUSTED_PROXY_HOPS` does
+     * not describe the proxies actually in front of this process.
+     *
+     * IT IS LOGGED FOR EXACTLY THAT REASON. A rate limiter that quietly stops
+     * counting looks identical to one that is working, which is how the
+     * dashboard ran with no per-source ceiling at all and nothing said so.
      */
-    if (subject === undefined || subject.trim() === '') return;
+    if (subject === undefined || subject.trim() === '') {
+      if (scope.endsWith(':ip')) {
+        log.warn('no source address could be established, so this dimension is not counted', {
+          scope,
+          hint: 'Set TRUSTED_PROXY_HOPS to the number of proxies in front of this process.',
+        });
+      }
+      return;
+    }
     const decision = await this.record(scope, subject, limit, windowSeconds);
     if (!decision.allowed) {
       throw new RateLimitedError(scope, decision.retryAfterSeconds);
