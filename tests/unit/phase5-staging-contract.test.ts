@@ -270,6 +270,20 @@ describe('the client-origin contract reaches staging unchanged', () => {
   });
 });
 
+describe('the Railway browser app healthchecks use stable 200 routes', () => {
+  it('does not probe the locale-redirecting root for dashboard or admin', () => {
+    const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
+    const dashboardStart = railway.indexOf("const dashboard = service('dashboard'");
+    const adminStart = railway.indexOf("const admin = service('admin'");
+    const apiStart = railway.indexOf("const api = service('api'");
+    const dashboardBlock = railway.slice(dashboardStart, adminStart);
+    const adminBlock = railway.slice(adminStart, apiStart);
+
+    expect(dashboardBlock).toContain("healthcheckPath: '/en/reset'");
+    expect(adminBlock).toContain("healthcheckPath: '/en/login'");
+  });
+});
+
 describe('the database bootstrap makes the migration identity the schema owner', () => {
   it('transfers public schema ownership to brandspace_migrator and verifies it', () => {
     /*
