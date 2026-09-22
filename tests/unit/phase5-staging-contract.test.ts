@@ -293,5 +293,17 @@ describe('the database bootstrap makes the migration identity the schema owner',
     expect(roleSql).toContain(
       "IF schema_owner IS DISTINCT FROM 'brandspace_migrator' THEN",
     );
+    expect(roleSql).toContain(
+      "'GRANT CREATE ON DATABASE %I TO brandspace_migrator'",
+    );
+    expect(roleSql).toContain(
+      "'REVOKE CREATE ON DATABASE %I FROM brandspace_app'",
+    );
+    expect(roleSql).toContain(
+      "'REVOKE CREATE ON DATABASE %I FROM brandspace_platform'",
+    );
+    expect(roleSql).toContain(
+      "NOT has_database_privilege('brandspace_migrator', current_database(), 'CREATE')",
+    );
   });
 });
