@@ -307,5 +307,8 @@ describe('the database bootstrap makes the migration identity the schema owner',
     );
     expect(roleSql).not.toContain('DO $\n');
     expect(roleSql).not.toContain('\n$;\n');
+    const dollarQuoteOpens = roleSql.match(/DO \\$\\$/g) ?? [];
+    const dollarQuoteCloses = roleSql.match(/\\$\\$;/g) ?? [];
+    expect(dollarQuoteCloses).toHaveLength(dollarQuoteOpens.length);
   });
 });
