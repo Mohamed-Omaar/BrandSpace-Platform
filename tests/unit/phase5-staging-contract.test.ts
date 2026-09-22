@@ -270,7 +270,6 @@ describe('the client-origin contract reaches staging unchanged', () => {
   });
 });
 
-
 describe('the database bootstrap makes the migration identity the schema owner', () => {
   it('transfers public schema ownership to brandspace_migrator and verifies it', () => {
     /*
