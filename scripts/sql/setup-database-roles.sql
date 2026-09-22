@@ -49,6 +49,16 @@ ALTER ROLE brandspace_migrator WITH PASSWORD :'migrator_password';
 ALTER ROLE brandspace_app      WITH PASSWORD :'app_password';
 ALTER ROLE brandspace_platform WITH PASSWORD :'platform_password';
 
+-- The migrator is the DDL identity, so it must own the schema it migrates.
+--
+-- CI creates each test database WITH OWNER brandspace_migrator, which makes this
+-- true implicitly through PostgreSQL's pg_database_owner default. Railway
+-- provisions the database first under its own owner, so creating the role alone
+-- is not enough there: Prisma reaches the database but cannot create
+-- _prisma_migrations in public. Make the documented contract explicit in every
+-- environment instead of depending on how the database happened to be created.
+ALTER SCHEMA public OWNER TO brandspace_migrator;
+
 -- None of the three may ever bypass row-level security.
 ALTER ROLE brandspace_migrator NOBYPASSRLS NOSUPERUSER;
 ALTER ROLE brandspace_app      NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
@@ -74,9 +84,10 @@ REVOKE brandspace_migrator FROM brandspace_platform;
 -- --------------------------------------------------------------------------
 -- Verification. Fails loudly rather than leaving a weak environment in place.
 -- --------------------------------------------------------------------------
-DO $$
+DO $
 DECLARE
   offending text;
+  schema_owner text;
 BEGIN
   SELECT string_agg(rolname, ', ') INTO offending
     FROM pg_roles
@@ -90,5 +101,15 @@ BEGIN
     RAISE EXCEPTION
       'brandspace_app is a member of brandspace_platform; it could SET ROLE into the platform identity.';
   END IF;
+
+  SELECT pg_get_userbyid(nspowner) INTO schema_owner
+    FROM pg_namespace
+   WHERE nspname = 'public';
+
+  IF schema_owner IS DISTINCT FROM 'brandspace_migrator' THEN
+    RAISE EXCEPTION
+      'public schema must be owned by brandspace_migrator, found %',
+      COALESCE(schema_owner, '<missing>');
+  END IF;
 END
-$$;
+$;
