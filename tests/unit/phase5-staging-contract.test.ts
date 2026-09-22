@@ -270,6 +270,18 @@ describe('the client-origin contract reaches staging unchanged', () => {
   });
 });
 
+describe('the Railway marketing service builds the Next app it starts', () => {
+  it('builds @brandspace/web before running next start', () => {
+    const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
+    const webStart = railway.indexOf("const web = service('web'");
+    const dashboardStart = railway.indexOf("const dashboard = service('dashboard'");
+    const webBlock = railway.slice(webStart, dashboardStart);
+
+    expect(webBlock).toContain("buildCommand: 'pnpm --filter @brandspace/web build'");
+    expect(webBlock).toContain("startCommand: 'pnpm --filter @brandspace/web start'");
+  });
+});
+
 describe('the Railway browser app healthchecks use stable 200 routes', () => {
   it('does not probe the locale-redirecting root for dashboard or admin', () => {
     const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
