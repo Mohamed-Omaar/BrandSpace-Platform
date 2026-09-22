@@ -56,14 +56,123 @@
 const FORWARDED_FOR = 'x-forwarded-for';
 const USER_AGENT = 'user-agent';
 
-/** How many proxies sit in front of this process, from the environment. */
+/**
+ * HOW THE CLIENT'S ADDRESS IS ESTABLISHED, named rather than inferred.
+ *
+ * A BARE HOP COUNT CANNOT EXPRESS RAILWAY, which is why this exists. Railway's
+ * edge proxy STRIPS a client-supplied `X-Forwarded-For` and writes the real
+ * connecting address as the FIRST entry, then its own network appends as the
+ * request travels inward — and the number of internal hops varies with the
+ * routing path, because the CDN layer adds one and is not always in the path.
+ * A right-counted index against a hop count that is not stable is wrong
+ * intermittently, which is the worst way for a security control to be wrong.
+ * The leftmost entry is stable, and is the value Railway documents as the real
+ * client IP.
+ *
+ * SO THE STRATEGY IS DECLARED, NOT GUESSED:
+ *
+ *   `railway-edge`  the leftmost `X-Forwarded-For` entry. Correct wherever the
+ *                   edge strips client input and writes the client first.
+ *   `xff-hops`      generic append semantics: `chain.length - TRUSTED_PROXY_HOPS`,
+ *                   for an ordinary reverse proxy that appends its own peer.
+ *   `direct`        no proxy at all; the transport peer is the client.
+ *
+ * `X-REAL-IP` IS DELIBERATELY NOT USED. Railway sets it, and on paper a single
+ * value is stronger than a list — but Railway documents it as CURRENTLY WRONG
+ * when the CDN is in the path, where it carries the CDN edge address instead of
+ * the client. A header that is right most of the time and silently wrong behind
+ * a CDN is worse for a rate limiter than a list with a documented reading, and
+ * switching to it later is a one-line change to this file plus a strategy name.
+ */
+export const CLIENT_ORIGIN_STRATEGIES = ['railway-edge', 'xff-hops', 'direct'] as const;
+
+export type ClientOriginStrategy = (typeof CLIENT_ORIGIN_STRATEGIES)[number];
+
+/** Raised for configuration this module refuses to interpret. */
+export class ClientOriginConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClientOriginConfigurationError';
+  }
+}
+
+/**
+ * Parse a hop count STRICTLY. Never coerces.
+ *
+ * THE OLD READER COERCED EVERYTHING TO A SAFE-LOOKING NUMBER: `''`, `-3`,
+ * `lots` and `1.5` all became 0, and `900` became 10. Every one of those is an
+ * operator who believed they had configured something, and 0 means "do not read
+ * the header at all" — so a typo silently disabled the per-source rate limiter
+ * and looked exactly like a working deployment. Malformed security
+ * configuration must fail, loudly, at start-up.
+ */
+export function parseTrustedProxyHops(raw: string | undefined): number {
+  if (raw === undefined) {
+    throw new ClientOriginConfigurationError('TRUSTED_PROXY_HOPS is not set.');
+  }
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    throw new ClientOriginConfigurationError('TRUSTED_PROXY_HOPS is empty.');
+  }
+  // Digits only: `1abc`, `1.5`, `-1`, ` 1 2` and `0x1` are all refused rather
+  // than truncated by `parseInt`, which happily reads `1abc` as 1.
+  if (!/^[0-9]+$/.test(trimmed)) {
+    throw new ClientOriginConfigurationError(
+      'TRUSTED_PROXY_HOPS must be a whole number of proxies, written in digits only.',
+    );
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (parsed < 1) {
+    throw new ClientOriginConfigurationError(
+      'TRUSTED_PROXY_HOPS must be at least 1 under the xff-hops strategy; ' +
+        'a deployment with no proxy in front of it uses the direct strategy instead.',
+    );
+  }
+  if (parsed > MAX_TRUSTED_PROXY_HOPS) {
+    throw new ClientOriginConfigurationError(
+      `TRUSTED_PROXY_HOPS must not exceed ${MAX_TRUSTED_PROXY_HOPS}: a larger value reads ` +
+        'further into the part of the chain a client controls.',
+    );
+  }
+  return parsed;
+}
+
+/** The most proxies this will believe in. A typo must not read the far end. */
+export const MAX_TRUSTED_PROXY_HOPS = 10;
+
+/** The declared strategy, or undefined when none is set. Never guesses. */
+export function clientOriginStrategy(
+  env: NodeJS.ProcessEnv = process.env,
+): ClientOriginStrategy | undefined {
+  const raw = env['CLIENT_ORIGIN_STRATEGY']?.trim();
+  if (raw === undefined || raw === '') return undefined;
+  if ((CLIENT_ORIGIN_STRATEGIES as readonly string[]).includes(raw)) {
+    return raw as ClientOriginStrategy;
+  }
+  throw new ClientOriginConfigurationError(
+    `CLIENT_ORIGIN_STRATEGY must be one of ${CLIENT_ORIGIN_STRATEGIES.join(', ')}.`,
+  );
+}
+
+/**
+ * How many proxies sit in front of this process.
+ *
+ * KEPT FOR THE `xff-hops` STRATEGY AND FOR COMPATIBILITY. An unset value is 0,
+ * which means "read no header"; a SET value is parsed strictly and a malformed
+ * one throws rather than quietly becoming 0.
+ */
 export function trustedProxyHops(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env['TRUSTED_PROXY_HOPS'];
-  if (raw === undefined || raw.trim() === '') return 0;
-  const parsed = Number.parseInt(raw.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed < 0) return 0;
-  // A ceiling, so a typo cannot turn into "read the far end of a long list".
-  return Math.min(parsed, 10);
+  /*
+   * ABSENT IS ZERO — "read no header" — and that is the one safe coercion: a
+   * deployment that configured nothing trusts nothing.
+   *
+   * PRESENT-BUT-EMPTY IS NOT ABSENT. Somebody who wrote `TRUSTED_PROXY_HOPS=`
+   * believes they configured a hop count, and reading that as zero is the
+   * silent-disable this whole parser exists to stop.
+   */
+  if (raw === undefined) return 0;
+  return parseTrustedProxyHops(raw);
 }
 
 /** A header bag in either of the two shapes the two apps hand us. */
@@ -140,10 +249,20 @@ export interface RequestContext {
  * `AuthRateLimiter.enforce` says so in the log rather than skipping in silence.
  */
 export function requestContext(input: RequestContextInput): RequestContext {
-  const hops = trustedProxyHops(input.env ?? process.env);
+  const env = input.env ?? process.env;
   const userAgent = headerValue(input.headers, USER_AGENT)?.slice(0, 512) || undefined;
 
-  if (hops === 0) {
+  /*
+   * THE DECLARED STRATEGY WINS. When none is declared the old behaviour stands:
+   * a hop count means `xff-hops`, and no hop count means `direct`. That keeps
+   * every existing deployment and test reading the same way, while production
+   * is required by `assertProductionSafety` to declare one explicitly.
+   */
+  const declared = clientOriginStrategy(env);
+  const hops = trustedProxyHops(env);
+  const strategy: ClientOriginStrategy = declared ?? (hops === 0 ? 'direct' : 'xff-hops');
+
+  if (strategy === 'direct') {
     return { ip: normalizeAddress(input.socketAddress), userAgent };
   }
 
@@ -152,6 +271,18 @@ export function requestContext(input: RequestContextInput): RequestContext {
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry !== '');
+
+  if (strategy === 'railway-edge') {
+    /*
+     * THE LEFTMOST ENTRY, because the edge wrote it. Railway strips whatever
+     * `X-Forwarded-For` the caller sent and puts the real connecting address
+     * first, so position 0 is infrastructure's word and not the client's. An
+     * empty chain means the request did not arrive through that edge at all,
+     * and the socket peer is the only thing left worth believing.
+     */
+    if (chain.length === 0) return { ip: normalizeAddress(input.socketAddress), userAgent };
+    return { ip: normalizeAddress(chain[0]), userAgent };
+  }
 
   /*
    * `hops` entries were appended by infrastructure we run, and the client is the

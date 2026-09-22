@@ -142,22 +142,24 @@ on nobody having set the wrong variable.
 
 ## D — Owner-supplied settings
 
-| Variable                    | Services  | Secret | Required | Format                                   | Production rule                                                                                                                  |
-| --------------------------- | --------- | :----: | :------: | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                  | all       |   no   |   yes    | `production`                             | Every built Next.js app sets this. It is the build mode, **not** the deployment environment.                                     |
-| `APP_ENV`                   | all       |   no   |   yes    | `production` \| `staging`                | **This** is the deployment environment (D-97). Drives every production guard.                                                    |
-| `DATA_REGION`               | all       |   no   |   yes    | `eu-west`                                | Where the data actually is. See the residency note in the deployment doc §1.4.                                                   |
-| `LOG_LEVEL`                 | all       |   no   |    no    | `info` in production, `debug` in staging | Default `info`.                                                                                                                  |
-| `PUBLIC_WEB_URL`            | W D A P K |   no   |    no    | `https://www.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it. Https-checked if set. See the profile note below.       |
-| `DASHBOARD_URL`             | W D A P K |   no   |   yes    | `https://app.example.com`                |                                                                                                                                  |
-| `ADMIN_URL`                 | D A P K   |   no   |   yes    | `https://admin.example.com`              |                                                                                                                                  |
-| `API_URL`                   | D A P K   |   no   |   yes    | `https://api.example.com`                |                                                                                                                                  |
-| `PUBLIC_API_BASE_URL`       | D A P K   |   no   | **A P**  | `https://api.example.com`                | **Required by `admin` and `api`** — they read it. Every OAuth callback and webhook URL is built from it. Https-checked if set.   |
-| `PUBLIC_DASHBOARD_BASE_URL` | D A P K   |   no   | **D P**  | `https://app.example.com`                | **Required by `dashboard` and `api`** — every customer return URL and email link is built from it. Https-checked if set.         |
-| `BRANDSPACE_API_URL`        | D A       |   no   |   yes    | `http://api.railway.internal:3003`       | **Internal only.** `http://` is correct: Railway's private network is already WireGuard-encrypted.                               |
-| `WORKER_PORT`               | K         |   no   |   yes    | `3004`                                   | The worker serves its liveness endpoint here, not on `PORT`. Set both to the same value or Railway's probe hits a closed socket. |
-| `OTEL_SERVICE_NAME`         | all       |   no   |    no    | `brandspace`                             | Default `brandspace`.                                                                                                            |
-| `BRANDSPACE_WEBFONTS`       | D A       |   no   |    no    | `google`                                 | Opt-in. Unset keeps rendering hermetic. Leave unset unless the owner wants Google-hosted fonts.                                  |
+| Variable                    | Services  | Secret | Required | Format                                   | Production rule                                                                                                                                         |
+| --------------------------- | --------- | :----: | :------: | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                  | all       |   no   |   yes    | `production`                             | Every built Next.js app sets this. It is the build mode, **not** the deployment environment.                                                            |
+| `APP_ENV`                   | all       |   no   |   yes    | `production` \| `staging`                | **This** is the deployment environment (D-97). Drives every production guard.                                                                           |
+| `DATA_REGION`               | all       |   no   |   yes    | `eu-west`                                | Where the data actually is. See the residency note in the deployment doc §1.4.                                                                          |
+| `CLIENT_ORIGIN_STRATEGY`    | **D P**   |   no   | **D P**  | `railway-edge`                           | **How the source address is established. `dashboard` and `api` REFUSE TO START without it in production.** Blueprint literal; see §Client origin below. |
+| `TRUSTED_PROXY_HOPS`        | —         |   no   |    no    | `1`                                      | Only under the `xff-hops` strategy, which this deployment does not use. Digits only, 1–10; a malformed value is **refused, never coerced**.             |
+| `LOG_LEVEL`                 | all       |   no   |    no    | `info` in production, `debug` in staging | Default `info`.                                                                                                                                         |
+| `PUBLIC_WEB_URL`            | W D A P K |   no   |    no    | `https://www.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it. Https-checked if set. See the profile note below.                              |
+| `DASHBOARD_URL`             | W D A P K |   no   |   yes    | `https://app.example.com`                |                                                                                                                                                         |
+| `ADMIN_URL`                 | D A P K   |   no   |   yes    | `https://admin.example.com`              |                                                                                                                                                         |
+| `API_URL`                   | D A P K   |   no   |   yes    | `https://api.example.com`                |                                                                                                                                                         |
+| `PUBLIC_API_BASE_URL`       | D A P K   |   no   | **A P**  | `https://api.example.com`                | **Required by `admin` and `api`** — they read it. Every OAuth callback and webhook URL is built from it. Https-checked if set.                          |
+| `PUBLIC_DASHBOARD_BASE_URL` | D A P K   |   no   | **D P**  | `https://app.example.com`                | **Required by `dashboard` and `api`** — every customer return URL and email link is built from it. Https-checked if set.                                |
+| `BRANDSPACE_API_URL`        | D A       |   no   |   yes    | `http://api.railway.internal:3003`       | **Internal only.** `http://` is correct: Railway's private network is already WireGuard-encrypted.                                                      |
+| `WORKER_PORT`               | K         |   no   |   yes    | `3004`                                   | The worker serves its liveness endpoint here, not on `PORT`. Set both to the same value or Railway's probe hits a closed socket.                        |
+| `OTEL_SERVICE_NAME`         | all       |   no   |    no    | `brandspace`                             | Default `brandspace`.                                                                                                                                   |
+| `BRANDSPACE_WEBFONTS`       | D A       |   no   |    no    | `google`                                 | Opt-in. Unset keeps rendering hermetic. Leave unset unless the owner wants Google-hosted fonts.                                                         |
 
 ### The https constraint is a deployment-order constraint, and it is now per service
 
@@ -378,3 +380,47 @@ per environment, but nothing stops an operator pasting the same value into both.
 - ☐ `INTERNAL_SERVICE_TOKEN`
 - ☐ The Resend API key (entered in the Hub, not here)
 - ☐ Every class C secret, as §C already requires
+
+---
+
+## Client origin — why `railway-edge`, and why it is mandatory
+
+The customer authentication rate limiter counts attempts **per source**. A process
+that cannot establish a source does not apply that ceiling at all — and it fails
+silently: nothing errors, nothing logs, and the deployment looks healthy while the
+dimension that stops a spray across many accounts is simply absent. That was the
+live state before this change: neither `dashboard` nor `api` carried any origin
+configuration.
+
+So `CLIENT_ORIGIN_STRATEGY` is **required in production on those two services**, and
+`assertProductionSafety` refuses to start without it. The other three services never
+establish a customer's source address, and a variable a service does not read is one
+that drifts.
+
+### Why the leftmost `X-Forwarded-For` entry
+
+Railway's edge proxy **strips a client-supplied `X-Forwarded-For`** and writes the real
+connecting address as the **first** entry, so position 0 is infrastructure's word and
+not the caller's.
+
+The ordinary reverse-proxy reading — count `n` entries from the right — **cannot** be
+correct on Railway, because the number of internal hops is not stable: the CDN layer
+adds one and is not always in the routing path. A fixed count would therefore be right
+only some of the time, which for a security control is worse than being obviously wrong.
+The leftmost entry does not move.
+
+### Why not `X-Real-IP`
+
+Railway sets it, and a single value is stronger in principle than a list. But Railway
+documents it as **currently incorrect when the CDN is in the path**, where it carries the
+CDN edge address rather than the client's. A header that is right most of the time and
+silently wrong behind a CDN is the worst possible input to a rate limiter. If Railway
+fixes it, moving is one branch in `requestContext` plus a new strategy name.
+
+### What happens when no origin can be established
+
+In production the limiter **refuses the request** rather than proceeding without a source
+budget. Outside production it warns and skips, so a developer with no proxy can still sign
+in. See `docs/SECURITY.md` §10.1.
+
+---

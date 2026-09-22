@@ -316,6 +316,30 @@ export default defineRailway((ctx, project) => {
   const internalApiUrl = `http://api.railway.internal:${PORTS.api}`;
 
   // -------------------------------------------------------------------------
+  /**
+   * HOW A SERVICE ESTABLISHES THE CLIENT'S ADDRESS — the two that read it.
+   *
+   * ONLY `dashboard` AND `api`. They are the processes that terminate
+   * unauthenticated customer requests and run the authentication rate limiter,
+   * which counts attempts per SOURCE. The marketing site, the Control Center and
+   * the worker never ask the question, and a variable a service does not read is
+   * one that drifts out of date without anybody noticing.
+   *
+   * `railway-edge` IS THE CORRECT VALUE HERE, and it is a literal rather than an
+   * owner setting because it is a property of Railway, not of this deployment:
+   * the edge proxy strips a client-supplied `X-Forwarded-For` and writes the real
+   * connecting address FIRST. Counting hops from the right — the ordinary
+   * reverse-proxy reading — cannot be correct on Railway, because the number of
+   * internal hops changes with the routing path when the CDN layer is involved.
+   *
+   * WITHOUT IT THE SERVICE REFUSES TO START in production (`assertProductionSafety`),
+   * which is deliberate: the failure it replaces was a per-source rate limiter
+   * that silently did not apply.
+   */
+  const clientOriginEnv = {
+    CLIENT_ORIGIN_STRATEGY: 'railway-edge',
+  } as const;
+
   // PUBLIC SERVICES
   // -------------------------------------------------------------------------
 
@@ -367,6 +391,7 @@ export default defineRailway((ctx, project) => {
       ...databaseEnv,
       ...publicUrlEnv,
       PORT: String(PORTS.dashboard),
+      ...clientOriginEnv,
       REDIS_URL: ref(cache, 'REDIS_URL'),
       BRANDSPACE_API_URL: internalApiUrl,
       CUSTOMER_SESSION_SECRET: ownerSecret(
@@ -515,6 +540,7 @@ export default defineRailway((ctx, project) => {
       ...customerMfaVaultEnv,
       ...awsIdentityFor('api', 'the three vault keys and no others'),
       PORT: String(PORTS.api),
+      ...clientOriginEnv,
       REDIS_URL: ref(cache, 'REDIS_URL'),
       /*
        * THE CREATIVE ROUTES AND THE MAINTENANCE SWEEPS BOTH TOUCH OBJECTS, and

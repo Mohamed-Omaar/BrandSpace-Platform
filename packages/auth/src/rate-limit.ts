@@ -7,6 +7,7 @@ import {
   type Clock,
   createLogger,
   internalErrorFields,
+  isProduction,
   systemClock,
 } from '@brandspace/shared';
 
@@ -250,12 +251,46 @@ export class AuthRateLimiter {
      * dashboard ran with no per-source ceiling at all and nothing said so.
      */
     if (subject === undefined || subject.trim() === '') {
-      if (scope.endsWith(':ip')) {
-        log.warn('no source address could be established, so this dimension is not counted', {
+      if (!scope.endsWith(':ip')) return;
+
+      /*
+       * IN PRODUCTION THIS IS A REFUSAL, NOT A SKIP.
+       *
+       * The invariant: an unauthenticated customer request in production either
+       * has a trustworthy source identity that the limiter counts, or it is
+       * refused. It must never proceed with no source budget at all — which is
+       * precisely what a missing `CLIENT_ORIGIN_STRATEGY` produced, silently,
+       * on every sign-in, signup, reset and MFA attempt.
+       *
+       * `assertClientOriginContract` should already have stopped the process
+       * from starting, so reaching here in production means the contract was
+       * satisfied at boot and the request still arrived with no usable origin —
+       * a request that did not come through the declared edge. Refusing it is
+       * the same fail-closed reasoning as an unwritable counter: the refusal is
+       * generic, names nothing, and costs a caller who is where they should be
+       * nothing at all.
+       */
+      if (isProduction()) {
+        log.error('no source address could be established, so the request is refused', {
           scope,
-          hint: 'Set TRUSTED_PROXY_HOPS to the number of proxies in front of this process.',
+          hint:
+            'CLIENT_ORIGIN_STRATEGY must describe how this deployment establishes the client ' +
+            'address; on Railway it is railway-edge.',
         });
+        throw new RateLimitedError(scope, 60);
       }
+
+      /*
+       * OUTSIDE PRODUCTION IT IS A WARNING AND A SKIP. A developer on a laptop
+       * has no proxy and no forwarded header, and refusing every local sign-in
+       * would make the guard something people switch off. It is still logged,
+       * because a limiter that quietly stops counting looks exactly like one
+       * that is working.
+       */
+      log.warn('no source address could be established, so this dimension is not counted', {
+        scope,
+        hint: 'Set CLIENT_ORIGIN_STRATEGY (and TRUSTED_PROXY_HOPS under xff-hops).',
+      });
       return;
     }
     const decision = await this.record(scope, subject, limit, windowSeconds);

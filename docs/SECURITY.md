@@ -538,6 +538,40 @@ deployment defect; it is never pooled onto a constant, which would rate-limit th
 the list: a request that did not traverse the expected chain is not one whose claimed origin we believe, and
 reaching left to produce _some_ address is exactly the control this must deny (D-251).
 
+### The strategy is declared, not inferred (D-256)
+
+`CLIENT_ORIGIN_STRATEGY` names the contract in force, and the `dashboard` and `api` services **refuse to
+start in production without it**. They are the two processes that terminate unauthenticated customer
+requests and run the limiter; the marketing site, the Control Center and the worker never ask.
+
+| Strategy       | Reading                             | Where it is right                                                             |
+| -------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| `railway-edge` | leftmost `X-Forwarded-For` entry    | Railway: the edge strips a client-supplied header and writes the client first |
+| `xff-hops`     | `chain.length - TRUSTED_PROXY_HOPS` | an ordinary reverse proxy that appends its own peer                           |
+| `direct`       | the transport peer                  | no proxy at all — **refused in production**                                   |
+
+**On Railway a hop count is the wrong primitive.** The number of internal hops varies with the routing path
+because the CDN layer adds one and is not always present, so any fixed right-counted index is correct only
+some of the time. The leftmost entry does not move.
+
+**`X-Real-IP` is deliberately unused.** Railway sets it and documents it as currently wrong when the CDN is
+in the path, where it carries the CDN edge address rather than the client's.
+
+**Malformed configuration is refused, never coerced.** `TRUSTED_PROXY_HOPS` is digits only, at least 1, at
+most 10. An empty, fractional, negative, trailing-garbage or oversized value fails at start-up. The previous
+reader turned every one of them into `0`, which means _read no header_ — a typo that silently switched the
+per-source limiter off and looked exactly like a working deployment.
+
+### The production invariant
+
+> An unauthenticated customer request in production either has a trustworthy source identity that the
+> authentication rate limiter counts, or it is generically refused. It never proceeds with no source budget.
+
+Two locks enforce it. **At start-up**, a production consumer with no declared strategy does not boot. **Per
+request**, if one still arrives with no establishable origin, `AuthRateLimiter.enforce` raises a generic
+`RATE_LIMITED` rather than skipping the dimension. Outside production it warns and skips, because a
+developer has no proxy and a guard that refuses every local sign-in is a guard people switch off.
+
 **Abuse controls:** bot protection on sign-up and contact forms, disposable-email policy (configurable),
 velocity checks on invitations and trials, duplicate-account heuristics, automatic throttling on anomalous
 AI burn, and an owner-visible abuse queue.

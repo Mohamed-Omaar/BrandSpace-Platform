@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   AuthRateLimiter,
   BOOTSTRAP_CEILINGS,
@@ -621,5 +621,81 @@ describe('a caller cannot mint identities with X-Forwarded-For', () => {
       .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
 
     expect(secondOutcome).toBe('refused');
+  });
+});
+
+/**
+ * PRODUCTION NEVER PROCEEDS WITHOUT A SOURCE BUDGET — Phase 4, review fix.
+ *
+ * THE VERIFIED LIVE STATE THIS ANSWERS. Neither `dashboard` nor `api` carried any
+ * origin configuration in production. With none, `requestContext` establishes no
+ * address, and `enforce` used to SKIP any dimension whose subject was undefined —
+ * so every unauthenticated customer request ran with the per-account ceiling
+ * alone and no per-source ceiling whatever. Nothing failed and nothing logged.
+ *
+ * THE INVARIANT, ASSERTED AGAINST THE REAL LIMITER AND A REAL DATABASE: an
+ * unauthenticated request in production either has a trustworthy source identity
+ * that is counted, or is refused. It never proceeds with no source budget.
+ */
+describe('in production a request with no establishable source is refused', () => {
+  const REAL_APP_ENV = process.env['APP_ENV'];
+
+  afterEach(() => {
+    if (REAL_APP_ENV === undefined) delete process.env['APP_ENV'];
+    else process.env['APP_ENV'] = REAL_APP_ENV;
+  });
+
+  it('REFUSES rather than silently skipping the source dimension', async () => {
+    const target = await customer();
+    const service = auth();
+
+    // APP_ENV, never NODE_ENV (D-97).
+    process.env['APP_ENV'] = 'production';
+
+    const outcome = await service
+      .signIn({ email: target.email, password: PASSWORD, ip: undefined })
+      .then(() => 'allowed')
+      .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
+
+    /*
+     * NOT 'allowed'. The password is CORRECT here on purpose: without the
+     * refusal this sign-in succeeds, which is exactly the silent hole — a
+     * production request completing with no per-source accounting at all.
+     */
+    expect(outcome).toBe('rate-limited');
+  });
+
+  it('still counts normally when an origin IS established in production', async () => {
+    const target = await customer();
+    const service = auth();
+    process.env['APP_ENV'] = 'production';
+
+    const origin = requestContext({
+      headers: { 'x-forwarded-for': freshIp() },
+      env: { CLIENT_ORIGIN_STRATEGY: 'railway-edge' } as NodeJS.ProcessEnv,
+    });
+
+    const outcome = await service
+      .signIn({ email: target.email, password: PASSWORD, ip: origin.ip })
+      .then(() => 'allowed')
+      .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
+
+    // The refusal must be narrow: a correctly configured deployment is unaffected.
+    expect(outcome).toBe('allowed');
+  });
+
+  it('OUTSIDE production it warns and skips, so a laptop still signs in', async () => {
+    const target = await customer();
+    const service = auth();
+    process.env['APP_ENV'] = 'development';
+
+    const outcome = await service
+      .signIn({ email: target.email, password: PASSWORD, ip: undefined })
+      .then(() => 'allowed')
+      .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
+
+    // A developer has no proxy and no forwarded header. Refusing every local
+    // sign-in would make this guard the first thing anybody turned off.
+    expect(outcome).toBe('allowed');
   });
 });

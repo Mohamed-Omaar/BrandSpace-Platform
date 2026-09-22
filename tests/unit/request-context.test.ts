@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { requestContext, trustedProxyHops } from '@brandspace/shared';
+import {
+  ClientOriginConfigurationError,
+  requestContext,
+  trustedProxyHops,
+} from '@brandspace/shared';
 
 /**
  * WHOSE ADDRESS IS IT — Phase 4 §5, corrected after review.
@@ -306,17 +310,40 @@ describe('the header bag may be either shape', () => {
   });
 });
 
-describe('the hop count is read defensively', () => {
-  it('treats absent, empty, negative and unparseable values as zero', () => {
-    expect(trustedProxyHops({})).toBe(0);
-    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '' })).toBe(0);
-    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '  ' })).toBe(0);
-    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '-3' })).toBe(0);
-    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: 'lots' })).toBe(0);
+describe('the hop count is read STRICTLY, never coerced', () => {
+  /*
+   * THIS BLOCK USED TO ASSERT THE OPPOSITE, and that was the defect. `''`,
+   * `-3`, `lots` and `1.5` all became 0, and 0 means "do not read the header at
+   * all" — so a typo in a production security variable silently disabled the
+   * per-source rate limiter and looked exactly like a working deployment. An
+   * operator who mistypes has still configured something; they must be told.
+   */
+  it('REFUSES every malformed value rather than reading it as zero', () => {
+    for (const raw of ['', '   ', '-3', 'lots', '1.5', '1abc', '0x1', '1 2', '0']) {
+      expect(() => trustedProxyHops({ TRUSTED_PROXY_HOPS: raw })).toThrow(
+        ClientOriginConfigurationError,
+      );
+    }
   });
 
-  it('caps a typo rather than reading the far end of a long list', () => {
-    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '900' })).toBe(10);
+  it('REFUSES a value past the ceiling rather than capping it', () => {
+    // Capping a typo silently read further into the part of the chain a client
+    // controls than the operator ever asked for.
+    expect(() => trustedProxyHops({ TRUSTED_PROXY_HOPS: '900' })).toThrow(
+      ClientOriginConfigurationError,
+    );
+  });
+
+  it('an ABSENT value is still zero, which means "read no header"', () => {
+    // The one coercion that remains, and it is the safe direction: nothing
+    // configured means nothing trusted.
+    expect(trustedProxyHops({})).toBe(0);
+  });
+
+  it('accepts the values it should', () => {
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '1' })).toBe(1);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: ' 2 ' })).toBe(2);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: '10' })).toBe(10);
   });
 });
 
