@@ -360,6 +360,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   EmailVerificationToken: 'email_verification_token',
   UserLegalAcceptance: 'user_legal_acceptance',
   UserMfaRecoveryCode: 'user_mfa_recovery_code',
+  AuthRateLimit: 'auth_rate_limit',
 };
 
 export function isTenantOwned(model: string): model is TenantModel {

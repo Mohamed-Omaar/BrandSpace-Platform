@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  BOOTSTRAP_CEILINGS,
   CUSTOMER_MAX_FAILED_ATTEMPTS,
   CUSTOMER_REALM,
   CustomerAuthService,
@@ -43,7 +44,29 @@ beforeAll(async () => {
   // `listWorkspaces` returned NOTHING under RLS, because `membership` and
   // `workspace` are invisible without a workspace context — which is precisely
   // the state authentication runs in.
-  auth = new CustomerAuthService({ prisma: app });
+  /*
+   * CEILINGS WELL ABOVE WHAT THIS SUITE DOES — Phase 4 (F-19, D-250).
+   *
+   * The abuse ceilings are real, and this file signs the SAME fixture account in
+   * over thirty times across its cases; under the schema defaults it now trips
+   * the per-account ceiling partway through, which is the limiter working. What
+   * this suite is about is realm separation, enumeration resistance, lockout and
+   * password-reset atomicity — the ceilings have their own suite
+   * (`phase4-auth-abuse`), and a number here that interfered with these cases
+   * would make them fail for a reason none of them is testing.
+   */
+  auth = new CustomerAuthService({
+    prisma: app,
+    ceilings: {
+      ...BOOTSTRAP_CEILINGS,
+      signInPerIp: 100_000,
+      signInPerAccount: 100_000,
+      passwordResetPerIp: 100_000,
+      passwordResetPerAccount: 100_000,
+      mfaPerIp: 100_000,
+      mfaPerAccount: 100_000,
+    },
+  });
 
   // Give tenant A's owner a usable password. B's owner deliberately keeps none,
   // so the "passwordless account" path is exercised too.
