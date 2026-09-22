@@ -69,7 +69,10 @@ function productionEnv(profile: 'dashboard' | 'api' | 'web' | 'admin' | 'worker'
    */
   if (profile !== 'web') {
     base['DATABASE_URL'] = appDb;
-    base['AWS_ACCESS_KEY_ID'] = 'AKIA7SDFKJHG3MNBVCXZ';
+    // DELIBERATELY NOT AKIA-SHAPED. Nothing here validates the format, and a
+    // credential-shaped literal would trip the repository's secret scan — which
+    // is the scan doing its job, not an inconvenience to work around.
+    base['AWS_ACCESS_KEY_ID'] = 'aws-access-key-id-for-unit-tests';
     base['AWS_SECRET_ACCESS_KEY'] = secret('aws');
   }
   if (profile === 'dashboard') {
