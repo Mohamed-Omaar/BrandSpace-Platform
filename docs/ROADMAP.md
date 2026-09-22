@@ -31,6 +31,10 @@ phases. Where the two could be confused, the newer one is written out in full �
 credit and subscription machinery the callers it never had (`docs/BILLING-AND-CREDITS.md` Part V,
 D-237 to D-242). It is a different piece of work from this document's Phase 3 and does not replace it.
 
+The same holds for **current execution Phase 4 — Identity, Authentication and Security Completion**
+(D-250 to D-255, `docs/SECURITY.md` §10.1), which closed F-19 and is NOT this document's delivered
+"Phase 4 — AI Gateway".
+
 ---
 
 ## How to Read This Roadmap

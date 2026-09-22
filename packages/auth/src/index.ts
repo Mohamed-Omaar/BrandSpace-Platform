@@ -9,6 +9,7 @@ export * from './memberships';
 export * from './mfa';
 export * from './password';
 export * from './platform-session';
+export * from './rate-limit';
 export * from './realms';
 export * from './role-assignment';
 export * from './signup';

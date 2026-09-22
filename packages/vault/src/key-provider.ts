@@ -1,6 +1,6 @@
 import { createDecipheriv, createCipheriv, randomBytes, hkdfSync } from 'node:crypto';
 import { DecryptCommand, EncryptCommand, KMSClient } from '@aws-sdk/client-kms';
-import { currentEnvironment } from '@brandspace/shared';
+import { assertNotProduction, currentEnvironment } from '@brandspace/shared';
 
 /**
  * Key-encryption-key (KEK) provider — the envelope-encryption seam.
@@ -57,8 +57,9 @@ const IV_BYTES = 12;
  * policy, no independent audit trail, and the key sits in the same environment
  * as the data it protects.
  *
- * `assertNotProduction()` refuses to let it run in production, so shipping
- * without a KMS is a startup failure rather than a silent downgrade.
+ * `assertNotProduction()` in this constructor, AND the refusal in
+ * `createKeyProvider`, both stop it in production — so shipping without a KMS is
+ * a startup failure rather than a silent downgrade, whichever way it is reached.
  */
 export class LocalDevelopmentKeyProvider implements KeyProvider {
   readonly name = 'local-development';
@@ -66,6 +67,22 @@ export class LocalDevelopmentKeyProvider implements KeyProvider {
   readonly #keyId: string;
 
   constructor(masterKey: string, keyId = 'local-v1') {
+    /*
+     * THE GUARD THIS CLASS ALREADY CLAIMED TO HAVE — Phase 4.
+     *
+     * The comment above has said since Phase 1 that `assertNotProduction()`
+     * refuses to let this run in production, and the call was never here: the
+     * refusal lived in `createKeyProvider` alone. That factory is still the
+     * first lock and still the better error, because it can name the KMS
+     * variable to set. This is the second, for the same reason the doubles got
+     * theirs: a `new LocalDevelopmentKeyProvider(...)` anywhere else — a script,
+     * a helper, a future caller — met no refusal at all, and the file said it
+     * would.
+     */
+    assertNotProduction(
+      'The local development key provider',
+      'Set the KMS key ARN for this key domain instead (docs/RAILWAY-DEPLOYMENT.md §25): a key kept beside the data it protects has no hardware protection, no access policy and no independent audit trail.',
+    );
     if (masterKey.length < 32) {
       throw new Error(
         'SECRET_VAULT_KEK must be at least 32 characters. ' +

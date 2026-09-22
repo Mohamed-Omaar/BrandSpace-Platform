@@ -247,6 +247,22 @@ export function fail(reply: FastifyReply, action: string, error: unknown) {
     if (error.httpStatus >= 500) {
       log.error(`${action} failed`, { code: error.code, ...internalErrorFields(error) });
     }
+    /*
+     * A 429 CARRIES THE WAIT — Phase 4, docs/SECURITY.md §10.
+     *
+     * Set here rather than at each throw site, because this is the one exit
+     * every route error already passes through: a header added beside a throw
+     * is a header the next surface to refuse forgets. The value comes from the
+     * limiter's own window rather than a constant, so a client that honours it
+     * waits exactly as long as the ceiling actually lasts.
+     */
+    if (error.code === 'RATE_LIMITED') {
+      const seconds = (error.publicDetails as { retryAfterSeconds?: unknown } | undefined)
+        ?.retryAfterSeconds;
+      if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0) {
+        void reply.header('Retry-After', String(Math.ceil(seconds)));
+      }
+    }
     return reply
       .code(error.httpStatus)
       .send({ error: { code: error.code, details: error.publicDetails } });

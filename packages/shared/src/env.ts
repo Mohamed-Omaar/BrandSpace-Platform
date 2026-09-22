@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { currentEnvironment, type DeploymentEnvironment } from './deployment';
+import {
+  CLIENT_ORIGIN_STRATEGIES,
+  MAX_TRUSTED_PROXY_HOPS,
+  parseTrustedProxyHops,
+  type ClientOriginStrategy,
+} from './request-context';
 
 /**
  * Environment schema. Parsed once at boot — the process refuses to start on a bad
@@ -12,7 +18,7 @@ import { currentEnvironment, type DeploymentEnvironment } from './deployment';
 
 const nodeEnv = z.enum(['development', 'test', 'production']);
 
-export const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: nodeEnv.default('development'),
   APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
 
@@ -58,6 +64,29 @@ export const envSchema = z.object({
    * Absent means virtual-host, which is what R2 wants.
    */
   STORAGE_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
+
+  // --- Client origin (how a request's source address is established) --------
+  /**
+   * WHICH CONTRACT ESTABLISHES THE CLIENT'S ADDRESS. Required in production on
+   * the two services that read it — the dashboard and the API — because the
+   * authentication rate limiter counts by source, and a source it cannot
+   * establish is a per-source ceiling that is not being applied.
+   *
+   * `railway-edge` is the correct value for this deployment: Railway's edge
+   * proxy strips a client-supplied `X-Forwarded-For` and writes the real
+   * connecting address FIRST, and the number of internal hops varies with the
+   * routing path, so a right-counted hop number cannot be correct there.
+   */
+  CLIENT_ORIGIN_STRATEGY: z.enum(CLIENT_ORIGIN_STRATEGIES).optional(),
+  /**
+   * How many proxies append to `X-Forwarded-For` in front of this process.
+   *
+   * Only read under `xff-hops`, and PARSED STRICTLY: digits only, at least 1,
+   * at most 10. It is deliberately not coerced — `''`, `1abc`, `1.5` and `-1`
+   * used to become 0, which means "read no header", so a typo silently switched
+   * the per-source limiter off and looked like a working deployment.
+   */
+  TRUSTED_PROXY_HOPS: z.string().optional(),
 
   // --- Hostnames (D-04) -----------------------------------------------------
   PUBLIC_WEB_URL: z.string().url().optional(),
@@ -168,6 +197,69 @@ export const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().default('brandspace'),
 });
 
+/**
+ * THE CROSS-FIELD RULE: a hop count belongs to exactly one strategy.
+ *
+ * WHY THIS IS NOT A FIELD VALIDATOR. `TRUSTED_PROXY_HOPS` is not independently
+ * valid or invalid — it is REQUIRED under `xff-hops` and MEANINGLESS under the
+ * other two, so only the pair can be judged. Leaving it per-field produced the
+ * shape this rule exists to remove: a configuration that PASSED at start-up and
+ * then behaved unexpectedly at request time, e.g.
+ *
+ *     CLIENT_ORIGIN_STRATEGY=railway-edge
+ *     TRUSTED_PROXY_HOPS=
+ *
+ * which parsed cleanly and told an operator, wrongly, that a hop count was in
+ * force. A variable that the active strategy ignores must be ABSENT, not merely
+ * tolerated, because a reader who finds one reasonably concludes it is used.
+ *
+ * THE EFFECTIVE STRATEGY IS INFERRED FROM PRESENCE when none is declared, which
+ * is what `requestContext` does at runtime — the two must agree or this check
+ * would police a configuration the reader never sees.
+ */
+function refineClientOriginPair(
+  // `| undefined` explicitly: the repo runs `exactOptionalPropertyTypes`, so an
+  // optional marker alone would not accept the parsed shape zod hands over.
+  env: {
+    CLIENT_ORIGIN_STRATEGY?: ClientOriginStrategy | undefined;
+    TRUSTED_PROXY_HOPS?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const hops = env.TRUSTED_PROXY_HOPS;
+  const strategy: ClientOriginStrategy =
+    env.CLIENT_ORIGIN_STRATEGY ?? (hops === undefined ? 'direct' : 'xff-hops');
+
+  if (strategy === 'xff-hops') {
+    try {
+      parseTrustedProxyHops(hops);
+    } catch (error: unknown) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TRUSTED_PROXY_HOPS'],
+        message:
+          `is required under the xff-hops strategy and must be a whole number of proxies in ` +
+          `digits, at least 1 and at most ${MAX_TRUSTED_PROXY_HOPS}` +
+          (error instanceof Error ? ` (${error.message})` : ''),
+      });
+    }
+    return;
+  }
+
+  // `railway-edge` and `direct` read no hop count at all.
+  if (hops !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TRUSTED_PROXY_HOPS'],
+      message:
+        `must be absent under the ${strategy} strategy, which reads no hop count. ` +
+        'Leaving it set tells a reader the deployment counts proxies when it does not.',
+    });
+  }
+}
+
+export const envSchema = baseEnvSchema.superRefine(refineClientOriginPair);
+
 export type Env = z.infer<typeof envSchema>;
 
 /**
@@ -177,9 +269,9 @@ export type Env = z.infer<typeof envSchema>;
  * `parseEnv`, and widen only the startup parser so the web profile can prove
  * that DATABASE_URL is absent rather than being forced to invent one.
  */
-const startupEnvSchema = envSchema.extend({
-  DATABASE_URL: z.string().url().optional(),
-});
+const startupEnvSchema = baseEnvSchema
+  .extend({ DATABASE_URL: z.string().url().optional() })
+  .superRefine(refineClientOriginPair);
 
 type StartupEnv = z.infer<typeof startupEnvSchema>;
 
@@ -445,6 +537,69 @@ function assertDistinct(env: StartupEnv, names: readonly (keyof StartupEnv)[], w
   );
 }
 
+/**
+ * THE CLIENT-ORIGIN CONTRACT — the two services that read it must declare it.
+ *
+ * WHY IT IS FAIL-CLOSED RATHER THAN A DEFAULT. The customer authentication rate
+ * limiter counts attempts per source. A process that cannot establish a source
+ * does not apply that ceiling at all — and before this check, that was the state
+ * a production deployment reached by simply not setting a variable: the sign-in,
+ * signup, password-reset and MFA surfaces each kept their per-ACCOUNT ceiling and
+ * quietly lost the per-SOURCE one, which is the dimension that stops a spray
+ * across many accounts. Nothing failed, nothing logged, and the deployment looked
+ * healthy. A default would preserve exactly that: the only safe options are a
+ * declared contract or no start.
+ *
+ * ONLY THE CONSUMERS. `dashboard` and `api` terminate unauthenticated customer
+ * requests and run the limiter. The marketing site, the Control Center and the
+ * worker do not, so requiring it of them would be configuration nobody reads —
+ * and an unread variable is one that drifts.
+ */
+function assertClientOriginContract(env: StartupEnv, profile: StartupServiceProfile): void {
+  if (profile !== 'dashboard' && profile !== 'api') return;
+
+  /*
+   * ONLY `undefined` IS TESTED HERE, and that is not an oversight. An empty or
+   * misspelled value never reaches this function: the schema's enum refuses it
+   * first, so the process still does not start — it simply says "invalid" rather
+   * than "required". Re-checking for `''` would be unreachable code that reads
+   * like a second guard.
+   */
+  const strategy = env.CLIENT_ORIGIN_STRATEGY;
+  if (strategy === undefined) {
+    throw new Error(
+      `CLIENT_ORIGIN_STRATEGY is required in production for the ${profile} service: it is how ` +
+        'this process establishes the source address the authentication rate limiter counts. ' +
+        'Without it the per-source ceiling is silently not applied. ' +
+        `On Railway the value is railway-edge. (One of: ${CLIENT_ORIGIN_STRATEGIES.join(', ')}.)`,
+    );
+  }
+
+  /*
+   * THE HOP COUNT IS NOT RE-CHECKED HERE. `refineClientOriginPair` owns the
+   * whole pair in the schema, for every profile and every environment, so a
+   * second copy of the rule in this production-only path could only drift out
+   * of agreement with it.
+   */
+
+  /*
+   * `direct` IN PRODUCTION IS ALMOST CERTAINLY WRONG, and it is refused rather
+   * than warned about. It means "no proxy in front of this process", so every
+   * request resolves to the transport peer — which behind any load balancer is
+   * the balancer, putting every customer in the world into one rate-limit
+   * bucket. Somebody who genuinely serves without a proxy can say so by
+   * choosing the strategy consciously in a non-production environment; there is
+   * no deployment of this product where it is right.
+   */
+  if (strategy === 'direct') {
+    throw new Error(
+      `CLIENT_ORIGIN_STRATEGY must not be "direct" in production for the ${profile} service: ` +
+        'every request would resolve to the transport peer, which behind a load balancer is the ' +
+        'balancer — one rate-limit bucket for every customer. Use railway-edge on Railway.',
+    );
+  }
+}
+
 function assertProductionSafety(
   env: StartupEnv,
   profile: StartupServiceProfile = 'complete',
@@ -557,6 +712,7 @@ function assertProductionSafety(
   }
 
   assertPublicUrlContract(env, profile);
+  assertClientOriginContract(env, profile);
 }
 
 /**

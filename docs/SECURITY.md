@@ -479,8 +479,126 @@ decision with its own time box and audit trail (D-76), not a side effect of open
 | Per endpoint class | Read vs. write vs. AI vs. external-effect                                      |
 | Per provider       | Respect upstream quotas; internal concurrency caps                             |
 
-Responses use `429` with `Retry-After` and standard rate-limit headers. Algorithm: sliding-window or token
-bucket in Redis. Limits are per-plan configurable.
+Responses use `429` with `Retry-After`. Limits are configuration, in the activated `onboarding` document's
+`abuse` block, never constants.
+
+### 10.1 What is implemented — current execution Phase 4 (F-19, D-250)
+
+`AuthRateLimiter` in `@brandspace/auth` counts **two dimensions** for every customer-authentication
+operation, because neither subsumes the other: per **source address** stops one attacker spreading a few
+attempts each across thousands of accounts, and per **account** stops one address being ground down or
+mail-bombed.
+
+| Operation           | Per source | Per account | Also                                    |
+| ------------------- | ---------- | ----------- | --------------------------------------- |
+| Sign-in             | ✅         | ✅          | the existing 10-attempt account lockout |
+| Signup              | ✅         | —           | the address is the attacker's choice    |
+| Password reset      | ✅         | ✅          | the per-account one protects an inbox   |
+| Verification resend | ✅         | ✅          | the per-account cooldown and hourly cap |
+| Second factor       | ✅         | ✅          | the same account lockout                |
+
+**It lives in the services, not in a router.** The product signs people in through a Next.js server action
+and the API has its own routes for the same operations; a ceiling enforced in one router is a ceiling the
+other surface does not have, so `CustomerAuthService` and `SignupService` ask for it themselves.
+
+**PostgreSQL, not Redis** (R-07 named Redis for rate limits, and that still holds for per-request API
+throttling). This counter is the record of an attack in progress: it must survive a restart and be exactly
+right under concurrency, which one `INSERT … ON CONFLICT DO UPDATE … RETURNING` gives with the row lock
+the database already takes — and which a deterministic race test can prove.
+
+**It fails closed.** A counter that cannot be written REFUSES the attempt. That costs nothing real, because
+every one of these operations needs the same database one statement later; the alternative is the failure
+§19.1 names in as many words.
+
+**The subject is stored as a SHA-256 hash**, never an address or an email: the limiter only asks whether
+two attempts belong together, and a dump of the table then names nobody.
+
+**`X-Forwarded-For` is read from the RIGHT**, at `chain.length - TRUSTED_PROXY_HOPS`. It is a list the
+client can start, so trusting an entry the client could have written would let a caller choose the identity
+being counted — and therefore choose to have no limit.
+
+The selection follows the APPEND RULE, which is worth stating exactly because getting it one position wrong
+is silent. A proxy appends the address of the **peer that connected to it**, never its own. With trusted
+proxies P1…PN (P1 nearest the client) the header we receive is
+
+```
+<anything the client sent>, C, P1, …, P(N-1)
+```
+
+— exactly N entries appended by infrastructure we run, the **first** of which is the client. So with ONE
+trusted proxy the client is the **rightmost** entry, not the one before it.
+
+**Configuration is mandatory behind a proxy.** With no hop count the header is not read at all and the
+transport peer is used, which is correct for a direct connection and wrong for a load-balanced deployment:
+every caller then resolves to the balancer, or — on a Next.js server action, which has no transport peer —
+to nothing at all. A source dimension that cannot establish a subject is **skipped and logged** as a
+deployment defect; it is never pooled onto a constant, which would rate-limit the whole world as one caller.
+
+**When the chain is shorter than the configured hops**, the socket address is used and never an entry from
+the list: a request that did not traverse the expected chain is not one whose claimed origin we believe, and
+reaching left to produce _some_ address is exactly the control this must deny (D-251).
+
+### The strategy is declared, not inferred (D-256)
+
+`CLIENT_ORIGIN_STRATEGY` names the contract in force, and the `dashboard` and `api` services **refuse to
+start in production without it**. They are the two processes that terminate unauthenticated customer
+requests and run the limiter; the marketing site, the Control Center and the worker never ask.
+
+| Strategy       | Reading                             | Where it is right                                                             |
+| -------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| `railway-edge` | leftmost `X-Forwarded-For` entry    | Railway: the edge strips a client-supplied header and writes the client first |
+| `xff-hops`     | `chain.length - TRUSTED_PROXY_HOPS` | an ordinary reverse proxy that appends its own peer                           |
+| `direct`       | the transport peer                  | no proxy at all — **refused in production**                                   |
+
+**Each strategy has its own fallback rule, and the asymmetry is deliberate.**
+
+- `railway-edge` has **no socket fallback**. The transport peer behind Railway's edge is a Railway proxy —
+  on the API it is `req.ip`, which is infrastructure, never a customer. Substituting it when the header is
+  missing would collapse unrelated customers into **one shared rate-limit subject**, which is worse than
+  having no subject: it turns a missing signal into a wrong one. A missing or unusable chain therefore
+  answers `undefined`, and in production the limiter refuses. **Trustworthy edge origin, or refusal — never
+  proxy-peer substitution.**
+- `xff-hops` **keeps** its socket fallback, because nothing strips the header there: a chain shorter than the
+  declared hops means the request did not traverse the expected proxies, and the transport peer is the last
+  value the client could not have written.
+- `direct` reads only the socket peer, because under that strategy the peer _is_ the client.
+
+**A hop count belongs to exactly one strategy.** `TRUSTED_PROXY_HOPS` is not independently valid — it is
+required under `xff-hops` and meaningless under the other two, so the pair is validated together:
+
+| Strategy       | `TRUSTED_PROXY_HOPS`                   |
+| -------------- | -------------------------------------- |
+| `railway-edge` | **must be absent**                     |
+| `xff-hops`     | **must be present**, digits only, 1–10 |
+| `direct`       | **must be absent**                     |
+
+This removes a configuration that passed at start-up and then behaved unexpectedly at request time:
+`CLIENT_ORIGIN_STRATEGY=railway-edge` with `TRUSTED_PROXY_HOPS=` parsed cleanly and told an operator,
+wrongly, that a hop count was in force. `requestContext` correspondingly **does not parse the variable at
+all** unless the effective strategy is `xff-hops` — one that the active strategy ignores must never be able
+to fail a request.
+
+**On Railway a hop count is the wrong primitive.** The number of internal hops varies with the routing path
+because the CDN layer adds one and is not always present, so any fixed right-counted index is correct only
+some of the time. The leftmost entry does not move.
+
+**`X-Real-IP` is deliberately unused.** Railway sets it and documents it as currently wrong when the CDN is
+in the path, where it carries the CDN edge address rather than the client's.
+
+**Malformed configuration is refused, never coerced.** `TRUSTED_PROXY_HOPS` is digits only, at least 1, at
+most 10. An empty, fractional, negative, trailing-garbage or oversized value fails at start-up. The previous
+reader turned every one of them into `0`, which means _read no header_ — a typo that silently switched the
+per-source limiter off and looked exactly like a working deployment.
+
+### The production invariant
+
+> An unauthenticated customer request in production either has a trustworthy source identity that the
+> authentication rate limiter counts, or it is generically refused. It never proceeds with no source budget.
+
+Two locks enforce it. **At start-up**, a production consumer with no declared strategy does not boot. **Per
+request**, if one still arrives with no establishable origin, `AuthRateLimiter.enforce` raises a generic
+`RATE_LIMITED` rather than skipping the dimension. Outside production it warns and skips, because a
+developer has no proxy and a guard that refuses every local sign-in is a guard people switch off.
 
 **Abuse controls:** bot protection on sign-up and contact forms, disposable-email policy (configurable),
 velocity checks on invitations and trials, duplicate-account heuristics, automatic throttling on anomalous

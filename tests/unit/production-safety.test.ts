@@ -85,6 +85,13 @@ const COMPLETE = {
   PUBLIC_WEB_URL: 'https://brandspace.example',
   PUBLIC_API_BASE_URL: 'https://api.brandspace.example',
   PUBLIC_DASHBOARD_BASE_URL: 'https://app.brandspace.example',
+  /*
+   * PHASE 4. The dashboard and the API refuse to start in production without a
+   * declared client-origin contract (D-256), because a process that cannot
+   * establish a source address does not apply the per-source auth rate limit at
+   * all — silently. `railway-edge` is what the blueprint gives both.
+   */
+  CLIENT_ORIGIN_STRATEGY: 'railway-edge',
 } satisfies NodeJS.ProcessEnv;
 
 /** The public URLs every profile needs, so each fixture below stays readable. */
@@ -345,6 +352,7 @@ describe('each service holds exactly the key domains it uses', () => {
       env: {
         ...DEPLOYED,
         ...PUBLIC_URLS,
+        CLIENT_ORIGIN_STRATEGY: COMPLETE.CLIENT_ORIGIN_STRATEGY,
         // The dashboard READS this one — every customer return URL and email
         // link is built from it — so the per-profile contract requires it. The
         // blueprint gives the dashboard the whole `publicUrlEnv` spread, so the

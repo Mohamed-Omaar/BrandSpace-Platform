@@ -31,6 +31,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { assertNotProduction } from '@brandspace/shared';
 
 export interface StoredObject {
   readonly storageKey: string;
@@ -127,6 +128,21 @@ export class FilesystemObjectStore implements ObjectStore {
   readonly #root: string;
 
   constructor(root: string) {
+    /*
+     * ITS OWN GUARD, NOT SOMEBODY ELSE'S — Phase 4, reconciling the Phase 1 note.
+     *
+     * The factory/registry refusal that used to be the only thing keeping this
+     * out of production is correct and is still there. It is not sufficient on
+     * its own: it protects the ONE path that goes through it, and a `new` at any
+     * other call site — a script, a test helper promoted to a service, a new
+     * caller written by somebody who did not know the rule — reaches this
+     * constructor directly. CLAUDE.md §2.2 names `assertNotProduction()` as the
+     * way a double joins the refusing set; this is that call.
+     */
+    assertNotProduction(
+      'The filesystem object store',
+      'Configure S3-compatible object storage (STORAGE_BUCKET and its endpoint) before deploying to production: a container disk loses every upload on the next deploy.',
+    );
     this.#root = root;
   }
 

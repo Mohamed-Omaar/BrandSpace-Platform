@@ -25,7 +25,13 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { AppError, systemClock, type Clock, type Money } from '@brandspace/shared';
+import {
+  AppError,
+  assertNotProduction,
+  systemClock,
+  type Clock,
+  type Money,
+} from '@brandspace/shared';
 import type {
   CancelParams,
   CheckoutParams,
@@ -84,6 +90,21 @@ export class DevelopmentPaymentProvider implements PaymentProviderAdapter {
   readonly #clock: Clock;
 
   constructor(options: DevelopmentProviderOptions) {
+    /*
+     * ITS OWN GUARD, NOT SOMEBODY ELSE'S — Phase 4, reconciling the Phase 1 note.
+     *
+     * The factory/registry refusal that used to be the only thing keeping this
+     * out of production is correct and is still there. It is not sufficient on
+     * its own: it protects the ONE path that goes through it, and a `new` at any
+     * other call site — a script, a test helper promoted to a service, a new
+     * caller written by somebody who did not know the rule — reaches this
+     * constructor directly. CLAUDE.md §2.2 names `assertNotProduction()` as the
+     * way a double joins the refusing set; this is that call.
+     */
+    assertNotProduction(
+      'The development payment provider',
+      'Select and configure a real payment provider in Platform Admin > Integrations before deploying to production.',
+    );
     if (!options.webhookSecret || options.webhookSecret.length < 16) {
       throw new AppError(
         'VALIDATION_FAILED',

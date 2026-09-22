@@ -12,6 +12,7 @@ export * from './money';
 export * from './permissions';
 export * from './public-error';
 export * from './redaction';
+export * from './request-context';
 export * from './result';
 export * from './roles';
 export * from './untrusted-text';

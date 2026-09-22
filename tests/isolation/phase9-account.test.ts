@@ -45,6 +45,23 @@ const POLICY: OnboardingPolicy = {
     verificationResendCooldownSeconds: 0,
     verificationsPerHour: 5,
   },
+  /*
+   * Phase 4 (F-19). Deliberately HIGH, because this suite proves the signup,
+   * verification and MFA rules — not the ceilings, which have their own suite.
+   * A tight number here would make these assertions fail for the wrong reason
+   * the day somebody adds a case.
+   */
+  abuse: {
+    windowSeconds: 300,
+    signInPerIp: 10_000,
+    signInPerAccount: 10_000,
+    signUpPerIp: 10_000,
+    passwordResetPerIp: 10_000,
+    passwordResetPerAccount: 10_000,
+    verificationResendPerIp: 10_000,
+    mfaPerIp: 10_000,
+    mfaPerAccount: 10_000,
+  },
   legalDocuments: [
     {
       key: 'terms-of-service',

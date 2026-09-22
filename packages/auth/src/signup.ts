@@ -45,6 +45,7 @@ import {
   type TotpEnrolment,
 } from './mfa';
 import { hashPassword } from './password';
+import { AuthRateLimiter, type AbuseCeilings } from './rate-limit';
 
 // --- The policy, as the activated `onboarding` document carries it ------------
 
@@ -70,6 +71,8 @@ export interface OnboardingPolicy {
     readonly verificationsPerHour: number;
   };
   readonly legalDocuments: readonly LegalDocumentRequirement[];
+  /** The abuse ceilings (F-19). Structurally the same shape the projection has. */
+  readonly abuse: AbuseCeilings;
   readonly mfa: {
     readonly customerEnrolmentEnabled: boolean;
     readonly requiredForCustomers: boolean;
@@ -144,6 +147,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class SignupService {
   readonly #prisma: PrismaClient;
+  readonly #limiter: AuthRateLimiter;
   readonly #email: EmailProvider;
   readonly #link: (token: string, locale: 'AR' | 'EN') => string;
   readonly #clock: Clock;
@@ -158,6 +162,7 @@ export class SignupService {
     this.#clock = options.clock ?? systemClock;
     this.#keyProviderOverride = options.keyProvider;
     this.#env = options.env ?? process.env;
+    this.#limiter = new AuthRateLimiter({ prisma: options.prisma, clock: this.#clock });
   }
 
   /**
@@ -171,6 +176,21 @@ export class SignupService {
    */
   async signUp(policy: OnboardingPolicy, input: SignupInput): Promise<SignupAcknowledgement> {
     const email = input.email.trim().toLowerCase();
+
+    /*
+     * A CEILING ON ACCOUNT CREATION (F-19). There was none: one caller could
+     * create accounts without limit, and — because a TAKEN address is answered
+     * by mailing "you already have an account" to the address itself — could
+     * also send unlimited mail to any inbox it named. The ceiling is per SOURCE
+     * rather than per address, because the address is the attacker's choice and
+     * the source is not.
+     */
+    await this.#limiter.enforce(
+      'signup:ip',
+      input.ip,
+      policy.abuse.signUpPerIp,
+      policy.abuse.windowSeconds,
+    );
 
     if (!EMAIL_SHAPE.test(email)) {
       throw new AppError('VALIDATION_FAILED', 'That does not look like an email address.');
@@ -342,6 +362,20 @@ export class SignupService {
     context: { readonly ip?: string | undefined } = {},
   ): Promise<SignupAcknowledgement> {
     const address = email.trim().toLowerCase();
+
+    /*
+     * THE PER-ACCOUNT COOLDOWN AND HOURLY CEILING BELOW ALREADY WORK, and they
+     * are keyed on the target address — which the caller chooses. One source
+     * walking a list of addresses meets neither. This is the dimension that was
+     * missing.
+     */
+    await this.#limiter.enforce(
+      'verification-resend:ip',
+      context.ip,
+      policy.abuse.verificationResendPerIp,
+      policy.abuse.windowSeconds,
+    );
+
     const user = await this.#prisma.user.findUnique({
       where: { email: address },
       select: { id: true, locale: true, emailVerifiedAt: true, status: true },
@@ -532,6 +566,60 @@ export class SignupService {
         ],
       });
     });
+  }
+
+  /**
+   * Issue a fresh set of recovery codes, replacing the old one.
+   *
+   * THE GAP THIS CLOSES. Codes are shown once at enrolment and each works once;
+   * somebody who spends them has no way back to a working set short of turning
+   * MFA off and on again — which F-13 records as the same defect on the platform
+   * side. Nothing about the rules changes: this is the replacement
+   * `confirmMfaEnrolment` already performs, asked for deliberately.
+   *
+   * IT DEMANDS A WORKING CODE, exactly like disabling, and for the same reason:
+   * a stolen session must not be able to mint itself a set of permanent
+   * credentials for an account it has no second factor for. A recovery code is
+   * accepted as that proof — `verifyMfa` spends it — so the person who has lost
+   * their device can still use their last code to get a new set.
+   */
+  async regenerateRecoveryCodes(
+    policy: OnboardingPolicy,
+    userId: string,
+    code: string,
+  ): Promise<{ readonly recoveryCodes: readonly string[] }> {
+    const user = await this.#prisma.user.findUnique({
+      where: { id: userId },
+      select: { mfaEnabled: true },
+    });
+    if (!user?.mfaEnabled) {
+      throw new AppError('CONFLICT', 'Two-factor authentication is not on for this account.');
+    }
+    const ok = await this.verifyMfa(userId, code);
+    if (!ok) throw new AppError('UNAUTHENTICATED', 'That code is not valid.');
+
+    const codes = generateRecoveryCodes(policy.mfa.recoveryCodeCount);
+    await this.#prisma.$transaction(async (tx) => {
+      // Wholesale, for the reason enrolment gives: a surviving old code is a
+      // working second factor somebody printed and forgot.
+      await tx.userMfaRecoveryCode.deleteMany({ where: { userId } });
+      await tx.userMfaRecoveryCode.createMany({
+        data: codes.map((value) => ({ userId, codeHash: hashRecoveryCode(value) })),
+      });
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            workspaceId: null,
+            actorType: 'USER',
+            actorId: userId,
+            action: 'customer.mfa.recovery-codes-replaced',
+            severity: 'NOTICE',
+            outcome: 'SUCCESS',
+          },
+        ],
+      });
+    });
+    return { recoveryCodes: codes };
   }
 
   /** How many unused recovery codes remain — the number the settings page shows. */

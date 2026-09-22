@@ -60,6 +60,46 @@ const ONBOARDING_FIXTURE = {
       required: true,
     },
   ],
+  /*
+   * ABUSE CEILINGS THE HARNESS CAN LIVE WITH — Phase 4.
+   *
+   * THE WHOLE SUITE IS ONE CALLER. Every browser in every project connects from
+   * 127.0.0.1, and a fifty-minute run signs in, signs up and requests resets
+   * hundreds of times from that single address. The shipped per-source defaults
+   * are sized for ONE PERSON behind one address, so under the harness they are
+   * not a bug being papered over — they are being asked a question they were
+   * never meant to answer, and they correctly say no. The first full run after
+   * the limiter landed failed 76 tests on "Too many attempts", which is the
+   * evidence that this seed is required rather than convenient.
+   *
+   * THE PER-ACCOUNT CEILINGS ARE RAISED TOO, because several suites drive one
+   * fixture account repeatedly.
+   *
+   * IT WEAKENS NOTHING THAT SHIPS. These numbers live in a DEVELOPMENT fixture
+   * document and reach no other environment; the ceilings the product actually
+   * enforces are the schema defaults, and the rule that they are enforced at all
+   * is proven where it can be proven deterministically — in
+   * `tests/isolation/phase4-auth-abuse.test.ts`, against real PostgreSQL, with
+   * ceilings a test sets on purpose. A browser suite cannot prove a rate limiter
+   * without becoming one.
+   *
+   * THEY ARE THE SCHEMA'S MAXIMA, NOT ARBITRARY LARGE NUMBERS. The first attempt
+   * used 100_000 and the activation REFUSED it — this fixture goes through the
+   * same `validateDraft` an owner's activation runs, so even the harness cannot
+   * write a ceiling the schema would not accept. That refusal is the bound
+   * working, and it is why these are the largest values the document permits.
+   */
+  abuse: {
+    windowSeconds: 300,
+    signInPerIp: 500,
+    signInPerAccount: 200,
+    signUpPerIp: 200,
+    passwordResetPerIp: 200,
+    passwordResetPerAccount: 50,
+    verificationResendPerIp: 200,
+    mfaPerIp: 200,
+    mfaPerAccount: 100,
+  },
   mfa: { customerEnrolmentEnabled: true, requiredForCustomers: false, recoveryCodeCount: 10 },
   steps: [
     { key: 'workspace', required: true, sortOrder: 0 },

@@ -11,6 +11,7 @@ import type {
   SocialConnectorAdapter,
   TokenBundle,
 } from './adapter';
+import { assertNotProduction } from '@brandspace/shared';
 import type { ProviderCapabilities } from './policy';
 
 /**
@@ -124,6 +125,21 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
   readonly #baseUrl: string;
 
   constructor(provider: SocialProvider, capabilities: ProviderCapabilities) {
+    /*
+     * ITS OWN GUARD, NOT SOMEBODY ELSE'S — Phase 4, reconciling the Phase 1 note.
+     *
+     * The factory/registry refusal that used to be the only thing keeping this
+     * out of production is correct and is still there. It is not sufficient on
+     * its own: it protects the ONE path that goes through it, and a `new` at any
+     * other call site — a script, a test helper promoted to a service, a new
+     * caller written by somebody who did not know the rule — reaches this
+     * constructor directly. CLAUDE.md §2.2 names `assertNotProduction()` as the
+     * way a double joins the refusing set; this is that call.
+     */
+    assertNotProduction(
+      'A mock social connector',
+      'Configure a real social connector in Platform Admin > Integrations before deploying to production.',
+    );
     this.provider = provider;
     this.capabilities = capabilities;
     this.#baseUrl = `https://mock.invalid/${provider.toLowerCase()}`;

@@ -24,19 +24,43 @@ import {
  * never the URL. A dump of `email_message` therefore yields no usable link.
  */
 
-export type EmailTemplateKey =
-  | 'workspace.invitation'
-  | 'workspace.invitation.resent'
-  | 'auth.password_reset'
+/**
+ * EVERY TEMPLATE THE PRODUCT DECLARES — one runtime list, not a type alone.
+ *
+ * WHY IT IS A VALUE AND NOT ONLY A UNION. The API's internal delivery route
+ * needs this set AT RUNTIME, to refuse a request naming anything else before it
+ * reaches a renderer. A TypeScript union vanishes at compile time, so that route
+ * MIRRORED the set as a hand-written `z.enum` — and the mirror drifted the first
+ * time a template was added. `auth.password_reset.unknown` was declared here,
+ * rendered here, sent by the dashboard, and rejected by the API as an unknown
+ * value, so the reset it exists for failed for every unregistered address
+ * wherever delivery is delegated. The type is now DERIVED from this array and
+ * the route's schema is BUILT from it, so the two cannot disagree again.
+ */
+export const EMAIL_TEMPLATE_KEYS = [
+  'workspace.invitation',
+  'workspace.invitation.resent',
+  'auth.password_reset',
+  /*
+   * Phase 4. THE PAIR TO `auth.password_reset`, and the pair is the point — the
+   * same reasoning the two signup templates already carry. A registered address
+   * gets a reset link; an unregistered one gets this. Both go out through the
+   * same provider on the same request, so the CALLER cannot tell which happened
+   * from the response, from the timing, or from whether the send failed.
+   */
+  'auth.password_reset.unknown',
   /*
    * Phase 9. The two signup templates, and the pair is the point: an address
    * that is FREE gets a verification link, one that is TAKEN gets a notice. The
    * caller cannot tell which was sent, so neither can an attacker enumerating
    * addresses (§10).
    */
-  | 'auth.email_verification'
-  | 'auth.signup.exists'
-  | 'workspace.suspended';
+  'auth.email_verification',
+  'auth.signup.exists',
+  'workspace.suspended',
+] as const;
+
+export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
 
 export interface EmailMessageInput {
   readonly to: string;

@@ -1,5 +1,5 @@
 import 'server-only';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import {
   getPrisma,
@@ -16,6 +16,7 @@ import {
   OutboxEmailProvider,
   type AuthenticatedCustomer,
   type CustomerWorkspaceContext,
+  type AbuseCeilings,
   type EmailProvider,
 } from '@brandspace/auth';
 import {
@@ -26,7 +27,7 @@ import {
   TenantCatalogueSource,
   UsageService,
 } from '@brandspace/entitlements';
-import { currentEnvironment, isProduction } from '@brandspace/shared';
+import { currentEnvironment, isProduction, requestContext } from '@brandspace/shared';
 
 /**
  * Server-only customer context.
@@ -45,8 +46,38 @@ function prisma() {
   return getPrisma();
 }
 
-export function getCustomerAuth(): CustomerAuthService {
-  return new CustomerAuthService({ prisma: prisma() });
+export function getCustomerAuth(ceilings?: AbuseCeilings): CustomerAuthService {
+  return new CustomerAuthService({ prisma: prisma(), ...(ceilings ? { ceilings } : {}) });
+}
+
+/**
+ * The caller's address and device, for the surface a browser actually uses.
+ *
+ * THIS IS THE HALF THAT WAS MISSING. Every customer sign-in, password reset and
+ * MFA challenge in the running product goes through a server action, and not one
+ * of them passed an address or a user agent — so `audit_event.ip`,
+ * `audit_event.userAgent` and `password_reset_token.ip` were null on every row
+ * the product ever wrote, while the parallel API routes (which no browser calls)
+ * passed them. An operator investigating a takeover had a time and nothing else.
+ *
+ * READ FROM THE FORWARDED CHAIN BY HOP COUNT, never from its leftmost entry: a
+ * Next.js server action is reached through the same proxy as everything else,
+ * and the entry a client puts there itself must never become the identity a rate
+ * limiter counts.
+ */
+export async function requestOrigin(): Promise<{
+  ip: string | undefined;
+  userAgent: string | undefined;
+}> {
+  const bag = await headers();
+  return requestContext({
+    headers: bag,
+    // Next.js does not expose the socket peer to a server action. With no
+    // trusted hops configured, `requestContext` therefore reports no address —
+    // which is honest, and which the limiter treats as "skip this dimension"
+    // rather than as one shared bucket for everybody.
+    socketAddress: undefined,
+  });
 }
 
 /**

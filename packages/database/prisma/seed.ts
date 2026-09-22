@@ -19,6 +19,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import {
   ALL_PERMISSIONS,
   ROLE_DEFINITIONS,
+  assertNotProduction,
   assertRealmsAreDisjoint,
   assertRolePermissionsAreValid,
 } from '@brandspace/shared';
@@ -73,6 +74,26 @@ function client(): PrismaClient {
 }
 
 async function main(): Promise<void> {
+  /*
+   * PRODUCTION FAILS CLOSED, BEFORE A CONNECTION IS OPENED — Phase 4.
+   *
+   * This is the DEVELOPMENT seed. It creates a Platform Owner with a password
+   * from the environment, enrols a second factor and prints it, and provisions
+   * two demonstration workspaces with their own users. Run against production it
+   * would inject a platform identity nobody approved into the live platform —
+   * and nothing stopped it: `pnpm db:seed` reads whichever
+   * `DATABASE_PLATFORM_URL` is set.
+   *
+   * THE THROWAWAY E2E SEEDS ALREADY GUARDED AND THIS ONE DID NOT, which is the
+   * wrong way round: those write fake plans into a test database, this one
+   * writes an owner. `assertNotProduction` is the shared helper from
+   * @brandspace/shared rather than a fourth local copy of the same `if`.
+   */
+  assertNotProduction(
+    'The development seed',
+    'Use `pnpm bootstrap:production-owner`, which is the audited, interactive path for creating the first platform owner in a real deployment.',
+  );
+
   // One correlation id for the whole seed run.
   const seedRequestId = `seed-${crypto.randomUUID()}`;
 

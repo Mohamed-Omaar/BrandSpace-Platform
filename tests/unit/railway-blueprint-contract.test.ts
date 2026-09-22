@@ -94,6 +94,9 @@ const FRAGMENT_NAMES = [
   'customerMfaVaultEnv',
   'publicUrlEnv',
   'storageEnv',
+  // Phase 4. Carried by the dashboard and the API alone; see the
+  // client-origin assertions below for why the narrowness is the point.
+  'clientOriginEnv',
 ] as const;
 
 /**
@@ -177,7 +180,22 @@ function blueprintVariablesFor(service: string): string[] {
  * `example`. The shape matters because the schema validates URLs and minimum
  * lengths, and because the three key domains must differ from one another.
  */
+/**
+ * The value the blueprint ACTUALLY declares for the client-origin strategy.
+ *
+ * Read out of the source rather than hard-coded here, so this fixture cannot
+ * disagree with the blueprint: if somebody changes it to `direct`, the
+ * production contract refuses it and these tests go red — which is the whole
+ * point of the coupling.
+ */
+function declaredClientOriginStrategy(): string {
+  const match = /CLIENT_ORIGIN_STRATEGY: '([a-z-]+)'/.exec(SOURCE);
+  expect(match, 'the blueprint declares no CLIENT_ORIGIN_STRATEGY').not.toBeNull();
+  return match![1]!;
+}
+
 function valueFor(name: string): string {
+  if (name === 'CLIENT_ORIGIN_STRATEGY') return declaredClientOriginStrategy();
   if (name === 'NODE_ENV') return 'production';
   if (name === 'APP_ENV') return 'production';
   if (name === 'LOG_LEVEL') return 'info';
@@ -322,5 +340,52 @@ describe('the Railway blueprint satisfies the production environment contract', 
     expect(() => validateStartupConfiguration(env as NodeJS.ProcessEnv, 'web')).toThrow(
       /PUBLIC_WEB_URL must use https/i,
     );
+  });
+});
+
+/**
+ * THE CLIENT-ORIGIN CONTRACT REACHES EXACTLY THE SERVICES THAT READ IT.
+ *
+ * WHY THIS IS A BLUEPRINT ASSERTION AND NOT ONLY AN ENV ONE. `env.ts` refuses to
+ * start a production `dashboard` or `api` without `CLIENT_ORIGIN_STRATEGY`. That
+ * is the runtime half. This is the other half: the blueprint is what actually
+ * puts the variable on the service, and a contract enforced by a process that
+ * nobody configured is a crash loop rather than a protection.
+ *
+ * AND IT REACHES NO FURTHER. The marketing site, the Control Center and the
+ * worker never establish a customer's source address, so the variable would be
+ * configuration nobody reads — which is configuration that drifts, and later
+ * gets copied somewhere it changes behaviour.
+ */
+describe('the client-origin contract is carried to its consumers only', () => {
+  const CONSUMERS = ['dashboard', 'api'];
+  const NON_CONSUMERS = ['web', 'admin', 'worker'];
+
+  it.each(CONSUMERS)('%s declares CLIENT_ORIGIN_STRATEGY', (service) => {
+    expect(blueprintVariablesFor(service)).toContain('CLIENT_ORIGIN_STRATEGY');
+  });
+
+  it.each(NON_CONSUMERS)('%s does NOT declare it', (service) => {
+    expect(blueprintVariablesFor(service)).not.toContain('CLIENT_ORIGIN_STRATEGY');
+  });
+
+  it('sets it to railway-edge, which is the contract Railway documents', () => {
+    /*
+     * A LITERAL, NOT AN OWNER SETTING, because it is a property of Railway
+     * rather than of this deployment: the edge proxy strips a client-supplied
+     * X-Forwarded-For and writes the real connecting address FIRST. Counting
+     * hops from the right cannot be correct there — the number of internal hops
+     * changes with the routing path when the CDN layer is in it.
+     */
+    const declaration = SOURCE.slice(SOURCE.indexOf('const clientOriginEnv'));
+    expect(declaration.slice(0, 300)).toContain("CLIENT_ORIGIN_STRATEGY: 'railway-edge'");
+  });
+
+  it('carries NO hop count, because railway-edge does not read one', () => {
+    // A stray TRUSTED_PROXY_HOPS here would be inert but misleading: a reader
+    // would reasonably conclude the deployment counts from the right.
+    for (const service of [...CONSUMERS, ...NON_CONSUMERS]) {
+      expect(blueprintVariablesFor(service)).not.toContain('TRUSTED_PROXY_HOPS');
+    }
   });
 });
