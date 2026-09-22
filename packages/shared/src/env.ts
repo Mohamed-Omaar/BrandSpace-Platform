@@ -510,8 +510,15 @@ function assertDistinct(env: StartupEnv, names: readonly (keyof StartupEnv)[], w
 function assertClientOriginContract(env: StartupEnv, profile: StartupServiceProfile): void {
   if (profile !== 'dashboard' && profile !== 'api') return;
 
+  /*
+   * ONLY `undefined` IS TESTED HERE, and that is not an oversight. An empty or
+   * misspelled value never reaches this function: the schema's enum refuses it
+   * first, so the process still does not start — it simply says "invalid" rather
+   * than "required". Re-checking for `''` would be unreachable code that reads
+   * like a second guard.
+   */
   const strategy = env.CLIENT_ORIGIN_STRATEGY;
-  if (strategy === undefined || strategy === '') {
+  if (strategy === undefined) {
     throw new Error(
       `CLIENT_ORIGIN_STRATEGY is required in production for the ${profile} service: it is how ` +
         'this process establishes the source address the authentication rate limiter counts. ' +
