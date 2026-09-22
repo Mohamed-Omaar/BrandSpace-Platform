@@ -33,7 +33,8 @@ describe('every template the product declares is deliverable through the API', (
   it('accepts each declared key', () => {
     const refused = EMAIL_TEMPLATE_KEYS.filter(
       (templateKey) =>
-        !deliverySchema.safeParse({ to: 'someone@example.test', templateKey, locale: 'EN' }).success,
+        !deliverySchema.safeParse({ to: 'someone@example.test', templateKey, locale: 'EN' })
+          .success,
     );
     expect(refused).toEqual([]);
   });
