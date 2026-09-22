@@ -151,6 +151,30 @@ export const messages = {
     'perms.permissionCount': '{count} صلاحية',
     'perms.permissionCountOne': 'صلاحية واحدة',
     'perms.permission': 'الصلاحية',
+    'security.title': 'الأمان',
+    'security.mfaHeading': 'التحقق بخطوتين',
+    'security.mfaOn': 'مُفعَّل',
+    'security.mfaOff': 'غير مُفعَّل',
+    'security.mfaExplain':
+      'يطلب رمزًا من تطبيق المصادقة بعد كلمة المرور، فلا تكفي كلمة المرور وحدها للدخول إلى حسابك.',
+    'security.enrolStart': 'تفعيل التحقق بخطوتين',
+    'security.enrolScan': 'امسح الرمز في تطبيق المصادقة، ثم أدخل الرمز المعروض.',
+    'security.enrolUri': 'أو أدخل هذا العنوان يدويًا في التطبيق:',
+    'security.code': 'الرمز',
+    'security.confirm': 'تأكيد',
+    'security.disable': 'إيقاف التحقق بخطوتين',
+    'security.disableExplain': 'يتطلب رمزًا صالحًا: سرقة الجلسة وحدها يجب ألا تكفي لإزالة الحماية.',
+    'security.recoveryHeading': 'رموز الاسترداد',
+    'security.recoveryRemaining': 'الرموز المتبقية',
+    'security.recoveryExplain':
+      'يُستخدم كل رمز مرة واحدة إذا فقدت جهازك. احفظها في مكان آمن — لن تُعرض مرة أخرى.',
+    'security.recoveryOnce': 'هذه هي المرة الوحيدة التي تُعرض فيها هذه الرموز.',
+    'security.recoveryRegenerate': 'إنشاء مجموعة جديدة',
+    'security.recoveryRegenerateExplain': 'يتطلب رمزًا صالحًا، ويُلغي المجموعة السابقة بالكامل.',
+    'security.sessionsHeading': 'الجلسات',
+    'security.sessionsExplain': 'تسجيل الخروج من كل الأجهزة الأخرى، مع إبقاء هذه الجلسة.',
+    'security.signOutOthers': 'تسجيل الخروج من الأجهزة الأخرى',
+    'security.unavailable': 'التحقق بخطوتين غير متاح حاليًا على هذه المنصة.',
     'settings.title': 'إعدادات مساحة العمل',
     'settings.navLabel': 'أقسام الإعدادات',
     'settings.name': 'الاسم',
@@ -1509,6 +1533,33 @@ export const messages = {
     'perms.permissionCount': '{count} permissions',
     'perms.permissionCountOne': '1 permission',
     'perms.permission': 'Permission',
+    'security.title': 'Security',
+    'security.mfaHeading': 'Two-factor authentication',
+    'security.mfaOn': 'On',
+    'security.mfaOff': 'Off',
+    'security.mfaExplain':
+      'Asks for a code from your authenticator app after your password, so a stolen password is not enough to reach your account.',
+    'security.enrolStart': 'Turn on two-factor authentication',
+    'security.enrolScan': 'Scan this in your authenticator app, then enter the code it shows.',
+    'security.enrolUri': 'Or enter this address in the app by hand:',
+    'security.code': 'Code',
+    'security.confirm': 'Confirm',
+    'security.disable': 'Turn off two-factor authentication',
+    'security.disableExplain':
+      'Requires a working code: a stolen session must not be enough to remove the protection it was behind.',
+    'security.recoveryHeading': 'Recovery codes',
+    'security.recoveryRemaining': 'Codes remaining',
+    'security.recoveryExplain':
+      'Each code works once if you lose your device. Keep them somewhere safe — they are not shown again.',
+    'security.recoveryOnce': 'This is the only time these codes are shown.',
+    'security.recoveryRegenerate': 'Generate a new set',
+    'security.recoveryRegenerateExplain':
+      'Requires a working code, and invalidates the whole previous set.',
+    'security.sessionsHeading': 'Sessions',
+    'security.sessionsExplain': 'Sign out everywhere else, keeping this session.',
+    'security.signOutOthers': 'Sign out other devices',
+    'security.unavailable':
+      'Two-factor authentication is not available on this platform right now.',
     'settings.title': 'Workspace settings',
     'settings.navLabel': 'Settings sections',
     'settings.name': 'Name',
@@ -3056,6 +3107,39 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   PASSWORD_UPDATED: {
     en: 'Password updated. Sign in with your new password.',
     ar: 'تم تحديث كلمة المرور. سجّل الدخول بكلمتك الجديدة.',
+  },
+  // Phase 4 — the customer's own security controls.
+  MFA_ENABLED: {
+    en: 'Two-factor authentication is on. Save your recovery codes now.',
+    ar: 'تم تفعيل التحقق بخطوتين. احفظ رموز الاسترداد الآن.',
+  },
+  MFA_DISABLED: {
+    en: 'Two-factor authentication is off.',
+    ar: 'تم إيقاف التحقق بخطوتين.',
+  },
+  RECOVERY_CODES_REPLACED: {
+    en: 'New recovery codes issued. The previous set no longer works.',
+    ar: 'تم إصدار رموز استرداد جديدة. لم تعد المجموعة السابقة صالحة.',
+  },
+  SESSIONS_REVOKED: {
+    en: 'Signed out of your other devices.',
+    ar: 'تم تسجيل الخروج من أجهزتك الأخرى.',
+  },
+  /*
+   * Phase 4 §4 — A SEND THAT FAILED IS NOT A SEND THAT WORKED.
+   *
+   * Its own code rather than the general `INTERNAL`, because "something went
+   * wrong and nothing was changed" is not what happened: a reset token may well
+   * have been created and only the delivery failed, so the honest instruction is
+   * to try again rather than to assume nothing happened.
+   *
+   * IT NAMES NO ADDRESS AND NO ACCOUNT, so it reads identically whether or not
+   * the address is registered — the transport failing has nothing to do with who
+   * has an account, and the anti-enumeration rule is untouched.
+   */
+  EMAIL_NOT_SENT: {
+    en: 'We could not send that email just now. Please try again in a few minutes.',
+    ar: 'تعذّر إرسال الرسالة الآن. حاول مرة أخرى بعد بضع دقائق.',
   },
 };
 

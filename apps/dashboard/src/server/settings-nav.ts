@@ -24,7 +24,8 @@
 import type { MessageKey } from '../i18n/messages';
 
 /** The Settings-section destinations, in the order they are shown. */
-export type SettingsNavKey = 'settings' | 'brand' | 'members' | 'permissions' | 'plan' | 'billing';
+export type SettingsNavKey =
+  'settings' | 'brand' | 'security' | 'members' | 'permissions' | 'plan' | 'billing';
 
 export interface SettingsNavEntry {
   readonly key: SettingsNavKey;
@@ -50,6 +51,13 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     permission: 'workspace.update',
   },
   { key: 'brand', path: '/settings/brand', labelKey: 'brand.profile', permission: 'brand.read' },
+  /*
+   * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
+   * the reader their OWN second factor and their own sessions, which belong to
+   * the person rather than to the workspace. No permission gates it because
+   * there is no other person whose security it could show.
+   */
+  { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
   { key: 'members', path: '/members', labelKey: 'nav.members', permission: 'member.read' },
   /*
    * PERMISSIONS IS OPEN TO EVERY MEMBER ON PURPOSE. It shows the reader their

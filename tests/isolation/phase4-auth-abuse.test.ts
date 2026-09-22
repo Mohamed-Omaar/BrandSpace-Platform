@@ -1,0 +1,499 @@
+import { randomUUID } from 'node:crypto';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  AuthRateLimiter,
+  BOOTSTRAP_CEILINGS,
+  CustomerAuthService,
+  SignupService,
+  hashPassword,
+  isRateLimited,
+  type AbuseCeilings,
+} from '@brandspace/auth';
+import { LocalDevelopmentKeyProvider } from '@brandspace/vault';
+import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+
+/** A key that exists only here, so the suite seals the same way on every machine. */
+const FIXTURE_KEK = 'isolation-fixture-customer-mfa-kek-000000';
+
+/**
+ * ABUSE CEILINGS FOR THE AUTHENTICATION SURFACE — Phase 4, F-19.
+ *
+ * WHAT WAS TRUE BEFORE THIS SUITE, measured against unmodified main:
+ *
+ *   - three accounts sprayed one wrong password each from one source: three
+ *     credential refusals and zero rate refusals, because the only brake was a
+ *     per-ACCOUNT lockout that none of them came near;
+ *   - twenty-five password-reset tokens issued for ONE address in a loop, which
+ *     is twenty-five working reset links into a stranger's inbox.
+ *
+ * Every assertion below fails against that implementation.
+ */
+
+const PASSWORD = 'a-strong-local-only-test-password-8842';
+
+/** Tight ceilings, so the suite proves the RULE rather than waits out a window. */
+const CEILINGS: AbuseCeilings = {
+  ...BOOTSTRAP_CEILINGS,
+  windowSeconds: 3_600,
+  signInPerIp: 3,
+  signInPerAccount: 4,
+  signUpPerIp: 2,
+  passwordResetPerIp: 3,
+  passwordResetPerAccount: 2,
+  verificationResendPerIp: 2,
+  mfaPerIp: 3,
+  mfaPerAccount: 2,
+};
+
+let fixtures: IsolationFixtures;
+let app: PrismaClient;
+let platform: PrismaClient;
+
+beforeAll(async () => {
+  app = appRoleClient();
+  platform = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env['DATABASE_PLATFORM_URL']! }),
+  });
+  fixtures = await createIsolationFixtures(app);
+  void fixtures;
+}, 90_000);
+
+afterAll(async () => {
+  await app?.$disconnect();
+  await platform?.$disconnect();
+});
+
+/**
+ * A SOURCE ADDRESS NOBODY ELSE HAS USED.
+ *
+ * The window is an hour and the isolation database outlives the run, so a
+ * literal address inherits its own count from the previous run and the second
+ * run of this suite fails on attempt one. The same trap as F-23, in a counter
+ * rather than a seed.
+ */
+function freshIp(): string {
+  const octets = randomUUID().replace(/-/g, '');
+  const a = Number.parseInt(octets.slice(0, 2), 16);
+  const b = Number.parseInt(octets.slice(2, 4), 16);
+  const c = Number.parseInt(octets.slice(4, 6), 16);
+  return `198.18.${a}.${b === 0 ? c || 1 : b}`;
+}
+
+/** A fresh ACTIVE customer with a working password. */
+async function customer(): Promise<{ id: string; email: string }> {
+  const email = `p4-${randomUUID()}@example.test`;
+  const user = await platform.user.create({
+    data: {
+      email,
+      name: 'phase four',
+      locale: 'EN',
+      timezone: 'UTC',
+      status: 'ACTIVE',
+      passwordHash: await hashPassword(PASSWORD),
+    },
+    select: { id: true, email: true },
+  });
+  return user;
+}
+
+function auth(): CustomerAuthService {
+  // THE TENANT CLIENT, deliberately: the customer application counts these
+  // attempts under RLS with no workspace context, which is the state
+  // authentication actually runs in.
+  return new CustomerAuthService({ prisma: app, ceilings: CEILINGS });
+}
+
+describe('one source cannot spray many accounts', () => {
+  it('REFUSES BY SOURCE once the ceiling is reached, whatever account is named', async () => {
+    const ip = freshIp();
+    const service = auth();
+    const outcomes: string[] = [];
+
+    // Four DIFFERENT accounts, one wrong password each, from one address. The
+    // per-account lockout (ten) is never approached; the per-source ceiling
+    // (three) is.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const target = await customer();
+      const result = await service
+        .signIn({ email: target.email, password: 'not-the-password', ip })
+        .then(() => 'accepted')
+        .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'credentials'));
+      outcomes.push(result);
+    }
+
+    expect(outcomes.slice(0, 3)).toEqual(['credentials', 'credentials', 'credentials']);
+    expect(outcomes[3]).toBe('rate-limited');
+  });
+
+  it('refuses a CORRECT password once the source is over its ceiling', async () => {
+    const ip = freshIp();
+    const service = auth();
+    const victim = await customer();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service
+        .signIn({ email: (await customer()).email, password: 'wrong', ip })
+        .catch(() => undefined);
+    }
+
+    // The ceiling is about the SOURCE, so knowing a password does not buy a
+    // way past it.
+    await expect(service.signIn({ email: victim.email, password: PASSWORD, ip })).rejects.toThrow(
+      /too many attempts/i,
+    );
+  });
+
+  it('does not punish a different source for the first one', async () => {
+    const attacker = freshIp();
+    const honest = freshIp();
+    const service = auth();
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await service
+        .signIn({ email: (await customer()).email, password: 'wrong', ip: attacker })
+        .catch(() => undefined);
+    }
+    const target = await customer();
+    // A real person on another connection is unaffected.
+    await expect(
+      service.signIn({ email: target.email, password: PASSWORD, ip: honest }),
+    ).resolves.toMatchObject({ mfaRequired: false });
+  });
+});
+
+describe('an inbox is not a weapon', () => {
+  it('STOPS ISSUING RESET TOKENS for one address at the ceiling', async () => {
+    const target = await customer();
+    const service = auth();
+    let issued = 0;
+    let refused = 0;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await service
+        .beginPasswordReset(target.email, freshIp())
+        .then((result) => {
+          if (result) issued += 1;
+        })
+        .catch((error: unknown) => {
+          if (isRateLimited(error)) refused += 1;
+          else throw error;
+        });
+    }
+
+    // Two, the per-account ceiling — NOT twenty-five. Each source is different,
+    // so only the per-account dimension can stop this, which is the point.
+    expect(issued).toBe(2);
+    expect(refused).toBe(3);
+    expect(await platform.passwordResetToken.count({ where: { userId: target.id } })).toBe(2);
+  });
+
+  it('REFUSES A KNOWN AND AN UNKNOWN ADDRESS IDENTICALLY, so the ceiling is no oracle', async () => {
+    const service = auth();
+
+    /*
+     * THE RISK A CEILING INTRODUCES. Rate limiting is a new observable, and an
+     * observable that differs between a registered address and an unregistered
+     * one is an account-existence oracle — precisely what the uniform
+     * acknowledgement elsewhere in this service exists to prevent. So the two
+     * sequences are compared to each other rather than to a literal: whatever
+     * the numbers are, they must be the same numbers.
+     */
+    async function sequenceFor(address: string): Promise<string[]> {
+      const outcomes: string[] = [];
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        outcomes.push(
+          await service
+            .beginPasswordReset(address, freshIp())
+            .then(() => 'acknowledged')
+            .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'other')),
+        );
+      }
+      return outcomes;
+    }
+
+    const registered = await sequenceFor((await customer()).email);
+    const stranger = await sequenceFor(`p4-nobody-${randomUUID()}@example.test`);
+
+    expect(stranger).toEqual(registered);
+    // And it does refuse: a sequence of four acknowledgements would pass the
+    // equality above while proving no ceiling exists at all.
+    expect(registered).toContain('rate-limited');
+    expect(registered).not.toContain('other');
+  });
+});
+
+describe('the second factor is counted too', () => {
+  it('refuses code guesses from one source past the ceiling', async () => {
+    const service = auth();
+    const ip = freshIp();
+    const target = await customer();
+
+    /*
+     * ENROLLED THROUGH THE REAL PATH. `mfaEnabled` cannot simply be set: a CHECK
+     * constraint requires the flag and the sealed seed to agree, which is itself
+     * a safeguard worth leaving intact. The seed is sealed under a fixture key,
+     * and the code is never verified here — `verify` is stubbed — because what
+     * is under test is the CEILING, not the arithmetic of TOTP.
+     */
+    const signup = new SignupService({
+      prisma: platform,
+      email: { key: 'test', send: async () => ({ messageId: randomUUID() }) },
+      verificationLink: () => 'https://example.test/verify',
+      keyProvider: new LocalDevelopmentKeyProvider(FIXTURE_KEK),
+    });
+    await signup.beginMfaEnrolment(
+      {
+        signup: {
+          open: true,
+          minPasswordLength: 12,
+          verificationTtlMinutes: 60,
+          verificationResendCooldownSeconds: 0,
+          verificationsPerHour: 50,
+        },
+        abuse: CEILINGS,
+        legalDocuments: [],
+        mfa: { customerEnrolmentEnabled: true, requiredForCustomers: false, recoveryCodeCount: 10 },
+        steps: [],
+      },
+      target.id,
+    );
+    await platform.user.update({
+      where: { id: target.id },
+      data: { mfaEnabled: true, mfaEnrolledAt: new Date() },
+    });
+
+    // A session that owes its second factor, created under ceilings that cannot
+    // interfere with what this test is measuring.
+    const session = await new CustomerAuthService({
+      prisma: app,
+      ceilings: { ...CEILINGS, signInPerIp: 1_000, signInPerAccount: 1_000 },
+    }).signIn({ email: target.email, password: PASSWORD, ip: freshIp() });
+
+    const outcomes: string[] = [];
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      outcomes.push(
+        await service
+          .completeMfa({ token: session.token, code: '000000', ip, verify: async () => false })
+          .then(() => 'verified')
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'bad-code')),
+      );
+    }
+    // Three guesses from this source, then refused — well before the six-digit
+    // space is anywhere near explored.
+    expect(outcomes[0]).toBe('bad-code');
+    expect(outcomes[3]).toBe('rate-limited');
+  });
+});
+
+describe('the counter is correct under concurrency', () => {
+  /*
+   * A DETERMINISTIC RACE, NOT A TIMING ONE. Every attempt is started before any
+   * is awaited, so they contend on the unique key inside one database; the
+   * assertion is on the SET of returned counts, which a read-modify-write
+   * implementation cannot produce however the scheduler interleaves it.
+   */
+  it('loses no increments when attempts arrive together', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const subject = `race-${randomUUID()}`;
+    const attempts = 12;
+
+    const decisions = await Promise.all(
+      Array.from({ length: attempts }, () => limiter.record('signin:ip', subject, 1_000, 3_600)),
+    );
+
+    const counts = decisions.map((d) => d.count).sort((a, b) => a - b);
+    // Exactly one through each value: no increment lost, none applied twice.
+    expect(counts).toEqual(Array.from({ length: attempts }, (_, index) => index + 1));
+  });
+
+  it('admits exactly the ceiling when the whole burst races it', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const subject = `race-ceiling-${randomUUID()}`;
+    const limit = 5;
+
+    const decisions = await Promise.all(
+      Array.from({ length: 20 }, () => limiter.record('signin:ip', subject, limit, 3_600)),
+    );
+
+    expect(decisions.filter((d) => d.allowed)).toHaveLength(limit);
+    expect(decisions.filter((d) => !d.allowed)).toHaveLength(15);
+  });
+
+  it('keeps separate subjects in separate buckets', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const a = await limiter.record('signin:ip', `sep-a-${randomUUID()}`, 1, 3_600);
+    const b = await limiter.record('signin:ip', `sep-b-${randomUUID()}`, 1, 3_600);
+    expect([a.count, b.count]).toEqual([1, 1]);
+  });
+
+  it('keeps the same subject in separate buckets per SCOPE', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const subject = `scoped-${randomUUID()}`;
+    await limiter.record('signin:ip', subject, 10, 3_600);
+    const other = await limiter.record('password-reset:ip', subject, 10, 3_600);
+    // Counting a sign-in attempt against a reset budget would let one surface
+    // lock a caller out of an unrelated one.
+    expect(other.count).toBe(1);
+  });
+});
+
+describe('the counter fails closed and stores nothing identifying', () => {
+  it('REFUSES rather than admits when it cannot record the attempt', async () => {
+    /*
+     * docs/SECURITY.md §19.1: what must never happen is rate limiting silently
+     * switching itself off. A store that throws is the whole point of this
+     * test — the alternative implementation, which swallows and continues, is
+     * indistinguishable from having no limiter at all exactly when it matters.
+     */
+    const broken = new AuthRateLimiter({
+      prisma: {
+        $queryRaw: async () => {
+          throw new Error('no database');
+        },
+      },
+    });
+    await expect(broken.enforce('signin:ip', '203.0.113.1', 10, 300)).rejects.toThrow(
+      /too many attempts/i,
+    );
+  });
+
+  it('stores neither the address nor the account it is counting', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const address = `secret-${randomUUID()}@example.test`;
+    await limiter.record('password-reset:account', address, 10, 3_600);
+
+    const rows = await platform.authRateLimit.findMany({
+      where: { scope: 'password-reset:account' },
+      select: { subjectHash: true },
+    });
+    // The subject is a hash and only a hash: a dump of this table names nobody.
+    expect(rows.some((row) => row.subjectHash.includes(address))).toBe(false);
+    expect(rows.every((row) => /^[0-9a-f]{64}$/.test(row.subjectHash))).toBe(true);
+  });
+
+  it('skips a dimension it has no subject for rather than pooling everybody', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    // A deployment that cannot establish a source address must not put every
+    // caller in the world into one bucket and lock the product out.
+    await expect(limiter.enforce('signin:ip', undefined, 1, 3_600)).resolves.toBeUndefined();
+    await expect(limiter.enforce('signin:ip', '', 1, 3_600)).resolves.toBeUndefined();
+  });
+});
+
+describe('signup and resend are bounded by source', () => {
+  const POLICY = {
+    signup: {
+      open: true,
+      minPasswordLength: 12,
+      verificationTtlMinutes: 60,
+      verificationResendCooldownSeconds: 0,
+      verificationsPerHour: 50,
+    },
+    abuse: CEILINGS,
+    legalDocuments: [],
+    mfa: { customerEnrolmentEnabled: true, requiredForCustomers: false, recoveryCodeCount: 10 },
+    steps: [],
+  };
+
+  function signupService(): SignupService {
+    return new SignupService({
+      prisma: app,
+      email: { key: 'test', send: async () => ({ messageId: randomUUID() }) },
+      verificationLink: () => 'https://example.test/verify',
+    });
+  }
+
+  it('STOPS ACCOUNT CREATION from one source at the ceiling', async () => {
+    const ip = freshIp();
+    const service = signupService();
+    const outcomes: string[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      outcomes.push(
+        await service
+          .signUp(POLICY, {
+            email: `p4-signup-${randomUUID()}@example.test`,
+            password: PASSWORD,
+            name: 'phase four',
+            locale: 'EN',
+            timezone: 'UTC',
+            acceptedDocuments: [],
+            ip,
+          })
+          .then(() => 'created')
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'other')),
+      );
+    }
+    expect(outcomes).toEqual(['created', 'created', 'rate-limited']);
+  });
+
+  it('STOPS VERIFICATION RESENDS from one source, whatever address they name', async () => {
+    const ip = freshIp();
+    const service = signupService();
+    const outcomes: string[] = [];
+    // Three DIFFERENT addresses: the existing per-account cooldown cannot see
+    // this, because the attacker chooses the account.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      outcomes.push(
+        await service
+          .resendVerification(POLICY, `p4-resend-${randomUUID()}@example.test`, { ip })
+          .then(() => 'acknowledged')
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'other')),
+      );
+    }
+    expect(outcomes).toEqual(['acknowledged', 'acknowledged', 'rate-limited']);
+  });
+});
+
+describe('the refusal carries the wait', () => {
+  it('names how long to wait, and never which dimension tripped', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    const subject = `retry-${randomUUID()}`;
+    await limiter.record('signin:account', subject, 1, 600);
+    const error = await limiter
+      .enforce('signin:account', subject, 1, 600)
+      .then(() => null)
+      .catch((caught: unknown) => caught);
+
+    expect(isRateLimited(error)).toBe(true);
+    const retryAfter = (error as { publicDetails: { retryAfterSeconds?: number } }).publicDetails
+      .retryAfterSeconds;
+    expect(typeof retryAfter).toBe('number');
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(600);
+    // The message names no address and no account: "too many attempts for THIS
+    // address" would tell an attacker the address is worth attacking.
+    expect(String((error as Error).message)).not.toContain(subject);
+  });
+});
+
+describe('expired windows are discarded', () => {
+  it('purges a window that has closed, and keeps one that has not', async () => {
+    const limiter = new AuthRateLimiter({ prisma: app });
+    await limiter.record('signin:ip', `stale-${randomUUID()}`, 10, 3_600);
+    const live = await limiter.record('signin:ip', `live-${randomUUID()}`, 10, 3_600);
+    void live;
+
+    // Age ONE row past its own window rather than waiting an hour out. Selected
+    // by id, so the test does not restate how a subject is hashed.
+    const stale = await platform.authRateLimit.findFirstOrThrow({
+      where: { scope: 'signin:ip' },
+      orderBy: { createdAt: 'desc' },
+      skip: 1,
+      select: { id: true },
+    });
+    await platform.authRateLimit.update({
+      where: { id: stale.id },
+      data: { windowEnd: new Date(Date.now() - 3_600_000) },
+    });
+
+    await limiter.purgeExpired();
+
+    expect(await platform.authRateLimit.findUnique({ where: { id: stale.id } })).toBeNull();
+    // The window that is still open is untouched: a purge that took everything
+    // would reset every attacker's count on every sweep.
+    expect(
+      await platform.authRateLimit.count({ where: { windowEnd: { gt: new Date() } } }),
+    ).toBeGreaterThan(0);
+  });
+});

@@ -49,6 +49,24 @@ export interface OnboardingPolicy {
     readonly verificationsPerHour: number;
   };
   readonly legalDocuments: readonly LegalDocumentRequirement[];
+  /**
+   * The abuse ceilings for the authentication surface (F-19).
+   *
+   * Projected alongside the signup rules because they are read at exactly the
+   * same moments and by the same callers — a second document would mean a
+   * second read on the sign-in path for no gain.
+   */
+  readonly abuse: {
+    readonly windowSeconds: number;
+    readonly signInPerIp: number;
+    readonly signInPerAccount: number;
+    readonly signUpPerIp: number;
+    readonly passwordResetPerIp: number;
+    readonly passwordResetPerAccount: number;
+    readonly verificationResendPerIp: number;
+    readonly mfaPerIp: number;
+    readonly mfaPerAccount: number;
+  };
   readonly mfa: {
     readonly customerEnrolmentEnabled: boolean;
     readonly requiredForCustomers: boolean;

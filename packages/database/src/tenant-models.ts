@@ -184,6 +184,11 @@ export const IDENTITY_MODELS_WITH_POLICY = [
   'EmailVerificationToken',
   'UserLegalAcceptance',
   'UserMfaRecoveryCode',
+  // Phase 4. The abuse counters for the authentication surface. No workspace, no
+  // person: the subject is a HASH of a source address or of an address being
+  // targeted, so the table names nobody even to a reader who has it. Its policy
+  // is the same no-workspace-context one the rows above carry.
+  'AuthRateLimit',
 ] as const;
 
 /**

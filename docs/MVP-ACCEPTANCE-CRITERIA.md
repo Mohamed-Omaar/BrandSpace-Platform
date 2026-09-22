@@ -1310,3 +1310,61 @@ arriving in the governed Brand Brain review queue. Reachability alone would not 
 | AC-50.8  | The SAME request racing itself is still a replay, not an error                                                    | `quota-enforcement`                          |
 | AC-50.9  | `refund` obeys the same rule: a different movement under the key is `CONFLICT`, the same movement gives back once | `quota-enforcement`                          |
 | AC-50.10 | The sequential and concurrent paths ask ONE question of the stored event, not two subtly different ones           | `packages/entitlements/src/usage.ts` (D-249) |
+
+### AC-51 The authentication surface has a ceiling, and it is one ceiling (F-19, D-250)
+
+| ID       | Criterion                                                                                       | Settled by                    |
+| -------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
+| AC-51.1  | One source spraying many DIFFERENT accounts is refused, which the per-account lockout never saw | `phase4-auth-abuse`           |
+| AC-51.2  | A correct password does not buy a way past a source that is over its ceiling                    | `phase4-auth-abuse`           |
+| AC-51.3  | Another source is unaffected by the first one                                                   | `phase4-auth-abuse`           |
+| AC-51.4  | Password-reset tokens for ONE address stop at the ceiling instead of filling an inbox           | `phase4-auth-abuse`           |
+| AC-51.5  | A registered and an unregistered address are refused identically, so the ceiling is no oracle   | `phase4-auth-abuse`           |
+| AC-51.6  | Account creation and verification resends are bounded by source                                 | `phase4-auth-abuse`           |
+| AC-51.7  | Second-factor guesses are bounded by source as well as by account                               | `phase4-auth-abuse`           |
+| AC-51.8  | Concurrent attempts lose no increment, and a racing burst admits exactly the ceiling            | `phase4-auth-abuse`           |
+| AC-51.9  | A counter that cannot be written REFUSES rather than admits                                     | `phase4-auth-abuse`           |
+| AC-51.10 | The stored subject is a hash: the table names neither the account nor the address               | `phase4-auth-abuse`           |
+| AC-51.11 | A refusal carries `retryAfterSeconds`, and the API turns it into a `Retry-After` header         | `phase4-auth-abuse`, `fail()` |
+| AC-51.12 | Scopes and subjects are separate buckets; expired windows are purged and open ones are not      | `phase4-auth-abuse`           |
+
+### AC-52 A security event can be acted on (D-251, D-252)
+
+| ID      | Criterion                                                                                                       | Settled by                |
+| ------- | --------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| AC-52.1 | A failed sign-in records the user agent, not only the address                                                   | `phase4-security-context` |
+| AC-52.2 | So do a locked account and an inactive one                                                                      | `phase4-security-context` |
+| AC-52.3 | A COMPLETED second factor is recorded as SUCCESS/NOTICE, not DENIED/WARNING                                     | `phase4-security-context` |
+| AC-52.4 | A REFUSED second factor is still recorded as a denial                                                           | `phase4-security-context` |
+| AC-52.5 | `X-Forwarded-For` is read from the right by a declared hop count; entries a client prepended are never believed | `request-context`         |
+| AC-52.6 | With no hop count configured the forwarded header is not read at all                                            | `request-context`         |
+| AC-52.7 | One address has one form: IPv6-mapped IPv4 and a port suffix normalise to the same subject                      | `request-context`         |
+
+### AC-53 A security email is reported truthfully (D-253)
+
+| ID      | Criterion                                                                                 | Settled by                           |
+| ------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |
+| AC-53.1 | A password-reset request whose send FAILED does not land on "a message is on its way"     | `phase4-security-email-truthfulness` |
+| AC-53.2 | A verification resend whose send FAILED says so instead of "check your email"             | `phase4-security-email-truthfulness` |
+| AC-53.3 | A registered and an unregistered address produce the SAME outcome when the send works     | `phase4-security-email-truthfulness` |
+| AC-53.4 | …and the SAME outcome when it fails, so surfacing the failure creates no existence oracle | `phase4-security-email-truthfulness` |
+| AC-53.5 | The stranger is sent a "no account here" notice, never a reset link                       | `phase4-security-email-truthfulness` |
+
+### AC-54 A customer can manage their own second factor (D-254)
+
+| ID      | Criterion                                                                           | Settled by                 |
+| ------- | ----------------------------------------------------------------------------------- | -------------------------- |
+| AC-54.1 | The Security row is reachable from the settings nav by every member                 | `phase4-security-settings` |
+| AC-54.2 | Enrolment hands over an otpauth URI that a real authenticator code verifies against | `phase4-security-settings` |
+| AC-54.3 | Confirmation shows the recovery codes once, and the remaining count thereafter      | `phase4-security-settings` |
+| AC-54.4 | The second factor is then really required at the next sign-in                       | `phase4-security-settings` |
+| AC-54.5 | A recovery code gets past the challenge                                             | `phase4-security-settings` |
+| AC-54.6 | Disabling refuses a wrong code and accepts a working one                            | `phase4-security-settings` |
+
+### AC-55 Production fails closed on developer tooling (D-255)
+
+| ID      | Criterion                                                                                    | Settled by                   |
+| ------- | -------------------------------------------------------------------------------------------- | ---------------------------- |
+| AC-55.1 | Each of the five development doubles refuses its own construction under `APP_ENV=production` | `phase4-development-doubles` |
+| AC-55.2 | Each still constructs under development AND under staging, which is a production BUILD       | `phase4-development-doubles` |
+| AC-55.3 | `pnpm db:seed` calls the SHARED guard before it constructs a database client                 | `phase4-development-doubles` |

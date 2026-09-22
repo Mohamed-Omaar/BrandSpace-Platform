@@ -12,6 +12,7 @@ import type {
   FetchRequest,
   MetricReading,
 } from './adapter';
+import { assertNotProduction } from '@brandspace/shared';
 import { findMetric, metricsForProvider } from './metrics';
 
 /**
@@ -158,6 +159,21 @@ export class MockAnalyticsConnectorAdapter implements AnalyticsConnectorAdapter 
   readonly sourceKind = 'MOCK' as const;
 
   constructor(provider: SocialProvider) {
+    /*
+     * ITS OWN GUARD, NOT SOMEBODY ELSE'S — Phase 4, reconciling the Phase 1 note.
+     *
+     * The factory/registry refusal that used to be the only thing keeping this
+     * out of production is correct and is still there. It is not sufficient on
+     * its own: it protects the ONE path that goes through it, and a `new` at any
+     * other call site — a script, a test helper promoted to a service, a new
+     * caller written by somebody who did not know the rule — reaches this
+     * constructor directly. CLAUDE.md §2.2 names `assertNotProduction()` as the
+     * way a double joins the refusing set; this is that call.
+     */
+    assertNotProduction(
+      'A mock analytics connector',
+      'Configure a real analytics connector in Platform Admin > Integrations before deploying to production.',
+    );
     this.provider = provider;
     const base = DEFAULT_CAPABILITIES[provider];
     this.capabilities = {

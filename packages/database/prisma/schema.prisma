@@ -5664,6 +5664,42 @@ model UserLegalAcceptance {
 /// The mirror of `PlatformMfaRecoveryCode` for the customer realm, and
 /// deliberately a separate table: the two realms never share a session, a
 /// credential or a recovery path (docs/SECURITY.md §3).
+/// Abuse ceilings for the authentication surface — Phase 4, F-19.
+///
+/// NOT TENANT-OWNED AND NOT PLATFORM-OWNED. Sign-in, signup and password reset
+/// all happen before any workspace exists, and the CUSTOMER application is what
+/// performs them, so the tenant role must be able to count them. The policy is
+/// the same one `customer_session` carries: reachable only with NO workspace
+/// context, so inside a workspace this table is empty for the tenant role.
+///
+/// THE SUBJECT IS A HASH, never an address or an email. The limiter only ever
+/// asks whether two attempts belong together, which equality of hashes answers
+/// exactly as well — and a dump of this table then discloses neither who has an
+/// account nor where they connect from.
+model AuthRateLimit {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// What is being limited: `signin:ip`, `signin:account`, `signup:ip`, …
+  scope String
+
+  /// SHA-256 of the source address or the lower-cased address being targeted.
+  subjectHash String
+
+  /// The start of the fixed window this row counts. Part of the unique key, so
+  /// a new window is a new row rather than a read-modify-write of an old one.
+  windowStart DateTime @db.Timestamptz(6)
+  windowEnd   DateTime @db.Timestamptz(6)
+
+  count Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([scope, subjectHash, windowStart])
+  /// The sweep that discards expired windows reads this.
+  @@index([windowEnd])
+  @@map("auth_rate_limit")
+}
+
 model UserMfaRecoveryCode {
   id     String @id @default(uuid()) @db.Uuid
   userId String @db.Uuid

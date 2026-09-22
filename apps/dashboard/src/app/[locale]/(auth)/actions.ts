@@ -15,6 +15,7 @@ import {
   getCustomerAuth,
   getUnscopedEmailProvider,
   inWorkspace,
+  requestOrigin,
 } from '../../../server/customer-context';
 import { getPrisma } from '@brandspace/database';
 import { InvitationService, SignupService } from '@brandspace/auth';
@@ -83,9 +84,16 @@ export async function signInAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await getCustomerAuth().signIn({
+    const policy = await readOnboardingPolicy();
+    const origin = await requestOrigin();
+    const session = await getCustomerAuth(policy.abuse).signIn({
       email: String(formData.get('email') ?? ''),
       password: String(formData.get('password') ?? ''),
+      // THE HALF THAT WAS MISSING. This action is how every customer signs in,
+      // and it passed neither, so every authentication audit row the product
+      // wrote had a null address and a null device.
+      ip: origin.ip,
+      userAgent: origin.userAgent,
     });
 
     const store = await cookies();
@@ -144,30 +152,76 @@ export async function signOutAction(formData: FormData): Promise<void> {
 export async function requestPasswordResetAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const email = String(formData.get('email') ?? '');
+  let destination: string;
 
   try {
-    const issued = await getCustomerAuth().beginPasswordReset(email);
-    if (issued) {
-      // No workspace, deliberately: resolving one here would make this an
-      // account-existence oracle. The outbox row therefore carries a NULL
-      // workspace, which the policy permits only with no context set.
-      await getUnscopedEmailProvider().send({
-        to: email,
-        templateKey: 'auth.password_reset',
-        locale: locale === 'ar' ? 'AR' : 'EN',
-        // The token is composed into the link and handed over; it is never
-        // persisted, not even in the outbox row.
-        link: customerLink(`/${locale}/reset/${issued.token}`),
-      });
-    }
+    const policy = await readOnboardingPolicy();
+    const origin = await requestOrigin();
+    const issued = await getCustomerAuth(policy.abuse).beginPasswordReset(email, origin.ip);
+
+    /*
+     * BOTH BRANCHES SEND, AND THAT IS WHAT KEEPS THIS FROM BEING AN ORACLE.
+     *
+     * A registered address gets a reset link; an unregistered one gets a "there
+     * is no account here" notice — the same pairing the two signup templates
+     * already use, for the same reason. Once the action stopped claiming success
+     * for a send that failed, a branch that did NOT send became distinguishable:
+     * during a provider outage a registered address saw the failure and a
+     * stranger saw the ordinary acknowledgement, which is precisely the
+     * account-existence oracle this endpoint exists to avoid. Sending both
+     * through the same provider on the same request makes the two outcomes
+     * identical however the transport behaves.
+     *
+     * THE CEILING IS WHAT KEEPS IT FROM BEING A WEAPON: the per-account reset
+     * limit bounds how much mail one address can be sent, registered or not.
+     *
+     * No workspace, deliberately: resolving one here would be an oracle of its
+     * own. The outbox row therefore carries a NULL workspace, which the policy
+     * permits only with no context set.
+     */
+    await getUnscopedEmailProvider().send({
+      to: email,
+      templateKey: issued ? 'auth.password_reset' : 'auth.password_reset.unknown',
+      locale: locale === 'ar' ? 'AR' : 'EN',
+      // The token is composed into the link and handed over; it is never
+      // persisted, not even in the outbox row.
+      ...(issued ? { link: customerLink(`/${locale}/reset/${issued.token}`) } : {}),
+    });
+    destination = signInUrl(locale, { ok: 'RESET_REQUESTED' });
   } catch (error: unknown) {
-    // Even a failure keeps the uniform response. It is logged, not surfaced.
+    /*
+     * A FAILED SEND IS NOT A SENT MAIL — Phase 4 §4.
+     *
+     * This caught everything and redirected to "check your inbox" regardless,
+     * so a provider outage told every customer their reset link was on its way
+     * and none of them ever received one. `ApiEmailProvider` and
+     * `UnconfiguredEmailProvider` both throw precisely so a caller can tell;
+     * this one threw the information away.
+     *
+     * ANTI-ENUMERATION IS UNTOUCHED, and that is the point of the distinction.
+     * Whether the transport worked has nothing to do with whether the address
+     * has an account: the failure is the same for both, the message names
+     * neither, and the uniform acknowledgement is still what a working request
+     * produces. What changes is only that a BROKEN one now says so.
+     *
+     * A RATE-LIMIT REFUSAL IS ALSO SURFACED, for the same reason: telling
+     * somebody their sixth reset request was sent when it was refused is the
+     * same lie in a smaller coat.
+     */
+    const correlationId = randomUUID();
     log.error('password reset request failed', {
-      correlationId: randomUUID(),
+      correlationId,
       ...internalErrorFields(error),
     });
+    destination = signInUrl(locale, {
+      // A rate-limit refusal says so plainly — it is the one failure the caller
+      // can do something about beyond waiting. Everything else is a delivery
+      // failure, and `EMAIL_NOT_SENT` is what that is.
+      error: toPublicErrorCode(error) === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'EMAIL_NOT_SENT',
+      ref: correlationId,
+    });
   }
-  redirect(signInUrl(locale, { ok: 'RESET_REQUESTED' }));
+  redirect(destination);
 }
 
 export async function completePasswordResetAction(formData: FormData): Promise<void> {
@@ -359,11 +413,14 @@ export async function signUpAction(formData: FormData): Promise<void> {
       .filter((document) => formData.get(`accept:${document.key}`) === 'on')
       .map((document) => ({ key: document.key, version: document.version }));
 
+    const origin = await requestOrigin();
     await signupService(locale).signUp(policy, {
       email,
       password: String(formData.get('password') ?? ''),
       name: String(formData.get('name') ?? ''),
       locale: locale === 'ar' ? 'AR' : 'EN',
+      ip: origin.ip,
+      userAgent: origin.userAgent,
       // D-194: no fallback. The form supplies it, and an empty value is refused
       // by the service rather than replaced.
       timezone: String(formData.get('timezone') ?? ''),
@@ -383,16 +440,36 @@ export async function signUpAction(formData: FormData): Promise<void> {
 export async function resendVerificationAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'ar');
   const email = String(formData.get('email') ?? '');
+  let destination: string;
   try {
     const policy = await readOnboardingPolicy();
-    await signupService(locale).resendVerification(policy, email);
+    const origin = await requestOrigin();
+    await signupService(locale).resendVerification(policy, email, { ip: origin.ip });
+    destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`;
   } catch (error: unknown) {
+    /*
+     * THE SAME LIE AS THE RESET ACTION, and the same correction. A customer who
+     * cannot sign in because the first link never arrived presses "send again";
+     * if that send also fails, telling them it worked leaves them pressing a
+     * button that has never once done anything.
+     *
+     * THE SILENCE THAT MATTERS IS UNAFFECTED. `resendVerification` still
+     * acknowledges an unknown address, an address already verified, a cooldown
+     * that has not elapsed and an exhausted hourly ceiling identically — those
+     * return normally and land on the confirmation. Only a TRANSPORT failure
+     * reaches here.
+     */
+    const correlationId = randomUUID();
     log.warn('verification resend failed', {
-      correlationId: randomUUID(),
+      correlationId,
       ...internalErrorFields(error),
     });
+    const code = toPublicErrorCode(error) === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'EMAIL_NOT_SENT';
+    destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(
+      email,
+    )}&error=${code}&ref=${correlationId}`;
   }
-  redirect(`/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`);
+  redirect(destination);
 }
 
 /**
@@ -410,9 +487,13 @@ export async function verifyMfaAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const service = signupService(locale);
-    await getCustomerAuth().completeMfa({
+    const policy = await readOnboardingPolicy();
+    const origin = await requestOrigin();
+    await getCustomerAuth(policy.abuse).completeMfa({
       token: token!,
       code: String(formData.get('code') ?? ''),
+      ip: origin.ip,
+      userAgent: origin.userAgent,
       verify: (userId, code) => service.verifyMfa(userId, code),
     });
     destination = await customerLandingPath(locale, token!);

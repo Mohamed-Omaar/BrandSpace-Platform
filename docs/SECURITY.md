@@ -479,8 +479,43 @@ decision with its own time box and audit trail (D-76), not a side effect of open
 | Per endpoint class | Read vs. write vs. AI vs. external-effect                                      |
 | Per provider       | Respect upstream quotas; internal concurrency caps                             |
 
-Responses use `429` with `Retry-After` and standard rate-limit headers. Algorithm: sliding-window or token
-bucket in Redis. Limits are per-plan configurable.
+Responses use `429` with `Retry-After`. Limits are configuration, in the activated `onboarding` document's
+`abuse` block, never constants.
+
+### 10.1 What is implemented — current execution Phase 4 (F-19, D-250)
+
+`AuthRateLimiter` in `@brandspace/auth` counts **two dimensions** for every customer-authentication
+operation, because neither subsumes the other: per **source address** stops one attacker spreading a few
+attempts each across thousands of accounts, and per **account** stops one address being ground down or
+mail-bombed.
+
+| Operation           | Per source | Per account | Also                                    |
+| ------------------- | ---------- | ----------- | --------------------------------------- |
+| Sign-in             | ✅         | ✅          | the existing 10-attempt account lockout |
+| Signup              | ✅         | —           | the address is the attacker's choice    |
+| Password reset      | ✅         | ✅          | the per-account one protects an inbox   |
+| Verification resend | ✅         | ✅          | the per-account cooldown and hourly cap |
+| Second factor       | ✅         | ✅          | the same account lockout                |
+
+**It lives in the services, not in a router.** The product signs people in through a Next.js server action
+and the API has its own routes for the same operations; a ceiling enforced in one router is a ceiling the
+other surface does not have, so `CustomerAuthService` and `SignupService` ask for it themselves.
+
+**PostgreSQL, not Redis** (R-07 named Redis for rate limits, and that still holds for per-request API
+throttling). This counter is the record of an attack in progress: it must survive a restart and be exactly
+right under concurrency, which one `INSERT … ON CONFLICT DO UPDATE … RETURNING` gives with the row lock
+the database already takes — and which a deterministic race test can prove.
+
+**It fails closed.** A counter that cannot be written REFUSES the attempt. That costs nothing real, because
+every one of these operations needs the same database one statement later; the alternative is the failure
+§19.1 names in as many words.
+
+**The subject is stored as a SHA-256 hash**, never an address or an email: the limiter only asks whether
+two attempts belong together, and a dump of the table then names nobody.
+
+**`X-Forwarded-For` is read from the RIGHT**, skipping exactly the number of proxies `TRUSTED_PROXY_HOPS`
+declares. It is a list the client can start, so trusting its leftmost entry would let a caller choose the
+identity being counted. With no hop count configured the header is not read at all (D-251).
 
 **Abuse controls:** bot protection on sign-up and contact forms, disposable-email policy (configurable),
 velocity checks on invitations and trials, duplicate-account heuristics, automatic throttling on anomalous

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CUSTOMER_REALM, CustomerAuthService, SignupService } from '@brandspace/auth';
 import { getPrisma } from '@brandspace/database';
-import { AppError } from '@brandspace/shared';
+import { AppError, requestContext } from '@brandspace/shared';
 import { getEmailProvider } from '../email-provider';
 import { route } from '../route-contract';
 import { fail, sessionTokenFrom } from './phase7-context';
@@ -40,13 +40,30 @@ const emailOnlySchema = z.object({ email: z.string().min(3).max(320) });
 const tokenSchema = z.object({ token: z.string().min(10).max(512) });
 const codeSchema = z.object({ code: z.string().min(4).max(32) });
 
+/**
+ * The caller's address and device, read the same way the dashboard reads them.
+ *
+ * `req.ip` WAS NOT THE CALLER. Fastify is constructed without `trustProxy`, so
+ * `req.ip` is the transport peer — behind a load balancer that is the balancer,
+ * identical for every request on earth. Every audit row, every reset token and
+ * every verification token this app wrote recorded that one address as if it
+ * were the customer's. `requestContext` reads the forwarded chain from the
+ * right, by the number of hops the deployment declares, so an address a client
+ * put there itself is never the one we believe.
+ */
+function contextOf(req: FastifyRequest): {
+  ip?: string | undefined;
+  userAgent?: string | undefined;
+} {
+  return requestContext({ headers: req.headers, socketAddress: req.ip });
+}
+
 function ipOf(req: FastifyRequest): string | undefined {
-  return req.ip || undefined;
+  return contextOf(req).ip;
 }
 
 function userAgentOf(req: FastifyRequest): string | undefined {
-  const value = req.headers['user-agent'];
-  return typeof value === 'string' ? value.slice(0, 512) : undefined;
+  return contextOf(req).userAgent;
 }
 
 /**
@@ -147,7 +164,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/account/verify',
-    { scope: 'public', idempotent: true },
+    { scope: 'public', idempotent: true, rateLimit: 'signup' },
     async (req, reply) => {
       const parsed = tokenSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
@@ -200,7 +217,7 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/account/mfa/challenge',
-    { scope: 'public', idempotent: false },
+    { scope: 'public', idempotent: false, rateLimit: 'mfa' },
     async (req, reply) => {
       const parsed = codeSchema.safeParse(req.body);
       const token = sessionTokenFrom(req);
@@ -209,12 +226,16 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       }
       try {
         const prisma = getPrisma();
-        const auth = new CustomerAuthService({ prisma });
+        // THE ACTIVATED CEILINGS, not the bootstrap ones: the owner's numbers
+        // must govern the surface an attacker actually reaches.
+        const policy = await onboardingPolicy();
+        const auth = new CustomerAuthService({ prisma, ceilings: policy.abuse });
         const signup = await signupService();
         await auth.completeMfa({
           token,
           code: parsed.data.code,
           ip: ipOf(req),
+          userAgent: userAgentOf(req),
           verify: (userId, code) => signup.verifyMfa(userId, code),
         });
         return await reply.send({ verified: true });

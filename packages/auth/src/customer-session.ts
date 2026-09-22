@@ -5,6 +5,7 @@ import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import { CUSTOMER_REALM } from './realms';
 import { hashPassword, verifyPassword } from './password';
+import { AuthRateLimiter, BOOTSTRAP_CEILINGS, type AbuseCeilings } from './rate-limit';
 
 /**
  * Customer authentication — docs/SECURITY.md §3.
@@ -27,6 +28,20 @@ import { hashPassword, verifyPassword } from './password';
  */
 
 const GENERIC_FAILURE = 'Invalid credentials.';
+
+/**
+ * What an authentication audit event records beyond the action.
+ *
+ * IT EXISTS BECAUSE THE DEFAULTS WERE WRONG. `#audit` hard-coded
+ * `outcome: 'DENIED'`, so a successful MFA verification was filed as a denial,
+ * and it had no user-agent parameter at all, so the column was null on every
+ * row this service has ever written.
+ */
+interface AuditContext {
+  readonly outcome?: 'SUCCESS' | 'DENIED' | 'ERROR';
+  readonly severity?: 'INFO' | 'NOTICE' | 'WARNING' | 'CRITICAL';
+  readonly userAgent?: string | undefined;
+}
 
 /** Session/lockout policy. Same shape and thresholds as the platform realm. */
 export const CUSTOMER_MAX_FAILED_ATTEMPTS = 10;
@@ -116,15 +131,27 @@ export interface CustomerWorkspaceContext {
 export interface CustomerAuthOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
+  /**
+   * The activated abuse ceilings (F-19).
+   *
+   * OPTIONAL, AND THE DEFAULT IS NOT "NO LIMIT". A caller that has not read the
+   * `onboarding` document still gets the schema defaults, because the one thing
+   * this must never do is authenticate with the counter switched off.
+   */
+  readonly ceilings?: AbuseCeilings;
 }
 
 export class CustomerAuthService {
   readonly #prisma: PrismaClient;
   readonly #clock: Clock;
+  readonly #ceilings: AbuseCeilings;
+  readonly #limiter: AuthRateLimiter;
 
   constructor(options: CustomerAuthOptions) {
     this.#prisma = options.prisma;
     this.#clock = options.clock ?? systemClock;
+    this.#ceilings = options.ceilings ?? BOOTSTRAP_CEILINGS;
+    this.#limiter = new AuthRateLimiter({ prisma: options.prisma, clock: this.#clock });
   }
 
   /**
@@ -137,6 +164,35 @@ export class CustomerAuthService {
    */
   async signIn(input: CustomerSignInInput): Promise<CustomerSessionToken> {
     const email = input.email.trim().toLowerCase();
+
+    /*
+     * THE CEILINGS COME FIRST, BEFORE THE ADDRESS IS EVEN LOOKED UP (F-19).
+     *
+     * Before this, the only brake was a per-ACCOUNT lockout, which an attacker
+     * spreading attempts across many accounts never touches — and which an
+     * attacker can trip on purpose to lock somebody out. Both dimensions are
+     * counted here, and counted on EVERY attempt rather than on failures only:
+     * a limiter that counts failures can be starved by an attacker who already
+     * knows one working credential, and the honest user who signs in twice is
+     * nowhere near a ceiling measured in tens.
+     *
+     * The refusal is identical whether or not the address exists, so this is not
+     * a new enumeration oracle: the per-source count is reached by making
+     * requests, not by guessing whose they are.
+     */
+    await this.#limiter.enforce(
+      'signin:ip',
+      input.ip,
+      this.#ceilings.signInPerIp,
+      this.#ceilings.windowSeconds,
+    );
+    await this.#limiter.enforce(
+      'signin:account',
+      email,
+      this.#ceilings.signInPerAccount,
+      this.#ceilings.windowSeconds,
+    );
+
     const user = await this.#prisma.user.findUnique({ where: { email } });
 
     if (!user) {
@@ -146,7 +202,9 @@ export class CustomerAuthService {
 
     if (this.#isLocked(user.lockedUntil)) {
       await enumerationGuard();
-      await this.#audit(user.id, 'customer.auth.locked', input.ip);
+      await this.#audit(user.id, 'customer.auth.locked', input.ip, false, {
+        userAgent: input.userAgent,
+      });
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
@@ -154,20 +212,22 @@ export class CustomerAuthService {
       // An invitation-only account. Doing the same work stops "no password set"
       // from being detectable by timing.
       await enumerationGuard();
-      await this.#countFailure(user.id, 'customer.auth.no_password', input.ip);
+      await this.#countFailure(user.id, 'customer.auth.no_password', input.ip, input.userAgent);
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
     const passwordOk = await verifyPassword(user.passwordHash, input.password);
     if (!passwordOk) {
-      await this.#countFailure(user.id, 'customer.auth.bad_password', input.ip);
+      await this.#countFailure(user.id, 'customer.auth.bad_password', input.ip, input.userAgent);
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
     // Status is checked AFTER the password, so a wrong password on a suspended
     // account is indistinguishable from a wrong password on an active one.
     if (user.status !== 'ACTIVE' || user.deletedAt !== null) {
-      await this.#audit(user.id, 'customer.auth.inactive', input.ip);
+      await this.#audit(user.id, 'customer.auth.inactive', input.ip, false, {
+        userAgent: input.userAgent,
+      });
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
@@ -196,7 +256,21 @@ export class CustomerAuthService {
     readonly verify: (userId: string, code: string) => Promise<boolean>;
     readonly code: string;
     readonly ip?: string | undefined;
+    readonly userAgent?: string | undefined;
   }): Promise<void> {
+    /*
+     * A SECOND FACTOR IS SIX DIGITS, so the per-account lockout below is the
+     * load-bearing control — and it is per ACCOUNT. An attacker holding many
+     * stolen passwords guesses one code each across many accounts and never
+     * meets it, which is why the source is counted too.
+     */
+    await this.#limiter.enforce(
+      'mfa:ip',
+      input.ip,
+      this.#ceilings.mfaPerIp,
+      this.#ceilings.windowSeconds,
+    );
+
     const session = await this.#prisma.customerSession.findUnique({
       where: { tokenHash: hashSessionToken(input.token) },
       select: { id: true, userId: true, revokedAt: true, expiresAt: true, mfaVerifiedAt: true },
@@ -208,18 +282,27 @@ export class CustomerAuthService {
     }
     if (session.mfaVerifiedAt) return;
 
+    await this.#limiter.enforce(
+      'mfa:account',
+      session.userId,
+      this.#ceilings.mfaPerAccount,
+      this.#ceilings.windowSeconds,
+    );
+
     const user = await this.#prisma.user.findUnique({
       where: { id: session.userId },
       select: { lockedUntil: true },
     });
     if (this.#isLocked(user?.lockedUntil ?? null)) {
-      await this.#audit(session.userId, 'customer.mfa.locked', input.ip);
+      await this.#audit(session.userId, 'customer.mfa.locked', input.ip, false, {
+        userAgent: input.userAgent,
+      });
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
     const ok = await input.verify(session.userId, input.code);
     if (!ok) {
-      await this.#countFailure(session.userId, 'customer.mfa.failed', input.ip);
+      await this.#countFailure(session.userId, 'customer.mfa.failed', input.ip, input.userAgent);
       throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     }
 
@@ -231,7 +314,13 @@ export class CustomerAuthService {
       where: { id: session.userId },
       data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now },
     });
-    await this.#audit(session.userId, 'customer.mfa.verified', input.ip);
+    // A SUCCESS, AND RECORDED AS ONE. This line used to file the completed
+    // second factor as a DENIED/WARNING event like every refusal above it.
+    await this.#audit(session.userId, 'customer.mfa.verified', input.ip, false, {
+      outcome: 'SUCCESS',
+      severity: 'NOTICE',
+      userAgent: input.userAgent,
+    });
   }
 
   /**
@@ -473,8 +562,34 @@ export class CustomerAuthService {
    * account-existence oracle.
    */
   async beginPasswordReset(email: string, ip?: string): Promise<{ token: string } | null> {
+    const address = email.trim().toLowerCase();
+
+    /*
+     * COUNTED BEFORE THE LOOKUP, so the ceiling cannot become an oracle: an
+     * address that exists and one that does not are refused at exactly the same
+     * point, after exactly the same number of requests.
+     *
+     * THE PER-ACCOUNT CEILING IS THE ONE THAT MATTERS HERE, and it protects
+     * somebody who is not the caller. A probe on unmodified main issued
+     * twenty-five reset tokens for one address in a loop — twenty-five emails
+     * into a stranger's inbox, each of them a working reset link, from one
+     * unauthenticated request repeated.
+     */
+    await this.#limiter.enforce(
+      'password-reset:ip',
+      ip,
+      this.#ceilings.passwordResetPerIp,
+      this.#ceilings.windowSeconds,
+    );
+    await this.#limiter.enforce(
+      'password-reset:account',
+      address,
+      this.#ceilings.passwordResetPerAccount,
+      this.#ceilings.windowSeconds,
+    );
+
     const user = await this.#prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
+      where: { email: address },
     });
     /*
      * No token is minted for an account a reset could not complete anyway.
@@ -677,7 +792,12 @@ export class CustomerAuthService {
    * PostgreSQL row locking serialises concurrent attempts and no increment is
    * lost. Read-modify-write here was R-01; it is not repeated.
    */
-  async #countFailure(userId: string, action: string, ip?: string): Promise<void> {
+  async #countFailure(
+    userId: string,
+    action: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<void> {
     const lockUntil = new Date(this.#clock.now().getTime() + CUSTOMER_LOCKOUT_MINUTES * 60_000);
     try {
       const rows = await this.#prisma.$queryRaw<{ lockedUntil: Date | null }[]>`
@@ -691,15 +811,28 @@ export class CustomerAuthService {
          WHERE "id" = ${userId}::uuid
          RETURNING "lockedUntil"`;
       const locked = rows[0]?.lockedUntil !== null && rows[0]?.lockedUntil !== undefined;
-      await this.#audit(userId, locked ? 'customer.account.locked' : action, ip, locked);
+      await this.#audit(userId, locked ? 'customer.account.locked' : action, ip, locked, {
+        userAgent,
+      });
     } catch {
       // Rate limiting must never switch itself off quietly. The attempt is
       // refused either way; this records that the counter did not persist.
-      await this.#audit(userId, 'customer.security.rate_limit_unavailable', ip, true);
+      await this.#audit(userId, 'customer.security.rate_limit_unavailable', ip, true, {
+        // The counter did not persist. That is an ERROR in this system, not a
+        // decision to deny somebody — the denial is recorded by the caller.
+        outcome: 'ERROR',
+        userAgent,
+      });
     }
   }
 
-  async #audit(userId: string, action: string, ip?: string, critical = false): Promise<void> {
+  async #audit(
+    userId: string,
+    action: string,
+    ip?: string,
+    critical = false,
+    context: AuditContext = {},
+  ): Promise<void> {
     try {
       // `createMany`, NOT `create`. Prisma's `create` issues INSERT … RETURNING,
       // and the tenant policy's USING clause deliberately hides platform-scope
@@ -718,9 +851,26 @@ export class CustomerAuthService {
             action,
             resourceType: 'user',
             resourceId: userId,
-            severity: critical ? 'CRITICAL' : 'WARNING',
-            outcome: 'DENIED',
+            /*
+             * THE OUTCOME IS THE TRUTH, NOT A CONSTANT.
+             *
+             * Every event this service wrote was recorded as DENIED at WARNING,
+             * including `customer.mfa.verified` — a SUCCESSFUL second factor.
+             * An operator filtering the audit trail for denials to find an
+             * attack therefore found every successful MFA challenge mixed in,
+             * and an operator asking "did this person get in" was told no.
+             * Callers now say which it was, and the severity follows.
+             */
+            severity: context.severity ?? (critical ? 'CRITICAL' : 'WARNING'),
+            outcome: context.outcome ?? 'DENIED',
             ip: ip ?? null,
+            /*
+             * THE USER AGENT, WHICH THIS NEVER STORED. The column has existed
+             * since Phase 1 and nothing on the authentication path ever wrote
+             * it, so every customer sign-in failure in the audit trail was a
+             * time and an address with no device beside it.
+             */
+            userAgent: context.userAgent ?? null,
           },
         ],
       });

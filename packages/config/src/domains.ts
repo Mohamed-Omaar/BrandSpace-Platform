@@ -2076,6 +2076,43 @@ const onboardingSchema = z.object({
     )
     .default([]),
 
+  /*
+   * ABUSE CEILINGS FOR THE AUTHENTICATION SURFACE — Phase 4, F-19.
+   *
+   * CONFIGURATION, NOT CONSTANTS, for the reason CLAUDE.md §2.2 gives: a
+   * ceiling an owner cannot move is a ceiling that gets removed from the code
+   * the first time it is inconvenient. The schema's defaults are deliberately
+   * generous enough that no honest person meets them and tight enough that a
+   * script does immediately.
+   *
+   * TWO DIMENSIONS, AND BOTH ARE NEEDED. Per-account stops one address being
+   * ground down; per-source stops one attacker spreading a few attempts each
+   * across thousands of accounts, which is the shape F-19 describes and which
+   * the existing lockout cannot see. Neither subsumes the other.
+   */
+  abuse: z
+    .object({
+      /** The window every ceiling below is counted over. */
+      windowSeconds: z.number().int().min(30).max(3_600).default(300),
+      /** Failed sign-ins from one source address before it is refused. */
+      signInPerIp: z.number().int().min(3).max(500).default(30),
+      /** Sign-in attempts against ONE address, whatever their source. */
+      signInPerAccount: z.number().int().min(3).max(200).default(15),
+      /** Accounts one source may try to create. */
+      signUpPerIp: z.number().int().min(1).max(200).default(10),
+      /** Password-reset requests one source may make. */
+      passwordResetPerIp: z.number().int().min(1).max(200).default(10),
+      /** Password-reset requests for ONE address — an inbox is not a weapon. */
+      passwordResetPerAccount: z.number().int().min(1).max(50).default(5),
+      /** Verification resends from one source. */
+      verificationResendPerIp: z.number().int().min(1).max(200).default(10),
+      /** Second-factor attempts from one source. */
+      mfaPerIp: z.number().int().min(3).max(200).default(20),
+      /** Second-factor attempts against one account. */
+      mfaPerAccount: z.number().int().min(3).max(100).default(10),
+    })
+    .default({}),
+
   mfa: z
     .object({
       /** Customers may enrol a second factor. Platform roles always must (D-27). */

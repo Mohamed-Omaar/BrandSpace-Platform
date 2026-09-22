@@ -64,6 +64,7 @@ describe('P8: the settings nav offers only what the member can open', () => {
     expect(items.map((item) => item.href)).toEqual([
       '/ar/settings',
       '/ar/settings/brand',
+      '/ar/settings/security',
       '/ar/members',
       '/ar/permissions',
       '/ar/plan',
@@ -81,7 +82,9 @@ describe('P8: the settings nav offers only what the member can open', () => {
       permissionKeys: MEMBER_ONLY,
       selected: 'permissions',
     });
-    expect(items.map((item) => item.href)).toEqual(['/en/permissions']);
+    // SECURITY JOINS PERMISSIONS as a row every member gets: both are about the
+    // reader themselves, and neither route asks for anything.
+    expect(items.map((item) => item.href)).toEqual(['/en/settings/security', '/en/permissions']);
   });
 
   /*
@@ -118,6 +121,7 @@ describe('P8: the settings nav permission column matches the routes themselves',
   const PAGE_FOR: Readonly<Record<string, string>> = {
     '/settings': 'apps/dashboard/src/app/[locale]/settings/page.tsx',
     '/settings/brand': 'apps/dashboard/src/app/[locale]/settings/brand/page.tsx',
+    '/settings/security': 'apps/dashboard/src/app/[locale]/settings/security/page.tsx',
     '/members': 'apps/dashboard/src/app/[locale]/members/page.tsx',
     '/permissions': 'apps/dashboard/src/app/[locale]/permissions/page.tsx',
     '/plan': 'apps/dashboard/src/app/[locale]/plan/page.tsx',

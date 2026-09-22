@@ -29,6 +29,14 @@ export type EmailTemplateKey =
   | 'workspace.invitation.resent'
   | 'auth.password_reset'
   /*
+   * Phase 4. THE PAIR TO `auth.password_reset`, and the pair is the point — the
+   * same reasoning the two signup templates already carry. A registered address
+   * gets a reset link; an unregistered one gets this. Both go out through the
+   * same provider on the same request, so the CALLER cannot tell which happened
+   * from the response, from the timing, or from whether the send failed.
+   */
+  | 'auth.password_reset.unknown'
+  /*
    * Phase 9. The two signup templates, and the pair is the point: an address
    * that is FREE gets a verification link, one that is TAKEN gets a notice. The
    * caller cannot tell which was sent, so neither can an attacker enumerating

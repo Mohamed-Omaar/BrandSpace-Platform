@@ -86,6 +86,32 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
       action: 'اختيار كلمة مرور جديدة',
     },
   },
+  /*
+   * Phase 4. Sent to an address that asked for a reset and has no account.
+   *
+   * WHY IT EXISTS AT ALL. Without it, the two branches of a reset request differ
+   * in whether they touch the email provider — so when the provider is failing,
+   * a registered address sees "we could not send that" and an unregistered one
+   * sees the ordinary acknowledgement. That difference is an account-existence
+   * oracle, and it appeared the moment the action stopped claiming success for a
+   * send that failed. Sending BOTH through the same provider on the same request
+   * is what makes the two outcomes identical, however the transport behaves.
+   *
+   * IT IS ALSO THE HONEST THING TO SEND. Somebody typed this address into a
+   * password-reset form; the person who owns it is entitled to know.
+   */
+  'auth.password_reset.unknown': {
+    EN: {
+      subject: 'Reset your BrandSpace password',
+      body: 'Someone asked to reset a BrandSpace password for this address, and there is no account here. If that was you, you may have used a different address. If it was not, no action is needed.',
+      action: 'Go to BrandSpace',
+    },
+    AR: {
+      subject: 'إعادة تعيين كلمة مرور BrandSpace',
+      body: 'طلب أحدهم إعادة تعيين كلمة مرور BrandSpace لهذا العنوان، ولا يوجد حساب هنا. إن كنت أنت، فربما استخدمت عنوانًا آخر. وإن لم تكن، فلا يلزم أي إجراء.',
+      action: 'الانتقال إلى BrandSpace',
+    },
+  },
   'workspace.invitation': {
     EN: {
       subject: 'You have been invited to a BrandSpace workspace',
