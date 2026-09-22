@@ -305,5 +305,7 @@ describe('the database bootstrap makes the migration identity the schema owner',
     expect(roleSql).toContain(
       "NOT has_database_privilege('brandspace_migrator', current_database(), 'CREATE')",
     );
+    expect(roleSql).not.toContain('DO $\n');
+    expect(roleSql).not.toContain('\n$;\n');
   });
 });
