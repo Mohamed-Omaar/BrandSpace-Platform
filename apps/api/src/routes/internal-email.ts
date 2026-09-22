@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { getPrisma, withWorkspace, type PrismaClient } from '@brandspace/database';
-import { OutboxEmailProvider, type EmailMessageInput } from '@brandspace/auth';
+import { EMAIL_TEMPLATE_KEYS, OutboxEmailProvider, type EmailMessageInput } from '@brandspace/auth';
 import { createLogger, internalErrorFields, isProduction } from '@brandspace/shared';
 import { getEmailProvider } from '../email-provider';
 import { route } from '../route-contract';
@@ -50,20 +50,24 @@ import { route } from '../route-contract';
 const log = createLogger({ context: { component: 'api.internal.email' } });
 
 /**
- * The six templates the product declares. Mirrored here as a literal union on
- * purpose: a request naming anything else is refused by the schema before it
- * reaches the renderer, rather than failing later with a lookup error.
+ * The templates the product declares. A request naming anything else is refused
+ * by the schema before it reaches the renderer, rather than failing later with a
+ * lookup error.
+ *
+ * BUILT FROM `EMAIL_TEMPLATE_KEYS`, NOT MIRRORED FROM IT. This was a
+ * hand-written list of six, and the comment above it said "mirrored here on
+ * purpose". The purpose was real — the closed set is what stops a caller holding
+ * the service token from composing a message the product would never send — but
+ * a hand-copied closed set is a rule enforced in one place and declared in
+ * another, and it drifted the first time a seventh template was added: the
+ * dashboard sent `auth.password_reset.unknown`, this schema had never heard of
+ * it, and every reset request for an unregistered address failed wherever
+ * delivery is delegated to this route. Deriving it keeps the refusal and removes
+ * the copy.
  */
-const deliverySchema = z.object({
+export const deliverySchema = z.object({
   to: z.string().min(3).max(320),
-  templateKey: z.enum([
-    'workspace.invitation',
-    'workspace.invitation.resent',
-    'auth.password_reset',
-    'auth.email_verification',
-    'auth.signup.exists',
-    'workspace.suspended',
-  ]),
+  templateKey: z.enum(EMAIL_TEMPLATE_KEYS),
   locale: z.enum(['AR', 'EN']),
   workspaceId: z.string().uuid().optional(),
   variables: z.record(z.string(), z.unknown()).optional(),
