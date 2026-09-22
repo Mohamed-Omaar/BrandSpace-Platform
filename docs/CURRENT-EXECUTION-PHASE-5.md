@@ -67,6 +67,94 @@ Expected:
 - Development/sandbox billing behavior only; no live payment provider.
 - No production OAuth application credentials.
 
+## Executable bootstrap — the exact owner inputs
+
+Everything the repository can prepare is prepared. What remains are values that
+cannot live in Git. Supply them, run the preflight, then deploy.
+
+### 1. Railway (owner action — the environment does not exist yet)
+
+Create ONE environment named `staging` in the existing project. Do not clone
+production variables or data. Then supply:
+
+```
+RAILWAY_STAGING_ENVIRONMENT_ID=<id>
+```
+
+Provision inside it: PostgreSQL (EU West, private), Redis (same region, private),
+and the five services. Generate Railway domains for `web`, `dashboard`, `admin`
+and `api` before filling the public URLs below.
+
+### 2. Cloudflare R2 (owner action — staging-only, never production's)
+
+```
+STORAGE_ENDPOINT=https://<staging-account-id>.r2.cloudflarestorage.com
+STORAGE_BUCKET=<a bucket that is NOT the production bucket>
+STORAGE_ACCESS_KEY_ID=<token scoped to that bucket alone>
+STORAGE_SECRET_ACCESS_KEY=<the secret half>
+```
+
+The blueprint says "MUST differ between production and staging" where the
+operator reads it, and the preflight rejects a template value — but **no process
+can compare the two environments' buckets**. That check is yours.
+
+### 3. Staging cryptography (owner action — generate fresh, never copy)
+
+Staging is sealed by KEKs, not by AWS KMS. This is now enforced: a staging
+service that supplies a KMS ARN instead of its KEK is refused, and one that
+supplies neither names the KEK it wants **and says "in staging"** so nobody is
+invited to paste production's key.
+
+```
+SECRET_VAULT_KEK=<fresh, staging only>            # admin, api
+SOCIAL_TOKEN_VAULT_KEK=<fresh, staging only>      # api, worker
+CUSTOMER_MFA_VAULT_KEK=<fresh, staging only>      # dashboard, api
+CUSTOMER_SESSION_SECRET=<fresh>                   # dashboard
+PLATFORM_SESSION_SECRET=<fresh>                   # admin
+INTERNAL_SERVICE_TOKEN=<fresh>                    # dashboard, admin, api
+BILLING_DEV_WEBHOOK_SECRET=<fresh>                # api — sandbox billing only
+```
+
+Three distinct KEKs. One key wearing three names is refused.
+
+### 4. Transactional email (owner action — sandbox only)
+
+A staging/sandbox sender that cannot reach real customers. Until it exists, the
+email-dependent rows in `docs/PHASE-5-COVERAGE-MATRIX.md` (C6, G9) stay
+`BLOCKED ONLY BY LIVE STAGING`. **Do not point staging at the production sender.**
+
+### 5. Public origins
+
+Railway-generated domains first; custom staging domains are optional until the
+first smoke passes.
+
+```
+PUBLIC_WEB_URL / PUBLIC_DASHBOARD_BASE_URL / PUBLIC_ADMIN_BASE_URL / PUBLIC_API_BASE_URL
+```
+
+All https. The parser refuses `http://`.
+
+### 6. Fixed by the blueprint — do not set by hand
+
+```
+NODE_ENV=production      # staging is a production BUILD (D-97)
+APP_ENV=staging          # the only discriminator
+CLIENT_ORIGIN_STRATEGY=railway-edge   # dashboard and api ONLY
+```
+
+No `TRUSTED_PROXY_HOPS` anywhere — under `railway-edge` it fails start-up.
+
+### 7. Run the preflight before deploying
+
+```bash
+pnpm staging:preflight --env-dir <dir>      # <dir>/dashboard.env, <dir>/api.env, …
+pnpm staging:preflight --service api --env-file api.env
+```
+
+It asks the same `validateStartupConfiguration` each service calls on the way up,
+so it cannot drift from the real contract. It prints **names and statuses only** —
+never a value — and exits non-zero until every service is ready.
+
 ## Deployment order
 
 1. Create staging environment.

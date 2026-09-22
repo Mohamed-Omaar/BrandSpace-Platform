@@ -395,18 +395,31 @@ const PROFILE_PUBLIC_URLS: Record<StartupServiceProfile, readonly PublicUrlName[
   worker: [],
 };
 
+/**
+ * The message NAMES THE DEPLOYMENT it is talking about.
+ *
+ * It used to say "in production" unconditionally, and these checks also run for
+ * STAGING — so a staging operator was told a variable was required "in
+ * production" for a deployment that is not production. The obvious way to clear
+ * such a message is to copy the value from the environment it names, which for a
+ * key domain means one managed key serving two environments. Saying "staging"
+ * removes that invitation.
+ */
 function requireProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
   const value = env[name];
   if (value === undefined || value === '') {
-    throw new Error(`${String(name)} is required in production for this service.`);
+    const where = currentEnvironment({ APP_ENV: env.APP_ENV }).toLowerCase();
+    throw new Error(`${String(name)} is required in ${where} for this service.`);
   }
 }
 
 function forbidProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
   const value = env[name];
   if (value !== undefined && value !== '') {
+    // Names the deployment, for the same reason `requireProductionValue` does.
+    const where = currentEnvironment({ APP_ENV: env.APP_ENV }).toLowerCase();
     throw new Error(
-      `${String(name)} must not be present in production for this service; ` +
+      `${String(name)} must not be present in ${where} for this service; ` +
         'keeping unused credentials out preserves the intended blast-radius boundary.',
     );
   }
@@ -439,12 +452,39 @@ function forbidProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
  */
 function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfile): void {
   const permitted = new Set(PERMITTED_KEY_DOMAINS[profile]);
+  const deployment = currentEnvironment({ APP_ENV: env.APP_ENV });
 
+  /*
+   * WHAT ENCRYPTS DEPENDS ON THE DEPLOYMENT, and until Phase 5 this loop did not
+   * ask. It required a KMS ARN for every permitted domain whenever it ran — and
+   * it runs for STAGING too, because a Railway staging build sets
+   * `NODE_ENV=production` (D-97). So a staging service configured exactly as the
+   * blueprint and docs/CURRENT-EXECUTION-PHASE-5.md describe it, holding its
+   * staging KEK and no managed key, reported itself misconfigured on every one of
+   * the four services that hold a key domain:
+   *
+   *     CUSTOMER_MFA_VAULT_KMS_KEY_ARN is required in production for this service.
+   *
+   * — in a deployment that is not production, naming a variable staging is not
+   * supposed to have. THAT MESSAGE IS THE DANGEROUS PART. The obvious way for an
+   * operator to clear it is to paste production's ARN into staging, which is the
+   * single thing Phase 5 exists to prevent: one managed key, two environments,
+   * and a staging test able to decrypt production's customers.
+   *
+   * So: PRODUCTION is sealed by KMS, STAGING by its own KEK, and each is
+   * REQUIRED in its own environment rather than tolerated.
+   */
   for (const domain of ALL_KEY_DOMAINS) {
     const { kms, kek } = KEY_DOMAIN_VARIABLES[domain];
     if (permitted.has(domain)) {
-      requireProductionValue(env, kms);
+      if (deployment === 'PRODUCTION') requireProductionValue(env, kms);
+      else requireProductionValue(env, kek);
     } else {
+      /*
+       * THE FORBID HALF IS UNCHANGED AND APPLIES TO BOTH. A service must not
+       * hold a domain it does not use, in any deployment — that is the
+       * blast-radius boundary, and staging is where somebody experiments.
+       */
       forbidProductionValue(env, kms);
       forbidProductionValue(env, kek);
     }
@@ -475,10 +515,11 @@ function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfi
    * NO key domain must not carry AWS credentials either: they would grant a
    * reach nothing in that process uses.
    */
-  if (permitted.size > 0) {
+  if (permitted.size > 0 && deployment === 'PRODUCTION') {
+    // Only production calls KMS, so only production needs an identity for it.
     requireProductionValue(env, 'AWS_ACCESS_KEY_ID');
     requireProductionValue(env, 'AWS_SECRET_ACCESS_KEY');
-  } else {
+  } else if (permitted.size === 0) {
     forbidProductionValue(env, 'AWS_ACCESS_KEY_ID');
     forbidProductionValue(env, 'AWS_SECRET_ACCESS_KEY');
   }
@@ -704,7 +745,7 @@ function assertProductionSafety(
    * assembled by copying a development one, and the next thing copied might
    * not be harmless.
    */
-  if (env.BILLING_DEV_WEBHOOK_SECRET) {
+  if (env.BILLING_DEV_WEBHOOK_SECRET && deployment === 'PRODUCTION') {
     throw new Error(
       'BILLING_DEV_WEBHOOK_SECRET must not be set in production: it belongs to the ' +
         'development payment adapter, which cannot run there (D-204).',
