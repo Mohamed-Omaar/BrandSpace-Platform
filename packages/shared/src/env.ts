@@ -4,6 +4,7 @@ import {
   CLIENT_ORIGIN_STRATEGIES,
   MAX_TRUSTED_PROXY_HOPS,
   parseTrustedProxyHops,
+  type ClientOriginStrategy,
 } from './request-context';
 
 /**
@@ -17,7 +18,7 @@ import {
 
 const nodeEnv = z.enum(['development', 'test', 'production']);
 
-export const envSchema = z.object({
+const baseEnvSchema = z.object({
   NODE_ENV: nodeEnv.default('development'),
   APP_ENV: z.enum(['development', 'staging', 'production']).default('development'),
 
@@ -85,23 +86,7 @@ export const envSchema = z.object({
    * used to become 0, which means "read no header", so a typo silently switched
    * the per-source limiter off and looked like a working deployment.
    */
-  TRUSTED_PROXY_HOPS: z
-    .string()
-    .optional()
-    .refine(
-      (raw) => {
-        if (raw === undefined || raw.trim() === '') return true;
-        try {
-          parseTrustedProxyHops(raw);
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      {
-        message: `must be a whole number of proxies in digits, at least 1 and at most ${MAX_TRUSTED_PROXY_HOPS}`,
-      },
-    ),
+  TRUSTED_PROXY_HOPS: z.string().optional(),
 
   // --- Hostnames (D-04) -----------------------------------------------------
   PUBLIC_WEB_URL: z.string().url().optional(),
@@ -212,6 +197,69 @@ export const envSchema = z.object({
   OTEL_SERVICE_NAME: z.string().default('brandspace'),
 });
 
+/**
+ * THE CROSS-FIELD RULE: a hop count belongs to exactly one strategy.
+ *
+ * WHY THIS IS NOT A FIELD VALIDATOR. `TRUSTED_PROXY_HOPS` is not independently
+ * valid or invalid — it is REQUIRED under `xff-hops` and MEANINGLESS under the
+ * other two, so only the pair can be judged. Leaving it per-field produced the
+ * shape this rule exists to remove: a configuration that PASSED at start-up and
+ * then behaved unexpectedly at request time, e.g.
+ *
+ *     CLIENT_ORIGIN_STRATEGY=railway-edge
+ *     TRUSTED_PROXY_HOPS=
+ *
+ * which parsed cleanly and told an operator, wrongly, that a hop count was in
+ * force. A variable that the active strategy ignores must be ABSENT, not merely
+ * tolerated, because a reader who finds one reasonably concludes it is used.
+ *
+ * THE EFFECTIVE STRATEGY IS INFERRED FROM PRESENCE when none is declared, which
+ * is what `requestContext` does at runtime — the two must agree or this check
+ * would police a configuration the reader never sees.
+ */
+function refineClientOriginPair(
+  // `| undefined` explicitly: the repo runs `exactOptionalPropertyTypes`, so an
+  // optional marker alone would not accept the parsed shape zod hands over.
+  env: {
+    CLIENT_ORIGIN_STRATEGY?: ClientOriginStrategy | undefined;
+    TRUSTED_PROXY_HOPS?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const hops = env.TRUSTED_PROXY_HOPS;
+  const strategy: ClientOriginStrategy =
+    env.CLIENT_ORIGIN_STRATEGY ?? (hops === undefined ? 'direct' : 'xff-hops');
+
+  if (strategy === 'xff-hops') {
+    try {
+      parseTrustedProxyHops(hops);
+    } catch (error: unknown) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TRUSTED_PROXY_HOPS'],
+        message:
+          `is required under the xff-hops strategy and must be a whole number of proxies in ` +
+          `digits, at least 1 and at most ${MAX_TRUSTED_PROXY_HOPS}` +
+          (error instanceof Error ? ` (${error.message})` : ''),
+      });
+    }
+    return;
+  }
+
+  // `railway-edge` and `direct` read no hop count at all.
+  if (hops !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['TRUSTED_PROXY_HOPS'],
+      message:
+        `must be absent under the ${strategy} strategy, which reads no hop count. ` +
+        'Leaving it set tells a reader the deployment counts proxies when it does not.',
+    });
+  }
+}
+
+export const envSchema = baseEnvSchema.superRefine(refineClientOriginPair);
+
 export type Env = z.infer<typeof envSchema>;
 
 /**
@@ -221,9 +269,9 @@ export type Env = z.infer<typeof envSchema>;
  * `parseEnv`, and widen only the startup parser so the web profile can prove
  * that DATABASE_URL is absent rather than being forced to invent one.
  */
-const startupEnvSchema = envSchema.extend({
-  DATABASE_URL: z.string().url().optional(),
-});
+const startupEnvSchema = baseEnvSchema
+  .extend({ DATABASE_URL: z.string().url().optional() })
+  .superRefine(refineClientOriginPair);
 
 type StartupEnv = z.infer<typeof startupEnvSchema>;
 
@@ -527,17 +575,12 @@ function assertClientOriginContract(env: StartupEnv, profile: StartupServiceProf
     );
   }
 
-  if (strategy === 'xff-hops') {
-    try {
-      parseTrustedProxyHops(env.TRUSTED_PROXY_HOPS);
-    } catch (error: unknown) {
-      const why = error instanceof Error ? error.message : 'it is invalid';
-      throw new Error(
-        `TRUSTED_PROXY_HOPS is required in production for the ${profile} service under the ` +
-          `xff-hops strategy: ${why}`,
-      );
-    }
-  }
+  /*
+   * THE HOP COUNT IS NOT RE-CHECKED HERE. `refineClientOriginPair` owns the
+   * whole pair in the schema, for every profile and every environment, so a
+   * second copy of the rule in this production-only path could only drift out
+   * of agreement with it.
+   */
 
   /*
    * `direct` IN PRODUCTION IS ALMOST CERTAINLY WRONG, and it is refused rather

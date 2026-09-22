@@ -10,16 +10,32 @@
  * takeover come from" had nothing to read. One shared extractor, used by both,
  * is what stops the two surfaces disagreeing again.
  *
- * WHY THE HOP COUNT IS EXPLICIT, AND WHAT IT COUNTS. `X-Forwarded-For` is a list
- * the CLIENT can start: anybody may send `X-Forwarded-For: 1.2.3.4` and every
- * proxy in front of us APPENDS to it rather than replacing it. Trusting the
- * leftmost entry therefore lets an attacker choose their own identity — which,
- * once that address is what a rate limiter counts, means choosing to have no
- * limit at all. The only safe reading is to count from the RIGHT.
+ * THERE ARE THREE STRATEGIES AND THEY DISAGREE ABOUT WHICH ENTRY TO BELIEVE.
+ * That is not an inconsistency to be reconciled — it is a property of the
+ * infrastructure in front of the process, so the deployment DECLARES which one
+ * is in force (`CLIENT_ORIGIN_STRATEGY`) and this file never guesses.
  *
- * THE APPEND RULE IS THE WHOLE CONTRACT, so it is worth writing out. A proxy
- * appends the address of the PEER THAT CONNECTED TO IT — not its own. With
- * trusted proxies P1…PN, P1 nearest the client:
+ * ── `railway-edge` — THE LEFTMOST ENTRY ─────────────────────────────────────
+ *
+ * Railway's edge proxy STRIPS whatever `X-Forwarded-For` the caller sent and
+ * writes the real connecting address as the FIRST entry; its own network then
+ * appends as the request travels inward. Position 0 is therefore infrastructure's
+ * word and not the client's, and it does not move when the number of internal
+ * hops changes — which it does, because the CDN layer adds one and is not always
+ * in the path. A right-counted index cannot be correct under this contract.
+ *
+ * IT HAS NO SOCKET FALLBACK, deliberately. Under this strategy the trusted
+ * origin is DEFINED as the edge-controlled header value; the transport peer is a
+ * Railway proxy, not a customer. Substituting it would collapse unrelated
+ * customers into one rate-limit subject — the opposite of what a per-source
+ * ceiling is for. When the header is absent or unusable the honest answer is
+ * `undefined`, and in production the limiter turns that into a generic refusal.
+ *
+ * ── `xff-hops` — COUNTED FROM THE RIGHT ─────────────────────────────────────
+ *
+ * The ORDINARY reverse-proxy contract, where nothing strips the header: the
+ * client may start the list, and every proxy APPENDS the address of the peer
+ * that connected to it. With trusted proxies P1…PN, P1 nearest the client:
  *
  *     P1 receives from the client C and appends C
  *     P2 receives from P1         and appends P1
@@ -27,29 +43,28 @@
  *     PN receives from P(N-1)     and appends P(N-1)
  *     our socket peer is PN, which appears in no header
  *
- * so the header we see is `<anything the client sent>, C, P1, …, P(N-1)`:
- * EXACTLY N entries were appended by infrastructure we run, and the client is
- * the FIRST of them, at `chain.length - N`.
+ * so the header is `<anything the client sent>, C, P1, …, P(N-1)` — exactly N
+ * appended entries, the FIRST of which is the client, at `chain.length - N`.
+ * Here the LEFTMOST entry is attacker-controlled and must never be believed.
  *
- * WITH ONE TRUSTED PROXY THE CLIENT IS THEREFORE THE RIGHTMOST ENTRY, not the
- * one before it. This is the defect this file shipped with: it read
- * `chain.length - hops - 1`, one position further left, which in the one-proxy
- * case is the last entry the CLIENT supplied. A caller sending
- * `X-Forwarded-For: 9.9.9.9` against a single load balancer was identified as
- * 9.9.9.9, and could pick a new value on every request — a fresh rate-limit
- * budget each time, which is precisely the attack the hop count exists to stop.
- * The same off-by-one made an ordinary one-entry chain look TOO SHORT, so the
- * dashboard — where a Next.js server action has no socket address to fall back
- * to — reported no address at all and the per-source ceiling was skipped
- * entirely on the one path every browser takes.
+ * ITS SOCKET FALLBACK IS PART OF THE STRATEGY. A chain shorter than the declared
+ * hops means the request did not traverse the expected proxies, and the transport
+ * peer — the last real proxy — is the only thing left that the client could not
+ * have written. Reaching left into the list instead would hand the caller exactly
+ * the control this reading exists to deny.
  *
- * The number of hops is a property of the deployment, never of this code.
+ * ── `direct` — THE TRANSPORT PEER ───────────────────────────────────────────
  *
- * THE DEFAULT IS TO TRUST NOTHING. With no `TRUSTED_PROXY_HOPS` set, the
- * forwarded header is ignored entirely and the socket address is used. A
- * deployment behind a load balancer sets it to 1. Defaulting the other way would
- * mean a developer running locally, or an operator who forgot, silently accepts
- * a client-chosen address — the failure that is invisible until it matters.
+ * No proxy at all, so the socket peer IS the client and no header is read. It is
+ * refused in production for the two customer-facing services, where it would put
+ * every customer behind a balancer into one bucket.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * THE DEFAULT IS TO TRUST NOTHING. With nothing declared and no hop count, the
+ * forwarded header is ignored entirely. Defaulting the other way would mean a
+ * developer running locally, or an operator who forgot, silently accepting a
+ * client-chosen address — the failure that is invisible until it matters.
  */
 
 /** Header names this reads. Lower-case, because Node lower-cases them. */
@@ -234,35 +249,32 @@ export interface RequestContext {
 /**
  * The client's address and user agent, read safely.
  *
- * THE ADDRESS IS COUNTED FROM THE RIGHT, at `chain.length - hops`. Our `hops`
- * proxies appended `hops` entries, the FIRST of which is the client; with one
- * trusted hop that is the last entry in the list. Anything the client prepended
- * sits further left and is never reached, however much of it there is. With zero
- * trusted hops the header is not read at all.
+ * WHICH ENTRY IS BELIEVED DEPENDS ENTIRELY ON THE DECLARED STRATEGY — see the
+ * three blocks at the top of this file. In one word each: `railway-edge` reads
+ * the LEFTMOST entry and has no socket fallback; `xff-hops` counts from the
+ * RIGHT and falls back to the socket peer; `direct` reads only the socket peer.
  *
- * WHEN THE HEADER IS TOO SHORT for the configured hops the socket address is
- * used, and never an entry from the list. A request that did not traverse the
- * expected chain is not one whose claimed origin we should believe, and reaching
- * left to produce SOME address would hand the caller exactly the control this
- * function exists to deny. When there is no socket address either — a Next.js
- * server action has none — the answer is honestly `undefined`, and
- * `AuthRateLimiter.enforce` says so in the log rather than skipping in silence.
+ * `TRUSTED_PROXY_HOPS` IS PARSED ONLY UNDER `xff-hops`. A variable that is
+ * irrelevant to the active strategy must not be able to fail a request later:
+ * a stale hop count left on a `railway-edge` service is a configuration error
+ * the START-UP contract rejects, not something for this function to throw over
+ * mid-request.
  */
 export function requestContext(input: RequestContextInput): RequestContext {
   const env = input.env ?? process.env;
   const userAgent = headerValue(input.headers, USER_AGENT)?.slice(0, 512) || undefined;
 
   /*
-   * THE DECLARED STRATEGY WINS. When none is declared the old behaviour stands:
-   * a hop count means `xff-hops`, and no hop count means `direct`. That keeps
-   * every existing deployment and test reading the same way, while production
-   * is required by `assertProductionSafety` to declare one explicitly.
+   * THE DECLARED STRATEGY WINS, and the fallback reads only the PRESENCE of a
+   * hop count, never its value — parsing it here would let a variable that this
+   * strategy ignores decide whether the request survives.
    */
   const declared = clientOriginStrategy(env);
-  const hops = trustedProxyHops(env);
-  const strategy: ClientOriginStrategy = declared ?? (hops === 0 ? 'direct' : 'xff-hops');
+  const strategy: ClientOriginStrategy =
+    declared ?? (env['TRUSTED_PROXY_HOPS'] === undefined ? 'direct' : 'xff-hops');
 
   if (strategy === 'direct') {
+    // The socket peer IS the client here; that is what the strategy means.
     return { ip: normalizeAddress(input.socketAddress), userAgent };
   }
 
@@ -274,21 +286,37 @@ export function requestContext(input: RequestContextInput): RequestContext {
 
   if (strategy === 'railway-edge') {
     /*
-     * THE LEFTMOST ENTRY, because the edge wrote it. Railway strips whatever
-     * `X-Forwarded-For` the caller sent and puts the real connecting address
-     * first, so position 0 is infrastructure's word and not the client's. An
-     * empty chain means the request did not arrive through that edge at all,
-     * and the socket peer is the only thing left worth believing.
+     * THE LEFTMOST ENTRY, AND NOTHING ELSE.
+     *
+     * Railway strips whatever `X-Forwarded-For` the caller sent and writes the
+     * real connecting address first, so position 0 is infrastructure's word.
+     *
+     * NO SOCKET FALLBACK — this is the security contract, not an omission.
+     * Under this strategy the transport peer is a Railway proxy, never a
+     * customer: on the API it is `req.ip`, which behind the edge is
+     * infrastructure. Substituting it when the header is missing would give
+     * unrelated customers ONE shared rate-limit subject, which is worse than
+     * having no subject at all. So an absent or unusable chain answers
+     * `undefined`, and in production `AuthRateLimiter.enforce` turns that into a
+     * generic refusal. Trustworthy edge origin, or refusal — never a proxy peer
+     * wearing a customer's identity.
      */
-    if (chain.length === 0) return { ip: normalizeAddress(input.socketAddress), userAgent };
-    return { ip: normalizeAddress(chain[0]), userAgent };
+    const client = normalizeAddress(chain[0]);
+    return { ip: client, userAgent };
   }
 
   /*
-   * `hops` entries were appended by infrastructure we run, and the client is the
-   * FIRST of those — the one our outermost proxy wrote down as its own peer.
-   * Indexed from the END, so nothing the client prepended can shift it.
+   * `xff-hops`: `hops` entries were appended by infrastructure we run, and the
+   * client is the FIRST of those — the one our outermost proxy wrote down as its
+   * own peer. Indexed from the END, so nothing the client prepended can shift it.
+   *
+   * THE SOCKET FALLBACK IS PART OF THIS STRATEGY. Nothing strips the header
+   * here, so a chain shorter than the declared hops means the request did not
+   * traverse the expected proxies — and the transport peer is the last thing the
+   * client could not have written. Reaching left into the list instead would
+   * hand the caller exactly the control this reading denies.
    */
+  const hops = trustedProxyHops(env);
   const index = chain.length - hops;
   if (index < 0) return { ip: normalizeAddress(input.socketAddress), userAgent };
   return { ip: normalizeAddress(chain[index]), userAgent };

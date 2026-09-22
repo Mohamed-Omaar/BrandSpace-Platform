@@ -684,6 +684,35 @@ describe('in production a request with no establishable source is refused', () =
     expect(outcome).toBe('allowed');
   });
 
+  it('REFUSES a railway-edge request whose XFF is missing, rather than using the proxy peer', async () => {
+    const target = await customer();
+    const service = auth();
+    process.env['APP_ENV'] = 'production';
+
+    /*
+     * THE WHOLE PATH, END TO END. A request arrives at the API with no
+     * `X-Forwarded-For` — it did not come through Railway's edge — but WITH a
+     * transport peer, which behind the edge is infrastructure rather than a
+     * customer. `requestContext` must not hand that peer over as an identity,
+     * because doing so would give every unrelated customer one shared
+     * rate-limit subject; and the limiter must then refuse rather than proceed.
+     */
+    const origin = requestContext({
+      headers: {},
+      socketAddress: '100.64.0.7', // a Railway-internal address, not a customer
+      env: { CLIENT_ORIGIN_STRATEGY: 'railway-edge' } as NodeJS.ProcessEnv,
+    });
+    expect(origin.ip).toBeUndefined();
+
+    const outcome = await service
+      .signIn({ email: target.email, password: PASSWORD, ip: origin.ip })
+      .then(() => 'allowed')
+      .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'refused'));
+
+    // The password is CORRECT on purpose: without the refusal this succeeds.
+    expect(outcome).toBe('rate-limited');
+  });
+
   it('OUTSIDE production it warns and skips, so a laptop still signs in', async () => {
     const target = await customer();
     const service = auth();

@@ -239,15 +239,163 @@ describe('the railway-edge strategy', () => {
     expect(context.ip?.trim()).not.toBe('');
   });
 
-  it('falls back to the socket peer when the request did not come through the edge', () => {
-    expect(requestContext({ headers: {}, socketAddress: '10.0.0.1', env: RAILWAY }).ip).toBe(
-      '10.0.0.1',
-    );
+  it('NEVER SUBSTITUTES THE SOCKET PEER when the header is missing', () => {
+    /*
+     * THE CONTRACT, NOT AN OMISSION. Under `railway-edge` the transport peer is
+     * a Railway proxy — on the API it is `req.ip`, which behind the edge is
+     * infrastructure and never a customer. Substituting it would give every
+     * unrelated customer ONE shared rate-limit subject, which is worse than
+     * having no subject at all: it converts a missing signal into a wrong one.
+     */
+    const context = requestContext({ headers: {}, socketAddress: '10.0.0.1', env: RAILWAY });
+    expect(context.ip).toBeUndefined();
+    expect(context.ip).not.toBe('10.0.0.1');
+  });
+
+  it('reports nothing for an unusable chain rather than reaching for the socket', () => {
+    // A header of only separators carries no entry; same answer, same reason.
+    expect(
+      requestContext({
+        headers: { 'x-forwarded-for': ' , , ' },
+        socketAddress: '10.0.0.1',
+        env: RAILWAY,
+      }).ip,
+    ).toBeUndefined();
   });
 
   it('reports nothing rather than inventing an address when there is neither', () => {
     // Honest — and in production the limiter turns this into a refusal rather
     // than letting the request proceed with no source budget.
     expect(requestContext({ headers: {}, env: RAILWAY }).ip).toBeUndefined();
+  });
+
+  it('keeps the user agent even when no address can be established', () => {
+    const context = requestContext({
+      headers: { 'user-agent': 'Mozilla/5.0 (Test)' },
+      socketAddress: '10.0.0.1',
+      env: RAILWAY,
+    });
+    expect(context.ip).toBeUndefined();
+    expect(context.userAgent).toBe('Mozilla/5.0 (Test)');
+  });
+
+  it('does not read TRUSTED_PROXY_HOPS at all, however broken it is', () => {
+    /*
+     * A variable the active strategy ignores must not be able to fail a REQUEST.
+     * A stale hop count on a railway-edge service is a configuration error the
+     * start-up contract rejects; mid-request is the wrong place to discover it.
+     */
+    expect(() =>
+      requestContext({
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+        env: { ...RAILWAY, TRUSTED_PROXY_HOPS: 'not-a-number' } as NodeJS.ProcessEnv,
+      }),
+    ).not.toThrow();
+    expect(
+      requestContext({
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+        env: { ...RAILWAY, TRUSTED_PROXY_HOPS: 'not-a-number' } as NodeJS.ProcessEnv,
+      }).ip,
+    ).toBe('203.0.113.9');
+  });
+});
+
+describe('the other two strategies keep their own fallback rules', () => {
+  it('DIRECT still legitimately uses the socket peer, because that IS the client', () => {
+    expect(
+      requestContext({
+        headers: { 'x-forwarded-for': '9.9.9.9' },
+        socketAddress: '203.0.113.9',
+        env: { CLIENT_ORIGIN_STRATEGY: 'direct' } as NodeJS.ProcessEnv,
+      }).ip,
+    ).toBe('203.0.113.9');
+  });
+
+  it('XFF-HOPS keeps its documented socket fallback on a too-short chain', () => {
+    /*
+     * INTENTIONALLY PART OF THAT STRATEGY, and the asymmetry with railway-edge
+     * is the point. Nothing strips the header under `xff-hops`, so a chain
+     * shorter than the declared hops means the request did not traverse the
+     * expected proxies — and the transport peer is the last value the CLIENT
+     * could not have written. Under railway-edge the peer is infrastructure, so
+     * the same substitution would be meaningless there.
+     */
+    expect(
+      requestContext({
+        headers: { 'x-forwarded-for': '9.9.9.9' },
+        socketAddress: '10.0.0.2',
+        env: { CLIENT_ORIGIN_STRATEGY: 'xff-hops', TRUSTED_PROXY_HOPS: '2' } as NodeJS.ProcessEnv,
+      }).ip,
+    ).toBe('10.0.0.2');
+  });
+
+  it('XFF-HOPS still counts from the right when the chain is long enough', () => {
+    expect(
+      requestContext({
+        headers: { 'x-forwarded-for': '9.9.9.9, 203.0.113.9, 10.0.0.1' },
+        socketAddress: '10.0.0.2',
+        env: { CLIENT_ORIGIN_STRATEGY: 'xff-hops', TRUSTED_PROXY_HOPS: '2' } as NodeJS.ProcessEnv,
+      }).ip,
+    ).toBe('203.0.113.9');
+  });
+});
+
+/**
+ * A HOP COUNT BELONGS TO EXACTLY ONE STRATEGY — the cross-field rule.
+ *
+ * The shape this removes is a configuration that PASSES at start-up and then
+ * behaves unexpectedly at request time. `CLIENT_ORIGIN_STRATEGY=railway-edge`
+ * with `TRUSTED_PROXY_HOPS=` parsed cleanly and told an operator, wrongly, that
+ * a hop count was in force. A variable the active strategy ignores must be
+ * ABSENT rather than tolerated, because a reader who finds one set reasonably
+ * concludes it is used.
+ */
+describe('the hop count and the strategy must agree', () => {
+  it('railway-edge + absent hops → starts', () => {
+    expect(startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'railway-edge' })).not.toThrow();
+  });
+
+  it('railway-edge + EMPTY hops → fails startup', () => {
+    expect(
+      startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'railway-edge', TRUSTED_PROXY_HOPS: '' }),
+    ).toThrow(/TRUSTED_PROXY_HOPS/);
+  });
+
+  it('railway-edge + a VALID hop count → fails startup, because it is misleading', () => {
+    expect(
+      startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'railway-edge', TRUSTED_PROXY_HOPS: '1' }),
+    ).toThrow(/TRUSTED_PROXY_HOPS/);
+  });
+
+  it('xff-hops + absent hops → fails startup', () => {
+    expect(startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'xff-hops' })).toThrow(
+      /TRUSTED_PROXY_HOPS/,
+    );
+  });
+
+  it('xff-hops + empty hops → fails startup', () => {
+    expect(
+      startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'xff-hops', TRUSTED_PROXY_HOPS: '' }),
+    ).toThrow(/TRUSTED_PROXY_HOPS/);
+  });
+
+  it('xff-hops + a valid hop count → starts', () => {
+    expect(
+      startup('dashboard', { CLIENT_ORIGIN_STRATEGY: 'xff-hops', TRUSTED_PROXY_HOPS: '1' }),
+    ).not.toThrow();
+  });
+
+  it('direct + a hop count → fails the contract as irrelevant and misleading', () => {
+    // `direct` is separately refused in production for these two services; this
+    // asserts the PAIR rule, on a profile where direct is otherwise allowed.
+    expect(
+      startup('worker', { CLIENT_ORIGIN_STRATEGY: 'direct', TRUSTED_PROXY_HOPS: '1' }),
+    ).toThrow(/TRUSTED_PROXY_HOPS/);
+  });
+
+  it('no strategy + a hop count is xff-hops, so the count must be valid', () => {
+    // The inferred case must agree with what `requestContext` does at runtime.
+    expect(startup('worker', { TRUSTED_PROXY_HOPS: 'nonsense' })).toThrow(/TRUSTED_PROXY_HOPS/);
+    expect(startup('worker', { TRUSTED_PROXY_HOPS: '2' })).not.toThrow();
   });
 });

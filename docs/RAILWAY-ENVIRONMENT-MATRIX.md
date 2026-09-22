@@ -417,7 +417,16 @@ CDN edge address rather than the client's. A header that is right most of the ti
 silently wrong behind a CDN is the worst possible input to a rate limiter. If Railway
 fixes it, moving is one branch in `requestContext` plus a new strategy name.
 
+### The hop count must be absent
+
+`railway-edge` reads no hop count, so `TRUSTED_PROXY_HOPS` **must not be set** on either service — an empty
+value fails start-up just as a valid one does. A variable the active strategy ignores tells a reader the
+deployment counts proxies when it does not, and the pair is validated together rather than field by field.
+
 ### What happens when no origin can be established
+
+**There is no socket fallback under `railway-edge`.** The transport peer behind the edge is a Railway proxy,
+not a customer, so substituting it would give unrelated customers one shared rate-limit subject.
 
 In production the limiter **refuses the request** rather than proceeding without a source
 budget. Outside production it warns and skips, so a developer with no proxy can still sign

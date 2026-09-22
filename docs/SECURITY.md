@@ -550,6 +550,34 @@ requests and run the limiter; the marketing site, the Control Center and the wor
 | `xff-hops`     | `chain.length - TRUSTED_PROXY_HOPS` | an ordinary reverse proxy that appends its own peer                           |
 | `direct`       | the transport peer                  | no proxy at all — **refused in production**                                   |
 
+**Each strategy has its own fallback rule, and the asymmetry is deliberate.**
+
+- `railway-edge` has **no socket fallback**. The transport peer behind Railway's edge is a Railway proxy —
+  on the API it is `req.ip`, which is infrastructure, never a customer. Substituting it when the header is
+  missing would collapse unrelated customers into **one shared rate-limit subject**, which is worse than
+  having no subject: it turns a missing signal into a wrong one. A missing or unusable chain therefore
+  answers `undefined`, and in production the limiter refuses. **Trustworthy edge origin, or refusal — never
+  proxy-peer substitution.**
+- `xff-hops` **keeps** its socket fallback, because nothing strips the header there: a chain shorter than the
+  declared hops means the request did not traverse the expected proxies, and the transport peer is the last
+  value the client could not have written.
+- `direct` reads only the socket peer, because under that strategy the peer _is_ the client.
+
+**A hop count belongs to exactly one strategy.** `TRUSTED_PROXY_HOPS` is not independently valid — it is
+required under `xff-hops` and meaningless under the other two, so the pair is validated together:
+
+| Strategy       | `TRUSTED_PROXY_HOPS`                   |
+| -------------- | -------------------------------------- |
+| `railway-edge` | **must be absent**                     |
+| `xff-hops`     | **must be present**, digits only, 1–10 |
+| `direct`       | **must be absent**                     |
+
+This removes a configuration that passed at start-up and then behaved unexpectedly at request time:
+`CLIENT_ORIGIN_STRATEGY=railway-edge` with `TRUSTED_PROXY_HOPS=` parsed cleanly and told an operator,
+wrongly, that a hop count was in force. `requestContext` correspondingly **does not parse the variable at
+all** unless the effective strategy is `xff-hops` — one that the active strategy ignores must never be able
+to fail a request.
+
 **On Railway a hop count is the wrong primitive.** The number of internal hops varies with the routing path
 because the CDN layer adds one and is not always present, so any fixed right-counted index is correct only
 some of the time. The leftmost entry does not move.
