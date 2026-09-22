@@ -407,6 +407,26 @@ validation, not advice:
 | Tax                  | Configure tax behavior per country/region; view tax reports                                                   |
 | Reports              | MRR/ARR movement, cohort retention, revenue by plan/country/currency, failed-payment recovery rate, AI margin |
 
+### 10.1 What is built today — the billing inbox on the System health page
+
+The table above is the module's destination. The one operational capability in it that is **built** is
+"failed events with replay", and it does not live on a Billing screen yet: the current execution Phase 3
+put it on **System health**, the page an operator already opens to ask whether anything is wrong.
+
+- **A bounded, read-only list** of the inbox rows in `DEAD_LETTER`, `FAILED` and `UNRESOLVED` — oldest
+  first, with the event type, provider, attempt count and failure reason. **Never the payload.**
+- **A replay control**, shown only to an actor holding both `platform.plan.assign` and
+  `platform.credit.adjust` — the union of the authorities a replay can exercise, which is strictly
+  narrower than either alone. The action re-checks both: a control that is not rendered is not a
+  control, because a server action is a public HTTP endpoint.
+- **The operator supplies nothing but an id.** The event re-applied is the normalized one the platform
+  stored when its signature was verified, so there is no path to invent a payment or amend an amount.
+- **This surface holds no provider secret.** Its reconciler is built without a provider registry, so it
+  can finish an event the platform already verified and cannot accept a new one (F-07).
+
+**The Phase 7 Control Center redesign is where this becomes a Billing screen.** Nothing here
+reorganises navigation or adds a dashboard.
+
 ---
 
 ## 11. Module 10 — Notification Templates

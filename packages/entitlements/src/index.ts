@@ -11,6 +11,7 @@ export * from './credit-ledger';
 export * from './credit-policy';
 export * from './credits';
 export * from './plan-catalogue';
+export * from './plan-quota';
 export * from './precedence';
 export * from './schedule-quota';
 export * from './service';

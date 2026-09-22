@@ -1,4 +1,5 @@
 import { colorTokens, scrollContainerStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
@@ -52,6 +53,23 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     db.membership.count({ where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' } }),
   );
 
+  /*
+   * THIS CYCLE'S USAGE, FROM THE COUNTERS THAT EXIST.
+   *
+   * These two rows said "available when publishing ships" — which stopped being
+   * true when publishing shipped. The counters were already being read two cards
+   * below, in the quota table, so the same page was simultaneously showing a
+   * customer their scheduled-post usage and telling them it was not available
+   * yet.
+   *
+   * A MISSING COUNTER ROW IS ZERO, NOT UNKNOWN. `usage_counter` is created by
+   * the first consumption in a window, so its absence means nothing has been
+   * consumed — which is a fact, not a gap to be filled with a plausible number.
+   * Anything the platform genuinely does not know still says so.
+   */
+  const usedFor = (featureKey: string): string =>
+    String(counters.find((counter) => counter.featureKey === featureKey)?.used ?? 0);
+
   const laterPhase = t('overview.metric.laterPhase');
   const usageRows: readonly {
     readonly key: string;
@@ -77,10 +95,15 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     {
       key: 'scheduled',
       label: t('plan.usageScheduled'),
-      value: null,
+      value: usedFor(QUOTA_FEATURES.scheduledPostsPerMonth),
       unavailable: laterPhase,
     },
-    { key: 'storage', label: t('plan.usageStorage'), value: null, unavailable: laterPhase },
+    {
+      key: 'storage',
+      label: t('plan.usageStorage'),
+      value: usedFor(QUOTA_FEATURES.storageGb),
+      unavailable: laterPhase,
+    },
   ];
 
   // The capabilities this workspace does not have. Quota dimensions are

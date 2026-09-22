@@ -41,6 +41,49 @@ export const INERT_CREDIT_POLICY: CreditPolicy = {
   reservationTimeoutSeconds: 900,
 };
 
+/**
+ * Materialise the `credits` configuration document.
+ *
+ * ONE READER, because two readers are two answers. The Control Center had this
+ * function inline and the scheduler needed the same values to expire grants and
+ * grant allowances; a copy would have meant an operator could change a policy
+ * and have the screens agree while the sweep went on using the old shape of it.
+ *
+ * ABSENT MEANS INERT, NEVER A GUESS. Every field falls back to
+ * `INERT_CREDIT_POLICY`, so an unconfigured platform expires nothing and warns
+ * about nothing rather than adopting numbers no owner approved (D-12).
+ */
+export function creditPolicyFrom(payload: Record<string, unknown>): CreditPolicy {
+  const numberOr = (value: unknown, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  };
+  return {
+    hardStopAtZero: payload['hardStopAtZero'] !== false,
+    purchasedPackExpiryMonths: numberOr(
+      payload['purchasedPackExpiryMonths'],
+      INERT_CREDIT_POLICY.purchasedPackExpiryMonths,
+    ),
+    promotionalExpiryMonths: numberOr(
+      payload['promotionalExpiryMonths'],
+      INERT_CREDIT_POLICY.promotionalExpiryMonths,
+    ),
+    planGrantExpiryMonths: numberOr(
+      payload['planGrantExpiryMonths'],
+      INERT_CREDIT_POLICY.planGrantExpiryMonths,
+    ),
+    lowBalanceThresholdPercents: Array.isArray(payload['lowBalanceThresholdPercents'])
+      ? (payload['lowBalanceThresholdPercents'] as number[]).filter(
+          (percent) => typeof percent === 'number' && Number.isFinite(percent),
+        )
+      : INERT_CREDIT_POLICY.lowBalanceThresholdPercents,
+    reservationTimeoutSeconds: numberOr(
+      payload['reservationTimeoutSeconds'],
+      INERT_CREDIT_POLICY.reservationTimeoutSeconds,
+    ),
+  };
+}
+
 export type CreditGrantSourceKey =
   | 'PLAN_GRANT'
   | 'TRIAL_GRANT'

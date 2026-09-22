@@ -16,6 +16,7 @@ export * from './checkout';
 export * from './invoices';
 export * from './credit-notes';
 export * from './reconcile';
+export * from './financial-reconciliation';
 export * from './credits-port';
 export * from './subscriptions';
 

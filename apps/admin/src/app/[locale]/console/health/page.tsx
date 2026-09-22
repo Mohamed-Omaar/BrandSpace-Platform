@@ -1,4 +1,5 @@
 import { evaluateHealth, tracingStatus, type DependencyCheck } from '@brandspace/observability';
+import { eventsNeedingAttention } from '@brandspace/billing';
 import { INTEGRATION_CATEGORY_DEFINITIONS } from '@brandspace/integrations';
 import {
   SectionHeader,
@@ -13,6 +14,7 @@ import {
   getPlatformPrisma,
   requirePageActor,
 } from '../../../../server/platform-context';
+import { replayBillingEventAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +31,15 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
   // inventory is configuration, so it needs the configuration read permission.
   const actor = await requirePageActor(locale, 'platform.workspace.read');
   const mayReadConfig = actor.permissionKeys.includes('platform.configuration.read');
+  /*
+   * THE REPLAY AUTHORITY IS THE UNION OF WHAT A REPLAY CAN DO — assigning a
+   * plan and moving credits — and the action re-checks both. A button that is
+   * not rendered is not a control (the action is a public HTTP endpoint), so
+   * this only decides whether an operator is shown something they could not use.
+   */
+  const mayReplay =
+    actor.permissionKeys.includes('platform.plan.assign') &&
+    actor.permissionKeys.includes('platform.credit.adjust');
   const environment = currentEnvironment();
   const isArabic = locale === 'ar';
 
@@ -78,6 +89,20 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
           : 'Not configured (spans are created locally, nothing is exported)',
     },
   ];
+
+  /*
+   * THE BILLING EVENTS NOBODY CAN FINISH WITHOUT BEING TOLD ABOUT THEM.
+   *
+   * A dead-lettered event is a payment that moved at the provider and did not
+   * move here. It writes a CRITICAL audit row when it happens — and an AUDIT ROW
+   * IS NOT AN ALERT: nothing pages anybody, so until this list existed the only
+   * way to find one was to go looking in a log. Listing it on the page an
+   * operator already opens to ask "is anything wrong" is the smallest honest fix.
+   *
+   * BOUNDED, AND WITHOUT THE PAYLOAD. `eventsNeedingAttention` selects identity
+   * and status and never the normalized body.
+   */
+  const stuckEvents = await eventsNeedingAttention(getPlatformPrisma(), { limit: 25 });
 
   const report = evaluateHealth(dependencies);
 
@@ -159,6 +184,67 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
           </tr>
         ))}
       </DataTable>
+
+      <div style={{ marginBlockStart: spacingTokens.xl }}>
+        <SectionHeader
+          title={isArabic ? 'أحداث الفوترة المتوقفة' : 'Billing events that stopped'}
+          description={
+            isArabic
+              ? 'أحداث وصلت وتم التحقق من توقيعها ولم تُطبَّق: نفدت محاولاتها، أو رُفضت لعدم تطابق المبلغ، أو تعذّر ربطها بمساحة عمل. لا يوجد تنبيه خارجي — هذه هي القائمة.'
+              : 'Events that arrived, had their signature verified, and were not applied: out of attempts, refused on an amount mismatch, or impossible to tie to a workspace. There is no external alert — this list is it.'
+          }
+        />
+      </div>
+      {stuckEvents.length === 0 ? (
+        <p
+          data-testid="billing-inbox-clear"
+          style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+        >
+          {isArabic ? 'لا شيء ينتظر قرارًا.' : 'Nothing is waiting for a decision.'}
+        </p>
+      ) : (
+        <DataTable
+          headers={[
+            isArabic ? 'الحدث' : 'Event',
+            isArabic ? 'الحالة' : 'Status',
+            isArabic ? 'المحاولات' : 'Attempts',
+            isArabic ? 'السبب' : 'Reason',
+            isArabic ? 'إعادة التشغيل' : 'Replay',
+          ]}
+        >
+          {stuckEvents.map((event) => (
+            <tr key={event.id} data-testid={`billing-event-${event.id}`}>
+              <Cell>
+                <code style={{ ...typographyTokens.caption, fontFamily: fontTokens.mono }}>
+                  {event.eventType}
+                </code>
+                <div style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                  {event.providerKey} · {event.receivedAt.toISOString().slice(0, 19)}Z
+                </div>
+              </Cell>
+              <Cell>
+                <span style={{ color: colorTokens.danger, fontWeight: 600 }}>{event.status}</span>
+              </Cell>
+              <Cell>{event.attempts}</Cell>
+              <Cell>{event.failureReason ?? '—'}</Cell>
+              <Cell>
+                {mayReplay ? (
+                  <form action={replayBillingEventAction}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="billingEventId" value={event.id} />
+                    <input type="hidden" name="providerKey" value={event.providerKey} />
+                    <button type="submit" data-testid={`replay-${event.id}`}>
+                      {isArabic ? 'أعد التشغيل' : 'Replay'}
+                    </button>
+                  </form>
+                ) : (
+                  <span style={{ color: colorTokens.textMuted }}>—</span>
+                )}
+              </Cell>
+            </tr>
+          ))}
+        </DataTable>
+      )}
 
       {mayReadConfig ? (
         <>

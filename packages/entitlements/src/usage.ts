@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@brandspace/database';
+import type { PrismaClient, TenantScopedClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 
 /**
@@ -31,6 +31,32 @@ import { AppError, type Clock, systemClock } from '@brandspace/shared';
  * IDEMPOTENCY is a second, independent mechanism: the `UsageEvent` row is
  * inserted in the same transaction and its key is unique, so a retried
  * recording aborts the transaction and leaves the counter untouched.
+ *
+ * THE BASELINE PROBLEM, and why a counter alone is not enough for a TOTAL
+ * quota.
+ *
+ * A counter records what has been consumed THROUGH IT. A `total` quota counts
+ * things that EXIST — brands, connected accounts — and those things predate the
+ * day their dimension was wired up. So a workspace with four connected accounts
+ * and a counter of zero was admitted four more under a limit of five, and two
+ * simultaneous callbacks could take the same last slot because the counter each
+ * of them incremented had never known about the other four.
+ *
+ * Counting the resources and comparing before creating is the read-then-write
+ * this file exists to avoid. So the count happens INSIDE the transaction,
+ * BEHIND THE COUNTER ROW'S OWN LOCK:
+ *
+ *   1. create-or-lock the counter row (`ON CONFLICT … DO UPDATE SET x = x`
+ *      locks the conflicting row, which is the whole point of writing it that
+ *      way rather than reading it);
+ *   2. ask the caller for the authoritative live count, on this transaction;
+ *   3. admit on `GREATEST(counter, live) + n <= limit`, in one statement.
+ *
+ * Two concurrent creates serialise on the lock, and the loser re-reads a live
+ * count that now includes the winner's row. `GREATEST` is what makes this
+ * idempotent and non-double-counting: a resource already represented in the
+ * counter is also in the live count, and the greater of the two is one of them,
+ * never their sum.
  */
 
 export const QUOTA_FEATURE_PREFIX = 'limit.';
@@ -122,6 +148,37 @@ export class QuotaExceededError extends AppError {
   }
 }
 
+/**
+ * The client one consumption runs on — a `PrismaClient` or a transaction of
+ * one. Named because the baseline path threads the same transaction through
+ * three statements and a caller-supplied count.
+ */
+export type UsageTx = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'
+>;
+
+/**
+ * The immutable fields that decide whether two recordings are the same request.
+ *
+ * `amount` is SIGNED: a refund is stored as the negative of what it reverses,
+ * so "the same key for a consumption and for a refund" is two different
+ * requests by this comparison, which is what it has to be.
+ */
+interface UsageEventIdentity {
+  readonly workspaceId: string;
+  readonly featureKey: string;
+  readonly amount: number;
+}
+
+function sameUsageRequest(stored: UsageEventIdentity, wanted: UsageEventIdentity): boolean {
+  return (
+    stored.workspaceId === wanted.workspaceId &&
+    stored.featureKey === wanted.featureKey &&
+    stored.amount === wanted.amount
+  );
+}
+
 export interface UsageServiceOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -153,6 +210,21 @@ export class UsageService {
     readonly amount?: number;
     readonly idempotencyKey: string;
     readonly cycle?: QuotaWindow | null;
+    /**
+     * The authoritative number of things that already exist, for a TOTAL
+     * resource quota.
+     *
+     * Supplied by the caller because only the caller knows what the dimension
+     * counts: this package must not learn about brands or social connections to
+     * answer "how many". It is called INSIDE the consuming transaction, on that
+     * transaction's client, and behind the counter row's lock — so what it
+     * returns cannot change between being read and being acted on.
+     *
+     * Absent for a quota that counts EVENTS rather than things (scheduled posts
+     * in a month): there is no live population to reconcile against, and the
+     * counter is the only record there has ever been.
+     */
+    readonly baselineCount?: (db: TenantScopedClient) => Promise<number>;
   }): Promise<QuotaConsumption> {
     const amount = input.amount ?? 1;
     if (!Number.isInteger(amount) || amount <= 0) {
@@ -168,10 +240,12 @@ export class UsageService {
     // A repeat of a recording that already happened returns the CURRENT state
     // rather than incrementing again. Checked before the write so the common
     // retry does not have to provoke a constraint violation to be safe.
-    const replay = await this.#prisma.usageEvent.findUnique({
-      where: { idempotencyKey: input.idempotencyKey },
-      select: { id: true, workspaceId: true, featureKey: true, amount: true },
-    });
+    const wanted: UsageEventIdentity = {
+      workspaceId: input.workspaceId,
+      featureKey: input.featureKey,
+      amount,
+    };
+    const replay = await this.#recordedRequest(input.idempotencyKey);
     if (replay) {
       /*
        * A REPLAY MUST BE THE SAME REQUEST — A-9.
@@ -187,11 +261,7 @@ export class UsageService {
        * The stored event's immutable fields decide whether this is the same
        * request. A different workspace, feature or amount is a CONFLICT.
        */
-      if (
-        replay.workspaceId !== input.workspaceId ||
-        replay.featureKey !== input.featureKey ||
-        replay.amount !== amount
-      ) {
+      if (!sameUsageRequest(replay, wanted)) {
         throw new AppError(
           'CONFLICT',
           'That idempotency key was used for a different usage event.',
@@ -208,6 +278,28 @@ export class UsageService {
 
     const used = await this.#prisma
       .$transaction(async (tx) => {
+        if (input.baselineCount) {
+          const row = await this.#consumeAgainstLive(tx, {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            limitValue: input.limitValue,
+            amount,
+            window,
+            baselineCount: input.baselineCount,
+          });
+          await tx.usageEvent.create({
+            data: {
+              workspaceId: input.workspaceId,
+              featureKey: input.featureKey,
+              idempotencyKey: input.idempotencyKey,
+              amount,
+              counterId: row.id,
+              occurredAt: now,
+            },
+          });
+          return row.usedValue;
+        }
+
         // ONE statement: the limit is in the WHERE, so the check and the
         // increment cannot be separated by another transaction.
         const rows =
@@ -281,13 +373,33 @@ export class UsageService {
         return row.usedValue;
       })
       .catch(async (error: unknown) => {
-        // A retry that RACED the pre-check above lands here instead: both calls
-        // saw no idempotency record, both entered a transaction, and one lost the
-        // unique key. The work was recorded exactly once, which is the guarantee
-        // — so the loser reports the current state rather than an error. Without
-        // this, an ordinary duplicate submit surfaces as a failure for work that
-        // actually succeeded.
+        /*
+         * A retry that RACED the pre-check above lands here instead: both calls
+         * saw no idempotency record, both entered a transaction, and one lost
+         * the unique key. The work was recorded exactly once, which is the
+         * guarantee — so the loser reports the current state rather than an
+         * error. Without this, an ordinary duplicate submit surfaces as a
+         * failure for work that actually succeeded.
+         *
+         * BUT ONLY IF IT WAS THE SAME REQUEST. This path used to establish that
+         * the collision was on `idempotencyKey` and stop there, so two
+         * genuinely DIFFERENT requests sharing one key concurrently produced
+         * one recording and two callers believing their own had been made —
+         * free quota, invisible in the counters, and refused by the sequential
+         * path on the way in. The winning row is read and compared by the same
+         * rule the pre-check applies.
+         */
         if (!isDuplicateIdempotencyKey(error)) throw error;
+        const winner = await this.#recordedRequest(input.idempotencyKey);
+        // The unique index said the row exists; if it does not, something other
+        // than a replay happened and the original error is the honest answer.
+        if (!winner) throw error;
+        if (!sameUsageRequest(winner, wanted)) {
+          throw new AppError(
+            'CONFLICT',
+            'That idempotency key was used for a different usage event.',
+          );
+        }
         const current = await this.consumption({
           workspaceId: input.workspaceId,
           featureKey: input.featureKey,
@@ -378,25 +490,30 @@ export class UsageService {
 
     const window = quotaWindow(input.period, this.#clock.now(), input.cycle ?? null);
 
-    const replay = await this.#prisma.usageEvent.findUnique({
-      where: { idempotencyKey: input.idempotencyKey },
-      select: { workspaceId: true, featureKey: true, amount: true },
-    });
+    /*
+     * SIGNED, and that is the rule rather than a detail: a refund is stored as
+     * the NEGATIVE of what it reverses, so the same key used for a consumption
+     * and for a refund is two different requests by this comparison — which is
+     * what it has to be.
+     */
+    const wanted: UsageEventIdentity = {
+      workspaceId: input.workspaceId,
+      featureKey: input.featureKey,
+      amount: -amount,
+    };
+    const replay = await this.#recordedRequest(input.idempotencyKey);
     if (replay) {
       // Same rule as `consume`: a key names ONE request, and a different one
       // wearing it is a conflict rather than a silent no-op.
-      if (
-        replay.workspaceId !== input.workspaceId ||
-        replay.featureKey !== input.featureKey ||
-        replay.amount !== -amount
-      ) {
+      if (!sameUsageRequest(replay, wanted)) {
         throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
       }
       return;
     }
 
-    await this.#prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: string }[]>`
+    await this.#prisma
+      .$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
         UPDATE "usage_counter"
            SET "usedValue" = GREATEST(0, "usedValue" - ${amount}),
                "updatedAt" = now()
@@ -405,25 +522,162 @@ export class UsageService {
            AND "periodStart" = ${window.start}
         RETURNING "id"`;
 
-      const counterId = rows[0]?.id;
-      // No counter means there is nothing recorded to give back. That is not
-      // an error — a delete of something that never consumed a slot is fine —
-      // but there is also no event to write, because `UsageEvent.counterId`
-      // must point at a real counter.
-      if (!counterId) return;
+        const counterId = rows[0]?.id;
+        // No counter means there is nothing recorded to give back. That is not
+        // an error — a delete of something that never consumed a slot is fine —
+        // but there is also no event to write, because `UsageEvent.counterId`
+        // must point at a real counter.
+        if (!counterId) return;
 
-      await tx.usageEvent.create({
-        data: {
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.idempotencyKey,
+            // Negative: this row REVERSES consumption, and the sign is what
+            // says so in an append-only record.
+            amount: -amount,
+            counterId,
+          },
+        });
+      })
+      .catch(async (error: unknown) => {
+        /*
+         * THE SAME COLLISION PATH `consume` HAS, and it did not have one at
+         * all: two refunds racing the pre-check both wrote, one lost the unique
+         * index, and the loser surfaced a raw database violation for a movement
+         * that HAD been recorded. A retried disconnection reporting a 500 for
+         * work that succeeded is the same defect as accepting a different
+         * request — the opposite direction, the same missing check.
+         *
+         * So the winning row is read and compared by the same rule. The same
+         * movement is a no-op; a DIFFERENT movement wearing this key is a
+         * conflict, however it got here.
+         */
+        if (!isDuplicateIdempotencyKey(error)) throw error;
+        const winner = await this.#recordedRequest(input.idempotencyKey);
+        if (!winner) throw error;
+        if (!sameUsageRequest(winner, wanted)) {
+          throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
+        }
+      });
+  }
+
+  /**
+   * THE ONE RULE: an idempotency key names ONE request, and the STORED event
+   * decides which.
+   *
+   * A-9 said this already, and the pre-check enforced it — but only when the
+   * pre-check SAW the event. Two requests that both looked before either wrote
+   * took a different path: one won the unique index, the other caught the
+   * violation and was told it had replayed successfully, WITHOUT anything ever
+   * comparing the two. Two genuinely different requests sharing a key
+   * concurrently therefore produced one recording and two callers believing
+   * their own had been made. The sequential path refused that and the
+   * concurrent path accepted it, which is the worst combination: the rule
+   * appeared to hold every time it was tested.
+   *
+   * So both paths ask the same question of the same row. `null` means the event
+   * is not there — for the pre-check that is the ordinary first attempt; for
+   * the collision path it cannot happen, and the caller re-throws rather than
+   * inventing an answer.
+   */
+  async #recordedRequest(idempotencyKey: string): Promise<UsageEventIdentity | null> {
+    return this.#prisma.usageEvent.findUnique({
+      where: { idempotencyKey },
+      select: { workspaceId: true, featureKey: true, amount: true },
+    });
+  }
+
+  /**
+   * Consume one slot of a TOTAL resource quota, against what actually exists.
+   *
+   * THREE STATEMENTS, ONE LOCK, NO READ-THEN-WRITE.
+   *
+   * The first creates the counter row if it is not there and LOCKS it either
+   * way — `ON CONFLICT … DO UPDATE SET "usedValue" = "usage_counter"."usedValue"`
+   * writes the value back to itself, which is a no-op to the data and a row
+   * lock to every other transaction. That is deliberate: a plain read would not
+   * serialise two creates, and serialising them is the whole reason the live
+   * count can be trusted between being taken and being used.
+   *
+   * The second asks the caller how many of the thing exist RIGHT NOW, on this
+   * transaction. Behind the lock, and before the new one is created, so it is
+   * the population the new resource is about to join.
+   *
+   * The third admits on the GREATER of the counter and that population. A
+   * resource already represented in the counter is also in the live count, so
+   * taking the greater of the two counts it once — never twice — and repeating
+   * the whole operation converges on the same number.
+   */
+  async #consumeAgainstLive(
+    tx: UsageTx,
+    input: {
+      readonly workspaceId: string;
+      readonly featureKey: string;
+      readonly limitValue: number | null;
+      readonly amount: number;
+      readonly window: QuotaWindow;
+      readonly baselineCount: (db: TenantScopedClient) => Promise<number>;
+    },
+  ): Promise<{ id: string; usedValue: number }> {
+    await tx.$executeRaw`
+      INSERT INTO "usage_counter"
+        ("id", "workspaceId", "featureKey", "periodStart", "periodEnd", "usedValue", "updatedAt")
+      VALUES
+        (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+         ${input.window.start}, ${input.window.end}, 0, now())
+      ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+      DO UPDATE SET "usedValue" = "usage_counter"."usedValue"`;
+
+    const live = await input.baselineCount(tx as unknown as TenantScopedClient);
+    if (!Number.isInteger(live) || live < 0) {
+      throw new AppError('INTERNAL', 'A live resource count must be a whole number of things.');
+    }
+
+    const rows =
+      input.limitValue === null
+        ? await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+            UPDATE "usage_counter"
+               SET "usedValue" = GREATEST("usedValue", ${live}) + ${input.amount},
+                   "updatedAt" = now()
+             WHERE "workspaceId" = ${input.workspaceId}::uuid
+               AND "featureKey"  = ${input.featureKey}
+               AND "periodStart" = ${input.window.start}
+            RETURNING "usedValue", "id"`
+        : await tx.$queryRaw<{ usedValue: number; id: string }[]>`
+            UPDATE "usage_counter"
+               SET "usedValue" = GREATEST("usedValue", ${live}) + ${input.amount},
+                   "updatedAt" = now()
+             WHERE "workspaceId" = ${input.workspaceId}::uuid
+               AND "featureKey"  = ${input.featureKey}
+               AND "periodStart" = ${input.window.start}
+               AND GREATEST("usedValue", ${live}) + ${input.amount} <= ${input.limitValue}
+            RETURNING "usedValue", "id"`;
+
+    const row = rows[0];
+    if (row) return row;
+
+    /*
+     * REFUSED. The number reported is the EFFECTIVE usage — what exists, not
+     * what the counter happened to have recorded — because that is the figure
+     * the customer's own screen shows and the one that explains the refusal.
+     */
+    const counter = await tx.usageCounter.findUnique({
+      where: {
+        workspaceId_featureKey_periodStart: {
           workspaceId: input.workspaceId,
           featureKey: input.featureKey,
-          idempotencyKey: input.idempotencyKey,
-          // Negative: this row REVERSES consumption, and the sign is what says
-          // so in an append-only record.
-          amount: -amount,
-          counterId,
+          periodStart: input.window.start,
         },
-      });
+      },
+      select: { usedValue: true },
     });
+    throw new QuotaExceededError(
+      input.featureKey,
+      input.limitValue ?? 0,
+      Math.max(counter?.usedValue ?? 0, live),
+    );
   }
 
   /** Every counter for a workspace in the current windows — the usage view. */

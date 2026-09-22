@@ -18,6 +18,7 @@ import {
   mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
+import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 
@@ -91,7 +92,7 @@ export async function createBrandAction(formData: FormData): Promise<void> {
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid brand name');
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ db }) => {
+    await inBrandBrain(session.workspace.workspaceId, async ({ db, entitlements, usage }) => {
       /*
        * CREATING A BRAND IS IDEMPOTENT ON ITS NAME (PHASE 2).
        *
@@ -117,6 +118,56 @@ export async function createBrandAction(formData: FormData): Promise<void> {
         select: { id: true },
       });
       if (existing) return;
+
+      /*
+       * THE PLAN'S BRAND CEILING (D-10, `limit.brands`), ENFORCED HERE BECAUSE
+       * HERE IS WHERE A BRAND COMES INTO EXISTENCE.
+       *
+       * It was not enforced anywhere. `limit.brands` was in the plan catalogue,
+       * in the quota projection, on the Control Center's plan editor and in the
+       * downgrade impact check — and no code path consulted it, so every
+       * workspace on every plan could create brands without end. A limit that
+       * only appears in a form an operator fills in is not a limit.
+       *
+       * THE ENGINE ANSWERS, NOT THIS FILE. `entitlements.limit` resolves plan →
+       * override → flag → default; `null` means unlimited and 0 means none, and
+       * the two are not the same number. A second count written here would be a
+       * second answer (the mistake `inAssetLibrary` records for storage).
+       *
+       * THE COUNTER AND THE BRAND MOVE TOGETHER. `inBrandBrain` runs this whole
+       * callback inside ONE PostgreSQL transaction, and `UsageService` runs
+       * inline on that same transaction rather than opening its own — so a
+       * `brand.create` that fails takes the consumption with it, and there is no
+       * window in which the plan is charged for a brand that does not exist.
+       *
+       * IDEMPOTENT ON THE BRAND THIS IS, not on the click. The key is the
+       * workspace and the normalised name — the same identity the replay guard
+       * above uses — so a retried submit that gets past the guard consumes the
+       * same slot rather than a second one.
+       */
+      await usage.consume({
+        workspaceId: session.workspace.workspaceId,
+        featureKey: QUOTA_FEATURES.brands,
+        limitValue: await entitlements.limit(session.workspace.workspaceId, QUOTA_FEATURES.brands),
+        period: 'total',
+        idempotencyKey: `brand:${session.workspace.workspaceId}:${name.toLowerCase()}`,
+        /*
+         * THE BRANDS THAT ALREADY EXIST.
+         *
+         * A `total` quota counts things, and the things predate the day the
+         * dimension was wired up: every brand made before this call site
+         * existed is in the table and not in the counter, and would have been
+         * free. The count runs inside this transaction, behind the counter
+         * row's own lock, so it is the population the new brand is joining and
+         * not a number that could have moved since it was read.
+         *
+         * THE PREDICATE IS DECLARED ONCE, beside the dimension it belongs to,
+         * so this action, the connected-account route and every suite agree
+         * about what occupies a slot.
+         */
+        baselineCount: (scoped) =>
+          TOTAL_RESOURCE_DIMENSIONS.brands.live(scoped, session.workspace.workspaceId),
+      });
 
       // A slug derived from the name, with a short suffix so two brands called
       // the same thing do not collide and so a soft-deleted brand does not hold

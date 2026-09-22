@@ -165,6 +165,27 @@ export interface CycleResetResult {
   readonly alreadyApplied: boolean;
 }
 
+/** What one cycle boundary needs in order to be applied. */
+export interface CycleResetInput {
+  readonly workspaceId: string;
+  readonly monthlyCredits: number;
+  readonly rolloverPolicy: RolloverPolicy;
+  readonly rolloverCapMultiplier: number;
+  readonly cycleKey: string;
+  readonly nextResetAt: Date | null;
+}
+
+/**
+ * How long one cycle boundary may take.
+ *
+ * It expires lapsed buckets, takes a wallet lock, forfeits FIFO above the cap,
+ * grants the allowance and stamps the wallet — and, when the scheduler drives
+ * it, the subscription's own period transition is inside the same transaction.
+ * Prisma's 5s interactive default is the wrong budget for that under
+ * contention, and a boundary that times out is one a customer does not get.
+ */
+const CYCLE_RESET_TIMEOUT_MS = 20_000;
+
 export interface CreditLedgerOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -948,19 +969,36 @@ export class CreditLedgerService {
    * ran first — so the honest outcome is to forfeit what can be forfeited and
    * say how much could not.
    */
-  async runCycleReset(input: {
-    readonly workspaceId: string;
-    readonly monthlyCredits: number;
-    readonly rolloverPolicy: RolloverPolicy;
-    readonly rolloverCapMultiplier: number;
-    readonly cycleKey: string;
-    readonly nextResetAt: Date | null;
-  }): Promise<CycleResetResult> {
+  async runCycleReset(input: CycleResetInput): Promise<CycleResetResult> {
+    return this.#prisma.$transaction(async (tx) => this.runCycleResetWithin(tx, input), {
+      // A boundary expires, forfeits, grants and stamps the wallet. Prisma's
+      // 5s interactive default is the wrong budget for that under contention.
+      timeout: CYCLE_RESET_TIMEOUT_MS,
+    });
+  }
+
+  /**
+   * The body of `runCycleReset`, taking a transaction.
+   *
+   * SEPARATED SO A CALLER CAN COMMIT THE BOUNDARY AND ITS ALLOWANCE TOGETHER.
+   *
+   * The scheduler used to move the subscription's period in one transaction and
+   * grant the new period's credits in another. A failure between them left the
+   * period permanently advanced with no allowance — and because `dueForCycle`
+   * selects on the period end, the workspace was no longer due, so no later
+   * sweep ever retried it. One boundary, one transaction: either the customer
+   * has the new period AND its credits, or they still have neither and the next
+   * sweep tries again.
+   *
+   * `#expireLapsedGrants`, `#lockWallet` and `#grant` already take a
+   * transaction; this is the same seam one level up, not a second ledger.
+   */
+  async runCycleResetWithin(tx: LedgerTx, input: CycleResetInput): Promise<CycleResetResult> {
     const now = this.#clock.now();
     const allowance = BigInt(input.monthlyCredits) * MILLI_PER_CREDIT;
     const completionKey = `reset-complete:${input.cycleKey}`;
 
-    const outcome = await this.#prisma.$transaction(async (tx) => {
+    const outcome = await (async () => {
       /*
        * THE CYCLE MARKER, read first and written last, inside the same
        * transaction. Its presence means this boundary already ran to
@@ -1093,13 +1131,13 @@ export class CreditLedgerService {
         expired,
         alreadyApplied: false,
       } satisfies CycleResetResult;
-    });
+    })();
 
     if (outcome) return outcome;
 
     // A repeat of a cycle that already completed. Report the CURRENT state
     // rather than re-deriving one, and say plainly that nothing was applied.
-    const walletAfter = await this.#prisma.creditWallet.findUniqueOrThrow({
+    const walletAfter = await tx.creditWallet.findUniqueOrThrow({
       where: { workspaceId: input.workspaceId },
     });
     return {

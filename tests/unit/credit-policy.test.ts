@@ -9,6 +9,8 @@ import {
   narrowAllocation,
   rolloverAmount,
   toWholeCredits,
+  creditPolicyFrom,
+  INERT_CREDIT_POLICY,
   MILLI_PER_CREDIT,
   type AllocatableBucket,
   type CreditPolicy,
@@ -255,5 +257,53 @@ describe('the display unit (D-14)', () => {
   it('rounds DOWN, so the customer is never shown more than is spendable', () => {
     expect(toWholeCredits(1999n)).toBe(1);
     expect(toWholeCredits(2000n)).toBe(2);
+  });
+});
+
+/*
+ * READING THE `credits` DOCUMENT — current execution Phase 3.
+ *
+ * There were two readers of it: one inside the Control Center and, once the
+ * scheduler needed the same values to expire grants and grant allowances, very
+ * nearly a second. Two readers are two answers, and the way that shows up is an
+ * operator changing a policy, seeing the screens agree, and the sweep going on
+ * using the old shape of it.
+ */
+describe('reading the credits policy', () => {
+  it('an absent document is INERT, never a guess at the approved numbers', () => {
+    expect(creditPolicyFrom({})).toEqual(INERT_CREDIT_POLICY);
+  });
+
+  it('takes the values an owner set', () => {
+    const policy = creditPolicyFrom({
+      hardStopAtZero: false,
+      purchasedPackExpiryMonths: 12,
+      promotionalExpiryMonths: 3,
+      planGrantExpiryMonths: 1,
+      lowBalanceThresholdPercents: [20, 5],
+      reservationTimeoutSeconds: 600,
+    });
+    expect(policy.hardStopAtZero).toBe(false);
+    expect(policy.purchasedPackExpiryMonths).toBe(12);
+    expect(policy.lowBalanceThresholdPercents).toEqual([20, 5]);
+    expect(policy.reservationTimeoutSeconds).toBe(600);
+  });
+
+  it('THE HARD STOP IS ON UNLESS IT IS EXPLICITLY OFF', () => {
+    // A missing field must not switch off the one control that stops a
+    // customer spending credits they do not have (D-11).
+    expect(creditPolicyFrom({ hardStopAtZero: undefined }).hardStopAtZero).toBe(true);
+    expect(creditPolicyFrom({ hardStopAtZero: null }).hardStopAtZero).toBe(true);
+  });
+
+  it('a nonsense value falls back rather than becoming NaN or a negative month', () => {
+    const policy = creditPolicyFrom({
+      purchasedPackExpiryMonths: 'soon',
+      reservationTimeoutSeconds: -5,
+      lowBalanceThresholdPercents: 'twenty',
+    });
+    expect(policy.purchasedPackExpiryMonths).toBe(INERT_CREDIT_POLICY.purchasedPackExpiryMonths);
+    expect(policy.reservationTimeoutSeconds).toBe(INERT_CREDIT_POLICY.reservationTimeoutSeconds);
+    expect(policy.lowBalanceThresholdPercents).toEqual([]);
   });
 });

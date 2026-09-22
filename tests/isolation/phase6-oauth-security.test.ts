@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type SocialProvider } from '@brandspace/database';
+import { QUOTA_FEATURES, createPlanQuota } from '@brandspace/entitlements';
 import {
   createConnectorRegistry,
   parsePublishingPolicy,
@@ -15,6 +16,7 @@ import {
 import {
   appRoleClient,
   createIsolationFixtures,
+  grantUnlimitedQuota,
   FIXTURE_SOCIAL_KEK,
   type IsolationFixtures,
 } from './fixtures';
@@ -110,6 +112,18 @@ function serviceIn<T>(
           registry: createConnectorRegistry({ policy: active, environment: 'DEVELOPMENT' }),
           vault,
           applications,
+          // THE REAL QUOTA, not a permissive stand-in. `limit.social_accounts`
+          // is unconfigured in these fixtures, which the engine reads as
+          // unlimited — so the ceiling never fires here and the suite keeps
+          // testing what it is about, while still exercising the path that
+          // records the consumption.
+          quota: createPlanQuota({
+            db,
+            workspaceId,
+            environment: 'DEVELOPMENT',
+            featureKey: QUOTA_FEATURES.socialAccounts,
+            period: 'total',
+          }),
         }),
       ),
     { prisma: app },
@@ -170,6 +184,18 @@ beforeAll(async () => {
   app = appRoleClient();
   fixtures = await createIsolationFixtures(app);
   policy = bothProvidersPolicy();
+  // The plan's connected-account ceiling is real now, and a fixture workspace is
+  // on no plan — which the engine reads as "none". These suites are about OAuth
+  // security and token secrecy, not about that ceiling, so the dimension is
+  // granted the way an operator would grant it.
+  // BOTH workspaces: the cross-tenant cases start a flow in B.
+  for (const workspaceId of [fixtures.a.workspaceId, fixtures.b.workspaceId]) {
+    await grantUnlimitedQuota(app, {
+      workspaceId,
+      platformUserId: fixtures.platformUserId,
+      featureKey: QUOTA_FEATURES.socialAccounts,
+    });
+  }
 }, 60_000);
 
 afterAll(async () => {

@@ -19,6 +19,20 @@
 
 ---
 
+## Two phase numberings, and why both are kept
+
+**This document's numbering is the original delivery plan and is not renumbered.** Its "Phase 3 — Plans,
+Entitlements and Credits" was delivered long ago, and every reference to it in the repository's history
+still means that.
+
+A **current execution plan** now runs alongside it, numbered from the work that followed the delivered
+phases. Where the two could be confused, the newer one is written out in full — for example
+"**current execution Phase 3 — Billing & Entitlements Operations**", which gave the already-delivered
+credit and subscription machinery the callers it never had (`docs/BILLING-AND-CREDITS.md` Part V,
+D-237 to D-242). It is a different piece of work from this document's Phase 3 and does not replace it.
+
+---
+
 ## How to Read This Roadmap
 
 - Phases are **sequential**; each has explicit exit criteria that must be demonstrably met before the next begins.

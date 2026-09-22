@@ -44,23 +44,9 @@ const ENVIRONMENT: Environment = 'DEVELOPMENT';
 const REASON = 'Development fixture: enable the quota features the product needs to be usable.';
 
 /**
- * The quota features that must be switched on for the product to be usable at
- * all on a freshly seeded database.
- *
- * EXACTLY THESE TWO, and each is one a customer-facing path actually consults —
- * uploading a file, and putting a post on the calendar. Turning on anything
- * else would be granting capabilities a test does not need, which is the habit
- * F-15 warns about.
- *
- * `limit.scheduled_posts` is here for precisely the reason `limit.storage_gb`
- * is: the engine fails closed, so an ungranted quota feature reports a limit of
- * ZERO — "not unlimited, none" — and every scheduling attempt is refused with a
- * quota error. The Content Calendar is then untestable through the product.
- */
-/**
  * The features an end-to-end run needs switched on.
  *
- * TWO LIMITS AND ONE CAPABILITY, and the capability is here for the same reason
+ * FOUR LIMITS AND ONE CAPABILITY, and the capability is here for the same reason
  * the limits are: the entitlements engine fails CLOSED, so a feature nothing
  * grants resolves to `enabled: false` and the Copilot refuses every plan that
  * would change anything. That is correct in production, where an operator has
@@ -68,11 +54,33 @@ const REASON = 'Development fixture: enable the quota features the product needs
  * through the product — which is how a capability comes to exist only in unit
  * tests.
  *
+ * `limit.brands` AND `limit.social_accounts` JOINED THE LIST IN THE CURRENT
+ * EXECUTION PHASE 3, when they stopped being decorative. Both were in the plan
+ * catalogue and the Control Center and were consulted by no code path, so every
+ * workspace could create brands and connect accounts without end; now that
+ * creating a brand and completing an OAuth callback each consume their
+ * dimension, an unseeded database would resolve both to ZERO and a fresh
+ * workspace could not create its first brand. That is right in production and
+ * untestable in a suite, which is exactly what this fixture is for.
+ *
+ * `limit.seats` IS DELIBERATELY ABSENT. Nothing consumes it yet, and turning on
+ * a feature no path consults would be granting a capability a test does not
+ * need. Why it is not consumed is recorded in docs/DECISIONS.md (D-233): the
+ * founder's own membership is written by the transaction that creates the
+ * workspace, before any plan can exist, so failing closed there would stop a
+ * workspace being created at all rather than stop a seat being added.
+ *
  * `ai.copilot` STILL CARRIES NO LIMIT AND NO PRICE. The flag turns it on; what
  * it costs comes from the credit rules and what a plan allows comes from the
  * plan, neither of which this seed writes.
  */
-const QUOTA_FEATURES = ['limit.storage_gb', 'limit.scheduled_posts', 'ai.copilot'] as const;
+const QUOTA_FEATURES = [
+  'limit.storage_gb',
+  'limit.scheduled_posts',
+  'limit.brands',
+  'limit.social_accounts',
+  'ai.copilot',
+] as const;
 
 function assertNotProduction(): void {
   if ((process.env['APP_ENV'] ?? 'development') === 'production') {

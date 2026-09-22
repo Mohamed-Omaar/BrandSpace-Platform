@@ -21,9 +21,17 @@ import {
   CreditService,
   EntitlementService,
   SubscriptionService,
-  INERT_CREDIT_POLICY,
+  creditPolicyFrom,
+  readPlanCatalogue,
   type CreditPolicy,
+  type PlanDetail,
 } from '@brandspace/entitlements';
+import {
+  BillingReconciler,
+  commercePolicyFrom,
+  creditLedgerPort,
+  type CommercePolicy,
+} from '@brandspace/billing';
 import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
 import { IntegrationsService, type IntegrationDefinition } from '@brandspace/integrations';
@@ -175,22 +183,13 @@ export async function getCreditLedgerService(): Promise<CreditLedgerService> {
 
 /** The active `credits` document, or the inert default. */
 export async function getCreditPolicy(): Promise<CreditPolicy> {
-  const payload = (await getConfigService().get('credits', currentEnvironment())) as Partial<
-    Record<keyof CreditPolicy, unknown>
-  >;
-  return {
-    hardStopAtZero: payload.hardStopAtZero !== false,
-    purchasedPackExpiryMonths: Number(payload.purchasedPackExpiryMonths ?? 0),
-    promotionalExpiryMonths: Number(payload.promotionalExpiryMonths ?? 0),
-    planGrantExpiryMonths: Number(payload.planGrantExpiryMonths ?? 0),
-    consumptionOrder: 'fifo_by_expiry',
-    lowBalanceThresholdPercents: Array.isArray(payload.lowBalanceThresholdPercents)
-      ? (payload.lowBalanceThresholdPercents as number[])
-      : [],
-    reservationTimeoutSeconds: Number(
-      payload.reservationTimeoutSeconds ?? INERT_CREDIT_POLICY.reservationTimeoutSeconds,
-    ),
-  } as CreditPolicy;
+  /*
+   * THE SHARED READER, not a copy of it. This screen and the financial
+   * maintenance sweep must agree about what the owner configured, and they
+   * cannot if each parses the document itself.
+   */
+  const payload = await getConfigService().get('credits', currentEnvironment());
+  return creditPolicyFrom(payload as Record<string, unknown>);
 }
 
 export function getSubscriptionService(): SubscriptionService {
@@ -332,3 +331,45 @@ export class PlatformAccessError extends Error {
  * other files, each a private copy of the same four lines (Phase 10 §18).
  */
 export { currentEnvironment };
+
+/**
+ * The billing inbox, for an operator — current execution Phase 3.
+ *
+ * REPLAY ONLY, AND THAT IS ENFORCED BY CONSTRUCTION. No provider registry is
+ * supplied, so this reconciler cannot verify a signature and cannot accept a
+ * delivery; it can only re-apply an event the platform already received and
+ * already verified. The Control Center therefore never holds a webhook signing
+ * secret (F-07) while still being able to finish a stuck payment.
+ *
+ * THE LEDGER PORT IS THE SAME ONE `apps/api` USES — one function wide, "grant
+ * these credits, once, inside the transaction I am already in" (D-196). A
+ * replayed pack purchase grants exactly what the original would have.
+ */
+export function getBillingReconciler(): BillingReconciler {
+  return new BillingReconciler({
+    credits: creditLedgerPort(new CreditLedgerService({ prisma: getPlatformPrisma() })),
+  });
+}
+
+/** The activated commercial catalogue. Read per call: an activation must take effect. */
+export async function getCommercePolicy(): Promise<CommercePolicy> {
+  const document = await getConfigService().get('commerce', currentEnvironment());
+  return commercePolicyFrom(document as Record<string, unknown>);
+}
+
+/** The activated plan catalogue and the version a settlement pins against. */
+export async function getPlanCatalogue(): Promise<{
+  plans: readonly PlanDetail[];
+  versionId: string | null;
+}> {
+  const environment = currentEnvironment();
+  const configuration = getConfigService();
+  const [document, versionId] = await Promise.all([
+    configuration.get('plans', environment),
+    configuration.activeVersionId('plans', environment),
+  ]);
+  return {
+    plans: readPlanCatalogue(document as Record<string, unknown>),
+    versionId,
+  };
+}
