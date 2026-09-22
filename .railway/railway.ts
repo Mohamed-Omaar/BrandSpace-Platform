@@ -349,7 +349,11 @@ export default defineRailway((ctx, project) => {
    */
   const web = service('web', {
     source: github(REPO),
-    build: { builder: 'RAILPACK', watchPatterns: WEB_WATCH },
+    build: {
+      builder: 'RAILPACK',
+      buildCommand: 'pnpm --filter @brandspace/web build',
+      watchPatterns: WEB_WATCH,
+    },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/web start',
       healthcheckPath: '/',
