@@ -14,8 +14,8 @@ itself, not when the feature exists. "Exists and is tested somewhere" is
 remaining proof needs a Railway environment that does not exist yet. It is not a
 gap; it is a scheduled step.
 
-**Status counts.** 41 PROVEN · 9 PARTIALLY PROVEN · 0 NOT PROVEN · 14 BLOCKED ONLY
-BY LIVE STAGING · 2 genuine defects found and fixed in this pass.
+**Status counts.** 44 PROVEN · 8 PARTIALLY PROVEN · 0 NOT PROVEN · 14 BLOCKED ONLY
+BY LIVE STAGING · **4 genuine defects found and fixed** (two staging-contract, one cross-process provider cache, one test-harness precondition).
 
 ---
 
@@ -49,14 +49,17 @@ BY LIVE STAGING · 2 genuine defects found and fixed in this pass.
 
 ## C. Journey — identity
 
-| #   | Requirement                                      | Implementation        | Test                                                      | Environment dependency     | Status                           |
-| --- | ------------------------------------------------ | --------------------- | --------------------------------------------------------- | -------------------------- | -------------------------------- |
-| C1  | Signup, verification, sign-in, session, sign-out | `@brandspace/auth`    | `customer-app.spec` (41), `phase9-account`                | local Postgres             | **PROVEN**                       |
-| C2  | MFA enrol / verify / recovery codes              | `SignupService`       | `phase4-security-settings.spec`, `phase9-account`         | local Postgres             | **PROVEN**                       |
-| C3  | Password reset, enumeration-safe                 | `CustomerAuthService` | `customer-app.spec`, `phase4-security-email-truthfulness` | local Postgres             | **PROVEN**                       |
-| C4  | Abuse ceilings, per-source and per-account       | `AuthRateLimiter`     | `phase4-auth-abuse` (24)                                  | real Postgres              | **PROVEN**                       |
-| C5  | Verification / reset token expiry and single use | `@brandspace/auth`    | `phase9-account`, `customer-auth`                         | real Postgres              | **PROVEN**                       |
-| C6  | Real transactional email delivery                | `ApiEmailProvider`    | `production-email.spec` (fake Resend)                     | **staging email provider** | **BLOCKED ONLY BY LIVE STAGING** |
+| #   | Requirement                                      | Implementation                   | Test                                                                         | Environment dependency     | Status                            |
+| --- | ------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------------- | -------------------------- | --------------------------------- |
+| C1  | Signup, verification, sign-in, session, sign-out | `@brandspace/auth`               | `customer-app.spec` (41), `phase9-account`                                   | local Postgres             | **PROVEN**                        |
+| C2  | MFA enrol / verify / recovery codes              | `SignupService`                  | `phase4-security-settings.spec`, `phase9-account`                            | local Postgres             | **PROVEN**                        |
+| C3  | Password reset, enumeration-safe                 | `CustomerAuthService`            | `customer-app.spec`, `phase4-security-email-truthfulness`                    | local Postgres             | **PROVEN**                        |
+| C4  | Abuse ceilings, per-source and per-account       | `AuthRateLimiter`                | `phase4-auth-abuse` (24)                                                     | real Postgres              | **PROVEN**                        |
+| C5  | Verification / reset token expiry and single use | `@brandspace/auth`               | `phase9-account`, `customer-auth`                                            | real Postgres              | **PROVEN**                        |
+| C6  | Real transactional email delivery                | `ApiEmailProvider`               | `production-email.spec` (fake Resend)                                        | **staging email provider** | **BLOCKED ONLY BY LIVE STAGING**  |
+| C7  | **Activation reaches the process that sends**    | `apps/api/src/email-provider.ts` | `phase5-email-provider-staleness` (isolation), `phase5-email-provider-cache` | real Postgres              | **PROVEN — defect fixed (D-257)** |
+| C8  | **Disable reaches it just as fast**              | same                             | `phase5-email-provider-staleness`                                            | real Postgres              | **PROVEN**                        |
+| C9  | A provider test states its own precondition      | `production-email.spec`          | the spec's `ensureResendActive`                                              | local                      | **PROVEN — defect fixed (D-258)** |
 
 ## D. Journey — workspace, brand, isolation
 
@@ -134,17 +137,18 @@ BY LIVE STAGING · 2 genuine defects found and fixed in this pass.
 
 ## I. Remaining PARTIALLY PROVEN rows
 
-| Row                                 | What is missing                                               | Why it is not closed in this pass                                                                 |
-| ----------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| H14                                 | Production-mode Redis outage path                             | Needs a controllable Redis failure in a production-mode process; belongs with the staging battery |
-| H15                                 | Customer-visible upload failure when storage is absent        | Same shape — the truthful surface is only observable against a real bucket                        |
-| E7, F13                             | Storage durability across redeploy                            | Needs the staging bucket                                                                          |
-| C6, G9                              | Real email delivery                                           | Needs the staging email provider                                                                  |
-| A10                                 | Environment exists                                            | Owner action                                                                                      |
-| Copilot undo/compensation           | Contract exists; not every path has a compensation assertion  | Scoped to the staging battery                                                                     |
-| Analytics → insight → Copilot chain | Each link proven; the chain is not asserted as one journey    | Candidate for the staging journey spec                                                            |
-| Invitation path                     | Tested in isolation; not part of the single journey spec      | Candidate for the staging journey spec                                                            |
-| Arabic/RTL depth                    | Proven across many screens; not every Phase 5 stage in Arabic | Extend with the staging journey                                                                   |
+| Row                                 | What is missing                                                                                    | Why it is not closed in this pass                                                                                                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| H14                                 | Production-mode Redis outage path                                                                  | Needs a controllable Redis failure in a production-mode process; belongs with the staging battery                                                                                                            |
+| H15                                 | Customer-visible upload failure when storage is absent                                             | Same shape — the truthful surface is only observable against a real bucket                                                                                                                                   |
+| E7, F13                             | Storage durability across redeploy                                                                 | Needs the staging bucket                                                                                                                                                                                     |
+| C6, G9                              | Real email delivery                                                                                | Needs the staging email provider                                                                                                                                                                             |
+| A10                                 | Environment exists                                                                                 | Owner action                                                                                                                                                                                                 |
+| Copilot undo/compensation           | Contract exists; not every path has a compensation assertion                                       | Scoped to the staging battery                                                                                                                                                                                |
+| Credential rotation latency         | Rotating a provider key does not change the configuration document, so no version stamp can see it | **Stated as a product contract** (D-257), not closed. Closing it means stamping on the secret's own version — a second uncached read per send, not obviously worth it until rotation is operationally urgent |
+| Analytics → insight → Copilot chain | Each link proven; the chain is not asserted as one journey                                         | Candidate for the staging journey spec                                                                                                                                                                       |
+| Invitation path                     | Tested in isolation; not part of the single journey spec                                           | Candidate for the staging journey spec                                                                                                                                                                       |
+| Arabic/RTL depth                    | Proven across many screens; not every Phase 5 stage in Arabic                                      | Extend with the staging journey                                                                                                                                                                              |
 
 ## J. What the repository can enforce vs what only Railway can
 

@@ -172,6 +172,27 @@ never a value — and exits non-zero until every service is ready.
 13. Start Web.
 14. Verify health/readiness before functional tests.
 
+## Integration defects found and fixed in the repository-side pass
+
+Four, none of which needed a Railway environment to find.
+
+1. **Staging was held to the production KMS contract** — every service holding a key
+   domain reported itself misconfigured in staging, demanding a managed key staging
+   does not use. The message invited the one fix that must never happen: pasting
+   production's ARN into staging (D-256 context; fixed in `packages/shared/src/env.ts`).
+2. **Staging could not carry the sandbox billing secret** its own development payment
+   adapter needs.
+3. **A provider activated in the Control Center did not reach the API** (D-257). The
+   email provider was memoised for sixty seconds keyed on time alone, and the process
+   that activates is not the process that sends. `/v1/internal/email/deliver` returned
+   200 the whole time, so the failure was silent. Now stamped with the activated
+   `configuration_version`: activation and disable take effect on the next send, in
+   every process. **Credential rotation remains bounded by `PROVIDER_TTL_MS`, and that
+   is a stated contract rather than an oversight.**
+4. **A test inherited its precondition from another test** (D-258), which the stale
+   cache had been standing in for. Fixed after the product defect underneath it, not
+   instead of it.
+
 ## Full E2E journey
 
 The staging battery must exercise one coherent customer journey, not isolated pages.
