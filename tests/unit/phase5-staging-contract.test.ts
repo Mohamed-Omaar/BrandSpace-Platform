@@ -124,7 +124,7 @@ describe('a staging service as the blueprint builds it starts clean', () => {
 
 describe('production is unchanged — it is still sealed by KMS', () => {
   function productionEnv(profile: StartupServiceProfile): Record<string, string> {
-    const env = { ...stagingEnv(profile), APP_ENV: 'production' };
+    const env: Record<string, string> = { ...stagingEnv(profile), APP_ENV: 'production' };
     // Production supplies the managed keys and the identity that calls them.
     if (profile === 'dashboard') env['CUSTOMER_MFA_VAULT_KMS_KEY_ARN'] = arn('customer-mfa');
     if (profile === 'api') {
