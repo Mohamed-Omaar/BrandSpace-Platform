@@ -55,24 +55,51 @@ function secrets(): SecretService {
 }
 
 /**
- * A resolved provider plus how long it may be trusted.
+ * A resolved provider, the activated configuration it was built from, and how
+ * long its CREDENTIAL may be trusted.
  *
- * THE CACHE IS SHORT AND DELIBERATE. Resolving means a configuration read and a
- * decryption, and doing both on every verification email would make signup a
- * database round trip slower than it needs to be. But a cache that never
- * expires means rotating a key in the Control Center does not take effect until
- * a redeploy — so it expires, and quickly enough that rotation is a minute's
- * wait rather than an operation.
+ * WHY THERE IS A VERSION STAMP — Phase 5. The cache used to be time-only, and
+ * the process that ACTIVATES a provider is not the process that SENDS. An owner
+ * connects Resend in the Control Center; the admin process invalidates its own
+ * configuration cache and reports success; the API process goes on answering
+ * from a sixty-second-old resolution and keeps writing to the development
+ * outbox. The internal delivery route returns 200 the whole time, because from
+ * its point of view a provider accepted the message — so the failure is silent,
+ * and the first evidence is a customer who never received a verification link.
+ *
+ * `resetEmailProviderCache` existed for exactly this and HAD NO CALLERS, in
+ * this repository or anywhere else. A cross-process cache cannot be invalidated
+ * by an in-process function call, so the design was unfixable in that shape.
+ *
+ * THE STAMP IS THE ACTIVATED VERSION ID, read uncached on every resolve. It is
+ * one indexed lookup — `activeVersionId` exists for precisely this kind of
+ * question and documents its own refusal to be cached — and it makes activation
+ * and disable take effect on the NEXT SEND in every process, with no window.
+ *
+ * THE TTL SURVIVES, NARROWED TO ONE JOB AND STATED AS A CONTRACT. Rotating a
+ * provider CREDENTIAL does not change the configuration document: the secret
+ * reference is the same, only the sealed value behind it differs. No stamp this
+ * side of reading the secret can see that, so rotation remains bounded by the
+ * TTL rather than instant. **Activation and disable are immediate; a credential
+ * rotation takes effect within `PROVIDER_TTL_MS`.**
  */
 interface CachedProvider {
   readonly provider: EmailProvider;
+  /** The `configuration_version` this provider was built from. */
+  readonly versionId: string | null;
   readonly expiresAt: number;
 }
 
 const PROVIDER_TTL_MS = 60_000;
 let cached: CachedProvider | null = null;
 
-/** Drop the memoised provider. Used by tests and after a configuration change. */
+/**
+ * Drop the memoised provider.
+ *
+ * KEPT FOR TESTS, which run several resolutions in one process and need a known
+ * starting point. It is NOT the invalidation mechanism — the version stamp is,
+ * because a function call cannot reach another process.
+ */
 export function resetEmailProviderCache(): void {
   cached = null;
 }
@@ -158,9 +185,27 @@ async function buildProvider(prisma: PrismaClient): Promise<EmailProvider> {
  * construct an email provider anywhere else.
  */
 export async function getEmailProvider(prisma: PrismaClient = getPrisma()): Promise<EmailProvider> {
+  const environment = currentEnvironment();
+  /*
+   * THE STAMP, READ FIRST AND UNCACHED. One indexed lookup, and it is what makes
+   * this correct across processes: the activation happened somewhere else, so
+   * only the database can say whether what we hold is still current.
+   */
+  const versionId = await configuration().activeVersionId('integrations.email', environment);
   const now = Date.now();
-  if (cached && cached.expiresAt > now) return cached.provider;
+
+  if (cached && cached.versionId === versionId && cached.expiresAt > now) return cached.provider;
+
+  /*
+   * ABOUT TO REBUILD, SO DROP THIS PROCESS'S CONFIGURATION CACHE FOR THE DOMAIN.
+   * `ConfigurationService` memoises payloads for thirty seconds of its own, and
+   * it was invalidated in the process that activated — not in this one. Without
+   * this, a correct stamp would still be answered with the previous document and
+   * the rebuild would produce the stale provider again.
+   */
+  configuration().invalidateCache('integrations.email', environment);
+
   const provider = await buildProvider(prisma);
-  cached = { provider, expiresAt: now + PROVIDER_TTL_MS };
+  cached = { provider, versionId, expiresAt: now + PROVIDER_TTL_MS };
   return provider;
 }
