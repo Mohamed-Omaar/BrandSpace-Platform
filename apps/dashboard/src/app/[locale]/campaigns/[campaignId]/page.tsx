@@ -22,6 +22,7 @@ import { inContentStudio } from '../../../../server/content-context';
 import { inAnalytics } from '../../../../server/analytics-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
+import { NotesPanel } from '../../../../components/notes-panel';
 import { archiveCampaignAction, updateCampaignAction } from '../actions';
 import { CampaignFormView } from '../campaign-form-view';
 import {
@@ -362,6 +363,22 @@ export default async function CampaignDetailPage({
             ) : null}
           </section>
         ) : null}
+
+        {/*
+          THE CONVERSATION LIVES ON THE CAMPAIGN (P6-05).
+        
+          A campaign is a project room, so the notes about it belong in the room
+          rather than in a separate inbox somebody has to correlate by hand. The
+          panel renders NOTHING at all for a member who may not read this
+          campaign's notes — the service answers 404 identically to a campaign
+          that does not exist, and an empty conversation would claim there is
+          nothing here, which is a different and wrong statement.
+        */}
+        <NotesPanel
+          locale={locale}
+          subject={{ type: 'CAMPAIGN', campaignId: campaign.id }}
+          returnPath={`/${locale}/campaigns/${campaign.id}`}
+        />
       </div>
     </WorkspaceShell>
   );
