@@ -431,15 +431,18 @@ describe('every declared template renders in both languages', () => {
   });
 
 
-  it('uses the BrandSpace shell without remote assets or tracking pixels', () => {
+  it('matches the BrandSpace protected-preview shell without tracking pixels', () => {
     const rendered = renderEmail(message());
     expect(rendered.html).toContain('BrandSpace');
+    expect(rendered.html).toContain('https://www.brandspace.cc/brandspace-logo.svg');
+    expect(rendered.html).toContain('SECURE EMAIL');
     expect(rendered.html).toContain('#7935FE');
     expect(rendered.html).toContain('#FFDD15');
     expect(rendered.html).toContain('#111114');
+    expect(rendered.html).toContain('background-image:radial-gradient');
     expect(rendered.html).toContain('role="presentation"');
-    expect(rendered.html).not.toContain('<img');
-    expect(rendered.html).not.toMatch(/tracking|pixel/i);
+    expect(rendered.html).toContain('background-color:#111114');
+    expect(rendered.html).not.toMatch(/tracking[_-]?pixel/i);
   });
 
   it('keeps the action prominent and the raw URL available as a fallback', () => {
