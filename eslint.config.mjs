@@ -398,6 +398,10 @@ export default tseslint.config(
       // operator command: its entire interface is what it prints to a
       // terminal, including the one-time MFA enrolment.
       '**/bootstrap-production-owner.ts',
+      // Its staging sibling, for the same reason: a one-off command whose
+      // output IS its result. Added when the file arrived without it and
+      // failed lint on three `console.log` calls that are the whole point.
+      '**/bootstrap-staging-owner.ts',
     ],
     rules: {
       'no-console': 'off',

@@ -374,6 +374,44 @@ Every level, per the brief: unit · integration · isolation · E2E in **both** 
 responsive. The regression methodology carried forward from Phases 4 and 5 applies to every defect
 fixed in this phase — write the test, plant the defect, show the test fail, restore, keep the test.
 
+### 7.1 Defect plants performed so far
+
+Each was shown FAILING with the defect in place and PASSING once restored. A test that does not fail
+when its defect is reinstated is not evidence of anything.
+
+| # | Planted defect | Failed |
+| - | -------------- | ------ |
+| 1 | The quota default collapse restored (`quotaWithNoStatedCeiling` forced false) | 2 unit, 3 isolation |
+| 2 | The `planEnded` narrowing dropped, so a cancelled subscription gets unlimited | 1 unit |
+| 3 | The concurrent-replay guard removed from `usage.consume` | 1 isolation |
+| 4 | `.cs-select`'s fill changed away from the demo's value | 2 unit (fidelity) |
+| 5 | A gradient rewritten as a colour longhand, to test the substitution's narrowness | 2 unit (fidelity) |
+| 6 | The accounting export button returned to bare | 1 unit |
+| 7 | The select chevron re-keyed to a class instead of the element | 1 unit |
+| 8 | The `background` shorthand returned to `.cs-field select` | 1 unit |
+| 9 | `CONTROL_CLASS` removed from the password input | 1 unit |
+| 10 | The 12-character floor hard-coded back into `hashPassword` | 2 unit |
+| 11 | A server action made to read the password confirmation | 1 unit |
+| 12 | The confirmation field given a `name`, so it submits | 1 unit |
+| 13 | `MIN_OWNER_PASSWORD_LENGTH` lowered to the customer floor | 1 unit |
+
+Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
+substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
+the property proves the opposite of what it claims, and the second attempt used a class that shares
+no substring.
+
+### 7.2 Results on this branch
+
+| Gate | Result |
+| ---- | ------ |
+| Unit | **2238 passed**, 94 files (2232 before the merge brought the owner's 6) |
+| Isolation (real PostgreSQL) | see §7.3 |
+| D-29 tenant-isolation gate | 65 tenant-owned, 9 platform-owned — all covered |
+| Typecheck | clean across every package and app |
+| Lint | clean (after fixing the seven errors the merge brought in — D-263) |
+| Build | clean |
+| Secret scan (CI's exact pattern) | no new matches; the only hits are the pre-existing allowlisted redaction fixtures |
+
 ---
 
 ## 8. Close-out

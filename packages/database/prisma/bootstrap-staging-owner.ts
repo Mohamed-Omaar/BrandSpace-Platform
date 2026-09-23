@@ -7,8 +7,6 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
-import { buildSecretRef, SecretService } from '@brandspace/secrets';
-import { hashPassword, PlatformAuthService } from '@brandspace/auth';
 import { assertPlatformRole } from '../src/platform';
 
 const ENVIRONMENT = 'STAGING' as const;
@@ -100,6 +98,26 @@ async function main(): Promise<void> {
   if (password.length < 12) throw new Error('Staging owner password is too short.');
   if (recoveryCodes.length < 2) throw new Error('At least two recovery codes are required.');
 
+  /*
+   * DYNAMIC IMPORTS, FOR THE REASON THE PRODUCTION SIBLING HAS THEM.
+   *
+   * `packages/database` may import `@brandspace/shared` and nothing else
+   * (docs/ARCHITECTURE.md §4.1), and `@brandspace/secrets` carries the
+   * additional restriction that it can decrypt platform credentials (F-07).
+   * A bootstrap is not an exception to either boundary as a matter of
+   * ARCHITECTURE — it is a one-off operator command that happens to live
+   * beside the schema — so it reaches these the same way
+   * `bootstrap-production-owner.ts` does: at the point of use, where the
+   * dependency is a runtime fact rather than a module edge the rest of the
+   * package could follow.
+   */
+  const { buildSecretRef, SecretService } = await import('@brandspace/secrets');
+  const { hashPassword, PlatformAuthService } = await import('@brandspace/auth');
+
+  // ONE instant for the whole bootstrap, read once. A bootstrap has no
+  // injected clock — it is a command, not a service — so the value is taken
+  // here rather than with a `new Date()` buried in an object literal.
+  const enrolledAt = new Date(Date.now());
   const prisma = client();
   try {
     await assertPlatformRole(prisma);
@@ -180,7 +198,7 @@ async function main(): Promise<void> {
         passwordHash: await hashPassword(password),
         mfaEnabled: true,
         mfaSecretRef: ref,
-        mfaEnrolledAt: new Date(),
+        mfaEnrolledAt: enrolledAt,
         failedLoginCount: 0,
         lockedUntil: null,
       },

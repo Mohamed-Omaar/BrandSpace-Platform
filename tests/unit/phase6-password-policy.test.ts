@@ -212,6 +212,40 @@ describe('P6-03a · the confirmation is never trusted by the server', () => {
 });
 
 describe('P6-03a · Platform Admin is untouched', () => {
+  it('the platform owner bootstraps keep their OWN, stricter floors', () => {
+    /*
+     * A PLATFORM OWNER IS NOT A CUSTOMER, and D-261 lowered the CUSTOMER floor.
+     *
+     * These create the account that can reach every tenant's data, behind
+     * mandatory MFA (D-27). Both already carry their own explicit minimum —
+     * 16 for production, 12 for staging — so neither was ever relying on
+     * `hashPassword`'s floor and neither moved when that floor did. Pinned
+     * here because the natural next step for somebody tidying up after D-261
+     * is to "make them consistent", which would weaken the one account the
+     * brief says must not weaken.
+     *
+     * The literal-scanning guard above deliberately does NOT reach these files;
+     * this is what keeps them honest instead.
+     */
+    const guards = readFileSync('packages/database/prisma/bootstrap-owner-guards.ts', 'utf8');
+    const production = guards.match(/MIN_OWNER_PASSWORD_LENGTH\s*=\s*(\d+)/);
+    expect(production, 'the production owner floor is gone entirely').not.toBeNull();
+    expect(
+      Number(production?.[1]),
+      'the production Platform Owner floor must stay above the customer floor',
+    ).toBeGreaterThanOrEqual(16);
+
+    const staging = readFileSync('packages/database/prisma/bootstrap-staging-owner.ts', 'utf8');
+    const stagingFloor = staging.match(/password\.length\s*<\s*(\d+)/);
+    expect(stagingFloor, 'the staging owner floor is gone entirely').not.toBeNull();
+    expect(Number(stagingFloor?.[1])).toBeGreaterThanOrEqual(12);
+
+    // And both are strictly above what a customer may use, which is the
+    // property that actually matters.
+    expect(Number(production?.[1])).toBeGreaterThan(ABSOLUTE_MIN_PASSWORD_LENGTH);
+    expect(Number(stagingFloor?.[1])).toBeGreaterThan(ABSOLUTE_MIN_PASSWORD_LENGTH);
+  });
+
   it('no platform auth path reads the customer signup policy', () => {
     // The brief is explicit that Platform Admin MFA and security rules do not
     // weaken. The customer floor lives in the `onboarding` domain, which the
