@@ -357,6 +357,19 @@ describe('the Railway blueprint satisfies the production environment contract', 
  * configuration nobody reads — which is configuration that drifts, and later
  * gets copied somewhere it changes behaviour.
  */
+describe('the marketing healthcheck uses a deterministic locale route', () => {
+  it('does not probe the locale redirect at /', () => {
+    const webStart = SOURCE.indexOf("const web = service('web', {");
+    const dashboardStart = SOURCE.indexOf("const dashboard = service('dashboard'", webStart);
+    expect(webStart).toBeGreaterThan(-1);
+    expect(dashboardStart).toBeGreaterThan(webStart);
+
+    const webBlock = SOURCE.slice(webStart, dashboardStart);
+    expect(webBlock).toContain("healthcheckPath: '/en/status'");
+    expect(webBlock).not.toContain("healthcheckPath: '/'");
+  });
+});
+
 describe('the client-origin contract is carried to its consumers only', () => {
   const CONSUMERS = ['dashboard', 'api'];
   const NON_CONSUMERS = ['web', 'admin', 'worker'];

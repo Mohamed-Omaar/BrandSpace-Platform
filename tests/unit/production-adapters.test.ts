@@ -403,6 +403,7 @@ describe('every declared template renders in both languages', () => {
     'auth.email_verification',
     'auth.signup.exists',
     'auth.password_reset',
+    'auth.password_reset.unknown',
     'workspace.invitation',
     'workspace.invitation.resent',
     'workspace.suspended',
@@ -427,6 +428,30 @@ describe('every declared template renders in both languages', () => {
     );
     expect(rendered.html).not.toContain('<script>');
     expect(rendered.html).toContain('&amp;');
+  });
+
+  it('matches the BrandSpace protected-preview shell without tracking pixels', () => {
+    const rendered = renderEmail(message());
+    expect(rendered.html).toContain('BrandSpace');
+    expect(rendered.html).toContain('https://www.brandspace.cc/brandspace-logo.svg');
+    expect(rendered.html).toContain('SECURE EMAIL');
+    expect(rendered.html).toContain('#7935FE');
+    expect(rendered.html).toContain('#FFDD15');
+    expect(rendered.html).toContain('#111114');
+    expect(rendered.html).toContain('rgba(121,53,254,0.28)');
+    expect(rendered.html).toContain('rgba(255,221,21,0.34)');
+    expect(rendered.html).toContain('rgba(255,153,185,0.22)');
+    expect(rendered.html).toContain('role="presentation"');
+    expect(rendered.html).toContain('background-color:#111114');
+    expect(rendered.html).not.toMatch(/tracking[_-]?pixel/i);
+  });
+
+  it('keeps the action prominent and the raw URL available as a fallback', () => {
+    const link = 'https://app.example.com/en/verify?token=abc';
+    const rendered = renderEmail(message({ link }));
+    expect(rendered.html).toContain('Confirm my email address');
+    expect(rendered.html).toContain(link);
+    expect(rendered.text).toContain(link);
   });
 
   it('gives the two signup templates the same subject, so neither reveals which was sent', () => {

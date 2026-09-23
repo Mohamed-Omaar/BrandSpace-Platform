@@ -16,10 +16,11 @@ import type { EmailMessageInput, EmailTemplateKey } from './email';
  * the renderer has to hold both. A single-language catalogue here would make
  * every Arabic customer's verification link arrive in English.
  *
- * DELIBERATELY PLAIN. No layout, no logo, no tracking pixel, no unsubscribe
- * footer: these are six transactional messages, and the one thing each must do
- * is carry a link that works. Design is a product decision this pass does not
- * take.
+ * BRANDED, BUT STILL TRANSACTIONAL. These messages use one restrained
+ * BrandSpace shell: no tracking pixel, no marketing content and no unsubscribe
+ * footer. The shell is intentionally table-based with inline styles so it
+ * survives conservative email clients while the security-sensitive words and
+ * links remain owned by this closed catalogue.
  *
  * THE TOKEN IS NEVER A VARIABLE. `link` is handed in already composed and is
  * never persisted; the templates below interpolate it and nothing else that
@@ -166,23 +167,119 @@ function escapeHtml(value: string): string {
  * input because today's callers are trusted is a renderer that stops being
  * correct the first time a new one is added.
  */
+const BRAND_PURPLE = '#7935FE';
+const BRAND_YELLOW = '#FFDD15';
+const BRAND_INK = '#111114';
+const BRAND_MUTED = '#717179';
+const BRAND_SURFACE = '#F3F3F3';
+const BRAND_CARD = '#FFFFFF';
+const BRAND_BADGE = '#F3EFFF';
+const BRAND_LOGO_URL = 'https://www.brandspace.cc/brandspace-logo.svg';
+
+/**
+ * Render the shared BrandSpace transactional shell.
+ *
+ * THE ONLY REMOTE ASSET IS OUR PUBLIC BRAND MARK. It comes from BrandSpace's
+ * own public site, carries no recipient data and is decorative: the BrandSpace
+ * name is still present as text beside it, so image blocking never removes the
+ * sender identity. There are no tracking pixels or recipient-specific image
+ * URLs. The message also remains complete when HTML is stripped because
+ * `text` is rendered independently below.
+ */
 export function renderEmail(message: EmailMessageInput): RenderedEmail {
   const copy = TEMPLATES[message.templateKey][message.locale];
   const rtl = message.locale === 'AR';
+  const dir = rtl ? 'rtl' : 'ltr';
+  const align = rtl ? 'right' : 'left';
 
   const text = message.link ? `${copy.body}\n\n${message.link}\n` : `${copy.body}\n`;
 
+  const safeLink = message.link ? escapeHtml(message.link) : '';
   const action =
     message.link && copy.action
-      ? `<p><a href="${escapeHtml(message.link)}">${escapeHtml(copy.action)}</a></p>` +
-        // The bare URL as well: a client that strips links leaves the reader
-        // with nothing to act on otherwise.
-        `<p>${escapeHtml(message.link)}</p>`
+      ? `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:24px;margin-bottom:22px;">
+          <tr>
+            <td bgcolor="${BRAND_INK}" align="center" style="background-color:${BRAND_INK};border-radius:13px;">
+              <a href="${safeLink}" style="display:block;padding-top:14px;padding-right:20px;padding-bottom:14px;padding-left:20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:800;color:#FFFFFF;text-decoration:none;text-align:center;">
+                ${escapeHtml(copy.action)}
+              </a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin-top:0;margin-right:0;margin-bottom:7px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:${BRAND_MUTED};">
+          ${rtl ? 'إذا لم يعمل الزر، انسخ الرابط التالي والصقه في المتصفح:' : 'If the button does not work, copy and paste this link into your browser:'}
+        </p>
+        <p style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;word-break:break-all;color:${BRAND_PURPLE};">
+          ${safeLink}
+        </p>`
       : '';
 
-  const html =
-    `<!doctype html><html lang="${rtl ? 'ar' : 'en'}" dir="${rtl ? 'rtl' : 'ltr'}">` +
-    `<body><p>${escapeHtml(copy.body)}</p>${action}</body></html>`;
+  const html = `<!doctype html>
+<html lang="${rtl ? 'ar' : 'en'}" dir="${dir}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${escapeHtml(copy.subject)}</title>
+</head>
+<body dir="${dir}" bgcolor="${BRAND_SURFACE}" style="margin:0;background-color:${BRAND_SURFACE};background-image:radial-gradient(circle at 12% 8%,rgba(121,53,254,0.28),transparent 34%),radial-gradient(circle at 90% 92%,rgba(255,221,21,0.34),transparent 34%),radial-gradient(circle at 82% 18%,rgba(255,153,185,0.22),transparent 28%);">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND_SURFACE}" style="width:100%;background-color:transparent;">
+    <tr>
+      <td align="center" style="padding-top:56px;padding-right:18px;padding-bottom:56px;padding-left:18px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td bgcolor="${BRAND_CARD}" style="background-color:${BRAND_CARD};border-radius:30px;padding-top:40px;padding-right:40px;padding-bottom:34px;padding-left:40px;text-align:${align};box-shadow:0 28px 80px rgba(35,22,66,0.12);">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+                <tr>
+                  <td valign="middle" style="padding-right:${rtl ? '0' : '11px'};padding-left:${rtl ? '11px' : '0'};">
+                    <img src="${BRAND_LOGO_URL}" width="42" height="42" border="0" alt="BrandSpace" style="display:block;width:42px;height:42px;border:0;border-radius:12px;">
+                  </td>
+                  <td valign="middle">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:800;color:${BRAND_INK};letter-spacing:-0.3px;">BrandSpace</span>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:17px;">
+                <tr>
+                  <td bgcolor="${BRAND_BADGE}" style="background-color:${BRAND_BADGE};border-radius:999px;padding-top:7px;padding-right:11px;padding-bottom:7px;padding-left:11px;">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:14px;font-weight:800;letter-spacing:0.7px;color:#5F25CF;text-transform:uppercase;">
+                      <span aria-hidden="true" style="color:${BRAND_PURPLE};">●</span>&nbsp; ${rtl ? 'رسالة آمنة' : 'SECURE EMAIL'}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="margin-top:0;margin-right:0;margin-bottom:11px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:38px;font-weight:800;letter-spacing:-1.2px;color:${BRAND_INK};text-align:${align};">
+                ${escapeHtml(copy.subject)}
+              </h1>
+              <p style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:${BRAND_MUTED};text-align:${align};">
+                ${escapeHtml(copy.body)}
+              </p>
+
+              ${action}
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;">
+                <tr>
+                  <td valign="middle" style="padding-right:${rtl ? '0' : '8px'};padding-left:${rtl ? '8px' : '0'};">
+                    <span aria-hidden="true" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:14px;color:${BRAND_YELLOW};">●</span>
+                  </td>
+                  <td valign="middle">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#A3A3AA;">
+                      ${rtl ? 'إشعار آمن من BrandSpace' : 'Secure BrandSpace notification'}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 
   return { subject: copy.subject, text, html };
 }

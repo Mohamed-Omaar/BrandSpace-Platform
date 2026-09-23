@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validateStartupConfiguration, type StartupServiceProfile } from '@brandspace/shared';
 
@@ -265,5 +267,65 @@ describe('the client-origin contract reaches staging unchanged', () => {
 
   it('staging carries no hop count under railway-edge', () => {
     expect(check('api', { TRUSTED_PROXY_HOPS: '1' }).ok).toBe(false);
+  });
+});
+
+describe('the Railway marketing service builds the Next app it starts', () => {
+  it('builds @brandspace/web before running next start', () => {
+    const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
+    const webStart = railway.indexOf("const web = service('web'");
+    const dashboardStart = railway.indexOf("const dashboard = service('dashboard'");
+    const webBlock = railway.slice(webStart, dashboardStart);
+
+    expect(webBlock).toContain("buildCommand: 'pnpm --filter @brandspace/web build'");
+    expect(webBlock).toContain("startCommand: 'pnpm --filter @brandspace/web start'");
+  });
+});
+
+describe('the Railway browser app healthchecks use stable 200 routes', () => {
+  it('does not probe the locale-redirecting root for dashboard or admin', () => {
+    const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
+    const dashboardStart = railway.indexOf("const dashboard = service('dashboard'");
+    const adminStart = railway.indexOf("const admin = service('admin'");
+    const apiStart = railway.indexOf("const api = service('api'");
+    const dashboardBlock = railway.slice(dashboardStart, adminStart);
+    const adminBlock = railway.slice(adminStart, apiStart);
+
+    expect(dashboardBlock).toContain("healthcheckPath: '/en/reset'");
+    expect(adminBlock).toContain("healthcheckPath: '/en/login'");
+  });
+});
+
+describe('the database bootstrap makes the migration identity the schema owner', () => {
+  it('transfers public schema ownership to brandspace_migrator and verifies it', () => {
+    /*
+     * LIVE STAGING DEFECT. Railway provisions the database before BrandSpace
+     * creates its three roles, so the database and its public schema initially
+     * belong to Railway's provisioned owner. Creating brandspace_migrator with
+     * DDL intent is not enough: Prisma can authenticate and still cannot create
+     * _prisma_migrations. CI did not expose that because its test database is
+     * created WITH OWNER brandspace_migrator.
+     *
+     * The role bootstrap is therefore responsible for making the documented
+     * "migrator owns the schema" contract true on an already-created database.
+     */
+    const roleSql = readFileSync(
+      resolve(process.cwd(), 'scripts/sql/setup-database-roles.sql'),
+      'utf8',
+    );
+
+    expect(roleSql).toContain('ALTER SCHEMA public OWNER TO brandspace_migrator;');
+    expect(roleSql).toContain("IF schema_owner IS DISTINCT FROM 'brandspace_migrator' THEN");
+    expect(roleSql).toContain("'GRANT CREATE ON DATABASE %I TO brandspace_migrator'");
+    expect(roleSql).toContain("'REVOKE CREATE ON DATABASE %I FROM brandspace_app'");
+    expect(roleSql).toContain("'REVOKE CREATE ON DATABASE %I FROM brandspace_platform'");
+    expect(roleSql).toContain(
+      "NOT has_database_privilege('brandspace_migrator', current_database(), 'CREATE')",
+    );
+    expect(roleSql).not.toContain('DO $\n');
+    expect(roleSql).not.toContain('\n$;\n');
+    const dollarQuoteOpens = roleSql.match(/DO \$\$/g) ?? [];
+    const dollarQuoteCloses = roleSql.match(/\$\$;/g) ?? [];
+    expect(dollarQuoteCloses).toHaveLength(dollarQuoteOpens.length);
   });
 });

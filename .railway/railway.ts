@@ -349,10 +349,17 @@ export default defineRailway((ctx, project) => {
    */
   const web = service('web', {
     source: github(REPO),
-    build: { builder: 'RAILPACK', watchPatterns: WEB_WATCH },
+    build: {
+      builder: 'RAILPACK',
+      buildCommand: 'pnpm --filter @brandspace/web build',
+      watchPatterns: WEB_WATCH,
+    },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/web start',
-      healthcheckPath: '/',
+      // The locale router redirects `/` with HTTP 307. Railway healthchecks
+      // require a successful response rather than a redirect, so probe the
+      // deterministic verification page that deliberately returns 200.
+      healthcheckPath: '/en/status',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
@@ -378,7 +385,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/dashboard start',
-      healthcheckPath: '/',
+      healthcheckPath: '/en/reset',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
@@ -440,7 +447,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/admin start',
-      healthcheckPath: '/',
+      healthcheckPath: '/en/login',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
