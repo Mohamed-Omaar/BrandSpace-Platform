@@ -408,6 +408,11 @@ when its defect is reinstated is not evidence of anything.
 | 25  | P6-12: undo removes a rule a person has since switched on                         | 1 isolation         |
 | 26  | P6-12: the `listRules` brand overwrite restored (D-271)                           | 1 isolation         |
 | 27  | P6-12: the dashboard's surface list drifts from the API's                         | 1 unit              |
+| 28  | P6-13: an invitation's brands stored unvalidated (the pre-existing escalation)    | 2 isolation         |
+| 29  | P6-13: a restricted actor's empty request treated as "all brands"                 | 3 isolation         |
+| 30  | P6-13: the workspace owner made restrictable                                      | 1 isolation         |
+| 31  | P6-13: an unlabelled audit action falls back to its raw key                       | 2 unit              |
+| 32  | P6-13: a disabled quota shown as "no ceiling stated" instead of 0                 | 1 unit              |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -511,6 +516,37 @@ and pass on a freshly migrated one — the F-90 family, local only.
 
 **Tests.** `tests/unit/phase6-copilot.test.ts` (14), `tests/isolation/phase6-copilot-automation.test.ts`
 (10), five E2E tests in `analytics-copilot.spec.ts`. Plants 22–27. No new model, migration or RLS change.
+
+---
+
+## 10. P6-13 — Team, Activity, Settings and Billing
+
+**Audit first.** Members, roles, invitations and the permission catalogue already came from the
+backend and were enforced there; the Activity log already read the audit stream through the
+workspace-scoped client; Billing already read the provider-neutral subscription. The gaps:
+
+| Gap found                                                                                                      | Closed by                                                 |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Every invitation granted EVERY brand, even from a brand-restricted inviter; resend re-issued it (pre-existing) | `resolveGrantableBrandScope` on create and resend (D-272) |
+| Nothing could change an existing member's brand access; the Team screen did not show it                        | `changeBrandAccess` + Brand access column and form        |
+| Invitations listed a raw role key and no brand access                                                          | Role names and access on each invitation                  |
+| Activity printed raw audit keys as titles and filter options; resource types printed raw                       | `activityActionLabel` / `activityResourceLabel` (D-273)   |
+| No Connections or Data controls under Settings                                                                 | Settings nav entries; `/settings/data`                    |
+| Plan showed the raw plan key and usage with no ceiling; brands and social accounts absent                      | Catalogue name; usage against the resolved ceiling        |
+| Billing actions that failed reloaded silently                                                                  | Failure notice                                            |
+
+**What is deliberately not shown.** Seats are not shown against `limit.seats`, which nothing enforces
+(D-233). Self-serve workspace export and deletion do not exist, and Data controls says so rather than
+omitting them. No plan name, price, quota, trial or credit figure is produced by the page — each is the
+resolved configuration or it is absent.
+
+**Tests.** `tests/unit/phase6-team-activity-billing.test.ts` (13, including a scan of every literal
+audit action the code writes), `tests/isolation/phase6-team-brand-access.test.ts` (11 against real
+PostgreSQL), `tests/isolation/invitations.test.ts` updated for the required inviter scope, and
+`tests/e2e/phase6-team-settings.spec.ts` (5, both viewports, read-only, axe on `/settings/data` and
+`/members` in both directions). The axe run caught the new brand checkboxes failing WCAG 2.5.8 target
+size on a phone; they now hold the 24px row minimum. Plants 28–32. No new model, migration or RLS
+change.
 
 ---
 

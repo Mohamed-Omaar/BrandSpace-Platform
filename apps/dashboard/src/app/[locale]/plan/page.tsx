@@ -1,8 +1,10 @@
 import { colorTokens, scrollContainerStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
-import { QUOTA_FEATURES } from '@brandspace/entitlements';
+import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
+import { ceilingFor, planDisplayName } from '../../../server/plan-usage';
+import { commerceSnapshotFor } from '../../../server/commerce-context';
 import {
   CustomerCard,
   CustomerEmpty,
@@ -49,9 +51,42 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     }),
   );
 
-  const memberCount = await inWorkspace(workspace.workspaceId, async ({ db }) =>
-    db.membership.count({ where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' } }),
+  const { memberCount, brandCount, socialAccountCount } = await inWorkspace(
+    workspace.workspaceId,
+    async ({ db }) => ({
+      memberCount: await db.membership.count({
+        where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' },
+      }),
+      /*
+       * P6-13 — THE SAME POPULATIONS THE QUOTAS COUNT. `TOTAL_RESOURCE_DIMENSIONS`
+       * is what `createTotalResourceQuota` enforces against, so the number shown
+       * beside the ceiling is the number the refusal is made from.
+       */
+      brandCount: await TOTAL_RESOURCE_DIMENSIONS.brands.live(db, workspace.workspaceId),
+      socialAccountCount: await TOTAL_RESOURCE_DIMENSIONS.socialAccounts.live(
+        db,
+        workspace.workspaceId,
+      ),
+    }),
   );
+
+  /*
+   * THE PLAN'S NAME FROM THE CATALOGUE (P6-13). The screen printed the raw plan
+   * key. The catalogue is configuration an owner activated; a key with no entry
+   * is shown as the key, never as a name made up here.
+   */
+  const catalogue = await commerceSnapshotFor(workspace.workspaceId)
+    .then((snapshot) => snapshot.plans)
+    .catch(() => []);
+  const planName = planDisplayName(effective.planKey, catalogue, locale);
+
+  /** "12 of 50", "12 · no ceiling stated" — the ceiling is the resolved decision. */
+  const againstCeiling = (used: string, featureKey: string): string => {
+    const ceiling = ceilingFor(effective.decisions, featureKey);
+    return ceiling.kind === 'limited'
+      ? t('plan.usageOf').replace('{used}', used).replace('{limit}', String(ceiling.limit))
+      : t('plan.usageUnstated').replace('{used}', used);
+  };
 
   /*
    * THIS CYCLE'S USAGE, FROM THE COUNTERS THAT EXIST.
@@ -93,15 +128,30 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       unavailable: laterPhase,
     },
     {
+      key: 'brands',
+      label: t('plan.usageBrands'),
+      value: againstCeiling(String(brandCount), QUOTA_FEATURES.brands),
+      unavailable: laterPhase,
+    },
+    {
+      key: 'social-accounts',
+      label: t('plan.usageSocialAccounts'),
+      value: againstCeiling(String(socialAccountCount), QUOTA_FEATURES.socialAccounts),
+      unavailable: laterPhase,
+    },
+    {
       key: 'scheduled',
       label: t('plan.usageScheduled'),
-      value: usedFor(QUOTA_FEATURES.scheduledPostsPerMonth),
+      value: againstCeiling(
+        usedFor(QUOTA_FEATURES.scheduledPostsPerMonth),
+        QUOTA_FEATURES.scheduledPostsPerMonth,
+      ),
       unavailable: laterPhase,
     },
     {
       key: 'storage',
       label: t('plan.usageStorage'),
-      value: usedFor(QUOTA_FEATURES.storageGb),
+      value: againstCeiling(usedFor(QUOTA_FEATURES.storageGb), QUOTA_FEATURES.storageGb),
       unavailable: laterPhase,
     },
   ];
@@ -141,7 +191,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       <div className="bs-split-main">
         <CustomerCard title={t('plan.current')} testId="plan-card">
           <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h3 }}>
-            {effective.planKey ?? t('plan.none')}
+            {planName ?? t('plan.none')}
           </p>
 
           {/* Trial and cycle come from the subscription, which is the record

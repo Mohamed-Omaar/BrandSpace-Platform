@@ -25,7 +25,15 @@ import type { MessageKey } from '../i18n/messages';
 
 /** The Settings-section destinations, in the order they are shown. */
 export type SettingsNavKey =
-  'settings' | 'brand' | 'security' | 'members' | 'permissions' | 'plan' | 'billing';
+  | 'settings'
+  | 'brand'
+  | 'security'
+  | 'connections'
+  | 'data'
+  | 'members'
+  | 'permissions'
+  | 'plan'
+  | 'billing';
 
 export interface SettingsNavEntry {
   readonly key: SettingsNavKey;
@@ -58,6 +66,28 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    * there is no other person whose security it could show.
    */
   { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
+  /*
+   * P6-13 — CONNECTIONS, reached from Settings as well as from the PUBLISH
+   * group. The connected accounts are workspace configuration as much as a
+   * publishing tool, and a person looking in Settings for "where are our
+   * accounts" was not told. The same route, not a second screen.
+   */
+  {
+    key: 'connections',
+    path: '/integrations',
+    labelKey: 'settings.connections',
+    permission: 'integrations.read',
+  },
+  /*
+   * P6-13 — DATA CONTROLS: one page naming every control this product has over
+   * a workspace's data, and saying plainly which ones it does not have yet.
+   */
+  {
+    key: 'data',
+    path: '/settings/data',
+    labelKey: 'settings.data',
+    permission: 'workspace.update',
+  },
   { key: 'members', path: '/members', labelKey: 'nav.members', permission: 'member.read' },
   /*
    * PERMISSIONS IS OPEN TO EVERY MEMBER ON PURPOSE. It shows the reader their

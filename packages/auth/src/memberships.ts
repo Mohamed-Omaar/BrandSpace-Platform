@@ -3,6 +3,7 @@
 import type { PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import { assignableRoleKeys as rolesAssignableBy, assertMayAssignRole } from './role-assignment';
+import { resolveGrantableBrandScope } from './brand-access';
 
 /**
  * Workspace membership management — docs/DATABASE.md §3.3.
@@ -62,6 +63,8 @@ export interface MemberSummary {
   readonly status: string;
   readonly joinedAt: Date | null;
   readonly isWorkspaceOwner: boolean;
+  /** P6-13 — the brands this member sees; empty is every brand in the workspace. */
+  readonly brandScope: readonly string[];
 }
 
 export interface MembershipActor {
@@ -108,6 +111,7 @@ export class MembershipService {
       status: m.status,
       joinedAt: m.acceptedAt,
       isWorkspaceOwner: workspace?.ownerUserId === m.userId,
+      brandScope: m.brandScope,
     }));
   }
 
@@ -187,6 +191,78 @@ export class MembershipService {
 
     // A role change invalidates nothing by itself — permissions are recomputed
     // on every resolve — but the audit trail records when it happened.
+  }
+
+  /**
+   * Change which brands a member can see (P6-13).
+   *
+   * THE SAME AUTHORITY AS A ROLE CHANGE, because BrandScope IS authorization:
+   * `member.assign_role`, and only over a member whose role the actor could
+   * assign (an admin cannot narrow the owner). The requested brands go through
+   * `resolveGrantableBrandScope`, so they must be this workspace's, and a
+   * brand-restricted actor can grant only a subset of their own brands.
+   *
+   * THE WORKSPACE OWNER IS NEVER RESTRICTED. An owner who could be narrowed out
+   * of a brand would still own the workspace that contains it — billing,
+   * deletion and ownership transfer over something they cannot see — so the
+   * owner's scope stays "every brand".
+   *
+   * TAKES EFFECT ON THE MEMBER'S NEXT REQUEST: the session resolves BrandScope
+   * from the membership row every time, so there is nothing to revoke.
+   */
+  async changeBrandAccess(
+    workspaceId: string,
+    actor: MembershipActor & { readonly brandScope: readonly string[] },
+    membershipId: string,
+    brandScope: readonly string[],
+  ): Promise<void> {
+    if (!actor.permissionKeys.includes('member.assign_role')) {
+      throw new AppError('FORBIDDEN', 'Changing brand access requires member.assign_role.');
+    }
+
+    await runAtomically(this.#prisma, async (tx) => {
+      await this.#lockWorkspace(tx, workspaceId);
+
+      const membership = await tx.membership.findFirst({
+        where: { id: membershipId, workspaceId, status: { not: 'REMOVED' } },
+        include: { role: true },
+      });
+      if (!membership) throw new AppError('NOT_FOUND', 'Member not found.');
+
+      if (!rolesAssignableBy(actor.roleKey).includes(membership.role.key)) {
+        throw new AppError('FORBIDDEN', 'Your role may not change that member.');
+      }
+
+      const next = await resolveGrantableBrandScope(tx, {
+        workspaceId,
+        actorBrandScope: actor.brandScope,
+        requested: brandScope,
+      });
+
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { ownerUserId: true },
+      });
+      if (workspace?.ownerUserId === membership.userId && next.length > 0) {
+        throw new AppError('VALIDATION_FAILED', 'The workspace owner always sees every brand.');
+      }
+
+      await tx.membership.update({ where: { id: membershipId }, data: { brandScope: next } });
+      await tx.auditEvent.create({
+        data: {
+          workspaceId,
+          actorType: 'USER',
+          actorId: actor.userId,
+          action: 'workspace.member.brand_access_changed',
+          resourceType: 'membership',
+          resourceId: membershipId,
+          severity: 'NOTICE',
+          outcome: 'SUCCESS',
+          before: { brandScope: membership.brandScope },
+          after: { brandScope: next },
+        },
+      });
+    });
   }
 
   /**

@@ -29,6 +29,30 @@ async function post(path: string, body: unknown): Promise<Response> {
   });
 }
 
+/**
+ * Post, and reload ONLY on success (P6-13).
+ *
+ * These actions used to `.catch(() => null)` and reload whatever happened, so a
+ * refused downgrade, a failed cancel or a network fault looked exactly like
+ * success until the customer noticed nothing had changed. A failure now stays
+ * on the page and says so; the server's own refusal is never echoed, only a
+ * fixed sentence.
+ */
+async function postThenReload(path: string, body: unknown): Promise<boolean> {
+  const response = await post(path, body).catch(() => null);
+  if (!response || !response.ok) return false;
+  globalThis.location.reload();
+  return true;
+}
+
+function FailedNotice({ label }: { label: string }) {
+  return (
+    <span role="alert" style={{ ...typographyTokens.caption, color: colorTokens.danger }}>
+      {label}
+    </span>
+  );
+}
+
 /** A stable key per click, so a double-submit opens ONE checkout. */
 function idempotencyKey(): string {
   return globalThis.crypto.randomUUID();
@@ -160,28 +184,37 @@ export function ScheduleDowngradeButton({
   planKey,
   label,
   busyLabel,
+  failedLabel,
   testId,
 }: {
   planKey: string;
   label: string;
   busyLabel: string;
+  failedLabel: string;
   testId?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      disabled={busy}
-      style={customerSecondaryButtonStyle()}
-      onClick={async () => {
-        setBusy(true);
-        await post('/api/commerce/subscription/downgrade', { planKey }).catch(() => null);
-        globalThis.location.reload();
-      }}
-    >
-      {busy ? busyLabel : label}
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid={testId}
+        disabled={busy}
+        style={customerSecondaryButtonStyle()}
+        onClick={async () => {
+          setBusy(true);
+          setFailed(false);
+          if (!(await postThenReload('/api/commerce/subscription/downgrade', { planKey }))) {
+            setBusy(false);
+            setFailed(true);
+          }
+        }}
+      >
+        {busy ? busyLabel : label}
+      </button>
+      {failed ? <FailedNotice label={failedLabel} /> : null}
+    </>
   );
 }
 
@@ -189,30 +222,39 @@ export function SimpleActionButton({
   path,
   label,
   busyLabel,
+  failedLabel,
   testId,
   variant = 'secondary',
 }: {
   path: string;
   label: string;
   busyLabel: string;
+  failedLabel: string;
   testId?: string;
   variant?: 'primary' | 'secondary';
 }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
-    <button
-      type="button"
-      data-testid={testId}
-      disabled={busy}
-      style={variant === 'primary' ? customerButtonStyle() : customerSecondaryButtonStyle()}
-      onClick={async () => {
-        setBusy(true);
-        await post(path, {}).catch(() => null);
-        globalThis.location.reload();
-      }}
-    >
-      {busy ? busyLabel : label}
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid={testId}
+        disabled={busy}
+        style={variant === 'primary' ? customerButtonStyle() : customerSecondaryButtonStyle()}
+        onClick={async () => {
+          setBusy(true);
+          setFailed(false);
+          if (!(await postThenReload(path, {}))) {
+            setBusy(false);
+            setFailed(true);
+          }
+        }}
+      >
+        {busy ? busyLabel : label}
+      </button>
+      {failed ? <FailedNotice label={failedLabel} /> : null}
+    </>
   );
 }
 
@@ -231,6 +273,7 @@ export function CancelSubscriptionForm({
   confirmLabel,
   submitLabel,
   busyLabel,
+  failedLabel,
 }: {
   title: string;
   body: string;
@@ -238,10 +281,12 @@ export function CancelSubscriptionForm({
   confirmLabel: string;
   submitLabel: string;
   busyLabel: string;
+  failedLabel: string;
 }) {
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   return (
     <form
@@ -250,10 +295,13 @@ export function CancelSubscriptionForm({
       onSubmit={async (event) => {
         event.preventDefault();
         setBusy(true);
-        await post('/api/commerce/subscription/cancel', { reason, confirm: true }).catch(
-          () => null,
-        );
-        globalThis.location.reload();
+        setFailed(false);
+        if (
+          !(await postThenReload('/api/commerce/subscription/cancel', { reason, confirm: true }))
+        ) {
+          setBusy(false);
+          setFailed(true);
+        }
       }}
     >
       <p style={{ margin: 0, ...typographyTokens.bodySm }}>{title}</p>
@@ -294,6 +342,7 @@ export function CancelSubscriptionForm({
       >
         {busy ? busyLabel : submitLabel}
       </button>
+      {failed ? <FailedNotice label={failedLabel} /> : null}
     </form>
   );
 }

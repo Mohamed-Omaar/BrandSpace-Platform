@@ -310,6 +310,14 @@ adds a brand caption, a proposal line on waiting runs, and a native `<details>` 
 styled with `buttonStyle` + `buttonClass`. The "Ask Copilot" entries on Home, Analytics, Intelligence
 and Automations are ghost/primary `buttonStyle` links. Nothing new is drawn.
 
+### 6.3.3 Phase 6 P6-13 — Team, Activity, Settings and Plan additions
+
+`/settings/data` is a new §6 extension composed only of `SettingsSplit`, `Card`, `SectionHeader`,
+`StatusBadge` and ghost `buttonStyle` links — the same parts every other Settings section uses. The Team
+screen adds a Brand access column to its existing `DataTable`/`RecordList` pair and a `<details>` form
+whose radios and checkboxes use native controls held to `layoutTokens.minTargetSize`, as the approvals
+checkboxes are. Activity and Plan change words, not layout. Nothing new is drawn.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -652,6 +652,7 @@ describe('the invitation service authorises its own caller', () => {
           // the wrong guard and prove nothing about this one.
           roleKey: 'workspace_owner',
           permissionKeys: ['workspace.read', 'member.read'],
+          brandScope: [],
         },
       }),
     ).rejects.toThrow('member.invite');
@@ -688,6 +689,7 @@ describe('the invitation service authorises its own caller', () => {
         userId: fixtures.a.userId,
         roleKey: 'workspace_owner',
         permissionKeys: ['member.read'],
+        brandScope: [],
       }),
     ).rejects.toThrow('member.invite');
 
@@ -697,6 +699,7 @@ describe('the invitation service authorises its own caller', () => {
         userId: fixtures.a.userId,
         roleKey: 'workspace_owner',
         permissionKeys: ['member.read'],
+        brandScope: [],
       }),
     ).rejects.toThrow('member.invite');
 
@@ -1470,6 +1473,7 @@ describe('the invitation path enforces the role-assignment ladder (P0)', () => {
     userId: fixtures.a.userId,
     roleKey,
     permissionKeys: ['member.read', 'member.invite', 'member.assign_role'],
+    brandScope: [] as string[],
   });
 
   it('an ADMIN may not invite a WORKSPACE OWNER, even with a crafted roleId', async () => {

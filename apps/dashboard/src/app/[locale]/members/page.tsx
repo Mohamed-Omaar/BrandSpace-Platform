@@ -10,16 +10,19 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   initialsFrom,
   inputStyle,
+  layoutTokens,
   spacingTokens,
   statusTone,
   typographyTokens,
   visuallyHiddenStyle,
   type MediaSeed,
 } from '@brandspace/ui';
+import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { statusMessage, translator } from '../../../i18n/messages';
@@ -30,9 +33,24 @@ import {
   removeMemberAction,
   resendInvitationAction,
   revokeInvitationAction,
+  changeBrandAccessAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Brand-access choices sit in a tight list, so each row holds the WCAG 2.5.8
+ * minimum target height and the control itself is sized like the approvals
+ * checkboxes — a default 13px box stacked 4px apart fails the target-size rule
+ * on a phone.
+ */
+const accessChoiceStyle = {
+  display: 'flex',
+  gap: spacingTokens.xs,
+  alignItems: 'center',
+  minBlockSize: layoutTokens.minTargetSize,
+} as const;
+const accessInputStyle = { inlineSize: '20px', blockSize: '20px', margin: 0 } as const;
 
 /**
  * Team: members and invitations.
@@ -71,7 +89,7 @@ export default async function MembersPage({
 
   // Every read runs inside the tenant context, so RLS — not a `where` clause
   // this page remembered — is what keeps another tenant's rows out.
-  const { members, invitations, invitationTotal, roles, assignable } = await inWorkspace(
+  const { members, invitations, invitationTotal, roles, assignable, brands } = await inWorkspace(
     workspace.workspaceId,
     async ({ db, memberships, invitations: invitationService }) => ({
       members: await memberships.list(workspace.workspaceId),
@@ -90,8 +108,128 @@ export default async function MembersPage({
       // Only the roles THIS member may hand out. The service refuses anything
       // else, so the list cannot be used to escalate by editing an option value.
       assignable: memberships.assignableRoleKeys(workspace.roleKey),
+      /*
+       * THE BRANDS THIS VIEWER CAN SEE — the only brands they may grant, and
+       * the only brand NAMES this page shows. A member's access to a brand the
+       * viewer cannot see is counted ("and 2 more"), never named.
+       */
+      brands: await db.brand.findMany({
+        where: {
+          workspaceId: workspace.workspaceId,
+          deletedAt: null,
+          ...brandScopeFilter(workspace.brandScope),
+        },
+        select: { id: true, name: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
     }),
   );
+  const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
+  const viewerRestricted = workspace.brandScope.length > 0;
+
+  /** "All brands", or the brands by name — counting any the viewer cannot see. */
+  function accessLabel(scope: readonly string[]): string {
+    if (scope.length === 0) return t('members.access.all');
+    const named = scope.flatMap((id) => {
+      const name = brandNames.get(id);
+      return name ? [name] : [];
+    });
+    const hidden = scope.length - named.length;
+    return hidden > 0
+      ? `${named.join('، ')}${named.length > 0 ? ' ' : ''}${t('members.access.more').replace('{count}', String(hidden))}`
+      : named.join(locale === 'ar' ? '، ' : ', ');
+  }
+
+  /**
+   * The brand-access controls, shared by the invitation form and the
+   * per-member editor. "All brands" is offered only to a viewer who holds it
+   * themselves; a restricted viewer can grant only a subset of their own.
+   * Native radios and checkboxes, so it works without script.
+   */
+  function accessFields(idPrefix: string, current: readonly string[]) {
+    const all = current.length === 0 && !viewerRestricted;
+    return (
+      <fieldset
+        style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
+        data-testid={`${idPrefix}-access`}
+      >
+        <legend style={{ ...typographyTokens.label, marginBlockEnd: spacingTokens.xs }}>
+          {t('members.access.title')}
+        </legend>
+        {!viewerRestricted ? (
+          <label style={accessChoiceStyle}>
+            <input
+              type="radio"
+              name="access"
+              value="all"
+              defaultChecked={all}
+              style={accessInputStyle}
+            />
+            <span style={typographyTokens.bodySm}>{t('members.access.all')}</span>
+          </label>
+        ) : null}
+        <label style={accessChoiceStyle}>
+          <input
+            type="radio"
+            name="access"
+            value="selected"
+            defaultChecked={!all}
+            style={accessInputStyle}
+          />
+          <span style={typographyTokens.bodySm}>{t('members.access.selected')}</span>
+        </label>
+        <div
+          style={{
+            display: 'grid',
+            gap: spacingTokens['2xs'],
+            paddingInlineStart: spacingTokens.lg,
+          }}
+        >
+          {brands.map((brand) => (
+            <label key={brand.id} style={accessChoiceStyle}>
+              <input
+                type="checkbox"
+                name="brandId"
+                value={brand.id}
+                defaultChecked={current.includes(brand.id)}
+                style={accessInputStyle}
+              />
+              <span style={typographyTokens.bodySm}>{brand.name}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
+
+  function accessForm(membershipId: string, current: readonly string[], testKey: string) {
+    return (
+      <details data-testid={`brand-access-${testKey}`}>
+        <summary
+          style={{ ...buttonStyle('ghost', 'sm'), listStyle: 'none' }}
+          className={buttonClass('ghost')}
+        >
+          {t('members.access.change')}
+        </summary>
+        <form
+          action={changeBrandAccessAction}
+          style={{ display: 'grid', gap: spacingTokens.sm, marginBlockStart: spacingTokens.xs }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="membershipId" value={membershipId} />
+          {accessFields(`member-${testKey}`, current)}
+          <button
+            type="submit"
+            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral')}
+            data-testid={`save-brand-access-${testKey}`}
+          >
+            {t('common.save')}
+          </button>
+        </form>
+      </details>
+    );
+  }
 
   const assignableRoles = roles.filter((r) => assignable.includes(r.key));
 
@@ -187,6 +325,7 @@ export default async function MembersPage({
   const memberHeaders = [
     t('members.email'),
     t('members.role'),
+    t('members.access.title'),
     t('members.status'),
     ...(mayManage ? [t('members.actions')] : []),
   ];
@@ -255,6 +394,11 @@ export default async function MembersPage({
                   </Cell>
                   <Cell>{locale === 'ar' ? m.roleNameAr : m.roleNameEn}</Cell>
                   <Cell>
+                    <span data-testid={`member-access-${m.email}`}>
+                      {accessLabel(m.brandScope)}
+                    </span>
+                  </Cell>
+                  <Cell>
                     <StatusBadge label={m.status} tone={statusTone(m.status)} />
                   </Cell>
                   {mayManage ? (
@@ -262,6 +406,11 @@ export default async function MembersPage({
                       <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
                         {may('member.assign_role') && assignableRoles.length > 0
                           ? roleForm(m.membershipId, m.email)
+                          : null}
+                        {may('member.assign_role') &&
+                        !m.isWorkspaceOwner &&
+                        assignable.includes(m.roleKey)
+                          ? accessForm(m.membershipId, m.brandScope, m.email)
                           : null}
                         {may('member.remove') ? removeForm(m.membershipId, m.email) : null}
                       </div>
@@ -299,6 +448,7 @@ export default async function MembersPage({
                     label: t('members.role'),
                     value: locale === 'ar' ? m.roleNameAr : m.roleNameEn,
                   },
+                  { label: t('members.access.title'), value: accessLabel(m.brandScope) },
                   {
                     label: t('members.status'),
                     value: <StatusBadge label={m.status} tone={statusTone(m.status)} />,
@@ -308,6 +458,11 @@ export default async function MembersPage({
                   <>
                     {may('member.assign_role') && assignableRoles.length > 0
                       ? roleForm(`${m.membershipId}-m`, `${m.email}-mobile`)
+                      : null}
+                    {may('member.assign_role') &&
+                    !m.isWorkspaceOwner &&
+                    assignable.includes(m.roleKey)
+                      ? accessForm(m.membershipId, m.brandScope, `${m.email}-mobile`)
                       : null}
                     {may('member.remove') ? removeForm(m.membershipId, `${m.email}-mobile`) : null}
                   </>
@@ -342,6 +497,7 @@ export default async function MembersPage({
                     headers={[
                       t('members.email'),
                       t('members.role'),
+                      t('members.access.title'),
                       t('members.status'),
                       t('members.actions'),
                     ]}
@@ -351,7 +507,8 @@ export default async function MembersPage({
                     {invitations.map((i) => (
                       <tr key={i.id} data-testid={`invitation-${i.email}`}>
                         <Cell>{i.email}</Cell>
-                        <Cell>{i.roleKey}</Cell>
+                        <Cell>{locale === 'ar' ? i.roleNameAr : i.roleNameEn}</Cell>
+                        <Cell>{accessLabel(i.brandScope)}</Cell>
                         <Cell>
                           <StatusBadge label={i.status} tone={statusTone(i.status)} />
                         </Cell>
@@ -368,7 +525,11 @@ export default async function MembersPage({
                       id: i.id,
                       title: <span style={{ overflowWrap: 'anywhere' }}>{i.email}</span>,
                       fields: [
-                        { label: t('members.role'), value: i.roleKey },
+                        {
+                          label: t('members.role'),
+                          value: locale === 'ar' ? i.roleNameAr : i.roleNameEn,
+                        },
+                        { label: t('members.access.title'), value: accessLabel(i.brandScope) },
                         {
                           label: t('members.status'),
                           value: <StatusBadge label={i.status} tone={statusTone(i.status)} />,
@@ -405,6 +566,9 @@ export default async function MembersPage({
                   ))}
                 </select>
               </Field>
+              {brands.length > 0 ? (
+                <div style={{ marginBlockEnd: spacingTokens.md }}>{accessFields('invite', [])}</div>
+              ) : null}
               <Button type="submit" data-testid="invite-submit">
                 {t('members.invite')}
               </Button>

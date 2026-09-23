@@ -15,7 +15,8 @@ import {
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { activityService } from '../../../server/approvals-context';
-import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { messages, optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { activityActionLabel, activityResourceLabel } from '../../../server/activity-labels';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -104,6 +105,9 @@ export default async function ActivityPage({
     timeZone: 'UTC',
   });
 
+  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
+    Record<string, string | undefined>
+  >;
   const actorLabel = (entry: (typeof page.entries)[number]): string => {
     if (entry.actorId && entry.actorId === customer.userId) return t('activity.you');
     if (entry.actorId && actorNames.has(entry.actorId)) return actorNames.get(entry.actorId) ?? '—';
@@ -174,7 +178,7 @@ export default async function ActivityPage({
                   <option value="">{t('activity.filterAll')}</option>
                   {actions.map((key) => (
                     <option key={key} value={key}>
-                      {key}
+                      {activityActionLabel(key, dictionary)}
                     </option>
                   ))}
                 </select>
@@ -193,7 +197,9 @@ export default async function ActivityPage({
                   {page.entries.map((entry) => (
                     <li key={entry.id} style={rowStyle} data-testid={`activity-${entry.id}`}>
                       <div style={headRowStyle}>
-                        <strong style={actionStyle}>{entry.action}</strong>
+                        <strong style={actionStyle}>
+                          {activityActionLabel(entry.action, dictionary)}
+                        </strong>
                         {entry.outcome === 'SUCCESS' ? null : (
                           <StatusBadge
                             label={t(`activity.outcome.${entry.outcome}` as MessageKey)}
@@ -206,7 +212,9 @@ export default async function ActivityPage({
                         <time dateTime={entry.occurredAt.toISOString()}>
                           {dateFormat.format(entry.occurredAt)}
                         </time>
-                        {entry.resourceType ? ` · ${entry.resourceType}` : ''}
+                        {activityResourceLabel(entry.resourceType, dictionary)
+                          ? ` · ${activityResourceLabel(entry.resourceType, dictionary)}`
+                          : ''}
                         {entry.brandId && brandNames.has(entry.brandId)
                           ? ` · ${brandNames.get(entry.brandId)}`
                           : ''}

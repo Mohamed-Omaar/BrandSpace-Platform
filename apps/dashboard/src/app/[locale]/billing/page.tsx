@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { planDisplayName } from '../../../server/plan-usage';
 import { formatMoney, systemClock, type Money } from '@brandspace/shared';
 import {
   buttonClass,
@@ -117,6 +118,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           {fill('billing.cancelScheduled', { date: day(subscription.currentPeriodEnd) })}{' '}
           {mayManage ? (
             <SimpleActionButton
+              failedLabel={t('billing.actionFailed')}
               path="/api/commerce/subscription/resume"
               label={t('billing.resume')}
               busyLabel={t('billing.checkoutOpening')}
@@ -130,7 +132,11 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         <CustomerCard title={t('billing.subscription')} testId="subscription-card">
           {subscription ? (
             <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
-              <Row label={t('billing.plan')} value={subscription.planKey} testId="billing-plan" />
+              <Row
+                label={t('billing.plan')}
+                value={planDisplayName(subscription.planKey, snapshot.plans, locale) ?? ''}
+                testId="billing-plan"
+              />
               <Row
                 label={t('billing.status')}
                 value={t(`billing.status.${subscription.status}` as MessageKey)}
@@ -162,12 +168,15 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               <p style={{ margin: 0, ...typographyTokens.bodySm }}>{t('billing.pendingChange')}</p>
               <p style={mutedStyle}>
                 {fill('billing.pendingChangeBody', {
-                  plan: subscription.pendingPlanKey,
+                  plan:
+                    planDisplayName(subscription.pendingPlanKey, snapshot.plans, locale) ??
+                    subscription.pendingPlanKey,
                   date: day(subscription.pendingPlanEffectiveAt),
                 })}
               </p>
               {mayManage ? (
                 <SimpleActionButton
+                  failedLabel={t('billing.actionFailed')}
                   path="/api/commerce/subscription/downgrade-cancel"
                   label={t('billing.pendingChangeCancel')}
                   busyLabel={t('billing.checkoutOpening')}
@@ -274,6 +283,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 ) : mayManage && availability?.available ? (
                   isDowngrade ? (
                     <ScheduleDowngradeButton
+                      failedLabel={t('billing.actionFailed')}
                       planKey={plan.key}
                       label={t('billing.downgradeSchedule')}
                       busyLabel={t('billing.checkoutOpening')}
@@ -473,6 +483,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       {mayManage && subscription && !subscription.cancelAtPeriodEnd ? (
         <CustomerCard title={t('billing.cancel')} testId="cancel-card">
           <CancelSubscriptionForm
+            failedLabel={t('billing.actionFailed')}
             title={t('billing.cancelTitle')}
             body={t('billing.cancelBody')}
             reasonLabel={t('billing.cancelReason')}

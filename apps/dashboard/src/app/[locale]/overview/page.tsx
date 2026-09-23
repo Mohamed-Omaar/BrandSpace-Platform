@@ -30,7 +30,8 @@ import {
   latestShift,
   performanceShiftItem,
 } from '../../../server/performance-patterns';
-import { translator } from '../../../i18n/messages';
+import { messages, translator } from '../../../i18n/messages';
+import { activityActionLabel } from '../../../server/activity-labels';
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
@@ -632,7 +633,12 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
                   {summary.recent.map((entry) => (
                     <li key={entry.id} style={panelRowStyle}>
                       <span style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
-                        {entry.action}
+                        {activityActionLabel(
+                          entry.action,
+                          (locale === 'ar' ? messages.ar : messages.en) as Readonly<
+                            Record<string, string | undefined>
+                          >,
+                        )}
                       </span>
                       <span style={panelMetaStyle}>
                         <time dateTime={entry.occurredAt.toISOString()}>
