@@ -36,6 +36,20 @@ export interface AreaItemData {
   readonly body: string;
   readonly origin: string;
   readonly originLabel: string;
+  /*
+   * WHICH OF THE FOUR MEMORIES THIS FACT LIVES IN (P6-07).
+   *
+   * The screen carried `origin` — human, document, AI — and never the LAYER,
+   * which is the other half of the model and the half that decides precedence.
+   * A reader could see that a fact was AI-inferred and not that it sat in the
+   * lowest-authority memory and therefore could never overwrite anything above
+   * it. `memoryRank` is the position the engine itself uses, so the screen
+   * explains the rule rather than restating an opinion about it.
+   */
+  readonly memory: string;
+  readonly memoryLabel: string;
+  readonly memoryRank: number;
+  readonly memoryDepth: number;
   readonly version: number;
   readonly stale: boolean;
 }

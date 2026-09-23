@@ -293,7 +293,16 @@ export function AreaDrawer({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {t('bb.version')} {item.version} · {item.originLabel}
+                    {t('bb.version')} {item.version} · {item.originLabel} ·{' '}
+                    {/*
+                      THE LAYER AND ITS AUTHORITY POSITION, together. "Strategy"
+                      alone says where the fact lives; "2 of 4" says what that
+                      means when two facts disagree — which is the question a
+                      reader actually has when they are looking at a conflict.
+                    */}
+                    <span title={t('bb.memory.authorityHint')} data-testid={`bb-memory-${item.id}`}>
+                      {item.memoryLabel} ({item.memoryRank}/{item.memoryDepth})
+                    </span>
                     {item.stale ? ` · ${t('bb.attention.stale_items')}` : ''}
                   </small>
                 </header>

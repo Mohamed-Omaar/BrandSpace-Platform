@@ -470,6 +470,13 @@ export const messages = {
     'bb.reviewProposed': 'القيمة المقترحة',
     'bb.version': 'الإصدار',
     'bb.origin.HUMAN': 'مُدخلة بشريًا',
+    /* P6-07 — the four memories, by name and by authority. */
+    'bb.memory.CANONICAL': 'المعرفة الأساسية',
+    'bb.memory.STRATEGY': 'ذاكرة الاستراتيجية',
+    'bb.memory.CONTENT': 'ذاكرة المحتوى',
+    'bb.memory.LEARNING': 'ذاكرة الأداء والتعلّم',
+    'bb.memory.authorityHint':
+      'ترتيب الأولوية: الأساسية تسبق الاستراتيجية تسبق المحتوى تسبق التعلّم.',
     'bb.origin.DOCUMENT': 'من مستند',
     'bb.origin.AI_INFERRED': 'مستنتجة',
     'bb.fieldStatus': 'الحالة',
@@ -1915,6 +1922,12 @@ export const messages = {
     'bb.origin.HUMAN': 'Entered by a person',
     'bb.origin.DOCUMENT': 'From a document',
     'bb.origin.AI_INFERRED': 'Inferred',
+    'bb.memory.CANONICAL': 'Canonical knowledge',
+    'bb.memory.STRATEGY': 'Strategy memory',
+    'bb.memory.CONTENT': 'Content memory',
+    'bb.memory.LEARNING': 'Performance and learning memory',
+    'bb.memory.authorityHint':
+      'Authority order: Canonical beats Strategy beats Content beats Learning.',
     'bb.fieldStatus': 'Status',
     'bb.archive': 'Archive',
     'bb.detailClose': 'Close panel',

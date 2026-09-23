@@ -1,5 +1,12 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
-import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
+import {
+  BRAND_MEMORY_LAYERS,
+  ORB_AREAS,
+  ORB_SLOTS,
+  areaDefinition,
+  localizedFrom,
+  memoryRank,
+} from '@brandspace/brand-brain';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
@@ -193,6 +200,18 @@ export default async function BrandBrainPage({
             title: true,
             body: true,
             origin: true,
+            /*
+             * THE MEMORY LAYER (P6-07).
+             *
+             * The screen showed WHERE an item came from — human, document, AI —
+             * and never WHICH OF THE FOUR MEMORIES it lives in. That is half the
+             * model, and the half that decides precedence: Canonical outranks
+             * Strategy outranks Content outranks Learning, always, and not as a
+             * tie-break (`memoryRank`). A reader could see that a fact was
+             * AI-inferred but not that it sat in the lowest-authority layer and
+             * therefore could never overwrite anything above it.
+             */
+            memory: true,
             version: true,
             status: true,
             confidenceMilli: true,
@@ -265,6 +284,19 @@ export default async function BrandBrainPage({
         body: pick(localizedFrom(item.body), locale),
         origin: item.origin,
         originLabel: t(`bb.origin.${item.origin}` as MessageKey),
+        memory: item.memory,
+        memoryLabel: t(`bb.memory.${item.memory}` as MessageKey),
+        /*
+         * THE AUTHORITY POSITION, FROM THE ENGINE RATHER THAN FROM A LIST HERE.
+         *
+         * `memoryRank` is what `comparePrecedence` and `mayOverwrite` actually
+         * consult, so reading it is the difference between the screen EXPLAINING
+         * the rule and the screen having its own opinion that happens to agree
+         * today. 1 is the highest authority, which is the direction a reader
+         * expects from a ranking.
+         */
+        memoryRank: memoryRank(item.memory) + 1,
+        memoryDepth: BRAND_MEMORY_LAYERS.length,
         version: item.version,
         stale: item.status === 'STALE',
       })),
