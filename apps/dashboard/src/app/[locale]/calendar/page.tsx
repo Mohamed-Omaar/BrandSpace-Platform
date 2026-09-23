@@ -11,6 +11,8 @@ import type {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inSocial } from '../../../server/social-context';
+import { isBlocking, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -240,6 +242,43 @@ export default async function CalendarPage({
   } = data;
 
   /*
+   * PHASE 6 · P6-10 — WHETHER EACH SCHEDULED POST HAS A ROUTE TO ITS PLATFORM.
+   *
+   * THE SILENCE THIS ENDS. `materialiseSlot` creates a job per ACTIVE
+   * connection with a matching variant; a brand with no connection for a
+   * channel produces no job, the sweep counts zero, and the slot stays
+   * `SCHEDULED` for ever with nothing written and nothing failed. So the month
+   * showed posts that read as on their way and had no route to a platform.
+   *
+   * READ THROUGH `inSocial` RATHER THAN THE STUDIO'S CLIENT, because that is
+   * where the publishing policy and the connection projection already live —
+   * and because the service it builds carries NEITHER a vault NOR an
+   * application resolver, so this page cannot open a credential (F-07).
+   */
+  const mayReadAccounts = workspace.permissionKeys.includes('integrations.read');
+  const readiness = await inSocial(workspace.workspaceId, async (services) =>
+    publishReadiness({
+      db: services.db,
+      workspaceId: workspace.workspaceId,
+      policy: await services.policy(),
+      brandScope: workspace.brandScope,
+      slots: visible.map((view) => ({
+        slotId: view.slot.id,
+        brandId: view.slot.brandId,
+        status: view.slot.status,
+        /*
+         * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
+         * connections against — and NOT `slot.platformKeys`, which records
+         * what was planned and is deliberately never updated.
+         */
+        variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
+      })),
+      now,
+    }),
+  );
+  const blockedCount = [...readiness.values()].filter((entry) => isBlocking(entry.state)).length;
+
+  /*
    * THE COVER PICTURE OF EACH SCHEDULED POST (AC-29.2).
    *
    * ONE ASSET PER SLOT, not all of them: a calendar chip is thirty pixels
@@ -316,6 +355,7 @@ export default async function CalendarPage({
       ? (APPROVAL_STATE[approvalRow] ?? 'NOT_REQUIRED')
       : 'NOT_REQUIRED';
     const status = SLOT_STATUS[view.slot.status] ?? 'SCHEDULED';
+    const slotReadiness = readiness.get(view.slot.id) ?? null;
 
     const record: PostRecord = {
       id: view.slot.id,
@@ -354,6 +394,35 @@ export default async function CalendarPage({
         ? translate(`approvals.status.${approvalRow}` as MessageKey)
         : null,
       mediaCount: mediaIds.length,
+      /*
+       * ABSENT RATHER THAN REASSURING for a slot that is not waiting to go
+       * out. `publishReadiness` assesses `SCHEDULED` alone, so a planned or an
+       * already-published slot has no entry and the dialog renders no row —
+       * the honest rendering of "this question does not apply" (D-184).
+       */
+      readiness: slotReadiness
+        ? {
+            label: translate(`calendar.readiness.${slotReadiness.state}` as MessageKey),
+            blocking: isBlocking(slotReadiness.state),
+            /*
+             * ONLY THE CHANNELS THAT ARE IN THE WAY. Listing the healthy ones
+             * beside them would bury the one line the planner has to act on.
+             *
+             * THE ACCOUNT'S NAME IS WITHHELD FROM A READER WHO MAY NOT SEE IT.
+             * This screen needs `content.read`; the connected accounts are an
+             * `integrations.read` surface. The STATE is about the reader's own
+             * post and is theirs to know; the account's display name is not,
+             * so it is dropped rather than the row being hidden.
+             */
+            channels: slotReadiness.channels
+              .filter((channel) => isBlocking(channel.state))
+              .map((channel) => ({
+                platformKey: channel.platformKey,
+                label: translate(`calendar.readiness.${channel.state}` as MessageKey),
+                accountName: mayReadAccounts ? channel.accountName : null,
+              })),
+          }
+        : null,
     });
   }
 
@@ -408,6 +477,33 @@ export default async function CalendarPage({
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+      {/*
+        THE MONTH'S BLOCKED POSTS, COUNTED — and `warning` rather than `error`,
+        because the screen is working exactly as intended and the reader still
+        has to be told. Rendered only when the count is non-zero: a banner
+        reading "0 posts will not go out" is noise on every healthy month.
+
+        THE LINK IS OFFERED ONLY TO SOMEBODY WHO CAN ACT ON IT. Connecting and
+        reconnecting an account needs `integrations.manage`; sending a member
+        without it to a route they will be refused is the dead control §20
+        forbids. The count is still shown, because knowing the post will not go
+        out is what lets them ask somebody who can fix it.
+      */}
+      {blockedCount > 0 ? (
+        <CustomerBanner tone="warning">
+          <span data-testid="calendar-readiness-banner">
+            {`${blockedCount} ${translate('calendar.readinessBlocked')}`}
+          </span>
+          {workspace.permissionKeys.includes('integrations.manage') ? (
+            <>
+              {' '}
+              <a href={`/${locale}/integrations`} data-testid="calendar-readiness-fix">
+                {translate('calendar.readinessFix')}
+              </a>
+            </>
+          ) : null}
+        </CustomerBanner>
+      ) : null}
       <CalendarView
         locale={locale}
         t={t}
@@ -508,7 +604,13 @@ const CALENDAR_KEYS = [
   'calendar.noSchedulable',
   'calendar.noSchedulableBody',
   'calendar.openInStudio',
-  'calendar.mockTarget',
+  'calendar.slotDialogHint',
+  'calendar.readiness',
+  'calendar.readiness.READY',
+  'calendar.readiness.EXPIRING',
+  'calendar.readiness.NEEDS_REAUTH',
+  'calendar.readiness.NOT_CONNECTED',
+  'calendar.readiness.UNSUPPORTED',
   'calendar.channels',
   'calendar.campaign',
   'calendar.publishState',

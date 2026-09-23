@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import {
+  Banner,
   Button,
   ContentCalendar,
   Dialog,
@@ -36,8 +37,13 @@ import {
  * State that lives only in the browser loses all three, and the Asset Library
  * and the content library both settled this the same way.
  *
- * NOTHING PUBLISHES (AC-14.7). Every slot's target is a mock, and the screen
- * says so rather than implying a connection the product does not have.
+ * NOTHING ON THIS SCREEN PUBLISHES, and that is not the same claim the header
+ * used to make. It said "every slot's target is a mock", which was true of
+ * Phase 5 and stopped being true when Phase 6 shipped real connections and the
+ * scheduler began sweeping due slots into publish jobs. The three actions here
+ * still reach no network — they move a plan — but the plan they move is one the
+ * worker will act on, so P6-10 puts the publishing readiness of each scheduled
+ * slot on the screen rather than a line saying nothing ever goes out.
  */
 
 export interface SchedulableDraft {
@@ -61,6 +67,28 @@ export interface SlotDetail {
   readonly approvalLabel: string | null;
   /** How many pictures the post carries across its variants. */
   readonly mediaCount: number;
+  /**
+   * PHASE 6 · P6-10 — whether this post has a route to its platforms, or
+   * `null` when the question does not apply (it is not waiting to go out).
+   *
+   * ALREADY TRANSLATED, like every other label on this island. The server owns
+   * the words; this component owns where they sit.
+   */
+  readonly readiness: SlotReadinessDetail | null;
+}
+
+export interface SlotReadinessDetail {
+  /** The worst of the channels, in words. */
+  readonly label: string;
+  /** True when the post cannot go out at all as it stands. */
+  readonly blocking: boolean;
+  /** Only the channels that are in the way; empty when nothing is. */
+  readonly channels: readonly {
+    readonly platformKey: string;
+    readonly label: string;
+    /** `null` for a reader who may not see connected accounts. */
+    readonly accountName: string | null;
+  }[];
 }
 
 export interface CalendarViewProps {
@@ -268,7 +296,7 @@ export function CalendarView({
         open={openSlot !== null}
         onClose={() => setOpenSlotId(null)}
         title={openSlot?.title ?? ''}
-        description={`${t['calendar.mockTarget']}`}
+        description={t['calendar.slotDialogHint'] ?? ''}
         closeLabel={t['common.close'] ?? 'Close'}
         testId="calendar-slot-dialog"
       >
@@ -313,7 +341,41 @@ export function CalendarView({
                   testId="calendar-slot-media"
                 />
               ) : null}
+              {openSlot.readiness ? (
+                <SlotFact
+                  term={t['calendar.readiness'] ?? ''}
+                  value={openSlot.readiness.label}
+                  testId="calendar-slot-readiness"
+                />
+              ) : null}
             </dl>
+
+            {/*
+              WHAT IS IN THE WAY, AND WHERE TO FIX IT.
+
+              `StateMessage` rather than a bespoke panel — the design system's
+              own inline notice, already used on this screen for the empty
+              draft list (UI-fidelity contract §6.2 rule 4: reuse before
+              creating). NOT a colour literal and not a new treatment.
+
+              One line per blocked channel, naming the channel and what is
+              wrong with it. The account's own name is appended only when the
+              server sent one, which it does only for a reader holding
+              `integrations.read`.
+            */}
+            {openSlot.readiness?.blocking ? (
+              <Banner tone="warning" testId="calendar-slot-readiness-detail">
+                <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md }}>
+                  {openSlot.readiness.channels.map((channel) => (
+                    <li key={channel.platformKey}>
+                      {channel.accountName
+                        ? `${channel.platformKey} · ${channel.label} — ${channel.accountName}`
+                        : `${channel.platformKey} · ${channel.label}`}
+                    </li>
+                  ))}
+                </ul>
+              </Banner>
+            ) : null}
 
             {canSchedule ? (
               <form action={actions.reschedule} style={{ display: 'grid', gap: spacingTokens.md }}>
