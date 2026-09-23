@@ -820,7 +820,14 @@ test.describe('P6-11 · analytics → intelligence → pulse', () => {
 
     const explain = page.getByTestId('analytics-explain');
     await expect(explain).toBeVisible();
-    await Promise.all([page.waitForURL(/\/(intelligence|analytics)\?/), explain.click()]);
+    /*
+     * WAIT FOR THE REDIRECT'S OWN MARKER, not for a path. The page starts on
+     * `/analytics?range=…`, which already matches "analytics with a query", so a
+     * path pattern resolves before the action has even run. Every outcome of the
+     * explain action carries `ok=` or `error=`, and the starting URL carries
+     * neither.
+     */
+    await Promise.all([page.waitForURL(/[?&](ok|error)=/), explain.click()]);
 
     if (new URL(page.url()).pathname.endsWith('/intelligence')) {
       // Landed on the finding it produced: focused, and read as three answers.
