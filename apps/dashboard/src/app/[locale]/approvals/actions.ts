@@ -7,6 +7,8 @@ import type { ApprovalVerdict } from '@brandspace/content';
 import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inNotes } from '../../../server/notes-context';
+import { noteForChangesRequested } from '../../../server/approval-notes';
 
 const log = createLogger({ context: { component: 'dashboard.approvals' } });
 
@@ -78,9 +80,58 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
      * A member with `content.read` alone reaches this action and is refused.
      */
     const session = await requireWorkspace(locale, 'content.read');
-    await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
+    const approval = await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).decide({ approvalId, verdict, actor: actorOf(session), note }),
     );
+
+    /*
+     * "NEEDS WORK" LEAVES A CONVERSATION BEHIND (P6-06).
+     *
+     * The approval is and remains the source of truth: this runs AFTER the
+     * decision has committed, changes nothing about it, and the verdict stands
+     * whatever happens here.
+     *
+     * WHY A NOTE AT ALL. `REQUEST_CHANGES` puts the item back in the author's
+     * hands with a `decisionNote` attached to a CLOSED approval cycle. The
+     * author opens the draft, and the reason they were asked to change it is on
+     * a different screen, in a record that is finished. Every team answers that
+     * the same way — by repeating the reviewer's note somewhere they can reply
+     * to it — and doing it by hand is how the reason and the work drift apart.
+     * A thread on the content item puts the request where the work is, and the
+     * author can answer it.
+     *
+     * ONLY FOR `REQUEST_CHANGES`. An approval needs no conversation, and a
+     * rejection ends the cycle rather than asking for something — inventing a
+     * thread for either would be the product talking to itself.
+     *
+     * THE AUTHOR IS MENTIONED, so it reaches their Command Center rather than
+     * waiting to be found. `startThread` only names members of this workspace
+     * and drops anything else, so a requester who has since left produces a
+     * note with no mention rather than a failure.
+     *
+     * A FAILURE HERE NEVER UNDOES THE VERDICT. The decision is committed and
+     * audited; a note that could not be written is a missing convenience, not a
+     * reason to tell a reviewer their decision failed and have them make it
+     * twice. It is logged and swallowed deliberately.
+     */
+    try {
+      await inNotes(locale, async ({ service, actor }) =>
+        noteForChangesRequested({
+          service,
+          actor,
+          verdict,
+          contentItemId: approval.contentItemId,
+          requestedByUserId: approval.requestedByUserId,
+          decisionNote: note,
+        }),
+      );
+    } catch (noteFailure: unknown) {
+      log.warn('changes-requested note could not be written', {
+        approvalId,
+        ...internalErrorFields(noteFailure),
+      });
+    }
+
     destination = approvalsUrl(locale, { ok: 'SAVED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'decideApproval');
