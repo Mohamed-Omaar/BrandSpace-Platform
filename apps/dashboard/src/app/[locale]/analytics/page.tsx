@@ -10,6 +10,7 @@ import {
   StateMessage,
   StatusBadge,
   TrendChart,
+  buttonClass,
   buttonStyle,
   colorTokens,
   spacingTokens,
@@ -18,11 +19,13 @@ import {
   type ChartPoint,
 } from '@brandspace/ui';
 import { systemClock } from '@brandspace/shared';
-import type { MetricAbsenceReason } from '@brandspace/analytics';
+import { detectAnomalies, type MetricAbsenceReason } from '@brandspace/analytics';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
+import { explainPeriodAction } from './actions';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -80,6 +83,8 @@ export default async function AnalyticsPage({
   const compare = query['compare'] !== '0';
   const mayExport = workspace.permissionKeys.includes('analytics.export');
   const mayExplain = workspace.permissionKeys.includes('analytics.explain');
+  const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
+  const error = typeof query['error'] === 'string' ? query['error'] : null;
 
   /*
    * THE BRANDS THIS MEMBER MAY ACT ON — filtered by `brandScopeFilter`, which
@@ -210,7 +215,31 @@ export default async function AnalyticsPage({
         })
       : [];
 
-    return { summary, series, byProvider, topPosts, insights, period };
+    /*
+     * WHAT CHANGED (P6-11). The same arithmetic the insight service and the
+     * learning rules use, over the series this screen already drew, with the
+     * thresholds from this tenant's analytics configuration. It spends nothing
+     * and can be checked by eye against the chart above it.
+     */
+    const policy = await services.policy();
+    const shift = latestShift(
+      detectAnomalies({
+        metricKey: series.metricKey,
+        unit: series.unit,
+        points: series.points,
+        policy,
+      }),
+      { now, withinDays: days },
+    );
+
+    return { summary, series, byProvider, topPosts, insights, period, shift };
+  });
+
+  const nextSteps = analyticsNextSteps({
+    absences: [...data.summary.metrics.map((metric) => metric.absent), data.series.absent],
+    shift: data.shift,
+    unreviewedFindings: data.insights.filter((insight) => insight.status === 'NEW').length,
+    permissionKeys: workspace.permissionKeys,
   });
 
   const seriesLabels: ChartLabels = {
@@ -286,6 +315,12 @@ export default async function AnalyticsPage({
          * configured window. A screen that drew them silently would be a screen
          * that lied by omission.
          */}
+        {ok ? (
+          <CustomerBanner tone="success">{statusMessage(ok, locale) ?? ok}</CustomerBanner>
+        ) : null}
+        {error ? (
+          <CustomerBanner tone="error">{statusMessage(error, locale) ?? error}</CustomerBanner>
+        ) : null}
         {data.summary.containsMockData ? (
           <CustomerBanner tone="warning">{t('analytics.mockNotice')}</CustomerBanner>
         ) : null}
@@ -404,6 +439,94 @@ export default async function AnalyticsPage({
           )}
         </Card>
 
+        {/*
+          WHAT CHANGED — shown only when something did. The four numbers a
+          reader needs to disagree with the finding (observed, baseline, how many
+          periods the baseline spans, and the deviation against the configured
+          threshold) are all printed; "engagement dropped" with no baseline is a
+          claim, not a finding (anomalies.ts).
+        */}
+        {data.shift ? (
+          <Card testId="analytics-shift">
+            <SectionHeader
+              title={t('analytics.shift.title')}
+              actions={
+                <StatusBadge
+                  tone={data.shift.direction === 'above' ? 'success' : 'warning'}
+                  label={t(`analytics.shift.${data.shift.direction}` as MessageKey)}
+                />
+              }
+            />
+            <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+              {t('analytics.shift.body')
+                .replace('{metric}', t(`analytics.metric.${data.shift.metricKey}` as MessageKey))
+                .replace('{day}', day.format(data.shift.periodStart))
+                .replace('{observed}', number.format(Number(data.shift.observedValue)))
+                .replace('{baseline}', number.format(Number(data.shift.baselineValue)))
+                .replace('{periods}', number.format(data.shift.baselinePeriods))
+                .replace('{deviation}', percent.format(data.shift.deviationMilli / 1_000))
+                .replace('{threshold}', percent.format(data.shift.thresholdMilli / 1_000))}
+            </p>
+          </Card>
+        ) : null}
+
+        {/*
+          WHAT NEXT — each step derived from a condition measured above and
+          gated on the permission of the screen it links to. Absent when there is
+          nothing to do: no "all good!" filler.
+        */}
+        {nextSteps.length > 0 ? (
+          <Card testId="analytics-next">
+            <SectionHeader title={t('analytics.next.title')} />
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'grid',
+                gap: spacingTokens.sm,
+              }}
+            >
+              {nextSteps.map((step) => (
+                <li
+                  key={step.key}
+                  data-testid={`analytics-next-${step.key}`}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.sm,
+                    ...typographyTokens.bodySm,
+                  }}
+                >
+                  <span style={{ color: colorTokens.textPrimary }}>
+                    {t(`analytics.next.${step.key}` as MessageKey)}
+                  </span>
+                  {step.href ? (
+                    <Link
+                      href={`/${locale}${step.href}`}
+                      style={buttonStyle('ghost', 'sm')}
+                      className={buttonClass('ghost')}
+                    >
+                      {t(`analytics.next.${step.key}.action` as MessageKey)}
+                    </Link>
+                  ) : step.key === 'explain-shift' ? (
+                    <ExplainForm
+                      locale={locale}
+                      brandId={brand.id}
+                      days={days}
+                      compare={compare}
+                      label={t('analytics.explain')}
+                      testId="analytics-explain-shift"
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
+
         <Card>
           <SectionHeader title={t('analytics.byPlatform')} />
           {providerPoints.length === 0 ? (
@@ -465,10 +588,29 @@ export default async function AnalyticsPage({
 
         {mayExplain || data.insights.length > 0 ? (
           <Card>
-            <SectionHeader title={t('insights.title')} />
+            <SectionHeader
+              title={t('insights.title')}
+              actions={
+                mayExplain ? (
+                  <ExplainForm
+                    locale={locale}
+                    brandId={brand.id}
+                    days={days}
+                    compare={compare}
+                    label={t('analytics.explain')}
+                    testId="analytics-explain"
+                  />
+                ) : undefined
+              }
+            />
             <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
               {t('insights.noExternalData')}
             </p>
+            {mayExplain ? (
+              <p style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                {t('analytics.explainHint')}
+              </p>
+            ) : null}
             {data.insights.length === 0 ? (
               <StateMessage kind="empty" title={t('insights.empty')} />
             ) : (
@@ -503,5 +645,47 @@ export default async function AnalyticsPage({
         ) : null}
       </Stack>
     </WorkspaceShell>
+  );
+}
+
+/**
+ * "Why?" — asks for an explanation of the period on screen.
+ *
+ * A plain form so it works without JavaScript, like every other form on this
+ * screen. It spends AI credits, which is why it sits behind
+ * `analytics.explain` and why the hint beside it says so; the action is
+ * idempotent per brand, range and day, so a second click is not a second
+ * charge.
+ */
+function ExplainForm({
+  locale,
+  brandId,
+  days,
+  compare,
+  label,
+  testId,
+}: {
+  locale: string;
+  brandId: string;
+  days: number;
+  compare: boolean;
+  label: string;
+  testId: string;
+}) {
+  return (
+    <form action={explainPeriodAction}>
+      <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="brandId" value={brandId} />
+      <input type="hidden" name="range" value={String(days)} />
+      <input type="hidden" name="compare" value={compare ? '1' : '0'} />
+      <button
+        type="submit"
+        style={buttonStyle('brand', 'sm')}
+        className={buttonClass('brand')}
+        data-testid={testId}
+      >
+        {label}
+      </button>
+    </form>
   );
 }

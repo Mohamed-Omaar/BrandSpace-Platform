@@ -379,21 +379,29 @@ fixed in this phase — write the test, plant the defect, show the test fail, re
 Each was shown FAILING with the defect in place and PASSING once restored. A test that does not fail
 when its defect is reinstated is not evidence of anything.
 
-| #   | Planted defect                                                                   | Failed              |
-| --- | -------------------------------------------------------------------------------- | ------------------- |
-| 1   | The quota default collapse restored (`quotaWithNoStatedCeiling` forced false)    | 2 unit, 3 isolation |
-| 2   | The `planEnded` narrowing dropped, so a cancelled subscription gets unlimited    | 1 unit              |
-| 3   | The concurrent-replay guard removed from `usage.consume`                         | 1 isolation         |
-| 4   | `.cs-select`'s fill changed away from the demo's value                           | 2 unit (fidelity)   |
-| 5   | A gradient rewritten as a colour longhand, to test the substitution's narrowness | 2 unit (fidelity)   |
-| 6   | The accounting export button returned to bare                                    | 1 unit              |
-| 7   | The select chevron re-keyed to a class instead of the element                    | 1 unit              |
-| 8   | The `background` shorthand returned to `.cs-field select`                        | 1 unit              |
-| 9   | `CONTROL_CLASS` removed from the password input                                  | 1 unit              |
-| 10  | The 12-character floor hard-coded back into `hashPassword`                       | 2 unit              |
-| 11  | A server action made to read the password confirmation                           | 1 unit              |
-| 12  | The confirmation field given a `name`, so it submits                             | 1 unit              |
-| 13  | `MIN_OWNER_PASSWORD_LENGTH` lowered to the customer floor                        | 1 unit              |
+| #   | Planted defect                                                                    | Failed              |
+| --- | --------------------------------------------------------------------------------- | ------------------- |
+| 1   | The quota default collapse restored (`quotaWithNoStatedCeiling` forced false)     | 2 unit, 3 isolation |
+| 2   | The `planEnded` narrowing dropped, so a cancelled subscription gets unlimited     | 1 unit              |
+| 3   | The concurrent-replay guard removed from `usage.consume`                          | 1 isolation         |
+| 4   | `.cs-select`'s fill changed away from the demo's value                            | 2 unit (fidelity)   |
+| 5   | A gradient rewritten as a colour longhand, to test the substitution's narrowness  | 2 unit (fidelity)   |
+| 6   | The accounting export button returned to bare                                     | 1 unit              |
+| 7   | The select chevron re-keyed to a class instead of the element                     | 1 unit              |
+| 8   | The `background` shorthand returned to `.cs-field select`                         | 1 unit              |
+| 9   | `CONTROL_CLASS` removed from the password input                                   | 1 unit              |
+| 10  | The 12-character floor hard-coded back into `hashPassword`                        | 2 unit              |
+| 11  | A server action made to read the password confirmation                            | 1 unit              |
+| 12  | The confirmation field given a `name`, so it submits                              | 1 unit              |
+| 13  | `MIN_OWNER_PASSWORD_LENGTH` lowered to the customer floor                         | 1 unit              |
+| 14  | P6-11: the brand table filtered with the child-row helper (D-269 restored)        | 4 isolation         |
+| 15  | P6-11: `learnings-pending` without its `workspaceId` predicate                    | 1 isolation         |
+| 16  | P6-11: `connection-expiring` without the BrandScope clause                        | 1 isolation         |
+| 17  | P6-11: the credit forecast no longer compared against the renewal date            | 2 unit              |
+| 18  | P6-11: the learning notice resolved recipients with no brand (BrandScope ignored) | 1 isolation         |
+| 19  | P6-11: the insight narrative keeps citations to evidence the reader cannot see    | 1 unit              |
+| 20  | P6-11: analytics next steps offered without their destination's permission        | 1 unit              |
+| 21  | P6-11: `insights-new` counts expired findings                                     | 1 isolation         |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -414,7 +422,57 @@ no substring.
 
 ---
 
-## 8. Close-out
+## 8. P6-11 — Analytics → Marketing Intelligence → Learnings → Pulse
+
+**Audit first.** Every domain this workstream touches already worked; the gaps were in how they
+connected, and each was read on this branch before any code was written:
+
+| Gap found                                                                                                                               | Where                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Intelligence never rendered an insight's `body`, so every paid-for explanation (summary, claims, recommendations) was stored and unseen | `intelligence/page.tsx`                            |
+| Analytics, and later Pulse, linked to `/intelligence?insight=<id>` and the page ignored the parameter                                   | `intelligence/page.tsx`                            |
+| `/v1/analytics/explain` existed since Phase 7 and nothing in the dashboard called it — "why?" had no button                             | `analytics/page.tsx`                               |
+| The Brand Brain review queue could not read an analytics learning's evidence (it only knew the document shape) and showed none          | `brand-brain/page.tsx` `evidenceLabels()`          |
+| The queue did not select `sourceKind`, `insightId` or `conflictsWithItemId` — an inference that contradicted a human fact looked normal | `brand-brain/page.tsx`                             |
+| `accept_edited` was supported by the action and the service and never offered — Accept / Edit / Dismiss was Accept / Dismiss            | `brand-brain/area-drawer.tsx`                      |
+| `brand_brain.learning_proposed` was declared in Phase 7 and never sent                                                                  | `packages/notifications/src/templates.ts`          |
+| No Pulse at all; Home showed no learnings, findings, expiring connections, gaps or credit outlook                                       | `server/command-center.ts`                         |
+| **A defect:** Home's attention list was empty for every brand-scoped member (D-269)                                                     | `server/command-center.ts` `brandsWithNoKnowledge` |
+
+**The loop, end to end, as it now reads on screen:**
+
+- **Observe** — Analytics, unchanged, plus a **What changed** card: the latest `detectAnomalies` finding
+  over the series on screen, with the four numbers that make it auditable (observed, baseline, periods,
+  deviation against the configured threshold). Arithmetic, no credits.
+- **Detect / Why** — **Why? Explain this period** calls the existing explain route (idempotent per
+  brand, range and day) and lands the reader on the explanation in Intelligence.
+- **What next** — a card on Analytics mapping each measured condition (no connection, reauthorisation,
+  nothing published, metrics pending, a shift, unreviewed findings) to the screen that fixes it, each
+  gated on that screen's permission. No filler when there is nothing to do.
+- **Propose / Evidence** — Intelligence renders each insight as **Why · What happened · What to do
+  next**, re-parsed against its schema, every line citing the evidence rows shown below it; a citation to
+  a row the reader cannot see is dropped. The deep link now focuses the finding. Each finding says how
+  many learnings from it are waiting for review or were accepted, with a link to Brand Brain.
+- **Human review** — the reviewer is **notified** (`brand_brain.learning_proposed`, in the proposal's
+  own transaction, to reviewers whose BrandScope admits the brand, once per batch), and the queue shows
+  the source, the measurements, a link back to the finding, and any **conflict** with a human-approved
+  fact — stating that accepting will not change it.
+- **Accept / Edit / Dismiss** — **Edit, then accept** is now offered (native `<details>`, no script).
+- **Governed memory** — unchanged and re-verified: a learning lands in the LEARNINGS area at the lowest
+  authority; `mayOverwrite` still refuses AI-inferred over human; nothing here writes Brand Brain.
+
+**Pulse (D-268)** is the Command Center's attention list with six more real sources and one computed
+item. It is one ranked list, the same wording as the destination screen and the notification inbox; no
+banner was added anywhere. What it does **not** surface, and why, is F-92.
+
+**Tests.** `tests/unit/phase6-pulse.test.ts` (26) pins the decisions; `tests/isolation/phase6-pulse.test.ts`
+(23) pins the queries under the application role inside `withWorkspace` AND through the platform pool,
+so the application predicate is shown to hold without RLS (both layers of CLAUDE.md §2.1). Plants 14–21
+above. No new tenant-owned model, no migration, no RLS change.
+
+---
+
+## Close-out
 
 Phase 6 stops before merge and waits for explicit owner approval, with the sixteen-point report the
 brief specifies.

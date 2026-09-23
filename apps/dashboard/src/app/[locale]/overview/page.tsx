@@ -17,12 +17,18 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
+import { detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { activityService, notificationService } from '../../../server/approvals-context';
-import { attentionItems, type AttentionItem } from '../../../server/command-center';
+import { attentionItems, rankAttention, type AttentionItem } from '../../../server/command-center';
+import {
+  PERFORMANCE_SHIFT_RECENT_DAYS,
+  latestShift,
+  performanceShiftItem,
+} from '../../../server/performance-patterns';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
@@ -39,14 +45,30 @@ export const dynamic = 'force-dynamic';
  * `{count}` and `{detail}` are substituted rather than concatenated, so Arabic
  * can put the number where Arabic puts it (CLAUDE.md §4).
  */
-function attentionSentence(t: (key: never) => string, item: AttentionItem): string {
+/** Kinds whose sentence names ONE thing when `detail` is present, and counts several when not. */
+const NAMED_OR_COUNTED = new Set(['brand-brain-empty', 'campaign-empty', 'calendar-gap']);
+
+/** Kinds whose `detail` is a metric key, translated rather than printed. */
+const METRIC_DETAIL = new Set(['performance-above', 'performance-below']);
+
+function attentionSentence(
+  t: (key: never) => string,
+  item: AttentionItem,
+  formatDate: (value: Date) => string,
+): string {
   const key =
-    item.detail === undefined && item.kind === 'brand-brain-empty'
-      ? 'attention.brand-brain-empty.many'
+    item.detail === undefined && NAMED_OR_COUNTED.has(item.kind)
+      ? `attention.${item.kind}.many`
       : `attention.${item.kind}`;
+  const detail =
+    item.detail !== undefined && METRIC_DETAIL.has(item.kind)
+      ? t(`analytics.metric.${item.detail}` as never)
+      : (item.detail ?? '');
   return t(key as never)
     .replace('{count}', String(item.count))
-    .replace('{detail}', item.detail ?? '');
+    .replace('{detail}', detail)
+    .replace('{date}', item.date ? formatDate(item.date) : '')
+    .replace('{secondDate}', item.secondDate ? formatDate(item.secondDate) : '');
 }
 
 /**
@@ -133,6 +155,42 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
         const metric = result.metrics.find((entry) => entry.metricKey === 'engagements');
         return metric?.value === null || metric?.value === undefined ? null : Number(metric.value);
       })
+    : null;
+
+  /*
+   * P6-11 — A PERFORMANCE SHIFT FOR PULSE. The same series and the same
+   * configured thresholds the Analytics screen uses, over the same 28 days as
+   * the figure above, raised only when the latest anomaly is from this past
+   * week. Read through the owning module, like every other figure here, so
+   * Home and Analytics cannot disagree.
+   *
+   * ITS OWN TRANSACTION, AND IT MAY NOT TAKE HOME DOWN. Like every Pulse
+   * source, a failure contributes nothing rather than failing the page — and a
+   * failed statement aborts the transaction it ran in, so sharing one with the
+   * figures above would let this take them down with it.
+   */
+  const performanceShift = maySeeAnalytics
+    ? await inAnalytics(workspace.workspaceId, async (services) => {
+        const queries = await services.queries();
+        const now = systemClock.now();
+        const series = await queries.series({
+          scope: {},
+          period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
+          metricKey: 'engagements',
+          brandScope: workspace.brandScope,
+        });
+        return performanceShiftItem(
+          latestShift(
+            detectAnomalies({
+              metricKey: series.metricKey,
+              unit: series.unit,
+              points: series.points,
+              policy: await services.policy(),
+            }),
+            { now, withinDays: PERFORMANCE_SHIFT_RECENT_DAYS },
+          ),
+        );
+      }).catch(() => null)
     : null;
 
   const summary = await inWorkspace(workspace.workspaceId, async (scoped) => {
@@ -231,9 +289,16 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
    * its destination requires — an attention item is a link, and pointing
    * somebody at a route that answers 404 is a dead link delivered as a to-do.
    */
-  const attention = await inWorkspace(workspace.workspaceId, async (scoped) =>
-    attentionItems(scoped.db, workspace, customer.userId),
-  );
+  const attention = rankAttention([
+    ...(await inWorkspace(workspace.workspaceId, async (scoped) =>
+      attentionItems(scoped.db, workspace, customer.userId),
+    )),
+    ...(performanceShift ? [performanceShift] : []),
+  ]);
+  const attentionDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
 
   const brandContext = await brandContextFor(workspace, '/overview');
 
@@ -353,7 +418,9 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
                       tone={item.severity === 'blocked' ? 'danger' : statusTone(item.severity)}
                       label={t(`attention.severity.${item.severity}` as never)}
                     />
-                    <span style={{ ...typographyTokens.body }}>{attentionSentence(t, item)}</span>
+                    <span style={{ ...typographyTokens.body }}>
+                      {attentionSentence(t, item, (value) => attentionDate.format(value))}
+                    </span>
                   </Link>
                 </li>
               ))}

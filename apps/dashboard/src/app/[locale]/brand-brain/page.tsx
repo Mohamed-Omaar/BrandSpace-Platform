@@ -8,6 +8,7 @@ import {
   memoryRank,
 } from '@brandspace/brand-brain';
 import { requireWorkspace } from '../../../server/customer-context';
+import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -235,6 +236,15 @@ export default async function BrandBrainPage({
                 confidenceMilli: true,
                 evidence: true,
                 targetItemId: true,
+                /*
+                 * P6-11 — WHERE IT CAME FROM AND WHAT IT CONTRADICTS. The queue
+                 * showed neither, so an analytics inference and a document
+                 * extract looked identical, and a learning that disagreed with
+                 * a human-approved fact was presented as if it did not.
+                 */
+                sourceKind: true,
+                insightId: true,
+                conflictsWithItemId: true,
               },
             })
           : [],
@@ -323,16 +333,70 @@ export default async function BrandBrainPage({
     ];
   });
 
-  const candidateData: CandidateData[] = candidates.map((candidate) => ({
-    id: candidate.id,
-    area: candidate.area,
-    itemKey: candidate.itemKey,
-    title: pick(localizedFrom(candidate.extractedTitle), locale),
-    body: pick(localizedFrom(candidate.extractedBody), locale),
-    confidencePercent: Math.round(candidate.confidenceMilli / 10),
-    evidence: evidenceLabels(candidate.evidence),
-    replacesExisting: candidate.targetItemId !== null,
-  }));
+  const itemTitles = new Map(
+    items.map((item) => [item.id, pick(localizedFrom(item.title), locale) || item.itemKey]),
+  );
+  const reviewNumber = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const reviewPercent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+    style: 'percent',
+    maximumFractionDigits: 1,
+  });
+  const reviewDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  const candidateData: CandidateData[] = candidates.map((candidate) => {
+    const title = localizedFrom(candidate.extractedTitle);
+    const body = localizedFrom(candidate.extractedBody);
+    const fromAnalytics = candidate.sourceKind === 'ANALYTICS';
+    /*
+     * THE NUMBERS THE INFERENCE WAS DRAWN FROM, in the reader's own language
+     * and number format. Parsed rather than cast (learning-review.ts): a row
+     * that does not match yields no sentence, and the link to the source
+     * insight still stands.
+     */
+    const measured = fromAnalytics ? analyticsEvidence(candidate.evidence) : null;
+    const conflict = conflictNote({
+      conflictsWithItemId: candidate.conflictsWithItemId,
+      titleOf: (id) => itemTitles.get(id) ?? null,
+    });
+    return {
+      id: candidate.id,
+      area: candidate.area,
+      itemKey: candidate.itemKey,
+      title: pick(title, locale),
+      body: pick(body, locale),
+      confidencePercent: Math.round(candidate.confidenceMilli / 10),
+      evidence: fromAnalytics ? [] : evidenceLabels(candidate.evidence),
+      replacesExisting: candidate.targetItemId !== null,
+      source: fromAnalytics ? 'ANALYTICS' : 'DOCUMENT',
+      sourceHref:
+        fromAnalytics && candidate.insightId && can('strategy.read')
+          ? `/${locale}/intelligence?brand=${brand.id}&insight=${candidate.insightId}`
+          : null,
+      measured: measured
+        ? t('bb.reviewMeasured')
+            .replace('{metric}', t(`analytics.metric.${measured.metricKey}` as MessageKey))
+            .replace('{observed}', reviewNumber.format(Number(measured.observedValue)))
+            .replace('{baseline}', reviewNumber.format(Number(measured.baselineValue)))
+            .replace('{deviation}', reviewPercent.format(measured.deviationMilli / 1_000))
+            .replace('{from}', reviewDay.format(measured.periodStart))
+            .replace('{to}', reviewDay.format(measured.periodEnd))
+        : null,
+      conflict: conflict
+        ? conflict.title
+          ? t('bb.reviewConflictNamed').replaceAll('{title}', conflict.title)
+          : t('bb.reviewConflict')
+        : null,
+      edit: {
+        titleEn: title.en ?? '',
+        titleAr: title.ar ?? '',
+        bodyEn: body.en ?? '',
+        bodyAr: body.ar ?? '',
+      },
+    };
+  });
 
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,

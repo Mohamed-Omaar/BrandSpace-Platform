@@ -77,6 +77,21 @@ export interface CandidateData {
   readonly confidencePercent: number;
   readonly evidence: readonly string[];
   readonly replacesExisting: boolean;
+  /** P6-11 — an analytics inference or a document extract. */
+  readonly source: 'ANALYTICS' | 'DOCUMENT';
+  /** The finding an analytics learning was drawn from, when the reader may open it. */
+  readonly sourceHref: string | null;
+  /** The measurements behind an analytics learning, as a translated sentence. */
+  readonly measured: string | null;
+  /** A human-approved fact this learning disagrees with, as a translated sentence. */
+  readonly conflict: string | null;
+  /** Both languages of the proposal, to prefill an edit-then-accept. */
+  readonly edit: {
+    readonly titleEn: string;
+    readonly titleAr: string;
+    readonly bodyEn: string;
+    readonly bodyAr: string;
+  };
 }
 
 export interface SourceData {

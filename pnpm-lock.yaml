@@ -761,6 +761,9 @@ importers:
       '@brandspace/entitlements':
         specifier: workspace:*
         version: link:../entitlements
+      '@brandspace/notifications':
+        specifier: workspace:*
+        version: link:../notifications
       '@brandspace/shared':
         specifier: workspace:*
         version: link:../shared
