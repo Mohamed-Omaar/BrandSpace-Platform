@@ -402,6 +402,12 @@ when its defect is reinstated is not evidence of anything.
 | 19  | P6-11: the insight narrative keeps citations to evidence the reader cannot see    | 1 unit              |
 | 20  | P6-11: analytics next steps offered without their destination's permission        | 1 unit              |
 | 21  | P6-11: `insights-new` counts expired findings                                     | 1 isolation         |
+| 22  | P6-12: the executor honours a model-supplied `enabled` flag                       | 1 unit              |
+| 23  | P6-12: the rule check ignores the ACTION's own permission                         | 1 isolation         |
+| 24  | P6-12: the preview fails OPEN when the rule check is not wired                    | 1 isolation         |
+| 25  | P6-12: undo removes a rule a person has since switched on                         | 1 isolation         |
+| 26  | P6-12: the `listRules` brand overwrite restored (D-271)                           | 1 isolation         |
+| 27  | P6-12: the dashboard's surface list drifts from the API's                         | 1 unit              |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -469,6 +475,42 @@ banner was added anywhere. What it does **not** surface, and why, is F-92.
 (23) pins the queries under the application role inside `withWorkspace` AND through the platform pool,
 so the application predicate is shown to hold without RLS (both layers of CLAUDE.md §2.1). Plants 14–21
 above. No new tenant-owned model, no migration, no RLS change.
+
+---
+
+## 9. P6-12 — Copilot + Automations
+
+**Audit first** (read on this branch before any code): the confirmation, tenancy and live re-check
+machinery in `packages/copilot` and `packages/automation` was already sound and is unchanged. The gaps
+were in how the assistant met the product:
+
+| Gap found                                                                                                 | Closed by                                             |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| The Copilot knew nothing of the screen it was opened from (`surface` stored, never read)                  | Closed surface list + prompt line; `?from=` entries   |
+| It ignored the rail's brand and kept its own `brands[0]` picker                                           | Global brand context (D-190), explicit no-brand state |
+| READ_ONLY plans could never execute (no token, `/confirm` requires one) — Inspect did not exist           | `/turn` executes read-only plans; results rendered    |
+| "Cancel" was local only; rejected plans held the open-plan ceiling until TTL                              | `/v1/copilot/cancel` + dashboard proxy                |
+| Every submit opened a new session, so there was no multi-turn conversation                                | One session per visit                                 |
+| Raw milli-credit cost, raw ISO expiry, "success" badge on failure, hidden failure codes, wrong label keys | Localized cost/expiry/status; expired state; keys     |
+| Credit estimate quoted a caption for ANY plan, under a placeholder workspace id                           | Only credit-spending steps, real workspace            |
+| No Copilot path to automations                                                                            | `automation.create_rule` (D-270) — created DISABLED   |
+| `listRules` dropped the requested brand for scoped members; screen ignored the rail's brand               | D-271                                                 |
+| NOTIFY rules sent the "confirmation required" template                                                    | `automation.notice`                                   |
+| External-publish confirm showed nothing about what it would publish; offered without `publishing.manage`  | Rule + content preview; permission-gated              |
+| One-click rule delete; run failure codes hidden                                                           | Confirm disclosure; failure shown                     |
+
+**The flow as it now runs:** Inspect (read-only plans run immediately, results shown) → Prepare
+(plan with previews, before → after) → Preview → Confirm (single-use token, hash-bound, expiry shown and
+enforced) → Execute (live re-authorization per step) → Audit (`copilot.*` plus the domain's own events)
+→ Undo where a compensation contract exists. External and destructive actions still require explicit
+confirmation of the exact plan; there is no silent publish.
+
+**Not changed, and recorded:** API route rate limits are declared and not enforced (F-93, pre-existing).
+`phase7-round6/7` fail on this container's long-lived database after the E2E seeds and runs have used it,
+and pass on a freshly migrated one — the F-90 family, local only.
+
+**Tests.** `tests/unit/phase6-copilot.test.ts` (14), `tests/isolation/phase6-copilot-automation.test.ts`
+(10), five E2E tests in `analytics-copilot.spec.ts`. Plants 22–27. No new model, migration or RLS change.
 
 ---
 

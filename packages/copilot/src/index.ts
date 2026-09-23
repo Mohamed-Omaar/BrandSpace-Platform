@@ -50,6 +50,8 @@ export type {
   ExecutorContext,
   ExecutorResult,
   ExternalActionPort,
+  AutomationRuleCheck,
+  AutomationRulePort,
   PreviewContext,
   ToolExecutor,
 } from './executors';
@@ -91,3 +93,6 @@ export {
 
 export { pruneCopilot } from './retention';
 export type { CopilotPruneResult } from './retention';
+
+export { COPILOT_SURFACES, COPILOT_SURFACE_KEYS, copilotSurface } from './surfaces';
+export type { CopilotSurface } from './surfaces';

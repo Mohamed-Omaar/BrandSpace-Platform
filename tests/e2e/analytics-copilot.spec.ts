@@ -851,7 +851,10 @@ test.describe('P6-11 · analytics → intelligence → pulse', () => {
     if ((await next.count()) === 0) return; // nothing to do is a finished state
     for (const link of await next.locator('a').all()) {
       const href = await link.getAttribute('href');
-      expect(href).toMatch(/^\/en\/(integrations|calendar|intelligence)$/);
+      // P6-12 added the card's "Ask Copilot" entry, which carries its context.
+      expect(href).toMatch(
+        /^\/en\/((integrations|calendar|intelligence)|copilot\?from=analytics)$/,
+      );
       const response = await page.request.get(`${DASHBOARD_BASE_URL}${href}`);
       expect(response.status(), `${href} answers`).toBeLessThan(400);
     }
@@ -886,5 +889,86 @@ test.describe('P6-11 · analytics → intelligence → pulse', () => {
       );
       expect(overflow, `${path} scrolls sideways on a phone`).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+/*
+ * PHASE 6 · P6-12 — THE COPILOT IN CONTEXT, AND AUTOMATIONS THAT SAY WHAT THEY DO.
+ *
+ * The model's output is not asserted: it is a deterministic development double
+ * here, and a test that assumed a particular plan would be testing the double.
+ * What is asserted is what the PRODUCT guarantees whatever the plan is.
+ */
+test.describe('P6-12 · copilot and automations', () => {
+  test('Home opens the Copilot with Home as its context, on the rail’s brand', async ({ page }) => {
+    await signIn(page);
+    const entry = page.getByTestId('overview-copilot-open');
+    await expect(entry).toBeVisible();
+    await Promise.all([page.waitForURL(/\/en\/copilot\?from=overview$/), entry.click()]);
+    const context = page.getByTestId('copilot-context');
+    await expect(context).toBeVisible();
+    // The brand every step will act on, and where the conversation started.
+    await expect(context).toContainText(/Acting on /);
+    await expect(context).toContainText(/opened from Home/);
+    // No second brand picker: the rail is the one source of brand context.
+    await expect(page.getByTestId('copilot-brand')).toHaveCount(0);
+  });
+
+  test('an unknown ?from= is not echoed anywhere', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=${encodeURIComponent('<b>x</b>')}`);
+    await expect(page.getByTestId('copilot-context')).not.toContainText('opened from');
+    await expect(page.locator('main')).not.toContainText('<b>x</b>');
+  });
+
+  test('declining a plan closes it, and nothing runs', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=campaigns`);
+    await page.getByTestId('copilot-request').fill('Create an autumn awareness campaign.');
+    await page.getByTestId('copilot-propose').click();
+    const outcome = await settle(page);
+    if (outcome !== 'plan') return; // a refusal is an honest answer too
+    const reject = page.getByTestId('copilot-reject');
+    if ((await reject.count()) === 0) return; // a read-only plan needs no decision
+    const cancelled = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/copilot/cancel') && response.request().method() === 'POST',
+    );
+    await reject.click();
+    expect((await cancelled).status()).toBeLessThan(500);
+    await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
+    await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+  });
+
+  test('the Copilot screen is clean under axe in both directions', async ({ page }) => {
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/copilot?from=analytics`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} copilot`).toEqual([]);
+    }
+  });
+
+  test('deleting a rule asks first', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    const form = page.getByTestId('automation-form');
+    const name = `E2E delete ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    const confirmDelete = row.getByRole('button', { name: /delete this rule/i });
+    // Not reachable in one click: the destructive button is behind a disclosure.
+    await expect(confirmDelete).toBeHidden();
+    await row.locator('summary').click();
+    await expect(confirmDelete).toBeVisible();
+    await confirmDelete.click();
+    await page.waitForLoadState('networkidle');
+    // The rule is gone — whether the list remains or gives way to its empty state.
+    await expect(page.locator('main')).not.toContainText(name);
   });
 });

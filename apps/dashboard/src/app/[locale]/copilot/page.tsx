@@ -1,7 +1,7 @@
-import { Stack, spacingTokens } from '@brandspace/ui';
-import { brandScopeFilter } from '@brandspace/shared';
+import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
+import { copilotSurface } from '../../../server/copilot-surface';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CopilotView } from './copilot-view';
@@ -25,26 +25,50 @@ export const dynamic = 'force-dynamic';
  * and a member without the permission is shown no number rather than a
  * plausible-looking placeholder (CLAUDE.md §2.2).
  */
-export default async function CopilotPage({ params }: { params: Promise<{ locale: string }> }) {
+/**
+ * P6-12 — THE COPILOT KNOWS WHERE IT WAS OPENED FROM, AND WHICH BRAND.
+ *
+ * `?from=` names the screen the person came from, narrowed to the closed
+ * surface list the API accepts (`COPILOT_SURFACE_KEYS`) — anything else is
+ * `general`, so the parameter cannot carry text into the assistant.
+ *
+ * THE BRAND IS THE RAIL'S (D-190). The screen used to keep its own picker,
+ * defaulting to the alphabetically first brand, so the assistant could be
+ * acting on a different brand from the one the rail said was selected. It now
+ * takes the global brand context and, when that is not exactly one brand, says
+ * so rather than guessing — a brand-less conversation has no tools at all.
+ */
+export default async function CopilotPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { locale } = await params;
+  const query = await searchParams;
   const t = translator(locale);
   const session = await requireWorkspace(locale, 'copilot.use');
   const { workspace } = session;
 
   const maySeeCredits = workspace.permissionKeys.includes('credits.read');
+  const from = typeof query['from'] === 'string' ? query['from'] : null;
+  const surface = copilotSurface(from);
 
-  const { brands, wallet } = await inWorkspace(workspace.workspaceId, async (services) => ({
-    brands: await services.db.brand.findMany({
-      where: { status: 'ACTIVE', ...brandScopeFilter(workspace.brandScope) },
-      select: { id: true, name: true },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-    }),
-    wallet: maySeeCredits ? await services.credits.wallet(workspace.workspaceId) : null,
-  }));
+  const brandContext = await brandContextFor(
+    session.workspace,
+    '/copilot',
+    typeof query['brand'] === 'string' ? query['brand'] : null,
+  );
+  const brand = requiredBrand(brandContext);
+
+  const wallet = maySeeCredits
+    ? await inWorkspace(workspace.workspaceId, async (services) =>
+        services.credits.wallet(workspace.workspaceId),
+      )
+    : null;
 
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
-
-  const brandContext = await brandContextFor(session.workspace, '/copilot');
 
   return (
     <WorkspaceShell
@@ -59,49 +83,66 @@ export default async function CopilotPage({ params }: { params: Promise<{ locale
       permissionKeys={workspace.permissionKeys}
     >
       <Stack gap={spacingTokens.lg}>
-        <CopilotView
-          locale={locale}
-          brands={brands}
-          creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
-          labels={{
-            title: t('copilot.title'),
-            subtitle: t('copilot.subtitle'),
-            open: t('copilot.title'),
-            close: t('common.close'),
-            promptLabel: t('copilot.promptLabel'),
-            promptPlaceholder: t('copilot.promptPlaceholder'),
-            send: t('copilot.send'),
-            attach: t('copilot.promptLabel'),
-            attachmentsLabel: t('copilot.promptLabel'),
-            suggestionsLabel: t('copilot.plan'),
-            conversationLabel: t('copilot.title'),
-            streaming: t('copilot.send'),
-            errorTitle: t('copilot.undoRefused'),
-            errorBody: t('copilot.planEmpty'),
-            insufficientCreditsTitle: t('insights.insufficientTitle'),
-            insufficientCreditsBody: t('insights.insufficientBody'),
-            approvalTitle: t('copilot.plan'),
-            approvalBody: t('copilot.externalWarning'),
-            approve: t('copilot.confirm'),
-            reject: t('copilot.reject'),
-            mutatingWarning: t('copilot.externalWarning'),
-            disabledNotice: t('copilot.promptLabel'),
-            surfaceNames: {
-              general: t('copilot.title'),
-              calendar: t('nav.calendar'),
-              posts: t('nav.content'),
-              composer: t('nav.content'),
-              studio: t('nav.content'),
-            },
-            contextLabel: t('analytics.brandLabel'),
-            toolsLabel: t('copilot.plan'),
-            previewTitle: t('copilot.plan'),
-            beforeLabel: t('copilot.preview.status'),
-            afterLabel: t('copilot.preview.status'),
-            assistantName: t('copilot.title'),
-            userName: session.customer.name ?? session.customer.email,
-          }}
-        />
+        {!brand ? (
+          <StateMessage
+            kind="empty"
+            title={
+              brandContext.resolution.kind === 'unselected'
+                ? t('brand.chooseTitle')
+                : t('analytics.noBrandTitle')
+            }
+            description={
+              brandContext.resolution.kind === 'unselected'
+                ? t('brand.chooseBody')
+                : t('copilot.noBrandBody')
+            }
+          />
+        ) : (
+          <CopilotView
+            locale={locale}
+            brand={{ id: brand.id, name: brand.name }}
+            surface={surface}
+            creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
+            labels={{
+              title: t('copilot.title'),
+              subtitle: t('copilot.subtitle'),
+              open: t('copilot.title'),
+              close: t('common.close'),
+              promptLabel: t('copilot.promptLabel'),
+              promptPlaceholder: t('copilot.promptPlaceholder'),
+              send: t('copilot.send'),
+              attach: t('copilot.attach'),
+              attachmentsLabel: t('copilot.attachments'),
+              suggestionsLabel: t('copilot.suggestions'),
+              conversationLabel: t('copilot.conversation'),
+              streaming: t('copilot.working'),
+              errorTitle: t('copilot.errorTitle'),
+              errorBody: t('copilot.failed'),
+              insufficientCreditsTitle: t('copilot.insufficientCreditsTitle'),
+              insufficientCreditsBody: t('copilot.insufficientCreditsBody'),
+              approvalTitle: t('copilot.plan'),
+              approvalBody: t('copilot.approvalBody'),
+              approve: t('copilot.confirm'),
+              reject: t('copilot.reject'),
+              mutatingWarning: t('copilot.externalWarning'),
+              disabledNotice: t('copilot.composerAbove'),
+              surfaceNames: {
+                general: t('copilot.title'),
+                calendar: t('nav.calendar'),
+                posts: t('nav.content'),
+                composer: t('nav.content'),
+                studio: t('nav.content'),
+              },
+              contextLabel: t('copilot.contextLabel'),
+              toolsLabel: t('copilot.steps'),
+              previewTitle: t('copilot.plan'),
+              beforeLabel: t('copilot.before'),
+              afterLabel: t('copilot.after'),
+              assistantName: t('copilot.title'),
+              userName: session.customer.name ?? session.customer.email,
+            }}
+          />
+        )}
       </Stack>
     </WorkspaceShell>
   );

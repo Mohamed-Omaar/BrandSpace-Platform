@@ -70,6 +70,30 @@ export interface ExecutorContext {
    * all, which is the F-07 pattern applied to the assistant.
    */
   readonly externalActions?: ExternalActionPort | undefined;
+  /**
+   * P6-12 — THE AUTOMATIONS DOMAIN, INJECTED. `automation.create_rule` writes
+   * through `AutomationEngine.createRule` and nothing else, so every rule the
+   * assistant composes meets the pairing, condition, limit and permission
+   * checks a person's rule meets. A surface not wired with this port simply
+   * cannot compose automations.
+   */
+  readonly automations?: AutomationRulePort | undefined;
+}
+
+/** The slice of `AutomationEngine` the Copilot may reach: creating, never enabling. */
+export interface AutomationRulePort {
+  createRule(input: {
+    readonly brandId: string;
+    readonly name: string;
+    readonly triggerType: string;
+    readonly triggerConfig: unknown;
+    readonly conditions: unknown;
+    readonly actionType: string;
+    readonly actionConfig: unknown;
+    /** Always false from the Copilot. Typed as the literal so nothing else fits. */
+    readonly enabled: false;
+    readonly actor: LiveAuthorization;
+  }): Promise<{ readonly id: string; readonly version: number; readonly name: string }>;
 }
 
 /**
@@ -135,6 +159,23 @@ export interface PreviewContext {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
   readonly authorization: LiveAuthorization;
+  /**
+   * P6-12 — the automations registry's verdict on a proposed rule, INJECTED
+   * because this package may not import `@brandspace/automation` (ARCHITECTURE
+   * §4.1). Absent means a rule cannot be previewed, and the step is refused:
+   * a check that was not wired fails closed rather than waving the rule
+   * through to find out at execution.
+   */
+  readonly automationRules?: AutomationRuleCheck | undefined;
+}
+
+/** Is this trigger/action pair real, compatible, and within the caller's authority? */
+export interface AutomationRuleCheck {
+  admissible(input: {
+    readonly triggerType: string;
+    readonly actionType: string;
+    readonly permissionKeys: readonly string[];
+  }): boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +509,41 @@ const publishNow: ToolExecutor = async (context, args) => {
   };
 };
 
+/**
+ * P6-12 — compose an automation rule, DISABLED.
+ *
+ * `enabled: false` is written here and typed as a literal on the port, so no
+ * argument the model produces can turn a rule on: enabling a rule is what makes
+ * it act without a person, and that stays a person's decision on the
+ * Automations screen. The compensation removes the rule only while it is still
+ * disabled and unedited.
+ */
+const automationCreateRule: ToolExecutor = async (context, args) => {
+  if (!context.automations) throw externalActionUnavailable();
+  const rule = await context.automations.createRule({
+    brandId: String(args['brandId']),
+    name: String(args['name']),
+    triggerType: String(args['triggerType']),
+    triggerConfig: args['triggerConfig'] ?? {},
+    conditions: args['conditions'] ?? [],
+    actionType: String(args['actionType']),
+    actionConfig: args['actionConfig'] ?? {},
+    enabled: false,
+    actor: context.authorization,
+  });
+  return {
+    result: { ruleId: rule.id, name: rule.name, enabled: false },
+    resourceType: 'AutomationRule',
+    resourceId: rule.id,
+    resourceVersionAfter: rule.version,
+    compensation: {
+      kind: 'automation.remove',
+      ruleId: rule.id,
+      expectedVersion: rule.version,
+    },
+  };
+};
+
 export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
   'analytics.summary': analyticsSummary,
   'brand.context': brandContext,
@@ -479,6 +555,7 @@ export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
   'content.draft': contentDraft,
   'calendar.place': calendarPlace,
   'publishing.publish_now': publishNow,
+  'automation.create_rule': automationCreateRule,
 };
 
 // ---------------------------------------------------------------------------
@@ -555,6 +632,36 @@ export async function buildPreview(
         // The preview SAYS what class of action this is, in the dialog, in the
         // reader's language. "Publish" and "draft" must not look alike.
         { labelKey: 'copilot.preview.external', after: 'publish' },
+      ];
+    }
+    case 'automation.create_rule': {
+      /*
+       * THE PAIRING IS REFUSED AT BUILD TIME, not left to execution. A rule the
+       * engine would refuse is not a plan the customer should be asked to
+       * confirm; nor is one whose ACTION the caller may not perform — refused in
+       * the same 404 shape as every other build-time refusal.
+       */
+      const triggerType = String(args['triggerType']);
+      const actionType = String(args['actionType']);
+      if (
+        !context.automationRules?.admissible({
+          triggerType,
+          actionType,
+          permissionKeys: context.authorization.permissionKeys,
+        })
+      ) {
+        throw copilotPlanNotFound();
+      }
+      return [
+        { labelKey: 'copilot.preview.ruleName', after: String(args['name'] ?? '') },
+        { labelKey: 'copilot.preview.trigger', after: triggerType },
+        { labelKey: 'copilot.preview.action', after: actionType },
+        {
+          labelKey: 'copilot.preview.conditions',
+          after: String(((args['conditions'] as unknown[] | undefined) ?? []).length),
+        },
+        // STATED IN THE DIALOG: the rule is created switched off.
+        { labelKey: 'copilot.preview.ruleEnabled', after: 'off' },
       ];
     }
     default:

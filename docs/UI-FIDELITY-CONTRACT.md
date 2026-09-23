@@ -301,6 +301,15 @@ the Brand Brain review drawer, composed entirely from what those screens already
   inputs reuse `CONTROL_CLASS` + `drawerInputStyle` and whose button reuses `reviewButtonStyle`, exactly
   as the drawer's existing "add knowledge" form does. Nothing in the ported geometry changed.
 
+### 6.3.2 Phase 6 P6-12 — Copilot and Automations additions
+
+Both routes were already §6 extensions. The Copilot screen keeps the ported `CopilotBody` shell and
+adds, inside its existing plan `Card`, a context caption, before → after in preview lines, an
+inspection results list and localized status — `typographyTokens` captions and lists only. Automations
+adds a brand caption, a proposal line on waiting runs, and a native `<details>` delete confirmation
+styled with `buttonStyle` + `buttonClass`. The "Ask Copilot" entries on Home, Analytics, Intelligence
+and Automations are ghost/primary `buttonStyle` links. Nothing new is drawn.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

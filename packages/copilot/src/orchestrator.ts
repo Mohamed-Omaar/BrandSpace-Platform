@@ -20,6 +20,7 @@ import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
 import { availableTools, findTool } from './tools';
 import type { ProposedStep } from './plans';
+import { COPILOT_SURFACES, copilotSurface, type CopilotSurface } from './surfaces';
 
 /**
  * THE ORCHESTRATOR — the one place a model is asked what to do, and the one place
@@ -235,7 +236,9 @@ export class CopilotOrchestrator {
       planKey: input.planKey,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, [], brandId !== null),
+        // A quote has no session, so it is priced for the general surface: the
+        // one line that differs is a few words, not a different task.
+        prompt: this.#prompt(input.request, input.authorization, [], brandId !== null, 'general'),
         untrustedContext: context ? [context] : [],
       },
     });
@@ -344,7 +347,13 @@ export class CopilotOrchestrator {
       idempotencyKey: `copilot:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, history, brandId !== null),
+        prompt: this.#prompt(
+          input.request,
+          input.authorization,
+          history,
+          brandId !== null,
+          copilotSurface(session.surface),
+        ),
         untrustedContext: context ? [context] : [],
       },
     });
@@ -505,11 +514,19 @@ export class CopilotOrchestrator {
     authorization: LiveAuthorization,
     history: readonly { role: string; body: string }[],
     brandBound: boolean,
+    surface: CopilotSurface,
   ): string {
     const tools = availableTools(authorization.permissionKeys, { brandBound });
 
     return [
       SYSTEM_INSTRUCTION,
+      '',
+      /*
+       * WHERE THE PERSON IS STANDING (P6-12). From the CLOSED list in
+       * `surfaces.ts`, as the description that file wrote — never a string the
+       * caller supplied, because this line is not fenced.
+       */
+      `THE CUSTOMER OPENED YOU FROM: ${COPILOT_SURFACES[surface]}.`,
       '',
       'TOOLS YOU MAY USE (and no others):',
       ...tools.map(

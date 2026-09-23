@@ -523,8 +523,14 @@ export class AutomationEngine {
       where: {
         workspaceId: this.#workspaceId,
         deletedAt: null,
-        ...(input.brandId ? { brandId: input.brandId } : {}),
-        ...(input.brandScope.length > 0 ? { brandId: { in: [...input.brandScope] } } : {}),
+        /*
+         * INTERSECTED, NOT OVERWRITTEN (P6-12). This spread `{ brandId }` and
+         * then `{ brandId: { in: scope } }` into the same object, so for any
+         * brand-scoped member the later key won and the brand the caller asked
+         * for was silently discarded — every in-scope brand's rules came back.
+         * The D-267 shape again; `brandIdQueryFilter` ANDs the two.
+         */
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -533,6 +539,8 @@ export class AutomationEngine {
 
   async listRuns(input: {
     ruleId?: string | undefined;
+    /** P6-12 — the brand the screen is showing, intersected with the scope. */
+    brandId?: string | undefined;
     brandScope: readonly string[];
     take?: number | undefined;
   }): Promise<readonly AutomationRun[]> {
@@ -540,7 +548,7 @@ export class AutomationEngine {
       where: {
         workspaceId: this.#workspaceId,
         ...(input.ruleId ? { ruleId: input.ruleId } : {}),
-        ...(input.brandScope.length > 0 ? { brandId: { in: [...input.brandScope] } } : {}),
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
       },
       orderBy: { startedAt: 'desc' },
       take: Math.max(1, Math.min(input.take ?? 50, 200)),

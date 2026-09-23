@@ -26,6 +26,7 @@ import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
 import { explainPeriodAction } from './actions';
+import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -477,7 +478,21 @@ export default async function AnalyticsPage({
         */}
         {nextSteps.length > 0 ? (
           <Card testId="analytics-next">
-            <SectionHeader title={t('analytics.next.title')} />
+            <SectionHeader
+              title={t('analytics.next.title')}
+              actions={
+                workspace.permissionKeys.includes('copilot.use') ? (
+                  <Link
+                    href={copilotHref(locale, 'analytics')}
+                    style={buttonStyle('ghost', 'sm')}
+                    className={buttonClass('ghost')}
+                    data-testid="analytics-ask-copilot"
+                  >
+                    {t('copilot.ask')}
+                  </Link>
+                ) : undefined
+              }
+            />
             <ul
               style={{
                 listStyle: 'none',

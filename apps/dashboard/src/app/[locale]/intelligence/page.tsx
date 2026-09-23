@@ -5,6 +5,7 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -17,6 +18,7 @@ import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { insightNarrative, type NarrativeLine } from '../../../server/insight-narrative';
 import { INTELLIGENCE_INSIGHT_TYPES } from '../../../server/command-center';
+import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   analyseContentGapsAction,
@@ -211,6 +213,19 @@ export default async function IntelligencePage({
          * of any finding here — "compared with what?"
          */}
         <CustomerBanner tone="info">{t('insights.noExternalData')}</CustomerBanner>
+
+        {brand && workspace.permissionKeys.includes('copilot.use') ? (
+          <div>
+            <Link
+              href={copilotHref(locale, 'intelligence')}
+              style={buttonStyle('ghost', 'sm')}
+              className={buttonClass('ghost')}
+              data-testid="intelligence-ask-copilot"
+            >
+              {t('copilot.ask')}
+            </Link>
+          </div>
+        ) : null}
 
         {!brand ? (
           <StateMessage

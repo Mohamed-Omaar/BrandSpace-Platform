@@ -31,6 +31,7 @@ import type { CopilotPolicy } from './policy';
 import {
   buildPreview,
   TOOL_EXECUTORS,
+  type AutomationRuleCheck,
   type ExecutorContext,
   type ExecutorResult,
 } from './executors';
@@ -210,6 +211,8 @@ export class CopilotPlanService {
     idempotencyKey?: string | undefined;
     /** When the plan record may be purged (D-116/D-117). */
     expiresAt: Date | null;
+    /** P6-12 — the automations registry's verdict, injected (see PreviewContext). */
+    automationRules?: AutomationRuleCheck | undefined;
   }): Promise<CreatedPlan> {
     if (input.steps.length > this.#policy.plans.maxSteps) {
       throw planTooLarge(this.#policy.plans.maxSteps);
@@ -332,6 +335,7 @@ export class CopilotPlanService {
             db: this.#db,
             workspaceId: this.#workspaceId,
             authorization: input.authorization,
+            automationRules: input.automationRules,
           },
           tool.key,
           parsed,

@@ -10,6 +10,7 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   spacingTokens,
@@ -30,6 +31,7 @@ import {
   performanceShiftItem,
 } from '../../../server/performance-patterns';
 import { translator } from '../../../i18n/messages';
+import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -101,6 +103,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
 
   const maySeeContent = workspace.permissionKeys.includes('content.read');
   const maySeeAnalytics = workspace.permissionKeys.includes('analytics.read');
+  const mayUseCopilot = workspace.permissionKeys.includes('copilot.use');
 
   const { effective, wallet, memberCount } = await inWorkspace(
     workspace.workspaceId,
@@ -374,7 +377,27 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
           with nothing outstanding is a good state and should read like one.
         */}
         <Card testId="attention-card">
-          <SectionHeader title={t('attention.title')} />
+          <SectionHeader
+            title={t('attention.title')}
+            actions={
+              /*
+               * PULSE → COPILOT (P6-12). The assistant opened from here is told
+               * it was opened from Home, where this list is — one path from
+               * "what needs me" to "help me with it", with the same
+               * confirmation ceremony as anywhere else.
+               */
+              mayUseCopilot && attention.length > 0 ? (
+                <Link
+                  href={copilotHref(locale, 'overview')}
+                  style={buttonStyle('ghost', 'sm')}
+                  className={buttonClass('ghost')}
+                  data-testid="attention-ask-copilot"
+                >
+                  {t('copilot.ask')}
+                </Link>
+              ) : undefined
+            }
+          />
           {attention.length === 0 ? (
             <p
               data-testid="attention-none"
@@ -641,13 +664,39 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
               </p>
             </Card>
 
-            <Card testId="overview-copilot">
-              <SectionHeader eyebrow={t('overview.copilotKicker')} title={t('overview.copilot')} />
-              <StateMessage
-                title={t('overview.copilotEmptyTitle')}
-                description={t('overview.copilotEmptyBody')}
-              />
-            </Card>
+            {/*
+              THE COPILOT CARD SAID "suggestions appear once AI generation is
+              enabled" long after it was — a permanently empty promise. It is now
+              the entry it always implied: open the assistant with Home as its
+              context, or, for a member without it, nothing at all.
+            */}
+            {mayUseCopilot ? (
+              <Card testId="overview-copilot">
+                <SectionHeader
+                  eyebrow={t('overview.copilotKicker')}
+                  title={t('copilot.title')}
+                  actions={
+                    <Link
+                      href={copilotHref(locale, 'overview')}
+                      style={buttonStyle('primary', 'sm')}
+                      className={buttonClass('primary')}
+                      data-testid="overview-copilot-open"
+                    >
+                      {t('copilot.ask')}
+                    </Link>
+                  }
+                />
+                <p
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.bodySm,
+                    color: colorTokens.textSecondary,
+                  }}
+                >
+                  {t('copilot.subtitle')}
+                </p>
+              </Card>
+            ) : null}
 
             <Card testId="overview-identity">
               <SectionHeader
