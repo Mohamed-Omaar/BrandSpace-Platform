@@ -176,7 +176,7 @@ could clear look like a platform fault.
 | Control            | Requirement                                                                                                                                                               |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Password storage   | Argon2id, per-user salt, tuned memory/time cost                                                                                                                           |
-| Password policy    | Length-first (min 12), breached-password check, no forced rotation                                                                                                        |
+| Password policy    | Length-first; the minimum is CONFIGURATION (`onboarding.signup.minPasswordLength`, default and absolute floor **8**, ceiling 128 — D-261), breached-password check (**NOT YET IMPLEMENTED — F-89**), no forced rotation                                                                                                        |
 | Rate limiting      | Per-IP and per-account exponential backoff; lockout with unlock flow                                                                                                      |
 | Email verification | Required before first login completes; signed single-use token                                                                                                            |
 | MFA                | TOTP + recovery codes. Optional for customers; **mandatory for Platform Owner and Platform Admin**                                                                        |

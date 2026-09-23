@@ -318,7 +318,20 @@ describe('every form control carries the class that makes it visible', () => {
     let scanned = 0;
 
     for (const file of sources) {
-      const source = read(file);
+      /*
+       * COMMENTS ARE BLANKED, NOT REMOVED (P6-02's lesson, applied here).
+       *
+       * A doc comment that MENTIONS a control — "each screen hand-rolled its own
+       * `<input type=\"password\">`" — is prose about the defect, not the defect.
+       * This scan reported one such sentence in `packages/ui/src/password-field.tsx`
+       * as an unstyled control while the real control below it carried
+       * `CONTROL_CLASS` correctly. Blanking with spaces of the same length keeps
+       * every remaining line number exact, so the failure still points at the
+       * line somebody has to open.
+       */
+      const source = read(file).replace(/\/\*[\s\S]*?\*\//g, (block) =>
+        block.replace(/[^\n]/g, ' '),
+      );
       for (const match of source.matchAll(controlPattern)) {
         const attributes = match[2] ?? '';
         if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;

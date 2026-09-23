@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ABSOLUTE_MAX_PASSWORD_LENGTH, ABSOLUTE_MIN_PASSWORD_LENGTH } from '@brandspace/shared';
 
 /**
  * Configuration domains and their schemas.
@@ -2047,7 +2048,12 @@ const onboardingSchema = z.object({
        * A FLOOR, NOT A COMPOSITION RULE. Length is the property that actually
        * resists guessing; forced symbol classes mostly produce `Password1!`.
        */
-      minPasswordLength: z.number().int().min(10).max(128).default(12),
+      minPasswordLength: z
+        .number()
+        .int()
+        .min(ABSOLUTE_MIN_PASSWORD_LENGTH)
+        .max(ABSOLUTE_MAX_PASSWORD_LENGTH)
+        .default(ABSOLUTE_MIN_PASSWORD_LENGTH),
       /** How long a verification link is good for. */
       verificationTtlMinutes: z.number().int().min(15).max(10_080).default(1_440),
       /** How often a customer may ask for another one. */

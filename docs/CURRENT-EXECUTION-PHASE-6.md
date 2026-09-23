@@ -237,8 +237,31 @@ configuration:
 | `apps/dashboard/src/app/[locale]/invitations/[token]/page.tsx:131` | `minLength={12}`                                                          |
 | `apps/dashboard/src/app/[locale]/(auth)/sign-up/page.tsx:132`      | `minLength={policy.signup.minPasswordLength}` — **already configuration** |
 
-The floor moves to 8 **through configuration**, the hard-coded copies are removed rather than
-re-typed, passphrases stay valid, and Platform Admin MFA and security rules are untouched.
+**RESOLVED.** `ABSOLUTE_MIN_PASSWORD_LENGTH` (8) and `ABSOLUTE_MAX_PASSWORD_LENGTH` (128) live in
+`@brandspace/shared`, bound the configuration schema and are the only floor the domain enforces; the
+policy in force is resolved from configuration at every boundary through one accessor,
+`signupPolicy()`. The hard-coded copies are removed rather than re-typed, and a guard fails on the
+SHAPE of the defect — any comparison of a password length against a literal, not just against 12 —
+so writing `< 8` would be caught too.
+
+The ceiling is new and is not cosmetic: Argon2id hashes whatever it is given, so an unbounded
+password on an unauthenticated endpoint is a cheap way to spend the server's memory budget.
+
+Argon2id at m=19456/t=2/p=1 is unchanged, every server action still validates independently, the
+F-19 abuse ceilings are untouched, and a test asserts Platform Admin reads none of this.
+
+The UI is **one component** — `packages/ui/src/password-field.tsx` — rather than four hand-rolled
+inputs, carrying the reveal toggle, the confirmation with live mismatch, and a rules list stated
+before anything is typed. **The confirmation is deliberately unnamed and is never submitted**: a
+client-side match is the caller checking their own input, so no action reads it and a test fails if
+one starts to.
+
+**One thing this uncovered and did NOT fix.** `docs/SECURITY.md` §3 has always listed a
+breached-password check beside the length policy, and nothing in the repository implements one. That
+matters more after this change than before it, because NIST's position is that a shorter minimum is
+safe *because* candidates are screened against known-breached corpora — the two halves were meant to
+ship together and only one ever did. It is recorded as **F-89** and the requirements table now says
+it is not implemented, rather than the document continuing to claim a control the product lacks.
 
 ### 4.3 P6-03b — the new-workspace brand quota refusal
 

@@ -125,7 +125,7 @@ export const messages = {
     'invite.setUpTitle': 'ليس لديك حساب بعد؟',
     'invite.setUpHint': 'أنشئ كلمة مرور لقبول الدعوة والدخول مباشرة.',
     'invite.password': 'كلمة المرور الجديدة',
-    'invite.passwordHint': '12 حرفًا على الأقل.',
+    'invite.passwordHint': 'لا تقل عن {min} حرفًا.',
     'invite.setUpSubmit': 'إنشاء الحساب وقبول الدعوة',
     'invite.haveAccount': 'لديك حساب بالفعل؟ سجّل الدخول.',
     'invite.workspace': 'مساحة العمل',
@@ -1352,6 +1352,22 @@ export const messages = {
     'signUp.email': 'البريد الإلكتروني',
     'signUp.password': 'كلمة المرور',
     'signUp.passwordHint': 'لا تقل عن {min} حرفًا.',
+    /*
+     * P6-03a — the password control's own strings, in BOTH languages.
+     *
+     * The rules are stated before anything is typed (`password.rule.*`) rather
+     * than only after a submission fails: a rule the customer discovers by
+     * failing it is a rule the form kept secret. `{min}` is the CONFIGURED
+     * minimum, substituted at the call site — never a number written here.
+     */
+    'password.show': 'إظهار',
+    'password.hide': 'إخفاء',
+    'password.confirm': 'تأكيد كلمة المرور',
+    'password.mismatch': 'كلمتا المرور غير متطابقتين.',
+    'password.match': 'كلمتا المرور متطابقتان.',
+    'password.rulesLabel': 'شروط كلمة المرور',
+    'password.rule.length': 'لا تقل عن {min} حرفًا',
+    'password.rule.phrase': 'يمكن استخدام عبارة تتضمن مسافات',
     'signUp.timezone': 'المنطقة الزمنية',
     'signUp.locale': 'اللغة',
     'signUp.accept': 'أوافق على {document}',
@@ -1507,7 +1523,7 @@ export const messages = {
     'invite.setUpTitle': 'No account yet?',
     'invite.setUpHint': 'Choose a password to accept the invitation and sign in.',
     'invite.password': 'New password',
-    'invite.passwordHint': 'At least 12 characters.',
+    'invite.passwordHint': 'At least {min} characters.',
     'invite.setUpSubmit': 'Create account and accept',
     'invite.haveAccount': 'Already have an account? Sign in.',
     'invite.workspace': 'Workspace',
@@ -2774,6 +2790,14 @@ export const messages = {
     'signUp.name': 'Name',
     'signUp.email': 'Email address',
     'signUp.password': 'Password',
+    'password.show': 'Show',
+    'password.hide': 'Hide',
+    'password.confirm': 'Confirm password',
+    'password.mismatch': 'The two passwords do not match.',
+    'password.match': 'The two passwords match.',
+    'password.rulesLabel': 'Password rules',
+    'password.rule.length': 'At least {min} characters',
+    'password.rule.phrase': 'A phrase with spaces is fine',
     'signUp.passwordHint': 'At least {min} characters.',
     'signUp.timezone': 'Timezone',
     'signUp.locale': 'Language',

@@ -18,6 +18,7 @@ export * from './overlays';
 export * from './overview-hero';
 export * from './post-card';
 export * from './post-detail-drawer';
+export * from './password-field';
 export * from './primitives';
 export * from './searchable-select';
 export * from './social-post-preview';

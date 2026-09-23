@@ -1,7 +1,8 @@
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { PasswordField, colorTokens, spacingTokens } from '@brandspace/ui';
 import { statusMessage, translator } from '../../../../../i18n/messages';
-import { AuthCard, authButtonStyle, authInputStyle } from '../../../../../components/auth-card';
+import { AuthCard, authButtonStyle } from '../../../../../components/auth-card';
 import { completePasswordResetAction } from '../../actions';
+import { signupPolicy } from '../../../../../server/signup-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ export default async function ResetCompletePage({
   const t = translator(locale);
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
+  const { minPasswordLength } = await signupPolicy();
 
   return (
     <AuthCard locale={locale} heading={t('reset.title')}>
@@ -36,18 +38,35 @@ export default async function ResetCompletePage({
       <form action={completePasswordResetAction}>
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="token" value={token} />
-        <label htmlFor="password" style={{ display: 'block', ...typographyTokens.label }}>
-          {t('reset.newPassword')}
-        </label>
-        <input
-          className="bs-control"
+        {/*
+          THE CONFIGURED MINIMUM AND THE SHARED CONTROL (P6-03a).
+
+          `minLength={12}` was typed here, so this screen and the sign-up form
+          could disagree about the policy and the customer would be told
+          whichever number happened to be nearest. It now reads the same
+          configuration the server action validates against, and uses the same
+          component as every other password screen — which is what gives it the
+          reveal toggle, the confirmation and the rules it had none of.
+        */}
+        <PasswordField
           id="password"
-          name="password"
-          type="password"
-          required
-          minLength={12}
-          autoComplete="new-password"
-          style={authInputStyle()}
+          labels={{
+            label: t('reset.newPassword'),
+            show: t('password.show'),
+            hide: t('password.hide'),
+            confirmLabel: t('password.confirm'),
+            mismatch: t('password.mismatch'),
+            match: t('password.match'),
+            rulesLabel: t('password.rulesLabel'),
+          }}
+          minLength={minPasswordLength}
+          rules={[
+            {
+              label: t('password.rule.length').replace('{min}', String(minPasswordLength)),
+              kind: 'min-length',
+            },
+            { label: t('password.rule.phrase'), kind: 'note' },
+          ]}
         />
         <button
           type="submit"

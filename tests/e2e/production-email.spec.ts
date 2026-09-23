@@ -203,6 +203,7 @@ test.describe('the owner connects Resend, and a customer signup uses it', () => 
     await signup.locator('#name').fill('Email Journey Customer');
     await signup.locator('#email').fill(address);
     await signup.locator('#password').fill('An-Adequately-Long-Passphrase-9');
+    await signup.locator('#password-confirm').fill('An-Adequately-Long-Passphrase-9');
     await signup.locator('#timezone').fill('Asia/Riyadh');
     await signup.locator('#timezone').press('Enter');
     await expect(signup.locator('input[type="hidden"][name="timezone"]')).toHaveValue(

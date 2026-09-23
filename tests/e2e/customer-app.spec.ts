@@ -290,6 +290,11 @@ test.describe('invitation acceptance', () => {
     expect(shortIsValid).toBe(false);
 
     await page.fill('[data-testid="invitation-password"]', password);
+    // P6-03a: the confirmation field. It is the customer's own check against a
+    // typo and is deliberately NOT submitted — the server validates the
+    // password itself — but it is required, so the form will not submit
+    // without it.
+    await page.fill('#invite-password-confirm', password);
     await page.click('[data-testid="invitation-setup-submit"]');
 
     // Signed in, in the workspace, in one step.
