@@ -44,7 +44,7 @@ export const messages = {
      * needs attention except the one that says exactly that, because a
      * Command Center with nothing on it is a workspace with nothing waiting.
      */
-    'attention.title': 'ما الذي يحتاج انتباهك',
+    'attention.title': 'النبض — ما الذي يحتاج انتباهك',
     'attention.none': 'لا شيء ينتظرك الآن.',
     'attention.publishing-failed': 'فشل نشر {count} من المنشورات.',
     'attention.schedule-overdue': 'مرّ موعد {count} من المنشورات المجدولة دون نشر.',
@@ -54,6 +54,25 @@ export const messages = {
     'attention.brand-brain-empty.many': '{count} من العلامات بلا معرفة بعد.',
     'attention.notes-assigned': '{count} من المحادثات مُسندة إليك.',
     'attention.notes-mentions': 'ذُكر اسمك في {count} من الملاحظات ولم تقرأها بعد.',
+    /*
+     * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
+     * real condition measured against real rows, never a score.
+     */
+    'attention.learnings-pending':
+      '{count} من الدروس والحقائق المقترحة بانتظار مراجعتك في عقل العلامة.',
+    'attention.insights-new': '{count} من نتائج ذكاء التسويق لم يطّلع عليها أحد بعد.',
+    'attention.connection-expiring':
+      'ينتهي وصول {count} من الحسابات المتصلة خلال يوم أو انتهى بالفعل. حدّث الاتصال قبل أن يفشل النشر.',
+    'attention.campaign-empty': 'الحملة {detail} نشطة ولا يوجد فيها أي محتوى.',
+    'attention.campaign-empty.many': '{count} من الحملات النشطة بلا أي محتوى.',
+    'attention.calendar-gap':
+      'لا شيء مجدول لـ {detail} خلال الأيام السبعة القادمة رغم وجود حساب متصل.',
+    'attention.calendar-gap.many':
+      '{count} من العلامات لديها حسابات متصلة ولا شيء مجدول لها خلال الأيام السبعة القادمة.',
+    'attention.credits-forecast':
+      'بوتيرة آخر 28 يومًا، ينفد رصيد الذكاء الاصطناعي بعد نحو {count} يومًا ({date}) — قبل تجديده في {secondDate}.',
+    'attention.performance-above': 'ارتفع مؤشر {detail} في {date} فوق خط أساسه المعتاد.',
+    'attention.performance-below': 'انخفض مؤشر {detail} في {date} دون خط أساسه المعتاد.',
     /* P6-05 — the notes panel. */
     'notes.title': 'الملاحظات',
     'notes.emptyTitle': 'لا توجد ملاحظات بعد',
@@ -468,6 +487,20 @@ export const messages = {
     'bb.reviewEvidence': 'المصدر',
     'bb.reviewExisting': 'القيمة المعتمدة حاليًا',
     'bb.reviewProposed': 'القيمة المقترحة',
+    'bb.reviewFromAnalytics': 'مستنتج من أداء التحليلات',
+    'bb.reviewMeasured':
+      '{metric}: {observed} مقابل خط أساس {baseline} ({deviation})، من {from} إلى {to}',
+    'bb.reviewOpenFinding': 'افتح النتيجة',
+    'bb.reviewConflict':
+      'يتعارض مع حقيقة اعتمدها شخص. الاعتماد لن يغيّرها: يُحفظ هذا كدرس بأدنى أولوية، وتبقى الحقيقة البشرية هي المرجع.',
+    'bb.reviewConflictNamed':
+      'يتعارض مع «{title}» الذي اعتمده شخص. الاعتماد لن يغيّره: يُحفظ هذا كدرس بأدنى أولوية، ويبقى «{title}» هو المرجع.',
+    'bb.reviewEdit': 'عدّل ثم اعتمد',
+    'bb.reviewEditTitleEn': 'العنوان بالإنجليزية',
+    'bb.reviewEditTitleAr': 'العنوان بالعربية',
+    'bb.reviewEditBodyEn': 'النص بالإنجليزية',
+    'bb.reviewEditBodyAr': 'النص بالعربية',
+    'bb.reviewAcceptEdited': 'اعتمد بعد التعديل',
     'bb.version': 'الإصدار',
     'bb.origin.HUMAN': 'مُدخلة بشريًا',
     /* P6-07 — the four memories, by name and by authority. */
@@ -905,6 +938,27 @@ export const messages = {
     'analytics.freshness.STALE': 'قديمة',
     'analytics.freshness.UNAVAILABLE': 'غير متاحة',
     'analytics.lastSynced': 'آخر مزامنة',
+    'analytics.shift.title': 'ما الذي تغيّر',
+    'analytics.shift.above': 'أعلى من المعتاد',
+    'analytics.shift.below': 'أقل من المعتاد',
+    'analytics.shift.body':
+      '{metric} في {day}: {observed}، مقابل خط أساس {baseline} محسوب من {periods} فترات سابقة — انحراف {deviation}، والحد المعتمد {threshold}.',
+    'analytics.next.title': 'ما الخطوة التالية',
+    'analytics.next.connect': 'لا يوجد حساب متصل لهذه العلامة، فلا توجد أرقام لقياسها.',
+    'analytics.next.connect.action': 'اربط حسابًا',
+    'analytics.next.reconnect': 'أحد الحسابات المتصلة يحتاج إعادة تفويض، فلا تصل أرقامه.',
+    'analytics.next.reconnect.action': 'أعد الربط',
+    'analytics.next.schedule': 'لا يوجد محتوى منشور في هذه الفترة لقياسه.',
+    'analytics.next.schedule.action': 'افتح التقويم',
+    'analytics.next.wait-for-sync':
+      'بعض الأرقام قيد المزامنة وستظهر بعد المزامنة التالية. لا يلزم أي إجراء.',
+    'analytics.next.explain-shift':
+      'تغيّر أحد المؤشرات بشكل غير معتاد. اطلب شرحًا مستندًا إلى القياسات المخزّنة.',
+    'analytics.next.review-findings': 'توجد نتائج جديدة في ذكاء التسويق لم يطّلع عليها أحد.',
+    'analytics.next.review-findings.action': 'راجع النتائج',
+    'analytics.explain': 'لماذا؟ اشرح هذه الفترة',
+    'analytics.explainHint':
+      'يستهلك رصيد ذكاء اصطناعي، ولا يُحتسب إذا لم تكفِ البيانات. كل رقم في الشرح مأخوذ من قياس مخزّن.',
     'analytics.mockNotice':
       'هذه الأرقام من مصدر تجريبي حتمي، وليست من منصة حقيقية. لم تُعتمد بيانات اعتماد تحليلات حقيقية بعد.',
     'analytics.staleNotice':
@@ -976,6 +1030,13 @@ export const messages = {
     'intelligence.focusPlaceholder': 'مثال: حضورنا على لينكدإن هذا الربع',
     'intelligence.basisNotice':
       'يستهلك رصيد ذكاء اصطناعي. يستند إلى محاور علامتك المعتمدة وحساباتها الموصولة وسجل نشرها — ولا يوجد مصدر خارجي.',
+    'intelligence.focused': 'النتيجة التي فتحتها.',
+    'intelligence.why': 'لماذا',
+    'intelligence.happened': 'ماذا حدث',
+    'intelligence.next': 'ما الخطوة التالية',
+    'intelligence.loop.pending': '{count} من الدروس المقترحة من هذه النتيجة بانتظار المراجعة',
+    'intelligence.loop.accepted': '{count} منها اعتُمد في عقل العلامة',
+    'intelligence.loop.open': 'افتح عقل العلامة',
     'intelligence.empty': 'لا توجد نتائج بعد.',
     'intelligence.emptyBody':
       'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
@@ -1493,7 +1554,7 @@ export const messages = {
     'topbar.previewTitle': 'Not connected yet',
     'topbar.previewBody':
       'This control is part of the approved design and its behaviour has not shipped. It will work when content and notifications arrive in a later phase; it performs no action today.',
-    'attention.title': 'What needs you',
+    'attention.title': 'Pulse — what needs you',
     'attention.none': 'Nothing is waiting on you right now.',
     'attention.publishing-failed': '{count} posts failed to publish.',
     'attention.schedule-overdue':
@@ -1504,6 +1565,26 @@ export const messages = {
     'attention.brand-brain-empty.many': '{count} brands have no brand knowledge yet.',
     'attention.notes-assigned': '{count} conversations are assigned to you.',
     'attention.notes-mentions': 'You were mentioned in {count} notes you have not read.',
+    /*
+     * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
+     * real condition measured against real rows, never a score.
+     */
+    'attention.learnings-pending':
+      '{count} proposed learnings and facts are waiting for your review in Brand Brain.',
+    'attention.insights-new':
+      '{count} Marketing Intelligence findings have not been looked at yet.',
+    'attention.connection-expiring':
+      '{count} connected accounts lose access within a day, or already have. Refresh them before publishing fails.',
+    'attention.campaign-empty': '{detail} is active and has no content in it.',
+    'attention.campaign-empty.many': '{count} active campaigns have no content in them.',
+    'attention.calendar-gap':
+      'Nothing is scheduled for {detail} in the next 7 days, though it has a connected account.',
+    'attention.calendar-gap.many':
+      '{count} brands have connected accounts and nothing scheduled in the next 7 days.',
+    'attention.credits-forecast':
+      'At the last 28 days’ pace, AI credits run out in about {count} days ({date}) — before they renew on {secondDate}.',
+    'attention.performance-above': '{detail} on {date} rose above its usual baseline.',
+    'attention.performance-below': '{detail} on {date} fell below its usual baseline.',
     'notes.title': 'Notes',
     'notes.emptyTitle': 'No notes yet',
     'notes.emptyBody': 'Leave a note for your colleagues, beside the work it is about.',
@@ -1926,6 +2007,20 @@ export const messages = {
     'bb.reviewEvidence': 'Source',
     'bb.reviewExisting': 'Currently approved',
     'bb.reviewProposed': 'Proposed',
+    'bb.reviewFromAnalytics': 'Inferred from analytics performance',
+    'bb.reviewMeasured':
+      '{metric}: {observed} against a baseline of {baseline} ({deviation}), {from} to {to}',
+    'bb.reviewOpenFinding': 'Open the finding',
+    'bb.reviewConflict':
+      'Disagrees with a fact a person approved. Accepting will not change it: this is kept as a learning at the lowest authority, and the human fact stays the reference.',
+    'bb.reviewConflictNamed':
+      'Disagrees with “{title}”, which a person approved. Accepting will not change it: this is kept as a learning at the lowest authority, and “{title}” stays the reference.',
+    'bb.reviewEdit': 'Edit, then accept',
+    'bb.reviewEditTitleEn': 'Title in English',
+    'bb.reviewEditTitleAr': 'Title in Arabic',
+    'bb.reviewEditBodyEn': 'Text in English',
+    'bb.reviewEditBodyAr': 'Text in Arabic',
+    'bb.reviewAcceptEdited': 'Accept as edited',
     'bb.version': 'Version',
     'bb.origin.HUMAN': 'Entered by a person',
     'bb.origin.DOCUMENT': 'From a document',
@@ -2378,6 +2473,31 @@ export const messages = {
     'analytics.freshness.STALE': 'Stale',
     'analytics.freshness.UNAVAILABLE': 'Not available',
     'analytics.lastSynced': 'Last synced',
+    'analytics.shift.title': 'What changed',
+    'analytics.shift.above': 'Above usual',
+    'analytics.shift.below': 'Below usual',
+    'analytics.shift.body':
+      '{metric} on {day}: {observed}, against a baseline of {baseline} from the {periods} periods before it — a deviation of {deviation}, where the configured threshold is {threshold}.',
+    'analytics.next.title': 'What to do next',
+    'analytics.next.connect':
+      'No account is connected for this brand, so there is nothing to measure.',
+    'analytics.next.connect.action': 'Connect an account',
+    'analytics.next.reconnect':
+      'A connected account needs re-authorising, so its figures are not arriving.',
+    'analytics.next.reconnect.action': 'Reconnect',
+    'analytics.next.schedule':
+      'Nothing was published in this period, so there is nothing to measure.',
+    'analytics.next.schedule.action': 'Open the calendar',
+    'analytics.next.wait-for-sync':
+      'Some figures are still syncing and will appear after the next sync. Nothing to do.',
+    'analytics.next.explain-shift':
+      'A metric moved unusually. Ask for an explanation grounded in the stored measurements.',
+    'analytics.next.review-findings':
+      'There are new Marketing Intelligence findings nobody has looked at.',
+    'analytics.next.review-findings.action': 'Review findings',
+    'analytics.explain': 'Why? Explain this period',
+    'analytics.explainHint':
+      'Uses AI credits, and nothing is charged if there is not enough data. Every figure in the explanation comes from a stored measurement.',
     'analytics.mockNotice':
       'These figures come from a deterministic mock source, not from a real platform. No real analytics credential has been approved yet.',
     'analytics.staleNotice':
@@ -2452,6 +2572,14 @@ export const messages = {
     'intelligence.focusPlaceholder': 'For example: our LinkedIn presence this quarter',
     'intelligence.basisNotice':
       'Spends AI credits. It rests on your approved pillars, your connected accounts and what this brand has actually published — there is no outside source.',
+    'intelligence.focused': 'The finding you opened.',
+    'intelligence.why': 'Why',
+    'intelligence.happened': 'What happened',
+    'intelligence.next': 'What to do next',
+    'intelligence.loop.pending':
+      '{count} learnings proposed from this finding are waiting for review',
+    'intelligence.loop.accepted': '{count} accepted into Brand Brain',
+    'intelligence.loop.open': 'Open Brand Brain',
     'intelligence.empty': 'Nothing here yet.',
     'intelligence.emptyBody':
       'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',

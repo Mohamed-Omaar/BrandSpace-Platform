@@ -10,7 +10,12 @@
 export { StrategyService } from './strategy';
 export type { StrategyInput, StrategyResult, StrategyServiceOptions } from './strategy';
 
-export { LEARNING_INFERENCE_VERSION, LearningWriteBackService, confidenceFor } from './learning';
+export {
+  LEARNING_INFERENCE_VERSION,
+  LearningWriteBackService,
+  confidenceFor,
+  notifyLearningReviewers,
+} from './learning';
 export type { LearningServiceOptions, ProposedLearning, WriteBackResult } from './learning';
 
 export {

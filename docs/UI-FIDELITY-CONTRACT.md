@@ -285,6 +285,22 @@ take it on trust.
 | `/[locale]/billing/invoices/[invoiceId]/document` | **The invoice as a printable document.** The demo has no invoice at all, and this is not a screen in the first place: it is a document that happens to be served over HTTP, with no navigation, no shell and A4 proportions | Deliberately NOT the dashboard shell, and that absence is the design decision. It is the platform's typography scale, the platform's own `surface`, `textPrimary` and `textSecondary` tokens, one new token (`documentRule` — a rule weight that survives a printer, where the screen borders do not), and the same definition-list and table composition the invoice SCREEN uses — so the two say the same thing in the same order. Its `@page` rules and print colours are declared inline on the route, because an accounting document must not be alterable by a change to a shared stylesheet. Every amount renders through `formatMoney`, which takes its decimals from the currency itself | D-216 |
 | `/[locale]/settings/security` | **The customer's own security settings.** The demo has a signed-in product and no account-security screen anywhere — `#customer/security` is not in `app-1.js`'s navigation, not in `meta` and not in `page()`'s router. It is also not a new KIND of screen: it is a settings page for one person's second factor, which is why it is composed exactly like the settings pages beside it rather than designed for itself | `packages/ui`'s `SettingsSplit`, `Card`, `Field`, `buttonStyle`, `inputStyle` and the spacing and typography tokens, plus the shared shell and the same `CustomerBanner` every settings route uses — the IDENTICAL composition `/[locale]/settings` and `/[locale]/settings/brand` already use, in the same order, so a reader moving between the three meets one page design. The only additions are a `<code>` block for the otpauth string and a list of recovery codes in the same caption typography; nothing new was drawn, and no colour, font, shadow, layout system or interaction model was introduced | D-254 |
 
+### 6.3.1 Phase 6 P6-11 — additions inside screens that were already extensions
+
+`/analytics` and `/intelligence` were already §6 extensions (above). P6-11 adds content to them, and to
+the Brand Brain review drawer, composed entirely from what those screens already use:
+
+- **Analytics** — a _What changed_ card and a _What to do next_ card: `Card`, `SectionHeader`,
+  `StatusBadge`, a token-styled list, and `buttonStyle` + `buttonClass` links and forms. No new
+  component.
+- **Intelligence** — _Why · What happened · What to do next_ blocks: a `label`-token heading over a
+  `bodySm` list, the same scale as the evidence list beneath it. The deep-linked finding uses the existing
+  `Card` tone `lavender` — an existing surface tone, not a new highlight treatment.
+- **Brand Brain review drawer (a ported demo surface)** — the additions are the drawer's OWN micro
+  caption style for source/measurement/conflict lines, and an _Edit, then accept_ disclosure whose
+  inputs reuse `CONTROL_CLASS` + `drawerInputStyle` and whose button reuses `reviewButtonStyle`, exactly
+  as the drawer's existing "add knowledge" form does. Nothing in the ported geometry changed.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

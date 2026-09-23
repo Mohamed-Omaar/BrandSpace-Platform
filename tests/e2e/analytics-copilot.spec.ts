@@ -801,3 +801,83 @@ test.describe('automations', () => {
     }
   });
 });
+
+/*
+ * PHASE 6 · P6-11 — WHAT HAPPENED, WHY, AND WHAT NEXT.
+ *
+ * The loop's screens, driven for real: Analytics offers "why?", the answer is
+ * read in Marketing Intelligence as three sections that cite stored evidence,
+ * and Home carries the result in its one ranked list. Nothing here asserts a
+ * particular finding — the seeded series decides whether there is a shift and
+ * whether the explanation has enough data, and a test that assumed either would
+ * be asserting on the fixture rather than the product. Each branch the product
+ * can honestly take is accepted, and each is checked for what it must say.
+ */
+test.describe('P6-11 · analytics → intelligence → pulse', () => {
+  test('"why?" is answered in Marketing Intelligence, or honestly declined', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    const explain = page.getByTestId('analytics-explain');
+    await expect(explain).toBeVisible();
+    await Promise.all([page.waitForURL(/\/(intelligence|analytics)\?/), explain.click()]);
+
+    if (new URL(page.url()).pathname.endsWith('/intelligence')) {
+      // Landed on the finding it produced: focused, and read as three answers.
+      expect(new URL(page.url()).searchParams.get('insight')).toMatch(/^[0-9a-f-]{36}$/);
+      await expect(page.getByTestId('intelligence-focused')).toBeVisible();
+      const narrative = page.getByTestId('intelligence-narrative').first();
+      await expect(narrative.getByTestId('narrative-why')).toBeVisible();
+      await expect(narrative.getByTestId('narrative-happened')).toBeVisible();
+      // Every figure on the card still comes from the stored evidence rows.
+      await expect(page.getByTestId('intelligence-evidence').first()).toBeVisible();
+    } else {
+      // Not enough data is an ANSWER, and nothing was charged for it.
+      await expect(page.getByText(/not enough performance data/i)).toBeVisible();
+    }
+  });
+
+  test('a next step is only ever a link somewhere real', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+    const next = page.getByTestId('analytics-next');
+    if ((await next.count()) === 0) return; // nothing to do is a finished state
+    for (const link of await next.locator('a').all()) {
+      const href = await link.getAttribute('href');
+      expect(href).toMatch(/^\/en\/(integrations|calendar|intelligence)$/);
+      const response = await page.request.get(`${DASHBOARD_BASE_URL}${href}`);
+      expect(response.status(), `${href} answers`).toBeLessThan(400);
+    }
+  });
+
+  test('Home names the list Pulse, in both languages', async ({ page }) => {
+    await signIn(page);
+    await expect(page.getByTestId('attention-card')).toContainText('Pulse');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/overview`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('attention-card')).toContainText('النبض');
+  });
+
+  test('intelligence is clean under axe in both directions', async ({ page }) => {
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/intelligence`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} intelligence`).toEqual([]);
+    }
+  });
+
+  test('intelligence does not scroll sideways on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    for (const path of ['/en/intelligence', '/ar/intelligence', '/en/overview']) {
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${path} scrolls sideways on a phone`).toBeLessThanOrEqual(1);
+    }
+  });
+});

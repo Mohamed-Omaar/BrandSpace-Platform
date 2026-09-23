@@ -1,7 +1,8 @@
-import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
+import { brandIdScopeFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
 
 /**
  * WHAT NEEDS A PERSON, RIGHT NOW, IN THIS WORKSPACE (P6-04).
@@ -75,6 +76,15 @@ export interface AttentionItem {
    * sentence needs one that is not the count — a date, a brand name.
    */
   readonly detail?: string | undefined;
+  /**
+   * A moment the sentence names — the day credits are projected to run out,
+   * the day they renew. Carried as a `Date` rather than a pre-formatted string
+   * so the page formats it in the READER's locale and calendar, exactly as it
+   * formats every other date on the screen.
+   */
+  readonly date?: Date | undefined;
+  /** A second moment, when the sentence compares two. */
+  readonly secondDate?: Date | undefined;
 }
 
 const SEVERITY_ORDER: Record<AttentionSeverity, number> = {
@@ -204,7 +214,18 @@ async function brandsWithNoKnowledge(
     where: {
       workspaceId: session.workspaceId,
       deletedAt: null,
-      ...brandIdScopeFilter(session.brandScope),
+      /*
+       * `brandScopeFilter` — BY `id` — BECAUSE THIS IS THE BRAND TABLE (P6-11).
+       *
+       * This used `brandIdScopeFilter`, which filters a CHILD row by `brandId`.
+       * The brand table has no `brandId`, so for every brand-scoped member the
+       * query failed validation — and because the sources are dispatched
+       * together, the failure took EVERY other source with it: a member
+       * restricted to one brand opened Home and was told nothing was waiting,
+       * whatever was. Found by the P6-11 isolation suite, which is the first to
+       * run the Command Center as a scoped member holding `brand_brain.read`.
+       */
+      ...brandScopeFilter(session.brandScope),
     },
     select: { id: true, name: true },
   });
@@ -231,6 +252,337 @@ async function brandsWithNoKnowledge(
     // brand knowledge yet" is actionable in a way that "1 brand" is not.
     ...(empty.length === 1 && empty[0] ? { detail: empty[0].name } : {}),
   };
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * P6-11 — PULSE.
+ *
+ * The sources above answer "what is broken or waiting". The ones below answer
+ * the Learn and Improve half of the loop — what the workspace's own data has
+ * noticed and is waiting on a person to decide about — under exactly the same
+ * three rules:
+ *
+ *   1. an item exists only when the condition is TRUE, measured against real
+ *      rows, never estimated into existence;
+ *   2. every one is a link to where it is acted on, gated by that route's
+ *      permission;
+ *   3. nothing is a score, a percentage of an invented whole, or a confidence
+ *      the data does not carry.
+ *
+ * PULSE IS THIS LIST, NOT A SECOND MECHANISM. A separate "insights feed" beside
+ * the attention list would be two answers to "what should I do next" that can
+ * disagree, and the brief asks for no banner spam: one ranked list, on Home,
+ * with the same wording the notification inbox and the destination screen use.
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * Proposed learnings and facts waiting in the Brand Brain review queue.
+ *
+ * THE HUMAN-REVIEW STEP OF THE LEARNING LOOP. An analytics inference and a
+ * fact extracted from an uploaded document both land as a PENDING candidate,
+ * and neither reaches Brand Brain until a person accepts, edits or dismisses
+ * it (D-150). A queue nobody knows is there is how the loop silently stops at
+ * "propose", so the count belongs on the screen everybody lands on.
+ *
+ * `brand_brain.review`, because that is who can clear it — somebody who can
+ * only READ Brand Brain would be shown a task they cannot do.
+ */
+async function learningsPending(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const count = await db.brandKnowledgeCandidate.count({
+    where: {
+      workspaceId: session.workspaceId,
+      status: 'PENDING',
+      ...brandIdScopeFilter(session.brandScope),
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'learnings-pending', severity: 'waiting', count, href: '/brand-brain' };
+}
+
+/** The insight types Marketing Intelligence presents — the page's own list. */
+export const INTELLIGENCE_INSIGHT_TYPES = [
+  'CONTENT_GAP',
+  'OPPORTUNITY',
+  'ANALYTICS_EXPLANATION',
+  'ANOMALY',
+  'RECOMMENDATION',
+] as const;
+
+/**
+ * Findings nobody has looked at yet.
+ *
+ * `NEW` is the insight's own lifecycle state — generated, not yet seen,
+ * accepted or dismissed — so this is a fact about the row, not a guess about
+ * the reader. An expired insight is excluded: retention has already decided it
+ * no longer matters, and pointing at it would send somebody to a finding the
+ * next prune removes.
+ *
+ * STRATEGIES AND MONTHLY PLANS ARE NOT COUNTED. They are `/strategy`'s subject,
+ * and the link here goes to `/intelligence`; counting rows the destination does
+ * not list would be a number the reader cannot reconcile.
+ */
+async function insightsUnreviewed(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const count = await db.insight.count({
+    where: {
+      workspaceId: session.workspaceId,
+      status: 'NEW',
+      type: { in: [...INTELLIGENCE_INSIGHT_TYPES] },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: systemClock.now() } }],
+      ...brandIdScopeFilter(session.brandScope),
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'insights-new', severity: 'notice', count, href: '/intelligence' };
+}
+
+/**
+ * Connected accounts whose access expires within the refresh window — or
+ * already has, while the connection still reads ACTIVE.
+ *
+ * NOTHING REFRESHES THESE AUTOMATICALLY. Refreshing is a manual action on
+ * `/integrations`, so an expiring token is a genuine task, and the one that
+ * turns into `publishing-failed` tomorrow if nobody does it today. The window
+ * is the connector package's own `EXPIRING_SOON_MS`, so Home, the integrations
+ * screen and the calendar's publish readiness cannot disagree about which
+ * accounts are expiring.
+ */
+async function connectionsExpiring(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const horizon = new Date(systemClock.now().getTime() + EXPIRING_SOON_MS);
+  const count = await db.socialConnection.count({
+    where: {
+      workspaceId: session.workspaceId,
+      status: 'ACTIVE',
+      tokenExpiresAt: { not: null, lt: horizon },
+      ...brandIdScopeFilter(session.brandScope),
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'connection-expiring', severity: 'waiting', count, href: '/integrations' };
+}
+
+/**
+ * Running campaigns with nothing in them.
+ *
+ * ACTIVE is the campaign's own status — somebody started it — and a campaign
+ * that is running with no content attached is running in name only. An ended
+ * campaign (its `endDate` has passed) is not counted even if its status was
+ * never moved on: that is a tidy-up, not a gap.
+ *
+ * Named when there is one, so the link goes straight to it.
+ */
+async function campaignsWithoutContent(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const today = startOfUtcDay(systemClock.now());
+  const empty = await db.campaign.findMany({
+    where: {
+      workspaceId: session.workspaceId,
+      deletedAt: null,
+      status: 'ACTIVE',
+      OR: [{ endDate: null }, { endDate: { gte: today } }],
+      contentItems: { none: { deletedAt: null } },
+      ...brandIdScopeFilter(session.brandScope),
+    },
+    select: { id: true, name: true },
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+  });
+  if (empty.length === 0) return null;
+  const only = empty.length === 1 ? empty[0] : undefined;
+  return {
+    kind: 'campaign-empty',
+    severity: 'notice',
+    count: empty.length,
+    href: only ? `/campaigns/${only.id}` : '/campaigns',
+    ...(only ? { detail: only.name } : {}),
+  };
+}
+
+/**
+ * How far ahead "nothing is scheduled" is judged.
+ *
+ * A PRESENTATION HORIZON, NOT A POLICY. It decides which question Home asks —
+ * "is anything going out this coming week?" — in the same way the 28-day
+ * engagement figure beside it decides which period Home summarises. It sets no
+ * limit, charges nothing and changes no behaviour, which is what separates it
+ * from the configuration CLAUDE.md §2.2 moves out of code.
+ */
+export const CALENDAR_GAP_HORIZON_DAYS = 7;
+
+/**
+ * Brands that can publish and have nothing going out in the coming week.
+ *
+ * "CAN PUBLISH" IS THE CONDITION THAT MAKES THIS A GAP rather than a fact about
+ * a brand that has not connected anything yet — that brand's problem is
+ * `/integrations`, not the calendar, and telling it "nothing is scheduled"
+ * would be true and useless. So a brand counts only when it has at least one
+ * ACTIVE connection and no live slot inside the horizon.
+ *
+ * A slot counts as "going out" in every state short of done or abandoned:
+ * planned, scheduled or in flight.
+ */
+async function calendarGaps(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const now = systemClock.now();
+  const horizon = new Date(now.getTime() + CALENDAR_GAP_HORIZON_DAYS * 86_400_000);
+  const brands = await db.brand.findMany({
+    where: {
+      workspaceId: session.workspaceId,
+      deletedAt: null,
+      socialConnections: { some: { status: 'ACTIVE' } },
+      ...brandScopeFilter(session.brandScope),
+    },
+    select: { id: true, name: true },
+    take: 200,
+  });
+  if (brands.length === 0) return null;
+
+  const busy = await db.calendarSlot.groupBy({
+    by: ['brandId'],
+    where: {
+      workspaceId: session.workspaceId,
+      brandId: { in: brands.map((b) => b.id) },
+      status: { in: ['PLANNED', 'SCHEDULED', 'PUBLISHING'] },
+      scheduledAtUtc: { gte: now, lt: horizon },
+    },
+    _count: { _all: true },
+  });
+  const scheduled = new Set(busy.map((row) => row.brandId));
+  const idle = brands.filter((brand) => !scheduled.has(brand.id));
+  if (idle.length === 0) return null;
+  return {
+    kind: 'calendar-gap',
+    severity: 'notice',
+    count: idle.length,
+    href: '/calendar',
+    ...(idle.length === 1 && idle[0] ? { detail: idle[0].name } : {}),
+  };
+}
+
+/** The trailing window a credit forecast is drawn from — Home's own period. */
+export const CREDIT_FORECAST_WINDOW_DAYS = 28;
+
+/**
+ * Pure: when, at the recent pace, do spendable credits run out — and is that
+ * before they renew?
+ *
+ * RETURNS NULL RATHER THAN GUESSING in every case the arithmetic cannot
+ * honestly support:
+ *
+ *   - no renewal date: with nothing to compare the run-out against there is no
+ *     claim to make, and "you have N days" alone invites a reader to plan on a
+ *     number derived from a quiet month;
+ *   - no consumption in the window: a zero pace has no run-out;
+ *   - nothing spendable: that is not a forecast, it is the present, and the
+ *     credits screen already says it;
+ *   - a run-out on or after the renewal: the renewal arrives first, so there is
+ *     nothing to act on.
+ *
+ * THE PACE IS DIVIDED BY THE WHOLE WINDOW, never by "days since the first
+ * charge". A workspace that started yesterday would otherwise extrapolate one
+ * busy afternoon into a monthly rate; dividing by the full window can only
+ * UNDER-state the pace, so the item errs towards appearing later, not falsely.
+ */
+export function creditForecast(input: {
+  readonly spendableMilliCredits: bigint;
+  /** Net consumption over the window, in milli-credits. Positive means spent. */
+  readonly consumedInWindowMilliCredits: bigint;
+  readonly windowDays: number;
+  readonly nextResetAt: Date | null;
+  readonly now: Date;
+}): { readonly daysLeft: number; readonly runOutAt: Date } | null {
+  if (input.nextResetAt === null) return null;
+  if (input.consumedInWindowMilliCredits <= 0n) return null;
+  if (input.spendableMilliCredits <= 0n) return null;
+  if (input.windowDays <= 0) return null;
+
+  // Milli-credits per day, as a float only at the last step: the inputs are
+  // exact integers from the ledger.
+  const perDay = Number(input.consumedInWindowMilliCredits) / input.windowDays;
+  const daysLeftExact = Number(input.spendableMilliCredits) / perDay;
+  const runOutAt = new Date(input.now.getTime() + daysLeftExact * 86_400_000);
+  if (runOutAt.getTime() >= input.nextResetAt.getTime()) return null;
+  return { daysLeft: Math.max(1, Math.floor(daysLeftExact)), runOutAt };
+}
+
+/**
+ * AI credits that will run out before they renew, at the recent pace.
+ *
+ * DERIVED FROM THE LEDGER, NOT THE BALANCE HISTORY. Net consumption is usage
+ * charges less refunds over the window — the same rows `reconcile()` replays —
+ * so the pace is what was actually spent, and a refunded failure (CLAUDE.md
+ * §2.4: a failed provider request is never a deduction) does not inflate it.
+ *
+ * Needs BOTH `credits.read` (the balance is the input) and `billing.read` (the
+ * link goes to `/plan`, which requires it).
+ */
+async function creditsRunningOut(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const wallet = await db.creditWallet.findFirst({
+    where: { workspaceId: session.workspaceId },
+    select: {
+      id: true,
+      balanceMilliCredits: true,
+      reservedMilliCredits: true,
+      nextResetAt: true,
+    },
+  });
+  if (!wallet) return null;
+  const now = systemClock.now();
+  const since = new Date(now.getTime() - CREDIT_FORECAST_WINDOW_DAYS * 86_400_000);
+  const flows = await db.creditTransaction.groupBy({
+    by: ['type'],
+    where: {
+      workspaceId: session.workspaceId,
+      walletId: wallet.id,
+      type: { in: ['USAGE_CHARGE', 'REFUND'] },
+      occurredAt: { gte: since },
+    },
+    _sum: { amountMilliCredits: true },
+  });
+  // Charges are stored negative and refunds positive, so the NEGATED sum is
+  // what was spent net of what was given back.
+  const net = flows.reduce((total, row) => total + (row._sum.amountMilliCredits ?? 0n), 0n);
+  const forecast = creditForecast({
+    spendableMilliCredits: wallet.balanceMilliCredits - wallet.reservedMilliCredits,
+    consumedInWindowMilliCredits: -net,
+    windowDays: CREDIT_FORECAST_WINDOW_DAYS,
+    nextResetAt: wallet.nextResetAt,
+    now,
+  });
+  if (!forecast || !wallet.nextResetAt) return null;
+  return {
+    kind: 'credits-forecast',
+    severity: 'notice',
+    count: forecast.daysLeft,
+    href: '/plan',
+    date: forecast.runOutAt,
+    secondDate: wallet.nextResetAt,
+  };
+}
+
+/** Midnight UTC of the given instant — `@db.Date` columns compare against it. */
+function startOfUtcDay(instant: Date): Date {
+  return new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
 /**
@@ -300,17 +652,30 @@ async function unreadMentions(
  * forbids, delivered as a to-do.
  */
 const SOURCES: readonly {
-  readonly permission: string | null;
+  /**
+   * EVERY permission listed is required. A list rather than one key because
+   * the credit forecast reads one thing (`credits.read`) and links to a route
+   * that requires another (`billing.read`); holding either alone would show a
+   * member a number they may not see or a link they cannot follow.
+   */
+  readonly permissions: readonly string[];
   readonly run: (
     db: TenantScopedClient,
     session: CustomerWorkspaceContext,
   ) => Promise<AttentionItem | null>;
 }[] = [
-  { permission: 'content.read', run: publishingFailures },
-  { permission: 'content.read', run: overdueSchedules },
-  { permission: 'integrations.read', run: connectionsNeedingReauth },
-  { permission: 'content.read', run: contentInReview },
-  { permission: 'brand_brain.read', run: brandsWithNoKnowledge },
+  { permissions: ['content.read'], run: publishingFailures },
+  { permissions: ['content.read'], run: overdueSchedules },
+  { permissions: ['integrations.read'], run: connectionsNeedingReauth },
+  { permissions: ['content.read'], run: contentInReview },
+  { permissions: ['brand_brain.read'], run: brandsWithNoKnowledge },
+  // P6-11 — Pulse.
+  { permissions: ['brand_brain.review'], run: learningsPending },
+  { permissions: ['strategy.read'], run: insightsUnreviewed },
+  { permissions: ['integrations.read'], run: connectionsExpiring },
+  { permissions: ['campaigns.read'], run: campaignsWithoutContent },
+  { permissions: ['content.read'], run: calendarGaps },
+  { permissions: ['credits.read', 'billing.read'], run: creditsRunningOut },
 ];
 
 /**
@@ -352,8 +717,8 @@ export async function attentionItems(
    */
   userId?: string,
 ): Promise<readonly AttentionItem[]> {
-  const permitted = SOURCES.filter(
-    (source) => source.permission === null || session.permissionKeys.includes(source.permission),
+  const permitted = SOURCES.filter((source) =>
+    source.permissions.every((key) => session.permissionKeys.includes(key)),
   );
   const readerPermitted =
     userId === undefined
@@ -375,5 +740,17 @@ export async function attentionItems(
     .map((result) => result.value)
     .filter((item): item is AttentionItem => item !== null);
 
+  return rankAttention(items);
+}
+
+/**
+ * Most urgent first. Stable, so items of equal severity keep their source
+ * order — which is itself ordered by how much it costs to leave them.
+ *
+ * Exported so an item computed OUTSIDE this module — the performance shift,
+ * which needs the analytics services rather than a bare client — joins the
+ * same ranked list instead of being rendered as a second one.
+ */
+export function rankAttention(items: readonly AttentionItem[]): readonly AttentionItem[] {
   return [...items].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }

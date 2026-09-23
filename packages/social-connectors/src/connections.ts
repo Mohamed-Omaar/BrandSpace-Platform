@@ -100,8 +100,15 @@ export interface ConnectionServiceOptions {
   readonly clock?: Clock;
 }
 
-/** A token inside this window is treated as expiring. Mirrors the refresh cue. */
-const EXPIRING_SOON_MS = 24 * 60 * 60 * 1_000;
+/**
+ * A token inside this window is treated as expiring. Mirrors the refresh cue.
+ *
+ * Exported (P6-11) so the Command Center's Pulse asks the SAME question the
+ * integrations screen and publish readiness ask. A second copy of the window
+ * would let Home say "fine" about an account the integrations screen calls
+ * expiring.
+ */
+export const EXPIRING_SOON_MS = 24 * 60 * 60 * 1_000;
 
 export function toConnectionView(connection: SocialConnection, now: Date): ConnectionView {
   return {
