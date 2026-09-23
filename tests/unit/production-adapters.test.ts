@@ -430,7 +430,6 @@ describe('every declared template renders in both languages', () => {
     expect(rendered.html).toContain('&amp;');
   });
 
-
   it('matches the BrandSpace protected-preview shell without tracking pixels', () => {
     const rendered = renderEmail(message());
     expect(rendered.html).toContain('BrandSpace');
