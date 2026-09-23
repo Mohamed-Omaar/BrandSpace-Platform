@@ -171,7 +171,7 @@ const BRAND_PURPLE = '#7935FE';
 const BRAND_YELLOW = '#FFDD15';
 const BRAND_INK = '#111114';
 const BRAND_MUTED = '#717179';
-const BRAND_SURFACE = '#F3F3F5';
+const BRAND_SURFACE = '#F3F3F3';
 const BRAND_CARD = '#FFFFFF';
 const BRAND_BADGE = '#F3EFFF';
 const BRAND_LOGO_URL = 'https://www.brandspace.cc/brandspace-logo.svg';
@@ -223,7 +223,7 @@ export function renderEmail(message: EmailMessageInput): RenderedEmail {
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>${escapeHtml(copy.subject)}</title>
 </head>
-<body dir="${dir}" bgcolor="${BRAND_SURFACE}" style="margin:0;background-color:${BRAND_SURFACE};background-image:radial-gradient(circle at 10% 8%,rgba(121,53,254,0.18),transparent 29%),radial-gradient(circle at 92% 88%,rgba(255,221,21,0.22),transparent 30%),radial-gradient(circle at 88% 12%,rgba(255,153,185,0.10),transparent 24%);">
+<body dir="${dir}" bgcolor="${BRAND_SURFACE}" style="margin:0;background-color:${BRAND_SURFACE};background-image:radial-gradient(circle at 12% 8%,rgba(121,53,254,0.28),transparent 34%),radial-gradient(circle at 90% 92%,rgba(255,221,21,0.34),transparent 34%),radial-gradient(circle at 82% 18%,rgba(255,153,185,0.22),transparent 28%);">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND_SURFACE}" style="width:100%;background-color:transparent;">
     <tr>
       <td align="center" style="padding-top:56px;padding-right:18px;padding-bottom:56px;padding-left:18px;">
