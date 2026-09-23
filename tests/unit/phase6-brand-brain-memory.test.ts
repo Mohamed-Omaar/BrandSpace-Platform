@@ -6,6 +6,8 @@ import {
   mayOverwrite,
   memoryRank,
   originRank,
+  sortByPrecedence,
+  type PrecedenceSubject,
 } from '@brandspace/brand-brain';
 
 /**
@@ -31,6 +33,29 @@ import {
  *     explains the rule instead of holding an opinion that agrees today;
  *   - both languages name all four layers.
  */
+
+/**
+ * A SUBJECT WITH ALL FOUR OF ITS FIELDS.
+ *
+ * `PrecedenceSubject` carries `version` and `id` as well as the layer and the
+ * origin, and the first version of this file left both off — which typechecked
+ * nowhere and was caught by `pnpm typecheck` in the `tests` package rather than
+ * by the suite, because Vitest transpiles without checking types.
+ *
+ * THEY ARE NOT CEREMONY. `comparePrecedence` is a TOTAL order and the two
+ * tie-breaks are what make it total: retrieval builds a context window from it,
+ * so a comparison that could return 0 for two different rows makes a generation
+ * unreproducible. Supplying them here rather than relaxing the type keeps that
+ * contract intact — and the third describe block below now exercises both,
+ * which is the coverage their absence was hiding.
+ */
+function subject(
+  memory: PrecedenceSubject['memory'],
+  origin: PrecedenceSubject['origin'],
+  overrides: Partial<Pick<PrecedenceSubject, 'version' | 'id'>> = {},
+): PrecedenceSubject {
+  return { memory, origin, version: overrides.version ?? 1, id: overrides.id ?? 'k-1' };
+}
 
 describe('P6-07 · one list, and the ranking comes from it', () => {
   it('names the four memories in authority order', () => {
@@ -66,8 +91,8 @@ describe('P6-07 · AI inference never silently overwrites human knowledge', () =
     // `mayOverwrite(existing, incoming)` — that order matters, and getting it
     // backwards is how this test first "found" a defect that was not there.
     const decision = mayOverwrite(
-      { memory: 'CANONICAL', origin: 'HUMAN' },
-      { memory: 'CANONICAL', origin: 'AI_INFERRED' },
+      subject('CANONICAL', 'HUMAN'),
+      subject('CANONICAL', 'AI_INFERRED'),
     );
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe('human_precedence');
@@ -77,18 +102,15 @@ describe('P6-07 · AI inference never silently overwrites human knowledge', () =
     // D-65 is checked BEFORE the memory comparison, so an AI-inferred CANONICAL
     // item cannot outrank a human LEARNING one by borrowing its layer.
     const decision = mayOverwrite(
-      { memory: 'LEARNING', origin: 'HUMAN' },
-      { memory: 'CANONICAL', origin: 'AI_INFERRED' },
+      subject('LEARNING', 'HUMAN'),
+      subject('CANONICAL', 'AI_INFERRED'),
     );
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe('human_precedence');
   });
 
   it('refuses a lower-authority layer over a higher one', () => {
-    const decision = mayOverwrite(
-      { memory: 'CANONICAL', origin: 'HUMAN' },
-      { memory: 'LEARNING', origin: 'HUMAN' },
-    );
+    const decision = mayOverwrite(subject('CANONICAL', 'HUMAN'), subject('LEARNING', 'HUMAN'));
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toBe('lower_memory_authority');
   });
@@ -96,10 +118,7 @@ describe('P6-07 · AI inference never silently overwrites human knowledge', () =
   it('allows a person editing their own knowledge at equal authority', () => {
     // The ordinary case, and the one an edit screen performs. A model that
     // refused this would make the knowledge base read-only.
-    const decision = mayOverwrite(
-      { memory: 'CANONICAL', origin: 'HUMAN' },
-      { memory: 'CANONICAL', origin: 'HUMAN' },
-    );
+    const decision = mayOverwrite(subject('CANONICAL', 'HUMAN'), subject('CANONICAL', 'HUMAN'));
     expect(decision.allowed).toBe(true);
     expect(decision.reason).toBe('same_authority');
   });
@@ -112,9 +131,61 @@ describe('P6-07 · AI inference never silently overwrites human knowledge', () =
   it('sorts a conflicting pair by layer first, then by origin', () => {
     // What the screen shows when two facts disagree: the higher-authority one
     // first, and the reason it is first is the pair (layer, origin).
-    const canonicalInferred = { memory: 'CANONICAL' as const, origin: 'AI_INFERRED' as const };
-    const strategyHuman = { memory: 'STRATEGY' as const, origin: 'HUMAN' as const };
-    expect(comparePrecedence(canonicalInferred, strategyHuman)).toBeLessThan(0);
+    expect(
+      comparePrecedence(subject('CANONICAL', 'AI_INFERRED'), subject('STRATEGY', 'HUMAN')),
+    ).toBeLessThan(0);
+  });
+});
+
+describe('P6-07 · the order is TOTAL, which is what the tie-breaks are for', () => {
+  /*
+   * WHY THIS BLOCK EXISTS. Leaving `version` and `id` off the fixtures did not
+   * only fail the compiler — it meant nothing in this file exercised the half
+   * of `comparePrecedence` that runs once the layer and the origin agree. That
+   * is the half retrieval depends on: `sortByPrecedence` builds the context
+   * window a generation is produced from, so two rows that compare equal make
+   * the same request return a different window on a different day.
+   */
+  it('puts the newer version first when layer and origin agree', () => {
+    const older = subject('CANONICAL', 'HUMAN', { version: 1, id: 'a' });
+    const newer = subject('CANONICAL', 'HUMAN', { version: 2, id: 'b' });
+    expect(comparePrecedence(newer, older)).toBeLessThan(0);
+  });
+
+  it('falls back to the id, so two rows never compare equal', () => {
+    const first = subject('CANONICAL', 'HUMAN', { version: 3, id: 'aaa' });
+    const second = subject('CANONICAL', 'HUMAN', { version: 3, id: 'bbb' });
+    expect(comparePrecedence(first, second)).toBeLessThan(0);
+    expect(comparePrecedence(second, first)).toBeGreaterThan(0);
+  });
+
+  it('compares a row with itself as equal, and only itself', () => {
+    const one = subject('STRATEGY', 'DOCUMENT', { version: 7, id: 'k-9' });
+    expect(comparePrecedence(one, one)).toBe(0);
+  });
+
+  it('sorts the same way twice, which is the reproducibility requirement', () => {
+    const rows = [
+      subject('LEARNING', 'AI_INFERRED', { version: 1, id: 'd' }),
+      subject('CANONICAL', 'HUMAN', { version: 1, id: 'a' }),
+      subject('CANONICAL', 'HUMAN', { version: 2, id: 'b' }),
+      subject('STRATEGY', 'DOCUMENT', { version: 1, id: 'c' }),
+    ];
+    const once = sortByPrecedence(rows).map((row) => row.id);
+    const twice = sortByPrecedence([...rows].reverse()).map((row) => row.id);
+    expect(once).toEqual(['b', 'a', 'c', 'd']);
+    // The SAME answer from a differently ordered input — a sort that depended
+    // on the input order would still look right on one of the two runs.
+    expect(twice).toEqual(once);
+  });
+
+  it('never mutates the list it was given', () => {
+    const rows = [
+      subject('LEARNING', 'HUMAN', { version: 1, id: 'z' }),
+      subject('CANONICAL', 'HUMAN', { version: 1, id: 'a' }),
+    ];
+    sortByPrecedence(rows);
+    expect(rows.map((row) => row.id)).toEqual(['z', 'a']);
   });
 });
 

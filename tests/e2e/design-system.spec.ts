@@ -958,10 +958,37 @@ test.describe('the shell reproduces the demo geometry', () => {
     for (const testId of ['workspace-switcher', 'profile-menu']) {
       await expect(page.getByTestId(testId)).toHaveCSS('border-radius', '16px');
     }
+    /*
+     * TWO DEMO CLASSES, TWO SETS OF NUMBERS — and this test used to assert one
+     * of them against whichever element happened to be first in the DOM.
+     *
+     * `[data-surface="card"]` is worn by BOTH `MetricCard` and the generic
+     * `Card`, and the demo gives them different geometry on purpose: a
+     * statistic is a smaller plane than a section. `.first()` therefore only
+     * ever found a metric because the metrics grid happened to be the first
+     * card on Overview. P6-04 put the Command Center's attention card above it,
+     * `.first()` began resolving to a generic surface card, and the test
+     * reported 18px against an expectation of 20px — reading as a design-system
+     * regression when nothing in `packages/ui` had changed at all.
+     *
+     * The locators below name what they mean. Scoping to the metrics grid is
+     * what makes the assertion about a METRIC rather than about DOM order, so
+     * adding another card to this page can no longer break it.
+     */
     // `.metric { border-radius:20px; padding:20px; background:rgba(255,255,255,.72) }`
-    const metric = page.locator('[data-surface="card"]').first();
+    const metric = page.getByTestId('overview-metrics').locator('[data-surface="card"]').first();
     await expect(metric).toHaveCSS('border-radius', '20px');
     await expect(metric).toHaveCSS('padding', '20px');
     await expect(metric).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.72)');
+
+    /*
+     * `.surface-card { border-radius: 18px; padding: 22px }` — the OTHER half,
+     * which the positional locator was hiding rather than covering. Asserting
+     * it here means a change to `cardStyle` fails on the card it actually
+     * changed, instead of surfacing as a confusing metric failure.
+     */
+    const surface = page.getByTestId('overview-upcoming');
+    await expect(surface).toHaveCSS('border-radius', '18px');
+    await expect(surface).toHaveCSS('padding', '22px');
   });
 });

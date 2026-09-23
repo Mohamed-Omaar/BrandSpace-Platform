@@ -1,7 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -88,6 +98,66 @@ function runPrismaDirect(args: string[], cwd: string, env: NodeJS.ProcessEnv): R
   return run(process.execPath, [PRISMA_ENTRYPOINT, ...args], cwd, env);
 }
 
+/**
+ * THE GENERATED CLIENT EVERY OTHER TEST IMPORTS.
+ *
+ * Resolved through Node rather than written down, because the path contains
+ * pnpm's content hash and changes with every dependency bump.
+ */
+function sharedClientDirectory(): string {
+  const require_ = createRequire(path.join(databasePackage, 'index.js'));
+  return path.join(path.dirname(require_.resolve('@prisma/client')), '..', '..', '.prisma/client');
+}
+
+/**
+ * A schema that generates SOMEWHERE ELSE.
+ *
+ * WHY THIS EXISTS — THE DEFECT IT CLOSES (F-91).
+ *
+ * `prisma generate` REWRITES THE SHARED GENERATED CLIENT IN PLACE. Watching
+ * that directory through a run shows it torn down and rebuilt on the same
+ * inode, passing through states with as few as four files in it — and, for
+ * hundreds of consecutive samples, with NO `package.json` and NO `default.js`.
+ *
+ * `@prisma/client/default.js` is one line: `require('.prisma/client/default')`.
+ * Resolving that subpath reads `.prisma/client/package.json` for its `exports`
+ * map. So while this test regenerates, any OTHER unit test file whose module
+ * graph loads `@prisma/client` fails at IMPORT with
+ *
+ *     Error: Cannot find module '.prisma/client/default'
+ *
+ * which is precisely how CI failed `tests/unit/brand-brain-policy.test.ts` on
+ * run 244. Nothing was wrong with that file: Vitest loads test files in
+ * parallel, and it was the one holding the door when this test pulled the floor
+ * out. Locally the race is usually won; a loaded CI runner loses it. The
+ * failure therefore moves between files and looks like flake, which is the
+ * worst property a failure can have.
+ *
+ * THE FIX IS NOT TO STOP GENERATING — that is the whole assertion. It is to
+ * generate into a throwaway directory, so the command under test is the same
+ * command and the shared client is not collateral.
+ *
+ * The temporary tree lives INSIDE the package on purpose: the generator
+ * resolves `@prisma/client` relative to its own output, and a directory under
+ * /tmp is outside every `node_modules` and fails with "Could not resolve
+ * @prisma/client" — a failure of the harness that would read as a failure of
+ * the thing under test.
+ */
+function schemaGeneratingTo(outputDirectory: string): string {
+  const source = readFileSync(path.join(databasePackage, 'prisma', 'schema.prisma'), 'utf8');
+  const generated = source.replace(
+    /generator client \{([^}]*)\}/,
+    (_match, body: string) =>
+      `generator client {${body}  output   = "${outputDirectory}/client"\n}`,
+  );
+  // A replacement that silently matched nothing would generate to the SHARED
+  // client and reintroduce the exact race this guards against.
+  expect(generated, 'the generator block was not rewritten').toContain(outputDirectory);
+  const schemaPath = path.join(outputDirectory, 'schema.prisma');
+  writeFileSync(schemaPath, generated, 'utf8');
+  return schemaPath;
+}
+
 describe('prisma generate in a clean environment', () => {
   it('inherits no database variables in the test environment itself', () => {
     assertNoDatabaseVars(scrubbedEnv());
@@ -95,13 +165,60 @@ describe('prisma generate in a clean environment', () => {
 
   it('SUCCEEDS with no database environment at all', () => {
     // The exact failure from CI: generate must not require a connection string.
-    const result = runPrisma(['generate'], databasePackage, scrubbedEnv());
-    // Guard against a false pass: if the command could not be spawned at all we
-    // would see empty output, which must not be mistaken for success.
-    expect(result.output.trim()).not.toBe('');
-    expect(result.output).not.toContain('Cannot resolve environment variable');
-    expect(result.output).not.toContain('PrismaConfigEnvError');
-    expect(result.code).toBe(0);
+    const scratch = mkdtempSync(path.join(databasePackage, '.tmp-generate-'));
+    try {
+      const result = runPrisma(
+        ['generate', '--schema', schemaGeneratingTo(scratch)],
+        databasePackage,
+        scrubbedEnv(),
+      );
+      // Guard against a false pass: if the command could not be spawned at all we
+      // would see empty output, which must not be mistaken for success.
+      expect(result.output.trim()).not.toBe('');
+      expect(result.output).not.toContain('Cannot resolve environment variable');
+      expect(result.output).not.toContain('PrismaConfigEnvError');
+      // The harness failure that would otherwise masquerade as the real one.
+      expect(result.output).not.toContain('Could not resolve @prisma/client');
+      /*
+       * NO ASSERTION ON "Loaded Prisma config from prisma.config.ts". Prisma
+       * writes that line to STDERR, and `run()` returns stderr only on failure
+       * — so asserting it here would fail on a perfectly good run. It would
+       * also be redundant: a config that threw for a missing variable is
+       * exactly what makes this command exit non-zero, which is what the
+       * assertion above already pins.
+       */
+      expect(result.code).toBe(0);
+    } finally {
+      rmSync(scratch, { force: true, recursive: true });
+    }
+  });
+
+  it('does not disturb the generated client the rest of the suite imports (F-91)', () => {
+    /*
+     * THE REGRESSION GUARD FOR THE RACE ITSELF, asserted on the filesystem
+     * rather than on the command's own words. If somebody later drops the
+     * `--schema` redirection for tidiness, this fails here instead of surfacing
+     * a fortnight later as an unrelated test file that cannot find a module.
+     *
+     * `package.json` is the file watched because it is the one whose absence
+     * breaks `require('.prisma/client/default')` — the exports map lives in it.
+     */
+    const marker = path.join(sharedClientDirectory(), 'package.json');
+    const before = statSync(marker).mtimeMs;
+
+    const scratch = mkdtempSync(path.join(databasePackage, '.tmp-generate-'));
+    try {
+      const result = runPrisma(
+        ['generate', '--schema', schemaGeneratingTo(scratch)],
+        databasePackage,
+        scrubbedEnv(),
+      );
+      expect(result.code).toBe(0);
+    } finally {
+      rmSync(scratch, { force: true, recursive: true });
+    }
+
+    expect(statSync(marker).mtimeMs, 'generate rewrote the shared client').toBe(before);
   });
 
   it('SUCCEEDS for `validate`, which is also an offline command', () => {
