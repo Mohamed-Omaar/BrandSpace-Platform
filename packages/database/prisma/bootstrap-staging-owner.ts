@@ -24,10 +24,7 @@ function client(): PrismaClient {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-async function syncCatalogue(
-  prisma: PrismaClient,
-  actorId: string,
-): Promise<Map<string, string>> {
+async function syncCatalogue(prisma: PrismaClient): Promise<Map<string, string>> {
   for (const permission of ALL_PERMISSIONS) {
     await prisma.permission.upsert({
       where: { key: permission.key },
@@ -109,7 +106,7 @@ async function main(): Promise<void> {
 
     const existing = await prisma.platformUser.findUnique({ where: { email } });
     const ownerId = existing?.id ?? crypto.randomUUID();
-    const roleIds = await syncCatalogue(prisma, ownerId);
+    const roleIds = await syncCatalogue(prisma);
     const ownerRoleId = roleIds.get('platform_owner');
     if (!ownerRoleId) throw new Error('platform_owner role was not created.');
 
