@@ -358,13 +358,24 @@ describe('every form control carries the class that makes it visible', () => {
      */
     const css = read('packages/ui/src/content-studio.css');
 
+    /*
+     * `background(-color)?`, because the two spellings paint the same pixels.
+     *
+     * What this asserts is the PROPERTY the `.bs-control` exemption trades
+     * away — that the control is visible — and a fill is a fill however it is
+     * written. The rules that render a select moved to the longhand in P6-02
+     * because the shorthand also resets `background-image`, which silently
+     * erased the one dropdown marker the product draws; see
+     * `docs/UI-FIDELITY-CONTRACT.md` §4 and `tests/unit/content-fidelity.test.ts`,
+     * which compares the two spellings as equal on both sides.
+     */
     // The demo's own field fill, on every control the composer renders.
     expect(css).toMatch(
-      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background: var\(--cs-soft\)/,
+      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background(-color)?: var\(--cs-soft\)/,
     );
     // And on the library's search box and its select.
-    expect(css).toMatch(/\.cs-search-field \{[^}]*background: var\(--cs-soft\)/);
-    expect(css).toMatch(/\.cs-select \{[^}]*background: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-search-field \{[^}]*background(-color)?: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-select \{[^}]*background(-color)?: var\(--cs-soft\)/);
 
     // The focus ring the demo omits and WCAG 2.2 AA requires.
     expect(css).toMatch(/\.content-page :focus-visible \{[^}]*outline: 2px solid/);

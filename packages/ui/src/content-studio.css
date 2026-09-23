@@ -179,14 +179,29 @@
  * filter-row buttons, so this is that rule, not a new treatment.
  */
 .cs-select {
+  /*
+   * `background-color`, NOT THE `background` SHORTHAND (P6-02). The shorthand
+   * resets `background-image` too, and this rule outranks the global
+   * `select` rule in tokens.css on specificity — so it silently erased the
+   * product's chevron and left this control wearing the browser's own arrow,
+   * which the demo's `.select-like` (a static `<div>`) never had.
+   */
   border: 0;
   border-radius: 10px;
-  background: var(--cs-soft);
+  background-color: var(--cs-soft);
   min-height: 36px;
   padding: 0 11px;
   white-space: nowrap;
   font-size: 9px;
   font-weight: 750;
+
+  /*
+   * A 36px control at 9px type cannot spare the default trailing room, so it
+   * overrides the SPACE and the INSET rather than the marker. Same glyph, same
+   * optical relationship, at this control's scale.
+   */
+  --bs-select-chevron-inset: 0.5rem;
+  --bs-select-chevron-space: 1.75rem;
 }
 
 /* --- the card grid --------------------------------------------------- */
@@ -313,13 +328,31 @@
 .cs-field input,
 .cs-field select,
 .cs-input-like {
+  /*
+   * `background-color` rather than the `background` shorthand, for the reason
+   * `.cs-select` gives (P6-02): the shorthand resets `background-image`, and
+   * this rule outranks the global `select` rule — so the five composer selects
+   * kept a browser-drawn arrow while every other select in the product wore the
+   * chevron. The fill, radius, padding and type below are the demo's own and
+   * are unchanged.
+   */
   width: 100%;
   border: 0;
   outline: 0;
-  background: var(--cs-soft);
+  background-color: var(--cs-soft);
   border-radius: 13px;
   padding: 12px;
   font-size: 10px;
+}
+
+/*
+ * The composer's selects are full-width at 10px type, so they take the default
+ * inset with a trailing space matched to their own 12px padding rather than to
+ * the design system's larger controls.
+ */
+.cs-field select {
+  --bs-select-chevron-inset: 0.75rem;
+  --bs-select-chevron-space: 2.25rem;
 }
 
 .cs-field textarea {

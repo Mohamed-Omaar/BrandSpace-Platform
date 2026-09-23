@@ -144,44 +144,85 @@ Each was established by reading the code on this branch, not inferred from the s
 
 ### 4.1 P6-02 — control consistency
 
-Four distinct defects, all of them a _bypass_ of a design system that is already correct:
+Four defects were reported. Each was root-caused rather than taken at face value, and **two of the
+four first-pass counts in this section were wrong and are corrected here** — the audit heuristic
+(a `<button>` carrying neither `className` nor `style`) over-counted, and the first explanation of the
+doubled arrow was wrong about the mechanism.
 
-**(a) Bare browser-default buttons.** Four controls render as `<button>` with neither `className` nor
-`style`, so the browser's own button chrome shows:
+**(a) Bare browser-default buttons — TWO, not four.** The heuristic flagged four; two of them are
+styled by an ancestor rule in the design system's own stylesheet and are fine:
+`brand-brain-view.tsx:441` (`.bb-upload button[type='submit']`) and `brand-chat.tsx:316`
+(`.bb-chat-suggestions button`). The two genuinely unstyled controls, with no class, no inline style
+and no rule that could reach them, were:
 
 - `apps/dashboard/src/app/[locale]/billing/page.tsx:437` — the submit of the accounting export form.
-  **This is the "Download CSV" button the owner reported.**
-- `apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx:441`
-- `apps/dashboard/src/app/[locale]/brand-brain/brand-chat.tsx:316`
-- `apps/admin/src/app/[locale]/console/health/page.tsx:236`
+  **This is the button the owner reported**, sitting between two design-system date fields in the
+  browser's own grey chrome.
+- `apps/admin/src/app/[locale]/console/health/page.tsx:236` — the Control Center's billing-event
+  replay, one per table row.
 
-A further class of control uses `style={buttonStyle(...)}` but omits the class `buttonClass()` would
-have applied, so it gets the fill but loses hover, active and disabled response — `:hover` cannot be
-expressed inline. The `Button` component already composes both correctly; these call sites bypass it.
+Both now take `buttonStyle()` **with** `buttonClass()`. They stay plain `<button type="submit">`
+rather than the `Button` component deliberately: `Button` is a client component defaulting to
+`type="button"`, and both forms exist to work with no JavaScript at all. `buttonClass` was private
+and is now exported, because the style alone is half a button — `:hover`, `:active` and `:disabled`
+cannot be expressed inline, so a call site taking one and not the other gets a control that looks
+right and feels dead.
 
-**(b) Selects with inconsistent arrows.** `packages/ui/src/tokens.css:628` replaces the native arrow
-for `select.bs-control, select.bs-select` — `appearance: none` plus one logical chevron that mirrors
-for RTL. Seven selects never carry either class, so they keep the native arrow, at the physical edge,
-varying by browser, un-mirrored in Arabic:
+**(b) The doubled dropdown arrow — the cause is `appearance: base-select`.** The first reading of
+this section blamed the selects that carry no design-system class. That is a real defect (see (c))
+but it produces a _mismatched_ marker, not a doubled one. The doubling is in `tokens.css` itself:
 
-- `content/compose/composer-view.tsx` at 499, 581, 676, 687, 825 — **no class at all**
-- `content/content-library-view.tsx:189` — `className="cs-select"`
+```
+select.bs-control            { appearance: none; background-image: <chevron> }   /* ~line 628 */
+@supports (appearance: base-select) {
+  select:not([multiple])     { appearance: base-select }                          /* ~line 1129 */
+}
+```
 
-`.cs-select` (`content-studio.css:181`) and `.cs-field select` (`:314`) both set a fill, a radius and
-padding but **never reset `appearance`**, so they are styled boxes wearing a native arrow. Side by
-side with a `bs-control` select, the two markers disagree — which is what reads as a doubled or
-mismatched arrow.
+Both selectors are specificity **(0,1,1)** — `:not()` contributes nothing itself but its argument
+does — so the later declaration wins and `base-select` takes effect. The browser then draws its own
+`::picker-icon` **while the chevron background-image is still painted underneath it**. Two markers,
+on precisely the selects that had adopted the design system, in precisely the browsers that support
+customizable selects. Inside the `@supports` block the product's chevron now stands down and the
+trailing space returns to ordinary padding, so there is exactly one marker in every browser.
 
-**(c) Date inputs.** Six `type="date"` inputs (`billing:415,430`, `campaigns/campaign-form-view:148,159`,
-`calendar/calendar-view:238,329`) carry `bs-control` and `inputStyle()`, but nothing normalises the
-native picker indicator — which is a browser-drawn glyph with its own size and colour, and which sits
-at the physical right in Arabic while every other control's marker mirrors.
+**(c) Selects wearing the browser's arrow.** Seven selects carry neither `bs-control` nor
+`bs-select`, so the class-keyed rule never reached them — five in `content/compose/composer-view.tsx`
+(499, 581, 676, 687, 825) with no class at all, and `content/content-library-view.tsx:189` with
+`.cs-select`. Worse, `.cs-select` and `.cs-field select` in `content-studio.css` set the
+**`background` shorthand**, which resets `background-image` as well as the colour and outranks an
+element rule on specificity — so even after re-keying, the chevron would have been erased there.
 
-**(d) Selected-option chips.** To be measured against the rendered surface before changing anything;
-the fix belongs with the chip primitive, not the pages.
+`.cs-select` is the sharpest case for fidelity rather than taste: it renders the demo's
+`.select-like`, which **in the demo is a static `<div>` with no arrow at all**. The native arrow was
+never part of the approved design; it arrived with the conversion to a real `<select>`.
 
-**The fix path is the design system, never page-by-page CSS**, and it is completed by a guard that
-makes the bypass fail a check rather than relying on review.
+The fix is therefore keyed on the **element**, so a select cannot opt out by forgetting a class, with
+two custom properties (`--bs-select-chevron-inset`, `--bs-select-chevron-space`) so a 36px filter
+select at 9px type can fit the same glyph at its own scale. The two shorthands became
+`background-color`. The demo's fill, radius, padding and type are untouched.
+
+**(d) Selected option rows merging.** `select:not([multiple]) option` gives each row a radius and a
+lavender highlight when `:checked`, `:hover` or `:focus`, and no separation. The selected row and the
+row the pointer is on are adjacent as soon as you move one step, so the two highlights met edge to
+edge and read as one taller block with a pinched waist rather than two rows one of which is chosen.
+`.bs-dropdown-option` never showed this because its panel gives it room. The native list now gets a
+1px vertical margin.
+
+**(e) Date inputs.** Six `type="date"` inputs (`billing:415,430`, `campaign-form-view:148,159`,
+`calendar-view:238,329`) carried `bs-control` and `inputStyle()`, but nothing normalised the native
+picker indicator — a browser-drawn glyph at its own size and colour, at the **physical** trailing
+edge, so in Arabic it sat opposite every other control's mirrored marker. The indicator is kept (on
+some platforms it is the only affordance that opens the picker) and given the product's inset, the
+chevron's size and a logical margin, with the field's own direction corrected for RTL.
+
+**The guard.** All of the above is fixable a second time by the next call site that forgets, so
+`tests/unit/phase6-control-consistency.test.ts` fails on a `<button>` with no styling anywhere in
+either app, on the chevron being re-keyed to a class, on a `background` shorthand returning to a
+select, and on the `@supports` stand-down being removed. Exemptions are listed with the rule that
+justifies them, and the test fails if a cited rule stops existing. It found one defect in itself
+while being written — it matched the words `<button>` inside a JSX comment — which is why it blanks
+comments before scanning while preserving line numbers.
 
 ### 4.2 P6-03a — the password floor
 

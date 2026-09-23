@@ -128,8 +128,20 @@ export function buttonStyle(
   }
 }
 
-/** The interaction classes a button needs for hover, active and disabled. */
-function buttonClass(variant: ButtonVariant): string {
+/**
+ * The interaction classes a button needs for hover, active and disabled.
+ *
+ * EXPORTED SINCE P6-02, because `buttonStyle` alone is half a button. The
+ * inline style carries the fill and the geometry; `:hover`, `:active` and
+ * `:disabled` cannot be expressed inline at all, so a call site that took the
+ * style and not the class got a control that looked right and felt dead.
+ *
+ * `Button` remains the right answer wherever a client component is acceptable.
+ * This exists for the places it is not — chiefly a plain `<button type="submit">`
+ * inside a no-JavaScript form, where `Button`'s `type="button"` default would
+ * stop the form submitting.
+ */
+export function buttonClass(variant: ButtonVariant): string {
   if (variant === 'neutral' || variant === 'ghost') return 'bs-pressable bs-control';
   if (variant === 'primary') return 'bs-pressable bs-filled-ink';
   if (variant === 'brand') return 'bs-pressable bs-filled-brand';

@@ -62,6 +62,36 @@ const LOGICAL: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
+ * The SECOND permitted substitution class: a background shorthand carrying only
+ * a colour, written as the longhand that says so (P6-02).
+ *
+ * `background: var(--soft)` and `background-color: var(--soft)` paint the same
+ * pixels. They differ in what they RESET: the shorthand also clears
+ * `background-image`, so it silently erased the select chevron that
+ * `tokens.css` applies to every select in the product — the rule outranks an
+ * element rule on specificity, so the control was handed back to the browser's
+ * own arrow. See `docs/UI-FIDELITY-CONTRACT.md` §4 for the authorisation.
+ *
+ * NARROW ON PURPOSE, and checked rather than assumed: it applies only where the
+ * demo's own value is a bare colour — a `var()` or a hex. A demo declaration
+ * carrying a gradient, an image or several layers is NOT a colour and is
+ * compared literally, so `.cs-gradient-a` and friends cannot drift through this
+ * door. A genuine change of fill still fails, because the VALUE is unchanged by
+ * the mapping.
+ *
+ * APPLIED TO BOTH SIDES, so the two spellings compare equal in either direction:
+ * a port rule that still writes the shorthand is not made to fail, and one that
+ * writes the longhand is not made to look like an addition.
+ */
+const COLOUR_ONLY_BACKGROUND = /^background:(var\(--[a-z-]+\)|#[0-9a-f]{3,8}|transparent)$/;
+
+function mapBackgroundLonghand(declaration: string): string {
+  return COLOUR_ONLY_BACKGROUND.test(declaration)
+    ? declaration.replace('background:', 'background-color:')
+    : declaration;
+}
+
+/**
  * Flatten a stylesheet into `[selector, declarations]` pairs.
  *
  * A HAND-ROLLED WALK RATHER THAN A REGEX, because a regex cannot see nesting
@@ -129,7 +159,9 @@ function demoDeclarations(selector: string): string[] {
   const found = DEMO_RULES.filter((rule) => rule.selector === selector).flatMap((rule) =>
     rule.declarations.map((declaration) => {
       const mapped = LOGICAL.find(([physical]) => declaration.startsWith(physical));
-      return mapped ? declaration.replace(mapped[0], mapped[1]) : declaration;
+      return mapBackgroundLonghand(
+        mapped ? declaration.replace(mapped[0], mapped[1]) : declaration,
+      );
     }),
   );
   if (found.length === 0) throw new Error(`selector "${selector}" is not in the snapshot`);
@@ -138,8 +170,8 @@ function demoDeclarations(selector: string): string[] {
 
 /** The port's own declarations for a selector, likewise accumulated. */
 function portedDeclarations(selector: string): string[] {
-  const found = PORT_RULES.filter((rule) => rule.selector === selector).flatMap(
-    (rule) => rule.declarations,
+  const found = PORT_RULES.filter((rule) => rule.selector === selector).flatMap((rule) =>
+    rule.declarations.map(mapBackgroundLonghand),
   );
   if (found.length === 0) throw new Error(`selector "${selector}" is not in the port`);
   return found;
@@ -232,6 +264,24 @@ const PERMITTED_ADDITIONS: Record<string, readonly string[]> = {
   // out too, so the inherited declarations appear under the grouped selector
   // rather than here.
   '.cs-post-art > span': [],
+
+  /*
+   * THE SELECT CHEVRON'S SIZE, on the two rules that render a select (P6-02).
+   *
+   * Not a visual change to the demo's control: the fill, radius, padding, type
+   * and geometry are unchanged and still compared. These two custom properties
+   * only tell `tokens.css` how much trailing room THIS control can spare for the
+   * one dropdown marker the product draws — a 36px filter select at 9px type
+   * cannot take the default 2.75rem.
+   *
+   * The marker itself is the authorised deviation recorded in
+   * `docs/UI-FIDELITY-CONTRACT.md` §4: the demo's `.select-like` is a static
+   * `<div>` with no options and therefore no affordance, and rendering it as a
+   * real `<select>` — which the demo's own `.field select` rule contemplates —
+   * gave it the browser's arrow instead. The owner authorised one consistent,
+   * RTL-mirrored marker in the Phase 6 brief.
+   */
+  '.cs-select': ['--bs-select-chevron-inset:0.5rem', '--bs-select-chevron-space:1.75rem'],
 };
 
 describe('the Content Studio stylesheet is a transcription of the pinned demo', () => {

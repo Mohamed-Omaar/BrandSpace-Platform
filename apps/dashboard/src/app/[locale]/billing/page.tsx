@@ -1,6 +1,13 @@
 import Link from 'next/link';
 import { formatMoney, systemClock, type Money } from '@brandspace/shared';
-import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  buttonClass,
+  buttonStyle,
+  colorTokens,
+  inputStyle,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -434,7 +441,30 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
               style={inputStyle()}
             />
           </div>
-          <button type="submit" data-testid="export-submit">
+          {/*
+            THE DESIGN SYSTEM'S BUTTON, NOT THE BROWSER'S (P6-02).
+
+            This shipped as a bare `<button>` with no class and no style, so it
+            rendered in the browser's own button chrome — a grey bevelled box
+            beside two design-system date fields. It is the control the owner
+            reported, and it is the reason P6-02 fixes this through
+            `buttonStyle`/`buttonClass` rather than a rule on this page: one
+            call site forgetting the system is a defect the system should not
+            allow, and `tests/unit/phase6-control-consistency.test.ts` now fails
+            if another appears.
+
+            A plain submit, NOT the `Button` component: `Button` is a client
+            component that defaults to `type="button"`, and this form's whole
+            point is that the browser performs the GET with no JavaScript at all
+            (an accountant on a locked-down machine). So it takes the same
+            style and the same interaction classes by the same functions.
+          */}
+          <button
+            type="submit"
+            data-testid="export-submit"
+            className={buttonClass('primary')}
+            style={buttonStyle('primary')}
+          >
             {t('billing.exportSubmit')}
           </button>
         </form>
