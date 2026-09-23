@@ -13,7 +13,7 @@ import {
 } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { translator } from '../../../i18n/messages';
+import { optionalMessage, translator } from '../../../i18n/messages';
 import {
   CustomerCard,
   WorkspaceShell,
@@ -65,7 +65,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
       permissionKeys={workspace.permissionKeys}
     >
       <SectionHeader
-        eyebrow={locale === 'ar' ? 'التحكم في الوصول' : 'Access control'}
+        eyebrow={t('perms.eyebrow')}
         title={t('perms.rolesTitle')}
         description={t('perms.rolesHint')}
       />
@@ -152,7 +152,12 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
           </span>
         </p>
 
-        <div style={scrollContainerStyle()}>
+        <div
+          style={scrollContainerStyle()}
+          tabIndex={0}
+          role="group"
+          aria-label={t('perms.permission')}
+        >
           <table style={customerTableStyle()} data-testid="permissions-table">
             <thead>
               <tr>
@@ -169,7 +174,9 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                       <code>{p.key}</code>
                       <br />
                       <span style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}>
-                        {p.description}
+                        {/* P6-14 — the catalogue's description is English only; the
+                            dictionary carries both, and the catalogue is the fallback. */}
+                        {optionalMessage(locale, `perms.desc.${p.key}`) ?? p.description}
                       </span>
                     </td>
                     <td style={customerTdStyle()}>

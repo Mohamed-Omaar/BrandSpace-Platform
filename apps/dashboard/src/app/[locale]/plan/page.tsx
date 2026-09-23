@@ -1,8 +1,14 @@
-import { colorTokens, scrollContainerStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  colorTokens,
+  radiusTokens,
+  scrollContainerStyle,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { translator } from '../../../i18n/messages';
+import { optionalMessage, translator } from '../../../i18n/messages';
 import { ceilingFor, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
 import {
@@ -27,9 +33,29 @@ export const dynamic = 'force-dynamic';
  * plausible zero — that is exactly the kind of invented number that gets acted
  * on.
  */
+/**
+ * P6-14 — the table wrappers carry an OPAQUE surface, as `DataTable` does. The
+ * card behind them is translucent (the demo's `.surface-card`), and on this
+ * page the ambient glow sits under its tables: 9px column headings measured
+ * 4.24:1 on the blend (axe `color-contrast`). The card is not restyled; the
+ * table gets the surface every other table in the product already has.
+ */
+const tableSurface = {
+  ...scrollContainerStyle(),
+  borderRadius: radiusTokens.lg,
+  background: colorTokens.surface,
+} as const;
+
+/** Ledger kinds whose `reason` a person wrote, rather than the system. */
+const HUMAN_REASON_TYPES = new Set(['ADMIN_ADJUSTMENT', 'PROMOTIONAL_GRANT']);
+
 export default async function PlanPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
+  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const ledgerDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    dateStyle: 'medium',
+  });
   const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
 
   // Inside the tenant context: the overrides and the wallet are tenant-owned,
@@ -281,7 +307,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
           {grants.length === 0 ? (
             <CustomerEmpty message={t('plan.allocNone')} />
           ) : (
-            <div style={scrollContainerStyle()}>
+            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.allocations')}>
               <table style={customerTableStyle()} data-testid="allocations-table">
                 <thead>
                   <tr>
@@ -342,7 +368,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
         {counters.length === 0 ? (
           <CustomerEmpty message={t('plan.quotaNone')} />
         ) : (
-          <div style={scrollContainerStyle()}>
+          <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.quotaTitle')}>
             <table style={customerTableStyle()} data-testid="quota-table">
               <thead>
                 <tr>
@@ -378,16 +404,34 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
           {ledger.length === 0 ? (
             <CustomerEmpty message={t('plan.historyNone')} />
           ) : (
-            <div style={scrollContainerStyle()}>
+            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.history')}>
               <table style={customerTableStyle()} data-testid="credit-history-table">
                 <tbody>
                   {ledger.map((entry) => (
                     <tr key={entry.id} data-testid={`ledger-${entry.id}`}>
+                      <td style={customerTdStyle()}>{ledgerDate.format(entry.occurredAt)}</td>
                       <td style={customerTdStyle()}>
-                        {entry.occurredAt.toISOString().slice(0, 10)}
+                        {number.format(Number(entry.amountMilliCredits / 1000n))}
                       </td>
-                      <td style={customerTdStyle()}>{Number(entry.amountMilliCredits / 1000n)}</td>
-                      <td style={customerTdStyle()}>{entry.reason}</td>
+                      {/* P6-14 — the entry's KIND in the reader's language. The
+                          stored reason is English written by the system, so it is
+                          shown only where a person wrote it (an adjustment or a
+                          promotional grant), marked as its own direction. */}
+                      <td style={customerTdStyle()}>
+                        {optionalMessage(locale, `plan.ledgerType.${entry.type}`) ?? entry.type}
+                        {HUMAN_REASON_TYPES.has(entry.type) && entry.reason ? (
+                          <span
+                            dir="auto"
+                            style={{
+                              display: 'block',
+                              color: colorTokens.textSecondary,
+                              ...typographyTokens.caption,
+                            }}
+                          >
+                            {entry.reason}
+                          </span>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -401,7 +445,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
         {effective.decisions.length === 0 ? (
           <CustomerEmpty message={t('plan.noFeatures')} />
         ) : (
-          <div style={scrollContainerStyle()}>
+          <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.features')}>
             <table style={customerTableStyle()} data-testid="features-table">
               <thead>
                 <tr>

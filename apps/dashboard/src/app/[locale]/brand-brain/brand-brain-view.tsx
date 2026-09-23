@@ -299,7 +299,15 @@ export function BrandBrainView({
               </div>
             </div>
 
-            <div className="bb-attention" data-testid="attention-card">
+            {/* Scrolls on a phone (`overflow-y: auto`), so it takes focus: a region a
+                mouse can scroll must be one a keyboard can scroll (P6-14). */}
+            <div
+              className="bb-attention"
+              data-testid="attention-card"
+              tabIndex={0}
+              role="region"
+              aria-label={t('bb.attentionTitle')}
+            >
               <b>{t('bb.attentionTitle')}</b>
               {needingAttention.length > 0 ? (
                 <ul>

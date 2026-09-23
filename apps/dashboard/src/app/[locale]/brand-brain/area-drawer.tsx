@@ -583,31 +583,31 @@ export function AreaDrawer({
               name="itemKey"
               required
               placeholder="identity.positioning"
-              aria-label="key"
+              aria-label={t('bb.newItem.key')}
               data-testid="new-item-key"
               style={drawerInputStyle}
             />
             <input
               className={CONTROL_CLASS}
               name="titleEn"
-              placeholder="Title (EN)"
-              aria-label="Title EN"
+              placeholder={t('bb.newItem.titleEn')}
+              aria-label={t('bb.newItem.titleEn')}
               data-testid="new-item-title-en"
               style={drawerInputStyle}
             />
             <input
               className={CONTROL_CLASS}
               name="titleAr"
-              placeholder="العنوان (AR)"
-              aria-label="Title AR"
+              placeholder={t('bb.newItem.titleAr')}
+              aria-label={t('bb.newItem.titleAr')}
               style={drawerInputStyle}
             />
             <textarea
               className={CONTROL_CLASS}
               name="bodyEn"
               rows={3}
-              placeholder="Body (EN)"
-              aria-label="Body EN"
+              placeholder={t('bb.newItem.bodyEn')}
+              aria-label={t('bb.newItem.bodyEn')}
               data-testid="new-item-body-en"
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
@@ -615,8 +615,8 @@ export function AreaDrawer({
               className={CONTROL_CLASS}
               name="bodyAr"
               rows={3}
-              placeholder="النص (AR)"
-              aria-label="Body AR"
+              placeholder={t('bb.newItem.bodyAr')}
+              aria-label={t('bb.newItem.bodyAr')}
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
             <button

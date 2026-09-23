@@ -318,6 +318,14 @@ screen adds a Brand access column to its existing `DataTable`/`RecordList` pair 
 whose radios and checkboxes use native controls held to `layoutTokens.minTargetSize`, as the approvals
 checkboxes are. Activity and Plan change words, not layout. Nothing new is drawn.
 
+### 6.3.4 Phase 6 P6-14 — accessibility corrections to existing screens
+
+No geometry changed. Plan's table wrappers take the opaque `surface` + `radiusTokens.lg` that
+`DataTable` already has, because the demo's translucent `.surface-card` put 9px headings on the ambient
+glow at 4.24:1; the card itself is untouched. Plan's tables and Brand Brain's `.bb-attention` take
+keyboard focus (visible only as the standard focus ring). Brand Profile's locale checkboxes take the
+approvals checkbox size. All three are corrections the owner may refine in the final parity pass.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

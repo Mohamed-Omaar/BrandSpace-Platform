@@ -5,6 +5,7 @@ import {
   StateMessage,
   buttonStyle,
   colorTokens,
+  layoutTokens,
   inputStyle,
   radiusTokens,
   spacingTokens,
@@ -260,14 +261,21 @@ export default async function BrandProfilePage({
                   {(['AR', 'EN'] as const).map((value) => (
                     <label
                       key={value}
-                      style={{ display: 'flex', gap: spacingTokens.xs, alignItems: 'center' }}
+                      style={{
+                        display: 'flex',
+                        gap: spacingTokens.xs,
+                        alignItems: 'center',
+                        minBlockSize: layoutTokens.minTargetSize,
+                      }}
                     >
+                      {/* WCAG 2.5.8 target size, as the approvals checkboxes (P6-14). */}
                       <input
                         type="checkbox"
                         name="supportedLocales"
                         value={value}
                         defaultChecked={data.brand.supportedLocales.includes(value)}
                         disabled={!mayManage}
+                        style={{ inlineSize: '20px', blockSize: '20px', margin: 0 }}
                       />
                       <span style={typographyTokens.bodySm}>
                         {value === 'AR' ? t('brandProfile.localeAr') : t('brandProfile.localeEn')}

@@ -413,6 +413,10 @@ when its defect is reinstated is not evidence of anything.
 | 30  | P6-13: the workspace owner made restrictable                                      | 1 isolation         |
 | 31  | P6-13: an unlabelled audit action falls back to its raw key                       | 2 unit              |
 | 32  | P6-13: a disabled quota shown as "no ceiling stated" instead of 0                 | 1 unit              |
+| 33  | P6-14: a Brand Brain accessible name returned to an English literal               | 1 unit              |
+| 34  | P6-14: a physical `marginLeft` added to a dashboard page                          | 1 unit              |
+| 35  | P6-14: an Arabic value replaced by its English copy                               | 2 unit              |
+| 36  | P6-14: an Arabic key dropped (its placeholder no longer survives)                 | 1 unit              |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -547,6 +551,38 @@ PostgreSQL), `tests/isolation/invitations.test.ts` updated for the required invi
 `/members` in both directions). The axe run caught the new brand checkboxes failing WCAG 2.5.8 target
 size on a phone; they now hold the 24px row minimum. Plants 28–32. No new model, migration or RLS
 change.
+
+---
+
+## 11. P6-14 — Arabic, RTL, responsive and accessibility
+
+**Method.** Rather than re-proving each screen in isolation, one sweep
+(`tests/e2e/phase6-locale-sweep.spec.ts`) now visits every signed-in customer route — 26 of them — in
+English and Arabic, in both the desktop (1280px) and phone (Pixel 5) projects, and asserts `lang` and
+`dir`, zero inline-end overhang (the F-26 measurement, which sees RTL's left edge), an Arabic heading on
+Arabic screens, no raw dictionary key or `undefined` in the copy, and **zero** axe violations at WCAG 2.2
+AA.
+
+**What its first run found — six defects, all pre-existing, all fixed:**
+
+| Found                                                                                   | Fix                                                                       |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Permissions described all 54 permissions in English on the Arabic page                  | `perms.desc.*` in both languages; English pinned to the catalogue         |
+| Brand Brain's add-knowledge form had English literal accessible names                   | `bb.newItem.*` keys                                                       |
+| Brand Profile's locale checkboxes (and P6-13's brand checkboxes) failed 2.5.8 on phones | 24px rows, 20px controls — the approvals checkbox treatment               |
+| Plan's tables and Brand Brain's attention card scrolled but took no keyboard focus      | `tabIndex=0` + named group/region, as `DataTable` does                    |
+| Plan's 9px table headings at 4.24:1 over the ambient glow through the translucent card  | Opaque table surface, as `DataTable` has; the card is not restyled        |
+| Plan's credit history printed ISO dates and system-written English reasons              | Localized date; entry kind in the reader's language (`plan.ledgerType.*`) |
+
+**Static guards, widened** (`tests/unit/phase6-locale-guards.test.ts`, 10): the whole dictionary is
+Arabic in Arabic (was Brand Brain only), `{placeholders}` survive translation, the dashboard as a whole
+uses no physical side (was `packages/ui` only), no literal English accessible name, every permission
+and every ledger kind described in both languages.
+
+**Result.** Sweep 52/52 across both projects; with the P6-13 and commerce specs, 74/74. Regression:
+brand-brain, brand-brain-visual, customer-app and design-system projects green (four invitation tests
+failed once locally because an earlier local run had consumed the seeded one-time invitation; green
+after `pnpm e2e:seed`, which CI runs every time). Plants 33–36.
 
 ---
 
