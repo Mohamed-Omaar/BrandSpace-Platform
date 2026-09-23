@@ -8,6 +8,7 @@ import { inContentStudio } from '../../../../server/content-context';
 import { listMediaOptions } from '../../../../server/media-picker';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
+import { NotesPanel } from '../../../../components/notes-panel';
 import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
@@ -299,6 +300,27 @@ export default async function ComposePage({
           listCampaignOptions: listCampaignOptionsAction,
         }}
       />
+
+      {/*
+        THE CONVERSATION ABOUT THIS DRAFT (P6-09).
+      
+        Rendered only once a draft EXISTS — there is nothing to have a
+        conversation about before the item has an id, and a panel offering to
+        discuss a thing that has not been created yet is a control that cannot
+        work.
+      
+        THIS IS WHERE A "NEEDS WORK" VERDICT LANDS. P6-06 puts the reviewer's
+        note on the content item; this is the screen the author opens next, so
+        the request and the work are finally on the same page and the author can
+        answer it rather than re-reading a closed approval cycle.
+      */}
+      {draft ? (
+        <NotesPanel
+          locale={locale}
+          subject={{ type: 'CONTENT_ITEM', contentItemId: draft.id }}
+          returnPath={`/${locale}/content/compose?item=${draft.id}`}
+        />
+      ) : null}
     </WorkspaceShell>
   );
 }

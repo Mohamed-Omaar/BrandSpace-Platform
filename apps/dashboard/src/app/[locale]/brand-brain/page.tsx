@@ -12,6 +12,7 @@ import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { NotesPanel } from '../../../components/notes-panel';
 import { statusMessage } from '../../../i18n/messages';
 import {
   BrandBrainView,
@@ -394,6 +395,27 @@ export default async function BrandBrainPage({
           remove: can('brand_brain.delete'),
           chat: can('brand_brain.chat'),
         }}
+      />
+
+      {/*
+        THE BRAND-LEVEL CONVERSATION (P6-07, P6-09).
+      
+        Attached to the BRAND rather than to any one fact, because the questions
+        that belong here are about the brand as a whole — whether the tone has
+        moved, whether a rule still holds, what a conflicting pair should
+        resolve to.
+      
+        AND IT IS STILL NOT BRAND KNOWLEDGE. A thread here reads beside the four
+        memories and never enters them: a remark about the brand is not a fact
+        the brand has decided, and promoting one is a deliberate act through
+        this screen's own review, where it arrives with provenance. The
+        separation is structural — `packages/collaboration` has no dependency on
+        `packages/brand-brain` in either direction.
+      */}
+      <NotesPanel
+        locale={locale}
+        subject={{ type: 'BRAND', brandId: brand.id }}
+        returnPath={`/${locale}/brand-brain`}
       />
     </WorkspaceShell>
   );
