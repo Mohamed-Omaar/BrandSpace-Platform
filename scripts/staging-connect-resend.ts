@@ -88,7 +88,9 @@ async function main(): Promise<void> {
     console.log('STAGING_RESEND_CONNECTED_OK');
     console.log(`enabled=${view.enabled}`);
     console.log(`configuration_complete=${view.configurationComplete}`);
-    console.log(`credential_present=${view.credentials.find((c) => c.fieldKey === 'apiKey')?.present === true}`);
+    console.log(
+      `credential_present=${view.credentials.find((c) => c.fieldKey === 'apiKey')?.present === true}`,
+    );
     console.log(`from_email=${view.settings['fromEmail'] ?? ''}`);
   } finally {
     await prisma.$disconnect();

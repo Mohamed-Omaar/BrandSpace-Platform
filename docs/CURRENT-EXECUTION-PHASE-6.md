@@ -259,7 +259,7 @@ one starts to.
 **One thing this uncovered and did NOT fix.** `docs/SECURITY.md` §3 has always listed a
 breached-password check beside the length policy, and nothing in the repository implements one. That
 matters more after this change than before it, because NIST's position is that a shorter minimum is
-safe *because* candidates are screened against known-breached corpora — the two halves were meant to
+safe _because_ candidates are screened against known-breached corpora — the two halves were meant to
 ship together and only one ever did. It is recorded as **F-89** and the requirements table now says
 it is not implemented, rather than the document continuing to claim a control the product lacks.
 
@@ -379,21 +379,21 @@ fixed in this phase — write the test, plant the defect, show the test fail, re
 Each was shown FAILING with the defect in place and PASSING once restored. A test that does not fail
 when its defect is reinstated is not evidence of anything.
 
-| # | Planted defect | Failed |
-| - | -------------- | ------ |
-| 1 | The quota default collapse restored (`quotaWithNoStatedCeiling` forced false) | 2 unit, 3 isolation |
-| 2 | The `planEnded` narrowing dropped, so a cancelled subscription gets unlimited | 1 unit |
-| 3 | The concurrent-replay guard removed from `usage.consume` | 1 isolation |
-| 4 | `.cs-select`'s fill changed away from the demo's value | 2 unit (fidelity) |
-| 5 | A gradient rewritten as a colour longhand, to test the substitution's narrowness | 2 unit (fidelity) |
-| 6 | The accounting export button returned to bare | 1 unit |
-| 7 | The select chevron re-keyed to a class instead of the element | 1 unit |
-| 8 | The `background` shorthand returned to `.cs-field select` | 1 unit |
-| 9 | `CONTROL_CLASS` removed from the password input | 1 unit |
-| 10 | The 12-character floor hard-coded back into `hashPassword` | 2 unit |
-| 11 | A server action made to read the password confirmation | 1 unit |
-| 12 | The confirmation field given a `name`, so it submits | 1 unit |
-| 13 | `MIN_OWNER_PASSWORD_LENGTH` lowered to the customer floor | 1 unit |
+| #   | Planted defect                                                                   | Failed              |
+| --- | -------------------------------------------------------------------------------- | ------------------- |
+| 1   | The quota default collapse restored (`quotaWithNoStatedCeiling` forced false)    | 2 unit, 3 isolation |
+| 2   | The `planEnded` narrowing dropped, so a cancelled subscription gets unlimited    | 1 unit              |
+| 3   | The concurrent-replay guard removed from `usage.consume`                         | 1 isolation         |
+| 4   | `.cs-select`'s fill changed away from the demo's value                           | 2 unit (fidelity)   |
+| 5   | A gradient rewritten as a colour longhand, to test the substitution's narrowness | 2 unit (fidelity)   |
+| 6   | The accounting export button returned to bare                                    | 1 unit              |
+| 7   | The select chevron re-keyed to a class instead of the element                    | 1 unit              |
+| 8   | The `background` shorthand returned to `.cs-field select`                        | 1 unit              |
+| 9   | `CONTROL_CLASS` removed from the password input                                  | 1 unit              |
+| 10  | The 12-character floor hard-coded back into `hashPassword`                       | 2 unit              |
+| 11  | A server action made to read the password confirmation                           | 1 unit              |
+| 12  | The confirmation field given a `name`, so it submits                             | 1 unit              |
+| 13  | `MIN_OWNER_PASSWORD_LENGTH` lowered to the customer floor                        | 1 unit              |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -402,15 +402,15 @@ no substring.
 
 ### 7.2 Results on this branch
 
-| Gate | Result |
-| ---- | ------ |
-| Unit | **2238 passed**, 94 files (2232 before the merge brought the owner's 6) |
-| Isolation (real PostgreSQL) | see §7.3 |
-| D-29 tenant-isolation gate | 65 tenant-owned, 9 platform-owned — all covered |
-| Typecheck | clean across every package and app |
-| Lint | clean (after fixing the seven errors the merge brought in — D-263) |
-| Build | clean |
-| Secret scan (CI's exact pattern) | no new matches; the only hits are the pre-existing allowlisted redaction fixtures |
+| Gate                             | Result                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit                             | **2238 passed**, 94 files (2232 before the merge brought the owner's 6)                                                                                                                                                                                                                                                                                                                     |
+| Isolation (real PostgreSQL)      | **Green in CI on a fresh database.** Locally, 9 tests in `phase7-round6`/`round7` fail on this container's long-lived database: 7312 accumulated `automation_rule` rows starve their `BATCH = 500` sweep. Proven by raising the batch above the row count, which makes them pass unchanged. Recorded as **F-90** — unrelated to Phase 6, and invisible to CI because CI migrates from empty |
+| D-29 tenant-isolation gate       | 65 tenant-owned, 9 platform-owned — all covered                                                                                                                                                                                                                                                                                                                                             |
+| Typecheck                        | clean across every package and app                                                                                                                                                                                                                                                                                                                                                          |
+| Lint                             | clean (after fixing the seven errors the merge brought in — D-263)                                                                                                                                                                                                                                                                                                                          |
+| Build                            | clean                                                                                                                                                                                                                                                                                                                                                                                       |
+| Secret scan (CI's exact pattern) | no new matches; the only hits are the pre-existing allowlisted redaction fixtures                                                                                                                                                                                                                                                                                                           |
 
 ---
 

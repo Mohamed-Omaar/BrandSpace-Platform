@@ -173,20 +173,20 @@ could clear look like a platform fault.
 
 ## 3. Authentication
 
-| Control            | Requirement                                                                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Password storage   | Argon2id, per-user salt, tuned memory/time cost                                                                                                                           |
-| Password policy    | Length-first; the minimum is CONFIGURATION (`onboarding.signup.minPasswordLength`, default and absolute floor **8**, ceiling 128 — D-261), breached-password check (**NOT YET IMPLEMENTED — F-89**), no forced rotation                                                                                                        |
-| Rate limiting      | Per-IP and per-account exponential backoff; lockout with unlock flow                                                                                                      |
-| Email verification | Required before first login completes; signed single-use token                                                                                                            |
-| MFA                | TOTP + recovery codes. Optional for customers; **mandatory for Platform Owner and Platform Admin**                                                                        |
-| Step-up auth       | Required for: secret create/rotate/revoke, plan price changes, entering support mode, refunds, credit adjustments above a threshold, account deletion, ownership transfer |
-| Sessions           | Short-lived access token, rotating refresh, absolute max lifetime, device list, revoke-all                                                                                |
-| Invalidation       | On password change, role change, membership removal, workspace suspension, MFA reset                                                                                      |
-| Invitations        | Signed, single-use, expiring, bound to workspace+role; token stored hashed                                                                                                |
-| Realm separation   | Distinct cookie names, signing keys, audiences, and session tables for customer vs. platform                                                                              |
-| Admin surface      | Dedicated hostname; optional IP allowlist; no public registration path                                                                                                    |
-| Future             | SSO (SAML/OIDC) and SCIM for Enterprise — identity model already supports it                                                                                              |
+| Control            | Requirement                                                                                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Password storage   | Argon2id, per-user salt, tuned memory/time cost                                                                                                                                                                         |
+| Password policy    | Length-first; the minimum is CONFIGURATION (`onboarding.signup.minPasswordLength`, default and absolute floor **8**, ceiling 128 — D-261), breached-password check (**NOT YET IMPLEMENTED — F-89**), no forced rotation |
+| Rate limiting      | Per-IP and per-account exponential backoff; lockout with unlock flow                                                                                                                                                    |
+| Email verification | Required before first login completes; signed single-use token                                                                                                                                                          |
+| MFA                | TOTP + recovery codes. Optional for customers; **mandatory for Platform Owner and Platform Admin**                                                                                                                      |
+| Step-up auth       | Required for: secret create/rotate/revoke, plan price changes, entering support mode, refunds, credit adjustments above a threshold, account deletion, ownership transfer                                               |
+| Sessions           | Short-lived access token, rotating refresh, absolute max lifetime, device list, revoke-all                                                                                                                              |
+| Invalidation       | On password change, role change, membership removal, workspace suspension, MFA reset                                                                                                                                    |
+| Invitations        | Signed, single-use, expiring, bound to workspace+role; token stored hashed                                                                                                                                              |
+| Realm separation   | Distinct cookie names, signing keys, audiences, and session tables for customer vs. platform                                                                                                                            |
+| Admin surface      | Dedicated hostname; optional IP allowlist; no public registration path                                                                                                                                                  |
+| Future             | SSO (SAML/OIDC) and SCIM for Enterprise — identity model already supports it                                                                                                                                            |
 
 **Cookies:** `HttpOnly`, `Secure`, `SameSite=Lax` (strict for admin), `__Host-` prefix, short TTL.
 **CSRF:** double-submit token plus SameSite; all mutations require the token.
