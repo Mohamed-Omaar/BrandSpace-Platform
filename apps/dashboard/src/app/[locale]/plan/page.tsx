@@ -320,7 +320,10 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                 <tbody>
                   {grants.map((grant) => (
                     <tr key={grant.id} data-testid={`allocation-${grant.id}`}>
-                      <td style={customerTdStyle()}>{grant.source}</td>
+                      <td style={customerTdStyle()}>
+                        {optionalMessage(locale, `plan.grantSource.${grant.source}`) ??
+                          grant.source}
+                      </td>
                       <td style={customerTdStyle()}>
                         {Number(grant.remainingMilliCredits / 1000n)}
                       </td>
@@ -329,7 +332,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                       </td>
                       <td style={customerTdStyle()}>
                         {grant.expiresAt
-                          ? grant.expiresAt.toISOString().slice(0, 10)
+                          ? ledgerDate.format(grant.expiresAt)
                           : t('plan.allocNever')}
                       </td>
                     </tr>

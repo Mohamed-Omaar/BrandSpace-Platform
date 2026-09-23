@@ -444,7 +444,7 @@ test.describe('the team page performs real work', () => {
 
     await page.click(`[data-testid="revoke-${invitee}"]`);
     await expect(page.getByTestId('success-banner')).toBeVisible();
-    await expect(page.getByTestId(`invitation-${invitee}`)).toContainText('REVOKED');
+    await expect(page.getByTestId(`invitation-${invitee}`)).toContainText('Revoked');
   });
 
   test('refuses to remove the last owner, with a safe message', async ({ page }) => {

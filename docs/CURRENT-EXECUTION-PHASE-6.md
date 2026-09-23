@@ -417,6 +417,8 @@ when its defect is reinstated is not evidence of anything.
 | 34  | P6-14: a physical `marginLeft` added to a dashboard page                          | 1 unit              |
 | 35  | P6-14: an Arabic value replaced by its English copy                               | 2 unit              |
 | 36  | P6-14: an Arabic key dropped (its placeholder no longer survives)                 | 1 unit              |
+| 37  | P6-15: the Team screen's member status returned to its raw enum                   | 1 unit              |
+| 38  | P6-15: one invitation status label dropped from the Arabic dictionary             | 1 unit              |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -583,6 +585,52 @@ and every ledger kind described in both languages.
 brand-brain, brand-brain-visual, customer-app and design-system projects green (four invitation tests
 failed once locally because an earlier local run had consumed the seeded one-time invitation; green
 after `pnpm e2e:seed`, which CI runs every time). Plants 33–36.
+
+---
+
+## 12. P6-15 — Full verification, regression and cleanup
+
+| Gate                                  | Result                                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Migrations from an empty database     | **47 applied**, clean, to a database created empty for this run                                                                 |
+| Schema drift                          | `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code` on that database: **no difference** |
+| Isolation + RLS (real PostgreSQL)     | **99 files, 2083 tests passed** on the fresh database — including `phase7-round6/7`, confirming F-90 is local litter only       |
+| D-29 gate                             | 68 tenant-owned + 9 platform-owned models covered                                                                               |
+| Unit                                  | **102 files, 2398 tests** — three consecutive clean runs after fixing a scan race (below)                                       |
+| Full Playwright, fresh database       | **580 / 580 passed** — every project, both viewports, RTL/LTR and axe, mirroring CI's `pnpm test:e2e`                           |
+| Typecheck (root), lint, format, build | clean                                                                                                                           |
+| Secret scan                           | CI's exact pattern: no match outside the allowlisted fixtures; no tracked `.env`; a wider scan of the Phase 6 diff also clean   |
+| CI                                    | all seven jobs green on each workstream's head; final head verified in the report                                               |
+
+**The final screenshot pass found one more class of defect** (D-275): the Arabic Team screen printed
+member and invitation states as raw enums. The sweep now refuses a raw enum state on every Arabic
+screen, and its next run found Home's workspace status and Plan's credit sources; all three are fixed
+and guarded. Plants 37–38.
+
+**A race of this phase's own making, fixed.** The P6-13 audit-action scan and the P6-14 dashboard scan
+walk source trees that the module-boundary suites plant `__*_probe.ts` files into and delete, in the
+same Vitest project. One full run listed a probe and found it gone (ENOENT). Both scans now read a
+vanished file as empty — the treatment `design-system.test.ts` already documents for the same race —
+and the full unit suite then passed three times in a row.
+
+**Staging.** Not reachable from this environment: its network policy refuses
+`api-staging.brandspace.cc` and the `*.up.railway.app` staging hosts, so no staging smoke was run from
+here and no staging claim is made. Nothing was deployed anywhere, and nothing touched Production.
+
+**One-off staging scripts — reviewed, kept, not deleted.** `scripts/staging-{connect-resend,
+signup-smoke,password-reset-smoke,cleanup-smoke-customer}.ts` and
+`packages/database/prisma/bootstrap-staging-owner.ts` each refuse any `APP_ENV` but `staging`, print no
+secret value, and are wired into no package script. The cleanup script deletes only an account with no
+workspace and no membership. Observations for the owner, not changed here: the signup smoke hard-codes a
+personal display name and timezone, and the Resend connector hard-codes the staging owner and sender
+addresses. Recommended: retire them (or move them under `scripts/staging/one-off/` with a README) once
+staging is signed off — an owner decision, because they may be re-run during staging bring-up.
+
+**Known findings, status at close:** F-89 (breached-password screening) — **open, not implemented, not
+claimed**. F-90 (local `automation_rule` litter) — local only; green on a fresh database; not "fixed" by
+raising a batch. F-91 (prisma-config generating into a throwaway directory) — intact, untouched by Phase 6.
+F-92 (repeated-workflow / edit-preference signals have no honest source) and F-93 (API rate limits
+declared, not enforced) — open, recorded.
 
 ---
 

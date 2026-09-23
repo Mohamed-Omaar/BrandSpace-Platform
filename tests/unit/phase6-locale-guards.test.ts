@@ -1,7 +1,13 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CreditTransactionType } from '@prisma/client';
+import {
+  CreditGrantSource,
+  CreditTransactionType,
+  InvitationStatus,
+  MembershipStatus,
+  WorkspaceStatus,
+} from '@prisma/client';
 import { ALL_PERMISSIONS } from '@brandspace/shared';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
@@ -19,11 +25,35 @@ import { messages } from '../../apps/dashboard/src/i18n/messages';
 const ROOT = path.resolve(__dirname, '../..');
 const DASHBOARD = path.join(ROOT, 'apps/dashboard/src');
 
+/**
+ * A file that vanished between listing and reading is not a failure: the
+ * boundary suites plant and delete `__*_probe.ts` files in these trees while
+ * this suite scans them (the same race `design-system.test.ts` documents). A
+ * missing file cannot contain what these scans look for, so it reads as empty.
+ */
+function readIfPresent(file: string): string {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+function isDirectory(full: string): boolean {
+  try {
+    return statSync(full).isDirectory();
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function sources(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...sources(full));
+    if (isDirectory(full)) out.push(...sources(full));
     else if (/\.(ts|tsx)$/.test(entry)) out.push(full);
   }
   return out;
@@ -31,7 +61,7 @@ function sources(dir: string): string[] {
 
 /** Source with comments removed — a comment naming `marginLeft` is not a layout. */
 function code(file: string): string {
-  return readFileSync(file, 'utf8')
+  return readIfPresent(file)
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
@@ -148,6 +178,40 @@ describe('P6-14 · credit history names each entry in the reader’s language', 
     for (const locale of ['en', 'ar'] as const) {
       const catalogue = messages[locale] as Record<string, string>;
       const missing = kinds.filter((kind) => !catalogue[`plan.ledgerType.${kind}`]);
+      expect(missing, locale).toEqual([]);
+    }
+  });
+});
+
+describe('P6-15 · the Team screen names member and invitation states in words', () => {
+  it('every membership and invitation status has a label in both languages', () => {
+    for (const locale of ['en', 'ar'] as const) {
+      const catalogue = messages[locale] as Record<string, string>;
+      const missing = [
+        ...Object.values(MembershipStatus).map((s) => `members.memberStatus.${s}`),
+        ...Object.values(InvitationStatus).map((s) => `members.inviteStatus.${s}`),
+      ].filter((key) => !catalogue[key]);
+      expect(missing, locale).toEqual([]);
+    }
+  });
+
+  it('the page renders the label, never the raw status', () => {
+    const page = readFileSync(
+      path.join(ROOT, 'apps/dashboard/src/app/[locale]/members/page.tsx'),
+      'utf8',
+    );
+    expect(page).not.toMatch(/label=\{(m|i)\.status\}/);
+  });
+});
+
+describe('P6-15 · Home and Plan name workspace state and credit sources in words', () => {
+  it('every workspace status and grant source has a label in both languages', () => {
+    for (const locale of ['en', 'ar'] as const) {
+      const catalogue = messages[locale] as Record<string, string>;
+      const missing = [
+        ...Object.values(WorkspaceStatus).map((s) => `overview.workspaceStatus.${s}`),
+        ...Object.values(CreditGrantSource).map((s) => `plan.grantSource.${s}`),
+      ].filter((key) => !catalogue[key]);
       expect(missing, locale).toEqual([]);
     }
   });

@@ -24,12 +24,36 @@ import { ceilingFor, planDisplayName } from '../../apps/dashboard/src/server/pla
 
 const ROOT = path.resolve(__dirname, '../..');
 
+/**
+ * A file that vanished between listing and reading is not a failure: the
+ * boundary suites plant and delete `__*_probe.ts` files in these trees while
+ * this suite scans them (the same race `design-system.test.ts` documents). A
+ * missing file cannot contain what these scans look for, so it reads as empty.
+ */
+function readIfPresent(file: string): string {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+function isDirectory(full: string): boolean {
+  try {
+    return statSync(full).isDirectory();
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     if (entry === 'node_modules' || entry === '.next' || entry === 'dist') continue;
     const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...sourceFiles(full));
+    if (isDirectory(full)) out.push(...sourceFiles(full));
     else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.ts$/.test(entry)) out.push(full);
   }
   return out;
@@ -43,7 +67,7 @@ function writtenActions(): string[] {
   ];
   const found = new Set<string>();
   for (const file of files) {
-    const source = readFileSync(file, 'utf8');
+    const source = readIfPresent(file);
     for (const match of source.matchAll(/action: '([a-z_]+(?:\.[a-z_]+)+)'/g)) {
       found.add(match[1] as string);
     }

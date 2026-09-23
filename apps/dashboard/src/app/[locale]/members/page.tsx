@@ -25,7 +25,7 @@ import {
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { statusMessage, translator } from '../../../i18n/messages';
+import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import {
   changeRoleAction,
@@ -233,6 +233,10 @@ export default async function MembersPage({
 
   const assignableRoles = roles.filter((r) => assignable.includes(r.key));
 
+  /** A membership or invitation status in the reader's language (P6-15). */
+  const statusLabel = (kind: 'memberStatus' | 'inviteStatus', status: string): string =>
+    optionalMessage(locale, `members.${kind}.${status}`) ?? status;
+
   const may = (key: string) => workspace.permissionKeys.includes(key);
   const mayManage = may('member.assign_role') || may('member.remove');
   const error = typeof query['error'] === 'string' ? query['error'] : null;
@@ -399,7 +403,10 @@ export default async function MembersPage({
                     </span>
                   </Cell>
                   <Cell>
-                    <StatusBadge label={m.status} tone={statusTone(m.status)} />
+                    <StatusBadge
+                      label={statusLabel('memberStatus', m.status)}
+                      tone={statusTone(m.status)}
+                    />
                   </Cell>
                   {mayManage ? (
                     <Cell>
@@ -451,7 +458,12 @@ export default async function MembersPage({
                   { label: t('members.access.title'), value: accessLabel(m.brandScope) },
                   {
                     label: t('members.status'),
-                    value: <StatusBadge label={m.status} tone={statusTone(m.status)} />,
+                    value: (
+                      <StatusBadge
+                        label={statusLabel('memberStatus', m.status)}
+                        tone={statusTone(m.status)}
+                      />
+                    ),
                   },
                 ],
                 actions: mayManage ? (
@@ -510,7 +522,10 @@ export default async function MembersPage({
                         <Cell>{locale === 'ar' ? i.roleNameAr : i.roleNameEn}</Cell>
                         <Cell>{accessLabel(i.brandScope)}</Cell>
                         <Cell>
-                          <StatusBadge label={i.status} tone={statusTone(i.status)} />
+                          <StatusBadge
+                            label={statusLabel('inviteStatus', i.status)}
+                            tone={statusTone(i.status)}
+                          />
                         </Cell>
                         <Cell>{invitationActions(i.id, i.email, i.status)}</Cell>
                       </tr>
@@ -532,7 +547,12 @@ export default async function MembersPage({
                         { label: t('members.access.title'), value: accessLabel(i.brandScope) },
                         {
                           label: t('members.status'),
-                          value: <StatusBadge label={i.status} tone={statusTone(i.status)} />,
+                          value: (
+                            <StatusBadge
+                              label={statusLabel('inviteStatus', i.status)}
+                              tone={statusTone(i.status)}
+                            />
+                          ),
                         },
                       ],
                       actions: invitationActions(i.id, `${i.email}-mobile`, i.status) ?? undefined,

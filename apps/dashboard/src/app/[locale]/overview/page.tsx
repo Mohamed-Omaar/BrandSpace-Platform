@@ -30,7 +30,7 @@ import {
   latestShift,
   performanceShiftItem,
 } from '../../../server/performance-patterns';
-import { messages, translator } from '../../../i18n/messages';
+import { messages, optionalMessage, translator } from '../../../i18n/messages';
 import { activityActionLabel } from '../../../server/activity-labels';
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -710,7 +710,12 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
                 description={t('overview.workspaceSectionHint')}
                 actions={
                   <StatusBadge
-                    label={workspace.workspaceStatus}
+                    label={
+                      optionalMessage(
+                        locale,
+                        `overview.workspaceStatus.${workspace.workspaceStatus}`,
+                      ) ?? workspace.workspaceStatus
+                    }
                     tone={statusTone(workspace.workspaceStatus)}
                     testId={`workspace-status-${workspace.workspaceStatus}`}
                   />

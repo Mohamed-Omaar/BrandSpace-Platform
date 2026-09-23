@@ -19,8 +19,9 @@ import { inlineEndOverhang } from './overflow';
  *   - nothing overhangs the inline-end edge (measured properly, F-26 — in RTL
  *     that is the LEFT edge, which a scroll-width check cannot see);
  *   - axe reports NO violation at WCAG 2.2 AA — not "no serious one";
- *   - the Arabic screen's heading is in Arabic, and no screen shows a raw
- *     dictionary key or the word `undefined` (a missing key renders as that).
+ *   - the Arabic screen's heading is in Arabic and it shows no raw enum state,
+ *     and no screen shows a raw dictionary key or the word `undefined` (a
+ *     missing key renders as that).
  *
  * READ-ONLY. It runs in both viewport projects in parallel against the shared
  * seeded workspace, so it navigates and measures and never submits.
@@ -86,6 +87,16 @@ const RAW_KEY = new RegExp(`(^|\\s)(${PREFIXES.join('|')})\\.[a-zA-Z][a-zA-Z_.]*
 
 const ARABIC = /[\u0600-\u06FF]/;
 
+/**
+ * A database enum printed raw — `ACTIVE`, `NEEDS_REAUTH`. On an Arabic screen
+ * that is untranslated state, which the heading and key checks cannot see
+ * (P6-15 found the Team screen's member statuses this way). Checked in Arabic
+ * only, where no English word belongs; an acronym like `AI` or `CSV` is not
+ * a state and is too short or absent from the list to match.
+ */
+const RAW_STATE =
+  /\b([A-Z]{2,}_[A-Z_]+|ACTIVE|PENDING|DRAFT|SCHEDULED|FAILED|PUBLISHED|REVOKED|EXPIRED|ARCHIVED|APPROVED|REJECTED|READY|PROCESSING|QUEUED|RUNNING|SUCCEEDED|CANCELLED|DISABLED|ENABLED|CONNECTED|INVITED|SUSPENDED|REMOVED|ACCEPTED|PAUSED|COMPLETED)\b/;
+
 test.describe('P6-14 · every customer screen, both languages', () => {
   test.describe.configure({ timeout: 120_000 });
 
@@ -121,6 +132,7 @@ test.describe('P6-14 · every customer screen, both languages', () => {
         expect(text.match(RAW_KEY)?.[0] ?? null, `${label} shows a raw key`).toBeNull();
 
         if (locale === 'ar') {
+          expect(text.match(RAW_STATE)?.[0] ?? null, `${label} shows a raw state`).toBeNull();
           const heading = (await page.locator('h1').first().innerText()).trim();
           expect(heading, `${label} heading`).toMatch(ARABIC);
         }
