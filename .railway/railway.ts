@@ -356,7 +356,10 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/web start',
-      healthcheckPath: '/',
+      // The locale router redirects `/` with HTTP 307. Railway healthchecks
+      // require a successful response rather than a redirect, so probe the
+      // deterministic verification page that deliberately returns 200.
+      healthcheckPath: '/en/status',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
