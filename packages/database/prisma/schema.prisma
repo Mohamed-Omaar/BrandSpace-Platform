@@ -518,6 +518,9 @@ model Workspace {
   @@index([ownerUserId])
   @@index([planKey])
   @@map("workspace")
+  noteThreads NoteThread[]
+  notes       Note[]
+  noteMentions NoteMention[]
 }
 
 /// TENANT-OWNED. Links a User to a Workspace with a role and optional brand scope.
@@ -1856,6 +1859,7 @@ model Brand {
   @@index([workspaceId, primaryLogoAssetId])
   @@index([workspaceId, secondaryLogoAssetId])
   @@map("brand")
+  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. One unit of brand knowledge — docs/DATABASE.md
@@ -2911,6 +2915,7 @@ model ContentItem {
   @@index([workspaceId, brandId, updatedAt(sort: Desc)])
   @@index([expiresAt])
   @@map("content_item")
+  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. Per-platform, per-locale rendering of a content
@@ -4301,6 +4306,7 @@ model Campaign {
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, startDate, endDate])
   @@map("campaign")
+  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. ONE GENERATED PIECE OF INTELLIGENCE — an
@@ -5788,4 +5794,179 @@ model IntegrationHealthCheck {
   @@index([category, providerKey, environment, checkedAt(sort: Desc)], map: "integration_health_check_lookup_idx")
   @@index([checkedAt])
   @@map("integration_health_check")
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 6 — CONTEXTUAL COLLABORATION (P6-05)
+//
+// The one genuinely new tenant-owned capability in Phase 6. Everything else the
+// phase touches already had a domain behind it.
+//
+// NOTES ARE NOT BRAND BRAIN KNOWLEDGE, AND THE SEPARATION IS STRUCTURAL RATHER
+// THAN A CONVENTION SOMEBODY HAS TO REMEMBER. There is no foreign key from a
+// note into `BrandKnowledgeItem`, no shared table, and no write path from one to
+// the other anywhere in the product. A note is what a colleague said about a
+// piece of work; brand knowledge is what the brand has decided is true, carries
+// provenance and an authority level, and governs what every AI surface
+// generates. Letting a passing remark become governed memory — silently, because
+// it was typed into the same screen — is exactly the failure the four-layer
+// model with its HUMAN > DOCUMENT > AI_INFERRED precedence exists to prevent.
+// If a note SHOULD become knowledge, a person promotes it deliberately through
+// Brand Brain's own review, where it arrives with provenance saying where it
+// came from.
+// ---------------------------------------------------------------------------
+
+/// What a thread is attached to.
+///
+/// A DISCRIMINATOR BESIDE REAL FOREIGN KEYS, not instead of them. A single
+/// polymorphic `subjectId` with no constraint would have been less schema and
+/// would have left the database unable to tell a live subject from a deleted
+/// one — orphan threads accumulating against content nobody can open, and no
+/// cascade to clean them up. Each subject the product supports gets a nullable
+/// FK and a CHECK that exactly the right one is set.
+///
+/// It is an enum so that adding a subject is a migration with a constraint
+/// change, which is the point at which somebody has to decide what deleting
+/// that subject does to its conversation.
+enum NoteSubjectType {
+  /// A draft, a variant, a piece of work in the Content Studio.
+  CONTENT_ITEM
+  /// A campaign, as a project room.
+  CAMPAIGN
+  /// The brand itself — for conversations that are not about one artefact.
+  BRAND
+}
+
+enum NoteThreadStatus {
+  OPEN
+  RESOLVED
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One conversation about one thing.
+///
+/// THE THREAD CARRIES THE STATE AND THE NOTES CARRY THE WORDS. Resolve/reopen,
+/// assignment and the subject belong to the conversation, not to whichever
+/// message happened to be first — a design where the first note owns the thread
+/// makes deleting it either impossible or destructive.
+model NoteThread {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// The brand this conversation belongs to.
+  ///
+  /// ALWAYS SET, including when the subject is a content item or a campaign,
+  /// because brand scope is how a member's visibility is filtered everywhere
+  /// else in the product (`brandIdScopeFilter`). Deriving it by joining to the
+  /// subject on every read would make the most common query a join and would
+  /// put the scoping rule in the query rather than in the row.
+  brandId String @db.Uuid
+
+  subjectType NoteSubjectType
+
+  /// Exactly one of these is set, matching `subjectType` — enforced by a CHECK
+  /// constraint in the migration, not by hope. When the subject is the BRAND
+  /// itself both are null and `brandId` is the subject.
+  contentItemId String? @db.Uuid
+  campaignId    String? @db.Uuid
+
+  status NoteThreadStatus @default(OPEN)
+
+  createdByUserId String  @db.Uuid
+  /// Who this is waiting on, when it is waiting on somebody in particular.
+  ///
+  /// OPTIONAL BECAUSE MOST COMMENTS ARE NOT TASKS. A thread that must always
+  /// name an assignee turns every passing remark into somebody's to-do list.
+  assignedToUserId String? @db.Uuid
+
+  resolvedAt       DateTime? @db.Timestamptz(6)
+  resolvedByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand       Brand        @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "note_thread_brand_fkey")
+  contentItem ContentItem? @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_content_item_fkey")
+  campaign    Campaign?    @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_campaign_fkey")
+  notes       Note[]
+
+  @@unique([workspaceId, id], name: "note_thread_workspace_scope")
+  /// The subject's own conversation list, which is the most common read.
+  @@index([workspaceId, brandId, subjectType, status])
+  @@index([workspaceId, contentItemId])
+  @@index([workspaceId, campaignId])
+  /// "What is waiting on me", for the Command Center.
+  @@index([workspaceId, assignedToUserId, status])
+  @@map("note_thread")
+}
+
+/// TENANT-OWNED. One message in a thread.
+model Note {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  threadId    String @db.Uuid
+
+  authorUserId String @db.Uuid
+
+  /// The message, as plain text.
+  ///
+  /// NOT MARKUP, AND NOT HTML. Everything a note needs to say fits in a
+  /// sentence, and accepting markup from one member and rendering it to another
+  /// is a stored-XSS surface bought for formatting nobody asked for. Mentions
+  /// are a separate table rather than a syntax parsed out of this at render
+  /// time, so what a note MEANS does not depend on re-parsing it identically
+  /// everywhere.
+  body String
+
+  /// Set when the author changes the text, so a reader can tell.
+  editedAt  DateTime? @db.Timestamptz(6)
+  /// Soft delete: the thread keeps its shape and the audit trail keeps its row.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  thread    NoteThread @relation(fields: [workspaceId, threadId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_fkey")
+  mentions  NoteMention[]
+
+  @@unique([workspaceId, id], name: "note_workspace_scope")
+  @@index([workspaceId, threadId, createdAt])
+  @@map("note")
+}
+
+/// TENANT-OWNED. One person named in one note.
+///
+/// A ROW RATHER THAN A SYNTAX. Storing mentions as `@name` inside the body would
+/// mean every reader re-parses the text to know who was addressed, every rename
+/// silently breaks an old mention, and "is this waiting on me" becomes a LIKE
+/// query. The row is the fact; the body is the sentence.
+///
+/// THE MENTIONED PERSON IS A MEMBER OF THIS WORKSPACE, and the service checks
+/// that before the row is written. Without it, mentioning an arbitrary user id
+/// would tell the mentioner whether that account exists — and would put a
+/// notification in a stranger's list.
+model NoteMention {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  noteId      String @db.Uuid
+
+  mentionedUserId String @db.Uuid
+
+  /// When the mentioned person saw it. Null is unread, which is what the
+  /// Command Center counts.
+  readAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  note      Note      @relation(fields: [workspaceId, noteId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_mention_note_fkey")
+
+  /// One mention of one person per note: saying somebody's name twice in a
+  /// sentence is not two notifications.
+  @@unique([workspaceId, noteId, mentionedUserId])
+  @@unique([workspaceId, id], name: "note_mention_workspace_scope")
+  /// "What is unread for me", for the Command Center and the bell.
+  @@index([workspaceId, mentionedUserId, readAt])
+  @@map("note_mention")
 }

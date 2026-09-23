@@ -317,6 +317,80 @@ describe('P6-04 · brand scope is honoured', () => {
   });
 });
 
+describe('P6-05 · the reader-specific sources appear once notes exist', () => {
+  it('counts threads assigned to this person, and to nobody else', async () => {
+    const fixture = await freshWorkspace('assigned');
+    const owner = await platform.workspace
+      .findUniqueOrThrow({ where: { id: fixture.workspaceId }, select: { ownerUserId: true } })
+      .then((w) => w.ownerUserId);
+
+    await platform.noteThread.create({
+      data: {
+        workspaceId: fixture.workspaceId,
+        brandId: fixture.brandId,
+        subjectType: 'BRAND',
+        status: 'OPEN',
+        createdByUserId: owner,
+        assignedToUserId: owner,
+      },
+    });
+
+    const mine = await attentionItems(db(), session(fixture), owner);
+    expect(mine.find((i) => i.kind === 'notes-assigned')?.count).toBe(1);
+
+    // Somebody else, in the same workspace, is not carrying this.
+    const theirs = await attentionItems(db(), session(fixture), crypto.randomUUID());
+    expect(theirs.find((i) => i.kind === 'notes-assigned')).toBeUndefined();
+  });
+
+  it('omits both sources entirely when no reader is supplied', async () => {
+    // The workspace items still answer; the reader items have nobody to be
+    // about. This is what keeps every existing caller working rather than
+    // silently reporting zero for a question nobody asked.
+    const fixture = await freshWorkspace('no-reader');
+    const owner = await platform.workspace
+      .findUniqueOrThrow({ where: { id: fixture.workspaceId }, select: { ownerUserId: true } })
+      .then((w) => w.ownerUserId);
+    await platform.noteThread.create({
+      data: {
+        workspaceId: fixture.workspaceId,
+        brandId: fixture.brandId,
+        subjectType: 'BRAND',
+        status: 'OPEN',
+        createdByUserId: owner,
+        assignedToUserId: owner,
+      },
+    });
+
+    const items = await attentionItems(db(), session(fixture));
+    expect(items.find((i) => i.kind === 'notes-assigned')).toBeUndefined();
+  });
+
+  it('a thread assigned in workspace B never counts for the same person in A', async () => {
+    const a = await freshWorkspace('reader-a');
+    const b = await freshWorkspace('reader-b');
+    const bOwner = await platform.workspace
+      .findUniqueOrThrow({ where: { id: b.workspaceId }, select: { ownerUserId: true } })
+      .then((w) => w.ownerUserId);
+
+    await platform.noteThread.create({
+      data: {
+        workspaceId: b.workspaceId,
+        brandId: b.brandId,
+        subjectType: 'BRAND',
+        status: 'OPEN',
+        createdByUserId: bOwner,
+        assignedToUserId: bOwner,
+      },
+    });
+
+    const inA = await attentionItems(db(), session(a), bOwner);
+    expect(inA.find((i) => i.kind === 'notes-assigned')).toBeUndefined();
+    const inB = await attentionItems(db(), session(b), bOwner);
+    expect(inB.find((i) => i.kind === 'notes-assigned')?.count).toBe(1);
+  });
+});
+
 describe('P6-04 · a member is never offered a link they cannot follow', () => {
   it('runs no source whose permission the member lacks', async () => {
     const fixture = await freshWorkspace('viewer');

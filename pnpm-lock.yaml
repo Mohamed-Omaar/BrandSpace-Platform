@@ -214,6 +214,9 @@ importers:
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../../packages/brand-brain
+      '@brandspace/collaboration':
+        specifier: workspace:*
+        version: link:../../packages/collaboration
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -545,6 +548,19 @@ importers:
       zod:
         specifier: 3.25.76
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/collaboration:
+    dependencies:
+      '@brandspace/database':
+        specifier: workspace:*
+        version: link:../database
+      '@brandspace/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -954,6 +970,9 @@ importers:
       '@brandspace/brand-brain':
         specifier: workspace:*
         version: link:../packages/brand-brain
+      '@brandspace/collaboration':
+        specifier: workspace:*
+        version: link:../packages/collaboration
       '@brandspace/config':
         specifier: workspace:*
         version: link:../packages/config

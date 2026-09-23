@@ -1,6 +1,7 @@
 import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
 
 /**
  * WHAT NEEDS A PERSON, RIGHT NOW, IN THIS WORKSPACE (P6-04).
@@ -233,6 +234,64 @@ async function brandsWithNoKnowledge(
 }
 
 /**
+ * Conversations waiting on this person, and mentions they have not read.
+ *
+ * THE SOURCE P6-04 DELIBERATELY LEFT ABSENT. Until P6-05 there were no notes,
+ * so there was no source rather than a source returning zero — a zero meaning
+ * "not built" is a fabricated metric wearing a number. Now that the capability
+ * exists the source does too, and it is the only one here that is about the
+ * READER specifically rather than about the workspace.
+ *
+ * Two separate items, because they are two different requests: somebody
+ * ASSIGNED you a thread, which is a task; somebody NAMED you in one, which is a
+ * conversation you are being invited into. Collapsing them into "3 things" would
+ * lose which of the two it is, and they are answered differently.
+ */
+async function assignedThreads(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+  userId: string,
+): Promise<AttentionItem | null> {
+  const count = await db.noteThread.count({
+    where: {
+      workspaceId: session.workspaceId,
+      assignedToUserId: userId,
+      status: 'OPEN',
+      ...brandIdScopeFilter(session.brandScope),
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'notes-assigned', severity: 'waiting', count, href: '/overview' };
+}
+
+async function unreadMentions(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+  userId: string,
+): Promise<AttentionItem | null> {
+  /*
+   * NO BRAND SCOPE CLAUSE, AND THAT IS CORRECT RATHER THAN AN OMISSION. A
+   * mention row carries no brand: it names a person in a note, and the note's
+   * thread is what is brand-scoped. Somebody is either named or they are not,
+   * and a mention they can see the notification for but not the thread would be
+   * worse than either — so the count is of mentions in threads they can reach,
+   * which the join below expresses directly.
+   */
+  const count = await db.noteMention.count({
+    where: {
+      workspaceId: session.workspaceId,
+      mentionedUserId: userId,
+      readAt: null,
+      note: { thread: { ...brandIdScopeFilter(session.brandScope) } },
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'notes-mentions', severity: 'waiting', count, href: '/overview' };
+}
+
+/**
  * Every source, in one place, with the permission each one needs.
  *
  * A SOURCE THE MEMBER MAY NOT SEE IS NOT RUN. The rail already hides links a
@@ -255,6 +314,25 @@ const SOURCES: readonly {
 ];
 
 /**
+ * The sources that are about the READER rather than about the workspace.
+ *
+ * Separate because they need the acting user's id, which the workspace context
+ * does not carry — and threading a user id through every source just so two of
+ * them can use it would make the other five look as though they depended on it.
+ */
+const READER_SOURCES: readonly {
+  readonly permission: string | null;
+  readonly run: (
+    db: TenantScopedClient,
+    session: CustomerWorkspaceContext,
+    userId: string,
+  ) => Promise<AttentionItem | null>;
+}[] = [
+  { permission: NOTE_PERMISSION, run: assignedThreads },
+  { permission: NOTE_PERMISSION, run: unreadMentions },
+];
+
+/**
  * What needs attention, most urgent first.
  *
  * ONE SOURCE FAILING MUST NOT TAKE THE HOME SCREEN DOWN. Each runs
@@ -265,11 +343,29 @@ const SOURCES: readonly {
 export async function attentionItems(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
+  /**
+   * The acting member, for the two sources that are about THEM.
+   *
+   * Optional so that a caller with no user in hand still gets the workspace
+   * items rather than nothing — and so that adding the reader did not change
+   * every existing call site into a broken one.
+   */
+  userId?: string,
 ): Promise<readonly AttentionItem[]> {
   const permitted = SOURCES.filter(
     (source) => source.permission === null || session.permissionKeys.includes(source.permission),
   );
-  const settled = await Promise.allSettled(permitted.map((source) => source.run(db, session)));
+  const readerPermitted =
+    userId === undefined
+      ? []
+      : READER_SOURCES.filter(
+          (source) =>
+            source.permission === null || session.permissionKeys.includes(source.permission),
+        );
+  const settled = await Promise.allSettled([
+    ...permitted.map((source) => source.run(db, session)),
+    ...readerPermitted.map((source) => source.run(db, session, userId as string)),
+  ]);
 
   const items = settled
     .filter(

@@ -232,7 +232,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
    * somebody at a route that answers 404 is a dead link delivered as a to-do.
    */
   const attention = await inWorkspace(workspace.workspaceId, async (scoped) =>
-    attentionItems(scoped.db, workspace),
+    attentionItems(scoped.db, workspace, customer.userId),
   );
 
   const brandContext = await brandContextFor(workspace, '/overview');
