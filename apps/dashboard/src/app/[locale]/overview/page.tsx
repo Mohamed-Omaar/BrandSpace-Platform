@@ -22,10 +22,32 @@ import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { activityService, notificationService } from '../../../server/approvals-context';
+import { attentionItems, type AttentionItem } from '../../../server/command-center';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The sentence for one attention item, in the reader's language.
+ *
+ * WHY A FUNCTION AND NOT A TEMPLATE AT THE CALL SITE. Two of the items need a
+ * different sentence for one versus many — "Northwind has no brand knowledge
+ * yet" is actionable in a way "1 brand" is not — and that choice belongs beside
+ * the strings rather than inside the JSX.
+ *
+ * `{count}` and `{detail}` are substituted rather than concatenated, so Arabic
+ * can put the number where Arabic puts it (CLAUDE.md §4).
+ */
+function attentionSentence(t: (key: never) => string, item: AttentionItem): string {
+  const key =
+    item.detail === undefined && item.kind === 'brand-brain-empty'
+      ? 'attention.brand-brain-empty.many'
+      : `attention.${item.kind}`;
+  return t(key as never)
+    .replace('{count}', String(item.count))
+    .replace('{detail}', item.detail ?? '');
+}
 
 /**
  * The authenticated workspace home, and the screen the approved direction is
@@ -196,6 +218,23 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   const primaryHref = maySeeMembers ? `/${locale}/members` : `/${locale}/settings`;
   const primaryLabel = maySeeMembers ? t('overview.hero.primary') : t('nav.settings');
 
+  /*
+   * WHAT NEEDS A PERSON — THE COMMAND CENTER'S FIRST QUESTION (P6-04).
+   *
+   * Above this, the page answers "how is the workspace doing" with real figures
+   * and honest unavailable states, which it has always done well. What it never
+   * answered is the question somebody opening it actually has, and the result
+   * was a member reading four correct numbers and still having to go looking.
+   *
+   * It runs in the same tenant-scoped transaction the summary uses, so it costs
+   * one round trip rather than five, and every source is gated by the permission
+   * its destination requires — an attention item is a link, and pointing
+   * somebody at a route that answers 404 is a dead link delivered as a to-do.
+   */
+  const attention = await inWorkspace(workspace.workspaceId, async (scoped) =>
+    attentionItems(scoped.db, workspace),
+  );
+
   const brandContext = await brandContextFor(workspace, '/overview');
 
   return (
@@ -258,6 +297,70 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       }
     >
       <Stack>
+        {/*
+          THE ATTENTION LIST COMES FIRST, ABOVE THE STATISTICS.
+
+          Ordering is the whole point of a Command Center: what needs doing
+          outranks how things are going. The statistics below are unchanged and
+          still answer the second question.
+
+          NO EMPTY-STATE CLUTTER. When nothing is waiting, this is ONE sentence
+          saying so — not a card, not an illustration, not a zero. A workspace
+          with nothing outstanding is a good state and should read like one.
+        */}
+        <Card testId="attention-card">
+          <SectionHeader title={t('attention.title')} />
+          {attention.length === 0 ? (
+            <p
+              data-testid="attention-none"
+              style={{ margin: 0, ...typographyTokens.body, color: colorTokens.textSecondary }}
+            >
+              {t('attention.none')}
+            </p>
+          ) : (
+            <ul
+              data-testid="attention-list"
+              style={{
+                margin: 0,
+                padding: 0,
+                listStyle: 'none',
+                display: 'grid',
+                gap: spacingTokens.sm,
+              }}
+            >
+              {attention.map((item) => (
+                <li key={item.kind}>
+                  <Link
+                    href={`/${locale}${item.href}`}
+                    data-testid={`attention-${item.kind}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: spacingTokens.sm,
+                      padding: spacingTokens.sm,
+                      borderRadius: '0.75rem',
+                      color: colorTokens.textPrimary,
+                      textDecoration: 'none',
+                    }}
+                    className="bs-control bs-pressable"
+                  >
+                    {/*
+                      The badge carries the severity as a WORD as well as a
+                      colour — colour alone fails WCAG 1.4.1, and "blocked" and
+                      "waiting" are genuinely different instructions.
+                    */}
+                    <StatusBadge
+                      tone={item.severity === 'blocked' ? 'danger' : statusTone(item.severity)}
+                      label={t(`attention.severity.${item.severity}` as never)}
+                    />
+                    <span style={{ ...typographyTokens.body }}>{attentionSentence(t, item)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
         {/*
           `.metric-row { grid-template-columns: repeat(4,1fr) }`, stepping to
           TWO columns at 900 and staying at two down to 390 — the demo never

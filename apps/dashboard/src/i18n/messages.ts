@@ -24,6 +24,44 @@ export const messages = {
     'topbar.previewTitle': 'غير متصل بعد',
     'topbar.previewBody':
       'هذا العنصر جزء من التصميم المعتمد، ولم تُفعَّل وظيفته بعد. سيعمل عند إطلاق المحتوى والإشعارات في مرحلة لاحقة، ولا ينفّذ أي إجراء الآن.',
+    /*
+     * P6-04 — THE SIDEBAR'S SEVEN GROUPS.
+     *
+     * The rail already rendered grouped sections (`ShellNavSection.title`), and
+     * the Control Center already used them; the customer dashboard passed all
+     * twenty-one entries as ONE unnamed section. These are the group names, not
+     * a new component and not a new visual treatment.
+     *
+     * The order is the order of the work: know the brand, plan it, make it,
+     * publish it, learn from it, automate it — and the workspace's own
+     * administration last, because it is not the work.
+     */
+    /*
+     * P6-04 — THE COMMAND CENTER'S ATTENTION LIST.
+     *
+     * Every sentence names a piece of WORK and what to do about it. `{count}`
+     * is a real number from a real query; there is no string here for "nothing
+     * needs attention except the one that says exactly that, because a
+     * Command Center with nothing on it is a workspace with nothing waiting.
+     */
+    'attention.title': 'ما الذي يحتاج انتباهك',
+    'attention.none': 'لا شيء ينتظرك الآن.',
+    'attention.publishing-failed': 'فشل نشر {count} من المنشورات.',
+    'attention.schedule-overdue': 'مرّ موعد {count} من المنشورات المجدولة دون نشر.',
+    'attention.connection-reauth': 'يحتاج {count} من الحسابات المتصلة إعادة تفويض.',
+    'attention.content-in-review': '{count} من المحتوى بانتظار المراجعة.',
+    'attention.brand-brain-empty': 'لا توجد معرفة بعد للعلامة {detail}.',
+    'attention.brand-brain-empty.many': '{count} من العلامات بلا معرفة بعد.',
+    'attention.severity.blocked': 'متوقف',
+    'attention.severity.waiting': 'بالانتظار',
+    'attention.severity.notice': 'للعلم',
+    'nav.group.core': 'الأساس',
+    'nav.group.plan': 'التخطيط',
+    'nav.group.create': 'الإنشاء',
+    'nav.group.publish': 'النشر',
+    'nav.group.improve': 'التحسين',
+    'nav.group.automate': 'الأتمتة',
+    'nav.group.workspace': 'مساحة العمل',
     'nav.primary': 'التنقل الرئيسي',
     'nav.open': 'فتح قائمة التنقل',
     'nav.close': 'إغلاق قائمة التنقل',
@@ -1420,6 +1458,25 @@ export const messages = {
     'topbar.previewTitle': 'Not connected yet',
     'topbar.previewBody':
       'This control is part of the approved design and its behaviour has not shipped. It will work when content and notifications arrive in a later phase; it performs no action today.',
+    'attention.title': 'What needs you',
+    'attention.none': 'Nothing is waiting on you right now.',
+    'attention.publishing-failed': '{count} posts failed to publish.',
+    'attention.schedule-overdue':
+      '{count} scheduled posts are past their time and have not published.',
+    'attention.connection-reauth': '{count} connected accounts need re-authorising.',
+    'attention.content-in-review': '{count} items are waiting for review.',
+    'attention.brand-brain-empty': '{detail} has no brand knowledge yet.',
+    'attention.brand-brain-empty.many': '{count} brands have no brand knowledge yet.',
+    'attention.severity.blocked': 'Blocked',
+    'attention.severity.waiting': 'Waiting',
+    'attention.severity.notice': 'Notice',
+    'nav.group.core': 'Core',
+    'nav.group.plan': 'Plan',
+    'nav.group.create': 'Create',
+    'nav.group.publish': 'Publish',
+    'nav.group.improve': 'Improve',
+    'nav.group.automate': 'Automate',
+    'nav.group.workspace': 'Workspace',
     'nav.primary': 'Main navigation',
     'nav.open': 'Open navigation menu',
     'nav.close': 'Close navigation menu',

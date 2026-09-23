@@ -55,12 +55,40 @@ import { signOutAction } from '../app/[locale]/(auth)/actions';
  * permission)` and answers 404 without it, so removing a link is not what keeps
  * anyone out (docs/SECURITY.md §4.5).
  */
-const NAV: readonly {
+interface NavEntry {
   href: string;
   key: MessageKey;
   permission: string | null;
   icon: ReactNode;
-}[] = [
+}
+
+/**
+ * The rail's groups, in the order of the work (P6-04).
+ *
+ * WHY THIS IS A DATA CHANGE AND NOT A COMPONENT ONE. `AppShell` has always
+ * taken `readonly ShellNavSection[]` with an optional per-section `title`, has
+ * always rendered those titles as `.nav-group-title`, and already replaces a
+ * heading with a divider when the rail is collapsed — the Control Center has
+ * used all of it since Phase 2C. The customer dashboard passed twenty-one
+ * entries as ONE unnamed section, so a member arriving at a workspace met an
+ * undifferentiated list and had to know the product to find anything in it.
+ *
+ * Nothing about the sidebar's appearance changes: same geometry, same density,
+ * same icons, same active treatment, same collapse behaviour. What changes is
+ * that the list says what its parts are for.
+ *
+ * THE ORDER IS THE ORDER OF THE WORK: know the brand, plan it, make it, publish
+ * it, learn from it, automate it — and the workspace's own administration last,
+ * because administering the workspace is not the work.
+ *
+ * EVERY PERMISSION GATE IS CARRIED OVER UNCHANGED. Grouping must not become a
+ * way to leak an entry: each route still calls `requireWorkspace(locale,
+ * permission)` and answers 404 without it, the hidden link is still tidiness
+ * rather than security, and a group whose every entry is filtered out renders
+ * no heading at all — a titled group with nothing under it would be the dead
+ * navigation §20 forbids, wearing a label.
+ */
+const NAV: readonly NavEntry[] = [
   { href: '/overview', key: 'nav.overview', permission: null, icon: <HomeIcon size={20} /> },
   {
     href: '/brand-brain',
@@ -256,6 +284,96 @@ const NAV: readonly {
 ];
 
 /**
+ * Which group each entry belongs to, and the order within it.
+ *
+ * A TABLE OF HREFS rather than a restructured `NAV`, deliberately. Every entry
+ * above carries the reasoning for its permission gate, its icon reuse and the
+ * phase it arrived in — moving them into nested arrays would have rewritten all
+ * of that to express one ordering. This says the ordering and leaves the
+ * reasoning where it was written.
+ *
+ * IT IS CHECKED RATHER THAN TRUSTED: `navSections` below asserts that every
+ * `NAV` entry appears exactly once here, so adding a route without placing it
+ * cannot silently drop it out of the rail.
+ */
+const NAV_GROUPS: readonly { titleKey: MessageKey; hrefs: readonly string[] }[] = [
+  { titleKey: 'nav.group.core', hrefs: ['/overview', '/brand-brain'] },
+  { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
+  { titleKey: 'nav.group.create', hrefs: ['/content', '/creative', '/assets'] },
+  { titleKey: 'nav.group.publish', hrefs: ['/calendar', '/approvals', '/integrations'] },
+  { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
+  { titleKey: 'nav.group.automate', hrefs: ['/copilot', '/automations'] },
+  /*
+   * WORKSPACE holds four entries the brief's list does not name — `/permissions`,
+   * `/notifications`, `/plan` and `/onboarding`. They are real, reachable routes
+   * with real screens, and dropping them from the rail to match a list would
+   * have hidden working product rather than organised it. Each sits where its
+   * question belongs: what may I do, what happened to me, what am I entitled
+   * to, what is left to set up.
+   */
+  {
+    titleKey: 'nav.group.workspace',
+    hrefs: [
+      '/members',
+      '/permissions',
+      '/activity',
+      '/notifications',
+      '/onboarding',
+      '/plan',
+      '/billing',
+      '/settings',
+    ],
+  },
+];
+
+/**
+ * The rail's sections, filtered by the member's effective permissions.
+ *
+ * TWO INVARIANTS, BOTH ENFORCED HERE rather than left to review:
+ *
+ *   1. every `NAV` entry is placed in exactly one group — a route added without
+ *      a placement would otherwise vanish from the rail silently, which is the
+ *      opposite failure from a dead link and just as invisible;
+ *   2. a group whose entries are ALL filtered out renders nothing — no heading,
+ *      no divider. A titled group with nothing under it is dead navigation
+ *      wearing a label, and a Viewer (D-62, D-130) holds `workspace.read` and
+ *      nothing else, so most groups are empty for them.
+ */
+function navSections(
+  permissionKeys: readonly string[],
+  locale: string,
+  activePath: string | undefined,
+  t: (key: MessageKey) => string,
+): readonly ShellNavSection[] {
+  const byHref = new Map(NAV.map((item) => [item.href, item]));
+  const placed = NAV_GROUPS.flatMap((group) => group.hrefs);
+  if (placed.length !== NAV.length || new Set(placed).size !== NAV.length) {
+    // A programming error, not a runtime condition: it can only be reached by
+    // editing NAV or NAV_GROUPS and not the other.
+    throw new Error('Every NAV entry must appear in exactly one NAV_GROUPS entry.');
+  }
+
+  const sections: ShellNavSection[] = [];
+  for (const group of NAV_GROUPS) {
+    const items = group.hrefs
+      .map((href) => byHref.get(href))
+      .filter((item): item is NavEntry => item !== undefined)
+      .filter((item) => item.permission === null || permissionKeys.includes(item.permission))
+      .map((item) => ({
+        href: `/${locale}${item.href}`,
+        label: t(item.key),
+        icon: item.icon,
+        active: activePath === item.href,
+        // The existing convention, preserved: renaming these would drop the
+        // end-to-end assertions that use them.
+        testId: `nav-${item.href.slice(1)}`,
+      }));
+    if (items.length > 0) sections.push({ title: t(group.titleKey), items });
+  }
+  return sections;
+}
+
+/**
  * The two lines the brand card shows, for each of the four resolutions.
  *
  * THE CARD NEVER LIES ABOUT WHICH BRAND YOU ARE ON. "No brand selected" is a
@@ -363,21 +481,7 @@ export async function WorkspaceShell({
     switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
   const identity = customerName ?? workspaceName;
 
-  const sections: readonly ShellNavSection[] = [
-    {
-      items: NAV.filter(
-        (item) => item.permission === null || permissionKeys.includes(item.permission),
-      ).map((item) => ({
-        href: `/${locale}${item.href}`,
-        label: t(item.key),
-        icon: item.icon,
-        active: activePath === item.href,
-        // The existing convention, preserved: renaming these would drop the
-        // end-to-end assertions that use them.
-        testId: `nav-${item.href.slice(1)}`,
-      })),
-    },
-  ];
+  const sections = navSections(permissionKeys, locale, activePath, t);
 
   /*
    * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.
