@@ -389,6 +389,48 @@ export class UsageService {
          * path on the way in. The winning row is read and compared by the same
          * rule the pre-check applies.
          */
+        /*
+         * A CONCURRENT REPLAY THAT LOST THE RACE IS REFUSED BY THE CEILING
+         * BEFORE IT EVER REACHES THE UNIQUE KEY (P6-03b).
+         *
+         * The duplicate-key path below only catches a loser that got as far as
+         * writing its idempotency record. Under a ceiling the WINNER just
+         * filled, the loser never gets there: it blocks on the counter row,
+         * wakes to find the slot taken, and throws `QUOTA_EXCEEDED` from inside
+         * the transaction. So two simultaneous clicks on "create brand", under
+         * a plan granting one brand, produced one brand and one alarming quota
+         * error — for work the customer's own first click had just completed.
+         *
+         * THE SEQUENTIAL REPLAY OF THAT SAME KEY DOES NOT REFUSE: the
+         * pre-check at the top of `consume` finds the record and returns the
+         * current consumption. This makes the concurrent path agree with it,
+         * by the same rule and the same comparison — a key already recorded for
+         * THIS request has taken its slot, and is not asking for a second one.
+         *
+         * A GENUINE REFUSAL IS UNTOUCHED, because it has no record to find: a
+         * different key over the ceiling still throws, which is what every
+         * `brands = 0` and every second-brand case depends on. A different
+         * request wearing this key is a CONFLICT by the same rule as everywhere
+         * else, not a quiet success.
+         */
+        if (error instanceof QuotaExceededError) {
+          const recorded = await this.#recordedRequest(input.idempotencyKey);
+          if (!recorded) throw error;
+          if (!sameUsageRequest(recorded, wanted)) {
+            throw new AppError(
+              'CONFLICT',
+              'That idempotency key was used for a different usage event.',
+            );
+          }
+          const replayed = await this.consumption({
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            limitValue: input.limitValue,
+            period: input.period,
+            cycle: input.cycle ?? null,
+          });
+          return replayed.used;
+        }
         if (!isDuplicateIdempotencyKey(error)) throw error;
         const winner = await this.#recordedRequest(input.idempotencyKey);
         // The unique index said the row exists; if it does not, something other

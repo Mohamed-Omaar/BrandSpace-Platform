@@ -365,10 +365,19 @@ export class EntitlementService {
       where: { workspaceId },
       select: { status: true },
     });
-    const planKey =
-      subscription !== null && TERMINAL_SUBSCRIPTION_STATUSES.has(subscription.status)
-        ? null
-        : workspace.planKey;
+    /*
+     * `planEnded` CARRIES THE REASON `planKey` IS NULL (P6-03b).
+     *
+     * Two opposite situations both end with no plan, and an unstated quota
+     * wants opposite answers from them: a relationship that ENDED gets none,
+     * per the paragraph above; a workspace that never had a plan at all — one
+     * created minutes ago where no plan is configured — must still be usable.
+     * Without this flag the engine cannot tell them apart, and fixing either
+     * one breaks the other.
+     */
+    const planEnded =
+      subscription !== null && TERMINAL_SUBSCRIPTION_STATUSES.has(subscription.status);
+    const planKey = planEnded ? null : workspace.planKey;
 
     const overrides = await this.#prisma.workspaceOverride.findMany({
       where: { workspaceId, status: 'ACTIVE' },
@@ -386,6 +395,7 @@ export class EntitlementService {
     return {
       workspaceId: workspace.id,
       planKey,
+      planEnded,
       country: workspace.country,
       betaGroups: cohorts.map((c) => c.cohortKey),
       overrides: overrides.map((o) => ({
