@@ -170,17 +170,21 @@ function escapeHtml(value: string): string {
 const BRAND_PURPLE = '#7935FE';
 const BRAND_YELLOW = '#FFDD15';
 const BRAND_INK = '#111114';
-const BRAND_MUTED = '#66666F';
-const BRAND_SURFACE = '#F7F6FA';
-const BRAND_BORDER = '#E8E5EF';
+const BRAND_MUTED = '#717179';
+const BRAND_SURFACE = '#F3F3F5';
+const BRAND_CARD = '#FFFFFF';
+const BRAND_BADGE = '#F3EFFF';
+const BRAND_LOGO_URL = 'https://www.brandspace.cc/brandspace-logo.svg';
 
 /**
  * Render the shared BrandSpace transactional shell.
  *
- * NO REMOTE ASSETS. A wordmark built from text and brand colour avoids image
- * blocking, broken asset URLs and another host that would need to be trusted by
- * every mail client. The message still makes sense when HTML is stripped
- * because `text` is rendered independently below.
+ * THE ONLY REMOTE ASSET IS OUR PUBLIC BRAND MARK. It comes from BrandSpace's
+ * own public site, carries no recipient data and is decorative: the BrandSpace
+ * name is still present as text beside it, so image blocking never removes the
+ * sender identity. There are no tracking pixels or recipient-specific image
+ * URLs. The message also remains complete when HTML is stripped because
+ * `text` is rendered independently below.
  */
 export function renderEmail(message: EmailMessageInput): RenderedEmail {
   const copy = TEMPLATES[message.templateKey][message.locale];
@@ -194,17 +198,17 @@ export function renderEmail(message: EmailMessageInput): RenderedEmail {
   const action =
     message.link && copy.action
       ? `
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;margin-bottom:24px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:24px;margin-bottom:22px;">
           <tr>
-            <td bgcolor="${BRAND_PURPLE}" style="background-color:${BRAND_PURPLE};border-radius:10px;">
-              <a href="${safeLink}" style="display:inline-block;padding-top:13px;padding-right:20px;padding-bottom:13px;padding-left:20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:20px;font-weight:700;color:#FFFFFF;text-decoration:none;">
+            <td bgcolor="${BRAND_INK}" align="center" style="background-color:${BRAND_INK};border-radius:13px;">
+              <a href="${safeLink}" style="display:block;padding-top:14px;padding-right:20px;padding-bottom:14px;padding-left:20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:800;color:#FFFFFF;text-decoration:none;text-align:center;">
                 ${escapeHtml(copy.action)}
               </a>
             </td>
           </tr>
         </table>
-        <p style="margin-top:0;margin-right:0;margin-bottom:8px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:${BRAND_MUTED};">
-          ${rtl ? 'إذا لم يعمل الزر، انسخ هذا الرابط والصقه في المتصفح:' : 'If the button does not work, copy and paste this link into your browser:'}
+        <p style="margin-top:0;margin-right:0;margin-bottom:7px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:${BRAND_MUTED};">
+          ${rtl ? 'إذا لم يعمل الزر، انسخ الرابط التالي والصقه في المتصفح:' : 'If the button does not work, copy and paste this link into your browser:'}
         </p>
         <p style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;word-break:break-all;color:${BRAND_PURPLE};">
           ${safeLink}
@@ -219,33 +223,55 @@ export function renderEmail(message: EmailMessageInput): RenderedEmail {
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <title>${escapeHtml(copy.subject)}</title>
 </head>
-<body dir="${dir}" bgcolor="${BRAND_SURFACE}" style="margin:0;background-color:${BRAND_SURFACE};">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND_SURFACE}" style="width:100%;background-color:${BRAND_SURFACE};">
+<body dir="${dir}" bgcolor="${BRAND_SURFACE}" style="margin:0;background-color:${BRAND_SURFACE};background-image:radial-gradient(circle at 10% 8%,rgba(121,53,254,0.18),transparent 29%),radial-gradient(circle at 92% 88%,rgba(255,221,21,0.22),transparent 30%),radial-gradient(circle at 88% 12%,rgba(255,153,185,0.10),transparent 24%);">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${BRAND_SURFACE}" style="width:100%;background-color:transparent;">
     <tr>
-      <td align="center" style="padding-top:40px;padding-right:16px;padding-bottom:40px;padding-left:16px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
+      <td align="center" style="padding-top:56px;padding-right:18px;padding-bottom:56px;padding-left:18px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
           <tr>
-            <td align="${align}" style="padding-top:0;padding-right:0;padding-bottom:18px;padding-left:0;">
-              <span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:28px;font-weight:800;color:${BRAND_INK};letter-spacing:-0.4px;">BrandSpace</span>
-              <span aria-hidden="true" style="display:inline-block;margin-left:6px;margin-right:6px;width:10px;height:10px;border-radius:999px;background-color:${BRAND_YELLOW};font-size:1px;line-height:1px;">&nbsp;</span>
-            </td>
-          </tr>
-          <tr>
-            <td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:1px solid ${BRAND_BORDER};border-radius:18px;padding-top:34px;padding-right:34px;padding-bottom:34px;padding-left:34px;text-align:${align};">
-              <p style="margin-top:0;margin-right:0;margin-bottom:12px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:32px;font-weight:800;color:${BRAND_INK};">
+            <td bgcolor="${BRAND_CARD}" style="background-color:${BRAND_CARD};border-radius:30px;padding-top:40px;padding-right:40px;padding-bottom:34px;padding-left:40px;text-align:${align};box-shadow:0 28px 80px rgba(35,22,66,0.12);">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+                <tr>
+                  <td valign="middle" style="padding-right:${rtl ? '0' : '11px'};padding-left:${rtl ? '11px' : '0'};">
+                    <img src="${BRAND_LOGO_URL}" width="42" height="42" border="0" alt="BrandSpace" style="display:block;width:42px;height:42px;border:0;border-radius:12px;">
+                  </td>
+                  <td valign="middle">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:800;color:${BRAND_INK};letter-spacing:-0.3px;">BrandSpace</span>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:17px;">
+                <tr>
+                  <td bgcolor="${BRAND_BADGE}" style="background-color:${BRAND_BADGE};border-radius:999px;padding-top:7px;padding-right:11px;padding-bottom:7px;padding-left:11px;">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:14px;font-weight:800;letter-spacing:0.7px;color:#5F25CF;text-transform:uppercase;">
+                      <span aria-hidden="true" style="color:${BRAND_PURPLE};">●</span>&nbsp; ${rtl ? 'رسالة آمنة' : 'SECURE EMAIL'}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="margin-top:0;margin-right:0;margin-bottom:11px;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:38px;font-weight:800;letter-spacing:-1.2px;color:${BRAND_INK};text-align:${align};">
                 ${escapeHtml(copy.subject)}
-              </p>
-              <p style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:${BRAND_MUTED};">
+              </h1>
+              <p style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:${BRAND_MUTED};text-align:${align};">
                 ${escapeHtml(copy.body)}
               </p>
+
               ${action}
-            </td>
-          </tr>
-          <tr>
-            <td align="${align}" style="padding-top:16px;padding-right:4px;padding-bottom:0;padding-left:4px;">
-              <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;color:#8D8D96;">
-                ${rtl ? 'هذه رسالة خدمية من BrandSpace مرتبطة بأمان حسابك أو مساحة عملك.' : 'This is a transactional BrandSpace message related to your account or workspace security.'}
-              </p>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;">
+                <tr>
+                  <td valign="middle" style="padding-right:${rtl ? '0' : '8px'};padding-left:${rtl ? '8px' : '0'};">
+                    <span aria-hidden="true" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:14px;color:${BRAND_YELLOW};">●</span>
+                  </td>
+                  <td valign="middle">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#A3A3AA;">
+                      ${rtl ? 'إشعار آمن من BrandSpace' : 'Secure BrandSpace notification'}
+                    </span>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
         </table>
