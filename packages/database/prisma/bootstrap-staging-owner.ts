@@ -9,7 +9,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
 import { buildSecretRef, SecretService } from '@brandspace/secrets';
 import { hashPassword, PlatformAuthService } from '@brandspace/auth';
-import { asPlatform, assertPlatformRole } from '../src/platform';
+import { assertPlatformRole } from '../src/platform';
 
 const ENVIRONMENT = 'STAGING' as const;
 
@@ -48,52 +48,41 @@ async function syncCatalogue(
   }
 
   const roleIds = new Map<string, string>();
-  await asPlatform(
-    { platformUserId: actorId, roleKey: 'platform_owner', mfaVerified: true },
-    {
-      action: 'platform.bootstrap.staging.roles',
-      reason: 'Staging bootstrap: synchronise system roles',
-      requestId: `staging-bootstrap-${crypto.randomUUID()}`,
-    },
-    async (db) => {
-      for (const definition of ROLE_DEFINITIONS) {
-        const existing = await db.role.findFirst({
-          where: { key: definition.key, workspaceId: null },
+  for (const definition of ROLE_DEFINITIONS) {
+    const existing = await prisma.role.findFirst({
+      where: { key: definition.key, workspaceId: null },
+    });
+    const role = existing
+      ? await prisma.role.update({
+          where: { id: existing.id },
+          data: {
+            nameEn: definition.nameEn,
+            nameAr: definition.nameAr,
+            realm: definition.realm === 'platform' ? 'PLATFORM' : 'WORKSPACE',
+            isSystem: true,
+          },
+        })
+      : await prisma.role.create({
+          data: {
+            key: definition.key,
+            workspaceId: null,
+            realm: definition.realm === 'platform' ? 'PLATFORM' : 'WORKSPACE',
+            nameEn: definition.nameEn,
+            nameAr: definition.nameAr,
+            isSystem: true,
+          },
         });
-        const role = existing
-          ? await db.role.update({
-              where: { id: existing.id },
-              data: {
-                nameEn: definition.nameEn,
-                nameAr: definition.nameAr,
-                realm: definition.realm === 'platform' ? 'PLATFORM' : 'WORKSPACE',
-                isSystem: true,
-              },
-            })
-          : await db.role.create({
-              data: {
-                key: definition.key,
-                workspaceId: null,
-                realm: definition.realm === 'platform' ? 'PLATFORM' : 'WORKSPACE',
-                nameEn: definition.nameEn,
-                nameAr: definition.nameAr,
-                isSystem: true,
-              },
-            });
 
-        roleIds.set(definition.key, role.id);
-        await db.rolePermission.deleteMany({ where: { roleId: role.id } });
-        for (const permissionKey of definition.permissionKeys) {
-          const permission = await db.permission.findUnique({ where: { key: permissionKey } });
-          if (!permission) throw new Error(`Unknown permission: ${permissionKey}`);
-          await db.rolePermission.create({
-            data: { roleId: role.id, permissionId: permission.id },
-          });
-        }
-      }
-    },
-    { prisma },
-  );
+    roleIds.set(definition.key, role.id);
+    await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+    for (const permissionKey of definition.permissionKeys) {
+      const permission = await prisma.permission.findUnique({ where: { key: permissionKey } });
+      if (!permission) throw new Error(`Unknown permission: ${permissionKey}`);
+      await prisma.rolePermission.create({
+        data: { roleId: role.id, permissionId: permission.id },
+      });
+    }
+  }
 
   return roleIds;
 }
