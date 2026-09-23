@@ -439,7 +439,9 @@ describe('every declared template renders in both languages', () => {
     expect(rendered.html).toContain('#7935FE');
     expect(rendered.html).toContain('#FFDD15');
     expect(rendered.html).toContain('#111114');
-    expect(rendered.html).toContain('background-image:radial-gradient');
+    expect(rendered.html).toContain('rgba(121,53,254,0.28)');
+    expect(rendered.html).toContain('rgba(255,221,21,0.34)');
+    expect(rendered.html).toContain('rgba(255,153,185,0.22)');
     expect(rendered.html).toContain('role="presentation"');
     expect(rendered.html).toContain('background-color:#111114');
     expect(rendered.html).not.toMatch(/tracking[_-]?pixel/i);
