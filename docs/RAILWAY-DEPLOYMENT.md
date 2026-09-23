@@ -229,7 +229,9 @@ replica, region EU West.
 | `api`       | `prisma generate`                                    | `pnpm --filter @brandspace/api start`       | `/health/ready` | 30 s  | `apps/api/**`, `packages/**`, root files                          |
 | `worker`    | `prisma generate`                                    | `pnpm --filter @brandspace/worker start`    | `/`             | 120 s | `apps/worker/**`, `packages/**`, root files                       |
 
-The web healthcheck uses `/en/status` rather than `/`: the bilingual router redirects the bare root with HTTP 307, while the status page is a deterministic verification route that returns a successful response for Railway.
+The web healthcheck uses `/en/status` rather than `/`: the bilingual router redirects the bare root
+with HTTP 307, while the status page is a deterministic verification route that returns a successful
+response for Railway.
 
 **No pre-deploy command on any application service.** Migrations are a separate
 job — §4 explains why.
