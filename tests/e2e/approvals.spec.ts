@@ -245,7 +245,7 @@ test.describe('the Activity Log', () => {
 
     // The owner is graded workspace-wide, and the page says which grade it is
     // rather than leaving the reader to guess why a colleague sees more.
-    await expect(page.getByTestId('activity-log')).toContainText('Showing all workspace activity');
+    await expect(page.getByTestId('activity-log')).toContainText('Showing all activity');
   });
 
   test('filters without JavaScript — it is a GET form with a real URL', async ({ page }) => {

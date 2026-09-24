@@ -653,14 +653,13 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         data-testid="assets-layout"
       >
         <Stack gap={spacingTokens.md}>
-          {props.folders.length > 0 ? (
-            <FolderBrowser
-              folders={props.folders}
-              current={filters.folder}
-              hrefFor={(folder) => filterHref(props.locale, filters, { folder })}
-              t={t}
-            />
-          ) : null}
+          {/* The location is always stated, even before the first folder exists. */}
+          <FolderBrowser
+            folders={props.folders}
+            current={filters.folder}
+            hrefFor={(folder) => filterHref(props.locale, filters, { folder })}
+            t={t}
+          />
 
           {props.cards.length === 0 ? (
             <StateMessage
