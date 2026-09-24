@@ -87,9 +87,19 @@ async function submitAndSettle(page: Page, selector: string, marker: RegExp): Pr
   await expect.poll(() => page.url(), { timeout: 15_000 }).toMatch(marker);
 }
 
-/** Open the reviewable fixture in the composer. */
+/**
+ * Open the reviewable fixture in the composer.
+ *
+ * FOUND BY ITS TITLE, the way a person would find it. The library shows the
+ * most recently touched posts first, and every suite running beside this one
+ * adds posts of its own — so "it is on the first page" held only while this
+ * suite happened to run early. The library's own search keeps the lookup
+ * independent of what else the run has written.
+ */
 async function openReviewableDraft(page: Page, locale = 'en'): Promise<void> {
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/content`);
+  await page.goto(
+    `${DASHBOARD_BASE_URL}/${locale}/content?q=${encodeURIComponent('Launch announcement')}`,
+  );
   await page.waitForLoadState('domcontentloaded');
   const card = page
     .locator('[data-testid="content-card"]')
