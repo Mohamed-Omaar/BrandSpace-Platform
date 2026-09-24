@@ -76,13 +76,19 @@ export const messages = {
     'attention.title': 'النبض — ما الذي يحتاج انتباهك',
     'attention.none': 'لا شيء ينتظرك الآن.',
     'attention.publishing-failed': 'فشل نشر {count} من المنشورات.',
+    'attention.publishing-failed.one': 'فشل نشر منشور واحد.',
     'attention.schedule-overdue': 'مرّ موعد {count} من المنشورات المجدولة دون نشر.',
+    'attention.schedule-overdue.one': 'مرّ موعد منشور مجدول واحد دون نشر.',
     'attention.connection-reauth': 'يحتاج {count} من الحسابات المتصلة إعادة تفويض.',
-    'attention.content-in-review': '{count} من المحتوى بانتظار المراجعة.',
+    'attention.connection-reauth.one': 'يحتاج حساب متصل واحد إلى إعادة تفويض.',
+    'attention.content-in-review': '{count} من المنشورات بانتظار المراجعة.',
+    'attention.content-in-review.one': 'منشور واحد بانتظار المراجعة.',
     'attention.brand-brain-empty': 'لا توجد معرفة بعد للعلامة {detail}.',
     'attention.brand-brain-empty.many': '{count} من العلامات بلا معرفة بعد.',
     'attention.notes-assigned': '{count} من المحادثات مُسندة إليك.',
+    'attention.notes-assigned.one': 'أُسندت إليك محادثة واحدة.',
     'attention.notes-mentions': 'ذُكر اسمك في {count} من الملاحظات ولم تقرأها بعد.',
+    'attention.notes-mentions.one': 'ذُكرت في ملاحظة واحدة لم تقرأها.',
     /*
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.
@@ -2589,14 +2595,20 @@ export const messages = {
     'attention.title': 'Pulse — what needs you',
     'attention.none': 'Nothing is waiting on you right now.',
     'attention.publishing-failed': '{count} posts failed to publish.',
+    'attention.publishing-failed.one': '1 post failed to publish.',
     'attention.schedule-overdue':
       '{count} scheduled posts are past their time and have not published.',
+    'attention.schedule-overdue.one': '1 scheduled post is past its time and has not published.',
     'attention.connection-reauth': '{count} connected accounts need re-authorising.',
-    'attention.content-in-review': '{count} items are waiting for review.',
+    'attention.connection-reauth.one': '1 connected account needs re-authorising.',
+    'attention.content-in-review': '{count} posts are waiting for review.',
+    'attention.content-in-review.one': '1 post is waiting for review.',
     'attention.brand-brain-empty': '{detail} has no brand knowledge yet.',
     'attention.brand-brain-empty.many': '{count} brands have no brand knowledge yet.',
     'attention.notes-assigned': '{count} conversations are assigned to you.',
+    'attention.notes-assigned.one': '1 conversation is assigned to you.',
     'attention.notes-mentions': 'You were mentioned in {count} notes you have not read.',
+    'attention.notes-mentions.one': 'You were mentioned in 1 note you have not read.',
     /*
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.

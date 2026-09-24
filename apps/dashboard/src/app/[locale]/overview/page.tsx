@@ -81,11 +81,17 @@ function attentionSentence(
   t: (key: never) => string,
   item: AttentionItem,
   formatDate: (value: Date) => string,
+  locale: string,
 ): string {
-  const key =
+  const counted =
     item.detail === undefined && NAMED_OR_COUNTED.has(item.kind)
       ? `attention.${item.kind}.many`
       : `attention.${item.kind}`;
+  // D-299 — "1 post failed", not "1 posts failed": a `.one` form where one exists.
+  const key =
+    item.count === 1 && optionalMessage(locale, `${counted}.one`) !== null
+      ? `${counted}.one`
+      : counted;
   const detail =
     item.detail !== undefined && METRIC_DETAIL.has(item.kind)
       ? t(`analytics.metric.${item.detail}` as never)
@@ -517,7 +523,7 @@ export default async function OverviewPage({
                     label={t(`attention.severity.${item.severity}` as never)}
                   />
                   <span style={{ ...typographyTokens.body, flex: '1 1 14rem', minInlineSize: 0 }}>
-                    {attentionSentence(t, item, (value) => attentionDate.format(value))}
+                    {attentionSentence(t, item, (value) => attentionDate.format(value), locale)}
                   </span>
                   <Link
                     href={`/${locale}${item.href}`}
