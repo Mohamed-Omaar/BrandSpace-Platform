@@ -315,52 +315,58 @@ test.describe('Simple writes go through the existing services', () => {
     await expect(page.getByTestId('open-draft-notice')).toHaveCount(0);
   });
 
-  test('a feature is switched on for everyone and back, with a preview first', async ({ page }) => {
-    // The registry is Advanced: create a boolean feature there, activated.
-    const key = `e2e.simple.${randomUUID().slice(0, 8)}`;
-    await signIn(page, 'en');
-    await page.goto(`${ADMIN_BASE_URL}/en/console/features`);
-    const form = page.getByTestId('feature-form');
-    await form.getByTestId('feature-key').fill(key);
-    await form.locator('[name="name.en"]').fill('Simple E2E feature');
-    await form.locator('[name="name.ar"]').fill('ميزة اختبار');
-    await form.getByTestId('feature-type').selectOption('boolean');
-    await form.getByTestId('save-feature').click();
-    await page.getByTestId('validate-features').click();
-    const activate = page.locator('form', { has: page.getByTestId('activate-features') });
-    await activate.locator('[name="acknowledge"]').check();
-    await activate.getByTestId('activate-features').click();
-    await expect(page).toHaveURL(/ok=/);
-
-    await useMode(page, 'simple');
+  test('a SEEDED feature is switched on for everyone, off for everyone, and back to its plan', async ({
+    page,
+  }) => {
+    /*
+     * `approvals.workflow` — Team approvals — is registered by
+     * `seed-features.ts` with a grant on the Growth fixture plan, exactly as
+     * the product matrix has it. No code path gates on it yet, so switching it
+     * for everyone cannot disturb a suite running alongside this one.
+     */
+    const key = 'approvals.workflow';
+    const access = page.getByTestId(`feature-${key}-access`);
+    await signIn(page, 'en', { mode: 'simple' });
     await page.goto(`${ADMIN_BASE_URL}/en/console/features`);
     await discardLeftovers(page);
-    await expect(page.getByTestId(`feature-${key}-access`)).toHaveText('Off for every plan');
+    await expect(page.getByTestId(`feature-${key}`)).toContainText('Team approvals');
+    await expect(access).toHaveText('On for: Fixture Growth');
 
-    await page.getByTestId(`feature-${key}-change`).click();
-    await page.getByTestId('feature-access-everyone').check();
-    await page.getByTestId('feature-preview').click();
-    await expect(page.getByTestId('feature-review-lines')).toContainText('on for every customer');
-    await page.getByTestId('feature-reason').fill('End-to-end check of the Simple feature switch');
-    await page.getByTestId('feature-confirm').check();
-    await page.getByTestId('feature-apply').click();
-    await expect(page).toHaveURL(/ok=ACCESS_CHANGED/);
-    await expect(page.getByTestId(`feature-${key}-access`)).toHaveText('On for everyone');
+    const change = async (
+      choice: 'everyone' | 'nobody' | 'plans',
+      plans: readonly string[],
+      review: string,
+    ) => {
+      await page.getByTestId(`feature-${key}-change`).click();
+      await page.getByTestId(`feature-access-${choice}`).check();
+      if (choice === 'plans') {
+        for (const box of await page.locator('[data-testid^="feature-plan-"]').all()) {
+          const planKey = ((await box.getAttribute('data-testid')) ?? '').replace(
+            'feature-plan-',
+            '',
+          );
+          if (plans.includes(planKey)) await box.check();
+          else await box.uncheck();
+        }
+      }
+      // Previewing is a GET: nothing has changed yet.
+      await page.getByTestId('feature-preview').click();
+      await expect(page.getByTestId('feature-review-lines')).toContainText(review);
+      await page.getByTestId('feature-reason').fill(`End-to-end check: ${key} to ${choice}`);
+      await page.getByTestId('feature-confirm').check();
+      await page.getByTestId('feature-apply').click();
+      await expect(page).toHaveURL(/ok=ACCESS_CHANGED/);
+    };
 
-    await page.getByTestId(`feature-${key}-change`).click();
-    await page.getByTestId('feature-access-plans').check();
-    // Coming from "everyone", every plan starts ticked — which is the truth of
-    // what everyone means. Untick them all to put the feature back as it was.
-    for (const box of await page.locator('[data-testid^="feature-plan-"]').all())
-      await box.uncheck();
-    await page.getByTestId('feature-preview').click();
-    await expect(page.getByTestId('feature-review-lines')).toContainText(
-      'Plans that will have it: None',
-    );
-    await page.getByTestId('feature-reason').fill('Restore plan-by-plan access after the check');
-    await page.getByTestId('feature-confirm').check();
-    await page.getByTestId('feature-apply').click();
-    await expect(page.getByTestId(`feature-${key}-access`)).toHaveText('Off for every plan');
+    await change('everyone', [], 'on for every customer');
+    await expect(access).toHaveText('On for everyone');
+
+    await change('nobody', [], 'off for every customer');
+    await expect(access).toHaveText('Off for everyone');
+
+    // Back exactly as seeded: plan by plan, Growth only.
+    await change('plans', ['fixture-growth'], 'Plans that will have it: Fixture Growth');
+    await expect(access).toHaveText('On for: Fixture Growth');
   });
 
   test('a customer is created, credited, suspended and reactivated from Simple mode', async ({

@@ -13,5 +13,7 @@ and development stand-ins for AI and social.
 - `16-simple-mode-on-an-advanced-screen-*`: an Advanced screen opened in Simple mode. It renders with
   a note offering the switch, and is never redirected or hidden.
 
-The Features screen shows its empty state because the seed registers no features. The E2E suite
-creates one and exercises the on/off flow (`tests/e2e/owner-simple-mode.spec.ts`).
+The Features screen shows the four documented product features registered by
+`tests/e2e/seed-features.ts`. Team approvals is on for the Growth fixture plan, and the other three are
+off. The E2E suite switches Team approvals on for everyone, off for everyone, and back to Growth
+(`tests/e2e/owner-simple-mode.spec.ts`).
