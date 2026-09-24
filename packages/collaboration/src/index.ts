@@ -18,6 +18,7 @@ export type {
   NoteInboxEntry,
   NoteRecord,
   NoteSubject,
+  NoteImportance,
   NoteSubjectType,
   NoteThreadStatus,
   NoteThreadSummary,

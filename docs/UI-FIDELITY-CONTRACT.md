@@ -365,6 +365,36 @@ pill with the pressed-purple label for the current step) plus the success tint f
 soft-surface card with the same Accept / Edit, then accept / Reject controls the Brand Brain drawer
 uses. No new colour, radius, shadow, font or motion.
 
+### 6.3.7 Phase 6 final — the global Copilot drawer (D-277 §37, D-280)
+
+`CopilotDrawer` is the demo's `.side-drawer` transcribed exactly as `PostDetailDrawer` already transcribes
+it (430px, inset 20px, 28px radius, the drawer surface, blur and shadow) with the existing
+`CopilotHeader` on top and the existing `CopilotView` inside. The 300px `CopilotPanel` is unchanged and
+remains the composer's docked column. The context line gains one clause, "looking at “…”", in the same
+caption style. No new colour, radius, shadow or motion.
+
+### 6.3.8 Phase 6 final — Notes as conversations (D-277 §28, D-281)
+
+The notes panel keeps its `Card` composition. Each note gains a 28px initial avatar in the lavender
+tint with the pressed-purple letter (the same treatment Home's notes preview uses), the author in
+bold and a relative time; the thread header gains `StatusBadge`s for Important (accent tone) and
+Due / Overdue (neutral / danger), and a plain "waiting on" caption. Assignment, due date and
+importance sit behind one native `<details>` disclosure in caption type, so a thread still reads as a
+conversation. The @-mention suggestions are a small surface listbox (surface background, `md` radius,
+the overlay shadow, lavender active row) under the field — the dropdown-menu treatment already in
+`menu-style`. A deep-linked thread is drawn with the lavender surface and the purple border. No new
+colour, font, radius or motion.
+
+### 6.3.9 Phase 6 final — the media-first Content Library (D-277 §15, D-282)
+
+`/[locale]/content` is no longer the `postsPage()` port: the owner's contract replaced the gradient
+cards. The screen is composed from `LinkTabs` (status and Grid / List), the ordinary controls in a GET
+form, `Card` (for "Ideas worth making"), `StatusBadge`, `AssetMedia` and the button variants. A card is
+the surface-card treatment (`surfaceCardAlpha`, `cardBorder`, `2xl` radius) holding a square media well
+in `surfaceSoft` with the `lg` radius; a text-only post shows its caption in `bodySm` / `textSecondary`
+there. The composer (`/content/compose`) remains the demo port until its own workstream. The
+manifest rows above for `/[locale]/content` now pin only the composer.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
@@ -513,6 +543,15 @@ scanning the form will notice each and might reasonably file a bug:
   which is every development double except the payment one — correctly shows no form at all.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
+
+> **Superseded in composition by D-277 §7 / D-279 (Phase 6 final).** The hero, its two floating
+> cards, the metric card and the surface card keep the demo's geometry and treatment; what changed is
+> the ORDER and CONTENT the owner specified: greeting + selected brand, then What needs you (one action
+> per row), Recommended by BrandSpace (≤3 grounded insights), Notes from your team, Coming up this
+> week (day-grouped), and the Performance snapshot LAST. The floating cards now carry the real 28-day
+> engagement figure and the next scheduled item (the decorative mini chart is gone). Plan, credits,
+> members, activity and the notification count left Home. The sections below describe the earlier
+> composition and remain as history.
 
 The Overview is the one 5B-3 screen with a REAL demo design behind it: `overview()` in
 `demo/app-2.js`, whose hero, two floating cards, four-across metric row and 1.45/0.8 dashboard split

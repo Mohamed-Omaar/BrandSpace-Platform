@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
+import { withPlatformPrisma } from './platform-prisma';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 import { inlineEndOverhang } from './overflow';
 
@@ -93,16 +94,62 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(page.getByTestId('notifications')).toBeVisible();
   });
 
-  test('Copilot opens with the screen the reader was on', async ({ page }) => {
+  /*
+   * PHASE 6 FINAL (D-277 §37): THE COPILOT OPENS OVER THE SCREEN.
+   *
+   * The control is still a link to the full Copilot for this surface — the
+   * no-script path and a modified click follow it — and a plain click opens
+   * the drawer where the reader already is, saying which brand it acts on and
+   * which screen it was opened from.
+   */
+  test('Copilot opens over the screen, with that screen as its context', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/analytics`);
-    await expect(page.getByTestId('topbar-copilot')).toHaveAttribute(
+    const control = page.getByTestId('topbar-copilot');
+    await expect(control).toHaveAttribute('href', '/en/copilot?from=analytics');
+
+    await control.click();
+    const drawer = page.getByTestId('copilot-drawer');
+    await expect(drawer).toBeVisible();
+    await expect(page).toHaveURL(/\/en\/analytics$/);
+    await expect(drawer.getByTestId('copilot-context')).toContainText(/Acting on /);
+    await expect(drawer.getByTestId('copilot-context')).toContainText(/opened from Analytics/);
+    await expect(drawer.getByTestId('global-copilot-full')).toHaveAttribute(
       'href',
       '/en/copilot?from=analytics',
     );
+
+    // A modal: Escape closes it and focus returns to the control that opened it.
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(control).toBeFocused();
+  });
+
+  test('on a campaign, the Copilot knows which campaign', async ({ page }) => {
+    const loaded = credentials();
+    const campaign = await withPlatformPrisma((prisma) =>
+      prisma.campaign.findFirst({
+        where: {
+          workspaceId: loaded.customer.workspaceId,
+          brandId: brandFixtures(loaded).primaryBrandId,
+          deletedAt: null,
+        },
+        select: { id: true, name: true },
+      }),
+    );
+    test.skip(!campaign, 'the seeded brand has no campaign');
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${campaign?.id}`);
     await page.getByTestId('topbar-copilot').click();
-    await page.waitForURL(/\/en\/copilot\?from=analytics$/);
+    const context = page.getByTestId('copilot-drawer').getByTestId('copilot-context');
+    await expect(context).toContainText(`looking at “${campaign?.name}”`);
+  });
+
+  test('the full Copilot screen is still one click away', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=analytics`);
     await expect(page.getByTestId('topbar-copilot')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('copilot-context')).toContainText(/opened from Analytics/);
   });
 
   test('the notifications dot is the unread count the inbox shows', async ({ page }) => {

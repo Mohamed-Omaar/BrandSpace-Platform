@@ -1,10 +1,10 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import {
   Card,
   ContentGrid,
-  MetricCard,
   HeroFloatCard,
-  HeroMiniChart,
+  MetricCard,
   OverviewHero,
   SectionHeader,
   Stack,
@@ -13,42 +13,58 @@ import {
   buttonClass,
   buttonStyle,
   colorTokens,
+  radiusTokens,
   spacingTokens,
   statusTone,
   typographyTokens,
 } from '@brandspace/ui';
-import { brandIdScopeFilter, systemClock } from '@brandspace/shared';
+import { localizedFrom } from '@brandspace/brand-brain';
+import { NOTE_PERMISSION, NotesService, type NoteInboxEntry } from '@brandspace/collaboration';
+import { brandIdQueryFilter, systemClock } from '@brandspace/shared';
 import { detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { activityService, notificationService } from '../../../server/approvals-context';
 import { attentionItems, rankAttention, type AttentionItem } from '../../../server/command-center';
 import {
   PERFORMANCE_SHIFT_RECENT_DAYS,
   latestShift,
   performanceShiftItem,
 } from '../../../server/performance-patterns';
-import { messages, optionalMessage, translator } from '../../../i18n/messages';
-import { activityActionLabel } from '../../../server/activity-labels';
+import {
+  HOME_NOTES,
+  HOME_RECOMMENDATIONS,
+  HOME_UPCOMING_DAYS,
+  RECOMMENDATION_INSIGHT_TYPES,
+  attentionAction,
+  greetingName,
+  greetingPeriod,
+  groupByDay,
+  hourIn,
+  relativeTime,
+  safeZone,
+  shouldInviteSetup,
+} from '../../../server/home';
+import { setupFactsFor } from '../../../server/setup-wizard';
+import { mentionableMembers } from '../../../server/notes-context';
+import { noteThreadHref } from '../../../server/note-links';
+import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
+import { resolveNoteThreadAction } from '../notes-actions';
+import { reviewIntelligenceAction } from '../intelligence/actions';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * The sentence for one attention item, in the reader's language.
  *
- * WHY A FUNCTION AND NOT A TEMPLATE AT THE CALL SITE. Two of the items need a
- * different sentence for one versus many — "Northwind has no brand knowledge
- * yet" is actionable in a way "1 brand" is not — and that choice belongs beside
- * the strings rather than inside the JSX.
- *
  * `{count}` and `{detail}` are substituted rather than concatenated, so Arabic
- * can put the number where Arabic puts it (CLAUDE.md §4).
+ * can put the number where Arabic puts it (CLAUDE.md §4). Two kinds need a
+ * different sentence for one versus many — "Northwind has no brand knowledge
+ * yet" is actionable in a way "1 brand" is not.
  */
-/** Kinds whose sentence names ONE thing when `detail` is present, and counts several when not. */
 const NAMED_OR_COUNTED = new Set(['brand-brain-empty', 'campaign-empty', 'calendar-gap']);
 
 /** Kinds whose `detail` is a metric key, translated rather than printed. */
@@ -75,108 +91,70 @@ function attentionSentence(
 }
 
 /**
- * The authenticated workspace home, and the screen the approved direction is
- * judged on (§5 of the brief).
+ * HOME — "What needs me now? What should I do next? What did BrandSpace
+ * notice?" (Phase 6 final, D-277 §7).
  *
- * THE LARGE OVERVIEW IS REPRODUCED, THE INVENTED DATA IS NOT. The reference's
- * hero, its four-across statistic row, its 1.45/0.8 split and its section
- * kickers are all here at the reference's scale. What is not here is the
- * reference's content: "12 scheduled", "03 in review", "28 published across 4
- * channels", "76% of AI credits, resets in 12 days", and two posts on a
- * calendar. There is no Post model, no connected account and no publishing
- * pipeline in this phase, so every one of those would be a fabricated
- * measurement — CLAUDE.md §2.2, and the reason this page has always shown
- * either a real figure or an explicit reason it is unavailable.
+ * IN THE OWNER'S ORDER, and the order is the point:
  *
- * So each panel says which of the three things is true: here is the real
- * number; you do not have permission to see it; or the capability has not
- * shipped yet. An empty state that names its reason is a finished screen. A
- * plausible-looking zero is not.
+ *   top  a greeting and the brand this is about;
+ *   A    What needs you — the Command Center's attention sources, each a
+ *        sentence with ONE action and a link to where it is done;
+ *   B    Recommended by BrandSpace — at most three grounded recommendations
+ *        from the insight domain, each with its evidence, a way to hand it to
+ *        the Copilot, and Dismiss;
+ *   C    Notes — the actual conversations waiting on the reader, not a count;
+ *   D    Coming up — the next seven days, compact;
+ *   E    Performance — real figures, last.
+ *
+ * NOTHING HERE IS NEW DATA. Every section reads the module that owns it —
+ * `attentionItems`, `Insight` rows, `NotesService.inbox`, calendar slots,
+ * `AnalyticsQueryService` — under the reader's BrandScope and the rail's
+ * brand, so Home and the module screens cannot disagree. A section with
+ * nothing real to say says so in one line; it never shows a zero standing in
+ * for "unknown", and it never fabricates a recommendation.
+ *
+ * Plan, credits, members, the activity log and the notification count left
+ * Home: they are account facts, and each has its place in Settings or the top
+ * bar (D-277 §3/§4).
  */
-export default async function OverviewPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function OverviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { locale } = await params;
+  const query = await searchParams;
   const t = translator(locale);
   const { customer, workspace } = await requireWorkspace(locale);
+  const may = (key: string) => workspace.permissionKeys.includes(key);
 
-  const maySeeBilling = workspace.permissionKeys.includes('billing.read');
-  const maySeeCredits = workspace.permissionKeys.includes('credits.read');
-  const maySeeMembers = workspace.permissionKeys.includes('member.read');
+  const maySeeContent = may('content.read');
+  const maySeeAnalytics = may('analytics.read');
+  const mayUseCopilot = may('copilot.use');
+  const maySeeInsights = may('strategy.read');
+  const mayReviewInsights = may('strategy.manage');
+  const mayUseNotes = may(NOTE_PERMISSION);
 
-  const maySeeContent = workspace.permissionKeys.includes('content.read');
-  const maySeeAnalytics = workspace.permissionKeys.includes('analytics.read');
-  const mayUseCopilot = workspace.permissionKeys.includes('copilot.use');
+  const brandContext = await brandContextFor(workspace, '/overview');
+  const brand = requiredBrand(brandContext);
+  const brandId =
+    brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : undefined;
+  const now = systemClock.now();
 
-  const { effective, wallet, memberCount } = await inWorkspace(
-    workspace.workspaceId,
-    async ({ entitlements, credits, db }) => ({
-      effective: maySeeBilling ? await entitlements.resolveAll(workspace.workspaceId) : null,
-      wallet: maySeeCredits ? await credits.wallet(workspace.workspaceId) : null,
-      memberCount: maySeeMembers
-        ? await db.membership.count({
-            where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' },
-          })
-        : null,
-    }),
+  const timeZone = safeZone(
+    await inWorkspace(workspace.workspaceId, async ({ db }) =>
+      db.workspace
+        .findUnique({ where: { id: workspace.workspaceId }, select: { timezone: true } })
+        .then((row) => row?.timezone ?? null),
+    ),
   );
 
-  /*
-   * PHASE 5B-3 — THE COMMAND CENTER AGGREGATES; IT DOES NOT DUPLICATE.
-   *
-   * Every figure below is read through the module that owns it — the approvals
-   * queue from `ContentApprovalService`, upcoming slots from the calendar's own
-   * table, recent activity from `ActivityLogService`, the unread badge from
-   * `NotificationService` — so the home screen and the module screens cannot
-   * disagree. A dashboard that counted rows itself would be a second
-   * implementation of four different scoping rules, and the activity one is
-   * graded three ways.
-   *
-   * WHAT IS STILL NOT HERE, and for the same reason it never was: published
-   * counts and engagement need the publishing pipeline (Phase 6) and analytics
-   * ingestion (Phase 7). Those panels keep saying so.
-   */
-  /*
-   * PHASE 7 — THE ENGAGEMENT FIGURE THE COMMAND CENTER COULD NOT MEASURE BEFORE.
-   *
-   * READ THROUGH THE MODULE THAT OWNS IT, exactly as every other figure on this
-   * screen is: `AnalyticsQueryService` applies BrandScope as a query predicate
-   * and tells missing from zero, so the home screen and the analytics screen
-   * cannot disagree. A dashboard that summed `metric_observation` itself would
-   * be a second implementation of both rules.
-   *
-   * ONLY WHEN THE READER MAY SEE IT. A total fetched and then dropped in
-   * JavaScript is a disclosure computed over rows this person may not see (F-10).
-   */
-  const engagements = maySeeAnalytics
-    ? await inAnalytics(workspace.workspaceId, async (services) => {
-        const queries = await services.queries();
-        const now = systemClock.now();
-        const result = await queries.summary({
-          scope: {},
-          period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
-          brandScope: workspace.brandScope,
-          metricKeys: ['engagements'],
-        });
-        const metric = result.metrics.find((entry) => entry.metricKey === 'engagements');
-        return metric?.value === null || metric?.value === undefined ? null : Number(metric.value);
-      })
-    : null;
-
-  /*
-   * P6-11 — A PERFORMANCE SHIFT FOR PULSE. The same series and the same
-   * configured thresholds the Analytics screen uses, over the same 28 days as
-   * the figure above, raised only when the latest anomaly is from this past
-   * week. Read through the owning module, like every other figure here, so
-   * Home and Analytics cannot disagree.
-   *
-   * ITS OWN TRANSACTION, AND IT MAY NOT TAKE HOME DOWN. Like every Pulse
-   * source, a failure contributes nothing rather than failing the page — and a
-   * failed statement aborts the transaction it ran in, so sharing one with the
-   * figures above would let this take them down with it.
-   */
+  /* ------------------------------------------------------------ A — attention */
   const performanceShift = maySeeAnalytics
     ? await inAnalytics(workspace.workspaceId, async (services) => {
         const queries = await services.queries();
-        const now = systemClock.now();
         const series = await queries.series({
           scope: {},
           period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
@@ -197,114 +175,176 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       }).catch(() => null)
     : null;
 
-  const summary = await inWorkspace(workspace.workspaceId, async (scoped) => {
-    const notifications = notificationService({
-      db: scoped.db,
-      workspaceId: workspace.workspaceId,
-    });
-    const activity = activityService({ db: scoped.db, workspaceId: workspace.workspaceId });
-    const viewer = {
-      userId: customer.userId,
-      permissionKeys: workspace.permissionKeys,
-      brandScope: workspace.brandScope,
-    };
-    const recent = await activity.recent({ viewer, take: 6 });
-    const unread = await notifications.unreadCount(customer.userId);
-
-    if (!maySeeContent) {
-      return { recent, unread, pendingApprovals: 0, inReview: 0, upcoming: [], scope: 'none' };
-    }
-
-    /*
-     * `brandIdScopeFilter` IS THE RULE, applied once. An empty membership scope
-     * is UNRESTRICTED, so it contributes no clause — this page used to expand
-     * it into "every brand id" to work around a service that read empty as
-     * "none", which was the rule implemented a second time in a page.
-     */
-    const upcoming = await scoped.db.calendarSlot.findMany({
-      where: {
-        workspaceId: workspace.workspaceId,
-        status: { not: 'CANCELLED' },
-        ...brandIdScopeFilter(workspace.brandScope),
-        scheduledAtUtc: { gte: systemClock.now() },
-      },
-      orderBy: { scheduledAtUtc: 'asc' },
-      take: 5,
-      select: {
-        id: true,
-        scheduledAtUtc: true,
-        contentItemId: true,
-        item: { select: { title: true, status: true } },
-      },
-    });
-    const inReview = await scoped.db.contentItem.count({
-      where: {
-        workspaceId: workspace.workspaceId,
-        deletedAt: null,
-        status: 'IN_REVIEW',
-        ...brandIdScopeFilter(workspace.brandScope),
-      },
-    });
-    return { recent, unread, pendingApprovals: 0, inReview, upcoming, scope: 'ok' };
-  });
-
-  /*
-   * The queue count comes from the Approvals service itself, which applies the
-   * same brand scoping its own screen does.
-   *
-   * THE MEMBERSHIP SCOPE IS PASSED THROUGH UNCHANGED. It used to be expanded
-   * here — an empty scope was replaced with "every brand id" — because the
-   * service read an empty list as "no brands" and would otherwise have returned
-   * zero. That workaround was a second implementation of the BrandScope rule
-   * living in a page, and the place the two would drift apart. The service now
-   * honours the platform rule directly, so the page hands it what the session
-   * holds and nothing more.
-   */
-  const pendingApprovals = maySeeContent
-    ? await inContentStudio(workspace.workspaceId, async ({ approvals }) =>
-        (await approvals()).pendingCount(workspace.brandScope),
-      )
-    : 0;
-
-  const overviewDateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
-
-  /*
-   * Both hero actions go somewhere real, and to a page the reader is actually
-   * allowed to open — §20 forbids a dead button or a `#` placeholder, and a
-   * primary action that lands on a 404 is worse than no primary action.
-   */
-  const primaryHref = maySeeMembers ? `/${locale}/members` : `/${locale}/settings`;
-  const primaryLabel = maySeeMembers ? t('overview.hero.primary') : t('nav.settings');
-
-  /*
-   * WHAT NEEDS A PERSON — THE COMMAND CENTER'S FIRST QUESTION (P6-04).
-   *
-   * Above this, the page answers "how is the workspace doing" with real figures
-   * and honest unavailable states, which it has always done well. What it never
-   * answered is the question somebody opening it actually has, and the result
-   * was a member reading four correct numbers and still having to go looking.
-   *
-   * It runs in the same tenant-scoped transaction the summary uses, so it costs
-   * one round trip rather than five, and every source is gated by the permission
-   * its destination requires — an attention item is a link, and pointing
-   * somebody at a route that answers 404 is a dead link delivered as a to-do.
-   */
   const attention = rankAttention([
     ...(await inWorkspace(workspace.workspaceId, async (scoped) =>
       attentionItems(scoped.db, workspace, customer.userId),
     )),
     ...(performanceShift ? [performanceShift] : []),
   ]);
+
+  /* ------------------------------------------------------ B — recommendations */
+  const recommendations = maySeeInsights
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        db.insight.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }),
+            type: { in: [...RECOMMENDATION_INSIGHT_TYPES] },
+            status: { in: ['NEW', 'SEEN'] },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          orderBy: [{ confidenceMilli: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          take: HOME_RECOMMENDATIONS,
+          select: {
+            id: true,
+            type: true,
+            basis: true,
+            title: true,
+            body: true,
+            createdAt: true,
+            _count: { select: { evidence: true } },
+          },
+        }),
+      )
+    : [];
+
+  /* ---------------------------------------------------------------- C — notes */
+  const inbox = mayUseNotes
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        new NotesService({ db, workspaceId: workspace.workspaceId, clock: systemClock }).inbox(
+          {
+            userId: customer.userId,
+            permissionKeys: workspace.permissionKeys,
+            brandScope: workspace.brandScope,
+          },
+          { brandId: brandId ?? null },
+        ),
+      )
+    : null;
+  const conversations: readonly NoteInboxEntry[] = inbox
+    ? [...inbox.forYou, ...inbox.open].slice(0, HOME_NOTES)
+    : [];
+  const members = conversations.length > 0 ? await mentionableMembers(locale) : [];
+  const nameOf = (userId: string): string =>
+    members.find((member) => member.userId === userId)?.name ?? t('notes.someone');
+
+  /* ------------------------------------------------ D + E — schedule, figures */
+  const horizon = new Date(now.getTime() + HOME_UPCOMING_DAYS * 86_400_000);
+  const schedule = maySeeContent
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+        const scope = brandIdQueryFilter({ brandId, brandScope: workspace.brandScope });
+        const [upcoming, inReview, published] = await Promise.all([
+          db.calendarSlot.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              status: { in: ['PLANNED', 'SCHEDULED', 'PUBLISHING'] },
+              ...scope,
+              scheduledAtUtc: { gte: now, lt: horizon },
+            },
+            orderBy: { scheduledAtUtc: 'asc' },
+            take: 20,
+            select: {
+              id: true,
+              status: true,
+              scheduledAtUtc: true,
+              contentItemId: true,
+              item: { select: { title: true } },
+            },
+          }),
+          db.contentItem.count({
+            where: {
+              workspaceId: workspace.workspaceId,
+              deletedAt: null,
+              status: 'IN_REVIEW',
+              ...scope,
+            },
+          }),
+          db.publishJob.count({
+            where: {
+              workspaceId: workspace.workspaceId,
+              status: 'PUBLISHED',
+              publishedAt: { gte: new Date(now.getTime() - 28 * 86_400_000) },
+              ...scope,
+            },
+          }),
+        ]);
+        return { upcoming, inReview, published };
+      })
+    : null;
+
+  const pendingApprovals = maySeeContent
+    ? await inContentStudio(workspace.workspaceId, async ({ approvals }) =>
+        (await approvals()).pendingCount(workspace.brandScope),
+      )
+    : null;
+
+  const engagements = maySeeAnalytics
+    ? await inAnalytics(workspace.workspaceId, async (services) => {
+        const queries = await services.queries();
+        const result = await queries.summary({
+          scope: brandId ? { brandId } : {},
+          period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
+          brandScope: workspace.brandScope,
+          metricKeys: ['engagements'],
+        });
+        const metric = result.metrics.find((entry) => entry.metricKey === 'engagements');
+        return metric?.value === null || metric?.value === undefined ? null : Number(metric.value);
+      }).catch(() => null)
+    : null;
+
+  /* ------------------------------------------------------------------- setup */
+  const setup = await setupFactsFor(workspace.workspaceId, brand?.id ?? null);
+  const inviteSetup =
+    brandContext.resolution.kind !== 'unselected' &&
+    brandContext.resolution.kind !== 'all' &&
+    shouldInviteSetup({
+      hasBrand: brand !== null,
+      sources: setup.sources.total,
+      connections: setup.activeConnections,
+      hasGoal: setup.goal !== null,
+    });
+
+  /* -------------------------------------------------------------- formatting */
+  const dayFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    timeZone,
+  });
+  const timeFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  });
   const attentionDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'medium',
-    timeZone: 'UTC',
+    timeZone,
   });
+  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const pick = (value: unknown) => {
+    const text = localizedFrom(value as never);
+    return (locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '';
+  };
 
-  const brandContext = await brandContextFor(workspace, '/overview');
+  const period = greetingPeriod(hourIn(now, timeZone));
+  const firstName = greetingName(customer.name);
+  const greeting = firstName
+    ? t(`home.greeting.${period}` as MessageKey).replace('{name}', firstName)
+    : t(`home.greeting.${period}.plain` as MessageKey);
+
+  const noteHref = (entry: NoteInboxEntry): string => noteThreadHref(locale, entry);
+
+  const nextSlot = schedule?.upcoming[0] ?? null;
+  const ok = typeof query['ok'] === 'string' ? statusMessage(query['ok'], locale) : null;
+
+  const quiet = (text: string, testId: string): ReactNode => (
+    <p
+      data-testid={testId}
+      style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+    >
+      {text}
+    </p>
+  );
 
   return (
     <WorkspaceShell
@@ -318,75 +358,98 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
       permissionKeys={workspace.permissionKeys}
       hero={
         <OverviewHero
-          eyebrow={workspace.workspaceName}
-          title={t('overview.hero.title')}
-          description={t('overview.hero.body')}
+          eyebrow={brand?.name ?? workspace.workspaceName}
+          title={greeting}
+          description={t('home.hero.body')}
           primaryAction={
-            <Link href={primaryHref} style={buttonStyle('primary')} data-testid="hero-primary">
-              {primaryLabel}
-            </Link>
+            may('content.create') ? (
+              <Link
+                href={`/${locale}/content/compose`}
+                style={buttonStyle('primary')}
+                className={buttonClass('primary')}
+                data-testid="hero-primary"
+              >
+                {t('home.hero.create')}
+              </Link>
+            ) : undefined
+          }
+          secondaryAction={
+            mayUseCopilot ? (
+              <Link
+                href={copilotHref(locale, 'overview')}
+                data-testid="overview-copilot-open"
+                style={{
+                  ...buttonStyle('ghost'),
+                  background: 'transparent',
+                  color: colorTokens.textPrimary,
+                }}
+              >
+                {t('home.hero.copilot')}
+                <span aria-hidden="true">→</span>
+              </Link>
+            ) : undefined
           }
           visual={
             /*
-             * The demo's two floating cards, at its exact geometry, carrying
-             * honest content: it captions them with engagement and schedule
-             * figures this phase cannot measure, so each says instead what it
-             * will hold and that it holds nothing yet (§33).
+             * The demo's two floating cards at its exact geometry, carrying
+             * REAL content: the 28-day engagement figure (or the reason there
+             * is none) and the next thing going out (or that nothing is).
              */
             <>
               <HeroFloatCard
                 placement="end"
                 title={t('overview.float.performance')}
-                detail={t('overview.metric.laterPhase')}
-              >
-                <HeroMiniChart />
-              </HeroFloatCard>
+                detail={
+                  engagements === null
+                    ? t('analytics.absent.metrics_pending')
+                    : t('home.float.engagements').replace('{count}', number.format(engagements))
+                }
+              />
               <HeroFloatCard
                 placement="start"
                 title={t('overview.float.next')}
-                detail={t('overview.upcomingEmptyTitle')}
+                detail={
+                  nextSlot
+                    ? `${nextSlot.item?.title ?? '—'} · ${dayFormat.format(nextSlot.scheduledAtUtc)}`
+                    : t('overview.upcomingEmptyTitle')
+                }
               />
             </>
-          }
-          secondaryAction={
-            <Link
-              href={`/${locale}/settings`}
-              data-testid="hero-secondary"
-              style={{
-                ...buttonStyle('ghost'),
-                background: 'transparent',
-                color: colorTokens.textPrimary,
-              }}
-            >
-              {t('overview.hero.secondary')}
-              <span aria-hidden="true">→</span>
-            </Link>
           }
         />
       }
     >
       <Stack>
-        {/*
-          THE ATTENTION LIST COMES FIRST, ABOVE THE STATISTICS.
+        {ok ? (
+          <p role="status" style={{ margin: 0, ...typographyTokens.bodySm }}>
+            {ok}
+          </p>
+        ) : null}
 
-          Ordering is the whole point of a Command Center: what needs doing
-          outranks how things are going. The statistics below are unchanged and
-          still answer the second question.
+        {inviteSetup ? (
+          <Card testId="home-setup" tone="lavender">
+            <SectionHeader
+              title={brand ? t('home.setup.continueTitle') : t('home.setup.startTitle')}
+              description={brand ? t('home.setup.continueBody') : t('home.setup.startBody')}
+              actions={
+                <Link
+                  href={`/${locale}/onboarding`}
+                  style={buttonStyle('brand', 'sm')}
+                  className={buttonClass('brand')}
+                  data-testid="home-setup-open"
+                >
+                  {t('home.setup.open')}
+                </Link>
+              }
+            />
+          </Card>
+        ) : null}
 
-          NO EMPTY-STATE CLUTTER. When nothing is waiting, this is ONE sentence
-          saying so — not a card, not an illustration, not a zero. A workspace
-          with nothing outstanding is a good state and should read like one.
-        */}
+        {/* ------------------------------------------------ A — WHAT NEEDS YOU */}
         <Card testId="attention-card">
           <SectionHeader
             title={t('attention.title')}
             actions={
-              /*
-               * PULSE → COPILOT (P6-12). The assistant opened from here is told
-               * it was opened from Home, where this list is — one path from
-               * "what needs me" to "help me with it", with the same
-               * confirmation ceremony as anywhere else.
-               */
               mayUseCopilot && attention.length > 0 ? (
                 <Link
                   href={copilotHref(locale, 'overview')}
@@ -400,51 +463,29 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
             }
           />
           {attention.length === 0 ? (
-            <p
-              data-testid="attention-none"
-              style={{ margin: 0, ...typographyTokens.body, color: colorTokens.textSecondary }}
-            >
-              {t('attention.none')}
-            </p>
+            quiet(t('attention.none'), 'attention-none')
           ) : (
-            <ul
-              data-testid="attention-list"
-              style={{
-                margin: 0,
-                padding: 0,
-                listStyle: 'none',
-                display: 'grid',
-                gap: spacingTokens.sm,
-              }}
-            >
+            <ul data-testid="attention-list" style={listStyle}>
               {attention.map((item) => (
-                <li key={item.kind}>
+                <li key={item.kind} data-testid={`attention-${item.kind}`} style={rowStyle}>
+                  {/*
+                    The badge carries the severity as a WORD as well as a
+                    colour — colour alone fails WCAG 1.4.1.
+                  */}
+                  <StatusBadge
+                    tone={item.severity === 'blocked' ? 'danger' : statusTone(item.severity)}
+                    label={t(`attention.severity.${item.severity}` as never)}
+                  />
+                  <span style={{ ...typographyTokens.body, flex: '1 1 14rem', minInlineSize: 0 }}>
+                    {attentionSentence(t, item, (value) => attentionDate.format(value))}
+                  </span>
                   <Link
                     href={`/${locale}${item.href}`}
-                    data-testid={`attention-${item.kind}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: spacingTokens.sm,
-                      padding: spacingTokens.sm,
-                      borderRadius: '0.75rem',
-                      color: colorTokens.textPrimary,
-                      textDecoration: 'none',
-                    }}
-                    className="bs-control bs-pressable"
+                    style={buttonStyle('neutral', 'sm')}
+                    className={buttonClass('neutral')}
+                    data-testid={`attention-action-${item.kind}`}
                   >
-                    {/*
-                      The badge carries the severity as a WORD as well as a
-                      colour — colour alone fails WCAG 1.4.1, and "blocked" and
-                      "waiting" are genuinely different instructions.
-                    */}
-                    <StatusBadge
-                      tone={item.severity === 'blocked' ? 'danger' : statusTone(item.severity)}
-                      label={t(`attention.severity.${item.severity}` as never)}
-                    />
-                    <span style={{ ...typographyTokens.body }}>
-                      {attentionSentence(t, item, (value) => attentionDate.format(value))}
-                    </span>
+                    {t(`home.action.${attentionAction(item.kind)}` as MessageKey)}
                   </Link>
                 </li>
               ))}
@@ -452,358 +493,360 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
           )}
         </Card>
 
-        {/*
-          `.metric-row { grid-template-columns: repeat(4,1fr) }`, stepping to
-          TWO columns at 900 and staying at two down to 390 — the demo never
-          gives a phone a single column of statistics. A 12rem floor could not
-          fit two inside 366px and collapsed to one, which made the Overview
-          four tall cards deep before the first section.
-        */}
-        <ContentGrid min="10rem" testId="overview-metrics">
-          <MetricCard
-            label={t('overview.metric.plan')}
-            value={effective?.planKey ?? undefined}
-            unavailable={!maySeeBilling || !effective?.planKey}
-            unavailableLabel={maySeeBilling ? t('plan.none') : t('overview.metric.hidden')}
-            hint={t('overview.metric.planHint')}
-            testId="metric-plan"
-          />
-          <MetricCard
-            label={t('overview.metric.credits')}
-            value={wallet ? String(wallet.balanceCredits) : undefined}
-            unavailable={!wallet}
-            unavailableLabel={t('overview.metric.hidden')}
-            hint={t('overview.metric.creditsHint')}
-            testId="metric-credits"
-          />
-          <MetricCard
-            label={t('overview.metric.members')}
-            value={memberCount === null ? undefined : String(memberCount)}
-            unavailable={memberCount === null}
-            unavailableLabel={t('overview.metric.hidden')}
-            testId="metric-members"
-          />
-          {/*
-            PHASE 5B-3 REPLACED THE FOURTH PLACEHOLDER WITH A REAL FIGURE. "In
-            review" is now measurable because there is a review workflow behind
-            it; "published" still is not, and has moved below rather than being
-            quietly rendered as a zero.
-          */}
-          <MetricCard
-            label={t('overview.metric.inReview')}
-            value={maySeeContent ? String(summary.inReview) : undefined}
-            unavailable={!maySeeContent}
-            unavailableLabel={t('overview.metric.hidden')}
-            testId="metric-in-review"
-          />
-          <MetricCard
-            label={t('overview.metric.scheduled')}
-            value={maySeeContent ? String(summary.upcoming.length) : undefined}
-            unavailable={!maySeeContent}
-            unavailableLabel={t('overview.metric.hidden')}
-            hint={t('overview.metric.scheduledHint')}
-            testId="metric-scheduled"
-          />
-          {/*
-            PHASE 7 MAKES THIS ONE REAL, AND ONLY BECAUSE THERE IS SOMETHING TO
-            MEASURE.
-
-            The card said "available when publishing ships" through Phases 5B-2
-            and 6, because a zero there would have read as "you published
-            nothing" — a fabricated measurement of a feature that did not exist
-            (CLAUDE.md §2.2). Publishing shipped in Phase 6 and analytics
-            ingestion in Phase 7, so the number is now a real sum over stored
-            observations.
-
-            IT IS STILL UNAVAILABLE RATHER THAN ZERO when there is no
-            measurement: `engagements === null` means no reading has arrived,
-            which is a different thing from a measured none, and the card keeps
-            saying which.
-          */}
-          <MetricCard
-            label={t('overview.metric.engagement')}
-            {...(engagements === null
-              ? {
-                  unavailable: true,
-                  unavailableLabel: maySeeAnalytics
-                    ? t('analytics.absent.metrics_pending')
-                    : t('overview.metric.hidden'),
-                }
-              : {
-                  value: new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(engagements),
-                })}
-            hint={t('overview.metric.engagementHint')}
-            testId="metric-engagement"
-          />
-        </ContentGrid>
+        {/* --------------------------------------- B — RECOMMENDED BY BRANDSPACE */}
+        {maySeeInsights ? (
+          <Card testId="home-recommended">
+            <SectionHeader
+              title={t('home.recommended.title')}
+              description={t('home.recommended.body')}
+            />
+            {recommendations.length === 0 ? (
+              quiet(t('home.recommended.none'), 'home-recommended-none')
+            ) : (
+              <ul style={listStyle}>
+                {recommendations.map((insight) => (
+                  <li
+                    key={insight.id}
+                    data-testid={`home-recommendation-${insight.id}`}
+                    style={{ ...rowStyle, alignItems: 'flex-start', flexDirection: 'column' }}
+                  >
+                    <strong style={typographyTokens.body}>{pick(insight.title)}</strong>
+                    <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
+                      {pick(insight.body)}
+                    </span>
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                      {t('home.recommended.evidence')
+                        .replace('{count}', String(insight._count.evidence))
+                        .replace('{basis}', t(`home.basis.${insight.basis}` as MessageKey))}
+                    </span>
+                    <div style={actionsStyle}>
+                      <Link
+                        href={`/${locale}/intelligence?insight=${insight.id}`}
+                        style={buttonStyle('neutral', 'sm')}
+                        className={buttonClass('neutral')}
+                        data-testid={`home-recommendation-evidence-${insight.id}`}
+                      >
+                        {t('home.recommended.viewEvidence')}
+                      </Link>
+                      {mayUseCopilot ? (
+                        <Link
+                          href={copilotHref(locale, 'intelligence')}
+                          style={buttonStyle('ghost', 'sm')}
+                          className={buttonClass('ghost')}
+                        >
+                          {t('home.recommended.giveToCopilot')}
+                        </Link>
+                      ) : null}
+                      {mayReviewInsights ? (
+                        <form action={reviewIntelligenceAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="insightId" value={insight.id} />
+                          <input type="hidden" name="decision" value="dismiss" />
+                          <input type="hidden" name="returnTo" value="/overview" />
+                          <button
+                            type="submit"
+                            style={buttonStyle('ghost', 'sm')}
+                            className={buttonClass('ghost')}
+                            data-testid={`home-recommendation-dismiss-${insight.id}`}
+                          >
+                            {t('insights.dismiss')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ) : null}
 
         <div className="bs-split-main">
-          <Stack>
-            {/*
-              The reference's "Next on your calendar". The composition is
-              reproduced; the two posts inside it are not, because a scheduled
-              post cannot exist before the schedule does.
-            */}
+          {/* ------------------------------------------------------ C — NOTES */}
+          {mayUseNotes ? (
+            <Card testId="home-notes">
+              <SectionHeader
+                title={t('home.notes.title')}
+                actions={
+                  <Link
+                    href={`/${locale}/notes`}
+                    style={buttonStyle('neutral', 'sm')}
+                    className={buttonClass('neutral')}
+                  >
+                    {t('home.notes.all')}
+                  </Link>
+                }
+              />
+              {conversations.length === 0 ? (
+                quiet(t('home.notes.none'), 'home-notes-none')
+              ) : (
+                <ul style={listStyle}>
+                  {conversations.map((entry) => {
+                    const author = entry.lastNote ? nameOf(entry.lastNote.authorUserId) : null;
+                    return (
+                      <li
+                        key={entry.threadId}
+                        data-testid={`home-note-${entry.threadId}`}
+                        style={{ ...rowStyle, alignItems: 'flex-start' }}
+                      >
+                        <span aria-hidden="true" style={avatarStyle}>
+                          {(author ?? entry.brandName).slice(0, 1).toUpperCase()}
+                        </span>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gap: spacingTokens['3xs'],
+                            flex: '1 1 12rem',
+                            minInlineSize: 0,
+                          }}
+                        >
+                          <span style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
+                            {author ?? entry.brandName}
+                            {entry.unreadMentions > 0 ? (
+                              <>
+                                {' '}
+                                <StatusBadge
+                                  label={t('notesInbox.unread').replace(
+                                    '{count}',
+                                    String(entry.unreadMentions),
+                                  )}
+                                  tone="warning"
+                                  dot
+                                />
+                              </>
+                            ) : null}
+                          </span>
+                          {entry.lastNote ? (
+                            <span
+                              dir="auto"
+                              style={{
+                                ...typographyTokens.bodySm,
+                                color: colorTokens.textSecondary,
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {entry.lastNote.body}
+                            </span>
+                          ) : null}
+                          <span
+                            style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
+                          >
+                            {entry.subjectTitle ?? entry.brandName} ·{' '}
+                            <time dateTime={entry.updatedAt.toISOString()}>
+                              {relativeTime(entry.updatedAt, now, locale)}
+                            </time>
+                          </span>
+                          <div style={actionsStyle}>
+                            <Link
+                              href={noteHref(entry)}
+                              style={buttonStyle('neutral', 'sm')}
+                              className={buttonClass('neutral')}
+                              data-testid={`home-note-open-${entry.threadId}`}
+                            >
+                              {t(`home.notes.open.${entry.subjectType}` as MessageKey)}
+                            </Link>
+                            {entry.status === 'OPEN' ? (
+                              <form action={resolveNoteThreadAction}>
+                                <input type="hidden" name="locale" value={locale} />
+                                <input type="hidden" name="threadId" value={entry.threadId} />
+                                <input
+                                  type="hidden"
+                                  name="returnPath"
+                                  value={`/${locale}/overview`}
+                                />
+                                <button
+                                  type="submit"
+                                  style={buttonStyle('ghost', 'sm')}
+                                  className={buttonClass('ghost')}
+                                  data-testid={`home-note-resolve-${entry.threadId}`}
+                                >
+                                  {t('home.notes.resolve')}
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+
+          {/* -------------------------------------------------- D — COMING UP */}
+          {schedule ? (
             <Card testId="overview-upcoming">
               <SectionHeader
                 eyebrow={t('overview.upcomingKicker')}
-                title={t('overview.upcoming')}
+                title={t('home.upcoming.title')}
                 actions={
-                  maySeeContent ? (
-                    <Link href={`/${locale}/calendar`} style={buttonStyle('neutral', 'sm')}>
-                      {t('overview.upcomingSeeAll')}
-                    </Link>
-                  ) : undefined
+                  <Link
+                    href={`/${locale}/calendar`}
+                    style={buttonStyle('neutral', 'sm')}
+                    className={buttonClass('neutral')}
+                    data-testid="overview-upcoming-calendar"
+                  >
+                    {t('overview.upcomingSeeAll')}
+                  </Link>
                 }
               />
-              {summary.upcoming.length === 0 ? (
+              {schedule.upcoming.length === 0 ? (
                 <StateMessage
                   title={t('overview.upcomingEmptyTitle')}
-                  description={t('overview.upcomingEmptyBody')}
+                  description={t('home.upcoming.empty')}
                 />
               ) : (
-                <ul style={panelListStyle} data-testid="overview-upcoming-list">
-                  {summary.upcoming.map((slot) => (
-                    <li key={slot.id} style={panelRowStyle}>
-                      <Link
-                        href={`/${locale}/content/compose?item=${slot.contentItemId}`}
-                        style={{ ...typographyTokens.bodySm, fontWeight: 600 }}
-                      >
-                        {slot.item?.title ?? '—'}
-                      </Link>
-                      <span style={panelMetaStyle}>
-                        <time dateTime={slot.scheduledAtUtc.toISOString()}>
-                          {overviewDateFormat.format(slot.scheduledAtUtc)}
-                        </time>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <ol
+                  data-testid="overview-upcoming-list"
+                  style={{ ...listStyle, gap: spacingTokens.md }}
+                >
+                  {groupByDay(schedule.upcoming, (slot) => slot.scheduledAtUtc, timeZone).map(
+                    (group) => (
+                      <li key={group.day}>
+                        <h3
+                          style={{
+                            margin: `0 0 ${spacingTokens.xs}`,
+                            ...typographyTokens.label,
+                            color: colorTokens.textSecondary,
+                          }}
+                        >
+                          {dayFormat.format(group.first)}
+                        </h3>
+                        <ul style={{ ...listStyle, gap: spacingTokens.xs }}>
+                          {group.rows.map((slot) => (
+                            <li key={slot.id} style={{ ...rowStyle, padding: 0 }}>
+                              <time
+                                dateTime={slot.scheduledAtUtc.toISOString()}
+                                style={{
+                                  ...typographyTokens.caption,
+                                  color: colorTokens.textMuted,
+                                  minInlineSize: '3.5rem',
+                                }}
+                              >
+                                {timeFormat.format(slot.scheduledAtUtc)}
+                              </time>
+                              <Link
+                                href={`/${locale}/content/compose?item=${slot.contentItemId}`}
+                                style={{
+                                  ...typographyTokens.bodySm,
+                                  fontWeight: 600,
+                                  flex: '1 1 10rem',
+                                  minInlineSize: 0,
+                                }}
+                              >
+                                {slot.item?.title ?? '—'}
+                              </Link>
+                              <StatusBadge
+                                label={t(`home.slot.${slot.status}` as MessageKey)}
+                                tone={slot.status === 'PLANNED' ? 'neutral' : 'info'}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    ),
+                  )}
+                </ol>
               )}
             </Card>
-
-            {/*
-              PHASE 5B-3 — "NEEDS YOUR APPROVAL", the widget docs/PRODUCT.md
-              §5.1 names first. The count comes from the Approvals service, so it
-              carries that module's brand scoping rather than a second copy of it.
-            */}
-            <Card testId="overview-approvals">
-              <SectionHeader
-                eyebrow={t('overview.needsApprovalKicker')}
-                title={t('overview.needsApproval')}
-                actions={
-                  maySeeContent ? (
-                    <Link href={`/${locale}/approvals`} style={buttonStyle('neutral', 'sm')}>
-                      {t('overview.approvalsSeeAll')}
-                    </Link>
-                  ) : undefined
-                }
-              />
-              {pendingApprovals === 0 ? (
-                <StateMessage
-                  title={t('overview.needsApprovalEmptyTitle')}
-                  description={t('overview.needsApprovalEmptyBody')}
-                />
-              ) : (
-                <p
-                  style={{ margin: 0, ...typographyTokens.bodySm }}
-                  data-testid="overview-approvals-count"
-                >
-                  {pendingApprovals}
-                </p>
-              )}
-            </Card>
-
-            <Card testId="overview-activity">
-              <SectionHeader
-                title={t('overview.activity')}
-                actions={
-                  <Link href={`/${locale}/activity`} style={buttonStyle('neutral', 'sm')}>
-                    {t('overview.activitySeeAll')}
-                  </Link>
-                }
-              />
-              {summary.recent.length === 0 ? (
-                <StateMessage
-                  title={t('overview.activityEmptyTitle')}
-                  description={t('overview.activityEmptyBody')}
-                />
-              ) : (
-                <ul style={panelListStyle} data-testid="overview-activity-list">
-                  {summary.recent.map((entry) => (
-                    <li key={entry.id} style={panelRowStyle}>
-                      <span style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
-                        {activityActionLabel(
-                          entry.action,
-                          (locale === 'ar' ? messages.ar : messages.en) as Readonly<
-                            Record<string, string | undefined>
-                          >,
-                        )}
-                      </span>
-                      <span style={panelMetaStyle}>
-                        <time dateTime={entry.occurredAt.toISOString()}>
-                          {overviewDateFormat.format(entry.occurredAt)}
-                        </time>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </Stack>
-
-          <Stack>
-            <Card
-              testId="overview-notifications"
-              title={t('notifications.title')}
-              actions={
-                <Link href={`/${locale}/notifications`} style={buttonStyle('neutral', 'sm')}>
-                  {t('notifications.open')}
-                </Link>
-              }
-            >
-              <p
-                style={{ margin: 0, ...typographyTokens.bodySm }}
-                data-testid="overview-unread-count"
-              >
-                {t('notifications.unread')}: {summary.unread}
-              </p>
-            </Card>
-
-            {/*
-              THE COPILOT CARD SAID "suggestions appear once AI generation is
-              enabled" long after it was — a permanently empty promise. It is now
-              the entry it always implied: open the assistant with Home as its
-              context, or, for a member without it, nothing at all.
-            */}
-            {mayUseCopilot ? (
-              <Card testId="overview-copilot">
-                <SectionHeader
-                  eyebrow={t('overview.copilotKicker')}
-                  title={t('copilot.title')}
-                  actions={
-                    <Link
-                      href={copilotHref(locale, 'overview')}
-                      style={buttonStyle('primary', 'sm')}
-                      className={buttonClass('primary')}
-                      data-testid="overview-copilot-open"
-                    >
-                      {t('copilot.ask')}
-                    </Link>
-                  }
-                />
-                <p
-                  style={{
-                    margin: 0,
-                    ...typographyTokens.bodySm,
-                    color: colorTokens.textSecondary,
-                  }}
-                >
-                  {t('copilot.subtitle')}
-                </p>
-              </Card>
-            ) : null}
-
-            <Card testId="overview-identity">
-              <SectionHeader
-                title={t('overview.workspaceSection')}
-                description={t('overview.workspaceSectionHint')}
-                actions={
-                  <StatusBadge
-                    label={
-                      optionalMessage(
-                        locale,
-                        `overview.workspaceStatus.${workspace.workspaceStatus}`,
-                      ) ?? workspace.workspaceStatus
-                    }
-                    tone={statusTone(workspace.workspaceStatus)}
-                    testId={`workspace-status-${workspace.workspaceStatus}`}
-                  />
-                }
-              />
-              <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.sm }}>
-                {[
-                  {
-                    label: t('overview.field.signedInAs'),
-                    value: customer.email,
-                    testId: 'signed-in-as',
-                  },
-                  { label: t('overview.field.workspace'), value: workspace.workspaceName },
-                  {
-                    label: t('overview.field.role'),
-                    value: locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn,
-                  },
-                ].map((row) => (
-                  <div key={row.label} style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
-                    <dt
-                      style={{
-                        ...typographyTokens.caption,
-                        color: colorTokens.textMuted,
-                      }}
-                    >
-                      {row.label}
-                    </dt>
-                    <dd
-                      data-testid={row.testId}
-                      style={{
-                        margin: 0,
-                        ...typographyTokens.bodySm,
-                        fontWeight: 600,
-                        overflowWrap: 'anywhere',
-                      }}
-                    >
-                      {row.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-
-            {maySeeBilling && effective ? (
-              <Card
-                title={t('plan.current')}
-                testId="overview-plan"
-                actions={
-                  <Link href={`/${locale}/plan`} style={buttonStyle('neutral', 'sm')}>
-                    {t('nav.plan')}
-                  </Link>
-                }
-              >
-                <p
-                  style={{ margin: 0, ...typographyTokens.bodySm }}
-                  data-testid="overview-plan-key"
-                >
-                  {effective.planKey ?? t('plan.none')}
-                </p>
-                {wallet ? (
-                  <p style={{ marginBlockEnd: 0, ...typographyTokens.bodySm }}>
-                    {t('plan.credits')}:{' '}
-                    <strong data-testid="overview-credits">{wallet.balanceCredits}</strong>
-                  </p>
-                ) : null}
-              </Card>
-            ) : null}
-          </Stack>
+          ) : null}
         </div>
+
+        {/* ------------------------------------------------ E — PERFORMANCE */}
+        <section
+          aria-labelledby="home-performance-title"
+          style={{ display: 'grid', gap: spacingTokens.sm }}
+        >
+          <h2 id="home-performance-title" style={{ margin: 0, ...typographyTokens.cardTitle }}>
+            {t('home.performance.title')}
+          </h2>
+          <ContentGrid min="10rem" testId="overview-metrics">
+            <MetricCard
+              label={t('overview.metric.engagement')}
+              {...(engagements === null
+                ? {
+                    unavailable: true,
+                    unavailableLabel: maySeeAnalytics
+                      ? t('analytics.absent.metrics_pending')
+                      : t('overview.metric.hidden'),
+                  }
+                : { value: number.format(engagements) })}
+              hint={t('overview.metric.engagementHint')}
+              testId="metric-engagement"
+            />
+            <MetricCard
+              label={t('home.metric.published')}
+              value={schedule ? number.format(schedule.published) : undefined}
+              unavailable={!schedule}
+              unavailableLabel={t('overview.metric.hidden')}
+              hint={t('home.metric.publishedHint')}
+              testId="metric-published-28d"
+            />
+            <MetricCard
+              label={t('overview.metric.scheduled')}
+              value={schedule ? number.format(schedule.upcoming.length) : undefined}
+              unavailable={!schedule}
+              unavailableLabel={t('overview.metric.hidden')}
+              hint={t('home.metric.scheduledHint')}
+              testId="metric-scheduled"
+            />
+            <MetricCard
+              label={t('overview.metric.inReview')}
+              value={schedule ? number.format(schedule.inReview) : undefined}
+              unavailable={!schedule}
+              unavailableLabel={t('overview.metric.hidden')}
+              hint={
+                pendingApprovals === null
+                  ? undefined
+                  : t('home.metric.approvalsHint').replace(
+                      '{count}',
+                      number.format(pendingApprovals),
+                    )
+              }
+              testId="metric-in-review"
+            />
+          </ContentGrid>
+        </section>
       </Stack>
     </WorkspaceShell>
   );
 }
 
-const panelListStyle = {
+const listStyle = {
   listStyle: 'none',
   margin: 0,
   padding: 0,
   display: 'grid',
-  gap: spacingTokens.xs,
+  gap: spacingTokens.sm,
 } as const;
 
-const panelRowStyle = {
+const rowStyle = {
   display: 'flex',
-  gap: spacingTokens.xs,
-  justifyContent: 'space-between',
-  alignItems: 'baseline',
   flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: spacingTokens.sm,
+  padding: spacingTokens.sm,
+  borderRadius: radiusTokens.md,
+  background: colorTokens.surfaceSoft,
 } as const;
 
-const panelMetaStyle = { ...typographyTokens.caption, color: colorTokens.textMuted } as const;
+const actionsStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: spacingTokens.xs,
+  alignItems: 'center',
+} as const;
+
+const avatarStyle = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  flex: '0 0 auto',
+  inlineSize: '2rem',
+  blockSize: '2rem',
+  borderRadius: radiusTokens.full,
+  background: colorTokens.surfaceLavenderStrong,
+  color: colorTokens.brandPurplePressed,
+  ...typographyTokens.caption,
+  fontWeight: 700,
+} as const;

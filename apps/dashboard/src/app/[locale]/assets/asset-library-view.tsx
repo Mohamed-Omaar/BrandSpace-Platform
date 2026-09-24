@@ -1,5 +1,7 @@
 'use client';
 
+import type React from 'react';
+
 import { useId, useState } from 'react';
 import type { AssetKind, AssetScanStatus, AssetStatus } from '@brandspace/database';
 import {
@@ -114,6 +116,11 @@ export interface AssetLibraryViewProps {
   readonly maxFileBytes: Readonly<Record<string, number>>;
   readonly allowedMimeTypes: readonly string[];
   readonly selected: AssetDetailData | null;
+  /**
+   * The selected asset's conversation (D-277 §28, D-281) — the server-rendered
+   * `NotesPanel`, passed in as a slot because this view is a client component.
+   */
+  readonly notes?: React.ReactNode;
   readonly filters: {
     readonly search?: string;
     readonly kind?: string;
@@ -506,6 +513,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           t={t}
         />
       ) : null}
+      {props.selected && props.notes ? props.notes : null}
 
       {/* --- Upload ------------------------------------------------------ */}
       <Dialog

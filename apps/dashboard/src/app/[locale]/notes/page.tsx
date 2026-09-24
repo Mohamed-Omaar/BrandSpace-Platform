@@ -15,6 +15,7 @@ import { systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { mentionableMembers } from '../../../server/notes-context';
+import { noteThreadHref } from '../../../server/note-links';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
@@ -78,16 +79,8 @@ export default async function NotesPage({
     timeZone: 'UTC',
   });
 
-  /** Where the conversation lives — the subject's own screen, with its panel. */
-  const subjectHref = (entry: NoteInboxEntry): string => {
-    if (entry.subjectType === 'CONTENT_ITEM' && entry.contentItemId) {
-      return `/${locale}/content/compose?item=${entry.contentItemId}`;
-    }
-    if (entry.subjectType === 'CAMPAIGN' && entry.campaignId) {
-      return `/${locale}/campaigns/${entry.campaignId}`;
-    }
-    return `/${locale}/brand-brain?brand=${entry.brandId}`;
-  };
+  /** Where the conversation lives — the subject's own screen, the thread highlighted. */
+  const subjectHref = (entry: NoteInboxEntry): string => noteThreadHref(locale, entry);
 
   const row = (entry: NoteInboxEntry) => (
     <li

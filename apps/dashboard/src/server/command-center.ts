@@ -114,7 +114,7 @@ async function publishingFailures(
   });
   return count === 0
     ? null
-    : { kind: 'publishing-failed', severity: 'blocked', count, href: '/calendar' };
+    : { kind: 'publishing-failed', severity: 'blocked', count, href: '/publishing?tab=failed' };
 }
 
 /**
@@ -141,7 +141,7 @@ async function connectionsNeedingReauth(
   });
   return count === 0
     ? null
-    : { kind: 'connection-reauth', severity: 'blocked', count, href: '/integrations' };
+    : { kind: 'connection-reauth', severity: 'blocked', count, href: '/publishing?tab=accounts' };
 }
 
 /**
@@ -371,7 +371,7 @@ async function connectionsExpiring(
   });
   return count === 0
     ? null
-    : { kind: 'connection-expiring', severity: 'waiting', count, href: '/integrations' };
+    : { kind: 'connection-expiring', severity: 'waiting', count, href: '/publishing?tab=accounts' };
 }
 
 /**
@@ -674,15 +674,17 @@ const SOURCES: readonly {
     session: CustomerWorkspaceContext,
   ) => Promise<AttentionItem | null>;
 }[] = [
-  { permissions: ['content.read'], run: publishingFailures },
+  // Publishing (D-277 §33) is where failures and account health are acted on,
+  // so its permission joins the source's own.
+  { permissions: ['content.read', 'publishing.read'], run: publishingFailures },
   { permissions: ['content.read'], run: overdueSchedules },
-  { permissions: ['integrations.read'], run: connectionsNeedingReauth },
+  { permissions: ['integrations.read', 'publishing.read'], run: connectionsNeedingReauth },
   { permissions: ['content.read'], run: contentInReview },
   { permissions: ['brand_brain.read'], run: brandsWithNoKnowledge },
   // P6-11 — Pulse.
   { permissions: ['brand_brain.review'], run: learningsPending },
   { permissions: ['strategy.read'], run: insightsUnreviewed },
-  { permissions: ['integrations.read'], run: connectionsExpiring },
+  { permissions: ['integrations.read', 'publishing.read'], run: connectionsExpiring },
   { permissions: ['campaigns.read'], run: campaignsWithoutContent },
   { permissions: ['content.read'], run: calendarGaps },
   { permissions: ['credits.read', 'billing.read'], run: creditsRunningOut },

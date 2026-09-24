@@ -930,6 +930,79 @@ export function CopilotPanel({
   );
 }
 
+/**
+ * THE GLOBAL COPILOT DRAWER (Phase 6 final, D-277 §37).
+ *
+ * The Copilot opened from the top bar, over whatever screen the person is on,
+ * so the conversation can start from where they are rather than on a page of
+ * its own. THE DEMO'S `.side-drawer`, token for token — the same floating,
+ * inset, rounded panel `PostDetailDrawer` transcribes (430px, 22px padding,
+ * the drawer surface and shadow) — with the Copilot's own header on top. No
+ * new geometry: the 300px `CopilotPanel` stays the composer's docked column.
+ *
+ * A MODAL DIALOG: focus moves in, is trapped, Escape closes it from anywhere
+ * inside and focus returns to the top-bar control that opened it — the same
+ * `useOverlayBehaviour` every other overlay uses.
+ */
+export function CopilotDrawer({
+  open,
+  onClose,
+  labels,
+  children,
+  testId = 'copilot-drawer',
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly labels: CopilotLabels;
+  readonly children: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useOverlayBehaviour({ open, onClose, containerRef: panelRef });
+  if (!open) return null;
+  return (
+    <div
+      data-testid={`${testId}-scrim`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: zIndexTokens.drawer,
+        background: 'rgba(12, 12, 14, 0.25)',
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={labels.title}
+        data-testid={testId}
+        tabIndex={-1}
+        style={{
+          position: 'fixed',
+          insetBlock: layoutTokens.shellInset,
+          insetInlineEnd: layoutTokens.shellInset,
+          inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
+          zIndex: zIndexTokens.overlay,
+          overflowY: 'auto',
+          background: colorTokens.drawerAlpha,
+          backdropFilter: 'blur(24px)',
+          borderRadius: radiusTokens['3xl'],
+          boxShadow: shadowTokens.drawer,
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr',
+          alignContent: 'start',
+        }}
+      >
+        <CopilotHeader labels={labels} onClose={onClose} />
+        <div style={{ minBlockSize: 0, padding: '0 1.375rem 1.375rem' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /** The launcher. Hidden in production navigation until the AI phase ships. */
 export function CopilotLauncher({
   label,

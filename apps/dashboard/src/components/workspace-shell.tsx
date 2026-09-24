@@ -34,6 +34,10 @@ import { switchLocalePath } from '../i18n/locale-path';
 import { translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
 import { topbarModel } from '../server/topbar';
+import { copilotSurfaceForPath } from '../server/copilot-surface';
+import { copilotLabels } from '../server/copilot-labels';
+import { copilotDrawerSubject } from '../server/copilot-context';
+import { GlobalCopilot } from './global-copilot';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
@@ -381,6 +385,20 @@ export async function WorkspaceShell({
   const sections = navSections(permissionKeys, locale, activePath, t, brandContext);
 
   /*
+   * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
+   * brand, this screen as its surface, and the object this address names,
+   * read under the reader's scope. Only when the top bar offers the Copilot.
+   */
+  const copilotLink = topbar.links.find((link) => link.key === 'copilot' && !link.current);
+  const drawerBrand =
+    brandContext?.resolution.kind === 'brand'
+      ? { id: brandContext.resolution.brand.id, name: brandContext.resolution.brand.name }
+      : null;
+  const drawerSubject = copilotLink
+    ? await copilotDrawerSubject(requestPath, drawerBrand?.id ?? null, locale)
+    : null;
+
+  /*
    * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.
    *
    * `/settings/brand` calls `requireWorkspace(locale, 'brand.read')` and answers
@@ -481,7 +499,7 @@ export async function WorkspaceShell({
         <>
           {topbar.links.map((link) => {
             const count = link.count ?? 0;
-            return (
+            const control = (
               <TopbarLink
                 key={link.key}
                 href={link.href}
@@ -495,6 +513,26 @@ export async function WorkspaceShell({
                     : null
                 }
               />
+            );
+            return link === copilotLink ? (
+              <GlobalCopilot
+                key={link.key}
+                locale={locale}
+                href={link.href}
+                brand={drawerBrand}
+                surface={copilotSurfaceForPath(requestPath)}
+                subject={drawerSubject}
+                labels={copilotLabels(locale, identity)}
+                strings={{
+                  openFull: t('copilot.openFull'),
+                  chooseBrandTitle: t('brand.chooseTitle'),
+                  chooseBrandBody: t('copilot.noBrandBody'),
+                }}
+              >
+                {control}
+              </GlobalCopilot>
+            ) : (
+              control
             );
           })}
           <LanguageSwitcher

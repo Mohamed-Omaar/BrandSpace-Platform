@@ -31,7 +31,8 @@ import type { TenantScopedClient } from '@brandspace/database';
  * site rather than defaulted somewhere in here.
  */
 
-export type NoteSubjectType = 'CONTENT_ITEM' | 'CAMPAIGN' | 'BRAND';
+export type NoteSubjectType = 'CONTENT_ITEM' | 'CAMPAIGN' | 'BRAND' | 'ASSET';
+export type NoteImportance = 'NORMAL' | 'IMPORTANT';
 export type NoteThreadStatus = 'OPEN' | 'RESOLVED';
 
 /**
@@ -51,7 +52,13 @@ export interface NoteActor {
 export type NoteSubject =
   | { readonly type: 'CONTENT_ITEM'; readonly contentItemId: string }
   | { readonly type: 'CAMPAIGN'; readonly campaignId: string }
-  | { readonly type: 'BRAND'; readonly brandId: string };
+  | { readonly type: 'BRAND'; readonly brandId: string }
+  /**
+   * D-281. An asset, discussed within ONE brand: its own for a brand's asset
+   * (the `brandId` given must match), the reader's chosen one for a
+   * workspace-shared asset.
+   */
+  | { readonly type: 'ASSET'; readonly assetId: string; readonly brandId: string };
 
 export interface NoteThreadSummary {
   readonly id: string;
@@ -59,9 +66,12 @@ export interface NoteThreadSummary {
   readonly subjectType: NoteSubjectType;
   readonly contentItemId: string | null;
   readonly campaignId: string | null;
+  readonly assetId: string | null;
   readonly status: NoteThreadStatus;
   readonly createdByUserId: string;
   readonly assignedToUserId: string | null;
+  readonly dueAt: Date | null;
+  readonly importance: NoteImportance;
   readonly resolvedAt: Date | null;
   readonly createdAt: Date;
   readonly noteCount: number;
@@ -92,8 +102,11 @@ export interface NoteInboxEntry {
   readonly subjectType: NoteSubjectType;
   readonly contentItemId: string | null;
   readonly campaignId: string | null;
-  /** The content item's title or the campaign's name; null for a brand thread. */
+  readonly assetId: string | null;
+  /** The content item's title, the campaign's or the asset's name; null for a brand thread. */
   readonly subjectTitle: string | null;
+  readonly dueAt: Date | null;
+  readonly importance: NoteImportance;
   readonly status: NoteThreadStatus;
   readonly assignedToUserId: string | null;
   readonly updatedAt: Date;
@@ -203,6 +216,32 @@ export class NotesService {
       return campaign.brandId;
     }
 
+    if (subject.type === 'ASSET') {
+      /*
+       * D-281. The asset must be in this workspace, not deleted, and either the
+       * brand's own or workspace-shared — AND inside the member's scope. A
+       * brand's asset is discussed only within that brand; a shared one within
+       * the brand the caller names, which is then checked like any brand.
+       */
+      const asset = await this.#db.asset.findFirst({
+        where: {
+          id: subject.assetId,
+          workspaceId: this.#workspaceId,
+          deletedAt: null,
+          AND: [
+            { OR: [{ brandId: null }, { brandId: subject.brandId }] },
+            actor.brandScope.length === 0
+              ? {}
+              : { OR: [{ brandId: null }, { brandId: { in: [...actor.brandScope] } }] },
+          ],
+        },
+        select: { brandId: true },
+      });
+      if (!asset) throw this.#notFound();
+      if (asset.brandId !== null) return asset.brandId;
+      return this.#brandForSubject({ type: 'BRAND', brandId: subject.brandId }, actor);
+    }
+
     /*
      * THE BRAND'S OWN COLUMN IS `id`, NOT `brandId` — AND THE TWO CLAUSES MUST
      * INTERSECT RATHER THAN REPLACE EACH OTHER.
@@ -303,6 +342,7 @@ export class NotesService {
         subjectType: input.subject.type,
         contentItemId: input.subject.type === 'CONTENT_ITEM' ? input.subject.contentItemId : null,
         campaignId: input.subject.type === 'CAMPAIGN' ? input.subject.campaignId : null,
+        assetId: input.subject.type === 'ASSET' ? input.subject.assetId : null,
         status: 'OPEN',
         createdByUserId: input.actor.userId,
         assignedToUserId: assignee,
@@ -414,6 +454,51 @@ export class NotesService {
     });
   }
 
+  /**
+   * D-281 — WHEN A CONVERSATION NEEDS AN ANSWER BY, or not at all (`null`).
+   *
+   * A date and nothing more: no overdue state, no reminder engine. The reader
+   * sees it beside the thread; Home and Notes sort by what matters.
+   */
+  async setDue(input: {
+    readonly actor: NoteActor;
+    readonly threadId: string;
+    readonly dueAt: Date | null;
+  }): Promise<void> {
+    this.#requirePermission(input.actor);
+    const thread = await this.#threadFor(input.threadId, input.actor);
+    if (input.dueAt !== null && Number.isNaN(input.dueAt.getTime())) {
+      throw new AppError('VALIDATION_FAILED', 'That is not a date.');
+    }
+    await this.#db.noteThread.update({
+      where: { id: thread.id },
+      data: { dueAt: input.dueAt, updatedAt: this.#clock.now() },
+    });
+    await this.#audit(input.actor, 'customer.note.due_set', thread.id, {
+      due: input.dueAt !== null,
+    });
+  }
+
+  /** D-281 — Normal or Important. Nothing finer. */
+  async setImportance(input: {
+    readonly actor: NoteActor;
+    readonly threadId: string;
+    readonly importance: NoteImportance;
+  }): Promise<void> {
+    this.#requirePermission(input.actor);
+    if (input.importance !== 'NORMAL' && input.importance !== 'IMPORTANT') {
+      throw new AppError('VALIDATION_FAILED', 'Unknown importance.');
+    }
+    const thread = await this.#threadFor(input.threadId, input.actor);
+    await this.#db.noteThread.update({
+      where: { id: thread.id },
+      data: { importance: input.importance, updatedAt: this.#clock.now() },
+    });
+    await this.#audit(input.actor, 'customer.note.importance_set', thread.id, {
+      importance: input.importance,
+    });
+  }
+
   /** Every thread about one subject, newest activity first. */
   async threadsFor(subject: NoteSubject, actor: NoteActor): Promise<readonly NoteThreadSummary[]> {
     this.#requirePermission(actor);
@@ -421,7 +506,7 @@ export class NotesService {
     // workspace, or one outside this member's brand scope, before any thread is
     // read — rather than returning an empty list, which would not distinguish
     // "no conversations" from "not yours".
-    await this.#brandForSubject(subject, actor);
+    const resolvedBrand = await this.#brandForSubject(subject, actor);
 
     const threads = await this.#db.noteThread.findMany({
       where: {
@@ -431,9 +516,12 @@ export class NotesService {
           ? { contentItemId: subject.contentItemId }
           : subject.type === 'CAMPAIGN'
             ? { campaignId: subject.campaignId }
-            : { subjectType: 'BRAND', brandId: subject.brandId }),
+            : subject.type === 'ASSET'
+              ? { assetId: subject.assetId, brandId: resolvedBrand }
+              : { subjectType: 'BRAND', brandId: subject.brandId }),
       },
-      orderBy: { updatedAt: 'desc' },
+      // Important first, then the most recent — what matters leads (D-281).
+      orderBy: [{ importance: 'desc' }, { updatedAt: 'desc' }],
       include: { _count: { select: { notes: true } } },
     });
 
@@ -443,9 +531,12 @@ export class NotesService {
       subjectType: thread.subjectType as NoteSubjectType,
       contentItemId: thread.contentItemId,
       campaignId: thread.campaignId,
+      assetId: thread.assetId,
       status: thread.status as NoteThreadStatus,
       createdByUserId: thread.createdByUserId,
       assignedToUserId: thread.assignedToUserId,
+      dueAt: thread.dueAt,
+      importance: thread.importance as NoteImportance,
       resolvedAt: thread.resolvedAt,
       createdAt: thread.createdAt,
       noteCount: thread._count.notes,
@@ -536,12 +627,15 @@ export class NotesService {
         ...scope.AND,
         // A thread about a deleted content item has nowhere to link to.
         { NOT: { contentItem: { is: { deletedAt: { not: null } } } } },
+        // Nor does one about a deleted asset (D-281).
+        { NOT: { asset: { is: { deletedAt: { not: null } } } } },
       ],
     };
     const include = {
       brand: { select: { name: true } },
       contentItem: { select: { title: true } },
       campaign: { select: { name: true } },
+      asset: { select: { name: true } },
       notes: {
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' as const },
@@ -598,7 +692,11 @@ export class NotesService {
         subjectType: thread.subjectType as NoteSubjectType,
         contentItemId: thread.contentItemId,
         campaignId: thread.campaignId,
-        subjectTitle: thread.contentItem?.title ?? thread.campaign?.name ?? null,
+        assetId: thread.assetId,
+        subjectTitle:
+          thread.contentItem?.title ?? thread.campaign?.name ?? thread.asset?.name ?? null,
+        dueAt: thread.dueAt,
+        importance: thread.importance as NoteImportance,
         status: thread.status as NoteThreadStatus,
         assignedToUserId: thread.assignedToUserId,
         updatedAt: thread.updatedAt,
@@ -615,10 +713,12 @@ export class NotesService {
     };
 
     const forYou = mine.map((thread) => entry(thread, true));
-    // Unread first, then most recent — what is waiting on the reader leads.
+    // Unread first, then important, then most recent — what is waiting on the
+    // reader leads (D-281).
     forYou.sort(
       (a, b) =>
         Number(b.unreadMentions > 0) - Number(a.unreadMentions > 0) ||
+        Number(b.importance === 'IMPORTANT') - Number(a.importance === 'IMPORTANT') ||
         b.updatedAt.getTime() - a.updatedAt.getTime(),
     );
     return { forYou, open: others.map((thread) => entry(thread, false)) };

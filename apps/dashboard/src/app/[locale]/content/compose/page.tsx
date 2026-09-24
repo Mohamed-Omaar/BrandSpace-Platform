@@ -319,6 +319,7 @@ export default async function ComposePage({
           locale={locale}
           subject={{ type: 'CONTENT_ITEM', contentItemId: draft.id }}
           returnPath={`/${locale}/content/compose?item=${draft.id}`}
+          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
         />
       ) : null}
     </WorkspaceShell>

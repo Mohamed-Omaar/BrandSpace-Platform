@@ -71,7 +71,9 @@ export function approvalNotifier(input: {
         userIds: [event.notifyUserId],
         templateKey: templateForVerdict(event.verdict),
         payload: { itemTitle: event.itemTitle },
-        linkPath: `/content?item=${event.itemId}`,
+        // THE POST ITSELF, in the composer, where its conversation is (D-277
+        // §28/§29): a "changes requested" verdict is answered by editing there.
+        linkPath: `/content/compose?item=${event.itemId}`,
         brandId: event.brandId,
         resourceType: 'Approval',
         resourceId: event.approvalId,

@@ -110,8 +110,19 @@ export function CopilotView({
   surface,
   labels,
   creditsLabel,
+  subject = null,
 }: {
   readonly locale: string;
+  /**
+   * WHAT THE READER IS LOOKING AT (D-277 §37, D-280) — a campaign, a post or an
+   * insight, with the title to say so. Sent when the session opens; the server
+   * admits it against the brand or refuses the conversation.
+   */
+  readonly subject?: {
+    readonly type: 'CAMPAIGN' | 'CONTENT_ITEM' | 'INSIGHT';
+    readonly id: string;
+    readonly title: string;
+  } | null;
   /** The rail's selected brand — the ONLY brand this conversation acts on (D-190). */
   readonly brand: CopilotBrand;
   /** Where the Copilot was opened from; a key from the closed surface list. */
@@ -184,6 +195,7 @@ export function CopilotView({
       brandId: brand.id,
       surface,
       locale: locale === 'ar' ? 'AR' : 'EN',
+      subject: subject ? { type: subject.type, id: subject.id } : null,
     })) as { sessionId?: string; error?: { code?: string } };
     if (!opened.sessionId) {
       setErrorCode(opened.error?.code ?? 'INTERNAL');
@@ -387,6 +399,7 @@ export function CopilotView({
                   tOr(`copilot.surface.${surface}`, surface),
                 )}`
               : ''}
+            {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
           </p>
 
           <label style={{ display: 'grid', gap: '0.25rem' }}>
@@ -451,7 +464,21 @@ export function CopilotView({
            * THE EXTERNAL WARNING IS ITS OWN BANNER, not a line in a list. A plan
            * that would leave the platform must not look like one that would not.
            */}
-          {external ? <Banner tone="warning">{t('copilot.externalWarning')}</Banner> : null}
+          {external ? (
+            <Banner tone="warning">{t('copilot.externalWarning')}</Banner>
+          ) : (
+            /*
+             * AND THE OPPOSITE IS SAID TOO (D-277 §38): a plan that stays inside
+             * BrandSpace says so before it is confirmed, so "create two drafts"
+             * is never mistaken for "post two things".
+             */
+            <p
+              data-testid="copilot-nothing-published"
+              style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+            >
+              {t('copilot.nothingWillPublish')}
+            </p>
+          )}
 
           <ol style={{ display: 'grid', gap: spacingTokens.sm, paddingInlineStart: '1.25rem' }}>
             {steps.map((step) => {
@@ -556,6 +583,35 @@ export function CopilotView({
                   String(execution.status ?? ''),
                 )}
               />
+              {/*
+               * WHAT CHANGED, SAID EXACTLY (D-277 §38): one line per step that
+               * ran, from the server's own tool-call record — and, unless a
+               * publish step actually succeeded, that nothing was published.
+               */}
+              <ul
+                data-testid="copilot-changed"
+                style={{ margin: 0, paddingInlineStart: '1rem', ...typographyTokens.caption }}
+              >
+                {(execution.toolCalls ?? [])
+                  .filter((call) => call.status === 'SUCCEEDED')
+                  .map((call) => (
+                    <li key={call.ordinal}>✓ {stepTitle(call.toolKey)}</li>
+                  ))}
+              </ul>
+              {(execution.toolCalls ?? []).some(
+                (call) => call.toolKey === 'publishing.publish_now' && call.status === 'SUCCEEDED',
+              ) ? null : (
+                <p
+                  data-testid="copilot-nothing-was-published"
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    color: colorTokens.textSecondary,
+                  }}
+                >
+                  {t('copilot.nothingPublished')}
+                </p>
+              )}
               {execution.undoStatus === 'AVAILABLE' ? (
                 <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
                   <Button

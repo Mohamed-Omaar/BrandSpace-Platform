@@ -110,3 +110,32 @@ export async function markNoteMentionsReadAction(formData: FormData): Promise<vo
   });
   revalidatePath(safePath(formData));
 }
+
+/**
+ * D-281 — when the conversation needs an answer by. An empty field clears it.
+ * `<input type="date">` sends `YYYY-MM-DD`; it is stored as the END of that day
+ * in UTC so "due Thursday" is not already overdue on Thursday morning.
+ */
+export async function setNoteDueAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const threadId = String(formData.get('threadId') ?? '');
+  const raw = String(formData.get('dueAt') ?? '').trim();
+  const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T23:59:59.000Z`) : null;
+  if (raw !== '' && dueAt === null) throw new Error('Invalid date.');
+  await inNotes(locale, async ({ service, actor }) => {
+    await service.setDue({ actor, threadId, dueAt });
+  });
+  revalidatePath(safePath(formData));
+}
+
+/** D-281 — Normal or Important, from a closed set. */
+export async function setNoteImportanceAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const threadId = String(formData.get('threadId') ?? '');
+  const importance =
+    String(formData.get('importance') ?? '') === 'IMPORTANT' ? 'IMPORTANT' : 'NORMAL';
+  await inNotes(locale, async ({ service, actor }) => {
+    await service.setImportance({ actor, threadId, importance });
+  });
+  revalidatePath(safePath(formData));
+}

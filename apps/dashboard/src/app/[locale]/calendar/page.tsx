@@ -506,6 +506,7 @@ export default async function CalendarPage({
       ) : null}
       <CalendarView
         locale={locale}
+        preselectItemId={single('item')}
         t={t}
         periodLabel={periodLabel}
         month={monthKey(year, month)}

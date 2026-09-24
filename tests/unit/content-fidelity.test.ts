@@ -354,35 +354,21 @@ describe('the Content Studio stylesheet is a transcription of the pinned demo', 
     expect(ported).not.toContain('300px');
   });
 
-  it('the composer and library markup is the demo’s composition', () => {
+  it('the composer markup is the demo’s composition', () => {
     /*
-     * The class names a reviewer would look for, asserted against the VIEWS
+     * The class names a reviewer would look for, asserted against the VIEW
      * rather than the stylesheet — a stylesheet full of ported rules nothing
      * renders is not a port.
+     *
+     * THE LIBRARY IS NO LONGER A DEMO PORT. The owner's final UX contract
+     * (D-277 §15, D-282) replaced its gradient cards with a media-first library
+     * built from the design system; that decision supersedes this assertion
+     * for `/content`, and `docs/UI-FIDELITY-CONTRACT.md` records it.
      */
-    const library = readFileSync(
-      path.join(ROOT, 'apps/dashboard/src/app/[locale]/content/content-library-view.tsx'),
-      'utf8',
-    );
     const composer = readFileSync(
       path.join(ROOT, 'apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx'),
       'utf8',
     );
-
-    for (const className of [
-      'cs-view-toolbar',
-      'cs-section-kicker',
-      'cs-tabs',
-      'cs-filter-row',
-      'cs-search-field',
-      'cs-card-grid',
-      'cs-post-card',
-      'cs-post-art',
-      'cs-post-info',
-      'cs-status',
-    ]) {
-      expect(library, `the library does not render .${className}`).toContain(className);
-    }
 
     for (const className of [
       'cs-view-toolbar',

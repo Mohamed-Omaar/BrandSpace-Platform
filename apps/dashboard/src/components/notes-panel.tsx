@@ -8,17 +8,22 @@ import {
   colorTokens,
   inputStyle,
   spacingTokens,
-  textareaStyle,
   typographyTokens,
 } from '@brandspace/ui';
-import type { NoteSubject } from '@brandspace/collaboration';
+import type { NoteSubject, NoteThreadSummary } from '@brandspace/collaboration';
+import { systemClock } from '@brandspace/shared';
 import { inNotes, mentionableMembers } from '../server/notes-context';
+import { relativeTime } from '../server/home';
+import { MentionField } from './mention-field';
 import { translator, type MessageKey } from '../i18n/messages';
 import {
+  assignNoteThreadAction,
   markNoteMentionsReadAction,
   replyToNoteThreadAction,
   reopenNoteThreadAction,
   resolveNoteThreadAction,
+  setNoteDueAction,
+  setNoteImportanceAction,
   startNoteThreadAction,
 } from '../app/[locale]/notes-actions';
 
@@ -41,11 +46,13 @@ import {
  * panel needs no client JavaScript to post a note, which means it works before
  * hydration and on a locked-down browser.
  *
- * THE MENTION PICKER IS A NATIVE MULTIPLE SELECT rather than a typeahead. It
- * shows exactly the population the service will accept, it is keyboard
- * operable, it needs no client bundle, and it cannot get out of step with what
- * the server does with the ids. A richer picker is a later refinement, not a
- * correctness question.
+ * MENTIONS ARE A REAL TYPEAHEAD (D-277 §28): "@Sa" offers "Sara" from the
+ * same active-member population the service accepts (`MentionField`). Without
+ * script the native multiple select is still there, inside `<noscript>`.
+ *
+ * D-281: a thread shows who is talking (avatar, name, relative time), whether
+ * it is Important, when it is due and who it waits on — and a deep link
+ * (`?thread=`, `#thread-…`) opens the page with THAT conversation highlighted.
  */
 
 export async function NotesPanel({
@@ -53,12 +60,15 @@ export async function NotesPanel({
   subject,
   returnPath,
   title,
+  highlightThreadId = null,
 }: {
   readonly locale: string;
   readonly subject: NoteSubject;
   /** Where to refresh after a post. The page this panel is on. */
   readonly returnPath: string;
   readonly title?: string | undefined;
+  /** A deep link's target thread, drawn highlighted (D-281). */
+  readonly highlightThreadId?: string | null | undefined;
 }) {
   const t = translator(locale);
 
@@ -84,7 +94,9 @@ export async function NotesPanel({
       ? subject.contentItemId
       : subject.type === 'CAMPAIGN'
         ? subject.campaignId
-        : subject.brandId;
+        : subject.type === 'ASSET'
+          ? subject.assetId
+          : subject.brandId;
 
   return (
     <Card testId="notes-panel">
@@ -107,10 +119,10 @@ export async function NotesPanel({
             <NoteThread
               key={thread.id}
               locale={locale}
-              threadId={thread.id}
-              status={thread.status}
+              thread={thread}
               returnPath={returnPath}
               members={members}
+              highlighted={thread.id === highlightThreadId}
             />
           ))}
         </ul>
@@ -130,23 +142,27 @@ export async function NotesPanel({
         <input type="hidden" name="locale" value={locale} />
         <input type="hidden" name="subjectType" value={subject.type} />
         <input type="hidden" name="subjectId" value={subjectId} />
+        {subject.type === 'ASSET' ? (
+          <input type="hidden" name="subjectBrandId" value={subject.brandId} />
+        ) : null}
         <input type="hidden" name="returnPath" value={returnPath} />
 
         <label htmlFor="note-body" style={{ ...typographyTokens.caption, fontWeight: 800 }}>
           {t('notes.newLabel')}
         </label>
-        <textarea
-          className="bs-control"
+        <MentionField
           id="note-body"
           name="body"
+          multiline
           required
-          rows={3}
-          placeholder={t('notes.placeholder')}
-          data-testid="note-body"
-          style={textareaStyle()}
+          placeholder={t('notes.placeholderMention')}
+          suggestionsLabel={t('notes.mentionSuggestions')}
+          members={members}
+          testId="note-body"
         />
-
-        <MentionPicker locale={locale} members={members} id="note-mentions" />
+        <noscript>
+          <MentionPicker locale={locale} members={members} id="note-mentions" />
+        </noscript>
 
         <div>
           <button
@@ -166,75 +182,137 @@ export async function NotesPanel({
 /** One conversation: its messages, a reply box, and resolve/reopen. */
 async function NoteThread({
   locale,
-  threadId,
-  status,
+  thread,
   returnPath,
   members,
+  highlighted,
 }: {
   readonly locale: string;
-  readonly threadId: string;
-  readonly status: 'OPEN' | 'RESOLVED';
+  readonly thread: NoteThreadSummary;
   readonly returnPath: string;
   readonly members: readonly { readonly userId: string; readonly name: string }[];
+  readonly highlighted: boolean;
 }) {
   const t = translator(locale);
-  const notes = await inNotes(locale, ({ service, actor }) => service.notesIn(threadId, actor));
-  const names = new Map(members.map((member) => [member.userId, member.name]));
-  const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+  const threadId = thread.id;
+  const status = thread.status;
+  const now = systemClock.now();
+  const dayFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'medium',
-    timeStyle: 'short',
     timeZone: 'UTC',
   });
+  const hidden = (
+    <>
+      <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="threadId" value={threadId} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+    </>
+  );
+  const notes = await inNotes(locale, ({ service, actor }) => service.notesIn(threadId, actor));
+  const names = new Map(members.map((member) => [member.userId, member.name]));
+  const assignee = thread.assignedToUserId ? names.get(thread.assignedToUserId) : null;
+  const overdue = thread.dueAt !== null && status === 'OPEN' && thread.dueAt < now;
 
   return (
     <li
+      id={`thread-${threadId}`}
       data-testid={`note-thread-${threadId}`}
       data-status={status}
+      data-importance={thread.importance}
+      data-highlighted={highlighted ? 'true' : undefined}
       style={{
-        border: `1px solid ${colorTokens.hairline}`,
+        border: `1px solid ${highlighted ? colorTokens.brandPurpleBorder : colorTokens.hairline}`,
+        background: highlighted ? colorTokens.surfaceLavender : 'transparent',
         borderRadius: '0.875rem',
         padding: spacingTokens.md,
         display: 'grid',
         gap: spacingTokens.sm,
+        scrollMarginBlockStart: '6rem',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm, flexWrap: 'wrap' }}
+      >
         <StatusBadge
           tone={status === 'RESOLVED' ? 'success' : 'info'}
           label={t(status === 'RESOLVED' ? 'notes.resolved' : 'notes.open')}
         />
+        {thread.importance === 'IMPORTANT' ? (
+          <StatusBadge
+            tone="accent"
+            label={t('notes.important')}
+            dot
+            testId={`note-important-${threadId}`}
+          />
+        ) : null}
+        {thread.dueAt ? (
+          <StatusBadge
+            tone={overdue ? 'danger' : 'neutral'}
+            label={t(overdue ? 'notes.overdue' : 'notes.due').replace(
+              '{date}',
+              dayFormat.format(thread.dueAt),
+            )}
+            testId={`note-due-${threadId}`}
+          />
+        ) : null}
+        {assignee ? (
+          <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+            {t('notes.waitingOn').replace('{name}', assignee)}
+          </span>
+        ) : null}
       </div>
 
       <ol
         style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: spacingTokens.sm }}
       >
         {notes.map((note) => (
-          <li key={note.id} data-testid={`note-${note.id}`}>
-            <p
-              style={{
-                margin: 0,
-                ...typographyTokens.caption,
-                color: colorTokens.textSecondary,
-              }}
-            >
-              {/* The author by name, and when. An id here would be unreadable. */}
-              {names.get(note.authorUserId) ?? t('notes.someone')} ·{' '}
-              {formatter.format(note.createdAt)}
-            </p>
-            <p style={{ margin: 0, ...typographyTokens.body }}>{note.body}</p>
-            {note.mentionedUserIds.length > 0 ? (
+          <li
+            key={note.id}
+            data-testid={`note-${note.id}`}
+            style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: spacingTokens.sm }}
+          >
+            <span aria-hidden="true" style={avatarStyle}>
+              {(names.get(note.authorUserId) ?? '?').slice(0, 1).toUpperCase()}
+            </span>
+            <div style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}>
               <p
                 style={{
                   margin: 0,
                   ...typographyTokens.caption,
                   color: colorTokens.textSecondary,
                 }}
-                data-testid={`note-mentions-${note.id}`}
               >
-                {t('notes.mentioned')}{' '}
-                {note.mentionedUserIds.map((id) => names.get(id) ?? t('notes.someone')).join('، ')}
+                {/* The author by name, and when. An id here would be unreadable. */}
+                <strong style={{ color: colorTokens.textPrimary }}>
+                  {names.get(note.authorUserId) ?? t('notes.someone')}
+                </strong>{' '}
+                ·{' '}
+                <time dateTime={note.createdAt.toISOString()}>
+                  {relativeTime(note.createdAt, now, locale)}
+                </time>
               </p>
-            ) : null}
+              <p
+                dir="auto"
+                style={{ margin: 0, ...typographyTokens.body, overflowWrap: 'anywhere' }}
+              >
+                {note.body}
+              </p>
+              {note.mentionedUserIds.length > 0 ? (
+                <p
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    color: colorTokens.textSecondary,
+                  }}
+                  data-testid={`note-mentions-${note.id}`}
+                >
+                  {t('notes.mentioned')}{' '}
+                  {note.mentionedUserIds
+                    .map((id) => names.get(id) ?? t('notes.someone'))
+                    .join('، ')}
+                </p>
+              ) : null}
+            </div>
           </li>
         ))}
       </ol>
@@ -250,16 +328,19 @@ async function NoteThread({
         <label htmlFor={`reply-${threadId}`} className="bs-sr-only">
           {t('notes.replyLabel')}
         </label>
-        <input
-          className="bs-control"
+        <MentionField
           id={`reply-${threadId}`}
           name="body"
+          multiline={false}
           required
           placeholder={t('notes.replyPlaceholder')}
-          data-testid={`note-reply-${threadId}`}
-          style={inputStyle({ size: 'sm' })}
+          suggestionsLabel={t('notes.mentionSuggestions')}
+          members={members}
+          testId={`note-reply-${threadId}`}
         />
-        <MentionPicker locale={locale} members={members} id={`reply-mentions-${threadId}`} />
+        <noscript>
+          <MentionPicker locale={locale} members={members} id={`reply-mentions-${threadId}`} />
+        </noscript>
         <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
           <button
             type="submit"
@@ -307,9 +388,115 @@ async function NoteThread({
           </button>
         </form>
       </div>
+
+      {/*
+        WHO IT WAITS ON, WHEN, AND HOW MUCH IT MATTERS (D-281) — three small
+        forms behind one native disclosure, so the thread stays a conversation
+        and not a task card. Each is the service's own rule; no workflow sits
+        behind them.
+      */}
+      <details data-testid={`note-options-${threadId}`}>
+        <summary style={{ cursor: 'pointer', ...typographyTokens.caption, fontWeight: 700 }}>
+          {t('notes.options')}
+        </summary>
+        <div style={{ display: 'grid', gap: spacingTokens.sm, marginBlockStart: spacingTokens.sm }}>
+          <form action={assignNoteThreadAction} style={optionRowStyle}>
+            {hidden}
+            <label htmlFor={`assign-${threadId}`} style={optionLabelStyle}>
+              {t('notes.assignLabel')}
+            </label>
+            <select
+              id={`assign-${threadId}`}
+              name="assignedToUserId"
+              defaultValue={thread.assignedToUserId ?? ''}
+              className="bs-control bs-select"
+              style={inputStyle({ size: 'sm' })}
+              data-testid={`note-assign-${threadId}`}
+            >
+              <option value="">{t('notes.nobody')}</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+            >
+              {t('notes.save')}
+            </button>
+          </form>
+          <form action={setNoteDueAction} style={optionRowStyle}>
+            {hidden}
+            <label htmlFor={`due-${threadId}`} style={optionLabelStyle}>
+              {t('notes.dueLabel')}
+            </label>
+            <input
+              id={`due-${threadId}`}
+              type="date"
+              name="dueAt"
+              defaultValue={thread.dueAt ? thread.dueAt.toISOString().slice(0, 10) : ''}
+              className="bs-control"
+              style={inputStyle({ size: 'sm' })}
+              data-testid={`note-due-input-${threadId}`}
+            />
+            <button
+              type="submit"
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              data-testid={`note-due-save-${threadId}`}
+            >
+              {t('notes.save')}
+            </button>
+          </form>
+          <form action={setNoteImportanceAction} style={optionRowStyle}>
+            {hidden}
+            <input
+              type="hidden"
+              name="importance"
+              value={thread.importance === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT'}
+            />
+            <button
+              type="submit"
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              data-testid={`note-importance-${threadId}`}
+            >
+              {t(thread.importance === 'IMPORTANT' ? 'notes.markNormal' : 'notes.markImportant')}
+            </button>
+          </form>
+        </div>
+      </details>
     </li>
   );
 }
+
+const avatarStyle = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  inlineSize: '1.75rem',
+  blockSize: '1.75rem',
+  borderRadius: '50%',
+  background: colorTokens.surfaceLavenderStrong,
+  color: colorTokens.brandPurplePressed,
+  ...typographyTokens.caption,
+  fontWeight: 700,
+} as const;
+
+const optionRowStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: spacingTokens.xs,
+} as const;
+
+const optionLabelStyle = {
+  ...typographyTokens.caption,
+  color: colorTokens.textSecondary,
+  minInlineSize: '6rem',
+} as const;
 
 /**
  * Who this note is addressed to.

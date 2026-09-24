@@ -12,6 +12,7 @@ import { requireWorkspace, type WorkspaceSession } from '../../../server/custome
 import { inContentStudio } from '../../../server/content-context';
 import { resolveContentLanguage } from '../../../server/content-language';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
+import { translator } from '../../../i18n/messages';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
 
@@ -476,6 +477,7 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get('itemId') ?? '');
   const note = String(formData.get('note') ?? '');
   const assignedTo = String(formData.get('assignedToUserId') ?? '');
+  const fromLibrary = formData.get('returnTo') === '/content';
 
   let destination: string;
   try {
@@ -488,9 +490,14 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
         note,
       }),
     );
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
+    // The library's quick action returns to the library (a closed set, D-282).
+    destination = fromLibrary
+      ? pageUrl(locale, '', { ok: 'SUBMITTED' })
+      : pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+    destination = fromLibrary
+      ? failure(locale, error, 'submitForReview', '')
+      : failure(locale, error, 'submitForReview', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   revalidatePath(`/${locale}/approvals`);
@@ -580,5 +587,62 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
     destination = `/${locale}/settings?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings`);
+  redirect(destination);
+}
+
+/**
+ * DUPLICATE A POST (D-277 §15, D-282) — a NEW draft carrying the source's
+ * words, media, format, language, campaign and tags, through the ordinary
+ * manual-create path: the same platform checks, the same brand-scope check,
+ * the same audit. The source is read under the member's BrandScope, so a post
+ * they cannot open cannot be copied.
+ *
+ * NOTHING ABOUT THE SOURCE'S LIFECYCLE IS COPIED — no approval, no schedule,
+ * no publication: a duplicate is a draft. A campaign is kept only for a member
+ * who may file content under campaigns, the same rule the composer applies.
+ * The form's per-render token is the idempotency key, so a double click makes
+ * one copy.
+ */
+export async function duplicateContentAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  const token = String(formData.get('token') ?? '').slice(0, 120) || randomUUID();
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.create');
+    const mayFile = session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION);
+    const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const [library, policy] = await Promise.all([services.library(), services.policy()]);
+      const source = await library.getItem(itemId, session.workspace.brandScope);
+      const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
+      const created = await library.createManualItem({
+        brandId: source.brandId,
+        title: translator(locale)('content.duplicateTitle').replace('{title}', source.title),
+        contentType: source.contentType,
+        locale: source.primaryLocale,
+        variants: source.variants
+          .filter((variant) => variant.locale === source.primaryLocale)
+          .map((variant) => ({
+            platformKey: variant.platformKey,
+            body: variant.body ?? '',
+            hashtags: variant.hashtags,
+            firstComment: variant.firstComment,
+            linkUrl: variant.linkUrl,
+            assetIds: variant.assetIds,
+          })),
+        campaignId: mayFile ? source.campaignId : null,
+        pillar: source.pillar,
+        tags: source.tags,
+        idempotencyKey: `duplicate:${token}`,
+        expiresAt: resolveContentExpiry(policy, facts, systemClock),
+        ...actorOf(session),
+      });
+      return created.item.id;
+    });
+    destination = pageUrl(locale, '/compose', { item: copyId, ok: 'DUPLICATED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'duplicate', '');
+  }
+  revalidatePath(`/${locale}/content`);
   redirect(destination);
 }

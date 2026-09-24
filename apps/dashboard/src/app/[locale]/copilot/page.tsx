@@ -1,5 +1,6 @@
 import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
 import { copilotSurface } from '../../../server/copilot-surface';
+import { copilotLabels } from '../../../server/copilot-labels';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
@@ -103,44 +104,7 @@ export default async function CopilotPage({
             brand={{ id: brand.id, name: brand.name }}
             surface={surface}
             creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
-            labels={{
-              title: t('copilot.title'),
-              subtitle: t('copilot.subtitle'),
-              open: t('copilot.title'),
-              close: t('common.close'),
-              promptLabel: t('copilot.promptLabel'),
-              promptPlaceholder: t('copilot.promptPlaceholder'),
-              send: t('copilot.send'),
-              attach: t('copilot.attach'),
-              attachmentsLabel: t('copilot.attachments'),
-              suggestionsLabel: t('copilot.suggestions'),
-              conversationLabel: t('copilot.conversation'),
-              streaming: t('copilot.working'),
-              errorTitle: t('copilot.errorTitle'),
-              errorBody: t('copilot.failed'),
-              insufficientCreditsTitle: t('copilot.insufficientCreditsTitle'),
-              insufficientCreditsBody: t('copilot.insufficientCreditsBody'),
-              approvalTitle: t('copilot.plan'),
-              approvalBody: t('copilot.approvalBody'),
-              approve: t('copilot.confirm'),
-              reject: t('copilot.reject'),
-              mutatingWarning: t('copilot.externalWarning'),
-              disabledNotice: t('copilot.composerAbove'),
-              surfaceNames: {
-                general: t('copilot.title'),
-                calendar: t('nav.calendar'),
-                posts: t('nav.content'),
-                composer: t('nav.content'),
-                studio: t('nav.content'),
-              },
-              contextLabel: t('copilot.contextLabel'),
-              toolsLabel: t('copilot.steps'),
-              previewTitle: t('copilot.plan'),
-              beforeLabel: t('copilot.before'),
-              afterLabel: t('copilot.after'),
-              assistantName: t('copilot.title'),
-              userName: session.customer.name ?? session.customer.email,
-            }}
+            labels={copilotLabels(locale, session.customer.name ?? session.customer.email)}
           />
         )}
       </Stack>

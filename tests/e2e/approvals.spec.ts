@@ -102,6 +102,9 @@ async function openReviewableDraft(page: Page, locale = 'en'): Promise<void> {
 
 test.describe('the approval workflow', () => {
   test('submit → refused self-approval → policy change → resubmit → approved', async ({ page }) => {
+    // A dozen server-action round trips in one journey: ~17s alone, and past
+    // the 30s default under a parallel worker. The slow budget, not a retry.
+    test.slow();
     /*
      * ONE JOURNEY RATHER THAN FOUR TESTS, deliberately. Each step is the
      * precondition of the next, and splitting them would mean re-establishing
@@ -294,45 +297,73 @@ test.describe('notifications', () => {
 });
 
 test.describe('the Command Center aggregates the modules', () => {
-  test('shows the real figures the placeholders used to stand in for', async ({ page }) => {
+  /*
+   * PHASE 6 FINAL (D-277 §7): HOME ANSWERS "WHAT NEEDS ME" FIRST.
+   *
+   * The sections come in the owner's order — what needs you, recommendations,
+   * notes, coming up — and the figures come LAST. Plan, credits, members, the
+   * activity log and the notification count left Home for Settings and the top
+   * bar. What did not change is the honesty rule below.
+   */
+  test('shows the owner’s sections, in order, with the figures last', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     await expect(page.getByTestId('overview-metrics')).toBeVisible({ timeout: 15_000 });
 
-    // Phase 5B-3's four additions.
+    const sections = [
+      'attention-card',
+      'home-recommended',
+      'home-notes',
+      'overview-upcoming',
+      'overview-metrics',
+    ];
+    const tops: number[] = [];
+    for (const id of sections) {
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, id).not.toBeNull();
+      tops.push(box?.y ?? 0);
+    }
+    // Notes and Coming up share a row on a wide screen; nothing comes before
+    // "what needs you", and the figures come after everything.
+    expect(Math.min(...tops)).toBe(tops[0]);
+    expect(Math.max(...tops)).toBe(tops[4]);
+
     await expect(page.getByTestId('metric-in-review')).toBeVisible();
     await expect(page.getByTestId('metric-scheduled')).toBeVisible();
-    await expect(page.getByTestId('overview-approvals')).toBeVisible();
-    await expect(page.getByTestId('overview-notifications')).toBeVisible();
-    await expect(page.getByTestId('overview-activity')).toBeVisible();
+    for (const gone of [
+      'metric-plan',
+      'metric-credits',
+      'overview-activity',
+      'overview-notifications',
+    ]) {
+      await expect(page.getByTestId(gone)).toHaveCount(0);
+    }
 
     /*
-     * AND THE CARD THAT USED TO SAY WHAT IT COULD NOT MEASURE NOW MEASURES IT.
-     *
-     * Through Phases 5B-3 and 6 this slot was `metric-published`, permanently
-     * unavailable, because a zero would have read as "you published nothing"
-     * about a feature that did not exist. Publishing shipped in Phase 6 and
-     * analytics ingestion in Phase 7, so the slot is `metric-engagement` and
-     * carries a real sum over stored observations.
-     *
-     * WHAT DID NOT CHANGE IS THE HONESTY RULE. With no reading yet the card is
-     * still UNAVAILABLE with a stated reason rather than a zero — missing and
-     * zero are different states, and the Command Center must not confuse them.
+     * WHAT DID NOT CHANGE IS THE HONESTY RULE. With no reading yet the
+     * engagement card is UNAVAILABLE with a stated reason rather than a zero —
+     * missing and zero are different states.
      */
-    await expect(page.getByTestId('metric-published')).toHaveCount(0);
     const engagement = page.getByTestId('metric-engagement');
     await expect(engagement).toBeVisible();
     await expect(engagement).not.toHaveText(/^\s*0\s*$/);
   });
 
-  test('every panel links somewhere real', async ({ page }) => {
+  test('every section links somewhere real', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
-    await expect(page.getByTestId('overview-activity')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('overview-upcoming')).toBeVisible({ timeout: 15_000 });
 
-    await page.getByTestId('overview-activity').getByRole('link').first().click();
-    await page.waitForURL(/\/en\/activity/, { timeout: 15_000 });
-    await expect(page.getByTestId('activity-log')).toBeVisible();
+    // Every attention row carries exactly one action, and it is a real link.
+    const rows = page.locator('[data-testid="attention-list"] > li');
+    for (let index = 0; index < (await rows.count()); index += 1) {
+      const actions = rows.nth(index).getByRole('link');
+      await expect(actions).toHaveCount(1);
+      await expect(actions).toHaveAttribute('href', /^\/en\//);
+    }
+
+    await page.getByTestId('overview-upcoming-calendar').click();
+    await page.waitForURL(/\/en\/calendar/, { timeout: 15_000 });
   });
 });
 

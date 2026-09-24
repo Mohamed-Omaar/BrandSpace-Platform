@@ -6,6 +6,8 @@ import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { NotesPanel } from '../../../components/notes-panel';
 import { AssetLibraryView, type AssetCardData, type FolderData } from './asset-library-view';
 import {
   addAssetVersionAction,
@@ -138,119 +140,135 @@ export default async function AssetsPage({
     brandScope: workspace.brandScope,
   };
 
-  const data = await inAssetLibrary(workspace.workspaceId, async (services) => {
-    const library = await services.library();
-    const policy = await services.policy();
+  const { selectedBrandId, ...data } = await inAssetLibrary(
+    workspace.workspaceId,
+    async (services) => {
+      const library = await services.library();
+      const policy = await services.policy();
 
-    const page = await library.browse({
-      actor,
-      ...browseScope,
-      ...(folderFilter ? { folderId: folderFilter } : {}),
-      ...(kindFilter ? { kinds: [kindFilter] } : {}),
-      ...(statusFilter ? { statuses: [statusFilter] } : {}),
-      ...(tagFilter ? { tags: [tagFilter] } : {}),
-      ...(search ? { search } : {}),
-      sort,
-      ...(cursor ? { cursor } : {}),
-      limit: 48,
-      includeArchived: statusFilter === 'ARCHIVED',
-    });
+      const page = await library.browse({
+        actor,
+        ...browseScope,
+        ...(folderFilter ? { folderId: folderFilter } : {}),
+        ...(kindFilter ? { kinds: [kindFilter] } : {}),
+        ...(statusFilter ? { statuses: [statusFilter] } : {}),
+        ...(tagFilter ? { tags: [tagFilter] } : {}),
+        ...(search ? { search } : {}),
+        sort,
+        ...(cursor ? { cursor } : {}),
+        limit: 48,
+        includeArchived: statusFilter === 'ARCHIVED',
+      });
 
-    const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
-      library.listFolders(actor),
-      library.tagFacets(actor),
-      services.storageLimitGb(),
-      services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
-    ]);
+      const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
+        library.listFolders(actor),
+        library.tagFacets(actor),
+        services.storageLimitGb(),
+        services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
+      ]);
 
-    const selected =
-      selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
-    const versions = selected ? await library.versions(selected.id, actor) : [];
+      const selected =
+        selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
+      const versions = selected ? await library.versions(selected.id, actor) : [];
 
-    /*
-     * A DOWNLOAD GRANT PER TILE, ISSUED ON THE SERVER.
-     *
-     * The client never receives a storage key or a path — only an opaque,
-     * expiring token bound to this workspace. Only SELECTABLE assets get one:
-     * a quarantined, processing, failed or archived file has no grant at all,
-     * so there is no path to its bytes rather than a broken one
-     * (docs/SECURITY.md §11.6-11.7).
-     */
-    const download = await services.download();
-    const cards: AssetCardData[] = await Promise.all(
-      page.items.map(async (asset) => {
-        const selectable = isSelectable(asset);
-        const grant =
-          selectable && canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)
-            ? await download
-                .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
-                .then((issued) => issued.grant.token)
-                .catch(() => null)
-            : null;
-        return {
-          id: asset.id,
-          name: asset.name,
-          kind: asset.kind,
-          status: asset.status,
-          scanStatus: asset.scanStatus,
-          mimeType: asset.mimeType,
-          sizeBytes: asset.sizeBytes,
-          width: asset.width,
-          height: asset.height,
-          tags: asset.tags,
-          folderId: asset.folderId,
-          version: asset.currentVersion,
-          createdAt: asset.createdAt.toISOString(),
-          failureReason: asset.failureReason,
-          selectable,
-          previewToken: grant,
-        };
-      }),
-    );
+      /*
+       * A DOWNLOAD GRANT PER TILE, ISSUED ON THE SERVER.
+       *
+       * The client never receives a storage key or a path — only an opaque,
+       * expiring token bound to this workspace. Only SELECTABLE assets get one:
+       * a quarantined, processing, failed or archived file has no grant at all,
+       * so there is no path to its bytes rather than a broken one
+       * (docs/SECURITY.md §11.6-11.7).
+       */
+      const download = await services.download();
+      const cards: AssetCardData[] = await Promise.all(
+        page.items.map(async (asset) => {
+          const selectable = isSelectable(asset);
+          const grant =
+            selectable && canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)
+              ? await download
+                  .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
+                  .then((issued) => issued.grant.token)
+                  .catch(() => null)
+              : null;
+          return {
+            id: asset.id,
+            name: asset.name,
+            kind: asset.kind,
+            status: asset.status,
+            scanStatus: asset.scanStatus,
+            mimeType: asset.mimeType,
+            sizeBytes: asset.sizeBytes,
+            width: asset.width,
+            height: asset.height,
+            tags: asset.tags,
+            folderId: asset.folderId,
+            version: asset.currentVersion,
+            createdAt: asset.createdAt.toISOString(),
+            failureReason: asset.failureReason,
+            selectable,
+            previewToken: grant,
+          };
+        }),
+      );
 
-    return {
-      cards,
-      hasMore: page.hasMore,
-      nextCursor: page.nextCursor,
-      folders: folders.map((folder): FolderData => ({
-        id: folder.id,
-        name: folder.name,
-        brandId: folder.brandId,
-        parentFolderId: folder.parentFolderId,
-      })),
-      tags: tags.map((facet) => ({ tag: facet.tag, count: facet.count })),
-      storageLimitGb,
-      storageUsedGb: usedCounter?.usedValue ?? 0,
-      maxFileBytes: policy.upload.maxFileBytes,
-      allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
-      selected: selected
-        ? {
-            id: selected.id,
-            name: selected.name,
-            kind: selected.kind,
-            status: selected.status,
-            scanStatus: selected.scanStatus,
-            mimeType: selected.mimeType,
-            sizeBytes: selected.sizeBytes,
-            width: selected.width,
-            height: selected.height,
-            tags: selected.tags,
-            folderId: selected.folderId,
-            version: selected.currentVersion,
-            createdAt: selected.createdAt.toISOString(),
-            failureReason: selected.failureReason,
-            selectable: isSelectable(selected),
-            previewToken: null,
-            versions: versions.map((version) => ({
-              versionNumber: version.versionNumber,
-              sizeBytes: version.sizeBytes,
-              scanStatus: version.scanStatus,
-              createdAt: version.createdAt.toISOString(),
-            })),
-          }
-        : null,
-    };
-  });
+      return {
+        // Which brand the selected asset belongs to (null = workspace-shared).
+        selectedBrandId: selected ? selected.brandId : null,
+        cards,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+        folders: folders.map((folder): FolderData => ({
+          id: folder.id,
+          name: folder.name,
+          brandId: folder.brandId,
+          parentFolderId: folder.parentFolderId,
+        })),
+        tags: tags.map((facet) => ({ tag: facet.tag, count: facet.count })),
+        storageLimitGb,
+        storageUsedGb: usedCounter?.usedValue ?? 0,
+        maxFileBytes: policy.upload.maxFileBytes,
+        allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
+        selected: selected
+          ? {
+              id: selected.id,
+              name: selected.name,
+              kind: selected.kind,
+              status: selected.status,
+              scanStatus: selected.scanStatus,
+              mimeType: selected.mimeType,
+              sizeBytes: selected.sizeBytes,
+              width: selected.width,
+              height: selected.height,
+              tags: selected.tags,
+              folderId: selected.folderId,
+              version: selected.currentVersion,
+              createdAt: selected.createdAt.toISOString(),
+              failureReason: selected.failureReason,
+              selectable: isSelectable(selected),
+              previewToken: null,
+              versions: versions.map((version) => ({
+                versionNumber: version.versionNumber,
+                sizeBytes: version.sizeBytes,
+                scanStatus: version.scanStatus,
+                createdAt: version.createdAt.toISOString(),
+              })),
+            }
+          : null,
+      };
+    },
+  );
+
+  /*
+   * THE BRAND AN ASSET'S CONVERSATION BELONGS TO (D-281): the asset's own, or —
+   * for a workspace-shared asset — the brand on the rail. With a shared asset
+   * and "All brands" there is no brand to talk in, and no panel.
+   */
+  const notesBrandId =
+    data.selected === null
+      ? null
+      : (selectedBrandId ??
+        (brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null));
 
   // The real outcome, in the reader's language, with the correlation id on a
   // failure — the one value that joins this screen to the redacted server log.
@@ -276,6 +294,16 @@ export default async function AssetsPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <AssetLibraryView
         locale={locale}
+        notes={
+          notesBrandId && selectedId && can(NOTE_PERMISSION) ? (
+            <NotesPanel
+              locale={locale}
+              subject={{ type: 'ASSET', assetId: selectedId, brandId: notesBrandId }}
+              returnPath={`/${locale}/assets?asset=${selectedId}`}
+              highlightThreadId={single('thread') ?? null}
+            />
+          ) : null
+        }
         openUpload={query['upload'] === '1'}
         eyebrow={t('assets.eyebrow')}
         title={t('assets.title')}

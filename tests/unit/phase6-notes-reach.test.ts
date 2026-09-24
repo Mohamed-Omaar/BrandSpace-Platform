@@ -25,6 +25,8 @@ const PAGES = {
   CONTENT_ITEM: 'apps/dashboard/src/app/[locale]/content/compose/page.tsx',
   CAMPAIGN: 'apps/dashboard/src/app/[locale]/campaigns/[campaignId]/page.tsx',
   BRAND: 'apps/dashboard/src/app/[locale]/brand-brain/page.tsx',
+  // Phase 6 final (D-281): the asset detail in the Asset Library.
+  ASSET: 'apps/dashboard/src/app/[locale]/assets/page.tsx',
 } as const;
 
 /** The subject types the domain declares. One list, read from the source. */
@@ -36,9 +38,14 @@ function declaredSubjectTypes(): readonly string[] {
 }
 
 describe('P6-08/09 · every subject the domain supports has a screen', () => {
-  it('declares exactly the three subjects the panel is mounted for', () => {
-    // If a fourth arrives, this fails and the next test says where to mount it.
-    expect([...declaredSubjectTypes()].sort()).toEqual(['BRAND', 'CAMPAIGN', 'CONTENT_ITEM']);
+  it('declares exactly the four subjects the panel is mounted for', () => {
+    // If a fifth arrives, this fails and the next test says where to mount it.
+    expect([...declaredSubjectTypes()].sort()).toEqual([
+      'ASSET',
+      'BRAND',
+      'CAMPAIGN',
+      'CONTENT_ITEM',
+    ]);
   });
 
   it.each(Object.entries(PAGES))('mounts the panel on the %s screen', (subject, path) => {

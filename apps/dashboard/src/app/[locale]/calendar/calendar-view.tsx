@@ -103,6 +103,11 @@ export interface CalendarViewProps {
   readonly days: readonly CalendarDay[];
   readonly slots: readonly SlotDetail[];
   readonly drafts: readonly SchedulableDraft[];
+  /**
+   * `?item=` — "Schedule" from the Content Library (D-282): the scheduling
+   * dialog opens with that post chosen. Ignored unless it is a schedulable draft.
+   */
+  readonly preselectItemId?: string | undefined;
   readonly timezone: string;
   readonly quotaUsed: number;
   readonly quotaLimit: number | null;
@@ -137,6 +142,7 @@ export function CalendarView({
   days,
   slots,
   drafts,
+  preselectItemId,
   timezone,
   quotaUsed,
   quotaLimit,
@@ -147,7 +153,10 @@ export function CalendarView({
 }: CalendarViewProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [scheduling, setScheduling] = useState(false);
+  const preselected = drafts.some((draft) => draft.id === preselectItemId)
+    ? preselectItemId
+    : undefined;
+  const [scheduling, setScheduling] = useState(preselected !== undefined);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
 
   const goTo = (target: string) => {
@@ -240,6 +249,7 @@ export function CalendarView({
                 id="schedule-item"
                 name="contentItemId"
                 required
+                defaultValue={preselected}
                 data-testid="schedule-item"
                 style={inputStyle()}
               >

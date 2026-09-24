@@ -96,3 +96,5 @@ export type { CopilotPruneResult } from './retention';
 
 export { COPILOT_SURFACES, COPILOT_SURFACE_KEYS, copilotSurface } from './surfaces';
 export type { CopilotSurface } from './surfaces';
+export { COPILOT_SUBJECT_TYPES, copilotSubjectType } from './subject';
+export type { CopilotSubject, CopilotSubjectType } from './subject';

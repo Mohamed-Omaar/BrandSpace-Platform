@@ -100,6 +100,15 @@ export class ContentLibraryService {
      * campaign returns nothing rather than anything.
      */
     campaignId?: string | undefined;
+    /**
+     * PHASE 6 FINAL (D-277 §15) — the library's format, platform and language
+     * filters. In the query, for the same reason as every filter above: a page
+     * the database already truncated cannot be filtered honestly afterwards.
+     */
+    contentType?: ContentItem['contentType'] | undefined;
+    /** Items with at least one variant for this platform. */
+    platformKey?: string | undefined;
+    locale?: ContentItem['primaryLocale'] | undefined;
     search?: string | undefined;
     limit?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
@@ -114,6 +123,9 @@ export class ContentLibraryService {
             ? { status: { in: [...input.statuses] } }
             : {}),
         ...(input.campaignId ? { campaignId: input.campaignId } : {}),
+        ...(input.contentType ? { contentType: input.contentType } : {}),
+        ...(input.locale ? { primaryLocale: input.locale } : {}),
+        ...(input.platformKey ? { variants: { some: { platformKey: input.platformKey } } } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
          *

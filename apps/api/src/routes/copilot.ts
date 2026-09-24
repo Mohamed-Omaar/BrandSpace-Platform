@@ -7,6 +7,7 @@ import {
 } from '@brandspace/analytics';
 import { TenantAutomationPolicySource } from '@brandspace/automation';
 import {
+  COPILOT_SUBJECT_TYPES,
   COPILOT_SURFACE_KEYS,
   CopilotOrchestrator,
   CopilotPlanService,
@@ -14,6 +15,7 @@ import {
   TenantCopilotPolicySource,
   findTool,
   resolveLiveAuthorization,
+  type CopilotSubjectType,
   type CopilotSurface,
   type ExecutorContext,
   type ExternalActionPort,
@@ -88,6 +90,20 @@ const sessionSchema = z.object({
    */
   surface: z.enum(COPILOT_SURFACE_KEYS as [CopilotSurface, ...CopilotSurface[]]).default('general'),
   locale: z.enum(['AR', 'EN']).default('EN'),
+  /*
+   * WHAT THE PERSON IS LOOKING AT (D-280): a kind from a closed set and an id.
+   * The orchestrator admits it against the session's brand or refuses to open
+   * the session, with the same 404 an unknown brand gets.
+   */
+  subject: z
+    .object({
+      type: z.enum(
+        COPILOT_SUBJECT_TYPES as unknown as [CopilotSubjectType, ...CopilotSubjectType[]],
+      ),
+      id: z.string().uuid(),
+    })
+    .nullable()
+    .default(null),
 });
 
 /*
@@ -358,6 +374,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               brandId: parsed.data.brandId,
               surface: parsed.data.surface,
               locale: parsed.data.locale,
+              subject: parsed.data.subject,
               expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
             });
           },

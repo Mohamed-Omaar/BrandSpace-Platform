@@ -88,7 +88,7 @@ function session(
     roleKey: 'workspace_owner',
     roleNameEn: 'Owner',
     roleNameAr: 'مالك',
-    permissionKeys: ['content.read', 'integrations.read', 'brand_brain.read'],
+    permissionKeys: ['content.read', 'integrations.read', 'publishing.read', 'brand_brain.read'],
     brandScope: [],
     ...overrides,
   };
@@ -150,7 +150,8 @@ describe('P6-04 · an item exists only when it is genuinely true', () => {
     const failed = items.find((i) => i.kind === 'publishing-failed');
     expect(failed?.count).toBe(1);
     expect(failed?.severity).toBe('blocked');
-    expect(failed?.href).toBe('/calendar');
+    // D-277 §33: failures are acted on in Publishing's Failed tab.
+    expect(failed?.href).toBe('/publishing?tab=failed');
   });
 
   it('counts a half-published slot as a failure, because it is one', async () => {
@@ -438,12 +439,21 @@ describe('P6-04 · a member is never offered a link they cannot follow', () => {
       },
     });
 
-    // `integrations.read` only: the connection shows, the brand-knowledge
-    // notice does not, because `/brand-brain` would answer 404 for them.
+    // `integrations.read` + `publishing.read` only: the connection shows (its
+    // link is Publishing > Accounts, D-277 §33), and the brand-knowledge notice
+    // does not, because `/brand-brain` would answer 404 for them.
     const items = await attentionItems(
+      db(),
+      session(fixture, { permissionKeys: ['integrations.read', 'publishing.read'] }),
+    );
+    expect(items.map((i) => i.kind)).toEqual(['connection-reauth']);
+    expect(items[0]?.href).toBe('/publishing?tab=accounts');
+
+    // Without `publishing.read` the row would be a link to a 404, so it is not raised.
+    const blind = await attentionItems(
       db(),
       session(fixture, { permissionKeys: ['integrations.read'] }),
     );
-    expect(items.map((i) => i.kind)).toEqual(['connection-reauth']);
+    expect(blind.map((i) => i.kind)).toEqual([]);
   });
 });

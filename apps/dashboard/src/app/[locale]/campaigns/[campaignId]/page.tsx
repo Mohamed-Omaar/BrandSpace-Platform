@@ -378,6 +378,7 @@ export default async function CampaignDetailPage({
           locale={locale}
           subject={{ type: 'CAMPAIGN', campaignId: campaign.id }}
           returnPath={`/${locale}/campaigns/${campaign.id}`}
+          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
         />
       </div>
     </WorkspaceShell>

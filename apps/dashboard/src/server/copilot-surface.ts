@@ -64,3 +64,42 @@ export function copilotSurfaceForPath(requestPath: string | null | undefined): C
   );
   return match ? match[1] : 'general';
 }
+
+/**
+ * WHAT THE READER IS LOOKING AT, as a Copilot subject (D-277 §37, D-280).
+ *
+ * A COPY OF `COPILOT_SUBJECT_TYPES`, for the same reason the surface list is a
+ * copy: the dashboard does not import `@brandspace/copilot`. The unit suite
+ * fails if the two differ.
+ *
+ * Read from the ADDRESS, never from anything the page renders: a campaign's own
+ * page, the composer's `?item=`, Intelligence's `?insight=`. A malformed id is
+ * no subject. Nothing here decides whether the reader may see the object — the
+ * orchestrator admits it against the session's brand, and refuses otherwise.
+ */
+export const COPILOT_SUBJECT_KINDS = ['CAMPAIGN', 'CONTENT_ITEM', 'INSIGHT'] as const;
+export type CopilotSubjectKind = (typeof COPILOT_SUBJECT_KINDS)[number];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function copilotSubjectForPath(
+  requestPath: string | null | undefined,
+): { readonly type: CopilotSubjectKind; readonly id: string } | null {
+  if (!requestPath) return null;
+  const [pathname = '', search = ''] = requestPath.split('?', 2);
+  const segments = pathname.split('/').filter(Boolean).slice(1);
+  const query = new URLSearchParams(search);
+
+  if (segments[0] === 'campaigns' && segments.length === 2 && UUID.test(segments[1] ?? '')) {
+    return { type: 'CAMPAIGN', id: segments[1] as string };
+  }
+  const item = query.get('item');
+  if (segments[0] === 'content' && segments[1] === 'compose' && item && UUID.test(item)) {
+    return { type: 'CONTENT_ITEM', id: item };
+  }
+  const insight = query.get('insight');
+  if (segments[0] === 'intelligence' && insight && UUID.test(insight)) {
+    return { type: 'INSIGHT', id: insight };
+  }
+  return null;
+}

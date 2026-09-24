@@ -480,6 +480,7 @@ export default async function BrandBrainPage({
         locale={locale}
         subject={{ type: 'BRAND', brandId: brand.id }}
         returnPath={`/${locale}/brand-brain`}
+        highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
       />
     </WorkspaceShell>
   );

@@ -33,8 +33,15 @@ import type { TopbarCounts } from './topbar';
 
 const UNKNOWN: TopbarCounts = { review: null, notes: null, notifications: null };
 
+/**
+ * THE SHELL'S SESSION, RESOLVED ONCE PER REQUEST. The top bar's counts and the
+ * global Copilot's subject (D-280) both need it; `cache` makes the second ask
+ * free rather than a second round trip on every page.
+ */
+export const shellSession = cache(() => resolveApiWorkspace().catch(() => null));
+
 export const topbarCounts = cache(async (): Promise<TopbarCounts> => {
-  const session = await resolveApiWorkspace().catch(() => null);
+  const session = await shellSession();
   if (!session) return UNKNOWN;
   const { customer, workspace } = session;
   const workspaceId = workspace.workspaceId;

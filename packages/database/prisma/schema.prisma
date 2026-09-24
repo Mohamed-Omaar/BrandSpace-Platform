@@ -2562,6 +2562,9 @@ model Asset {
   /// constraint is the backstop. See the migration for the partial unique index
   /// that makes re-uploading after a delete possible.
   /// The composite target versions, derivatives, sessions and jobs point at.
+  /// D-281. Conversations about this file.
+  noteThreads NoteThread[]
+
   @@unique([workspaceId, id], name: "asset_workspace_scope")
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, kind])
@@ -4511,6 +4514,16 @@ model CopilotSession {
   locale  Locale  @default(EN)
   title   String?
 
+  /// WHAT THE PERSON WAS LOOKING AT when they opened the Copilot (Phase 6
+  /// final, D-277 §37, D-280): a campaign, a content item or an insight. Both
+  /// or neither — a CHECK enforces it. NO FOREIGN KEY, because the subject is
+  /// one of three tables; the orchestrator ADMITS it at open (same workspace by
+  /// RLS, same brand as the session, by query) and re-reads it on every turn,
+  /// so a subject deleted since is simply absent rather than dangling. Its
+  /// title reaches the model only inside the fenced untrusted block.
+  subjectType String?
+  subjectId   String? @db.Uuid
+
   lastMessageAt DateTime? @db.Timestamptz(6)
   archivedAt    DateTime? @db.Timestamptz(6)
 
@@ -5835,11 +5848,21 @@ enum NoteSubjectType {
   CAMPAIGN
   /// The brand itself — for conversations that are not about one artefact.
   BRAND
+  /// A file in the Asset Library (Phase 6 final, D-277 §28, D-281).
+  ASSET
 }
 
 enum NoteThreadStatus {
   OPEN
   RESOLVED
+}
+
+/// How much a conversation matters (D-277 §28, D-281): Normal or Important and
+/// nothing more — not a priority scale, not a task status. A scale nobody
+/// applies consistently orders nothing.
+enum NoteImportance {
+  NORMAL
+  IMPORTANT
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. One conversation about one thing.
@@ -5868,8 +5891,18 @@ model NoteThread {
   /// itself both are null and `brandId` is the subject.
   contentItemId String? @db.Uuid
   campaignId    String? @db.Uuid
+  /// D-281. The asset this conversation is about. A workspace-shared asset
+  /// (`brandId` NULL) is discussed within ONE brand — the thread's — and a
+  /// brand's own asset only within that brand; the `note_thread_asset_scope`
+  /// trigger refuses anything else.
+  assetId       String? @db.Uuid
 
   status NoteThreadStatus @default(OPEN)
+
+  /// D-281. When the conversation needs an answer by — optional, and a date
+  /// rather than a workflow: there is no overdue state machine behind it.
+  dueAt      DateTime?      @db.Timestamptz(6)
+  importance NoteImportance @default(NORMAL)
 
   createdByUserId String  @db.Uuid
   /// Who this is waiting on, when it is waiting on somebody in particular.
@@ -5888,6 +5921,7 @@ model NoteThread {
   brand       Brand        @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "note_thread_brand_fkey")
   contentItem ContentItem? @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_content_item_fkey")
   campaign    Campaign?    @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_campaign_fkey")
+  asset       Asset?       @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_asset_fkey")
   notes       Note[]
 
   @@unique([workspaceId, id], name: "note_thread_workspace_scope")
@@ -5895,6 +5929,7 @@ model NoteThread {
   @@index([workspaceId, brandId, subjectType, status])
   @@index([workspaceId, contentItemId])
   @@index([workspaceId, campaignId])
+  @@index([workspaceId, assetId])
   /// "What is waiting on me", for the Command Center.
   @@index([workspaceId, assignedToUserId, status])
   @@map("note_thread")

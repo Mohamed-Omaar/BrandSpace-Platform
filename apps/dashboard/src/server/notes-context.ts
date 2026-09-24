@@ -83,6 +83,10 @@ export function subjectFromForm(formData: FormData): NoteSubject {
   if (type === 'CONTENT_ITEM') return { type, contentItemId: id };
   if (type === 'CAMPAIGN') return { type, campaignId: id };
   if (type === 'BRAND') return { type, brandId: id };
+  // D-281. An asset is discussed within a brand — the service checks that the
+  // brand is the asset's own, or that the asset is shared and the brand is in scope.
+  if (type === 'ASSET')
+    return { type, assetId: id, brandId: String(formData.get('subjectBrandId') ?? '') };
   /*
    * AN UNKNOWN SUBJECT IS NOT A DEFAULT.
    *

@@ -56,6 +56,7 @@ const inB = <T>(fn: (db: TenantScopedClient) => Promise<T>) =>
 const ALL_PERMISSIONS = [
   'content.read',
   'integrations.read',
+  'publishing.read',
   'brand_brain.read',
   'brand_brain.review',
   'strategy.read',
