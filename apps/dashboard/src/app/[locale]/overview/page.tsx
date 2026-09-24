@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import type { ReactNode } from 'react';
 import {
   Card,
@@ -375,7 +376,7 @@ export default async function OverviewPage({
           }
           secondaryAction={
             mayUseCopilot ? (
-              <Link
+              <CopilotLink
                 href={copilotHref(locale, 'overview')}
                 data-testid="overview-copilot-open"
                 style={{
@@ -386,7 +387,7 @@ export default async function OverviewPage({
               >
                 {t('home.hero.copilot')}
                 <span aria-hidden="true">→</span>
-              </Link>
+              </CopilotLink>
             ) : undefined
           }
           visual={
@@ -451,14 +452,14 @@ export default async function OverviewPage({
             title={t('attention.title')}
             actions={
               mayUseCopilot && attention.length > 0 ? (
-                <Link
+                <CopilotLink
                   href={copilotHref(locale, 'overview')}
                   style={buttonStyle('ghost', 'sm')}
                   className={buttonClass('ghost')}
                   data-testid="attention-ask-copilot"
                 >
                   {t('copilot.ask')}
-                </Link>
+                </CopilotLink>
               ) : undefined
             }
           />
@@ -529,13 +530,13 @@ export default async function OverviewPage({
                         {t('home.recommended.viewEvidence')}
                       </Link>
                       {mayUseCopilot ? (
-                        <Link
+                        <CopilotLink
                           href={copilotHref(locale, 'intelligence')}
                           style={buttonStyle('ghost', 'sm')}
                           className={buttonClass('ghost')}
                         >
                           {t('home.recommended.giveToCopilot')}
-                        </Link>
+                        </CopilotLink>
                       ) : null}
                       {mayReviewInsights ? (
                         <form action={reviewIntelligenceAction}>

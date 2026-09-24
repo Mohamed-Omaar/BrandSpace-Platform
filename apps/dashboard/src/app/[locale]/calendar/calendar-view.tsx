@@ -21,6 +21,7 @@ import {
   type PostRecord,
 } from '@brandspace/ui';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
+import { CopilotLink } from '../../../components/copilot-link';
 
 /**
  * The Content Calendar — the customer screen.
@@ -371,9 +372,9 @@ export function CalendarView({
           <b style={{ color: colorTokens.textPrimary }}>{t['calendar.gap.title']}</b>
           <span>{gaps.join(' ')}</span>
           {copilotHref ? (
-            <a href={copilotHref} data-testid="calendar-gap-copilot">
+            <CopilotLink href={copilotHref} testId="calendar-gap-copilot">
               {t['calendar.gap.ask']}
-            </a>
+            </CopilotLink>
           ) : null}
         </p>
       ) : null}

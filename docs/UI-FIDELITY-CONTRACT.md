@@ -469,6 +469,15 @@ in a two-column auto-fit grid for Audience / Key messages and Pillars / Channel 
 `aria-hidden`). Proposals use a dashed `border` frame to read as not-yet-accepted. No new colour, font or
 shadow.
 
+### 6.3.18 Phase 6 final — Brand Brain's head, layers and provenance (D-294)
+
+`/[locale]/brand-brain` keeps the ported orb, hero, area grid, intel and sources cards unchanged. The
+page head's demo headline is replaced by the brand's name inside the same `.bb-page-head` `h2 strong`,
+with the understanding sentence in its `p` and a neutral compact button. Below the hero, a four-tile
+strip on `surface` with a `border` hairline and the `h3` type step, and a caption line of ghost buttons
+for gaps. Provenance is a `micro` caption under each item in the area drawer. No new colour, font or
+shadow; the orb is untouched.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

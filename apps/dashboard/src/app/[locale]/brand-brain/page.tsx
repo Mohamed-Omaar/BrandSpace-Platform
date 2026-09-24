@@ -12,6 +12,7 @@ import { analyticsEvidence, conflictNote } from '../../../server/learning-review
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
+import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { NotesPanel } from '../../../components/notes-panel';
 import { statusMessage } from '../../../i18n/messages';
@@ -217,6 +218,10 @@ export default async function BrandBrainPage({
             version: true,
             status: true,
             confidenceMilli: true,
+            // D-294 — provenance on every value: when, who, from what.
+            updatedAt: true,
+            createdByUserId: true,
+            sourceDocumentId: true,
           },
           // Bounded: a brand with thousands of items must not send them all to
           // a browser. The drawer pages the rest.
@@ -268,6 +273,56 @@ export default async function BrandBrainPage({
     },
   );
 
+  /*
+   * D-294 — WHO ADDED A VALUE AND WHICH DOCUMENT IT CAME FROM, by name. Read
+   * under the workspace's own RLS: members of this workspace, documents of
+   * this brand. An id that resolves to nothing simply shows no name.
+   */
+  const provenanceNames = await inBrandBrain(workspace.workspaceId, async ({ db }) => {
+    const userIds = [
+      ...new Set(items.flatMap((item) => (item.createdByUserId ? [item.createdByUserId] : []))),
+    ];
+    const documentIds = [
+      ...new Set(items.flatMap((item) => (item.sourceDocumentId ? [item.sourceDocumentId] : []))),
+    ];
+    const [members, documents] = await Promise.all([
+      userIds.length
+        ? db.membership.findMany({
+            where: { userId: { in: userIds } },
+            select: { userId: true, user: { select: { name: true, email: true } } },
+          })
+        : [],
+      documentIds.length
+        ? db.brandSourceDocument.findMany({
+            where: { id: { in: documentIds }, brandId: brand.id },
+            select: { id: true, fileName: true },
+          })
+        : [],
+    ]);
+    return {
+      people: new Map(
+        members.map((member) => [member.userId, member.user.name?.trim() || member.user.email]),
+      ),
+      documents: new Map(documents.map((document) => [document.id, document.fileName])),
+    };
+  });
+  const provenanceDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
+  const provenanceOf = (item: (typeof items)[number]): string =>
+    [
+      `${t('bb.provenance.updated')} ${provenanceDay.format(item.updatedAt)}`,
+      item.createdByUserId && provenanceNames.people.get(item.createdByUserId)
+        ? `${t('bb.provenance.by')} ${provenanceNames.people.get(item.createdByUserId)}`
+        : null,
+      item.sourceDocumentId && provenanceNames.documents.get(item.sourceDocumentId)
+        ? `${t('bb.provenance.from')} ${provenanceNames.documents.get(item.sourceDocumentId)}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
   const itemsByArea = new Map<string, typeof items>();
   for (const item of items) {
     const list = itemsByArea.get(item.area) ?? [];
@@ -310,6 +365,7 @@ export default async function BrandBrainPage({
         memoryDepth: BRAND_MEMORY_LAYERS.length,
         version: item.version,
         stale: item.status === 'STALE',
+        provenance: provenanceOf(item),
       })),
     };
   });
@@ -420,6 +476,37 @@ export default async function BrandBrainPage({
           : `${source.chunkCount}`,
   }));
 
+  /*
+   * D-294 — THE FOUR LAYERS, COUNTED. Approved values per memory (only ACTIVE
+   * items; a stale value is still shown in its area but is not counted as
+   * current knowledge), plus the learnings still waiting on a person.
+   */
+  const activeIn = (memory: string) =>
+    items.filter((item) => item.status === 'ACTIVE' && item.memory === memory).length;
+  const pendingLearnings = candidates.filter(
+    (candidate) => candidate.sourceKind === 'ANALYTICS',
+  ).length;
+  const layers = (['CANONICAL', 'STRATEGY', 'CONTENT', 'LEARNING'] as const).map((memory) => ({
+    key: memory,
+    label: t(`bb.layer.${memory}` as MessageKey),
+    description: t(`bb.layer.${memory}.desc` as MessageKey),
+    count: activeIn(memory),
+    pending: memory === 'LEARNING' ? pendingLearnings : 0,
+  }));
+  const gaps = areaCards
+    .filter((area) => area.status === 'EMPTY')
+    .map((area) => ({ area: area.area, label: area.label }));
+  const areasWithKnowledge = areaCards.filter((area) => area.activeItems > 0).length;
+  const readySourceCount = sources.filter((source) => source.status === 'READY').length;
+  const understanding =
+    completion.totalActiveItems === 0
+      ? t('bb.understands.none')
+      : t('bb.understands.some')
+          .replace('{facts}', reviewNumber.format(completion.totalActiveItems))
+          .replace('{areas}', reviewNumber.format(areasWithKnowledge))
+          .replace('{total}', reviewNumber.format(areaCards.length))
+          .replace('{sources}', reviewNumber.format(readySourceCount));
+
   return (
     <WorkspaceShell
       /*
@@ -444,6 +531,11 @@ export default async function BrandBrainPage({
       <BrandBrainView
         locale={locale}
         brandId={brand.id}
+        brandName={brand.name}
+        understanding={understanding}
+        layers={layers}
+        gaps={gaps}
+        copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
         completionPercent={completion.percent}
         totalActiveItems={completion.totalActiveItems}
         sourceCount={sourceCount}

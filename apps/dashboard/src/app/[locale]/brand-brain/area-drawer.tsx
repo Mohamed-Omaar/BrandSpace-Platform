@@ -306,6 +306,17 @@ export function AreaDrawer({
                     {item.stale ? ` · ${t('bb.attention.stale_items')}` : ''}
                   </small>
                 </header>
+                {item.provenance ? (
+                  <small
+                    data-testid={`bb-provenance-${item.id}`}
+                    style={{
+                      color: colorTokens.textMuted,
+                      fontSize: typographyTokens.micro.fontSize,
+                    }}
+                  >
+                    {item.provenance}
+                  </small>
+                ) : null}
                 <p
                   style={{
                     margin: 0,

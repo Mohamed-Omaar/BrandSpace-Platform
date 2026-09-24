@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   SectionHeader,
@@ -236,14 +237,14 @@ export default async function StrategyPage({
                 )}
                 {copilot ? (
                   <div>
-                    <Link
+                    <CopilotLink
                       href={copilot}
                       style={buttonStyle('ghost', 'sm')}
                       className={buttonClass('ghost')}
                       data-testid="strategy-copilot"
                     >
                       {t('home.recommended.giveToCopilot')}
-                    </Link>
+                    </CopilotLink>
                   </div>
                 ) : null}
               </div>
@@ -397,13 +398,13 @@ export default async function StrategyPage({
                           </Link>
                         ) : null}
                         {copilot ? (
-                          <Link
+                          <CopilotLink
                             href={copilot}
                             style={buttonStyle('ghost', 'sm')}
                             className={buttonClass('ghost')}
                           >
                             {t('home.recommended.giveToCopilot')}
-                          </Link>
+                          </CopilotLink>
                         ) : null}
                       </div>
                     </li>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import {
   CopilotDrawer,
   StateMessage,
@@ -13,6 +13,7 @@ import {
 } from '@brandspace/ui';
 import Link from 'next/link';
 import { CopilotView } from '../app/[locale]/copilot/copilot-view';
+import { OPEN_COPILOT_EVENT } from './copilot-link';
 
 /**
  * THE GLOBAL COPILOT (Phase 6 final, D-277 §37).
@@ -69,19 +70,37 @@ export function GlobalCopilot({
    */
   const [conversation, setConversation] = useState({ key: 0, context: '' });
 
+  const openHere = useCallback(() => {
+    const context = `${brand?.id ?? ''}|${surface}|${subject?.id ?? ''}`;
+    setConversation((current) =>
+      current.context === context ? current : { key: current.key + 1, context },
+    );
+    setOpen(true);
+  }, [brand?.id, surface, subject?.id]);
+
   const intercept = useCallback(
     (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      const context = `${brand?.id ?? ''}|${surface}|${subject?.id ?? ''}`;
-      setConversation((current) =>
-        current.context === context ? current : { key: current.key + 1, context },
-      );
-      setOpen(true);
+      openHere();
     },
-    [brand?.id, surface, subject?.id],
+    [openHere],
   );
+
+  /*
+   * D-294 — "Give to Copilot" and "Ask about this Brand" inside a page ask for
+   * THIS drawer (`CopilotLink`), rather than navigating away from the screen
+   * the question is about.
+   */
+  useEffect(() => {
+    const onRequest = (event: Event) => {
+      event.preventDefault();
+      openHere();
+    };
+    window.addEventListener(OPEN_COPILOT_EVENT, onRequest);
+    return () => window.removeEventListener(OPEN_COPILOT_EVENT, onRequest);
+  }, [openHere]);
 
   return (
     <>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   SectionHeader,
@@ -250,14 +251,14 @@ export default async function IntelligencePage({
 
         {brand && workspace.permissionKeys.includes('copilot.use') ? (
           <div>
-            <Link
+            <CopilotLink
               href={copilotHref(locale, 'intelligence')}
               style={buttonStyle('ghost', 'sm')}
               className={buttonClass('ghost')}
               data-testid="intelligence-ask-copilot"
             >
               {t('copilot.ask')}
-            </Link>
+            </CopilotLink>
           </div>
         ) : null}
 
@@ -455,14 +456,14 @@ export default async function IntelligencePage({
 
                     {workspace.permissionKeys.includes('copilot.use') ? (
                       <div>
-                        <Link
+                        <CopilotLink
                           href={copilotHref(locale, 'intelligence')}
                           style={buttonStyle('ghost', 'sm')}
                           className={buttonClass('ghost')}
                           data-testid={`intelligence-copilot-${insight.id}`}
                         >
                           {t('home.recommended.giveToCopilot')}
-                        </Link>
+                        </CopilotLink>
                       </div>
                     ) : null}
 

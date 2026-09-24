@@ -5,6 +5,14 @@ import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { BrandChat } from './brand-chat';
 import { AreaDrawer } from './area-drawer';
+import {
+  buttonClass,
+  buttonStyle,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
+import { CopilotLink } from '../../../components/copilot-link';
 
 /**
  * The Brand Brain client island.
@@ -52,6 +60,18 @@ export interface AreaItemData {
   readonly memoryDepth: number;
   readonly version: number;
   readonly stale: boolean;
+  /** D-294 — "Updated 3 Sep 2026 · by Sara · from brand-guide.pdf". */
+  readonly provenance: string;
+}
+
+/** D-294 — one of the four memories, counted. */
+export interface LayerData {
+  readonly key: string;
+  readonly label: string;
+  readonly description: string;
+  readonly count: number;
+  /** Learnings waiting on a person (the LEARNING layer only). */
+  readonly pending: number;
 }
 
 export interface AreaCardData {
@@ -136,6 +156,11 @@ const AREA_GLYPHS: Record<string, string> = {
 export function BrandBrainView({
   locale,
   brandId,
+  brandName,
+  understanding,
+  layers,
+  gaps,
+  copilotHref,
   completionPercent,
   totalActiveItems,
   sourceCount,
@@ -148,6 +173,14 @@ export function BrandBrainView({
 }: {
   locale: string;
   brandId: string;
+  brandName: string;
+  /** "BrandSpace understands this brand from 12 approved facts…" — counted, never scored. */
+  understanding: string;
+  layers: readonly LayerData[];
+  /** Areas with no approved knowledge — the honest gaps. */
+  gaps: readonly { area: string; label: string }[];
+  /** The global Copilot, scoped to Brand Brain; null when the member may not use it. */
+  copilotHref: string | null;
   completionPercent: number;
   totalActiveItems: number;
   sourceCount: number;
@@ -219,15 +252,30 @@ export function BrandBrainView({
 
   return (
     <div className="brand-brain-page">
+      {/*
+        D-294 — THE BRAND BY NAME, AND WHAT BRANDSPACE KNOWS ABOUT IT, COUNTED.
+        The demo's generic headline named no brand; this names the one being
+        edited and states its knowledge in facts, areas and sources — no score.
+      */}
       <div className="bb-page-head">
         <div>
-          <h2>
-            {t('bb.heroTitle')}
-            <br />
-            <strong>{t('bb.heroTitleAccent')}</strong>
+          <h2 data-testid="brand-brain-name">
+            <strong>{brandName}</strong>
           </h2>
         </div>
-        <p>{t('bb.heroBody')}</p>
+        <div style={{ display: 'grid', gap: spacingTokens.xs, justifyItems: 'start' }}>
+          <p data-testid="brand-brain-understands">{understanding}</p>
+          {copilotHref ? (
+            <CopilotLink
+              href={copilotHref}
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              testId="brand-brain-ask"
+            >
+              {t('bb.askAboutBrand')}
+            </CopilotLink>
+          ) : null}
+        </div>
       </div>
 
       <section className="bb-hero" data-testid="brand-brain-hero">
@@ -365,6 +413,84 @@ export function BrandBrainView({
         </div>
       </section>
 
+      {/*
+        D-294 — THE FOUR LAYERS the engine already keeps, named for people:
+        what the brand IS, what it is trying to DO, what it has SAID, and what
+        it has LEARNED. Counts of approved values; learnings still waiting on a
+        person are said separately, because they are not knowledge yet.
+      */}
+      <section
+        aria-labelledby="bb-layers-title"
+        data-testid="brand-brain-layers"
+        style={{ display: 'grid', gap: spacingTokens.sm }}
+      >
+        <h3 id="bb-layers-title" style={{ margin: 0, ...typographyTokens.label }}>
+          {t('bb.layersTitle')}
+        </h3>
+        <ul
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'grid',
+            gap: spacingTokens.sm,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 12rem), 1fr))',
+          }}
+        >
+          {layers.map((layer) => (
+            <li
+              key={layer.key}
+              data-testid={`brand-brain-layer-${layer.key}`}
+              style={{
+                display: 'grid',
+                gap: spacingTokens['3xs'],
+                padding: spacingTokens.md,
+                borderRadius: '1.125rem',
+                background: colorTokens.surface,
+                border: `1px solid ${colorTokens.border}`,
+              }}
+            >
+              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                {layer.label}
+              </span>
+              <b style={{ ...typographyTokens.h3, margin: 0 }}>{layer.count}</b>
+              <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                {layer.pending > 0
+                  ? t('bb.layerPending').replace('{count}', String(layer.pending))
+                  : layer.description}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {gaps.length > 0 ? (
+          <div
+            data-testid="brand-brain-gaps"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: spacingTokens.xs,
+              ...typographyTokens.caption,
+              color: colorTokens.textSecondary,
+            }}
+          >
+            <b style={{ color: colorTokens.textPrimary }}>{t('bb.gapsTitle')}</b>
+            {gaps.map((gap) => (
+              <button
+                key={gap.area}
+                type="button"
+                className={buttonClass('ghost')}
+                style={buttonStyle('ghost', 'sm')}
+                data-testid={`brand-brain-gap-${gap.area}`}
+                onClick={() => setOpenArea(gap.area)}
+              >
+                {t('bb.gapAdd').replace('{area}', gap.label)}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
       <div className="bb-section-title">
         <div>
           <h3>{t('bb.areasTitle')}</h3>
@@ -419,9 +545,30 @@ export function BrandBrainView({
           ) : (
             candidates.slice(0, 3).map((candidate) => (
               <div className="bb-learning" key={candidate.id} data-testid={`intel-${candidate.id}`}>
-                <small>{byArea.get(candidate.area)?.label ?? candidate.area}</small>
+                <small>
+                  {byArea.get(candidate.area)?.label ?? candidate.area} ·{' '}
+                  {candidate.source === 'ANALYTICS'
+                    ? t('bb.learningFromPerformance')
+                    : t('bb.learningFromDocument')}
+                </small>
                 <b>{candidate.title}</b>
                 <p>{candidate.body}</p>
+                {/*
+                  D-294 — THE EVIDENCE, AND A CONFIDENCE ONLY WHERE ONE IS
+                  MEASURED: a performance learning's confidence is computed from
+                  its deviation and the number of observations; a document
+                  extract's number is an area-match score, so it is not shown
+                  here as confidence in the fact.
+                */}
+                {candidate.measured ? (
+                  <p data-testid={`intel-evidence-${candidate.id}`}>{candidate.measured}</p>
+                ) : null}
+                {candidate.source === 'ANALYTICS' ? (
+                  <p data-testid={`intel-confidence-${candidate.id}`}>
+                    {t('bb.reviewConfidence')}: {candidate.confidencePercent}%
+                  </p>
+                ) : null}
+                {permissions.review ? <p>{t('bb.learningAcceptNote')}</p> : null}
                 {permissions.review ? (
                   <div className="bb-learning-actions">
                     {/*

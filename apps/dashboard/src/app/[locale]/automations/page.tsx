@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   SectionHeader,
@@ -265,14 +265,14 @@ export default async function AutomationsPage({
               <span />
             )}
             {workspace.permissionKeys.includes('copilot.use') ? (
-              <Link
+              <CopilotLink
                 href={copilotHref(locale, 'automations')}
                 style={buttonStyle('ghost', 'sm')}
                 className={buttonClass('ghost')}
                 data-testid="automations-ask-copilot"
               >
                 {t('copilot.ask')}
-              </Link>
+              </CopilotLink>
             ) : null}
           </div>
         ) : null}

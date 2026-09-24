@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   ChartUnavailable,
@@ -519,14 +520,14 @@ export default async function AnalyticsPage({
             title={t('analytics.story.try')}
             actions={
               workspace.permissionKeys.includes('copilot.use') ? (
-                <Link
+                <CopilotLink
                   href={copilotHref(locale, 'analytics')}
                   style={buttonStyle('ghost', 'sm')}
                   className={buttonClass('ghost')}
                   data-testid="analytics-ask-copilot"
                 >
                   {t('home.recommended.giveToCopilot')}
-                </Link>
+                </CopilotLink>
               ) : undefined
             }
           />

@@ -905,8 +905,13 @@ test.describe('P6-12 · copilot and automations', () => {
     await signIn(page);
     const entry = page.getByTestId('overview-copilot-open');
     await expect(entry).toBeVisible();
-    await Promise.all([page.waitForURL(/\/en\/copilot\?from=overview$/), entry.click()]);
-    const context = page.getByTestId('copilot-context');
+    // Without script it is still the full screen's link (D-294)…
+    await expect(entry).toHaveAttribute('href', '/en/copilot?from=overview');
+    // …and with it, the Copilot opens OVER Home rather than taking you away.
+    await entry.click();
+    await expect(page.getByTestId('copilot-drawer')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/en/overview');
+    const context = page.getByTestId('copilot-drawer').getByTestId('copilot-context');
     await expect(context).toBeVisible();
     // The brand every step will act on, and where the conversation started.
     await expect(context).toContainText(/Acting on /);
