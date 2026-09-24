@@ -17,6 +17,8 @@ import {
   requirePageActor,
 } from '../../../../server/platform-context';
 import { replayBillingEventAction } from './actions';
+import { SimpleSystem } from '../../../../components/simple/system';
+import { getConsoleMode } from '../../../../server/console-mode-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +34,8 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
   // Basic health is visible to every admin-capable role; the provider
   // inventory is configuration, so it needs the configuration read permission.
   const actor = await requirePageActor(locale, 'platform.workspace.read');
+  // Simple mode: the same checks, in the owner's words (D-307, contract §18).
+  if ((await getConsoleMode()) === 'simple') return <SimpleSystem locale={locale} actor={actor} />;
   const mayReadConfig = actor.permissionKeys.includes('platform.configuration.read');
   /*
    * THE REPLAY AUTHORITY IS THE UNION OF WHAT A REPLAY CAN DO — assigning a
