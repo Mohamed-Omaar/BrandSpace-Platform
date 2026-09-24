@@ -26,6 +26,7 @@ import { detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { decidePreferenceAction } from './actions';
 import { inAnalytics } from '../../../server/analytics-context';
 import { attentionItems, rankAttention, type AttentionItem } from '../../../server/command-center';
 import {
@@ -50,7 +51,12 @@ import {
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { mentionableMembers } from '../../../server/notes-context';
 import { noteThreadHref } from '../../../server/note-links';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { resolveNoteThreadAction } from '../notes-actions';
@@ -278,6 +284,24 @@ export default async function OverviewPage({
         (await approvals()).pendingCount(workspace.brandScope),
       )
     : null;
+
+  /*
+   * D-295 — PREFERENCES BRANDSPACE NOTICED in this member's own edits for the
+   * selected brand. Derived from the audit trail past the configured
+   * thresholds; one already decided on is not shown again. Two at most.
+   */
+  const noticedPreferences =
+    brandId && may('content.create')
+      ? (
+          await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
+            (await suggestions()).noticedPreferences({
+              userId: customer.userId,
+              brandId,
+              brandScope: workspace.brandScope,
+            }),
+          )
+        ).slice(0, 2)
+      : [];
 
   const engagements = maySeeAnalytics
     ? await inAnalytics(workspace.workspaceId, async (services) => {
@@ -559,6 +583,72 @@ export default async function OverviewPage({
                 ))}
               </ul>
             )}
+          </Card>
+        ) : null}
+
+        {/*
+          D-295 — "BrandSpace noticed a preference": a PREFERENCE, drawn apart
+          from the evidence-backed insights above because it is about how this
+          person works, not about the brand's performance. It changes nothing
+          until they choose "Make this my default".
+        */}
+        {noticedPreferences.length > 0 && brandId ? (
+          <Card testId="home-noticed">
+            <SectionHeader
+              title={t('home.preference.title')}
+              description={t('home.preference.body')}
+            />
+            <ul style={listStyle}>
+              {noticedPreferences.map((preference) => (
+                <li
+                  key={preference.key}
+                  data-testid={`home-preference-${preference.key}`}
+                  style={{ ...rowStyle, alignItems: 'flex-start' }}
+                >
+                  <div style={{ display: 'grid', gap: spacingTokens['3xs'], flex: '1 1 14rem' }}>
+                    <StatusBadge tone="info" label={t('home.preference.badge')} />
+                    <strong style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+                      {(preference.tool === 'shorten'
+                        ? t('home.preference.shorter')
+                        : t('home.preference.tone').replace(
+                            '{tone}',
+                            t(
+                              `home.preference.tone.${preference.tone ?? 'professional'}` as MessageKey,
+                            ),
+                          )
+                      ).replace(
+                        '{platform}',
+                        optionalMessage(locale, `content.platform.${preference.platformKey}`) ??
+                          preference.platformKey,
+                      )}
+                    </strong>
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                      {t('home.preference.evidence')
+                        .replace('{count}', String(preference.observations))
+                        .replace('{posts}', String(preference.posts))}
+                    </span>
+                  </div>
+                  <div style={actionsStyle}>
+                    {(['accept', 'snooze', 'dismiss'] as const).map((decision) => (
+                      <form key={decision} action={decidePreferenceAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="brandId" value={brandId} />
+                        <input type="hidden" name="key" value={preference.key} />
+                        <input type="hidden" name="decision" value={decision} />
+                        <button
+                          type="submit"
+                          style={buttonStyle(decision === 'accept' ? 'primary' : 'ghost', 'sm')}
+                          className={buttonClass(decision === 'accept' ? 'primary' : 'ghost')}
+                          data-testid={`home-preference-${decision}-${preference.key}`}
+                        >
+                          {t(`home.preference.${decision}` as MessageKey)}
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </Card>
         ) : null}
 

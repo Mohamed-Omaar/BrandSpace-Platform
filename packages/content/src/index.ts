@@ -129,3 +129,14 @@ export { CampaignService, campaignNotFound, campaignVersionConflict } from './ca
 export { ContentMediaResolver, mediaNotFound, tooManyMedia } from './media';
 export type { MediaResolverOptions, ResolvedMedia } from './media';
 export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';
+export {
+  MemberSuggestionService,
+  PREFERENCE_SOURCE,
+  TONE_KEYS,
+  noticePreferences,
+  preferenceInstructions,
+  preferenceKeyOf,
+  type NoticedPreference,
+  type SuggestionDecision,
+  type ToolObservation,
+} from './suggestions';

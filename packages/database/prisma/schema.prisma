@@ -302,6 +302,8 @@ model User {
   legalAcceptances   UserLegalAcceptance[]
   mfaRecoveryCodes   UserMfaRecoveryCode[]
 
+  memberSuggestions MemberSuggestion[]
+
   @@index([status])
   @@map("user")
 }
@@ -516,6 +518,8 @@ model Workspace {
   noteThreads         NoteThread[]
   notes               Note[]
   noteMentions        NoteMention[]
+
+  memberSuggestions MemberSuggestion[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1854,6 +1858,8 @@ model Brand {
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
+  memberSuggestions MemberSuggestion[]
+
   @@unique([workspaceId, id], name: "brand_workspace_scope")
   @@unique([workspaceId, slug])
   @@index([workspaceId, status])
@@ -6012,4 +6018,65 @@ model NoteMention {
   /// "What is unread for me", for the Command Center and the bell.
   @@index([workspaceId, mentionedUserId, readAt])
   @@map("note_mention")
+}
+
+/// PHASE 6 FINAL (D-277 §9-§10, D-295) — A PERSON'S DECISION ON SOMETHING
+/// BRANDSPACE NOTICED ABOUT THEIR OWN WORK.
+///
+/// THE OBSERVATIONS ARE NOT STORED HERE. They are derived, every time, from
+/// the immutable audit trail (`content.variant.shorten`, `content.variant.tone`,
+/// …) with the thresholds in the tenant's content configuration — so there is
+/// no second record of behaviour to drift from the first. What IS stored is the
+/// only thing that cannot be derived: what the person decided.
+///
+///   - a PREFERENCE accepted ("make this my default") influences that person's
+///     future generations for that brand, and nothing else;
+///   - DISMISSED means "don't suggest this again";
+///   - SNOOZED means "not now", until `snoozedUntil`.
+///
+/// A WORKFLOW suggestion is never "accepted" here: accepting one means handing
+/// it to the Copilot, whose automation rule starts DISABLED (D-296).
+///
+/// Per MEMBER and per BRAND: one person's habit is not the brand's truth, and
+/// nothing here ever writes to Brand Brain.
+model MemberSuggestion {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+  userId      String @db.Uuid
+
+  kind   MemberSuggestionKind
+  /// A closed-form key the detector produces, e.g. `shorter:linkedin`.
+  key    String
+  status MemberSuggestionStatus
+
+  /// How many observations the suggestion rested on when it was decided.
+  evidenceCount Int
+  /// Which recorded behaviour it came from, e.g. `content.inline_actions`.
+  source        String
+
+  decidedAt    DateTime  @db.Timestamptz(6)
+  snoozedUntil DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "member_suggestion_brand_fkey")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "member_suggestion_user_fkey")
+
+  @@unique([workspaceId, brandId, userId, kind, key])
+  @@index([workspaceId, userId, status])
+  @@map("member_suggestion")
+}
+
+enum MemberSuggestionKind {
+  PREFERENCE
+  WORKFLOW
+}
+
+enum MemberSuggestionStatus {
+  ACCEPTED
+  DISMISSED
+  SNOOZED
 }

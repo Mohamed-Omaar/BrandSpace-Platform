@@ -16,6 +16,7 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import { BrandBrainRetriever, fenceUntrusted, type Citation } from '@brandspace/brand-brain';
 import { briefTooLong, contentItemNotFound, unsupportedPlatform } from './errors';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
+import { preferenceInstructions, TONE_KEYS } from './suggestions';
 import { findPlatform, type ContentDialect } from './policy';
 import { resolveContentExpiry, type RetentionInput } from './retention';
 import { validateVariant } from './validation';
@@ -261,7 +262,29 @@ export class ContentStudioService extends ContentLibraryService {
       idempotencyKey: `content-studio:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.brief, input.platformKeys, dialect, input.locale),
+        prompt: this.#prompt(
+          input.brief,
+          input.platformKeys,
+          dialect,
+          input.locale,
+          // D-295 — this person's ACCEPTED defaults for this brand, as
+          // instructions built from the closed preference keys only.
+          preferenceInstructions(
+            (
+              await this.db.memberSuggestion.findMany({
+                where: {
+                  workspaceId: this.workspaceId,
+                  brandId: input.brandId,
+                  userId: input.actorUserId,
+                  kind: 'PREFERENCE',
+                  status: 'ACCEPTED',
+                },
+                select: { key: true },
+              })
+            ).map((row) => row.key),
+            input.platformKeys,
+          ),
+        ),
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },
     });
@@ -407,7 +430,18 @@ export class ContentStudioService extends ContentLibraryService {
       resourceType: 'ContentVariant',
       resourceId: variant.id,
       brandId: variant.brandId,
-      after: { platformKey: variant.platformKey, locale: targetLocale, dialect: dialect.key },
+      after: {
+        platformKey: variant.platformKey,
+        locale: targetLocale,
+        dialect: dialect.key,
+        // D-295 — what the edit WAS, in closed terms, so a repeated habit can
+        // be noticed from the audit trail: the tone chosen (a closed key, never
+        // free text) and whether it reworked words BrandSpace had generated.
+        ...(input.tool === 'tone' && input.argument && TONE_KEYS[input.argument]
+          ? { tone: TONE_KEYS[input.argument] }
+          : {}),
+        afterGeneration: variant.origin === 'AI_GENERATED',
+      },
     });
 
     // PHASE 6 FINAL (D-284) — an AI edit is an edit. Before this, an inline
@@ -523,6 +557,8 @@ export class ContentStudioService extends ContentLibraryService {
     platformKeys: readonly string[],
     dialect?: ContentDialect,
     locale?: Locale,
+    /** D-295 — the author's accepted defaults (closed-key instructions). */
+    authorDefaults: readonly string[] = [],
   ): string {
     const platforms = platformKeys
       .map((key) => {
@@ -541,6 +577,9 @@ export class ContentStudioService extends ContentLibraryService {
       // D-115 reaches the prompt only when the output is Arabic. Naming a
       // dialect on an English caption would be noise the model has to ignore.
       locale === 'AR' && dialect ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      ...(authorDefaults.length > 0
+        ? ['Defaults this author chose for their own drafts:', ...authorDefaults]
+        : []),
       'Respond with JSON: {"title": string, "variants": [{"platformKey": string, "body": string, "hashtags": string[]}]}.',
       '',
       'Brief:',

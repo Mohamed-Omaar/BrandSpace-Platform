@@ -32,7 +32,7 @@ Updated as each workstream lands. The evidence column names the test or screen t
 | 6   | First-run Setup Wizard                               | DONE    | `/onboarding?step=` wizard: brand (one audited creation path, logo via asset pipeline), learn (Brand Brain upload), review (Accept / Edit / Reject extracted candidates), connect (real enabled providers, OAuth, Skip), first goal (STRATEGY knowledge `goal.primary`; unsure stores nothing), ready (recommended action from real knowledge) — D-278; `phase6-setup-wizard` unit, `onboarding-first-brand.spec.ts` (EN journey + AR RTL axe)                                                                                               |
 | 7   | Home / Command Center                                | DONE    | Greeting + brand; A What needs you (one verb per row, Publishing deep links, publishing.read gate); B ≤3 grounded insights with evidence / Give to Copilot / Dismiss; C notes preview with Open / Resolve; D 7-day day-grouped schedule; E performance last — D-279; `phase6-home` unit, `approvals.spec.ts` order + links, isolation `phase6-command-center`. Rows with count > 1 link to the filtered list rather than one object (by design: one row summarises several).                                                                 |
 | 8   | Four proactive-intelligence types, kept distinct     | PARTIAL | ATTENTION (Home A) and INSIGHT (Home B) are separate sections with separate sources and treatments; PREFERENCE and WORKFLOW arrive with §9 / §10.                                                                                                                                                                                                                                                                                                                                                                                            |
-| 9   | Preference learning                                  | MISSING |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 9   | Preference learning                                  | DONE    | D-295: derived from audited inline edits on generated words past configured thresholds; member_suggestion stores only decisions (FORCE RLS); Home "BrandSpace noticed a preference" with Make default / Not now / Don't suggest again; accepted defaults shape generation via closed-key instructions and are listed in the composer with Stop using. Isolation phase6-member-suggestion, unit phase6-preferences, E2E phase6-preferences                                                                                                    |
 | 10  | Repeated-workflow detection                          | MISSING |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 11  | Brand Profile + Brand Kit                            | MISSING |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 12  | Living Brand Brain                                   | DONE    | D-294: brand named + understanding in counts; four layers with counts and pending learnings; knowledge gaps open the area; per-value provenance (updated, by, from); learnings with source, evidence, confidence only when measured, accept note; Ask about this brand → global Copilot (brand_brain). Unit phase6-brand-brain, E2E phase6-brand-brain                                                                                                                                                                                       |
@@ -87,12 +87,29 @@ _Filled as screens are rebuilt: for each screen, the services and routes it read
 
 ## 4. New schema changes
 
-_None yet._
+Every one is a migration with FORCE RLS asserted, composite tenant keys and isolation coverage.
+
+| Migration                                           | Change                                                                                          | Decision |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------- |
+| `20260924120000_phase_6_copilot_subject`            | `copilot_session.subjectType/subjectId` — the campaign, post or insight a conversation is about | D-280    |
+| `20260924130000_phase_6_notes_asset_due_importance` | Notes: ASSET subject, optional `dueAt`, Normal/Important; brand-scope trigger                   | D-281    |
+| `20260924140000_phase_6_variant_cover`              | `content_variant.coverAssetId` — a Reel's or video's durable cover; brand-scope trigger         | D-285    |
+| `20260924150000_phase_6_member_suggestion`          | `member_suggestion` — a person's decision on a noticed preference or repeated workflow          | D-295    |
+
+No schema change for: Setup Wizard, Home, Content Library, Create Post entry, draft editor, Asset
+Library views, approvals flow, Campaign Project Room, Calendar, Publishing (a service rule and an
+in-place reconnect), Strategy, Analytics / Intelligence, Brand Brain.
 
 ## 5. Decision log
 
 - **D-277** — this contract is the product / UX / IA authority; the design system stays the visual
   authority; UI-FIDELITY composition rules superseded for redesigned surfaces.
+- **D-278** Setup Wizard · **D-279** Home · **D-280** global Copilot · **D-281** Notes · **D-282**
+  Content Library · **D-283** Create Post entry · **D-284** draft editor · **D-285** media and
+  covers · **D-286** rights in the one predicate · **D-287** Asset Library · **D-288** approvals flow ·
+  **D-289** Campaign Project Room · **D-290** Calendar · **D-291** Publishing and reconnect-retry ·
+  **D-292** Strategy · **D-293** Analytics / Intelligence · **D-294** Brand Brain and CopilotLink ·
+  **D-295** preference learning.
 
 ## 6. Deliberate exclusions (contract §52)
 

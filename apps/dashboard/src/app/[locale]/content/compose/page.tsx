@@ -5,6 +5,7 @@ import { CREATIVE_FORMATS } from '@brandspace/creative';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { listMediaOptions, mediaForVariants } from '../../../../server/media-picker';
@@ -490,6 +491,48 @@ export default async function ComposePage({
         return goalForObjective(goalFromTitle(title, goalLabels('en')));
       })
     : null;
+  /*
+   * D-295 — this member's ACCEPTED defaults for the brand, shown where they
+   * take effect, each with "Stop using". They reach the generator from the
+   * service itself (closed-key instructions); this is only the telling.
+   */
+  const authorDefaults = composingBrandId
+    ? (
+        await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
+          (await suggestions()).acceptedPreferences({
+            userId: customer.userId,
+            brandId: composingBrandId,
+          }),
+        )
+      ).flatMap((key) => {
+        const shorter = /^shorter:([a-z0-9_-]+)$/.exec(key);
+        const tone = /^tone:(friendly|professional):([a-z0-9_-]+)$/.exec(key);
+        const platform = (value: string) =>
+          optionalMessage(locale, `content.platform.${value}`) ?? value;
+        if (shorter) {
+          return [
+            {
+              key,
+              label: translate('create.defaults.shorter').replace(
+                '{platform}',
+                platform(shorter[1]!),
+              ),
+            },
+          ];
+        }
+        if (tone) {
+          return [
+            {
+              key,
+              label: translate('create.defaults.tone')
+                .replace('{platform}', platform(tone[2]!))
+                .replace('{tone}', translate(`home.preference.tone.${tone[1]}` as MessageKey)),
+            },
+          ];
+        }
+        return [];
+      })
+    : [];
   const requestedGoal = single('goal');
   const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
 
@@ -679,6 +722,9 @@ export default async function ComposePage({
         }))}
         recommendedGoal={recommendedGoal}
         initialGoal={initialGoal}
+        authorDefaults={authorDefaults}
+        defaultsBrandId={composingBrandId ?? ''}
+        forgetDefault={decidePreferenceAction}
         formatPlatforms={formatPlatforms}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
@@ -860,6 +906,8 @@ const COMPOSER_KEYS = [
   'create.goal.label',
   'create.goal.none',
   'create.goal.recommended',
+  'create.defaults.title',
+  'create.defaults.forget',
   'create.goal.instruction',
   'create.write.label',
   'create.write.placeholder',

@@ -175,6 +175,10 @@ export interface ComposerViewProps {
   readonly goals?: readonly { key: string; label: string }[];
   /** The goal recommended from the brand's own first goal (D-278), or null. */
   readonly recommendedGoal?: string | null;
+  /** D-295 — this member's accepted defaults for the brand, with "Stop using". */
+  readonly authorDefaults?: readonly { key: string; label: string }[];
+  readonly defaultsBrandId?: string;
+  readonly forgetDefault?: (formData: FormData) => Promise<void>;
   readonly initialGoal?: string;
   /**
    * §18 — for each format, the platforms whose ENABLED provider can carry it
@@ -247,6 +251,9 @@ export function ComposerView({
   sourceTitle = null,
   goals = [],
   recommendedGoal = null,
+  authorDefaults = [],
+  defaultsBrandId = '',
+  forgetDefault,
   initialGoal = '',
   formatPlatforms,
   now = 0,
@@ -800,6 +807,31 @@ export function ComposerView({
                       goals.find((option) => option.key === recommendedGoal)?.label ?? '',
                     )}
                   </p>
+                ) : null}
+                {authorDefaults.length > 0 ? (
+                  <div className="cs-hint" data-testid="content-defaults">
+                    <b>{t['create.defaults.title']}</b>
+                    <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+                      {authorDefaults.map((entry) => (
+                        <li key={entry.key} data-testid={`content-default-${entry.key}`}>
+                          {entry.label}{' '}
+                          {forgetDefault ? (
+                            <form action={forgetDefault} style={{ display: 'inline' }}>
+                              <input type="hidden" name="locale" value={locale} />
+                              <input type="hidden" name="brandId" value={defaultsBrandId} />
+                              <input type="hidden" name="key" value={entry.key} />
+                              <input type="hidden" name="decision" value="dismiss" />
+                              <input type="hidden" name="forget" value="1" />
+                              <input type="hidden" name="returnTo" value="/content/compose" />
+                              <button type="submit" className="cs-ghost-button cs-compact">
+                                {t['create.defaults.forget']}
+                              </button>
+                            </form>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
               </div>
             ) : null}

@@ -967,6 +967,31 @@ const contentStudioSchema = z.object({
       maxCyclesPerItem: z.number().int().min(1).max(100).default(25),
     })
     .default({}),
+
+  /**
+   * PHASE 6 FINAL (D-277 §9-§10, D-295/D-296) — WHEN A HABIT IS WORTH SAYING.
+   *
+   * BrandSpace notices a PREFERENCE (the same inline edit on the same platform,
+   * after generation) and a REPEATED WORKFLOW (the same kind of post made the
+   * same way on the same weekday) only past these thresholds, read from the
+   * audit trail inside a window. Conservative on purpose: one edit is not a
+   * preference, and a suggestion nobody asked for must be earned. Operator
+   * configuration, not code (CLAUDE.md §2.2).
+   */
+  learning: z
+    .object({
+      /** Observations before a preference is suggested. */
+      preferenceMinObservations: z.number().int().min(2).max(100).default(4),
+      /** …across at least this many different posts, so one post edited five times is not a habit. */
+      preferenceMinPosts: z.number().int().min(2).max(100).default(3),
+      /** Repetitions before a workflow is suggested. */
+      workflowMinRepeats: z.number().int().min(2).max(100).default(4),
+      /** How far back the audit trail is read, in days. */
+      windowDays: z.number().int().min(7).max(365).default(90),
+      /** How long "Not now" lasts. */
+      snoozeDays: z.number().int().min(1).max(365).default(30),
+    })
+    .default({}),
 });
 
 /**

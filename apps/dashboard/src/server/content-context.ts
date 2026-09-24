@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  MemberSuggestionService,
   CampaignService,
   ContentApprovalService,
   ContentCalendarService,
@@ -79,6 +80,11 @@ export interface ContentServices extends ScopedServices {
    */
   approvals(): Promise<ContentApprovalService>;
   /**
+   * D-295/D-296 — what BrandSpace noticed about the member's own work, and
+   * what they decided. The same scoped client and policy thresholds.
+   */
+  suggestions(): Promise<MemberSuggestionService>;
+  /**
    * PHASE 8 — Campaigns, the customer surface over the Phase 7 domain.
    *
    * SYNCHRONOUS, unlike its neighbours, because a campaign is not governed by
@@ -154,6 +160,8 @@ export async function inContentStudio<T>(
       policy,
       approvals,
       campaigns: () => new CampaignService({ db: scoped.db, workspaceId }),
+      suggestions: async () =>
+        new MemberSuggestionService({ db: scoped.db, workspaceId, policy: await policy() }),
       library: async () =>
         new ContentLibraryService({ db: scoped.db, workspaceId, policy: await policy() }),
       calendar: async () => {

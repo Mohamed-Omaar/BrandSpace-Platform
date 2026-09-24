@@ -164,6 +164,7 @@ export const STRICT_TENANT_MODELS = [
   'NoteThread',
   'Note',
   'NoteMention',
+  'MemberSuggestion',
   'PaymentAttempt',
   'CreditPackPurchase',
 ] as const;
@@ -374,6 +375,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   NoteThread: 'note_thread',
   Note: 'note',
   NoteMention: 'note_mention',
+  MemberSuggestion: 'member_suggestion',
   PaymentAttempt: 'payment_attempt',
   CreditPackPurchase: 'credit_pack_purchase',
   BillingEvent: 'billing_event',

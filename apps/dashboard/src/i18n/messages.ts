@@ -1063,6 +1063,10 @@ export const messages = {
     'create.goal.label': 'هدف هذا المنشور',
     'create.goal.none': 'بدون هدف محدد',
     'create.goal.recommended': 'المقترح: {goal} — بناءً على الهدف الأول لعلامتك.',
+    'create.defaults.title': 'افتراضاتك لهذه العلامة',
+    'create.defaults.shorter': 'مسودات {platform} أقصر',
+    'create.defaults.tone': 'مسودات {platform} {tone}',
+    'create.defaults.forget': 'توقف عن الاستخدام',
     'create.goal.instruction': 'هدف هذا المنشور: {goal}.',
     'create.goal.EDUCATE': 'التثقيف',
     'create.goal.ENGAGE': 'التفاعل',
@@ -2261,6 +2265,17 @@ export const messages = {
     'home.action.plan': 'خطّط للمحتوى',
     'home.action.open': 'افتح',
     'home.recommended.title': 'توصيات BrandSpace',
+    'home.preference.title': 'لاحظت BrandSpace تفضيلًا',
+    'home.preference.body': 'من تعديلاتك أنت. لا يتغير شيء إلا إذا جعلته افتراضيًا.',
+    'home.preference.badge': 'تفضيل',
+    'home.preference.shorter': 'عادةً ما تختصر مسودات {platform} بعد أن تكتبها BrandSpace.',
+    'home.preference.tone': 'عادةً ما تجعل مسودات {platform} {tone} بعد أن تكتبها BrandSpace.',
+    'home.preference.tone.friendly': 'أكثر ودًا',
+    'home.preference.tone.professional': 'أكثر احترافية',
+    'home.preference.evidence': '{count} تعديلات على {posts} منشورات.',
+    'home.preference.accept': 'اجعله افتراضيًا',
+    'home.preference.snooze': 'ليس الآن',
+    'home.preference.dismiss': 'لا تقترح هذا مجددًا',
     'home.recommended.body': 'مستمدة فقط من أدائك ومحتواك ومعرفة علامتك المعتمدة.',
     'home.recommended.none':
       'لا توجد توصيات بعد. تظهر التوصيات عندما تتوفر بيانات كافية من بياناتك لتستند إليها.',
@@ -3522,6 +3537,10 @@ export const messages = {
     'create.goal.label': 'Goal of this post',
     'create.goal.none': 'No specific goal',
     'create.goal.recommended': 'Recommended: {goal} — based on your brand’s first goal.',
+    'create.defaults.title': 'Your defaults for this brand',
+    'create.defaults.shorter': 'Shorter {platform} drafts',
+    'create.defaults.tone': '{tone} {platform} drafts',
+    'create.defaults.forget': 'Stop using',
     'create.goal.instruction': 'The goal of this post: {goal}.',
     'create.goal.EDUCATE': 'Educate',
     'create.goal.ENGAGE': 'Engage',
@@ -4771,6 +4790,19 @@ export const messages = {
     'home.action.plan': 'Plan content',
     'home.action.open': 'Open',
     'home.recommended.title': 'Recommended by BrandSpace',
+    'home.preference.title': 'BrandSpace noticed a preference',
+    'home.preference.body': 'From your own edits. Nothing changes unless you make it your default.',
+    'home.preference.badge': 'Preference',
+    'home.preference.shorter':
+      'You usually shorten {platform} drafts after BrandSpace writes them.',
+    'home.preference.tone':
+      'You usually make {platform} drafts {tone} after BrandSpace writes them.',
+    'home.preference.tone.friendly': 'friendlier',
+    'home.preference.tone.professional': 'more professional',
+    'home.preference.evidence': '{count} edits across {posts} posts.',
+    'home.preference.accept': 'Make this my default',
+    'home.preference.snooze': 'Not now',
+    'home.preference.dismiss': 'Don’t suggest this again',
     'home.recommended.body':
       'Drawn only from your own performance, content and approved brand knowledge.',
     'home.recommended.none':
@@ -5024,6 +5056,18 @@ export function optionalMessage(locale: string, key: string): string | null {
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
+  PREFERENCE_ACCEPT: {
+    en: 'Done. New drafts will follow this default.',
+    ar: 'تم. ستتبع المسودات الجديدة هذا الافتراض.',
+  },
+  PREFERENCE_SNOOZE: {
+    en: 'Okay — BrandSpace will ask again later.',
+    ar: 'حسنًا — ستسأل BrandSpace لاحقًا.',
+  },
+  PREFERENCE_DISMISS: {
+    en: 'Okay — BrandSpace won’t suggest this again.',
+    ar: 'حسنًا — لن تقترح BrandSpace هذا مجددًا.',
+  },
   SUBMITTED: {
     en: 'The post was sent for review.',
     ar: 'تم إرسال المنشور للمراجعة.',
