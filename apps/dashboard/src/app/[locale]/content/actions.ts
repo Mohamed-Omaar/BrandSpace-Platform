@@ -514,6 +514,16 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   const note = String(formData.get('note') ?? '');
   const assignedTo = String(formData.get('assignedToUserId') ?? '');
   const fromLibrary = formData.get('returnTo') === '/content';
+  // D-290 — the calendar's post drawer returns to the same month (a closed set).
+  const fromCalendar = formData.get('returnTo') === '/calendar';
+  const month = String(formData.get('month') ?? '');
+  const calendarUrl = (params: Record<string, string>) => {
+    const search = new URLSearchParams({
+      ...(/^\d{4}-\d{2}$/.test(month) ? { month } : {}),
+      ...params,
+    }).toString();
+    return `/${locale === 'ar' ? 'ar' : 'en'}/calendar?${search}`;
+  };
 
   let destination: string;
   try {
@@ -527,15 +537,26 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
       }),
     );
     // The library's quick action returns to the library (a closed set, D-282).
-    destination = fromLibrary
-      ? pageUrl(locale, '', { ok: 'SUBMITTED' })
-      : pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
+    destination = fromCalendar
+      ? calendarUrl({ ok: 'SUBMITTED' })
+      : fromLibrary
+        ? pageUrl(locale, '', { ok: 'SUBMITTED' })
+        : pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
   } catch (error: unknown) {
-    destination = fromLibrary
-      ? failure(locale, error, 'submitForReview', '')
-      : failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+    if (fromCalendar) {
+      const failed = new URL(failure(locale, error, 'submitForReview', ''), 'http://x');
+      destination = calendarUrl({
+        error: failed.searchParams.get('error') ?? '',
+        ref: failed.searchParams.get('ref') ?? '',
+      });
+    } else {
+      destination = fromLibrary
+        ? failure(locale, error, 'submitForReview', '')
+        : failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+    }
   }
   revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/approvals`);
   redirect(destination);
 }

@@ -110,6 +110,13 @@ export class ContentLibraryService {
     platformKey?: string | undefined;
     locale?: ContentItem['primaryLocale'] | undefined;
     search?: string | undefined;
+    /**
+     * PHASE 6 FINAL (D-290) — the calendar's unscheduled tray: only items
+     * with at least one variant and NO live slot (one not CANCELLED, PUBLISHED
+     * or FAILED). In the query, so the page limit is spent on rows the tray
+     * can actually offer rather than on posts already on the calendar.
+     */
+    unscheduledOnly?: boolean | undefined;
     limit?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
     return this.db.contentItem.findMany({
@@ -136,6 +143,14 @@ export class ContentLibraryService {
          * of anything the member can open.
          */
         ...(input.search ? { title: { contains: input.search, mode: 'insensitive' } } : {}),
+        ...(input.unscheduledOnly
+          ? {
+              ...(input.platformKey ? {} : { variants: { some: {} } }),
+              calendarSlots: {
+                none: { status: { notIn: ['CANCELLED', 'PUBLISHED', 'FAILED'] } },
+              },
+            }
+          : {}),
       },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
       orderBy: { updatedAt: 'desc' },

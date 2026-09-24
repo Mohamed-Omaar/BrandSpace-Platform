@@ -446,6 +446,14 @@ link for Download. No new colour, font, shadow or interaction model.
 `MetricCard`, `StateMessage`) and adds `LinkTabs` for its six sections, a three-card overview grid, list
 rows with a 3rem `AssetThumb`, and the edit form folded into a native `details`. No new visual treatment.
 
+### 6.3.15 Phase 6 final — the calendar's tray, filters and post drawer (D-290)
+
+`/[locale]/calendar` keeps the approved `ContentCalendar` grid, agenda and chips unchanged, and adds: a
+filter row of native selects, the Unscheduled tray on the grid's `surfaceMuted` panel treatment with the
+existing compact button, a caption-sized "BrandSpace noticed" line, and the post detail moved from the
+centred `Dialog` into the shared `SideSheet` (D-285) holding the existing `VariantPreview`. The grid's
+only new behaviour is a drop target on each day cell. No new colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
