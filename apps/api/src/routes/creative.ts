@@ -6,7 +6,7 @@ import {
   type AssetActor,
   type AssetPolicy,
 } from '@brandspace/assets';
-import { CreativeStudioService, findCreativeFormat } from '@brandspace/creative';
+import { CreativeStudioService, brandTypography, findCreativeFormat } from '@brandspace/creative';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { PrismaClient } from '@brandspace/database';
@@ -293,7 +293,7 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                 industry: brand.industry,
                 description: brand.description,
                 palette: stringArray(brand.colorPalette),
-                typography: stringArray(brand.typography),
+                typography: brandTypography(brand.typography),
                 knowledge: knowledge
                   .map((item) => localizedLine(item.body))
                   .filter((line) => line !== ''),

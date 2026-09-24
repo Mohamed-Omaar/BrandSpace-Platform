@@ -501,6 +501,12 @@ Empty-state actions are small `brand` (first step) or `neutral` (secondary) butt
 `StateMessage` on `shellSurface`, max 32rem, with the same small buttons and a `caption` / `textMuted`
 reference line. No new colour, font, shadow or interaction model.
 
+### 6.3.22 Phase 6 final — Creative Studio identity card (D-301)
+
+A `Card` above the studio: a `bodySm` strong title, the brand's palette as 1.25rem round swatches (the
+brand's own colours as data, `cardBorder` hairline — the Asset Library brand-kit treatment at a smaller
+step), a `caption` / `textSecondary` summary line and a caption link. No new colour, font or shadow.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

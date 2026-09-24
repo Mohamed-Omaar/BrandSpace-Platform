@@ -14,6 +14,7 @@
  */
 export {
   CreativeStudioService,
+  brandTypography,
   creativeBriefRequired,
   creativeGenerationFailed,
   creativeReturnedNoBytes,

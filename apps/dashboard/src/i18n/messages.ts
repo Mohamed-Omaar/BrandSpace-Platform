@@ -2145,6 +2145,13 @@ export const messages = {
     'creative.noBrandTitle': 'اختر علامة تجارية',
     'creative.noBrandBody': 'الصورة تُنشأ على هوية علامة واحدة. اخترها من المبدّل في الأعلى.',
     'creative.noLogoNotice': 'لا يُضاف شعار العلامة تلقائيًا إلى الصور المُنشأة.',
+    'creative.identity.title': 'ما تستند إليه صور {brand}',
+    'creative.identity.type': 'الخطوط: {fonts}',
+    'creative.identity.notes': '{count} ملاحظات معتمدة عن الهوية والنبرة من عقل العلامة',
+    'creative.identity.noNotes':
+      'لا توجد ملاحظات معتمدة عن الهوية أو النبرة بعد — ستتبع الصورة الوصف وحده',
+    'creative.identity.noPalette': 'لا توجد لوحة ألوان في ملف العلامة',
+    'creative.identity.edit': 'تعديل ملف العلامة',
     'creative.generatedBadge': 'أُنشئت بالذكاء الاصطناعي',
     'creative.scanning': 'الصورة محفوظة ويجري فحصها. ستظهر المعاينة بعد اكتمال الفحص.',
     'creative.format.square': 'مربّع للمنشورات',
@@ -4730,6 +4737,13 @@ export const messages = {
     'creative.noBrandBody':
       "An image is generated on one brand's identity. Choose one from the selector above.",
     'creative.noLogoNotice': 'A brand logo is never added to a generated image automatically.',
+    'creative.identity.title': 'What {brand} images draw on',
+    'creative.identity.type': 'Type: {fonts}',
+    'creative.identity.notes': '{count} approved identity and voice notes from Brand Brain',
+    'creative.identity.noNotes':
+      'No approved identity or voice notes yet — the image follows the brief alone',
+    'creative.identity.noPalette': 'No palette in the brand profile',
+    'creative.identity.edit': 'Edit brand profile',
     'creative.generatedBadge': 'AI generated',
     'creative.scanning':
       'The image is saved and is being scanned. The preview appears once the scan clears it.',

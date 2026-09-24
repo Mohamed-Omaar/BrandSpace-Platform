@@ -44,6 +44,25 @@ export interface CreativeStudioOptions {
   readonly clock?: Clock;
 }
 
+/**
+ * THE BRAND'S TYPE, AS THE PROFILE STORES IT (D-301). Brand Profile writes
+ * `{ heading, body }`; the generation route read it as an array, so every
+ * image was sent no typography at all. Both shapes are read, duplicates
+ * dropped; nothing is invented.
+ */
+export function brandTypography(value: unknown): readonly string[] {
+  const fonts: unknown[] = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null
+      ? [(value as Record<string, unknown>)['heading'], (value as Record<string, unknown>)['body']]
+      : [];
+  return [
+    ...new Set(
+      fonts.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== ''),
+    ),
+  ];
+}
+
 /** What the brand contributes to a generation. Read, never invented. */
 export interface BrandIdentityInput {
   readonly name: string;

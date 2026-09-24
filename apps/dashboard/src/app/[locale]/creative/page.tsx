@@ -1,7 +1,15 @@
-import { StateMessage } from '@brandspace/ui';
-import { CREATIVE_FORMATS } from '@brandspace/creative';
+import Link from 'next/link';
+import {
+  Card,
+  StateMessage,
+  colorTokens,
+  radiusTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
+import { CREATIVE_FORMATS, brandTypography } from '@brandspace/creative';
 import '@brandspace/ui/content-studio.css';
-import { requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -55,6 +63,39 @@ export default async function CreativeStudioPage({
 
   const brandContext = await brandContextFor(workspace, '/creative', single('brand'));
   const brand = requiredBrand(brandContext);
+
+  /*
+   * D-301 (§26) — WHAT THE IMAGE WILL DRAW ON, shown before it is asked for:
+   * the brand's own palette and type from its profile, and how many approved
+   * identity / voice notes Brand Brain contributes — the same selection the
+   * generation route reads (ACTIVE, IDENTITY or TONE_OF_VOICE, at most six).
+   * Counted, never scored; nothing here is sent anywhere.
+   */
+  const identity = brand
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+        const row = await db.brand.findFirst({
+          where: { id: brand.id, deletedAt: null },
+          select: { colorPalette: true, typography: true },
+        });
+        const notes = await db.brandKnowledgeItem.count({
+          where: {
+            brandId: brand.id,
+            status: 'ACTIVE',
+            area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
+          },
+        });
+        const strings = (value: unknown): string[] =>
+          Array.isArray(value)
+            ? value.filter((entry): entry is string => typeof entry === 'string')
+            : [];
+        return {
+          palette: strings(row?.colorPalette).slice(0, 8),
+          typography: brandTypography(row?.typography),
+          notes: Math.min(notes, 6),
+        };
+      })
+    : null;
+  const mayProfile = workspace.permissionKeys.includes('brand.read');
 
   const labels: CreativeStudioLabels = {
     brief: t('creative.brief'),
@@ -119,18 +160,93 @@ export default async function CreativeStudioPage({
           }
         />
       ) : (
-        <CreativeStudioView
-          locale={locale}
-          brandId={brand.id}
-          formats={CREATIVE_FORMATS.map((format) => ({
-            key: format.key,
-            label: t(FORMAT_KEYS[format.key] ?? 'creative.format.square'),
-            size: format.size,
-            aspect: format.aspect,
-          }))}
-          labels={labels}
-          initialResult={null}
-        />
+        <>
+          {identity ? (
+            <Card testId="creative-identity">
+              <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+                <strong style={typographyTokens.bodySm}>
+                  {t('creative.identity.title').replace('{brand}', brand.name)}
+                </strong>
+                {identity.palette.length > 0 ? (
+                  <ul
+                    data-testid="creative-identity-palette"
+                    aria-label={t('assets.kit.palette')}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: spacingTokens.xs,
+                      margin: 0,
+                      padding: 0,
+                      listStyle: 'none',
+                    }}
+                  >
+                    {identity.palette.map((colour) => (
+                      <li
+                        key={colour}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            inlineSize: '1.25rem',
+                            blockSize: '1.25rem',
+                            borderRadius: radiusTokens.full,
+                            // The brand's OWN colour, as data — not a design literal.
+                            background: colour,
+                            border: `1px solid ${colorTokens.cardBorder}`,
+                          }}
+                        />
+                        <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                          {colour}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <span
+                  data-testid="creative-identity-summary"
+                  style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                >
+                  {[
+                    identity.typography.length > 0
+                      ? t('creative.identity.type').replace(
+                          '{fonts}',
+                          identity.typography.join(' · '),
+                        )
+                      : null,
+                    identity.notes > 0
+                      ? t('creative.identity.notes').replace('{count}', String(identity.notes))
+                      : t('creative.identity.noNotes'),
+                    identity.palette.length === 0 ? t('creative.identity.noPalette') : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                {mayProfile ? (
+                  <Link
+                    href={`/${locale}/settings/brand?brand=${brand.id}`}
+                    data-testid="creative-identity-profile"
+                    style={{ ...typographyTokens.caption, justifySelf: 'start' }}
+                  >
+                    {t('creative.identity.edit')}
+                  </Link>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+          <CreativeStudioView
+            locale={locale}
+            brandId={brand.id}
+            formats={CREATIVE_FORMATS.map((format) => ({
+              key: format.key,
+              label: t(FORMAT_KEYS[format.key] ?? 'creative.format.square'),
+              size: format.size,
+              aspect: format.aspect,
+            }))}
+            labels={labels}
+            initialResult={null}
+          />
+        </>
       )}
     </WorkspaceShell>
   );
