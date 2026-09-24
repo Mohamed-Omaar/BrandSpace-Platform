@@ -27,6 +27,8 @@ export interface MediaOption {
   readonly mimeType: string;
   readonly width: number | null;
   readonly height: number | null;
+  /** PHASE 6 FINAL — a video's length, when the processor measured it. */
+  readonly durationMs: number | null;
   /** True for the workspace-shared shelf, so the screen can say so. */
   readonly shared: boolean;
   /** `null` when no inline preview can be issued; the row still lists. */
@@ -84,6 +86,7 @@ export async function listMediaOptions(input: {
             mimeType: asset.mimeType,
             width: asset.width,
             height: asset.height,
+            durationMs: asset.durationMs ?? null,
             shared: asset.brandId === null,
             previewToken: token,
           };
@@ -174,6 +177,7 @@ export async function mediaForVariants(input: {
         mimeType: asset.mimeType,
         width: asset.width,
         height: asset.height,
+        durationMs: asset.durationMs ?? null,
         shared: asset.brandId === null,
         previewToken: token,
       });

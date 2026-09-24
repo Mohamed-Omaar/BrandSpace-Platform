@@ -12,9 +12,15 @@ export type { ContentTool, GenerateInput, GenerationResult, StudioOptions } from
 export {
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
+  contentToolQuoteRequestSchema,
   contentToolRequestSchema,
 } from './requests';
-export type { ContentGenerateRequest, ContentQuoteRequest, ContentToolRequest } from './requests';
+export type {
+  ContentGenerateRequest,
+  ContentQuoteRequest,
+  ContentToolQuoteRequest,
+  ContentToolRequest,
+} from './requests';
 
 export { ContentLibraryService } from './library';
 export type { ContentLibraryOptions } from './library';

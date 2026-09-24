@@ -437,7 +437,10 @@ export function CreativeStudioView({
                   {labels.openInLibrary}
                 </Link>
                 <Link
-                  href={`/${locale}/content/compose`}
+                  href={`/${locale}/content/compose?${new URLSearchParams({
+                    mode: 'ai',
+                    asset: result.assetId,
+                  }).toString()}`}
                   style={buttonStyle('neutral', 'sm')}
                   data-testid="creative-use-in-content"
                 >

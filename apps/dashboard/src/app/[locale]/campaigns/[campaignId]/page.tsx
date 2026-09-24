@@ -283,7 +283,7 @@ export default async function CampaignDetailPage({
                   <Row key={item.id} testId={`campaign-content-${item.id}`}>
                     <Cell>
                       <Link
-                        href={`/${locale}/content/compose?draft=${item.id}`}
+                        href={`/${locale}/content/compose?item=${item.id}`}
                         style={{ color: colorTokens.brandPurple, fontWeight: 600 }}
                       >
                         {item.title}

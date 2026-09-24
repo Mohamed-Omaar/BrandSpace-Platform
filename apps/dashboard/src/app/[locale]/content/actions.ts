@@ -251,12 +251,28 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
       return created.item.id;
     });
 
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      ok: 'SAVED',
+      ...attachParam(formData),
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'createManualDraft', '/compose');
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
+}
+
+/**
+ * PHASE 6 FINAL (D-285) — AN IMAGE CARRIED FROM THE CREATIVE STUDIO.
+ *
+ * Only ever an id to OFFER on the new draft: the draft editor puts it on the
+ * slides, unsaved, and the ordinary save resolves it against the brand and the
+ * platform like any other media. Nothing is attached by this parameter alone.
+ */
+function attachParam(formData: FormData): { attach?: string } {
+  const value = String(formData.get('attach') ?? '');
+  return /^[0-9a-f-]{36}$/i.test(value) ? { attach: value } : {};
 }
 
 /** Save a person's own edit to a caption. No gateway, no credits. */
@@ -288,11 +304,26 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
       ? formData.getAll('assetIds').map((value) => String(value))
       : undefined;
 
+    const rawCover = formData.get('coverAssetId');
+    const coverAssetId =
+      rawCover === null
+        ? undefined
+        : String(rawCover).trim() === ''
+          ? null
+          : String(rawCover).trim();
+    // Present only where the platform takes one; absent leaves it untouched.
+    const rawComment = formData.get('firstComment');
+    const firstComment =
+      rawComment === null ? undefined : String(rawComment).trim().slice(0, 2_200);
+
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
       (await library()).editVariant({
         variantId,
         body,
         hashtags,
+        ...(firstComment === undefined ? {} : { firstComment }),
+        // PHASE 6 FINAL (D-285) — present only where a cover can be chosen.
+        ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
       }),
@@ -341,7 +372,11 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
         },
       }),
     );
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CAMPAIGN_LINKED' });
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      ok: 'CAMPAIGN_LINKED',
+      ...attachParam(formData),
+    });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
@@ -626,7 +661,12 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
             platformKey: variant.platformKey,
             body: variant.body ?? '',
             hashtags: variant.hashtags,
-            firstComment: variant.firstComment,
+            // A first comment travels only to a platform that still takes one:
+            // the operator may have switched it off since it was written.
+            firstComment: policy.platforms.find((p) => p.key === variant.platformKey)
+              ?.allowsFirstComment
+              ? variant.firstComment
+              : null,
             linkUrl: variant.linkUrl,
             assetIds: variant.assetIds,
           })),

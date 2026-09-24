@@ -110,8 +110,13 @@ async function openLibrary(page: Page, locale = 'en'): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
 }
 
+/**
+ * The composer itself. `/content/compose` alone is the Create entry (D-283);
+ * `?mode=ai` is the address of "Generate with AI", which is what every
+ * composer test here drives.
+ */
 async function openComposer(page: Page, locale = 'en'): Promise<void> {
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/content/compose`);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/content/compose?mode=ai`);
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('content-composer')).toBeVisible();
 }
@@ -345,7 +350,9 @@ test.describe('generation', () => {
     } else {
       // Outcome 1.
       await expect(page.getByTestId('content-variant').first()).toBeVisible();
-      // AC-11.4: the sources come from retrieval, so a grounded draft has them.
+      // AC-11.4: the sources come from retrieval, so a grounded draft has them —
+      // one quiet "Using … Brand Brain" away (D-284).
+      await page.getByTestId('draft-brain').locator('summary').click();
       await expect(page.getByTestId('content-citations')).toBeVisible();
     }
 
@@ -455,8 +462,15 @@ test.describe('writing a post by hand', () => {
     await openComposer(page);
     const body = `Two channels, one campaign, at ${new Date().toISOString()}.`;
 
-    // TWO channels, so the fan-out is observable rather than assumed.
-    const channels = page.getByTestId('content-channel');
+    /*
+     * THE FORMAT FIRST (D-283 §18): it decides which channels can carry the
+     * post, and a channel that cannot is disabled rather than silently dropped
+     * at publish time.
+     */
+    await page.getByTestId('content-format').selectOption('REEL');
+
+    // TWO channels that CAN carry a reel, so the fan-out is observable.
+    const channels = page.locator('[data-testid="content-channel"]:not([disabled])');
     const count = await channels.count();
     const picked: string[] = [];
     for (let index = 0; index < count && picked.length < 2; index += 1) {
@@ -469,11 +483,6 @@ test.describe('writing a post by hand', () => {
     expect(picked.length).toBe(2);
 
     await page.getByTestId('content-brief').fill(body);
-    await page
-      .locator('select')
-      .filter({ hasText: /Reel|ريل/ })
-      .first()
-      .selectOption('REEL');
 
     /*
      * THE CAMPAIGN IS NOT ASSERTED HERE. It used to be, conditionally — "if the
@@ -1138,7 +1147,7 @@ test.describe('accessibility and keyboard', () => {
   for (const locale of ['en', 'ar'] as const) {
     test(`the library and the composer are clean under axe (${locale})`, async ({ page }) => {
       await signIn(page, locale);
-      for (const path of ['/content', '/content/compose']) {
+      for (const path of ['/content', '/content/compose', '/content/compose?mode=ai']) {
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${path}`);
         await page.waitForLoadState('domcontentloaded');
         const results = await new AxeBuilder({ page })

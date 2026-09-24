@@ -148,13 +148,21 @@ test.describe('D-281 · notes as conversations', () => {
     await page.getByTestId('note-submit').click();
     await expect(panel).toContainText(text);
 
-    const stored = await withPlatformPrisma((prisma) =>
-      prisma.noteThread.findFirst({
-        where: { assetId, notes: { some: { body: text } } },
-        select: { subjectType: true },
-      }),
-    );
-    expect(stored?.subjectType).toBe('ASSET');
+    // The typed words are on screen before the post lands; wait for the ROW.
+    await expect
+      .poll(
+        async () =>
+          (
+            await withPlatformPrisma((prisma) =>
+              prisma.noteThread.findFirst({
+                where: { assetId, notes: { some: { body: text } } },
+                select: { subjectType: true },
+              }),
+            )
+          )?.subjectType,
+        { timeout: 30_000 },
+      )
+      .toBe('ASSET');
   });
 
   test('the panel is clean under an accessibility scan, right to left', async ({ page }) => {

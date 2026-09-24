@@ -395,6 +395,42 @@ in `surfaceSoft` with the `lg` radius; a text-only post shows its caption in `bo
 there. The composer (`/content/compose`) remains the demo port until its own workstream. The
 manifest rows above for `/[locale]/content` now pin only the composer.
 
+### 6.3.10 Phase 6 final — the Create Post entry (D-277 §17-§19, D-283)
+
+`/[locale]/content/compose` without a draft opens on "What would you like to create?": four link cards
+in a responsive grid using the surface-card treatment (`surfaceCardAlpha`, `cardBorder`, `2xl` radius)
+with the `brandPurpleTint` icon tile, plus the idea and repurpose pickers composed from `Card`,
+`StateMessage`, `StatusBadge` and the button variants. This is an APPROVED DESIGN-SYSTEM EXTENSION —
+the demo's `composer()` has no entry step. The composer port itself is unchanged in geometry; inside
+it the format selector moves above the channel chips (it decides which chips are enabled), a goal
+selector joins the pre-draft form in AI mode, and the primary-action class swaps between Generate and
+Save draft by mode — all with the port's own `cs-field`, `cs-channel`, `cs-dark-button` and
+`cs-ghost-button` classes.
+
+### 6.3.11 Phase 6 final — the draft editor (D-277 §20-§22, D-284)
+
+With a draft open, `/[locale]/content/compose` renders `.cs-draft-layout`: three tracks (context
+200–240px, editor fluid, preview 280–340px), collapsing to editor + preview at 1180px and to one
+column at 760px. It is an APPROVED DESIGN-SYSTEM EXTENSION built only from the port's own classes and
+colours (`cs-surface-card`, `cs-field`, `cs-channel` as the variant tabs, `cs-notice`, `cs-hint`,
+`cs-counter`, `cs-citations`; `--cs-purple`, `--cs-soft`, `--cs-muted`, the port's warning and error
+values). The preview track is where the demo's `copilotPanel()` column sat (§4.1): it now holds the
+live `SocialPostPreview` rather than a Copilot, which is global (D-280). The pre-draft form keeps the
+two-track `.cs-composer` port unchanged.
+
+### 6.3.12 Phase 6 final — slides, the media drawer and the paged carousel (D-285)
+
+The variant's media is `.cs-slides` / `.cs-slide-list`: rows on `--cs-soft` with the port's 13px radius,
+a 3.25rem `AssetThumb`, the slide label in the port's type scale and `cs-channel` action chips; a dragged
+row is outlined in `--cs-purple`. "Add media" opens `SideSheet` — a new `packages/ui` overlay that is the
+Copilot drawer's geometry (`drawerAlpha`, blur, `3xl` radius, `shadowTokens.drawer`, `drawerWidth`) with
+`Dialog`'s focus trap, Escape and restoration; the reason it exists is that `CopilotDrawer` is bound to
+Copilot labels. Its library grid is `.cs-media-grid` / `.cs-media-choice` in the same tokens. The
+`SocialPostPreview` carousel gains paging only when a caller passes `slides` and the three slide labels:
+two round arrows in the existing play-button treatment (white 0.9, `surfaceInk`), the logical chevron
+icons that flip in Arabic, and `CarouselDots`' existing `active` state. No new colour, font, shadow or
+interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

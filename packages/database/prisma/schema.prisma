@@ -513,14 +513,14 @@ model Workspace {
   creditNoteLines     CreditNoteLine[]
   paymentAttempts     PaymentAttempt[]
   creditPackPurchases CreditPackPurchase[]
+  noteThreads         NoteThread[]
+  notes               Note[]
+  noteMentions        NoteMention[]
 
   @@index([status])
   @@index([ownerUserId])
   @@index([planKey])
   @@map("workspace")
-  noteThreads NoteThread[]
-  notes       Note[]
-  noteMentions NoteMention[]
 }
 
 /// TENANT-OWNED. Links a User to a Workspace with a role and optional brand scope.
@@ -1850,6 +1850,7 @@ model Brand {
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
   automationEvents          AutomationEvent[]
+  noteThreads               NoteThread[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
@@ -1859,7 +1860,6 @@ model Brand {
   @@index([workspaceId, primaryLogoAssetId])
   @@index([workspaceId, secondaryLogoAssetId])
   @@map("brand")
-  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. One unit of brand knowledge — docs/DATABASE.md
@@ -2564,6 +2564,7 @@ model Asset {
   /// The composite target versions, derivatives, sessions and jobs point at.
   /// D-281. Conversations about this file.
   noteThreads NoteThread[]
+  coverOf     ContentVariant[] @relation("ContentVariantCover")
 
   @@unique([workspaceId, id], name: "asset_workspace_scope")
   @@index([workspaceId, brandId, status])
@@ -2909,6 +2910,7 @@ model ContentItem {
   campaign           Campaign?           @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_item_campaign_fkey")
   metricObservations MetricObservation[]
   insightEvidence    InsightEvidence[]
+  noteThreads        NoteThread[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -2918,7 +2920,6 @@ model ContentItem {
   @@index([workspaceId, brandId, updatedAt(sort: Desc)])
   @@index([expiresAt])
   @@map("content_item")
-  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. Per-platform, per-locale rendering of a content
@@ -2959,6 +2960,11 @@ model ContentVariant {
   /// refused on that path.
   assetIds String[] @default([]) @db.Uuid
 
+  /// Phase 6 final (D-285) — a Reel's or video's cover image. The variant's own
+  /// brand or the shared shelf (trigger `content_variant_cover_scope`); deleting
+  /// the asset clears it.
+  coverAssetId String? @db.Uuid
+
   platformOptions Json?
 
   validationState  ContentValidationState @default(UNVALIDATED)
@@ -2985,6 +2991,7 @@ model ContentVariant {
   /// the difference between accepted and refused would answer whether that id
   /// exists. F-80 and F-83 are what this line prevents recurring.
   item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_variant_item_fkey")
+  cover     Asset?      @relation("ContentVariantCover", fields: [workspaceId, coverAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_variant_cover_fkey")
 
   publishJobs PublishJob[]
 
@@ -2997,6 +3004,7 @@ model ContentVariant {
   @@unique([contentItemId, platformKey, locale])
   @@index([workspaceId, contentItemId])
   @@index([workspaceId, brandId])
+  @@index([workspaceId, coverAssetId])
   @@index([expiresAt])
   @@map("content_variant")
 }
@@ -4303,13 +4311,13 @@ model Campaign {
   contentItems ContentItem[]
   insights     Insight[]
   evidence     InsightEvidence[]
+  noteThreads  NoteThread[]
 
   @@unique([workspaceId, id], name: "campaign_workspace_scope")
   @@unique([workspaceId, brandId, createdByUserId, idempotencyKey])
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, startDate, endDate])
   @@map("campaign")
-  noteThreads NoteThread[]
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. ONE GENERATED PIECE OF INTELLIGENCE — an
@@ -5904,7 +5912,7 @@ model NoteThread {
   dueAt      DateTime?      @db.Timestamptz(6)
   importance NoteImportance @default(NORMAL)
 
-  createdByUserId String  @db.Uuid
+  createdByUserId  String  @db.Uuid
   /// Who this is waiting on, when it is waiting on somebody in particular.
   ///
   /// OPTIONAL BECAUSE MOST COMMENTS ARE NOT TASKS. A thread that must always
@@ -5961,8 +5969,8 @@ model Note {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  thread    NoteThread @relation(fields: [workspaceId, threadId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_fkey")
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  thread    NoteThread    @relation(fields: [workspaceId, threadId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_fkey")
   mentions  NoteMention[]
 
   @@unique([workspaceId, id], name: "note_workspace_scope")

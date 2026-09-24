@@ -6,7 +6,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { brandIdQueryFilter } from '@brandspace/shared';
+import { AppError, brandIdQueryFilter } from '@brandspace/shared';
 import {
   contentItemNotFound,
   draftLimitReached,
@@ -553,6 +553,11 @@ export class ContentLibraryService {
     hashtags?: readonly string[];
     firstComment?: string | null;
     assetIds?: readonly string[] | undefined;
+    /**
+     * PHASE 6 FINAL (D-285) — the cover image. Undefined leaves it; null clears
+     * it; an id must be an IMAGE this variant's brand may use, READY and CLEAN.
+     */
+    coverAssetId?: string | null | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
@@ -567,10 +572,18 @@ export class ContentLibraryService {
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
 
+    /*
+     * ABSENT MEANS "LEAVE IT" (Phase 6 final, D-284). A form that has no first
+     * comment field — every platform that does not take one — used to save
+     * `null` over whatever was stored. Only an explicit value, empty included,
+     * changes it now.
+     */
+    const firstComment =
+      input.firstComment === undefined ? variant.firstComment : input.firstComment || null;
     const validation = validateVariant(platform, {
       body: input.body,
       ...(input.hashtags ? { hashtags: input.hashtags } : {}),
-      firstComment: input.firstComment ?? null,
+      firstComment,
     });
 
     /*
@@ -593,13 +606,32 @@ export class ContentLibraryService {
             policy: this.policy,
           });
 
+    let cover: string | null | undefined;
+    if (input.coverAssetId === undefined || input.coverAssetId === null) {
+      cover = input.coverAssetId;
+    } else {
+      const [resolved] = await new ContentMediaResolver({
+        db: this.db,
+        workspaceId: this.workspaceId,
+      }).resolve({
+        assetIds: [input.coverAssetId],
+        brandId: variant.brandId,
+        brandScope: input.actorBrandScope,
+      });
+      if (!resolved || resolved.kind !== 'IMAGE') {
+        throw new AppError('VALIDATION_FAILED', 'A cover must be an image.');
+      }
+      cover = resolved.id;
+    }
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
-        firstComment: input.firstComment ?? null,
+        firstComment,
         origin: variant.origin === 'HUMAN' ? 'HUMAN' : 'AI_ASSISTED',
         characterCount: validation.characterCount,
         validationState: validation.state,
@@ -621,6 +653,7 @@ export class ContentLibraryService {
         characterCount: validation.characterCount,
         validationState: validation.state,
         ...(media === undefined ? {} : { mediaCount: media.length }),
+        ...(cover === undefined ? {} : { cover: cover === null ? 'cleared' : 'set' }),
       },
     });
 
@@ -644,12 +677,16 @@ export class ContentLibraryService {
      * something already planned is a Phase 6 question — there is a slot pointing
      * at it — and this phase does not answer it by silently unscheduling.
      */
-    await this.#revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
+    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
     return updated;
   }
 
-  /** See `editVariant`. Separate so the reason has somewhere to live. */
-  async #revokeApprovalOnEdit(
+  /**
+   * See `editVariant`. Separate so the reason has somewhere to live, and
+   * PROTECTED so the studio's AI edits obey the same rule (D-284): a caption an
+   * inline tool rewrote is as changed as one a person retyped.
+   */
+  protected async revokeApprovalOnEdit(
     actorUserId: string,
     contentItemId: string,
     brandId: string,

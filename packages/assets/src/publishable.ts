@@ -1,6 +1,6 @@
 import type { Prisma, TenantScopedClient } from '@brandspace/database';
 import type { ObjectStore } from '@brandspace/storage';
-import { AppError } from '@brandspace/shared';
+import { AppError, systemClock, type Clock } from '@brandspace/shared';
 
 /**
  * WHAT COUNTS AS PUBLISHABLE MEDIA — ONE PREDICATE, TWO CALLERS (AC-27.2, AC-29.3).
@@ -28,6 +28,12 @@ import { AppError } from '@brandspace/shared';
  *     quarantined; soft-deleted means gone. Publishing any of the three is what
  *     the scanner exists to prevent.
  *   - A KIND A POST CAN CARRY. A PDF is a fine asset and not a photograph.
+ *   - RIGHTS STILL IN FORCE (Phase 6 final, D-286). `rightsExpiryAt` is the
+ *     date the licence to use the file ends; after it the file may not be
+ *     attached to a post, and a post already carrying it may not publish.
+ *     Absent means no recorded limit. Measured against the caller's clock, so
+ *     the composer and the pipeline decide on the same rule at their own
+ *     moment — a post scheduled before the date and sent after it is refused.
  */
 
 /** Kinds a social post can carry. A document is an asset and not a picture. */
@@ -38,6 +44,8 @@ export function publishableAssetWhere(input: {
   readonly workspaceId: string;
   readonly brandId: string;
   readonly brandScope: readonly string[];
+  /** The moment the question is asked, for rights expiry (D-286). */
+  readonly now: Date;
 }): Prisma.AssetWhereInput {
   return {
     id: { in: [...new Set(input.assetIds)] },
@@ -48,6 +56,7 @@ export function publishableAssetWhere(input: {
     kind: { in: [...PUBLISHABLE_ASSET_KINDS] },
     AND: [
       { OR: [{ brandId: input.brandId }, { brandId: null }] },
+      { OR: [{ rightsExpiryAt: null }, { rightsExpiryAt: { gt: input.now } }] },
       /*
        * THE SCOPE CLAUSE FOR AN ASSET IS NOT THE ORDINARY ONE. Restricting
        * `brandId` to the scope would hide the workspace-SHARED shelf, whose
@@ -82,6 +91,7 @@ export interface PublishMediaResolverOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
   readonly store: ObjectStore;
+  readonly clock?: Clock;
 }
 
 /**
@@ -98,11 +108,13 @@ export class PublishMediaResolver {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
   readonly #store: ObjectStore;
+  readonly #clock: Clock;
 
   constructor(options: PublishMediaResolverOptions) {
     this.#db = options.db;
     this.#workspaceId = options.workspaceId;
     this.#store = options.store;
+    this.#clock = options.clock ?? systemClock;
   }
 
   async resolve(input: {
@@ -118,6 +130,7 @@ export class PublishMediaResolver {
         workspaceId: this.#workspaceId,
         brandId: input.brandId,
         brandScope: input.brandScope,
+        now: this.#clock.now(),
       }),
       select: {
         id: true,

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  PLATFORM_FORMATS,
   SocialPostPreview,
   spacingTokens,
   type PostAspect,
@@ -8,6 +9,7 @@ import {
   type SocialPlatform,
   type SocialPostPreviewLabels,
 } from '@brandspace/ui';
+import { durationLabel } from '../../../../server/composer-editor';
 
 /**
  * LIVE SOCIAL PREVIEWS, FED BY REAL CONTENT (AC-27.4).
@@ -47,14 +49,17 @@ export interface VariantPreviewMedia {
   readonly name: string;
   readonly kind: string;
   readonly previewToken: string | null;
+  readonly durationMs?: number | null;
 }
 
 export function VariantPreview({
   locale,
   platformKey,
+  format,
   body,
   hashtags,
   media,
+  cover = null,
   accountName,
   accountHandle,
   status,
@@ -64,10 +69,18 @@ export function VariantPreview({
 }: {
   readonly locale: string;
   readonly platformKey: string;
+  /**
+   * PHASE 6 FINAL (§22) — the composition the post is drawn in. A Reel is a
+   * 9:16 frame with an action rail, not a feed post with a video in it.
+   * Absent means the platform's own default.
+   */
+  readonly format?: 'feed' | 'story' | 'reel' | 'video';
   readonly body: string;
   readonly hashtags: readonly string[];
   /** In the author's order. The first item is the cover. */
   readonly media: readonly VariantPreviewMedia[];
+  /** PHASE 6 FINAL (D-285) — a Reel's or video's chosen cover image. */
+  readonly cover?: VariantPreviewMedia | null;
   readonly accountName: string;
   readonly accountHandle: string;
   readonly status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
@@ -86,19 +99,38 @@ export function VariantPreview({
   const captionDirection = /[؀-ۿ]/.test(body) ? 'rtl' : 'ltr';
 
   const first = media[0];
+  const srcOf = (item: VariantPreviewMedia) =>
+    item.previewToken ? `/${locale}/assets/file/${item.previewToken}` : undefined;
+  /*
+   * A VIDEO SHOWS ITS COVER where one is chosen (D-285) — the frame a viewer
+   * sees before pressing play. A CAROUSEL carries every slide, in order, so the
+   * preview can be paged.
+   */
+  const poster = cover ? srcOf(cover) : undefined;
   const previewMedia: PreviewMedia = !first
     ? { kind: 'missing' }
     : first.kind === 'VIDEO'
       ? {
           kind: 'video',
           alt: first.name,
-          ...(first.previewToken ? { src: `/${locale}/assets/file/${first.previewToken}` } : {}),
+          ...(durationLabel(first.durationMs)
+            ? { durationLabel: durationLabel(first.durationMs) ?? '' }
+            : {}),
+          ...(poster ? { src: poster } : srcOf(first) ? { src: srcOf(first) } : {}),
         }
       : {
           kind: 'image',
           alt: first.name,
           count: media.length,
-          ...(first.previewToken ? { src: `/${locale}/assets/file/${first.previewToken}` } : {}),
+          ...(srcOf(first) ? { src: srcOf(first) } : {}),
+          ...(media.length > 1
+            ? {
+                slides: media.map((item) => ({
+                  alt: item.name,
+                  ...(srcOf(item) ? { src: srcOf(item) } : {}),
+                })),
+              }
+            : {}),
         };
 
   return (
@@ -106,6 +138,7 @@ export function VariantPreview({
       <SocialPostPreview
         content={{
           platform,
+          ...(format ? { format: drawableFormat(platform, format) } : {}),
           // `resolveAspect` inside the component forces a story/reel to 9:16 and
           // falls back to the platform's first allowed ratio, so a square
           // request on TikTok cannot render as a square.
@@ -126,6 +159,25 @@ export function VariantPreview({
       />
     </div>
   );
+}
+
+/**
+ * The format this platform's preview can DRAW. A reel on TikTok is its vertical
+ * video; a vertical format a platform has no frame for falls back to that
+ * platform's own vertical frame when it has one, and to its feed otherwise.
+ */
+function drawableFormat(
+  platform: SocialPlatform,
+  format: 'feed' | 'story' | 'reel' | 'video',
+): 'feed' | 'story' | 'reel' | 'video' {
+  const formats = PLATFORM_FORMATS[platform];
+  const nearest = {
+    feed: ['feed'],
+    reel: ['reel', 'video', 'story'],
+    video: ['video', 'reel', 'story'],
+    story: ['story', 'reel', 'video'],
+  } as const;
+  return nearest[format].find((option) => formats.includes(option)) ?? formats[0] ?? 'feed';
 }
 
 function initialsOf(value: string): string {
@@ -173,6 +225,12 @@ export function previewLabels(t: Record<string, string>): SocialPostPreviewLabel
     videoBadge: t['content.media.video'] ?? '',
     carouselLabel: (count) =>
       (t['content.preview.carousel'] ?? '{count}').replace('{count}', String(count)),
+    slideLabel: (index, count) =>
+      (t['editor.preview.slide'] ?? '{index}/{count}')
+        .replace('{index}', String(index))
+        .replace('{count}', String(count)),
+    previousSlide: t['editor.preview.previousSlide'] ?? '',
+    nextSlide: t['editor.preview.nextSlide'] ?? '',
     previewNotice: t['content.preview.notice'] ?? '',
     aspectLabel: (aspect) =>
       (t['content.preview.aspect'] ?? '{aspect}').replace('{aspect}', aspect),

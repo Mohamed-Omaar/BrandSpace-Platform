@@ -777,3 +777,115 @@ export function TabPanel({
     </div>
   );
 }
+
+/**
+ * PHASE 6 FINAL (D-285) — A SIDE SHEET: the global Copilot drawer's geometry,
+ * for any in-context task that must not navigate away (the composer's media
+ * drawer is the first). The same tokens, blur, radius and shadow as
+ * `CopilotDrawer`; the same focus trap, Escape and focus restoration as
+ * `Dialog`. A composition, not a new visual treatment.
+ */
+export function SideSheet({
+  open,
+  onClose,
+  title,
+  description,
+  closeLabel,
+  children,
+  testId = 'side-sheet',
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly title: string;
+  readonly description?: string | undefined;
+  readonly closeLabel: string;
+  readonly children?: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useOverlayBehaviour({ open, onClose, containerRef: panelRef });
+  if (!open) return null;
+  return (
+    <div
+      data-testid={`${testId}-scrim`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: zIndexTokens.drawer,
+        background: 'rgba(12, 12, 14, 0.25)',
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        data-testid={testId}
+        tabIndex={-1}
+        style={{
+          position: 'fixed',
+          insetBlock: layoutTokens.shellInset,
+          insetInlineEnd: layoutTokens.shellInset,
+          inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
+          zIndex: zIndexTokens.overlay,
+          overflowY: 'auto',
+          background: colorTokens.drawerAlpha,
+          backdropFilter: 'blur(24px)',
+          borderRadius: radiusTokens['3xl'],
+          boxShadow: shadowTokens.drawer,
+          padding: spacingTokens.lg,
+          display: 'grid',
+          gap: spacingTokens.md,
+          alignContent: 'start',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: spacingTokens.md,
+          }}
+        >
+          <div style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
+            <h2
+              id={titleId}
+              style={{ margin: 0, ...typographyTokens.h3, color: colorTokens.textPrimary }}
+            >
+              {title}
+            </h2>
+            {description ? (
+              <p
+                style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+              >
+                {description}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            aria-label={closeLabel}
+            data-testid={`${testId}-close`}
+            onClick={onClose}
+            className="bs-pressable bs-control"
+            style={{
+              ...buttonStyle('ghost', 'sm'),
+              inlineSize: '2.25rem',
+              blockSize: '2.25rem',
+              paddingInline: 0,
+              borderRadius: radiusTokens.full,
+              color: colorTokens.textSecondary,
+            }}
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}

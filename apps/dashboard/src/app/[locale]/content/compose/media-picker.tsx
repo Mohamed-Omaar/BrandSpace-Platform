@@ -34,6 +34,10 @@ export interface MediaOptionView {
   readonly shared: boolean;
   /** A same-origin, expiring grant. `null` when no inline preview is possible. */
   readonly previewToken: string | null;
+  /** PHASE 6 FINAL — measured facts, when the processor recorded them. */
+  readonly width?: number | null;
+  readonly height?: number | null;
+  readonly durationMs?: number | null;
 }
 
 export interface MediaPickerLabels {
@@ -55,6 +59,7 @@ export function MediaPicker({
   disabled,
   labels,
   testId,
+  onChange,
 }: {
   readonly locale: string;
   readonly options: readonly MediaOptionView[];
@@ -63,6 +68,8 @@ export function MediaPicker({
   readonly disabled: boolean;
   readonly labels: MediaPickerLabels;
   readonly testId: string;
+  /** PHASE 6 FINAL — the selection as it changes, for the live preview. */
+  readonly onChange?: (assetIds: readonly string[]) => void;
 }) {
   const [chosen, setChosen] = useState<readonly string[]>(selected);
 
@@ -76,11 +83,11 @@ export function MediaPicker({
   const atLimit = chosen.length >= maxItems;
 
   const toggle = (id: string, checked: boolean): void => {
-    setChosen((current) =>
-      checked
-        ? [...current.filter((value) => value !== id), id]
-        : current.filter((value) => value !== id),
-    );
+    const next = checked
+      ? [...chosen.filter((value) => value !== id), id]
+      : chosen.filter((value) => value !== id);
+    setChosen(next);
+    onChange?.(next);
   };
 
   return (

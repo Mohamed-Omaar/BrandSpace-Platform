@@ -592,3 +592,238 @@
   font-weight: 750;
   color: var(--cs-muted);
 }
+
+/* ========================================================================== */
+/* §4  PHASE 6 FINAL — THE DRAFT EDITOR (D-284)                                */
+/* ========================================================================== */
+
+/*
+ * THREE TRACKS ONCE A POST EXISTS: context, editor, live preview (D-277 §20).
+ * An approved design-system extension (docs/UI-FIDELITY-CONTRACT.md §6.3.11):
+ * the port's own gap, card and type scale, and only colours declared above.
+ * The preview track is the one the demo's `copilotPanel()` column occupied.
+ */
+.cs-draft-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: 12px;
+  align-items: start;
+}
+
+.cs-draft-context,
+.cs-draft-editor,
+.cs-draft-preview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cs-draft-preview {
+  position: sticky;
+  top: 12px;
+}
+
+/* The preview track's heading row: its kicker and "Compare previews". */
+.cs-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A variant tab's panel: the port's field rhythm, stacked. */
+.cs-variant-panel {
+  display: grid;
+  gap: 4px;
+}
+
+.cs-variant-panel[hidden] {
+  display: none;
+}
+
+/* The lifecycle as a path: done steps muted, the current one in purple. */
+.cs-lifecycle {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cs-lifecycle li {
+  background: var(--cs-soft);
+  border-radius: 99px;
+  padding: 5px 8px;
+  font-size: 8px;
+  font-weight: 750;
+  color: var(--cs-muted);
+}
+
+.cs-lifecycle li.done {
+  color: var(--cs-ink);
+}
+
+.cs-lifecycle li.current {
+  background: var(--cs-purple);
+  color: #fff;
+}
+
+.cs-draft-facts {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 9px;
+}
+
+.cs-draft-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cs-draft-facts dt {
+  color: var(--cs-muted);
+  font-weight: 700;
+}
+
+.cs-draft-facts dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+/* "Using {Brand} Brand Brain" — quiet until opened. */
+.cs-brain summary {
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--cs-purple);
+}
+
+.cs-brain[open] {
+  display: grid;
+  gap: 8px;
+}
+
+/* Friendly validation, each line with its fix beside it (D-277 §21). */
+.cs-issues {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cs-issues li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 13px;
+  padding: 8px 10px;
+  font-size: 9px;
+  line-height: 1.5;
+  background: #fff6d3;
+  color: var(--cs-warning);
+}
+
+.cs-issues li.error {
+  background: var(--cs-soft);
+  color: #b83245;
+}
+
+@media (max-width: 1180px) {
+  .cs-draft-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  }
+
+  .cs-draft-context {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .cs-draft-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-draft-preview {
+    position: static;
+  }
+}
+
+/* The media of one platform version, as ordered slides (D-285). */
+.cs-slides {
+  border: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cs-slide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cs-slide-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 13px;
+  background: var(--cs-soft);
+  font-size: 9px;
+  cursor: grab;
+}
+
+.cs-slide-list li.dragging {
+  outline: 2px dashed var(--cs-purple);
+}
+
+.cs-slide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+/* The media drawer's library grid. */
+.cs-media-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.cs-media-choice {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  inline-size: 100%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: var(--cs-soft);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.cs-media-choice:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.cs-media-choice:hover:not(:disabled),
+.cs-media-choice:focus-visible {
+  border-color: var(--cs-purple);
+}

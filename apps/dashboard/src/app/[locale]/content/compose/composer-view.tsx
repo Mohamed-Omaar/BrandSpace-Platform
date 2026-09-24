@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { generationKeyFor, manualKeyFor } from './idempotency';
-import { MediaPicker, type MediaOptionView, type MediaPickerLabels } from './media-picker';
-import { VariantPreview, previewLabels } from './variant-preview';
+import type { MediaOptionView } from './media-picker';
+import { DraftEditor } from './draft-editor';
+import { formatCredits } from '../../../../server/composer-editor';
 
 /**
  * The composer — a MECHANICAL PORT of the approved demo's `composer()`
@@ -43,6 +44,8 @@ export interface ComposerPlatform {
   readonly maxHashtags: number;
   /** PHASE 8 — media items this platform accepts. Zero means no picker. */
   readonly maxMediaItems: number;
+  /** PHASE 6 FINAL — whether the configured platform takes a first comment. */
+  readonly allowsFirstComment?: boolean;
 }
 
 export interface ComposerVariant {
@@ -55,6 +58,12 @@ export interface ComposerVariant {
   readonly validationState: 'VALID' | 'WARNINGS' | 'INVALID';
   /** PHASE 8 — the media attached to this variant, in the author's order. */
   readonly assetIds: readonly string[];
+  /** PHASE 6 FINAL — the stored first comment, when there is one. */
+  readonly firstComment?: string | null;
+  /** PHASE 6 FINAL (D-285) — the cover image of a Reel or video. */
+  readonly coverAssetId?: string | null;
+  /** When the row last changed — the editor's "Saved …" and its version key. */
+  readonly updatedAt: string;
 }
 
 export interface ComposerDraft {
@@ -64,6 +73,8 @@ export interface ComposerDraft {
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
+  /** The post's format (POST, REEL, …) — what the preview is drawn as. */
+  readonly contentType: string;
   /** PHASE 8 — the campaign this draft is filed under, when it is. */
   readonly campaignId: string | null;
   readonly arabicDialect: string | null;
@@ -100,6 +111,11 @@ export interface ComposerViewProps {
    * offered, and the save path re-resolves every id anyway.
    */
   readonly mediaOptions: readonly MediaOptionView[];
+  /**
+   * PHASE 6 FINAL (D-285) — an image brought from the Creative Studio, already
+   * checked by the server. Offered on the draft's slides, unsaved.
+   */
+  readonly carriedMedia?: MediaOptionView | null;
   readonly contentTypes: readonly string[];
   readonly maxBriefChars: number;
   readonly maxVariants: number;
@@ -119,8 +135,40 @@ export interface ComposerViewProps {
     archive: boolean;
     manageCampaigns: boolean;
     uploadMedia: boolean;
+    /** Creative generation from the media drawer (`assets.upload`, AI credits). */
+    generateMedia?: boolean;
   };
   readonly tools: readonly string[];
+  /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
+  readonly creativeFormats?: readonly { key: string; label: string }[];
+  /** The server's clock at render, for "Saved 5 minutes ago". */
+  readonly now?: number;
+  /**
+   * PHASE 6 FINAL — HOW THE PERSON CHOSE TO START (D-277 §17, D-283).
+   *
+   * `ai` makes Generate the primary action; `write` makes Save draft primary
+   * and the text field the post itself. Both verbs stay on screen in both, so
+   * nobody is locked into the path they picked a moment ago.
+   */
+  readonly mode?: 'ai' | 'write';
+  /** A brief the reader arrived with — an idea, or a post being repurposed. */
+  readonly initialBrief?: string;
+  /** The campaign the reader came from, already checked against `campaigns`. */
+  readonly initialCampaignId?: string;
+  /** The post being repurposed, named so the reader knows what the brief holds. */
+  readonly sourceTitle?: string | null;
+  /** §19 — the post's goal. Steers the words; travels in the brief only. */
+  readonly goals?: readonly { key: string; label: string }[];
+  /** The goal recommended from the brand's own first goal (D-278), or null. */
+  readonly recommendedGoal?: string | null;
+  readonly initialGoal?: string;
+  /**
+   * §18 — for each format, the platforms whose ENABLED provider can carry it
+   * (the publishing capability registry). A format with no entry is not
+   * offered; a platform that cannot carry the chosen format cannot be picked.
+   * Absent means "no registry answer": every format, every platform.
+   */
+  readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
@@ -155,48 +203,6 @@ export interface ComposerViewProps {
   };
 }
 
-/**
- * The media picker's labels, built from the same dictionary the rest of the
- * composer uses so a missing key is a compile error rather than a blank chip.
- */
-function mediaLabels(t: Record<string, string>): MediaPickerLabels {
-  return {
-    legend: t['content.media.legend'] ?? '',
-    none: t['content.media.none'] ?? '',
-    empty: t['content.media.empty'] ?? '',
-    shared: t['assets.filter.shared'] ?? '',
-    video: t['content.media.video'] ?? '',
-    atLimit: t['content.media.atLimit'] ?? '',
-    uploadHint: t['content.media.uploadHint'] ?? '',
-    selectedCount: (selected, max) =>
-      (t['content.media.selected'] ?? '')
-        .replace('{selected}', String(selected))
-        .replace('{max}', String(max)),
-  };
-}
-
-/**
- * The approval state the preview should show, derived from the item's status.
- *
- * ONE SOURCE. The preview has its own four-value vocabulary and the content
- * item has its own five; mapping in one place keeps the badge under the post
- * from disagreeing with the status shown above it.
- */
-function approvalStateOf(
-  status: ComposerDraft['status'],
-): 'NOT_REQUIRED' | 'NEEDS_APPROVAL' | 'APPROVED' | 'CHANGES_REQUESTED' {
-  switch (status) {
-    case 'IN_REVIEW':
-      return 'NEEDS_APPROVAL';
-    case 'APPROVED':
-      return 'APPROVED';
-    case 'CHANGES_REQUESTED':
-      return 'CHANGES_REQUESTED';
-    default:
-      return 'NOT_REQUIRED';
-  }
-}
-
 /** The customer-safe codes the proxy and the API can return. */
 const FAILURE_KEYS: Record<string, string> = {
   QUOTA_EXCEEDED: 'content.error.quota',
@@ -219,6 +225,17 @@ export function ComposerView({
   can,
   tools,
   actions,
+  mode = 'ai',
+  initialBrief = '',
+  initialCampaignId = '',
+  sourceTitle = null,
+  goals = [],
+  recommendedGoal = null,
+  initialGoal = '',
+  formatPlatforms,
+  now = 0,
+  creativeFormats = [],
+  carriedMedia = null,
 }: ComposerViewProps) {
   const router = useRouter();
   const fieldId = useId();
@@ -247,14 +264,39 @@ export function ComposerView({
    */
   const brandName = brands.find((brand) => brand.id === brandId)?.name ?? '';
   const brandHandle = brandName === '' ? '' : `@${brandName.replace(/\s+/g, '').toLowerCase()}`;
-  const [selected, setSelected] = useState<string[]>(() =>
-    platforms[0] ? [platforms[0].key] : [],
+  /*
+   * §18 — THE FORMATS ON OFFER ARE THE ONES SOMETHING CAN CARRY. With no
+   * registry answer every configured format stays, exactly as before.
+   */
+  const offeredTypes = formatPlatforms
+    ? contentTypes.filter((type) => (formatPlatforms[type]?.length ?? 0) > 0)
+    : contentTypes;
+  const [contentType, setContentType] = useState(offeredTypes[0] ?? contentTypes[0] ?? 'POST');
+  const carries = useCallback(
+    (type: string, platformKey: string) =>
+      !formatPlatforms || (formatPlatforms[type] ?? []).includes(platformKey),
+    [formatPlatforms],
   );
-  const [brief, setBrief] = useState('');
+  const [selected, setSelected] = useState<string[]>(() => {
+    const first = platforms.find((platform) => carries(contentType, platform.key));
+    return first ? [first.key] : [];
+  });
+  const [brief, setBrief] = useState(initialBrief);
+  const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
     () => brands.find((brand) => brand.id === brandId)?.defaultLocale ?? 'EN',
   );
-  const [contentType, setContentType] = useState(contentTypes[0] ?? 'POST');
+
+  /*
+   * THE GOAL TRAVELS IN THE BRIEF, as one plain sentence after the reader's
+   * own words — the same field the model already reads, the same length
+   * ceiling. It is never stored as a column: it is an instruction, not a fact.
+   */
+  const goalLabel = goals.find((option) => option.key === goal)?.label ?? '';
+  const generationBrief =
+    mode === 'ai' && goalLabel !== '' && brief.trim() !== ''
+      ? `${brief}\n\n${(t['create.goal.instruction'] ?? '{goal}').replace('{goal}', goalLabel)}`
+      : brief;
 
   /*
    * THE CAMPAIGN THIS POST WOULD BE FILED UNDER, and the options for the brand
@@ -271,7 +313,7 @@ export function ComposerView({
    * refused by `createManualItem` or — worse if the ids ever collided — file
    * the post somewhere nobody asked for. Clearing is the honest reset.
    */
-  const [campaignId, setCampaignId] = useState('');
+  const [campaignId, setCampaignId] = useState(initialCampaignId);
   const [campaignOptions, setCampaignOptions] =
     useState<readonly { id: string; name: string }[]>(campaigns);
 
@@ -279,16 +321,21 @@ export function ComposerView({
     // Only the pre-draft form owns this; an existing draft has its own campaign
     // control, with its own action and its own list.
     if (draft !== null || !can.manageCampaigns) return;
-    setCampaignId('');
     if (brandId === '') {
+      setCampaignId('');
       setCampaignOptions([]);
       return;
     }
     if (brandId === defaultBrandId) {
-      // The server already answered for this brand. No request.
+      // The server already answered for this brand. No request. A choice the
+      // reader arrived with (`?campaign=`) survives only if it is one of these.
       setCampaignOptions(campaigns);
+      setCampaignId((current) =>
+        campaigns.some((campaign) => campaign.id === current) ? current : '',
+      );
       return;
     }
+    setCampaignId('');
     let current = true;
     actions
       .listCampaignOptions(locale, brandId)
@@ -308,7 +355,6 @@ export function ComposerView({
   const [busy, setBusy] = useState<null | 'quote' | 'generate' | string>(null);
   const [quote, setQuote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const [toneArgument, setToneArgument] = useState('');
 
   /*
    * TWO KEYS, BECAUSE THE COMPOSER MAKES TWO DIFFERENT ASKS.
@@ -335,9 +381,11 @@ export function ComposerView({
     }),
     [brandId, brief, selected, contentLocale, contentType],
   );
+  // The GENERATION ask reads the brief the model will read — goal included —
+  // so choosing a different goal is a different request, not a retry.
   const generationIdempotencyKey = useMemo(
-    () => generationKeyFor(ask, draft?.id ?? null),
-    [ask, draft?.id],
+    () => generationKeyFor({ ...ask, brief: generationBrief }, draft?.id ?? null),
+    [ask, generationBrief, draft?.id],
   );
   const manualIdempotencyKey = useMemo(() => manualKeyFor(ask, campaignId), [ask, campaignId]);
 
@@ -364,6 +412,7 @@ export function ComposerView({
   );
 
   const toggle = (key: string) => {
+    if (!carries(contentType, key)) return;
     setQuote(null);
     setSelected((current) =>
       current.includes(key)
@@ -376,7 +425,11 @@ export function ComposerView({
 
   const runQuote = async () => {
     setBusy('quote');
-    const payload = await post('quote', { brandId, brief, platformKeys: selected });
+    const payload = await post('quote', {
+      brandId,
+      brief: generationBrief,
+      platformKeys: selected,
+    });
     if (payload) setQuote(String(payload['estimateMilli'] ?? '0'));
     setBusy(null);
   };
@@ -385,7 +438,7 @@ export function ComposerView({
     setBusy('generate');
     const payload = await post('generate', {
       brandId,
-      brief,
+      brief: generationBrief,
       platformKeys: selected,
       locale: contentLocale,
       contentType,
@@ -393,30 +446,55 @@ export function ComposerView({
     });
     setBusy(null);
     if (payload) {
+      /*
+       * THE CAMPAIGN THE READER CHOSE IS FILED THROUGH THE ONE ACTION THAT
+       * FILES CAMPAIGNS (§19). Generation goes through the AI Gateway, which
+       * neither takes nor stores a campaign; the association is a second,
+       * audited step under `campaigns.manage`, and its own redirect opens the
+       * new draft — with its own success or failure message.
+       */
+      if (campaignId !== '' && can.manageCampaigns) {
+        const form = new FormData();
+        form.set('locale', locale);
+        form.set('itemId', String(payload['itemId']));
+        form.set('campaignId', campaignId);
+        if (carriedMedia) form.set('attach', carriedMedia.id);
+        await actions.setCampaign(form);
+        return;
+      }
       // The server component re-reads the draft under RLS. Navigating rather
       // than rendering the response is what keeps ONE source of truth for what
       // the draft says — the database, not a fetch result held in state.
-      router.push(`/${locale}/content/compose?item=${String(payload['itemId'])}`);
+      router.push(
+        `/${locale}/content/compose?${new URLSearchParams({
+          item: String(payload['itemId']),
+          ...(carriedMedia ? { attach: carriedMedia.id } : {}),
+        }).toString()}`,
+      );
       router.refresh();
     }
   };
 
-  const runTool = async (variantId: string, tool: string) => {
+  const runTool = async (variantId: string, tool: string, argument?: string) => {
     setBusy(`${variantId}:${tool}`);
     const payload = await post('tool', {
       variantId,
       tool,
-      ...(tool === 'tone' && toneArgument ? { argument: toneArgument } : {}),
+      ...(tool === 'tone' && argument ? { argument } : {}),
       ...(tool === 'translate'
         ? { targetLocale: draftVariantLocale(draft, variantId) === 'AR' ? 'EN' : 'AR' }
         : {}),
-      idempotencyKey: `${generationIdempotencyKey}:${tool}:${variantId}`,
+      // The variant's VERSION is part of the key: the same tool on the same
+      // words is a retry, the same tool after an edit is a new request.
+      idempotencyKey: `${generationIdempotencyKey}:${tool}:${argument ?? ''}:${variantId}:${
+        draft?.variants.find((variant) => variant.id === variantId)?.updatedAt ?? ''
+      }`,
     });
     setBusy(null);
     if (payload) router.refresh();
   };
 
-  const briefTooLong = brief.length > maxBriefChars;
+  const briefTooLong = generationBrief.length > maxBriefChars;
   const canGenerate =
     can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
   /*
@@ -463,6 +541,24 @@ export function ComposerView({
         respond concludes the product is broken. The same honest empty state the
         Brand Brain screen shows, and it links to where the brand is created.
       */}
+      {draft === null && carriedMedia ? (
+        <div className="cs-notice info" role="status" data-testid="content-carried-media">
+          <b dir="auto">
+            {(t['editor.media.carried'] ?? '{name}').replace('{name}', carriedMedia.name)}
+          </b>
+          <p>{t['editor.media.carriedBody']}</p>
+        </div>
+      ) : null}
+
+      {draft === null && sourceTitle ? (
+        <div className="cs-notice info" role="status" data-testid="content-repurpose-source">
+          <b dir="auto">
+            {(t['create.repurpose.from'] ?? '{title}').replace('{title}', sourceTitle)}
+          </b>
+          <p>{t['create.repurpose.fromBody']}</p>
+        </div>
+      ) : null}
+
       {brands.length === 0 ? (
         <div className="cs-notice info" role="status" data-testid="content-no-brand">
           <b>{t['content.noBrand']}</b>
@@ -473,128 +569,50 @@ export function ComposerView({
         </div>
       ) : null}
 
-      {draft?.insufficientKnowledge ? (
-        <div className="cs-notice warning" role="status" data-testid="content-insufficient">
-          <b>{t['content.insufficient']}</b>
-          <p>{t['content.insufficientBody']}</p>
-        </div>
-      ) : null}
-
-      {/*
-        PHASE 8 — WHICH CAMPAIGN THIS POST BELONGS TO (AC-26.3).
-
-        ONLY FOR AN EXISTING DRAFT, because a campaign is filed against a row and
-        there is no row until the draft exists. It is a plain form posting a
-        server action rather than client state: the campaign is a fact about the
-        item, and a control that changed it without a round trip would be a
-        second place where "which campaign?" is answered.
-
-        `campaigns` is already narrowed to this draft's own brand, so the list
-        can never offer another brand's campaign — and the action re-checks the
-        member's BrandScope against both the item and the campaign anyway.
-      */}
-      {draft && can.manageCampaigns ? (
-        <form
-          action={actions.setCampaign}
-          className="cs-notice info"
-          data-testid="content-campaign-form"
-        >
-          <input type="hidden" name="locale" value={locale} />
-          <input type="hidden" name="itemId" value={draft.id} />
-          <div className="cs-field">
-            <label htmlFor={`${fieldId}-campaign`}>{t['campaigns.composerLabel']}</label>
-            <select
-              id={`${fieldId}-campaign`}
-              name="campaignId"
-              defaultValue={draft.campaignId ?? ''}
-              data-testid="content-campaign"
-            >
-              <option value="">{t['campaigns.composerNone']}</option>
-              {campaigns.map((campaign) => (
-                <option key={campaign.id} value={campaign.id}>
-                  {campaign.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="cs-ghost-button cs-compact"
-            data-testid="content-campaign-save"
-          >
-            {t['content.composer.saveEdit']}
-          </button>
-        </form>
-      ) : null}
-
-      {/*
-        PHASE 8 — ADDING A PICTURE WITHOUT LEAVING THE DRAFT (AC-27.1).
-
-        A FORM OF ITS OWN, ABOVE THE COMPOSER, and both halves of that are
-        forced. Its own, because the picker lives inside each variant's `<form>`
-        and a nested form is invalid markup browsers repair unpredictably.
-        Above, because a file belongs to the DRAFT rather than to one platform's
-        caption — uploading it once and ticking it on three variants is the
-        shape of the work.
-
-        IT UPLOADS INTO THE ONE LIBRARY. Same permission, same brand, same scan.
-        The file becomes selectable in every picker below once the scanner
-        clears it, which is why the hint says so rather than implying it is
-        instantly usable.
-      */}
-      {draft && can.uploadMedia ? (
-        <form
-          action={actions.uploadMedia}
-          className="cs-notice info"
-          data-testid="composer-upload-form"
-        >
-          <input type="hidden" name="locale" value={locale} />
-          <input type="hidden" name="itemId" value={draft.id} />
-          <div className="cs-field">
-            <label htmlFor={`${fieldId}-media-upload`}>{t['content.media.uploadLabel']}</label>
-            <input
-              id={`${fieldId}-media-upload`}
-              type="file"
-              name="file"
-              required
-              accept="image/*,video/*"
-              data-testid="composer-upload-file"
-            />
-          </div>
-          <p className="cs-hint">{t['content.media.uploadNotice']}</p>
-          <button
-            type="submit"
-            className="cs-ghost-button cs-compact"
-            data-testid="composer-upload-submit"
-          >
-            {t['content.media.uploadSubmit']}
-          </button>
-        </form>
-      ) : null}
-
-      <div className="cs-composer">
-        {/* ---------------------------------------------- the editor --- */}
-        <section className="cs-surface-card">
-          {/*
+      {draft !== null ? (
+        <DraftEditor
+          locale={locale}
+          t={t}
+          draft={draft}
+          platforms={platforms}
+          campaigns={campaigns}
+          mediaOptions={mediaOptions}
+          brandName={brandName}
+          brandHandle={brandHandle}
+          tools={tools}
+          busy={busy}
+          now={now}
+          can={can}
+          creativeFormats={creativeFormats}
+          attach={carriedMedia}
+          canGenerateMedia={can.generateMedia ?? false}
+          onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
+          actions={actions}
+        />
+      ) : (
+        <div className="cs-composer">
+          {/* ---------------------------------------------- the editor --- */}
+          <section className="cs-surface-card">
+            {/*
             THE LOCAL PICKER SURVIVES ONLY WHERE THE GLOBAL ONE CANNOT ANSWER:
             a NEW item composed while the rail is on "All brands". With a brand
             selected, or while editing a draft that already has one, this would
             be a second control setting the same thing — which is exactly how
             the rail and the page came to disagree (D-190).
           */}
-          {draft === null && defaultBrandId === null && brands.length > 1 ? (
-            <div className="cs-field">
-              <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
-              <select
-                id={`${fieldId}-brand`}
-                data-testid="content-brand"
-                value={brandId}
-                onChange={(event) => {
-                  setBrandId(event.target.value);
-                  setQuote(null);
-                }}
-              >
-                {/*
+            {draft === null && defaultBrandId === null && brands.length > 1 ? (
+              <div className="cs-field">
+                <label htmlFor={`${fieldId}-brand`}>{t['content.composer.brand']}</label>
+                <select
+                  id={`${fieldId}-brand`}
+                  data-testid="content-brand"
+                  value={brandId}
+                  onChange={(event) => {
+                    setBrandId(event.target.value);
+                    setQuote(null);
+                  }}
+                >
+                  {/*
                   THE EMPTY OPTION IS LOAD-BEARING, not decoration.
 
                   `brandId` starts as '' here — D-191's rule that a brand-scoped
@@ -612,134 +630,197 @@ export function ComposerView({
                   actually is. It is NOT a brand and cannot be submitted as one:
                   `canGenerate` already requires a non-empty brand.
                 */}
-                <option value="">{t['content.composer.brandPlaceholder']}</option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
+                  <option value="">{t['content.composer.brandPlaceholder']}</option>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
-          <div className="cs-field">
-            {/* A group rather than a label: the control below is four buttons,
-                and a `<label>` can name only one. */}
-            <span id={`${fieldId}-channels`} className="cs-field-label">
-              {t['content.composer.channels']}
-            </span>
-            <div
-              className="cs-channel-row"
-              role="group"
-              aria-labelledby={`${fieldId}-channels`}
-              aria-describedby={`${fieldId}-channels-hint`}
-            >
-              {platforms.map((platform) => {
-                const on = selected.includes(platform.key);
-                return (
-                  <button
-                    key={platform.key}
-                    type="button"
-                    className={on ? 'cs-channel selected' : 'cs-channel'}
-                    aria-pressed={on}
-                    data-testid="content-channel"
-                    data-platform={platform.key}
-                    onClick={() => toggle(platform.key)}
-                  >
-                    {platform.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p id={`${fieldId}-channels-hint`} className="cs-hint">
-              {t['content.composer.channelsHint']}
-            </p>
-          </div>
-
-          <div className="cs-field">
-            <label htmlFor={`${fieldId}-brief`}>{t['content.composer.brief']}</label>
-            <textarea
-              id={`${fieldId}-brief`}
-              value={brief}
-              maxLength={maxBriefChars}
-              placeholder={t['content.composer.briefPlaceholder']}
-              data-testid="content-brief"
-              onChange={(event) => {
-                setBrief(event.target.value);
-                setQuote(null);
-              }}
-            />
-            <div className={briefTooLong ? 'cs-counter over' : 'cs-counter'}>
-              <span>
-                {brief.length} {t['content.composer.of']} {maxBriefChars}{' '}
-                {t['content.composer.characters']}
-              </span>
-            </div>
-          </div>
-
-          <div className="cs-form-row">
-            <div className="cs-field">
-              <label htmlFor={`${fieldId}-language`}>{t['content.composer.language']}</label>
-              <select
-                id={`${fieldId}-language`}
-                value={contentLocale}
-                onChange={(event) => setContentLocale(event.target.value as ContentLocale)}
-              >
-                <option value="AR">{t['content.language.AR']}</option>
-                <option value="EN">{t['content.language.EN']}</option>
-              </select>
-            </div>
+            {/*
+            §18 — THE FORMAT FIRST, because it decides which channels can carry
+            the post. Only formats some enabled provider accepts are offered,
+            and choosing one drops the channels that cannot carry it.
+          */}
             <div className="cs-field">
               <label htmlFor={`${fieldId}-type`}>{t['content.composer.contentType']}</label>
               <select
                 id={`${fieldId}-type`}
                 value={contentType}
-                onChange={(event) => setContentType(event.target.value)}
+                data-testid="content-format"
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setContentType(next);
+                  setQuote(null);
+                  setSelected((current) => {
+                    const kept = current.filter((key) => carries(next, key));
+                    if (kept.length > 0) return kept;
+                    const first = platforms.find((platform) => carries(next, platform.key));
+                    return first ? [first.key] : [];
+                  });
+                }}
               >
-                {contentTypes.map((type) => (
+                {offeredTypes.map((type) => (
                   <option key={type} value={type}>
                     {t[`content.type.${type}`] ?? type}
                   </option>
                 ))}
               </select>
             </div>
-          </div>
 
-          {quote !== null ? (
-            <div className="cs-notice info" role="status" data-testid="content-quote">
-              <b>
-                {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
-                {t['content.composer.quoteUnit']}
-              </b>
-              <p>{t['content.composer.quoteHint']}</p>
+            <div className="cs-field">
+              {/* A group rather than a label: the control below is four buttons,
+                and a `<label>` can name only one. */}
+              <span id={`${fieldId}-channels`} className="cs-field-label">
+                {t['content.composer.channels']}
+              </span>
+              <div
+                className="cs-channel-row"
+                role="group"
+                aria-labelledby={`${fieldId}-channels`}
+                aria-describedby={`${fieldId}-channels-hint`}
+              >
+                {platforms.map((platform) => {
+                  const on = selected.includes(platform.key);
+                  const able = carries(contentType, platform.key);
+                  return (
+                    <button
+                      key={platform.key}
+                      type="button"
+                      className={on ? 'cs-channel selected' : 'cs-channel'}
+                      aria-pressed={on}
+                      disabled={!able}
+                      title={able ? undefined : t['create.format.unsupported']}
+                      data-testid="content-channel"
+                      data-platform={platform.key}
+                      onClick={() => toggle(platform.key)}
+                    >
+                      {platform.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p id={`${fieldId}-channels-hint`} className="cs-hint">
+                {t['content.composer.channelsHint']}
+              </p>
             </div>
-          ) : null}
 
-          <div className="cs-form-actions">
-            <button
-              type="button"
-              className="cs-ghost-button"
-              disabled={!canGenerate || busy !== null}
-              data-testid="content-estimate"
-              onClick={runQuote}
-            >
-              {t['content.composer.estimate']}
-            </button>
-            <button
-              type="submit"
-              form={manualFormId}
-              className="cs-ghost-button"
-              disabled={!canWrite || busy !== null}
-              data-testid="content-write-manual"
-            >
-              {t['content.composer.write']}
-            </button>
-            <button
-              type="button"
-              className="cs-dark-button"
-              disabled={!canGenerate || busy !== null}
-              data-testid="content-generate"
-              /*
+            <div className="cs-field">
+              <label htmlFor={`${fieldId}-brief`}>
+                {mode === 'write' && draft === null
+                  ? t['create.write.label']
+                  : t['content.composer.brief']}
+              </label>
+              <textarea
+                id={`${fieldId}-brief`}
+                value={brief}
+                maxLength={maxBriefChars}
+                placeholder={
+                  mode === 'write' && draft === null
+                    ? t['create.write.placeholder']
+                    : t['content.composer.briefPlaceholder']
+                }
+                data-testid="content-brief"
+                onChange={(event) => {
+                  setBrief(event.target.value);
+                  setQuote(null);
+                }}
+              />
+              <div className={briefTooLong ? 'cs-counter over' : 'cs-counter'}>
+                <span>
+                  {generationBrief.length} {t['content.composer.of']} {maxBriefChars}{' '}
+                  {t['content.composer.characters']}
+                </span>
+              </div>
+            </div>
+
+            <div className="cs-form-row">
+              <div className="cs-field">
+                <label htmlFor={`${fieldId}-language`}>{t['content.composer.language']}</label>
+                <select
+                  id={`${fieldId}-language`}
+                  value={contentLocale}
+                  onChange={(event) => setContentLocale(event.target.value as ContentLocale)}
+                >
+                  <option value="AR">{t['content.language.AR']}</option>
+                  <option value="EN">{t['content.language.EN']}</option>
+                </select>
+              </div>
+            </div>
+
+            {/*
+            §19 — THE POST'S GOAL. Only where a model will read it: a post the
+            person writes themselves is saved word for word. The recommendation
+            is the brand's own first goal, named as such, never a guess.
+          */}
+            {mode === 'ai' && draft === null && goals.length > 0 ? (
+              <div className="cs-field">
+                <label htmlFor={`${fieldId}-goal`}>{t['create.goal.label']}</label>
+                <select
+                  id={`${fieldId}-goal`}
+                  value={goal}
+                  data-testid="content-goal"
+                  onChange={(event) => {
+                    setGoal(event.target.value);
+                    setQuote(null);
+                  }}
+                >
+                  <option value="">{t['create.goal.none']}</option>
+                  {goals.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {recommendedGoal ? (
+                  <p className="cs-hint" data-testid="content-goal-recommended">
+                    {(t['create.goal.recommended'] ?? '').replace(
+                      '{goal}',
+                      goals.find((option) => option.key === recommendedGoal)?.label ?? '',
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {quote !== null ? (
+              <div className="cs-notice info" role="status" data-testid="content-quote">
+                <b>
+                  {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
+                  {t['content.composer.quoteUnit']}
+                </b>
+                <p>{t['content.composer.quoteHint']}</p>
+              </div>
+            ) : null}
+
+            <div className="cs-form-actions">
+              <button
+                type="button"
+                className="cs-ghost-button"
+                disabled={!canGenerate || busy !== null}
+                data-testid="content-estimate"
+                onClick={runQuote}
+              >
+                {t['content.composer.estimate']}
+              </button>
+              <button
+                type="submit"
+                form={manualFormId}
+                className={mode === 'write' ? 'cs-dark-button' : 'cs-ghost-button'}
+                disabled={!canWrite || busy !== null}
+                data-testid="content-write-manual"
+              >
+                {t['content.composer.write']}
+              </button>
+              <button
+                type="button"
+                className={mode === 'write' ? 'cs-ghost-button' : 'cs-dark-button'}
+                disabled={!canGenerate || busy !== null}
+                data-testid="content-generate"
+                /*
                 THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
                 It is the only way a browser test can see WHICH of the two keys
                 the composer wired to generation — the defect being that the
@@ -748,16 +829,16 @@ export function ComposerView({
                 nothing: a hash of the customer's own inputs, already present in
                 this form as the manual submission's hidden field.
               */
-              data-generation-key={generationIdempotencyKey}
-              onClick={runGenerate}
-            >
-              {busy === 'generate'
-                ? t['content.composer.generating']
-                : t['content.composer.generate']}
-            </button>
-          </div>
+                data-generation-key={generationIdempotencyKey}
+                onClick={runGenerate}
+              >
+                {busy === 'generate'
+                  ? t['content.composer.generating']
+                  : t['content.composer.generate']}
+              </button>
+            </div>
 
-          {/*
+            {/*
             THE MANUAL FORM MIRRORS THE CONTROLS ABOVE; IT DOES NOT DUPLICATE
             THEM.
 
@@ -793,22 +874,25 @@ export function ComposerView({
             submit or a reloaded POST returns the first draft instead of making
             a second (AC-11.2 applied to a path with no gateway in it).
           */}
-          {draft === null ? (
-            <form
-              id={manualFormId}
-              action={actions.createManualDraft}
-              data-testid="content-manual-form"
-            >
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="brandId" value={brandId} />
-              <input type="hidden" name="contentLocale" value={contentLocale} />
-              <input type="hidden" name="contentType" value={contentType} />
-              <input type="hidden" name="body" value={brief} />
-              <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
-              {selected.map((platformKey) => (
-                <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
-              ))}
-              {/*
+            {draft === null ? (
+              <form
+                id={manualFormId}
+                action={actions.createManualDraft}
+                data-testid="content-manual-form"
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brandId} />
+                <input type="hidden" name="contentLocale" value={contentLocale} />
+                <input type="hidden" name="contentType" value={contentType} />
+                <input type="hidden" name="body" value={brief} />
+                <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
+                {carriedMedia ? (
+                  <input type="hidden" name="attach" value={carriedMedia.id} />
+                ) : null}
+                {selected.map((platformKey) => (
+                  <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
+                ))}
+                {/*
                 THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
                 ASSOCIATION, not merely on having campaigns to show.
 
@@ -824,295 +908,42 @@ export function ComposerView({
                 choice: two posts identical but for the campaign are two
                 requests, not a retry of one.
               */}
-              {can.manageCampaigns && campaignOptions.length > 0 ? (
-                <div className="cs-field">
-                  <label htmlFor={`${fieldId}-manual-campaign`}>
-                    {t['campaigns.composerLabel']}
-                  </label>
-                  <select
-                    id={`${fieldId}-manual-campaign`}
-                    name="campaignId"
-                    value={campaignId}
-                    onChange={(event) => setCampaignId(event.target.value)}
-                    data-testid="content-manual-campaign"
-                  >
-                    <option value="">{t['campaigns.composerNone']}</option>
-                    {campaignOptions.map((campaign) => (
-                      <option key={campaign.id} value={campaign.id}>
-                        {campaign.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </form>
-          ) : null}
-        </section>
-
-        {/* ------------------------------------ the generated variants --- */}
-        <section className="cs-surface-card" aria-live="polite" data-testid="content-results">
-          <span className="cs-section-kicker">{t['content.composer.results']}</span>
-
-          {draft === null || draft.variants.length === 0 ? (
-            <p className="cs-empty">{t['content.composer.resultsEmpty']}</p>
-          ) : (
-            <>
-              {/*
-                PHASE 5B-3 — THE LIFECYCLE STATE, ON THE SCREEN.
-                With a review workflow behind it the status is no longer a
-                detail: it is the difference between content a person may edit,
-                content somebody is reading, and content that has been approved.
-                A composer that showed the buttons but not the state left the
-                reader to infer which of the three they were looking at.
-              */}
-              <p className="cs-hint" data-testid="composer-status">
-                {t[`content.status.${draft.status}`] ?? draft.status}
-              </p>
-
-              {draft.arabicDialect ? (
-                <p className="cs-hint" data-testid="content-dialect">
-                  {t['content.composer.dialect']}:{' '}
-                  {t[`content.dialect.${draft.arabicDialect}`] ?? draft.arabicDialect}
-                </p>
-              ) : null}
-
-              {draft.variants.map((variant) => {
-                const platform = platforms.find((p) => p.key === variant.platformKey);
-                const limit = platform?.maxBodyChars ?? 0;
-                return (
-                  <form
-                    key={variant.id}
-                    action={actions.save}
-                    className="cs-field"
-                    data-testid="content-variant"
-                    data-platform={variant.platformKey}
-                  >
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="itemId" value={draft.id} />
-                    <input type="hidden" name="variantId" value={variant.id} />
-                    <label htmlFor={`${fieldId}-${variant.id}`}>
-                      {platform?.label ?? variant.platformKey}
+                {can.manageCampaigns && campaignOptions.length > 0 ? (
+                  <div className="cs-field">
+                    <label htmlFor={`${fieldId}-manual-campaign`}>
+                      {t['campaigns.composerLabel']}
                     </label>
-                    <textarea
-                      id={`${fieldId}-${variant.id}`}
-                      name="body"
-                      defaultValue={variant.body}
-                      readOnly={!can.edit}
-                    />
-                    <div
-                      className={
-                        variant.validationState === 'INVALID' ? 'cs-counter over' : 'cs-counter'
-                      }
+                    <select
+                      id={`${fieldId}-manual-campaign`}
+                      name="campaignId"
+                      value={campaignId}
+                      onChange={(event) => setCampaignId(event.target.value)}
+                      data-testid="content-manual-campaign"
                     >
-                      <span>
-                        {variant.characterCount} {t['content.composer.of']} {limit}{' '}
-                        {t['content.composer.characters']}
-                      </span>
-                      <span data-testid="content-validation">
-                        {t[`content.validation.${variant.validationState}`]}
-                      </span>
-                    </div>
-                    {/*
-                      THE HASHTAG FIELD IS ALWAYS RENDERED (PHASE 2 correction).
-
-                      It used to appear only when the variant ALREADY had
-                      hashtags, which made it an editor for a value nothing
-                      could create: a draft that came back without any — every
-                      manually written post, and any generation the model left
-                      bare — had no way to gain one, ever. The field is the only
-                      hashtag input in the product, so hiding it on empty made
-                      the whole capability unreachable rather than tidy.
-
-                      Empty submits an empty string, which `saveVariantAction`
-                      already parses to an empty list — the same answer as
-                      before, for a variant nobody touched.
-                    */}
-                    <label htmlFor={`${fieldId}-${variant.id}-tags`} className="cs-sr-only">
-                      {t['content.composer.hashtags']}
-                    </label>
-                    <input
-                      id={`${fieldId}-${variant.id}-tags`}
-                      name="hashtags"
-                      defaultValue={variant.hashtags.map((tag) => `#${tag}`).join(' ')}
-                      placeholder={t['content.composer.hashtags']}
-                      readOnly={!can.edit}
-                      data-testid={`content-hashtags-${variant.platformKey}`}
-                    />
-
-                    {/*
-                      PHASE 8 — MEDIA, INSIDE THE VARIANT'S OWN FORM (AC-27.3).
-
-                      Per VARIANT rather than per item, because the platforms
-                      differ: an Instagram carousel and an X post with one image
-                      are the same idea rendered two ways, and a single
-                      item-level list could satisfy neither ceiling.
-                    */}
-                    <MediaPicker
-                      locale={locale}
-                      options={mediaOptions}
-                      selected={variant.assetIds}
-                      maxItems={platform?.maxMediaItems ?? 0}
-                      disabled={!can.edit}
-                      labels={mediaLabels(t)}
-                      testId={`content-media-${variant.platformKey}`}
-                    />
-
-                    {/*
-                      PHASE 8 — WHAT THIS WILL LOOK LIKE (AC-27.4).
-
-                      The component is the approved `SocialPostPreview` that has
-                      shipped in `packages/ui` since Phase 2C and until now has
-                      only ever been fed fixtures in the showcase. It gets the
-                      real caption, the real hashtags and the real media here.
-                      A platform the preview does not know renders nothing at
-                      all rather than borrowing another platform's frame.
-                    */}
-                    <VariantPreview
-                      locale={locale}
-                      platformKey={variant.platformKey}
-                      body={variant.body}
-                      hashtags={variant.hashtags}
-                      media={variant.assetIds
-                        .map((id) => mediaOptions.find((option) => option.id === id))
-                        .filter((option): option is MediaOptionView => option !== undefined)}
-                      accountName={brandName}
-                      accountHandle={brandHandle}
-                      status="DRAFT"
-                      approval={approvalStateOf(draft.status)}
-                      labels={previewLabels(t)}
-                      testId={`content-preview-${variant.platformKey}`}
-                    />
-
-                    {can.edit ? (
-                      <div className="cs-channel-row">
-                        <button type="submit" className="cs-ghost-button cs-compact">
-                          {t['content.composer.saveEdit']}
-                        </button>
-                        {tools.map((tool) => (
-                          <button
-                            key={tool}
-                            type="button"
-                            className="cs-channel"
-                            disabled={busy !== null}
-                            data-testid="content-tool"
-                            data-tool={tool}
-                            onClick={() => runTool(variant.id, tool)}
-                          >
-                            {busy === `${variant.id}:${tool}`
-                              ? t['content.tool.running']
-                              : t[`content.tool.${tool}`]}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </form>
-                );
-              })}
-
-              {/* AC-11.4 — the sources RETRIEVAL returned, never the model's. */}
-              {draft.citations.length > 0 ? (
-                <div data-testid="content-citations">
-                  <span className="cs-section-kicker">{t['content.composer.sources']}</span>
-                  <div className="cs-citations">
-                    {draft.citations.map((citation, index) => (
-                      <span key={`${citation.label}-${index}`}>{citation.label}</span>
-                    ))}
+                      <option value="">{t['campaigns.composerNone']}</option>
+                      {campaignOptions.map((campaign) => (
+                        <option key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </form>
+            ) : null}
+          </section>
 
-              <div className="cs-form-actions">
-                {/*
-                  PHASE 5B-3 — THREE CONTROLS WHERE THERE WAS ONE, because the
-                  three moves are now genuinely different things. Restoring an
-                  archived draft is a plain status change; SUBMITTING opens an
-                  approval cycle; WITHDRAWING closes it. The old single button
-                  posted `to=IN_REVIEW` and left nothing for a reviewer to act
-                  on.
-                */}
-                {can.submit && draft.status === 'ARCHIVED' ? (
-                  <form action={actions.transition}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="itemId" value={draft.id} />
-                    <input type="hidden" name="to" value="DRAFT" />
-                    <button type="submit" className="cs-ghost-button cs-compact">
-                      {t['content.composer.restore']}
-                    </button>
-                  </form>
-                ) : null}
-                {can.submit &&
-                (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED') ? (
-                  <form action={actions.submitForReview}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="itemId" value={draft.id} />
-                    <button
-                      type="submit"
-                      className="cs-ghost-button cs-compact"
-                      data-testid="submit-for-review"
-                    >
-                      {t['content.composer.submit']}
-                    </button>
-                  </form>
-                ) : null}
-                {can.submit && draft.status === 'IN_REVIEW' && draft.openApprovalId ? (
-                  <form action={actions.cancelReview}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="itemId" value={draft.id} />
-                    <input type="hidden" name="approvalId" value={draft.openApprovalId} />
-                    <button
-                      type="submit"
-                      className="cs-ghost-button cs-compact"
-                      data-testid="withdraw-review"
-                    >
-                      {t['content.composer.withdraw']}
-                    </button>
-                  </form>
-                ) : null}
-                {can.archive && draft.status !== 'ARCHIVED' ? (
-                  <form action={actions.transition}>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="itemId" value={draft.id} />
-                    <input type="hidden" name="to" value="ARCHIVED" />
-                    <button type="submit" className="cs-ghost-button cs-compact">
-                      {t['content.composer.archive']}
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            </>
-          )}
-
-          {can.edit && tools.includes('tone') && draft && draft.variants.length > 0 ? (
-            <div className="cs-field">
-              <label htmlFor={`${fieldId}-tone`}>{t['content.tool.toneArgument']}</label>
-              <input
-                id={`${fieldId}-tone`}
-                value={toneArgument}
-                onChange={(event) => setToneArgument(event.target.value)}
-              />
-            </div>
-          ) : null}
-        </section>
-      </div>
+          {/* ------------------------- nothing generated yet, and says so --- */}
+          <section className="cs-surface-card" aria-live="polite" data-testid="content-results">
+            <span className="cs-section-kicker">{t['content.composer.results']}</span>
+            <p className="cs-empty">{t['content.composer.resultsEmpty']}</p>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
 function draftVariantLocale(draft: ComposerDraft | null, variantId: string): ContentLocale {
   return draft?.variants.find((variant) => variant.id === variantId)?.locale ?? 'EN';
-}
-
-/**
- * Credits are accounted in MILLI-units and quoted to the customer in credits.
- *
- * Kept as a string end to end: the estimate crosses the wire as one because a
- * `bigint` has no JSON form, and turning it into a `number` here would put a
- * financial figure through a float for the sake of dividing by a thousand.
- */
-function formatCredits(milli: string): string {
-  const negative = milli.startsWith('-');
-  const digits = (negative ? milli.slice(1) : milli).padStart(4, '0');
-  const whole = digits.slice(0, -3).replace(/^0+(?=\d)/, '');
-  const fraction = digits.slice(-3).replace(/0+$/, '');
-  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
 }

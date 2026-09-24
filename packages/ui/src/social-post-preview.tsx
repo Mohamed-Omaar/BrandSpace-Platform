@@ -9,7 +9,14 @@ import {
   spacingTokens,
   typographyTokens,
 } from './tokens';
-import { AlertIcon, CalendarIcon, ImageIcon, PlayIcon } from './icons';
+import {
+  AlertIcon,
+  CalendarIcon,
+  ChevronEndIcon,
+  ChevronStartIcon,
+  ImageIcon,
+  PlayIcon,
+} from './icons';
 import { StatusBadge, statusTone } from './data';
 import { Skeleton } from './feedback';
 import {
@@ -169,6 +176,19 @@ function MediaFrame({
   readonly children?: ReactNode;
 }) {
   const media = content.media ?? { kind: 'missing' as const };
+  /*
+   * PHASE 6 FINAL (D-285) — A CAROUSEL YOU CAN PAGE. The slide being shown is
+   * the preview's own state; it resets when the slide list shrinks under it.
+   */
+  const slides = media.kind === 'image' ? (media.slides ?? []) : [];
+  const [slideIndex, setSlideIndex] = useState(0);
+  const paged =
+    slides.length > 1 &&
+    labels.slideLabel !== undefined &&
+    labels.previousSlide !== undefined &&
+    labels.nextSlide !== undefined;
+  const slide = paged ? Math.min(slideIndex, slides.length - 1) : 0;
+  const current = paged ? slides[slide] : undefined;
   const frame: CSSProperties = {
     position: 'relative',
     aspectRatio: ASPECT_RATIO[aspect],
@@ -215,7 +235,28 @@ function MediaFrame({
     );
   }
 
-  const carouselCount = media.kind === 'image' ? (media.count ?? 1) : 1;
+  const carouselCount = media.kind === 'image' ? Math.max(media.count ?? 1, slides.length || 1) : 1;
+  const shownSrc = current ? current.src : media.src;
+  const shownAlt = current ? current.alt : media.alt;
+  const arrow = (side: 'start' | 'end'): CSSProperties => ({
+    position: 'absolute',
+    insetBlockStart: '50%',
+    ...(side === 'start'
+      ? { insetInlineStart: spacingTokens.xs }
+      : { insetInlineEnd: spacingTokens.xs }),
+    transform: 'translateY(-50%)',
+    zIndex: 1,
+    inlineSize: '1.75rem',
+    blockSize: '1.75rem',
+    borderRadius: radiusTokens.full,
+    border: 'none',
+    background: 'rgba(255, 255, 255, 0.9)',
+    color: colorTokens.surfaceInk,
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  });
 
   return (
     <div style={frame} data-testid="preview-media">
@@ -223,10 +264,10 @@ function MediaFrame({
         THE CUSTOMER'S OWN PICTURE WHERE THERE IS ONE, and the design system's
         artwork where there is not. Same frame, same aspect, same overlays.
       */}
-      {media.src ? (
-        <AssetMedia src={media.src} alt={media.alt} testId="preview-media-asset" />
+      {shownSrc ? (
+        <AssetMedia src={shownSrc} alt={shownAlt} testId="preview-media-asset" />
       ) : (
-        <AbstractMedia seed={media.seed ?? 0} alt={media.alt} />
+        <AbstractMedia seed={media.seed ?? 0} alt={shownAlt} />
       )}
       {media.kind === 'video' ? (
         <>
@@ -254,9 +295,11 @@ function MediaFrame({
       {carouselCount > 1 ? (
         <>
           <MediaChip placement="start-end" testId="preview-carousel-badge">
-            {labels.carouselLabel(carouselCount)}
+            {paged && labels.slideLabel
+              ? labels.slideLabel(slide + 1, slides.length)
+              : labels.carouselLabel(carouselCount)}
           </MediaChip>
-          <CarouselDots count={carouselCount} />
+          <CarouselDots count={carouselCount} active={slide} />
         </>
       ) : null}
       {content.status === 'DRAFT' ? (
@@ -268,6 +311,35 @@ function MediaFrame({
           tone="danger"
           testId="preview-failed-overlay"
         />
+      ) : null}
+      {/* The arrows sit ABOVE the state overlays, so a draft can still be paged. */}
+      {paged ? (
+        <>
+          {/*
+            Logical sides: in Arabic the "previous" arrow sits on the right,
+            where a right-to-left reader expects the slide before.
+          */}
+          <button
+            type="button"
+            aria-label={labels.previousSlide}
+            disabled={slide === 0}
+            data-testid="preview-slide-previous"
+            onClick={() => setSlideIndex(Math.max(0, slide - 1))}
+            style={{ ...arrow('start'), opacity: slide === 0 ? 0.4 : 1 }}
+          >
+            <ChevronStartIcon size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label={labels.nextSlide}
+            disabled={slide === slides.length - 1}
+            data-testid="preview-slide-next"
+            onClick={() => setSlideIndex(Math.min(slides.length - 1, slide + 1))}
+            style={{ ...arrow('end'), opacity: slide === slides.length - 1 ? 0.4 : 1 }}
+          >
+            <ChevronEndIcon size={16} />
+          </button>
+        </>
       ) : null}
       {children}
     </div>

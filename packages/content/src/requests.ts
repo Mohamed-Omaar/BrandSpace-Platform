@@ -49,6 +49,12 @@ export const contentToolRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
 });
 
+/** PHASE 6 FINAL (D-284) — what one inline AI edit would cost, before it runs. */
+export const contentToolQuoteRequestSchema = contentToolRequestSchema.omit({
+  idempotencyKey: true,
+});
+
+export type ContentToolQuoteRequest = z.infer<typeof contentToolQuoteRequestSchema>;
 export type ContentQuoteRequest = z.infer<typeof contentQuoteRequestSchema>;
 export type ContentGenerateRequest = z.infer<typeof contentGenerateRequestSchema>;
 export type ContentToolRequest = z.infer<typeof contentToolRequestSchema>;

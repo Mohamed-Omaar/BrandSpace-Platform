@@ -72,7 +72,14 @@ const SYSTEM_INSTRUCTION = [
  * instruction from a browser is a prompt the customer writes and the platform
  * pays for. Each maps to a fixed directive below.
  */
-export const CONTENT_TOOLS = ['rewrite', 'shorten', 'expand', 'tone', 'translate'] as const;
+export const CONTENT_TOOLS = [
+  'rewrite',
+  'shorten',
+  'expand',
+  'tone',
+  'translate',
+  'hashtags',
+] as const;
 export type ContentTool = (typeof CONTENT_TOOLS)[number];
 
 const TOOL_DIRECTIVE: Record<ContentTool, string> = {
@@ -87,6 +94,10 @@ const TOOL_DIRECTIVE: Record<ContentTool, string> = {
     'brand voice, and write naturally in the requested Arabic dialect rather',
     'than transliterating the source sentence structure.',
   ].join(' '),
+  // PHASE 6 FINAL (D-284) — hashtags only. The caption the model returns is
+  // DISCARDED below: this tool may not change a word the person wrote.
+  hashtags:
+    'Keep the caption exactly as it is. Propose hashtags that fit it and the brand, within the platform limit.',
 };
 
 export interface StudioOptions extends ContentLibraryOptions {
@@ -332,36 +343,7 @@ export class ContentStudioService extends ContentLibraryService {
     planKey: string | null;
     actorBrandScope: readonly string[];
   }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
-    // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
-    const variant = await this.db.contentVariant.findFirst({
-      where: {
-        id: input.variantId,
-        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
-      },
-    });
-    if (!variant) throw contentItemNotFound();
-
-    const platform = findPlatform(this.policy, variant.platformKey);
-    if (!platform) throw unsupportedPlatform();
-
-    const dialect = await this.resolveDialectFor(variant.brandId);
-    const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
-    const targetLocale = input.targetLocale ?? variant.locale;
-
-    const instruction = [
-      SYSTEM_INSTRUCTION,
-      TOOL_DIRECTIVE[input.tool],
-      input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
-      `Target language: ${targetLocale === 'AR' ? 'Arabic' : 'English'}.`,
-      targetLocale === 'AR' ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
-      `Keep it under ${platform.maxBodyChars} characters.`,
-      'Respond with JSON: {"body": string, "hashtags": string[]}.',
-      '',
-      'Caption to edit:',
-      variant.body ?? '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const { variant, platform, dialect, targetLocale, request } = await this.#toolRequest(input);
 
     const result = await this.#gateway.execute({
       workspaceId: this.workspaceId,
@@ -369,11 +351,7 @@ export class ContentStudioService extends ContentLibraryService {
       taskKey: 'caption.generate',
       planKey: input.planKey,
       idempotencyKey: `content-tool:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: instruction,
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
-      },
+      input: request,
     });
 
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
@@ -389,16 +367,23 @@ export class ContentStudioService extends ContentLibraryService {
     /* c8 ignore next -- the parser guarantees one variant under singleBody. */
     if (!produced) throw generationFailed(null);
 
-    const validation = validateVariant(platform, {
-      body: produced.body,
-      hashtags: produced.hashtags,
-    });
+    /*
+     * THE HASHTAG TOOL KEEPS THE PERSON'S WORDS. Whatever caption the model
+     * sent back is ignored, and the tags are bounded by the platform's own
+     * ceiling rather than trusted to have followed the instruction.
+     */
+    const hashtagsOnly = input.tool === 'hashtags';
+    const body = hashtagsOnly ? (variant.body ?? '') : produced.body;
+    const hashtags = hashtagsOnly
+      ? produced.hashtags.slice(0, platform.maxHashtags)
+      : produced.hashtags;
+    const validation = validateVariant(platform, { body, hashtags });
 
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
-        body: produced.body,
-        hashtags: produced.hashtags,
+        body,
+        hashtags,
         locale: targetLocale,
         arabicDialect: targetLocale === 'AR' ? dialect.key : null,
         // An edited variant is AI_ASSISTED, not AI_GENERATED: a person chose
@@ -425,6 +410,11 @@ export class ContentStudioService extends ContentLibraryService {
       after: { platformKey: variant.platformKey, locale: targetLocale, dialect: dialect.key },
     });
 
+    // PHASE 6 FINAL (D-284) — an AI edit is an edit. Before this, an inline
+    // tool could rewrite an APPROVED caption and leave the item saying
+    // "Approved" over words nobody had reviewed.
+    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
+
     return {
       variant: updated,
       aiRequestId: result.requestId,
@@ -433,6 +423,84 @@ export class ContentStudioService extends ContentLibraryService {
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * PHASE 6 FINAL (D-284) — WHAT ONE INLINE EDIT WOULD COST, before it runs.
+   *
+   * The SAME request `applyTool` sends — same variant read under the same
+   * BrandScope predicate, same retrieval, same instruction — handed to the
+   * gateway's quote instead of its execute. It reserves nothing and writes no
+   * `ai_request`, exactly like the generation quote.
+   */
+  async quoteTool(input: {
+    variantId: string;
+    tool: ContentTool;
+    argument?: string | undefined;
+    targetLocale?: Locale | undefined;
+    planKey: string | null;
+    actorBrandScope: readonly string[];
+  }): Promise<AiQuote> {
+    const { request } = await this.#toolRequest(input);
+    return this.#gateway.quote({
+      workspaceId: this.workspaceId,
+      taskKey: 'caption.generate',
+      planKey: input.planKey,
+      input: request,
+    });
+  }
+
+  /** The one place an inline edit's request is built, for the quote and the run. */
+  async #toolRequest(input: {
+    variantId: string;
+    tool: ContentTool;
+    argument?: string | undefined;
+    targetLocale?: Locale | undefined;
+    actorBrandScope: readonly string[];
+  }) {
+    // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
+    const variant = await this.db.contentVariant.findFirst({
+      where: {
+        id: input.variantId,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+    });
+    if (!variant) throw contentItemNotFound();
+
+    const platform = findPlatform(this.policy, variant.platformKey);
+    if (!platform) throw unsupportedPlatform();
+
+    const dialect = await this.resolveDialectFor(variant.brandId);
+    const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
+    const targetLocale = input.targetLocale ?? variant.locale;
+
+    const instruction = [
+      SYSTEM_INSTRUCTION,
+      TOOL_DIRECTIVE[input.tool],
+      input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
+      `Target language: ${targetLocale === 'AR' ? 'Arabic' : 'English'}.`,
+      targetLocale === 'AR' ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      `Keep it under ${platform.maxBodyChars} characters.`,
+      `Use at most ${platform.maxHashtags} hashtags.`,
+      'Respond with JSON: {"body": string, "hashtags": string[]}.',
+      '',
+      'Caption to edit:',
+      variant.body ?? '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return {
+      variant,
+      platform,
+      dialect,
+      targetLocale,
+      request: {
+        kind: 'text' as const,
+        prompt: instruction,
+        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+      },
+    };
+  }
 
   #assertBrief(brief: string): void {
     if (brief.length > this.policy.generation.maxBriefChars) throw briefTooLong();
