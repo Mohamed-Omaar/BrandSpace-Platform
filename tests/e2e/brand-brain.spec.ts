@@ -478,8 +478,12 @@ test.describe('accessibility', () => {
     await ensureBrand(page);
 
     // Tab until an area card takes focus, then open it with the keyboard.
+    // The budget counts every stop before the page's own content — the rail,
+    // both switchers and the top bar. P6-16 gave the top bar three more real
+    // destinations (Review, Notes, Copilot), which is what moved it past 40;
+    // the cards are exactly as reachable as before.
     let reached = false;
-    for (let i = 0; i < 40 && !reached; i += 1) {
+    for (let i = 0; i < 60 && !reached; i += 1) {
       await page.keyboard.press('Tab');
       reached = await page.evaluate(() =>
         (document.activeElement?.getAttribute('data-testid') ?? '').startsWith('area-card-'),
