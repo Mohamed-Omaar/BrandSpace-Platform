@@ -168,4 +168,21 @@ automation code/webhooks; global product search.
 
 ## 8. Staging acceptance matrix
 
-_Filled at the end: each §55–§60 journey step, how it was proven, and on which build._
+**Staging: BLOCKED from this environment.** The session's network policy refuses the Staging hosts
+(`api-staging.brandspace.cc` and the staging web hosts answer `CONNECT tunnel failed, 403` at the
+proxy), so no Staging deploy was triggered from here and no Staging smoke was run. No Staging claim is
+made. Nothing was deployed anywhere; nothing touched Production. What each acceptance area rests on
+instead — the local production build against real PostgreSQL, and CI on the pushed head:
+
+| Acceptance area                            | How it was proven                                                                                                                                                                        | Staging           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| §55 new-customer journey                   | E2E `phase8-journey`, `phase6-*` setup/home/create/approvals/calendar/publishing suites, full local suite 737 passed / 5 failed / 1 skipped, the 5 fixed and their suites re-run 119/119 | not run — blocked |
+| §56 format-specific (feed, carousel, reel) | `phase6-create-post`, `content-studio`, `phase6-assets`; isolation `content-studio-lifecycle` (carousel outline)                                                                         | not run — blocked |
+| §57 assets                                 | `assets`, `phase6-assets`; isolation asset rights / usage                                                                                                                                | not run — blocked |
+| §58 Home with seeded real rows             | `phase6-*` home/preferences/workflows/notifications suites; unit `phase6-home`, `phase6-pulse`                                                                                           | not run — blocked |
+| §59 Copilot                                | `analytics-copilot`, `phase6-topbar`, `phase6-workflows`, `phase6-states`                                                                                                                | not run — blocked |
+| §60 visual set                             | 68 captures in `docs/visual-review/phase-6-final/` (local production build)                                                                                                              | not run — blocked |
+
+To complete step 27 the owner (or a session whose environment allows the Staging hosts) deploys this
+branch's head to the Railway **staging** environment only, runs `pnpm staging:preflight`, then the
+smoke in `docs/RAILWAY-SMOKE-TEST.md` with mock connectors and no real social publishing.
