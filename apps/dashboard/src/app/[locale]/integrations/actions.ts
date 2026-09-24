@@ -221,6 +221,31 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
 }
 
 /**
+ * Retry a post that failed on a broken account, through the same account now
+ * reconnected (D-291). A person pressing Retry; the pipeline decides whether
+ * it is allowed and re-checks everything before anything is sent.
+ */
+export async function retryOnReconnectedAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'publishing.manage');
+    const jobId = String(formData.get('jobId') ?? '');
+    await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
+      (await pipeline()).retryOnReconnectedAccount({ jobId, ...actorOf(session) }),
+    );
+    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' }, back);
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'retry-reconnected', back);
+  }
+  revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
+  revalidatePath(`/${locale}/calendar`);
+  redirect(destination);
+}
+
+/**
  * Bind a pending multi-target grant to the page the customer chose (D-142).
  *
  * THE SELECTION SECRET COMES FROM THE FORM AND PROVES NOTHING ON ITS OWN. It

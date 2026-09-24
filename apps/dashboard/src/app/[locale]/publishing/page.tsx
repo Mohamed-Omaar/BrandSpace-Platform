@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  AssetThumb,
   Card,
   LinkTabs,
   SectionHeader,
@@ -15,6 +16,7 @@ import {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { inSocial } from '../../../server/social-context';
+import { mediaForVariants } from '../../../server/media-picker';
 import {
   optionalMessage,
   statusMessage,
@@ -26,6 +28,7 @@ import {
   cancelPublishAction,
   checkAccountAction,
   connectAccountAction,
+  retryOnReconnectedAction,
   retryPublishAction,
 } from '../integrations/actions';
 
@@ -133,6 +136,45 @@ export default async function PublishingPage({
             (connection) => brandId === undefined || connection.brandId === brandId,
           )
         : [];
+    /*
+     * D-291 — WHAT A ROW NEEDS BESIDES THE JOB: the post's picture, the
+     * account it goes through (its health is the job's readiness), the
+     * post's latest review, and — on Failed — whether the account it failed
+     * on has since been reconnected. All read under RLS and BrandScope; the
+     * account's NAME only for a member who may read accounts.
+     */
+    const jobVariants = jobs.length
+      ? await services.db.contentVariant.findMany({
+          where: { id: { in: [...new Set(jobs.map((job) => job.contentVariantId))] } },
+          select: { id: true, assetIds: true, coverAssetId: true },
+        })
+      : [];
+    const jobConnections = jobs.length
+      ? await services.db.socialConnection.findMany({
+          where: { id: { in: [...new Set(jobs.map((job) => job.socialConnectionId))] } },
+          select: { id: true, status: true, displayName: true },
+        })
+      : [];
+    const reviews =
+      tab === 'queue' && jobs.length
+        ? await services.db.approval.findMany({
+            where: { contentItemId: { in: [...new Set(jobs.map((job) => job.contentItemId))] } },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            select: { contentItemId: true, status: true },
+          })
+        : [];
+    const reconnected =
+      tab === 'failed' && may('publishing.manage')
+        ? await (
+            await services.pipeline()
+          ).reconnectedRetryable(jobs.filter((job) => job.status === 'FAILED').map((j) => j.id))
+        : new Set<string>();
+    const latestReview = new Map<string, string>();
+    for (const review of reviews) {
+      if (review.contentItemId && !latestReview.has(review.contentItemId)) {
+        latestReview.set(review.contentItemId, review.status);
+      }
+    }
     const itemIds = [...new Set(jobs.map((job) => job.contentItemId))];
     const brandIds = [
       ...new Set([...jobs.map((job) => job.brandId), ...connections.map((c) => c.brandId)]),
@@ -153,10 +195,32 @@ export default async function PublishingPage({
       counts,
       jobs,
       connections,
+      coverOf: new Map(
+        jobVariants.flatMap((variant) => {
+          const cover = variant.coverAssetId ?? variant.assetIds[0];
+          return cover ? [[variant.id, cover] as const] : [];
+        }),
+      ),
+      jobConnections: new Map(jobConnections.map((connection) => [connection.id, connection])),
+      latestReview,
+      reconnected,
       titles: new Map(items.map((item) => [item.id, item.title])),
       brandNames: new Map(brands.map((brand) => [brand.id, brand.name])),
     };
   });
+
+  const covers = await mediaForVariants({
+    workspaceId: workspace.workspaceId,
+    userId: session.customer.userId,
+    permissionKeys: workspace.permissionKeys,
+    brandScope: workspace.brandScope,
+    assetIds: [...data.coverOf.values()],
+  });
+  const REVIEW_KEY: Record<string, MessageKey> = {
+    PENDING: 'approvals.status.PENDING',
+    APPROVED: 'approvals.status.APPROVED',
+    CHANGES_REQUESTED: 'approvals.status.CHANGES_REQUESTED',
+  };
 
   const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'medium',
@@ -276,76 +340,154 @@ export default async function PublishingPage({
                     ? job.publishedAt
                     : job.scheduledAtUtc;
                 return (
-                  <li key={job.id} style={rowStyle} data-testid={`publish-job-${job.id}`}>
-                    <div style={headStyle}>
-                      <Link
-                        href={`/${locale}/content/compose?item=${job.contentItemId}`}
-                        style={titleStyle}
-                      >
-                        {title}
-                      </Link>
-                      <StatusBadge
-                        label={t(STATUS_KEY[job.status] ?? 'publishing.status.pending')}
-                        tone={STATUS_TONE[job.status] ?? 'neutral'}
-                      />
-                    </div>
-                    <span style={metaStyle}>
-                      {providerLabel(job.provider)} ·{' '}
-                      {data.brandNames.get(job.brandId) ?? t('integrations.unknownBrand')} ·{' '}
-                      {job.status === 'PUBLISHED'
-                        ? t('publishingHub.publishedOn')
-                        : t('publishingHub.scheduledFor')}{' '}
-                      <time dateTime={when.toISOString()}>{formatter.format(when)}</time>
-                    </span>
-                    {failure ? (
-                      <p style={failureStyle} data-testid={`failure-${job.id}`}>
-                        {failure}
-                      </p>
-                    ) : null}
-                    <div style={actionsStyle}>
-                      {job.status === 'PUBLISHED' && job.externalPostUrl ? (
-                        <a
-                          href={job.externalPostUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={buttonStyle('ghost', 'sm')}
-                          className={buttonClass('ghost')}
-                          data-testid={`post-link-${job.id}`}
+                  <li key={job.id} style={jobRowStyle} data-testid={`publish-job-${job.id}`}>
+                    {(() => {
+                      const coverId = data.coverOf.get(job.contentVariantId);
+                      const media = coverId ? covers.get(coverId) : undefined;
+                      return media?.previewToken ? (
+                        <AssetThumb
+                          src={`/${locale}/assets/file/${media.previewToken}`}
+                          alt=""
+                          size="3rem"
+                        />
+                      ) : (
+                        <span aria-hidden="true" style={textThumbStyle}>
+                          {title.slice(0, 1)}
+                        </span>
+                      );
+                    })()}
+                    <div style={jobBodyStyle}>
+                      <div style={headStyle}>
+                        <Link
+                          href={`/${locale}/content/compose?item=${job.contentItemId}`}
+                          style={titleStyle}
                         >
-                          {t('publishing.viewPost')}
-                        </a>
+                          {title}
+                        </Link>
+                        <StatusBadge
+                          label={t(STATUS_KEY[job.status] ?? 'publishing.status.pending')}
+                          tone={STATUS_TONE[job.status] ?? 'neutral'}
+                        />
+                      </div>
+                      <span style={metaStyle}>
+                        {providerLabel(job.provider)} ·{' '}
+                        {data.brandNames.get(job.brandId) ?? t('integrations.unknownBrand')} ·{' '}
+                        {job.status === 'PUBLISHED'
+                          ? t('publishingHub.publishedOn')
+                          : t('publishingHub.scheduledFor')}{' '}
+                        <time dateTime={when.toISOString()}>{formatter.format(when)}</time>
+                      </span>
+                      {tab === 'queue' ? (
+                        <span style={headStyle}>
+                          {(() => {
+                            const account = data.jobConnections.get(job.socialConnectionId);
+                            const ready = account?.status === 'ACTIVE';
+                            return (
+                              <span data-testid={`readiness-${job.id}`}>
+                                <StatusBadge
+                                  label={
+                                    ready
+                                      ? t('publishingHub.readiness.ready')
+                                      : t('publishingHub.readiness.reconnect')
+                                  }
+                                  tone={ready ? 'success' : 'warning'}
+                                />
+                              </span>
+                            );
+                          })()}
+                          {data.latestReview.get(job.contentItemId) &&
+                          REVIEW_KEY[data.latestReview.get(job.contentItemId) ?? ''] ? (
+                            <span data-testid={`review-${job.id}`} style={metaStyle}>
+                              {t('calendar.approvalState')}:{' '}
+                              {t(
+                                REVIEW_KEY[
+                                  data.latestReview.get(job.contentItemId) ?? ''
+                                ] as MessageKey,
+                              )}
+                            </span>
+                          ) : null}
+                          {may('integrations.read') &&
+                          data.jobConnections.get(job.socialConnectionId)?.displayName ? (
+                            <span style={metaStyle}>
+                              {data.jobConnections.get(job.socialConnectionId)?.displayName}
+                            </span>
+                          ) : null}
+                        </span>
                       ) : null}
-                      {job.needsReconnect && job.status === 'FAILED'
-                        ? reconnect(job.provider, job.brandId, `reconnect-${job.id}`)
-                        : null}
-                      {job.canRetry && job.status === 'FAILED' && may('publishing.manage') ? (
-                        <form action={retryPublishAction}>
-                          {back}
-                          <input type="hidden" name="jobId" value={job.id} />
-                          <button
-                            type="submit"
-                            style={buttonStyle('neutral', 'sm')}
-                            className={buttonClass('neutral')}
-                            data-testid={`retry-${job.id}`}
-                          >
-                            {t('publishing.retry')}
-                          </button>
-                        </form>
+                      {failure ? (
+                        <p style={failureStyle} data-testid={`failure-${job.id}`}>
+                          {failure}
+                        </p>
                       ) : null}
-                      {job.canCancel && may('publishing.manage') ? (
-                        <form action={cancelPublishAction}>
-                          {back}
-                          <input type="hidden" name="jobId" value={job.id} />
-                          <button
-                            type="submit"
+                      {data.reconnected.has(job.id) ? (
+                        <p style={reconnectedStyle} data-testid={`reconnected-${job.id}`}>
+                          {t('publishingHub.reconnected')}
+                        </p>
+                      ) : null}
+                      <div style={actionsStyle}>
+                        {job.status === 'PUBLISHED' && job.externalPostUrl ? (
+                          <a
+                            href={job.externalPostUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             style={buttonStyle('ghost', 'sm')}
                             className={buttonClass('ghost')}
-                            data-testid={`cancel-${job.id}`}
+                            data-testid={`post-link-${job.id}`}
                           >
-                            {t('publishing.cancel')}
-                          </button>
-                        </form>
-                      ) : null}
+                            {t('publishing.viewPost')}
+                          </a>
+                        ) : null}
+                        {data.reconnected.has(job.id) ? (
+                          <form action={retryOnReconnectedAction}>
+                            {back}
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <button
+                              type="submit"
+                              style={buttonStyle('primary', 'sm')}
+                              className={buttonClass('primary')}
+                              data-testid={`retry-reconnected-${job.id}`}
+                            >
+                              {t('publishing.retry')}
+                            </button>
+                          </form>
+                        ) : null}
+                        {(job.needsReconnect || job.failureClass === 'AUTH_EXPIRED') &&
+                        job.status === 'FAILED' &&
+                        !data.reconnected.has(job.id)
+                          ? reconnect(job.provider, job.brandId, `reconnect-${job.id}`)
+                          : null}
+                        {job.canRetry &&
+                        job.status === 'FAILED' &&
+                        !data.reconnected.has(job.id) &&
+                        may('publishing.manage') ? (
+                          <form action={retryPublishAction}>
+                            {back}
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <button
+                              type="submit"
+                              style={buttonStyle('neutral', 'sm')}
+                              className={buttonClass('neutral')}
+                              data-testid={`retry-${job.id}`}
+                            >
+                              {t('publishing.retry')}
+                            </button>
+                          </form>
+                        ) : null}
+                        {job.canCancel && may('publishing.manage') ? (
+                          <form action={cancelPublishAction}>
+                            {back}
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <button
+                              type="submit"
+                              style={buttonStyle('ghost', 'sm')}
+                              className={buttonClass('ghost')}
+                              data-testid={`cancel-${job.id}`}
+                            >
+                              {t('publishing.cancel')}
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 );
@@ -447,6 +589,33 @@ const rowStyle = {
   gap: spacingTokens['3xs'],
   paddingBlock: spacingTokens.sm,
   borderBlockEnd: `1px solid ${colorTokens.border}`,
+} as const;
+
+const jobRowStyle = {
+  ...rowStyle,
+  gridTemplateColumns: '3rem minmax(0, 1fr)',
+  columnGap: spacingTokens.sm,
+  alignItems: 'start',
+} as const;
+
+const jobBodyStyle = { display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 } as const;
+
+/** A text-only post: an intentional neutral tile, never fake art (§15). */
+const textThumbStyle = {
+  display: 'grid',
+  placeItems: 'center',
+  inlineSize: '3rem',
+  blockSize: '3rem',
+  borderRadius: '0.75rem',
+  background: colorTokens.surfaceMuted,
+  color: colorTokens.textSecondary,
+  ...typographyTokens.label,
+} as const;
+
+const reconnectedStyle = {
+  ...typographyTokens.bodySm,
+  margin: 0,
+  color: colorTokens.success,
 } as const;
 
 const headStyle = {

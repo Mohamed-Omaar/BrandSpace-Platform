@@ -454,6 +454,13 @@ existing compact button, a caption-sized "BrandSpace noticed" line, and the post
 centred `Dialog` into the shared `SideSheet` (D-285) holding the existing `VariantPreview`. The grid's
 only new behaviour is a drop target on each day cell. No new colour, font, shadow or interaction model.
 
+### 6.3.16 Phase 6 final — Publishing rows (D-291)
+
+`/[locale]/publishing` keeps its §6 extension (`LinkTabs`, `Card`, `StatusBadge`, list rows) and gives each
+job row a 3rem `AssetThumb` column — or a `surfaceMuted` tile with the title's first letter for a text-only
+post — plus a readiness `StatusBadge` and a `success`-token line for "Account reconnected". No new visual
+treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

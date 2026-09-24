@@ -702,6 +702,79 @@ export class SocialOAuthService {
      * have already consumed a single-use row — the authorization state or the
      * selection token — so this is not the place that stops a replay.
      */
+    /*
+     * THE SAME ACCOUNT, RECONNECTED (Phase 6 final, D-291) — IN PLACE.
+     *
+     * `social_connection_one_live_per_account` admits ONE live row per brand,
+     * provider and external account. Reconnecting an account whose token
+     * expired or was revoked — the connection is NEEDS_REAUTH, still live —
+     * used to try to create a second row, which the index refused: the one
+     * thing the customer was told to do ("Reconnect") could not succeed.
+     *
+     * So the existing row is renewed: the old credential is RETIRED (not
+     * overwritten, exactly as `refresh` does), a new version is stored, and the
+     * connection becomes ACTIVE again under its own id. It already holds its
+     * plan slot, so nothing is consumed; the jobs bound to it can be retried
+     * by a person once it is healthy.
+     */
+    const existing = await this.#db.socialConnection.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        brandId: input.record.brandId,
+        provider: input.record.provider,
+        externalAccountId: input.target.externalAccountId,
+        status: { in: ['PENDING', 'ACTIVE', 'NEEDS_REAUTH'] },
+      },
+    });
+    if (existing) {
+      const latest = await this.#db.socialCredential.findFirst({
+        where: { workspaceId: this.#workspaceId, socialConnectionId: existing.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      await this.#db.socialCredential.updateMany({
+        where: {
+          workspaceId: this.#workspaceId,
+          socialConnectionId: existing.id,
+          retiredAt: null,
+        },
+        data: { retiredAt: input.now },
+      });
+      await this.#storeCredential({
+        connectionId: existing.id,
+        version: (latest?.version ?? 0) + 1,
+        bundle: input.bundle,
+        expiresAt,
+      });
+      const renewed = await this.#db.socialConnection.update({
+        where: { id: existing.id },
+        data: {
+          displayName: input.target.displayName,
+          avatarUrl: input.target.avatarUrl,
+          status: input.missingScopes.length > 0 ? 'NEEDS_REAUTH' : 'ACTIVE',
+          grantedScopes: [...input.bundle.grantedScopes],
+          connectedByUserId: input.record.startedByUserId,
+          connectedAt: input.now,
+          tokenExpiresAt: expiresAt,
+          lastSyncedAt: input.now,
+          lastCheckedAt: input.now,
+          consecutiveFailureCount: 0,
+          lastFailureClass: input.missingScopes.length > 0 ? 'INSUFFICIENT_SCOPE' : null,
+        },
+      });
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'social.connection.reconnected',
+        actorType: 'USER',
+        actorId: input.record.startedByUserId,
+        resourceType: 'SocialConnection',
+        resourceId: existing.id,
+        brandId: input.record.brandId,
+        before: { status: existing.status },
+        after: { status: renewed.status, missingScopeCount: input.missingScopes.length },
+      });
+      return renewed;
+    }
+
     const connectionId = randomUUID();
     const took = await this.#quota.consume(`social-account:${connectionId}`);
     if (!took) throw connectionLimitReached();

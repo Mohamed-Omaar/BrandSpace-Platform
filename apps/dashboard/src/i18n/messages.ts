@@ -159,6 +159,11 @@ export const messages = {
     'publishingHub.publishedOn': 'نُشر في',
     'publishingHub.reconnect': 'إعادة ربط {provider}',
     'publishingHub.manageConnections': 'إدارة الاتصالات',
+    'publishingHub.readiness.ready': 'جاهز للنشر',
+    'publishingHub.readiness.reconnect': 'الحساب يحتاج إلى إعادة ربط',
+    'publishingHub.reconnected': 'تمت إعادة ربط الحساب. يمكنك إعادة المحاولة الآن.',
+    'publishingHub.retryAfterReconnect': 'منشورات فشلت ويمكن إعادة محاولتها الآن: {count}',
+    'publishingHub.retryAfterReconnectLink': 'راجعها وأعد المحاولة',
     'publishingHub.accounts.body':
       'حالة كل حساب متصل وقدرته على النشر. تتم إضافة الحسابات وإزالتها من الإعدادات.',
     'publishingHub.accounts.canPublish': 'جاهز للنشر',
@@ -2504,6 +2509,11 @@ export const messages = {
     'publishingHub.publishedOn': 'Published',
     'publishingHub.reconnect': 'Reconnect {provider}',
     'publishingHub.manageConnections': 'Manage connections',
+    'publishingHub.readiness.ready': 'Ready to publish',
+    'publishingHub.readiness.reconnect': 'Account needs reconnecting',
+    'publishingHub.reconnected': 'Account reconnected. You can retry now.',
+    'publishingHub.retryAfterReconnect': 'Failed posts you can retry now: {count}',
+    'publishingHub.retryAfterReconnectLink': 'Review and retry',
     'publishingHub.accounts.body':
       'Each connected account, its health and whether it can publish. Accounts are added and removed in Settings.',
     'publishingHub.accounts.canPublish': 'Ready to publish',

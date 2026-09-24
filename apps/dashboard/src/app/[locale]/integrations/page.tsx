@@ -121,6 +121,23 @@ export default async function IntegrationsPage({
   const mayReadPublishing = permissions.includes('publishing.read');
   const mayManagePublishing = permissions.includes('publishing.manage');
 
+  /*
+   * D-291 — AFTER A RECONNECTION, THE WAY BACK TO WHAT IT FIXES. The OAuth
+   * round trip always lands here; when the account just reconnected is one a
+   * failed post was waiting on, say how many can be retried and link to them.
+   * Only a count and a link: each retry is still a person pressing Retry.
+   */
+  const retryableAfterReconnect =
+    landing === 'connected' && mayManagePublishing
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const failed = await services
+            .history()
+            .list({ brandScope: workspace.brandScope, statuses: ['FAILED'], limit: 100 });
+          return (await (await services.pipeline()).reconnectedRetryable(failed.map((j) => j.id)))
+            .size;
+        })
+      : 0;
+
   const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -335,6 +352,17 @@ export default async function IntegrationsPage({
       <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
         {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
         {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+        {retryableAfterReconnect > 0 ? (
+          <CustomerBanner tone="info">
+            {t('publishingHub.retryAfterReconnect').replace(
+              '{count}',
+              String(retryableAfterReconnect),
+            )}{' '}
+            <Link href={`/${locale}/publishing?tab=failed`} data-testid="retry-after-reconnect">
+              {t('publishingHub.retryAfterReconnectLink')}
+            </Link>
+          </CustomerBanner>
+        ) : null}
         {resumeSetup ? (
           <CustomerBanner tone="info">
             {t('setup.resume.body')}{' '}
