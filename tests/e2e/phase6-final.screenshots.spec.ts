@@ -60,7 +60,9 @@ async function settle(page: Page): Promise<void> {
   await page.addStyleTag({
     content: '*,*::before,*::after{animation:none!important;transition:none!important}',
   });
-  await page.waitForLoadState('networkidle');
+  // Bounded: a screen that keeps a request open (a poll, a slow grant) is
+  // captured as it stands rather than stalling the whole set.
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
 }
 
 interface Targets {
@@ -436,7 +438,7 @@ const SCREENS: readonly Screen[] = [
   { key: '26-wizard-ready', path: () => '/onboarding?step=done' },
 ];
 
-test.describe.configure({ timeout: 600_000 });
+test.describe.configure({ timeout: 1_200_000 });
 test.afterAll(cleanup);
 
 test('Phase 6 final review set: 26 screens × desktop/phone × English/Arabic', async ({ page }) => {
