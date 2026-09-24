@@ -18,9 +18,9 @@ import {
   mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
-import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
+import { createBrandFor } from '../../../server/brand-creation';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
 
@@ -57,9 +57,30 @@ function knowledgeActor(session: WorkspaceSession): {
  * but hiding is a courtesy: the check here is what enforces it.
  */
 
-function pageUrl(locale: string, params: Record<string, string> = {}): string {
-  const search = new URLSearchParams(params).toString();
-  return `/${locale}/brand-brain${search ? `?${search}` : ''}`;
+/**
+ * WHERE AN ACTION RETURNS — a CLOSED SET, never a caller-supplied URL.
+ *
+ * The first-run Setup Wizard (D-277 §6) uploads brand documents and reviews
+ * extracted knowledge through THESE actions rather than copies of them; the
+ * form says it came from the wizard and which step, and anything else returns
+ * to Brand Brain.
+ */
+const WIZARD_STEPS = new Set(['learn', 'review']);
+
+function backTo(formData: FormData): { readonly path: string; readonly step?: string } {
+  if (String(formData.get('returnTo') ?? '') !== '/onboarding') return { path: '/brand-brain' };
+  const step = String(formData.get('step') ?? '');
+  return { path: '/onboarding', ...(WIZARD_STEPS.has(step) ? { step } : {}) };
+}
+
+function pageUrl(
+  locale: string,
+  params: Record<string, string> = {},
+  back: { readonly path: string; readonly step?: string } = { path: '/brand-brain' },
+): string {
+  const search = new URLSearchParams({ ...(back.step ? { step: back.step } : {}), ...params });
+  const query = search.toString();
+  return `/${locale}${back.path}${query ? `?${query}` : ''}`;
 }
 
 function failure(
@@ -67,12 +88,13 @@ function failure(
   error: unknown,
   action: string,
   extra: Record<string, string> = {},
+  back: { readonly path: string; readonly step?: string } = { path: '/brand-brain' },
 ) {
   const correlationId = randomUUID();
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No customer content is written either side.
   log.warn('brand brain action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId }, back);
 }
 
 function localized(formData: FormData, prefix: string): LocalizedText {
@@ -92,102 +114,17 @@ export async function createBrandAction(formData: FormData): Promise<void> {
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid brand name');
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ db, entitlements, usage }) => {
-      /*
-       * CREATING A BRAND IS IDEMPOTENT ON ITS NAME (PHASE 2).
-       *
-       * This is the only path in the product that creates a brand, and it is
-       * the step a new customer takes first. It had no replay guard at all: a
-       * double submit, a browser retry, or somebody walking the onboarding
-       * checklist a second time each made ANOTHER brand — same name, different
-       * slug, and now a workspace with two identical-looking brands whose
-       * content, knowledge and analytics are split between them. Nothing in the
-       * product merges those afterwards.
-       *
-       * The name is the key a person would use, so it is the key this uses:
-       * asking for a brand that already exists returns the one that exists.
-       * Comparison is case-insensitive and trimmed because "Acme" and "acme "
-       * are the same request typed twice, not two brands.
-       */
-      const existing = await db.brand.findFirst({
-        where: {
-          workspaceId: session.workspace.workspaceId,
-          deletedAt: null,
-          name: { equals: name, mode: 'insensitive' },
-        },
-        select: { id: true },
-      });
-      if (existing) return;
-
-      /*
-       * THE PLAN'S BRAND CEILING (D-10, `limit.brands`), ENFORCED HERE BECAUSE
-       * HERE IS WHERE A BRAND COMES INTO EXISTENCE.
-       *
-       * It was not enforced anywhere. `limit.brands` was in the plan catalogue,
-       * in the quota projection, on the Control Center's plan editor and in the
-       * downgrade impact check — and no code path consulted it, so every
-       * workspace on every plan could create brands without end. A limit that
-       * only appears in a form an operator fills in is not a limit.
-       *
-       * THE ENGINE ANSWERS, NOT THIS FILE. `entitlements.limit` resolves plan →
-       * override → flag → default; `null` means unlimited and 0 means none, and
-       * the two are not the same number. A second count written here would be a
-       * second answer (the mistake `inAssetLibrary` records for storage).
-       *
-       * THE COUNTER AND THE BRAND MOVE TOGETHER. `inBrandBrain` runs this whole
-       * callback inside ONE PostgreSQL transaction, and `UsageService` runs
-       * inline on that same transaction rather than opening its own — so a
-       * `brand.create` that fails takes the consumption with it, and there is no
-       * window in which the plan is charged for a brand that does not exist.
-       *
-       * IDEMPOTENT ON THE BRAND THIS IS, not on the click. The key is the
-       * workspace and the normalised name — the same identity the replay guard
-       * above uses — so a retried submit that gets past the guard consumes the
-       * same slot rather than a second one.
-       */
-      await usage.consume({
-        workspaceId: session.workspace.workspaceId,
-        featureKey: QUOTA_FEATURES.brands,
-        limitValue: await entitlements.limit(session.workspace.workspaceId, QUOTA_FEATURES.brands),
-        period: 'total',
-        idempotencyKey: `brand:${session.workspace.workspaceId}:${name.toLowerCase()}`,
-        /*
-         * THE BRANDS THAT ALREADY EXIST.
-         *
-         * A `total` quota counts things, and the things predate the day the
-         * dimension was wired up: every brand made before this call site
-         * existed is in the table and not in the counter, and would have been
-         * free. The count runs inside this transaction, behind the counter
-         * row's own lock, so it is the population the new brand is joining and
-         * not a number that could have moved since it was read.
-         *
-         * THE PREDICATE IS DECLARED ONCE, beside the dimension it belongs to,
-         * so this action, the connected-account route and every suite agree
-         * about what occupies a slot.
-         */
-        baselineCount: (scoped) =>
-          TOTAL_RESOURCE_DIMENSIONS.brands.live(scoped, session.workspace.workspaceId),
-      });
-
-      // A slug derived from the name, with a short suffix so two brands called
-      // the same thing do not collide and so a soft-deleted brand does not hold
-      // its slug hostage. The unique index is per workspace.
-      const base =
-        name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '')
-          .slice(0, 40) || 'brand';
-      await db.brand.create({
-        data: {
-          workspaceId: session.workspace.workspaceId,
-          slug: `${base}-${randomUUID().slice(0, 6)}`,
-          name,
-          status: 'ACTIVE',
-          defaultLocale: locale === 'ar' ? 'AR' : 'EN',
-          supportedLocales: ['EN', 'AR'],
-        },
-      });
+    /*
+     * THE ONE CREATION PATH (`server/brand-creation.ts`), shared with the
+     * first-run Setup Wizard: idempotent on the name, counted against the
+     * plan's brand quota, and audited. The brand's content language is the
+     * form's explicit choice, else English (D-277) — never the UI locale.
+     */
+    const explicit = String(formData.get('defaultLocale') ?? '');
+    await createBrandFor(session, {
+      name,
+      defaultLocale: explicit === 'AR' ? 'AR' : 'EN',
+      supportedLocales: ['EN', 'AR'],
     });
     destination = pageUrl(locale, { ok: 'BRAND_CREATED' });
   } catch (error: unknown) {
@@ -315,6 +252,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
 export async function reviewCandidateAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
+  const back = backTo(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'brand_brain.review');
@@ -341,14 +279,19 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
         policy: (await policy()).staleness,
       });
     });
-    destination = pageUrl(locale, {
-      ok: parsed.decision === 'reject' ? 'CANDIDATE_REJECTED' : 'CANDIDATE_ACCEPTED',
-      area,
-    });
+    destination = pageUrl(
+      locale,
+      {
+        ok: parsed.decision === 'reject' ? 'CANDIDATE_REJECTED' : 'CANDIDATE_ACCEPTED',
+        area,
+      },
+      back,
+    );
   } catch (error: unknown) {
-    destination = failure(locale, error, 'review-candidate', { area });
+    destination = failure(locale, error, 'review-candidate', { area }, back);
   }
   revalidatePath(`/${locale}/brand-brain`);
+  revalidatePath(`/${locale}/onboarding`);
   redirect(destination);
 }
 
@@ -378,6 +321,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
 export async function uploadSourceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
+  const back = backTo(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'brand_brain.upload');
@@ -455,10 +399,11 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
         });
       }
     }
-    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area });
+    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'upload-source', { area });
+    destination = failure(locale, error, 'upload-source', { area }, back);
   }
   revalidatePath(`/${locale}/brand-brain`);
+  revalidatePath(`/${locale}/onboarding`);
   redirect(destination);
 }

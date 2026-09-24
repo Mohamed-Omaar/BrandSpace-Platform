@@ -154,13 +154,14 @@ test.describe('a stranger becomes a paying customer', () => {
     await signIn(page, customer.email);
     await createWorkspace(page, { country: 'SA' });
 
-    // --- The first-run checklist is DERIVED, so the workspace step is already
-    // done and the plan step is not.
+    // --- The first-run wizard is DERIVED, so the workspace step is already
+    // done and the brand step is not. (Choosing a plan is not a setup step
+    // since D-277 §6; the trial and the plans live in Settings > Plan/Billing.)
     await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
       'data-complete',
       'true',
     );
-    await expect(page.locator('[data-testid="onboarding-step-plan"]')).toHaveAttribute(
+    await expect(page.locator('[data-testid="onboarding-step-brand"]')).toHaveAttribute(
       'data-complete',
       'false',
     );

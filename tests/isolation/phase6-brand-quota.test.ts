@@ -148,7 +148,7 @@ async function freshWorkspace(planKey: string | null): Promise<string> {
  * Creating a brand exactly as the product does.
  *
  * The same order, the same idempotency key and the same live population as
- * `apps/dashboard/src/app/[locale]/brand-brain/actions.ts`: consume the slot
+ * `apps/dashboard/src/server/brand-creation.ts`: consume the slot
  * first, and only then write the row — so a refusal leaves no brand behind and
  * a failed write takes its consumption with it.
  *

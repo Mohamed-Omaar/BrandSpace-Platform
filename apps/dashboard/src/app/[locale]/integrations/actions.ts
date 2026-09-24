@@ -32,7 +32,11 @@ function pageUrl(
   params: Record<string, string> = {},
   back: ReturnTo = { path: '/integrations' },
 ): string {
-  const search = new URLSearchParams({ ...(back.tab ? { tab: back.tab } : {}), ...params });
+  const search = new URLSearchParams({
+    ...(back.path === '/onboarding' ? { step: 'connect' } : {}),
+    ...(back.tab ? { tab: back.tab } : {}),
+    ...params,
+  });
   const query = search.toString();
   return `/${locale}${back.path}${query ? `?${query}` : ''}`;
 }
@@ -41,19 +45,22 @@ function pageUrl(
  * WHERE AN ACTION RETURNS TO — a CLOSED SET, never a caller-supplied URL.
  *
  * The same cancel, retry and check controls now appear on Publishing (Phase 6
- * final, D-277) and on Settings > Connections. The form names which screen it
- * came from; anything outside this set returns to Connections, so a crafted
- * `returnTo` cannot send the browser anywhere else.
+ * final, D-277) and on Settings > Connections, and the Setup Wizard's
+ * "Connect socials" step starts the same OAuth flow (§6). The form names which
+ * screen it came from; anything outside this set returns to Connections, so a
+ * crafted `returnTo` cannot send the browser anywhere else.
  */
 interface ReturnTo {
-  readonly path: '/integrations' | '/publishing';
+  readonly path: '/integrations' | '/publishing' | '/onboarding';
   readonly tab?: 'queue' | 'published' | 'failed' | 'accounts' | undefined;
 }
 
 const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
 
 function returnToOf(formData: FormData): ReturnTo {
-  if (String(formData.get('returnTo') ?? '') !== '/publishing') return { path: '/integrations' };
+  const requested = String(formData.get('returnTo') ?? '');
+  if (requested === '/onboarding') return { path: '/onboarding' };
+  if (requested !== '/publishing') return { path: '/integrations' };
   const tab = String(formData.get('tab') ?? '');
   return {
     path: '/publishing',
@@ -94,6 +101,7 @@ function actorOf(session: WorkspaceSession) {
 /** Begin an OAuth authorization and send the customer to the provider. */
 export async function connectAccountAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
@@ -102,11 +110,11 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
 
     const result = await callSocialApi('/v1/social/connect', { provider, brandId });
     if (!result.ok) {
-      destination = pageUrl(locale, { error: upstreamCode(result.payload) });
+      destination = pageUrl(locale, { error: upstreamCode(result.payload) }, back);
     } else {
       const url = (result.payload as { authorizationUrl?: unknown }).authorizationUrl;
       if (typeof url !== 'string') {
-        destination = pageUrl(locale, { error: 'INTERNAL' });
+        destination = pageUrl(locale, { error: 'INTERNAL' }, back);
       } else {
         /*
          * STRAIGHT TO THE PROVIDER. The authorization URL is the only thing
@@ -122,7 +130,7 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
     // `redirect()` throws by design; re-throw so Next can handle it.
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     if ((error as { digest?: string }).digest?.startsWith('NEXT_REDIRECT')) throw error;
-    destination = failure(locale, error, 'connect');
+    destination = failure(locale, error, 'connect', back);
   }
   revalidatePath(`/${locale}/integrations`);
   redirect(destination!);

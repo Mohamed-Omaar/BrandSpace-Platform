@@ -720,12 +720,16 @@ export class StrategyService {
     );
 
     // The pillars the brand DECLARED, read from its own approved knowledge.
+    // A `goal.` key is the brand's GOAL (the Setup Wizard's first goal, D-277
+    // §6), which shares the STRATEGY area but is not a content pillar: no post
+    // is ever tagged with it, so counting it would report a permanent gap.
     const declared = await this.#db.brandKnowledgeItem.findMany({
       where: {
         workspaceId: this.#workspaceId,
         brandId,
         area: 'STRATEGY',
         status: { in: ['ACTIVE', 'STALE'] },
+        NOT: { itemKey: { startsWith: 'goal.' } },
       },
       select: { itemKey: true },
       take: 20,

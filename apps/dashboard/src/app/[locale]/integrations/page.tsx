@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { setupFactsFor } from '../../../server/setup-wizard';
+import { setupSteps } from '../../../server/setup-wizard-state';
 import { callSocialApi, inSocial } from '../../../server/social-context';
 import {
   optionalMessage,
@@ -95,6 +98,23 @@ export default async function IntegrationsPage({
     (landingStatus && landingStatus !== 'ACCOUNT_CONNECTED'
       ? statusMessage(landingStatus, locale)
       : null);
+
+  /*
+   * BACK INTO THE SETUP WIZARD (D-277 §6). The OAuth round trip always lands
+   * here — the API redirects to one configured address and must not grow a
+   * second — so a customer who connected from the wizard's "Connect socials"
+   * step is offered the way back. Only while the wizard is genuinely
+   * unfinished for the brand they are on, derived from the same real rows the
+   * wizard reads; an established customer reconnecting an account never sees it.
+   */
+  let resumeSetup = false;
+  if (landing !== null) {
+    const setupBrand = requiredBrand(await brandContextFor(workspace, '/onboarding'));
+    if (setupBrand) {
+      const steps = setupSteps(await setupFactsFor(workspace.workspaceId, setupBrand.id));
+      resumeSetup = steps.some((step) => step.key === 'goal' && !step.complete);
+    }
+  }
 
   const permissions = workspace.permissionKeys;
   const mayManage = permissions.includes('integrations.manage');
@@ -315,6 +335,14 @@ export default async function IntegrationsPage({
       <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
         {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
         {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+        {resumeSetup ? (
+          <CustomerBanner tone="info">
+            {t('setup.resume.body')}{' '}
+            <Link href={`/${locale}/onboarding?step=connect`} data-testid="setup-resume">
+              {t('setup.resume.link')}
+            </Link>
+          </CustomerBanner>
+        ) : null}
         <IntegrationsView
           locale={locale}
           t={t}

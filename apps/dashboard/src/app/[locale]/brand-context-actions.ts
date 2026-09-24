@@ -1,14 +1,8 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
-import {
-  ALL_BRANDS,
-  BRAND_COOKIE,
-  brandCookieValue,
-  listAccessibleBrands,
-  safeReturnPath,
-} from '../../server/brand-context';
+import { ALL_BRANDS, listAccessibleBrands, safeReturnPath } from '../../server/brand-context';
+import { rememberBrand } from '../../server/brand-cookie';
 import { requireWorkspace } from '../../server/customer-context';
 import { scopeForPath } from '../../server/route-scope';
 
@@ -69,32 +63,7 @@ export async function selectBrandAction(formData: FormData): Promise<void> {
     value = brand.id;
   }
 
-  const store = await cookies();
-  store.set(BRAND_COOKIE, brandCookieValue(session.workspace.workspaceId, value), {
-    /*
-     * HTTP-ONLY, because nothing in the browser needs to read it: the server
-     * resolves the context and renders the result. A value scripts cannot touch
-     * is one an injected script cannot silently move somebody's work onto
-     * another brand with.
-     */
-    httpOnly: true,
-    sameSite: 'lax',
-    // Lax rather than Strict so following a colleague's link into the dashboard
-    // still arrives with the reader's own selection intact.
-    /*
-     * SECURE UNCONDITIONALLY, exactly as the session cookie is set. An
-     * environment-dependent flag would mean the one environment where somebody
-     * forgets to set the variable is the one that ships a cookie over plain
-     * HTTP — and localhost is treated as a secure origin, so nothing local
-     * needs the exception.
-     */
-    secure: true,
-    path: '/',
-    // A YEAR, because a preference that expires mid-session is a preference
-    // that looks like a bug. It carries no authority, so its lifetime is a
-    // convenience question rather than a security one.
-    maxAge: 60 * 60 * 24 * 365,
-  });
+  await rememberBrand(session.workspace.workspaceId, value);
 
   redirect(destination);
 }

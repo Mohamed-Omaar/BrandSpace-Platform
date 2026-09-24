@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { withPlatformPrisma } from './platform-prisma';
@@ -89,37 +90,188 @@ async function createWorkspace(page: Page, locale = 'en'): Promise<void> {
 }
 
 test.describe('onboarding reaches a first real brand', () => {
-  test('THE HAPPY PATH: workspace, then a brand, from the checklist itself', async ({ page }) => {
-    await signUpVerifyAndSignIn(page);
+  /*
+   * PHASE 6 FINAL (D-277 §6): THE CHECKLIST BECAME A GUIDED WIZARD.
+   *
+   * The defect above cannot recur in the same shape — the brand is created ON
+   * the wizard's own first step, not on a page a link points at — but the
+   * assertion that matters is the same: a new customer finishes setup holding
+   * a real brand. This walks the whole journey the owner specified, against
+   * the real services and the real worker: add a brand, give the Brand Brain a
+   * document, review what it extracted, skip connecting, choose a first goal,
+   * land on "You're ready to start".
+   */
+  test('THE HAPPY PATH: the wizard walks from a new workspace to “You’re ready to start”', async ({
+    page,
+  }) => {
+    test.slow();
+    const email = await signUpVerifyAndSignIn(page);
     await createWorkspace(page);
 
-    // The checklist is showing, and the brand step is not yet done.
-    const brandStep = page.locator('[data-testid="onboarding-step-brand"]');
-    await expect(brandStep).toBeVisible();
-
-    /*
-     * FOLLOW THE STEP'S OWN LINK. This is the whole assertion: before the fix
-     * it led to `/settings/brand`, which has no way to create a brand, so the
-     * customer could not finish the step the product had just asked them to.
-     */
-    await brandStep.locator('a').first().click();
-    await page.waitForLoadState('domcontentloaded');
-
-    const create = page.getByTestId('create-brand');
-    await expect(create).toBeVisible();
-    await page.fill('[data-testid="new-brand-name"]', BRAND_NAME);
-    await create.click();
-    await page.waitForLoadState('domcontentloaded');
-
-    // A USABLE BRAND EXISTS, and the empty state is gone.
-    await expect(page.getByTestId('brand-brain-no-brand')).toHaveCount(0);
-
-    // And the checklist now says so, rather than the customer having to guess.
-    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding`);
-    await expect(page.locator('[data-testid="onboarding-step-brand"]')).toHaveAttribute(
+    // The wizard is showing, on the brand step, and only the workspace is done.
+    const wizard = page.getByTestId('setup-wizard');
+    await expect(wizard).toHaveAttribute('data-view', 'brand');
+    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
       'data-complete',
       'true',
     );
+    const brandStep = page.locator('[data-testid="onboarding-step-brand"]');
+    await expect(brandStep).toHaveAttribute('data-complete', 'false');
+
+    // English is preselected as the brand's content language (D-277).
+    await expect(page.getByTestId('setup-brand-locale')).toHaveValue('EN');
+
+    // --- Step 2: the brand, created on the wizard's own screen.
+    await page.fill('[data-testid="setup-brand-name"]', BRAND_NAME);
+    await page.fill('#setup-brand-website', 'https://onboarding.example');
+    await page.fill('#setup-brand-industry', 'Retail');
+    await page.getByTestId('setup-create-brand').click();
+    await page.waitForURL(/step=learn/);
+    await expect(page).toHaveURL(/ok=BRAND_CREATED/);
+    await expect(wizard).toHaveAttribute('data-view', 'learn');
+    await expect(brandStep).toHaveAttribute('data-complete', 'true');
+
+    // --- Step 3: the Brand Brain's own upload, returning here.
+    await page.getByTestId('setup-upload-input').setInputFiles({
+      name: `setup-notes-${Date.now()}.txt`,
+      mimeType: 'text/plain',
+      buffer: Buffer.from(
+        [
+          'Our mission is to help independent retailers compete with national chains.',
+          '',
+          'Our audience is founders of small retail businesses in the Gulf region.',
+          '',
+          'We never make price comparisons against named competitors.',
+        ].join('\n'),
+        'utf8',
+      ),
+    });
+    await page.getByTestId('setup-upload-submit').click();
+    await page.waitForURL(/step=learn/);
+    await expect(page).toHaveURL(/ok=SOURCE_UPLOADED/);
+    await expect(page.locator('[data-testid="onboarding-step-learn"]')).toHaveAttribute(
+      'data-complete',
+      'true',
+    );
+
+    // --- Step 4: review. The worker reads the document on its own; the page
+    // is polled, never the queue.
+    await page.getByTestId('setup-continue').click();
+    await page.waitForURL(/step=review/);
+    const candidate = page.locator('[data-testid^="setup-candidate-"]').first();
+    const allDone = page.getByTestId('setup-review-done');
+    await expect(async () => {
+      await page.reload();
+      await expect(candidate.or(allDone)).toBeVisible();
+    }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 3_000] });
+    if (await candidate.isVisible()) {
+      await candidate.locator('[data-testid^="setup-accept-"]').first().click();
+      await page.waitForURL(/step=review/);
+      await expect(page).toHaveURL(/ok=CANDIDATE_ACCEPTED/);
+    }
+
+    // --- Step 5: connecting is offered, and skipping is a link — no post, no
+    // provider call.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding?step=connect`);
+    await expect(page.getByTestId('setup-connect')).toBeVisible();
+    await page.getByTestId('setup-skip').click();
+    await page.waitForURL(/step=goal/);
+
+    // --- Step 6: the first goal, into the brand's strategy memory.
+    await page.getByTestId('setup-goal-leads').check();
+    await page.getByTestId('setup-goal-submit').click();
+    await page.waitForURL(/step=done/);
+    await expect(page).toHaveURL(/ok=GOAL_SAVED/);
+    await expect(page.locator('[data-testid="onboarding-step-goal"]')).toHaveAttribute(
+      'data-complete',
+      'true',
+    );
+
+    // --- Step 7: the finish line, with a real next action.
+    await expect(page.getByTestId('setup-done')).toBeVisible();
+    await expect(
+      page.getByTestId('setup-create-post').or(page.getByTestId('setup-plan')).first(),
+    ).toBeVisible();
+    await expect(page.getByTestId('setup-home')).toHaveAttribute('href', '/en/overview');
+
+    // THE DATA, not the screen: one brand, audited; the goal is a HUMAN
+    // knowledge item in STRATEGY memory — not a wizard-only field.
+    const stored = await withPlatformPrisma(async (prisma) => {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        select: { memberships: { select: { workspaceId: true }, take: 1 } },
+      });
+      const workspaceId = user.memberships[0]?.workspaceId ?? '';
+      const brands = await prisma.brand.findMany({
+        where: { workspaceId, deletedAt: null },
+        select: { id: true, defaultLocale: true, websiteUrl: true, industry: true },
+      });
+      const goal = await prisma.brandKnowledgeItem.findFirst({
+        where: { workspaceId, itemKey: 'goal.primary' },
+        select: { area: true, memory: true, origin: true, status: true, title: true },
+      });
+      const audits = await prisma.auditEvent.count({
+        where: { workspaceId, action: 'brand.created' },
+      });
+      return { brands, goal, audits };
+    });
+    expect(stored.brands).toHaveLength(1);
+    expect(stored.brands[0]).toMatchObject({
+      defaultLocale: 'EN',
+      websiteUrl: 'https://onboarding.example',
+      industry: 'Retail',
+    });
+    expect(stored.goal).toMatchObject({
+      area: 'STRATEGY',
+      memory: 'STRATEGY',
+      origin: 'HUMAN',
+      status: 'ACTIVE',
+      title: { en: 'Generate leads' },
+    });
+    expect(stored.audits).toBe(1);
+
+    // The wizard in Arabic: right-to-left, and clean under an accessibility scan.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/onboarding?step=goal`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('setup-goal-leads')).toBeChecked();
+    const results = await new AxeBuilder({ page })
+      .include('[data-testid="setup-wizard"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze();
+    expect(
+      results.violations.map(
+        (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`,
+      ),
+    ).toEqual([]);
+  });
+
+  test('“I’M NOT SURE” STORES NOTHING, and the wizard still ends', async ({ page }) => {
+    const email = await signUpVerifyAndSignIn(page);
+    await createWorkspace(page);
+    await page.fill('[data-testid="setup-brand-name"]', BRAND_NAME);
+    await page.getByTestId('setup-create-brand').click();
+    await page.waitForURL(/step=learn/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding?step=goal`);
+    await page.getByTestId('setup-goal-unsure').check();
+    await page.getByTestId('setup-goal-submit').click();
+    await page.waitForURL(/step=done/);
+    await expect(page.getByTestId('setup-done')).toBeVisible();
+    await expect(page.locator('[data-testid="onboarding-step-goal"]')).toHaveAttribute(
+      'data-complete',
+      'false',
+    );
+
+    const goals = await withPlatformPrisma(async (prisma) => {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        select: { memberships: { select: { workspaceId: true }, take: 1 } },
+      });
+      return prisma.brandKnowledgeItem.count({
+        where: { workspaceId: user.memberships[0]?.workspaceId ?? '', itemKey: 'goal.primary' },
+      });
+    });
+    expect(goals).toBe(0);
   });
 
   test('THE RETRY PATH: creating the same brand twice makes one brand', async ({ page }) => {
