@@ -62,7 +62,7 @@ export function safeConsoleReturnPath(
   const path = candidate.split(/[?#]/, 1)[0] ?? '';
   if (path !== home && !path.startsWith(`${home}/`)) return home;
   // `/en/console/..//evil` and friends: only plain path segments survive.
-  if (!/^\/[a-z]{2}\/console(\/[A-Za-z0-9._~%-]+)*\/?$/.test(path)) return home;
+  if (!/^\/[a-z]{2}\/console(\/[A-Za-z0-9._~-]+)*\/?$/.test(path)) return home;
   if (path.split('/').some((segment) => segment === '..' || segment === '.')) return home;
   return path;
 }

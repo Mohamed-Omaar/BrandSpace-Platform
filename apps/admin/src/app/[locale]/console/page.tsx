@@ -13,6 +13,8 @@ import {
 } from '@brandspace/ui';
 import { PageIntro } from '../../../components/admin-shell';
 import { translator } from '../../../i18n/messages';
+import { SimpleHome } from '../../../components/simple/home';
+import { getConsoleMode } from '../../../server/console-mode-cookie';
 import {
   currentEnvironment,
   getConfigService,
@@ -25,7 +27,13 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-/** Overview — real counts from the platform database, not placeholders. */
+/**
+ * Home / Overview — real counts from the platform database, not placeholders.
+ *
+ * ONE ROUTE, TWO PRESENTATIONS (D-307). Simple mode renders the owner's home;
+ * Advanced renders the technical overview below, unchanged. The guard runs
+ * first and is the same for both.
+ */
 export default async function OverviewPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
@@ -33,6 +41,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ local
   // actor's permissions: a role that may not read secrets does not learn how
   // many exist from a summary tile.
   const actor = await requirePageActor(locale, 'platform.workspace.read');
+  if ((await getConsoleMode()) === 'simple') return <SimpleHome locale={locale} actor={actor} />;
   const mayReadConfig = actor.permissionKeys.includes('platform.configuration.read');
   const mayReadSecrets = actor.permissionKeys.includes('platform.secret.read');
 
