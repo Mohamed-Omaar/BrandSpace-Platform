@@ -9,7 +9,7 @@ import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitleme
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { optionalMessage, translator } from '../../../i18n/messages';
-import { ceilingFor, planDisplayName } from '../../../server/plan-usage';
+import { ceilingFor, featureDisplayName, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { BillingTabs } from '../../../components/billing-tabs';
@@ -65,10 +65,12 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const mayReadCredits = workspace.permissionKeys.includes('credits.read');
   const mayReadBilling = workspace.permissionKeys.includes('billing.read');
 
-  const { effective, wallet, grants, ledger, subscription, counters } = await inWorkspace(
+  const { effective, features, wallet, grants, ledger, subscription, counters } = await inWorkspace(
     workspace.workspaceId,
     async ({ entitlements, credits, ledger: creditLedger, subscriptions, usage }) => ({
       effective: await entitlements.resolveAll(workspace.workspaceId),
+      // The registry the decisions were resolved from — for the names only.
+      features: (await entitlements.catalogue()).features,
       // Credits are gated on their own permission, not on being signed in: a
       // member without `credits.read` sees the page without the balance.
       wallet: mayReadCredits ? await credits.wallet(workspace.workspaceId) : null,
@@ -477,7 +479,9 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                 <tbody>
                   {effective.decisions.map((d) => (
                     <tr key={d.featureKey} data-testid={`feature-${d.featureKey}`}>
-                      <td style={customerTdStyle()}>{d.featureKey}</td>
+                      <td style={customerTdStyle()}>
+                        {featureDisplayName(d.featureKey, features, locale)}
+                      </td>
                       <td style={customerTdStyle()}>
                         {d.enabled ? t('common.enabled') : t('common.disabled')}
                       </td>
@@ -514,7 +518,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                   data-testid={`upgrade-${decision.featureKey}`}
                   style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
                 >
-                  {decision.featureKey}
+                  {featureDisplayName(decision.featureKey, features, locale)}
                 </li>
               ))}
             </ul>

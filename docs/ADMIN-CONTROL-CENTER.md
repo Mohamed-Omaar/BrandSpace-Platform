@@ -951,3 +951,11 @@ are F-89 … F-97 in `docs/DECISIONS.md`.
 screens they present. The two new write actions (the AI profile and feature access) require both
 `platform.configuration.manage` and `platform.configuration.activate`, and `ConfigurationService`
 re-checks each.
+
+### 23.7 Changes outside the Control Center
+
+- **`packages/ui`** — `ShellNavItem.hidden`, the Control Center's English default locale, and the removal of
+  the placeholder top-bar controls (D-307 … D-310).
+- **Customer Plan screen (`apps/dashboard`, `/plan`)**: a feature is now named by its registered name in the
+  reader's language rather than its key, with the key as a fallback where the registry has no name. This
+  surfaced when the development seed registered real features (D-314). No other customer screen changed.
