@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 /**
  * THE ONE `<img>` THE LIBRARY RENDERS (Phase 6 final acceptance, D-306).
@@ -21,6 +21,15 @@ export function MediaImage({
   readonly style: CSSProperties;
 }) {
   const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
+  // A server-rendered image can fail before hydration attaches `onError`, so
+  // the error is also read from the element itself once it is on the page.
+  useEffect(() => {
+    const image = ref.current;
+    // `decode()` rejects only for an image that cannot be shown — unlike a
+    // zero `naturalWidth`, which a valid SVG without dimensions also reports.
+    if (image && image.complete) image.decode().catch(() => setFailed(true));
+  }, [src]);
   if (failed) return null;
-  return <img src={src} alt={alt} style={style} onError={() => setFailed(true)} />;
+  return <img ref={ref} src={src} alt={alt} style={style} onError={() => setFailed(true)} />;
 }
