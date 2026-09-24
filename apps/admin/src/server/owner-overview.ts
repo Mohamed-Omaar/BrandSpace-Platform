@@ -15,6 +15,7 @@ import {
   type IntegrationView,
 } from '@brandspace/integrations';
 import { evaluateHealth, tracingStatus, type HealthReport } from '@brandspace/observability';
+import { systemClock, type Clock } from '@brandspace/shared';
 import {
   WITHHELD,
   areaHref,
@@ -153,8 +154,9 @@ export interface TrialEnding {
 export async function loadTrialsEnding(
   days: number,
   take = 10,
+  clock: Clock = systemClock,
 ): Promise<{ readonly count: number; readonly items: readonly TrialEnding[] }> {
-  const now = new Date();
+  const now = clock.now();
   const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   const where = { status: 'TRIALING' as const, trialEndsAt: { gte: now, lte: until } };
   const prisma = getPlatformPrisma();
@@ -277,14 +279,18 @@ export interface AiSummary {
   readonly stuckRequests: number | null;
 }
 
-export async function loadAiSummary(actor: Actor, days = 30): Promise<AiSummary> {
+export async function loadAiSummary(
+  actor: Actor,
+  days = 30,
+  clock: Clock = systemClock,
+): Promise<AiSummary> {
   const environment = currentEnvironment();
   const routing = await getConfigService().get('ai.capability-routing', environment);
   let usage: AiSummary['usage'] = null;
   let stuckRequests: number | null = null;
   if (may(actor, 'platform.ai.usage.read')) {
     const explorer = getAiUsageExplorer();
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const since = new Date(clock.now().getTime() - days * 24 * 60 * 60 * 1000);
     const [rows, leaks] = await Promise.all([
       explorer.rollup(serviceActor(actor), 'taskKey', { since }),
       explorer.leakCount(serviceActor(actor)),

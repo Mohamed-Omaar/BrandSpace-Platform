@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { Secret, TOTP } from 'otpauth';
 import { DASHBOARD_BASE_URL, ADMIN_BASE_URL } from './apps';
+import { useMode } from './admin-session';
 import { E2E_CREDENTIALS_FILE, repoRoot, type E2eAdminCredentials } from './env';
 
 /**
@@ -137,6 +138,9 @@ async function signInAdmin(page: Page, locale = 'en'): Promise<void> {
   );
   await page.getByTestId('submit').click();
   await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/console`);
+  // This evidence set is of the technical screens, which Advanced mode keeps
+  // unchanged (D-307); Simple mode has its own review set.
+  await useMode(page, 'advanced');
 }
 
 test.describe('visual review evidence', () => {

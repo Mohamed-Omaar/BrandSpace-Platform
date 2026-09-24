@@ -40,7 +40,7 @@ function read(file: string): string {
 }
 
 describe('D-277 · the customer interface defaults to English', () => {
-  it('the customer default is English; the website and Control Center keep theirs', () => {
+  it('the customer default is English; the website keeps Arabic (the Control Center has its own, D-310)', () => {
     expect(CUSTOMER_DEFAULT_LOCALE).toBe('en');
     expect(DEFAULT_LOCALE).toBe('ar');
   });

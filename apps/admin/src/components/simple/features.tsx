@@ -1,4 +1,5 @@
 import type { AuthenticatedPlatformActor } from '@brandspace/auth';
+import { systemClock } from '@brandspace/shared';
 import { readPlanCatalogue, type PlanDetail } from '@brandspace/entitlements';
 import {
   Banner,
@@ -105,7 +106,7 @@ export async function SimpleFeatures({
     loadCustomersPerPlan(),
     getPlatformPrisma().workspaceOverride.groupBy({
       by: ['featureKey'],
-      where: { OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: new Date() } }] },
+      where: { OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: systemClock.now() } }] },
       _count: { _all: true },
     }),
   ]);
