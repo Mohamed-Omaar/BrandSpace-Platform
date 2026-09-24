@@ -139,7 +139,13 @@ describe('no application source carries its own copy of a policy value', () => {
     const walk = (current: string): void => {
       for (const entry of readdirSync(current)) {
         const full = path.join(current, entry);
-        if (statSync(full).isDirectory()) {
+        let isDirectory: boolean;
+        try {
+          isDirectory = statSync(full).isDirectory();
+        } catch {
+          continue; // a probe file planted and removed by another suite
+        }
+        if (isDirectory) {
           if (entry === 'node_modules' || entry === '.next') continue;
           walk(full);
         } else if (/\.tsx?$/.test(entry)) {
@@ -165,7 +171,12 @@ describe('no application source carries its own copy of a policy value', () => {
   it('assigns no Brand Brain policy value as a literal', () => {
     const offenders: string[] = [];
     for (const file of files) {
-      const source = readFileSync(path.join(ROOT, file), 'utf8');
+      let source: string;
+      try {
+        source = readFileSync(path.join(ROOT, file), 'utf8');
+      } catch {
+        continue; // a probe file planted and removed by another suite
+      }
       for (const [index, line] of source.split('\n').entries()) {
         const trimmed = line.trim();
         // Comments and JSDoc legitimately name these properties.
