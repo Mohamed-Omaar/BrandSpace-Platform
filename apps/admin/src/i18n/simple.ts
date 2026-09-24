@@ -149,6 +149,67 @@ const en = {
   'profile.custom.about': 'Use the routing rules set in Advanced mode.',
   'severity.warning': 'Important',
   'severity.info': 'For your information',
+  // Integrations.
+  'int.intro':
+    'Everything BrandSpace connects to, grouped by what it does. Credentials you enter here are stored encrypted and can never be read back — you never need the Secrets screen for normal setup.',
+  'int.noPermission':
+    'Your role can see configuration but not credential status, so connection states cannot be shown. Ask the platform owner for access.',
+  'int.options': '{count} option(s)',
+  'int.choose': 'Choose a provider',
+  'int.chooseIntro':
+    'Pick the provider you want to use for {area}. Only providers BrandSpace has a working connector for are listed.',
+  'int.allIntegrations': '← All integrations',
+  'int.provider.active': 'In use',
+  'int.provider.notActive': 'Not in use',
+  'int.devDouble': 'Development stand-in — never used for real customers',
+  'int.socialNote':
+    'This is BrandSpace’s own registration with each social network. Your customers later connect their own accounts from their dashboard through the network’s sign-in page — they never give BrandSpace a password. Networks may require business verification or app review before they allow publishing; BrandSpace cannot skip that.',
+  'int.noRealProvider':
+    'No real provider is available for this yet. Adding one is an engineering change (a new connector); once it exists it appears here automatically.',
+  // Guided setup.
+  'setup.step': 'Step {n}',
+  'setup.done': 'Done',
+  'setup.todo': 'To do',
+  'setup.blocked': 'Not possible here',
+  'setup.what': 'What this does',
+  'setup.need': 'What you need from {provider}',
+  'setup.needNothing': 'Nothing — this provider needs no settings or credentials.',
+  'setup.needCredential': 'secret, stored encrypted',
+  'setup.addresses': 'Addresses to give {provider}',
+  'setup.addressesIntro': 'BrandSpace generates these. Copy them into the provider’s settings.',
+  'setup.details': 'Settings and credentials',
+  'setup.detailsIntro': 'Saving stores these safely. It does not switch anything on.',
+  'setup.detailsNone': 'This provider has nothing to fill in.',
+  'setup.detailsForbidden': 'Your role cannot change these settings.',
+  'setup.credentialSaved':
+    'Saved (ending …{hint}). Leave blank to keep it; entering a new value replaces it.',
+  'setup.credentialMissing': 'Not saved yet.',
+  'setup.save': 'Save settings',
+  'setup.test': 'Test the connection',
+  'setup.testIntro':
+    'BrandSpace makes a minimal real request and records the result. Testing switches nothing on.',
+  'setup.testNotPossible': 'This provider cannot be tested from the Control Center.',
+  'setup.testRun': 'Test now',
+  'setup.testOk': 'Passed {when}.',
+  'setup.testFailed': 'Failed {when}: {message}',
+  'setup.testNever': 'Not tested yet.',
+  'setup.testNotConfigured': 'The last test found missing settings.',
+  'setup.testRefused': 'The last test was refused: {message}',
+  'setup.activate': 'Review and switch on',
+  'setup.activateIntro':
+    'Switching on makes {provider} the one BrandSpace uses for {area}. It is recorded with your reason and can be reversed.',
+  'setup.activeNow': '{provider} is switched on.',
+  'setup.switchOn': 'Switch on {provider}',
+  'setup.switchOff': 'Switch off {provider}',
+  'setup.switchOffConfirm':
+    'I understand {area} stops working for customers until another provider is switched on.',
+  'setup.refused': 'Cannot be switched on here: {reason}',
+  'setup.forbidden': 'Your role cannot switch providers on or off.',
+  'setup.nextProfile': 'Next: choose how AI balances cost and quality',
+  'setup.ok.CONFIGURATION_SAVED': 'Settings saved. Nothing was switched on.',
+  'setup.ok.CONNECTION_TESTED': 'Test finished — the result is shown in step {n}.',
+  'setup.ok.INTEGRATION_ACTIVATED': 'Switched on.',
+  'setup.ok.INTEGRATION_DISABLED': 'Switched off.',
 } as const;
 
 type Copy = { readonly [K in keyof typeof en]: string };
@@ -282,6 +343,64 @@ const ar: Copy = {
   'profile.custom.about': 'استخدام قواعد التوجيه المحددة في الوضع المتقدم.',
   'severity.warning': 'مهم',
   'severity.info': 'للعلم',
+  'int.intro':
+    'كل ما ترتبط به BrandSpace، مجمّعًا حسب وظيفته. بيانات الاعتماد التي تُدخلها هنا تُحفظ مشفّرة ولا يمكن قراءتها مجددًا — لا تحتاج شاشة المفاتيح السرية للإعداد المعتاد.',
+  'int.noPermission':
+    'دورك يرى الإعدادات لكن لا يرى حالة بيانات الاعتماد، لذا لا يمكن عرض حالة الاتصال. اطلب الصلاحية من مالك المنصة.',
+  'int.options': '{count} من الخيارات',
+  'int.choose': 'اختر مزودًا',
+  'int.chooseIntro':
+    'اختر المزود الذي تريد استخدامه لـ{area}. تظهر هنا فقط المزودات التي تملك BrandSpace موصّلًا يعمل معها.',
+  'int.allIntegrations': 'كل التكاملات ←',
+  'int.provider.active': 'قيد الاستخدام',
+  'int.provider.notActive': 'غير مستخدم',
+  'int.devDouble': 'بديل تطويري — لا يُستخدم أبدًا للعملاء الحقيقيين',
+  'int.socialNote':
+    'هذا تسجيل BrandSpace الخاص لدى كل شبكة اجتماعية. يربط عملاؤك حساباتهم لاحقًا من لوحة تحكمهم عبر صفحة تسجيل الدخول الخاصة بالشبكة — ولا يعطون BrandSpace كلمة مرور أبدًا. قد تشترط الشبكات توثيق النشاط التجاري أو مراجعة التطبيق قبل السماح بالنشر، ولا تستطيع BrandSpace تجاوز ذلك.',
+  'int.noRealProvider':
+    'لا يتوفر مزود حقيقي لهذا بعد. إضافة مزود تغيير هندسي (موصّل جديد)، وبمجرد توفره يظهر هنا تلقائيًا.',
+  'setup.step': 'الخطوة {n}',
+  'setup.done': 'تم',
+  'setup.todo': 'مطلوب',
+  'setup.blocked': 'غير ممكن هنا',
+  'setup.what': 'ماذا يفعل',
+  'setup.need': 'ما تحتاجه من {provider}',
+  'setup.needNothing': 'لا شيء — هذا المزود لا يحتاج إعدادات ولا بيانات اعتماد.',
+  'setup.needCredential': 'سري، يُحفظ مشفّرًا',
+  'setup.addresses': 'عناوين تُعطى لـ{provider}',
+  'setup.addressesIntro': 'تولّدها BrandSpace. انسخها إلى إعدادات المزود.',
+  'setup.details': 'الإعدادات وبيانات الاعتماد',
+  'setup.detailsIntro': 'الحفظ يخزّنها بأمان، ولا يشغّل شيئًا.',
+  'setup.detailsNone': 'لا يوجد ما يُملأ لهذا المزود.',
+  'setup.detailsForbidden': 'دورك لا يسمح بتغيير هذه الإعدادات.',
+  'setup.credentialSaved':
+    'محفوظ (ينتهي بـ…{hint}). اتركه فارغًا للإبقاء عليه؛ إدخال قيمة جديدة يستبدله.',
+  'setup.credentialMissing': 'لم يُحفظ بعد.',
+  'setup.save': 'حفظ الإعدادات',
+  'setup.test': 'اختبار الاتصال',
+  'setup.testIntro':
+    'ترسل BrandSpace طلبًا حقيقيًا صغيرًا وتسجّل النتيجة. الاختبار لا يشغّل شيئًا.',
+  'setup.testNotPossible': 'لا يمكن اختبار هذا المزود من مركز التحكم.',
+  'setup.testRun': 'اختبر الآن',
+  'setup.testOk': 'نجح {when}.',
+  'setup.testFailed': 'فشل {when}: {message}',
+  'setup.testNever': 'لم يُختبر بعد.',
+  'setup.testNotConfigured': 'وجد آخر اختبار إعدادات ناقصة.',
+  'setup.testRefused': 'رُفض آخر اختبار: {message}',
+  'setup.activate': 'المراجعة والتشغيل',
+  'setup.activateIntro':
+    'التشغيل يجعل {provider} المزود الذي تستخدمه BrandSpace لـ{area}. يُسجَّل مع سببك ويمكن التراجع عنه.',
+  'setup.activeNow': '{provider} قيد التشغيل.',
+  'setup.switchOn': 'تشغيل {provider}',
+  'setup.switchOff': 'إيقاف {provider}',
+  'setup.switchOffConfirm': 'أفهم أن {area} سيتوقف عن العمل للعملاء حتى يُشغَّل مزود آخر.',
+  'setup.refused': 'لا يمكن التشغيل هنا: {reason}',
+  'setup.forbidden': 'دورك لا يسمح بتشغيل المزودات أو إيقافها.',
+  'setup.nextProfile': 'التالي: اختر كيف يوازن الذكاء الاصطناعي بين التكلفة والجودة',
+  'setup.ok.CONFIGURATION_SAVED': 'حُفظت الإعدادات. لم يُشغَّل شيء.',
+  'setup.ok.CONNECTION_TESTED': 'انتهى الاختبار — النتيجة في الخطوة {n}.',
+  'setup.ok.INTEGRATION_ACTIVATED': 'تم التشغيل.',
+  'setup.ok.INTEGRATION_DISABLED': 'تم الإيقاف.',
 };
 
 export type SimpleKey = keyof typeof en;

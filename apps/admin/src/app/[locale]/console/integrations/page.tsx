@@ -6,6 +6,8 @@ import {
 } from '@brandspace/integrations';
 import { SectionHeader, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
+import { SimpleIntegrations } from '../../../../components/simple/integrations';
+import { getConsoleMode } from '../../../../server/console-mode-cookie';
 import {
   currentEnvironment,
   getIntegrationsService,
@@ -36,10 +38,13 @@ export const dynamic = 'force-dynamic';
  */
 export default async function IntegrationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
+  const query = await searchParams;
   /*
    * The configuration READ permission, because that is what this page is: a
    * view over configuration and masked credential metadata. Every mutating
@@ -47,6 +52,11 @@ export default async function IntegrationsPage({
    * guard is not authorization for an action (docs/SECURITY.md §4).
    */
   const actor = await requirePageActor(locale, 'platform.configuration.read');
+  // Simple mode: purpose cards and guided setup over the same services (D-307).
+  if ((await getConsoleMode()) === 'simple') {
+    const category = typeof query['category'] === 'string' ? query['category'] : null;
+    return <SimpleIntegrations locale={locale} actor={actor} category={category} />;
+  }
   const isArabic = locale === 'ar';
   const environment = currentEnvironment();
 

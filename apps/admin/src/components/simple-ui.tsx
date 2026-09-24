@@ -55,7 +55,7 @@ export function AreaBadge({
   readonly locale: string;
   readonly state: AreaState;
   readonly plans?: boolean;
-  readonly testId?: string;
+  readonly testId?: string | undefined;
 }) {
   return (
     <StatusBadge
@@ -77,7 +77,7 @@ export function ActionLink({
   readonly href: string;
   readonly children: ReactNode;
   readonly variant?: 'primary' | 'neutral' | 'ghost' | 'brand';
-  readonly testId?: string;
+  readonly testId?: string | undefined;
 }) {
   return (
     <Link
@@ -283,10 +283,10 @@ export function SimpleSection({
   testId,
 }: {
   readonly title: string;
-  readonly description?: string;
+  readonly description?: string | undefined;
   readonly actions?: ReactNode;
   readonly children: ReactNode;
-  readonly testId?: string;
+  readonly testId?: string | undefined;
 }) {
   return (
     <section data-testid={testId}>
@@ -304,4 +304,24 @@ export function flash(query: Record<string, string | string[] | undefined>): {
 } {
   const one = (key: string) => (typeof query[key] === 'string' ? (query[key] as string) : null);
   return { ok: one('ok'), error: one('error'), ref: one('ref') };
+}
+
+/** Locale-aware date and time; Arabic uses Western Arabic numerals (CLAUDE.md §4). */
+export function formatWhen(locale: string, date: Date): string {
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+/** A locale-aware date without the time. */
+export function formatDay(locale: string, date: Date): string {
+  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+    dateStyle: 'medium',
+  }).format(date);
+}
+
+/** A locale-aware whole number. */
+export function formatCount(locale: string, value: number): string {
+  return new Intl.NumberFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en').format(value);
 }
