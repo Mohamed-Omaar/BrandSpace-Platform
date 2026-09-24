@@ -461,6 +461,14 @@ job row a 3rem `AssetThumb` column — or a `surfaceMuted` tile with the title's
 post — plus a readiness `StatusBadge` and a `success`-token line for "Account reconnected". No new visual
 treatment.
 
+### 6.3.17 Phase 6 final — Strategy as a plan (D-292)
+
+`/[locale]/strategy` keeps its §6 extension primitives (`Card`, `SectionHeader`, `StatusBadge`, list rows)
+in a two-column auto-fit grid for Audience / Key messages and Pillars / Channel mix. Shares are drawn as a
+6px `surfaceMuted` track with a `brandPurple` fill beside the number (the number is the fact; the bar is
+`aria-hidden`). Proposals use a dashed `border` frame to read as not-yet-accepted. No new colour, font or
+shadow.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -1604,6 +1604,16 @@ export const messages = {
     'insights.explain': 'اشرح الأداء',
     'insights.explainHint': 'يستهلك رصيد ذكاء اصطناعي. يعتمد فقط على القياسات المخزّنة.',
     'insights.evidence': 'الأدلة',
+    'insights.evidenceLabel.content.none_in_window': 'لم يُنشر أي منشور في هذه الفترة',
+    'insights.evidenceLabel.content.pillar_unpublished': 'محور معلن بلا منشور في هذه الفترة',
+    'insights.evidenceLabel.content.platform_unused': 'حساب مرتبط لم يُنشر عليه شيء في هذه الفترة',
+    'insights.evidenceLabel.content.top_performer': 'منشور من الأعلى أداءً',
+    'insights.evidenceLabel.knowledge.approved': 'معرفة معتمدة في عقل العلامة',
+    'insights.evidenceLabel.metric.period_change': 'التغير مقارنة بالفترة السابقة',
+    'insights.evidenceLabel.metric.total': 'الإجمالي للفترة',
+    'insights.evidenceLabel.metric.anomaly_above': 'أعلى من المعتاد مقارنة بخط الأساس',
+    'insights.evidenceLabel.metric.anomaly_below': 'أقل من المعتاد مقارنة بخط الأساس',
+    'insights.evidenceLabel.unknown': 'دليل',
     'insights.evidenceCount': 'عدد الأدلة',
     'insights.insufficientTitle': 'لا توجد بيانات كافية بعد',
     'insights.insufficientBody': 'لم يُستهلك أي رصيد. ستتوفر الشروح بعد تراكم قياسات كافية.',
@@ -1653,6 +1663,36 @@ export const messages = {
     'intelligence.emptyBody':
       'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
     'strategy.title': 'الاستراتيجية',
+    'strategy.section.objective': 'الهدف الحالي',
+    'strategy.section.audience': 'الجمهور',
+    'strategy.section.messages': 'الرسائل الرئيسية',
+    'strategy.section.evidence': 'الأدلة والمصدر',
+    'strategy.section.suggestions': 'تغييرات مقترحة',
+    'strategy.acceptedBadge': 'استراتيجيتك',
+    'strategy.noAcceptedBadge': 'لا توجد استراتيجية معتمدة بعد',
+    'strategy.firstGoal': 'الهدف الأول:',
+    'strategy.acceptedOn': 'اعتُمدت في',
+    'strategy.noneAccepted':
+      'لا يُستخدم شيء هنا قبل أن يعتمد شخصٌ استراتيجية. اطلب مقترحًا أدناه — يبقى مقترحًا حتى تعتمده.',
+    'strategy.fromBrandBrain': 'من عقل العلامة',
+    'strategy.audienceEmpty': 'لا يحتوي عقل العلامة على جمهور معتمد بعد.',
+    'strategy.messagesEmpty': 'لا يحتوي عقل العلامة على عروض أو أدلة إثبات معتمدة بعد.',
+    'strategy.addKnowledge': 'أضف معرفة',
+    'strategy.declaredPillars': 'معلنة في عقل العلامة — لم تحدد أي استراتيجية معتمدة أوزانها بعد.',
+    'strategy.pillarsEmpty': 'لا توجد محاور بعد. اعتمد استراتيجية أو أضفها في عقل العلامة.',
+    'strategy.channelsEmpty': 'لا يوجد توزيع قنوات بعد. يأتي مع استراتيجية معتمدة.',
+    'strategy.monthHint': 'كل أسبوع يفتح حملة أو منشورًا بالموضوع معبّأً. لا يُنشأ شيء حتى تحفظه.',
+    'strategy.monthEmpty': 'لا توجد خطة شهرية بعد. تأتي مع استراتيجية معتمدة.',
+    'strategy.week': 'الأسبوع {n}',
+    'strategy.postsPlanned': 'منشورات مخططة: {count}',
+    'strategy.rests': 'يستند إلى',
+    'strategy.createCampaign': 'أنشئ حملة',
+    'strategy.sendToContent': 'أرسل إلى المحتوى',
+    'strategy.evidenceEmpty': 'تظهر الأدلة هنا بعد اعتماد استراتيجية.',
+    'strategy.proposalBadge': 'مقترح ذكاء اصطناعي',
+    'strategy.acceptExplains':
+      'الاعتماد يجعل هذه استراتيجيتك، وقد يؤثر على اقتراحات المحتوى القادمة.',
+    'strategy.startsFromGoal': 'نبدأ من الهدف الأول الذي اخترته. غيّره إن كانت هذه الخطة لغرض آخر.',
     'strategy.subtitle': 'مقترحات مبنية على معرفة علامتك وأدائها المقاس.',
     'strategy.generate': 'اقترح استراتيجية',
     'strategy.objectiveLabel': 'ما الذي تريد تحقيقه؟',
@@ -1743,6 +1783,7 @@ export const messages = {
     'copilot.surface.analytics': 'التحليلات',
     'copilot.surface.intelligence': 'ذكاء التسويق',
     'copilot.surface.brand_brain': 'عقل العلامة',
+    'copilot.surface.strategy': 'الاستراتيجية',
     'copilot.surface.campaigns': 'الحملات',
     'copilot.surface.calendar': 'التقويم',
     'copilot.surface.content': 'استوديو المحتوى',
@@ -3999,6 +4040,18 @@ export const messages = {
     'insights.explain': 'Explain performance',
     'insights.explainHint': 'Spends AI credits. Rests only on the measurements already stored.',
     'insights.evidence': 'Evidence',
+    'insights.evidenceLabel.content.none_in_window': 'No posts were published in this period',
+    'insights.evidenceLabel.content.pillar_unpublished':
+      'A declared pillar had no post in this period',
+    'insights.evidenceLabel.content.platform_unused':
+      'A connected account had nothing published in this period',
+    'insights.evidenceLabel.content.top_performer': 'A top-performing post',
+    'insights.evidenceLabel.knowledge.approved': 'Approved Brand Brain knowledge',
+    'insights.evidenceLabel.metric.period_change': 'Change against the previous period',
+    'insights.evidenceLabel.metric.total': 'Total for the period',
+    'insights.evidenceLabel.metric.anomaly_above': 'Unusually high against the baseline',
+    'insights.evidenceLabel.metric.anomaly_below': 'Unusually low against the baseline',
+    'insights.evidenceLabel.unknown': 'Evidence',
     'insights.evidenceCount': 'Evidence items',
     'insights.insufficientTitle': 'Not enough data yet',
     'insights.insufficientBody':
@@ -4051,6 +4104,38 @@ export const messages = {
     'intelligence.emptyBody':
       'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',
     'strategy.title': 'Strategy',
+    'strategy.section.objective': 'Current objective',
+    'strategy.section.audience': 'Audience',
+    'strategy.section.messages': 'Key messages',
+    'strategy.section.evidence': 'Evidence and source',
+    'strategy.section.suggestions': 'Suggested changes',
+    'strategy.acceptedBadge': 'Your strategy',
+    'strategy.noAcceptedBadge': 'No accepted strategy yet',
+    'strategy.firstGoal': 'First goal:',
+    'strategy.acceptedOn': 'Accepted',
+    'strategy.noneAccepted':
+      'Nothing here is used until a person accepts a strategy. Ask for a proposal below — it stays a proposal until you accept it.',
+    'strategy.fromBrandBrain': 'From Brand Brain',
+    'strategy.audienceEmpty': 'Brand Brain has no approved audience yet.',
+    'strategy.messagesEmpty': 'Brand Brain has no approved offers or proof points yet.',
+    'strategy.addKnowledge': 'Add knowledge',
+    'strategy.declaredPillars': 'Declared in Brand Brain — no accepted strategy weights them yet.',
+    'strategy.pillarsEmpty': 'No pillars yet. Accept a strategy, or add them in Brand Brain.',
+    'strategy.channelsEmpty': 'No channel mix yet. It comes with an accepted strategy.',
+    'strategy.monthHint':
+      'Each week opens a campaign or a post with the theme filled in. Nothing is created until you save it.',
+    'strategy.monthEmpty': 'No monthly plan yet. It comes with an accepted strategy.',
+    'strategy.week': 'Week {n}',
+    'strategy.postsPlanned': '{count} posts planned',
+    'strategy.rests': 'Rests on',
+    'strategy.createCampaign': 'Create campaign',
+    'strategy.sendToContent': 'Send to Content',
+    'strategy.evidenceEmpty': 'Evidence appears here once a strategy is accepted.',
+    'strategy.proposalBadge': 'AI proposal',
+    'strategy.acceptExplains':
+      'Accepting makes this your strategy. It may influence future content suggestions.',
+    'strategy.startsFromGoal':
+      'Starting from the first goal you chose. Change it if this plan is for something else.',
     'strategy.subtitle':
       "Proposals grounded in your brand's own knowledge and its measured performance.",
     'strategy.generate': 'Propose a strategy',
@@ -4148,6 +4233,7 @@ export const messages = {
     'copilot.surface.analytics': 'Analytics',
     'copilot.surface.intelligence': 'Marketing Intelligence',
     'copilot.surface.brand_brain': 'Brand Brain',
+    'copilot.surface.strategy': 'Strategy',
     'copilot.surface.campaigns': 'Campaigns',
     'copilot.surface.calendar': 'the calendar',
     'copilot.surface.content': 'the Content Studio',
@@ -4819,6 +4905,20 @@ export function translator(locale: string) {
  * system cannot know. The narrowing is done here, once, instead of at three
  * call sites that each got it wrong.
  */
+/**
+ * An evidence row's label, as a sentence (D-292). The analytics and strategy
+ * engines store a stable `labelKey` ("content.pillar_unpublished"); showing
+ * that key was technical vocabulary on a customer screen (D-277 §41). A key
+ * with no sentence yet reads as the neutral word "Evidence", never as itself.
+ */
+export function evidenceLabel(locale: string, labelKey: string | null | undefined): string {
+  return (
+    (labelKey ? optionalMessage(locale, `insights.evidenceLabel.${labelKey}`) : null) ??
+    optionalMessage(locale, 'insights.evidenceLabel.unknown') ??
+    ''
+  );
+}
+
 export function optionalMessage(locale: string, key: string): string | null {
   const dictionary: Record<string, string | undefined> =
     locale === 'ar' ? messages.ar : messages.en;

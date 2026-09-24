@@ -23,6 +23,8 @@ export const COPILOT_SURFACES = {
   analytics: 'Analytics: measured performance for the selected brand',
   intelligence: 'Marketing Intelligence: evidence-backed findings and proposed learnings',
   brand_brain: 'Brand Brain: the governed knowledge this brand is grounded in',
+  strategy:
+    'Strategy: the accepted plan for the selected brand (pillars, channel mix, monthly plan) and AI proposals awaiting review',
   campaigns: 'Campaigns: planned and running campaigns for the selected brand',
   calendar: 'the content calendar: what is planned, scheduled and published',
   content: 'the Content Studio: drafts and the content library',

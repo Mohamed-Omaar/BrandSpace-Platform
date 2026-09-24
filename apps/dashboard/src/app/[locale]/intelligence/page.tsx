@@ -15,7 +15,7 @@ import {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { evidenceLabel, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { insightNarrative, type NarrativeLine } from '../../../server/insight-narrative';
 import { INTELLIGENCE_INSIGHT_TYPES } from '../../../server/command-center';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -372,7 +372,7 @@ export default async function IntelligencePage({
                           <strong style={{ color: colorTokens.textPrimary }}>e{row.ordinal}</strong>{' '}
                           {row.metricKey
                             ? t(`analytics.metric.${row.metricKey}` as MessageKey)
-                            : row.labelKey}
+                            : evidenceLabel(locale, row.labelKey)}
                           {row.value === null ? '' : ` — ${number.format(Number(row.value))}`}
                           {row.periodStart && row.periodEnd
                             ? ` (${stamp.format(row.periodStart)} – ${stamp.format(row.periodEnd)})`
