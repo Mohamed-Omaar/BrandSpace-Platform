@@ -11,6 +11,7 @@ import {
   serviceActor,
 } from '../../../../server/platform-context';
 import { removeCollectionItem, upsertCollectionItem } from '../../../../server/config-draft';
+import { majorToMinor } from '../../../../server/money';
 
 const log = createLogger({ context: { component: 'admin.plans' } });
 
@@ -92,10 +93,21 @@ export async function savePlanAction(formData: FormData): Promise<void> {
       .map((c) => c.trim().toUpperCase())
       .filter(Boolean);
 
+    /*
+     * THE SIMPLE EDITOR SENDS MAJOR UNITS ("29.00") and says so with
+     * `priceUnit=major` (D-313); the Advanced form sends minor units and does
+     * not send the field, so its behaviour is unchanged. Conversion uses the
+     * currency's own minor digits and refuses rather than rounds.
+     */
+    const major = formData.get('priceUnit') === 'major';
+    const priceOf = (currency: string, period: 'monthly' | 'annual'): number =>
+      major
+        ? majorToMinor(String(formData.get(`price.${currency}.${period}`) ?? ''), currency)
+        : readInt(formData, `price.${currency}.${period}`);
     const prices = currencies.map((currency) => ({
       currency,
-      monthlyMinor: readInt(formData, `price.${currency}.monthly`),
-      annualMinor: readInt(formData, `price.${currency}.annual`),
+      monthlyMinor: priceOf(currency, 'monthly'),
+      annualMinor: priceOf(currency, 'annual'),
     }));
 
     const item: Record<string, unknown> = {
