@@ -39,7 +39,7 @@ async function signIn(page: Page): Promise<void> {
 interface Habit {
   readonly key: string;
   readonly action: 'content.variant.shorten' | 'content.variant.tone';
-  readonly after: Record<string, unknown>;
+  readonly after: Readonly<Record<string, string | boolean>>;
 }
 
 const HABITS: Record<string, Habit> = {

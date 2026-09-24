@@ -66,6 +66,13 @@ const POLICY: ContentPolicy = {
     maxSlotsPerDay: 25,
     requireApprovalBeforeScheduling: false,
   },
+  learning: {
+    preferenceMinObservations: 4,
+    preferenceMinPosts: 3,
+    workflowMinRepeats: 4,
+    windowDays: 90,
+    snoozeDays: 30,
+  },
   approvals: {
     requireApprovalBeforeScheduling: false,
     allowSelfApproval: false,
