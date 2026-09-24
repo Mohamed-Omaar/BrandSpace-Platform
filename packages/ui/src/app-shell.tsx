@@ -74,6 +74,15 @@ export interface ShellNavItem {
    * that used it.
    */
   readonly testId?: string | undefined;
+  /**
+   * A ROUTE THE SHELL KNOWS BUT DOES NOT LIST (D-308). It still names the page
+   * in the top bar and still wins the longest-match, but it is not drawn in
+   * the rail or the drawer. The Control Center's Simple mode uses it for the
+   * Advanced screens: reachable by URL and titled correctly, without putting
+   * the technical route list back in the owner's navigation. The customer
+   * dashboard never sets it, so its navigation is unchanged.
+   */
+  readonly hidden?: boolean | undefined;
 }
 
 export interface ShellNavSection {
@@ -271,9 +280,14 @@ function NavList({
   readonly collapsed: boolean;
   readonly onNavigate?: (() => void) | undefined;
 }) {
+  // Hidden items name pages; they are never drawn (D-308). A section left
+  // with nothing to draw is not drawn either, heading included.
+  const visible = sections
+    .map((section) => ({ ...section, items: section.items.filter((item) => !item.hidden) }))
+    .filter((section) => section.items.length > 0);
   return (
     <div style={{ display: 'grid', gap: layoutTokens.navGroupGap }}>
-      {sections.map((section, sectionIndex) => (
+      {visible.map((section, sectionIndex) => (
         <div key={section.title ?? `section-${sectionIndex}`}>
           {/* A section heading is meaningless next to icons with no labels, so
               it is replaced by a divider when collapsed rather than truncated. */}

@@ -18,6 +18,8 @@ import {
   secondaryButtonStyle,
   inputStyle,
 } from '../../../../../../components/console-ui';
+import { SimpleIntegrationSetup } from '../../../../../../components/simple/integrations';
+import { getConsoleMode } from '../../../../../../server/console-mode-cookie';
 import {
   currentEnvironment,
   generatedSettingsFor,
@@ -68,6 +70,18 @@ export default async function IntegrationDetailPage({
   const providerKey = decodeURIComponent(rawProviderKey);
 
   const actor = await requirePageActor(locale, 'platform.configuration.read');
+  // Simple mode: the same provider as numbered steps, same actions (D-307).
+  if ((await getConsoleMode()) === 'simple') {
+    return (
+      <SimpleIntegrationSetup
+        locale={locale}
+        actor={actor}
+        category={category}
+        providerKey={providerKey}
+        query={query}
+      />
+    );
+  }
   const isArabic = locale === 'ar';
   const environment = currentEnvironment();
 

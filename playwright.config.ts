@@ -373,7 +373,7 @@ export default defineConfig({
     {
       name: 'chromium-desktop',
       testIgnore: [
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode)\.(spec|screenshots\.spec)\.ts/,
         // EVERY capture run, not a list of them: a screenshots spec writes
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
@@ -388,7 +388,7 @@ export default defineConfig({
     {
       name: 'chromium-mobile',
       testIgnore: [
-        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings)\.(spec|screenshots\.spec)\.ts/,
+        /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings|owner-simple-mode)\.(spec|screenshots\.spec)\.ts/,
         // EVERY capture run, not a list of them: a screenshots spec writes
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
@@ -400,6 +400,26 @@ export default defineConfig({
       name: 'admin-console',
       testMatch: /(admin-console|plans-entitlements|secrets-pagination)\.spec\.ts/,
       fullyParallel: false,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions,
+      },
+    },
+    {
+      /*
+       * THE OWNER'S SIMPLE AND ADVANCED MODES (D-307 … D-314).
+       *
+       * SERIAL AND AFTER `admin-console`, because it drives the same signed-in
+       * Control Center and ACTIVATES configuration — a feature's access, the AI
+       * profile — that the Phase 3 suites in that project also draft. Ordering
+       * by `dependencies` is the mechanism that actually separates them; it
+       * restores what it changes before it finishes.
+       */
+      name: 'owner-simple-mode',
+      testMatch: /owner-simple-mode\.spec\.ts/,
+      fullyParallel: false,
+      dependencies: ['admin-console'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

@@ -861,3 +861,101 @@ the REASON rather than a disabled button, because a disabled button teaches noth
 - **The console overview** carries readiness, the degraded capabilities and the count of production
   integration gaps. It used to carry a card promising that "operational indicators appear here once
   telemetry is wired in a later phase"; Phase 10 is that phase, so the promise is replaced by the thing.
+
+---
+
+## 23. Simple Mode and Advanced Mode (owner contract, D-307 … D-314)
+
+> **ملخّص بالعربية**
+>
+> لمركز التحكم الآن طريقتا عرض فوق **الحالة نفسها والخدمات نفسها**: **الوضع البسيط** (الافتراضي) لمالك المنصة، بلغة
+> الأعمال وبطاقات واضحة وخطوات موجّهة؛ و**الوضع المتقدم** للعمليات التقنية، ويحتفظ بكل الشاشات الحالية كما هي. الوضع
+> تفضيل عرض فقط وليس حدًّا أمنيًا: الصلاحيات تُفحص في الخادم كما كانت، ولا يكشف تغيير الوضع شيئًا لا يملك المستخدم حق رؤيته.
+> لا توجد قاعدة بيانات إعدادات ثانية ولا خدمة موازية — كل إجراء في الوضع البسيط يستدعي الخدمة الموجودة نفسها.
+
+### 23.1 What the two modes are
+
+**Simple** is the default and is written for the platform owner: business language, cards, a guided setup
+for every integration, plain-language impact previews, and truthful "not available" states. **Advanced**
+is every existing technical screen, unchanged: raw configuration JSON, secrets, flags, providers, the model
+registry, routing, audit, support, health detail and AI usage.
+
+**They are two presentations over ONE platform state.** Where a route already existed, Simple and Advanced
+share the URL and the page chooses its presentation, so every existing server action's redirect lands on the
+same screen and switching mode keeps the reader where they are. New routes exist only where no screen did:
+`/console/ai`, `/console/ai/connect`, `/console/ai/profile` and `/console/usage`.
+
+**The mode is never a security boundary (D-307).** It is a `__Host-` cookie holding `simple` or `advanced`,
+read only to choose markup. No page guard, server action or service reads it. A role that may not open a
+screen gets the same 404 in either mode; an Advanced screen opened by URL in Simple mode renders normally
+with a note offering the switch.
+
+### 23.2 Simple navigation
+
+Home · Customers · Plans & Pricing · Features · AI · Integrations · Usage & Billing · System — each gated by
+the same permission as the screen behind it. Support and the raw audit log are Advanced tools. The top bar
+carries the mode switch and the language switch and nothing else: the Control Center has no search,
+notification or create domain, so those placeholders are gone (D-309).
+
+### 23.3 Service map — every Simple action is an existing path
+
+| Simple UI                                   | Existing service → call                                                                                                | Authorization (unchanged)                                                         | Audit                                   |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------- |
+| Home: customers by status                   | `WorkspaceAdminService.list({status, pageSize})` → `total`                                                             | `platform.workspace.read`                                                         | read                                    |
+| Home / System: readiness                    | `IntegrationsService.list` + `plans` active version + `evaluateHealth`                                                 | `platform.configuration.read` + `platform.secret.read`                            | read                                    |
+| Home: pending changes                       | `ConfigurationService.listVersions`                                                                                    | `platform.configuration.read`                                                     | read                                    |
+| Customers: change plan                      | `assignPlanAction` → `EntitlementService.assignPlan`                                                                   | `platform.plan.assign`                                                            | `platform.plan.assigned`                |
+| Customers: adjust credits                   | `adjustCreditsAction` → `CreditService.adjust`                                                                         | `platform.credit.adjust`                                                          | credit ledger + audit                   |
+| Customers: suspend / reactivate             | `changeStatusAction` → `WorkspaceAdminService.changeStatus`                                                            | `platform.workspace.suspend`                                                      | `platform.workspace.<status>`           |
+| Plans: edit                                 | `savePlanAction` → `upsertCollectionItem('plans')` (draft)                                                             | `platform.configuration.manage`                                                   | configuration version                   |
+| Plans / Features / AI: check                | `ConfigurationService.validateDraft` + `previewImpact`                                                                 | `platform.configuration.manage`                                                   | stored on the version                   |
+| Plans / Features / AI: activate             | `ConfigurationService.activate` (dual control for `plans` unchanged)                                                   | `platform.configuration.activate`                                                 | `configuration.activated`               |
+| Features: who gets it                       | `upsertCollectionItem('feature-flags')` — the flag's `globalEnabled`, boolean features without advanced targeting only | `platform.configuration.manage`                                                   | configuration version                   |
+| AI: change profile                          | `ConfigurationService.createDraft('ai.capability-routing')` → validate → preview → activate                            | `.manage` + `.activate`                                                           | `configuration.activated`               |
+| Features / AI: discard an unfinished change | `discardOpenDraftsAction` → `ConfigurationService.discardDraft` (closed list of three settings)                        | `platform.configuration.manage`                                                   | `config.draft.discarded`                |
+| Integrations: save / test / on-off          | `saveIntegrationConfigurationAction` / `testIntegrationAction` / `setIntegrationStateAction`                           | `.manage` (+ `secret.manage` + MFA in the Secret Service) / `.read` / `.activate` | `integration.*` + configuration version |
+| Usage & Billing                             | `AiUsageExplorer.rollup`, `eventsNeedingAttention`, subscription counts                                                | `platform.ai.usage.read` / `platform.workspace.read`                              | read                                    |
+| System                                      | the same `evaluateHealth` verdict, the integration readiness, the billing inbox                                        | `platform.workspace.read`                                                         | read                                    |
+
+The one new write orchestration is the AI profile change, which had no action at all; it is composed of the
+existing `ConfigurationService` calls and adds no path around them.
+
+### 23.4 Simple routes
+
+| Simple screen   | Route                                            | Shares the URL with Advanced | What it is built on                                                     |
+| --------------- | ------------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------- |
+| Home            | `/console`                                       | yes (the overview)           | `owner-overview.ts` — readiness, attention, customer counts, AI, system |
+| Customers       | `/console/workspaces`, `/console/workspaces/:id` | yes                          | `WorkspaceAdminService`, the directory's actions                        |
+| Plans & Pricing | `/console/plans` (`?edit=` for the editor)       | yes                          | `plans` domain, the plan actions                                        |
+| Features        | `/console/features`                              | yes                          | `entitlements` + `feature-flags`, `setFeatureAccessAction`              |
+| AI              | `/console/ai`, `/ai/connect`, `/ai/profile`      | no (new)                     | Hub views, `ai.capability-routing`, the router's `resolveRoute`         |
+| Integrations    | `/console/integrations[/:category/:provider]`    | yes                          | `IntegrationsService`, the Hub's save / test / switch actions           |
+| Usage & Billing | `/console/usage`                                 | no (new)                     | subscription counts, `AiUsageExplorer`, `eventsNeedingAttention`        |
+| System          | `/console/health`                                | yes                          | `evaluateHealth`, Hub views, the billing inbox                          |
+
+**Every Advanced screen is preserved unchanged**: overview, workspaces, support, configuration,
+secrets, flags, plans, features, integrations, providers, AI models, routing, audit, AI usage and
+health, with the same labels, permissions and test hooks. In Simple mode the Advanced-only ones stay
+reachable by URL and by "View technical details".
+
+### 23.5 What Simple mode will not say
+
+It never shows a figure without a source of truth. Revenue, MRR, profit and provider cost are named as
+not shown, the background job queue is "Not measured here", and a development stand-in is a "Test
+stand-in", never "Connected". A role that cannot see something is told so. The known gaps this leaves
+are F-89 … F-97 in `docs/DECISIONS.md`.
+
+### 23.6 Permissions
+
+**No permission was added, removed or re-scoped.** Simple screens call the same guards as the Advanced
+screens they present. The two new write actions (the AI profile and feature access) require both
+`platform.configuration.manage` and `platform.configuration.activate`, and `ConfigurationService`
+re-checks each.
+
+### 23.7 Changes outside the Control Center
+
+- **`packages/ui`** — `ShellNavItem.hidden`, the Control Center's English default locale, and the removal of
+  the placeholder top-bar controls (D-307 … D-310).
+- **Customer Plan screen (`apps/dashboard`, `/plan`)**: a feature is now named by its registered name in the
+  reader's language rather than its key, with the key as a fallback where the registry has no name. This
+  surfaced when the development seed registered real features (D-314). No other customer screen changed.

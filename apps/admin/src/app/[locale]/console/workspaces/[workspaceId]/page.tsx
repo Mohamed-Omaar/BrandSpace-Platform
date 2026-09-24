@@ -52,6 +52,8 @@ import {
   setOverrideAction,
   updateWorkspaceAction,
 } from '../actions';
+import { SimpleCustomerDetail } from '../../../../../components/simple/customers';
+import { getConsoleMode } from '../../../../../server/console-mode-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +75,12 @@ export default async function WorkspaceDetailPage({
   const { locale, workspaceId } = await params;
   const query = await searchParams;
   const actor = await requirePageActor(locale, 'platform.workspace.read');
+  // Simple mode: the customer summarised, with the existing actions (D-307).
+  if ((await getConsoleMode()) === 'simple') {
+    return (
+      <SimpleCustomerDetail locale={locale} actor={actor} workspaceId={workspaceId} query={query} />
+    );
+  }
   const t = translator(locale);
 
   const workspaceService = getWorkspaceService();

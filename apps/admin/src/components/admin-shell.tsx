@@ -3,12 +3,11 @@ import {
   AppShell,
   BrandMark,
   BuildingIcon,
+  CreditIcon,
   FlagIcon,
   HomeIcon,
   KeyIcon,
-  LanguageSwitcher,
   ProfileCard,
-  TopbarActions,
   LayersIcon,
   LifebuoyIcon,
   ListIcon,
@@ -28,171 +27,27 @@ import {
   type ShellNavSection,
   initialsFrom,
 } from '@brandspace/ui';
-import { translator, type MessageKey } from '../i18n/messages';
+import { translator } from '../i18n/messages';
+import { simpleCopy } from '../i18n/simple';
+import type { ConsoleMode } from '../server/console-mode';
+import { ADVANCED_ONLY_PATHS, consoleNavigation, type ConsoleIcon } from './console-nav';
+import { AdvancedScreenNotice, ConsoleLanguageSwitch, ModeSwitch } from './mode-switch';
 
-interface NavItem {
-  readonly href: string;
-  /** The navigation label. Short, because the rail is 250px wide. */
-  readonly key: MessageKey;
-  /** The top-bar page title. Longer, and centralised here so a
-      layout-rendered shell can title pages it never sees. */
-  readonly titleKey: MessageKey;
-  readonly permission: string;
-  readonly icon: ReactNode;
-}
-
-/**
- * Console navigation, grouped into functional sections.
- *
- * Each entry names the permission that gates its page. Filtering by permission
- * here is a CONVENIENCE — the page itself calls `requirePageActor` and returns
- * 404 without the permission. Hiding a link is not authorization.
- *
- * A section with no visible item is not rendered, so a support agent does not
- * see an empty "Configuration" heading and wonder what is missing.
- */
-const NAV_SECTIONS: ReadonlyArray<{
-  readonly titleAr: string;
-  readonly titleEn: string;
-  readonly items: readonly NavItem[];
-}> = [
-  {
-    titleAr: 'العملاء',
-    titleEn: 'Customers',
-    items: [
-      {
-        href: '',
-        key: 'nav.overview',
-        titleKey: 'page.overview',
-        permission: 'platform.workspace.read',
-        icon: <HomeIcon size={20} />,
-      },
-      {
-        href: '/workspaces',
-        key: 'nav.workspaces',
-        titleKey: 'page.workspaces',
-        permission: 'platform.workspace.read',
-        icon: <BuildingIcon size={20} />,
-      },
-      {
-        href: '/support',
-        key: 'nav.support',
-        titleKey: 'page.support',
-        permission: 'platform.support_mode.enter',
-        icon: <LifebuoyIcon size={20} />,
-      },
-    ],
-  },
-  {
-    titleAr: 'المنصة',
-    titleEn: 'Platform',
-    items: [
-      {
-        href: '/configuration',
-        key: 'nav.configuration',
-        titleKey: 'page.configuration',
-        permission: 'platform.configuration.read',
-        icon: <SlidersIcon size={20} />,
-      },
-      {
-        href: '/secrets',
-        key: 'nav.secrets',
-        titleKey: 'page.secrets',
-        permission: 'platform.secret.read',
-        icon: <KeyIcon size={20} />,
-      },
-      {
-        href: '/flags',
-        key: 'nav.flags',
-        titleKey: 'page.flags',
-        permission: 'platform.configuration.read',
-        icon: <FlagIcon size={20} />,
-      },
-      {
-        href: '/plans',
-        key: 'nav.plans',
-        titleKey: 'page.plans',
-        permission: 'platform.configuration.read',
-        icon: <LayersIcon size={20} />,
-      },
-      {
-        href: '/features',
-        key: 'nav.features',
-        titleKey: 'page.features',
-        permission: 'platform.configuration.read',
-        icon: <SlidersIcon size={20} />,
-      },
-    ],
-  },
-  {
-    titleAr: 'الذكاء الاصطناعي والتكاملات',
-    titleEn: 'AI & integrations',
-    items: [
-      {
-        /*
-         * Phase 10 — the Integrations Hub, FIRST in this section deliberately.
-         * It is the one screen that answers "what is this platform connected
-         * to"; the three below it are the detailed views of one slice each.
-         */
-        href: '/integrations',
-        key: 'nav.integrations',
-        titleKey: 'page.integrations',
-        permission: 'platform.configuration.read',
-        icon: <PlugIcon size={20} />,
-      },
-      {
-        href: '/providers',
-        key: 'nav.providers',
-        titleKey: 'page.providers',
-        permission: 'platform.configuration.read',
-        icon: <LayersIcon size={20} />,
-      },
-      {
-        href: '/ai-models',
-        key: 'nav.aiRegistry',
-        titleKey: 'page.aiRegistry',
-        permission: 'platform.configuration.read',
-        icon: <SparkIcon size={20} />,
-      },
-      {
-        href: '/routing',
-        key: 'nav.routing',
-        titleKey: 'page.routing',
-        permission: 'platform.configuration.read',
-        icon: <RouteIcon size={20} />,
-      },
-    ],
-  },
-  {
-    titleAr: 'العمليات',
-    titleEn: 'Operations',
-    items: [
-      {
-        href: '/audit',
-        key: 'nav.audit',
-        titleKey: 'page.audit',
-        permission: 'platform.audit.read',
-        icon: <ListIcon size={20} />,
-      },
-      {
-        href: '/ai-usage',
-        key: 'nav.aiUsage',
-        titleKey: 'page.aiUsage',
-        // Its own authority, not "View any workspace": AI usage is a
-        // per-workspace financial record (R-02's lesson).
-        permission: 'platform.ai.usage.read',
-        icon: <SparkIcon size={20} />,
-      },
-      {
-        href: '/health',
-        key: 'nav.health',
-        titleKey: 'page.health',
-        permission: 'platform.workspace.read',
-        icon: <PulseIcon size={20} />,
-      },
-    ],
-  },
-];
+const ICONS: Record<ConsoleIcon, ReactNode> = {
+  home: <HomeIcon size={20} />,
+  building: <BuildingIcon size={20} />,
+  lifebuoy: <LifebuoyIcon size={20} />,
+  sliders: <SlidersIcon size={20} />,
+  key: <KeyIcon size={20} />,
+  flag: <FlagIcon size={20} />,
+  layers: <LayersIcon size={20} />,
+  plug: <PlugIcon size={20} />,
+  spark: <SparkIcon size={20} />,
+  route: <RouteIcon size={20} />,
+  list: <ListIcon size={20} />,
+  pulse: <PulseIcon size={20} />,
+  credit: <CreditIcon size={20} />,
+};
 
 /** The active Support Mode grant, resolved server-side by the console layout. */
 export interface SupportBannerState {
@@ -211,6 +66,7 @@ export function AdminShell({
   actorRole,
   permissionKeys,
   environment,
+  mode,
   support = null,
   children,
 }: {
@@ -232,42 +88,46 @@ export function AdminShell({
   actorRole: string;
   permissionKeys: readonly string[];
   environment: string;
+  /** Simple or Advanced (D-307). Presentation only — never an access input. */
+  mode: ConsoleMode;
   support?: SupportBannerState | null;
   children: ReactNode;
 }) {
   const t = translator(locale);
-  const other = locale === 'ar' ? 'en' : 'ar';
+  const copy = simpleCopy(locale);
   const isProduction = environment === 'PRODUCTION';
 
-  const sections: readonly ShellNavSection[] = NAV_SECTIONS.map((section) => ({
-    title: locale === 'ar' ? section.titleAr : section.titleEn,
-    items: section.items
-      .filter((item) => permissionKeys.includes(item.permission))
-      .map((item) => ({
-        href: `/${locale}/console${item.href}`,
-        label: t(item.key),
-        icon: item.icon,
-        /*
-         * `active` is left to the shell, which resolves it from the real
-         * pathname by longest match.
-         *
-         * This comparison used to be `(activePath ?? '') === item.href`, and
-         * the console LAYOUT never passed `activePath` — so the empty string
-         * matched the console root's empty href and every one of the sixteen
-         * console screens showed "Overview" as the current page. A layout
-         * cannot read the pathname on the server; the shell is a client
-         * component and can.
-         */
-        ...(activePath === undefined ? {} : { active: activePath === item.href }),
-        /* The longer page title, for the top bar. The nav says "AI models";
-           the page is "AI model registry". Both are true, and the reference
-           puts the longer one in the bar. */
-        pageTitle: t(item.titleKey),
-        // The existing convention, preserved: the end-to-end suite selects
-        // `nav-nav.configuration` and `nav-nav.secrets`.
-        testId: `nav-${item.key}`,
-      })),
-  })).filter((section) => section.items.length > 0);
+  /*
+   * THE MODE CHOOSES WHICH PERMITTED SCREENS ARE LISTED (D-308). Filtering by
+   * permission is still a convenience — the page answers 404 without it — and
+   * the other mode's routes ride along hidden, so a screen opened by URL keeps
+   * its title.
+   */
+  const sections: readonly ShellNavSection[] = consoleNavigation(mode)
+    .map((section) => ({
+      title: section.title ? (locale === 'ar' ? section.title.ar : section.title.en) : undefined,
+      items: section.items
+        .filter((item) => permissionKeys.includes(item.permission))
+        .map((item) => ({
+          href: `/${locale}/console${item.href}`,
+          label: item.label(locale),
+          icon: ICONS[item.icon],
+          /*
+           * `active` is left to the shell, which resolves it from the real
+           * pathname by longest match — a layout cannot read the pathname on
+           * the server; the shell is a client component and can.
+           */
+          ...(activePath === undefined ? {} : { active: activePath === item.href }),
+          /* The longer page title, for the top bar. The nav says "AI models";
+             the page is "AI model registry". */
+          pageTitle: item.title(locale),
+          // The existing convention, preserved: the end-to-end suite selects
+          // `nav-nav.configuration` and `nav-nav.secrets` in Advanced mode.
+          testId: item.testId,
+          hidden: item.hidden === true,
+        })),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <AppShell
@@ -335,25 +195,27 @@ export function AdminShell({
         </span>
       }
       headerEnd={
-        <TopbarActions
-          labels={{
-            search: t('topbar.search'),
-            searchShortcut: t('topbar.searchShortcut'),
-            notifications: t('topbar.notifications'),
-            close: t('common.close'),
-            previewTitle: t('topbar.previewTitle'),
-            previewBody: t('topbar.previewBody'),
-            create: t('topbar.create'),
-          }}
-          language={
-            <LanguageSwitcher
-              href={`/${other}/console${activePath ?? ''}`}
-              targetLocale={other}
-              targetLabel={other === 'ar' ? 'العربية' : 'English'}
-              ariaLabel={t('nav.language')}
-            />
-          }
-        />
+        /*
+         * THE MODE SWITCH AND THE LANGUAGE, AND NOTHING ELSE (D-309).
+         *
+         * The top bar used to carry the customer product's search, bell and
+         * "+ Create", each opening a panel saying it was not connected. The
+         * Control Center has no search index, no notification feed and no
+         * single thing to create, so those were placeholders for capabilities
+         * that do not exist here — removed rather than kept as decoration.
+         */
+        <>
+          <ModeSwitch
+            locale={locale}
+            mode={mode}
+            labels={{
+              group: copy('mode.group'),
+              simple: copy('mode.simple'),
+              advanced: copy('mode.advanced'),
+            }}
+          />
+          <ConsoleLanguageSwitch locale={locale} ariaLabel={t('nav.language')} />
+        </>
       }
       /* The scope word above every console title — always, because the
          console LAYOUT renders the shell and never knows the page's own
@@ -405,6 +267,17 @@ export function AdminShell({
         >
           {actions}
         </div>
+      ) : null}
+      {mode === 'simple' ? (
+        <AdvancedScreenNotice
+          locale={locale}
+          advancedOnlyPaths={ADVANCED_ONLY_PATHS}
+          labels={{
+            message: copy('mode.advancedScreen'),
+            switchLabel: copy('mode.switchToAdvanced'),
+            homeLabel: copy('mode.backToSimple'),
+          }}
+        />
       ) : null}
       <div className="bs-section-stack">{children}</div>
     </AppShell>

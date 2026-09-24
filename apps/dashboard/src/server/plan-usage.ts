@@ -46,3 +46,21 @@ export function planDisplayName(
   if (!plan) return planKey;
   return locale === 'ar' ? plan.nameAr : plan.nameEn;
 }
+
+/**
+ * A feature's registered name in the reader's language — or its key when the
+ * registry has no name for it (a synthesised quota dimension). The same rule
+ * as `planDisplayName`: never a name made up here.
+ */
+export function featureDisplayName(
+  featureKey: string,
+  features: readonly {
+    readonly key: string;
+    readonly name?: { readonly en: string; readonly ar: string };
+  }[],
+  locale: string,
+): string {
+  const name = features.find((entry) => entry.key === featureKey)?.name;
+  if (!name) return featureKey;
+  return (locale === 'ar' ? name.ar : name.en) || featureKey;
+}

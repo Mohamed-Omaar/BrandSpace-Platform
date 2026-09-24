@@ -43,6 +43,13 @@ export type EntitlementSource =
 
 export interface FeatureDefinition {
   readonly key: string;
+  /**
+   * The registered name in both languages. Every feature an operator registers
+   * carries one (the `entitlements` schema requires it); the quota dimensions
+   * the engine synthesises do not, which is why it is optional. Display only:
+   * nothing here resolves on it.
+   */
+  readonly name?: { readonly en: string; readonly ar: string };
   readonly valueType: 'boolean' | 'quota' | 'enum';
   readonly defaultValue: boolean | number | string | null;
   readonly dependsOn: readonly string[];

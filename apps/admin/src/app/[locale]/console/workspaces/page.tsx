@@ -35,6 +35,8 @@ import {
   primaryButtonStyle,
 } from '../../../../components/console-ui';
 import { createWorkspaceAction } from './actions';
+import { SimpleCustomers } from '../../../../components/simple/customers';
+import { getConsoleMode } from '../../../../server/console-mode-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +67,14 @@ export default async function WorkspacesPage({
   const { locale } = await params;
   const query = await searchParams;
   const actor = await requirePageActor(locale, 'platform.workspace.read');
+  /*
+   * Simple mode: customer cards over the same paged listing (D-307). "Add
+   * customer" opens the existing create form, which this page renders in both
+   * modes — one form, one action.
+   */
+  if ((await getConsoleMode()) === 'simple' && query['view'] !== 'new') {
+    return <SimpleCustomers locale={locale} actor={actor} query={query} />;
+  }
   const t = translator(locale);
 
   const service = getWorkspaceService();

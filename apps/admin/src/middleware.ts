@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
+import { CONTROL_CENTER_DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
 /*
  * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
  *
@@ -78,7 +78,7 @@ export function middleware(request: NextRequest) {
   if (hasLocale) return secured(request);
 
   const url = request.nextUrl.clone();
-  url.pathname = `/${DEFAULT_LOCALE}${pathname === '/' ? '' : pathname}`;
+  url.pathname = `/${CONTROL_CENTER_DEFAULT_LOCALE}${pathname === '/' ? '' : pathname}`;
   return secured(request, url);
 }
 

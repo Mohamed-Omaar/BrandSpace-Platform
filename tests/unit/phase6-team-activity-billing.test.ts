@@ -6,7 +6,11 @@ import {
   activityActionLabel,
   activityResourceLabel,
 } from '../../apps/dashboard/src/server/activity-labels';
-import { ceilingFor, planDisplayName } from '../../apps/dashboard/src/server/plan-usage';
+import {
+  ceilingFor,
+  featureDisplayName,
+  planDisplayName,
+} from '../../apps/dashboard/src/server/plan-usage';
 
 /**
  * PHASE 6 · P6-13 — TEAM, ACTIVITY, SETTINGS AND BILLING, AS PURE RULES.
@@ -174,6 +178,23 @@ describe('P6-13 · a plan is named by the catalogue, never by the page', () => {
   it('falls back to the key itself, not to an invented name', () => {
     expect(planDisplayName('legacy_2024', plans, 'en')).toBe('legacy_2024');
     expect(planDisplayName(null, plans, 'en')).toBeNull();
+  });
+});
+
+describe('the Plan screen names a feature from the registry, never by its key', () => {
+  const features = [
+    { key: 'approvals.workflow', name: { en: 'Team approvals', ar: 'موافقات الفريق' } },
+    { key: 'limit.brands' },
+  ];
+
+  it('uses the registered name in the reader’s language', () => {
+    expect(featureDisplayName('approvals.workflow', features, 'en')).toBe('Team approvals');
+    expect(featureDisplayName('approvals.workflow', features, 'ar')).toBe('موافقات الفريق');
+  });
+
+  it('falls back to the key when the registry has no name, not to an invented one', () => {
+    expect(featureDisplayName('limit.brands', features, 'en')).toBe('limit.brands');
+    expect(featureDisplayName('unknown.feature', features, 'ar')).toBe('unknown.feature');
   });
 });
 
