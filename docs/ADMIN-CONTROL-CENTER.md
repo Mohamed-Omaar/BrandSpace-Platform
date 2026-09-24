@@ -918,3 +918,35 @@ notification or create domain, so those placeholders are gone (D-309).
 
 The one new write orchestration is the AI profile change, which had no action at all; it is composed of the
 existing `ConfigurationService` calls and adds no path around them.
+
+### 23.4 Simple routes
+
+| Simple screen   | Route                                            | Shares the URL with Advanced | What it is built on                                                     |
+| --------------- | ------------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------- |
+| Home            | `/console`                                       | yes (the overview)           | `owner-overview.ts` — readiness, attention, customer counts, AI, system |
+| Customers       | `/console/workspaces`, `/console/workspaces/:id` | yes                          | `WorkspaceAdminService`, the directory's actions                        |
+| Plans & Pricing | `/console/plans` (`?edit=` for the editor)       | yes                          | `plans` domain, the plan actions                                        |
+| Features        | `/console/features`                              | yes                          | `entitlements` + `feature-flags`, `setFeatureAccessAction`              |
+| AI              | `/console/ai`, `/ai/connect`, `/ai/profile`      | no (new)                     | Hub views, `ai.capability-routing`, the router's `resolveRoute`         |
+| Integrations    | `/console/integrations[/:category/:provider]`    | yes                          | `IntegrationsService`, the Hub's save / test / switch actions           |
+| Usage & Billing | `/console/usage`                                 | no (new)                     | subscription counts, `AiUsageExplorer`, `eventsNeedingAttention`        |
+| System          | `/console/health`                                | yes                          | `evaluateHealth`, Hub views, the billing inbox                          |
+
+**Every Advanced screen is preserved unchanged**: overview, workspaces, support, configuration,
+secrets, flags, plans, features, integrations, providers, AI models, routing, audit, AI usage and
+health, with the same labels, permissions and test hooks. In Simple mode the Advanced-only ones stay
+reachable by URL and by "View technical details".
+
+### 23.5 What Simple mode will not say
+
+It never shows a figure without a source of truth. Revenue, MRR, profit and provider cost are named as
+not shown, the background job queue is "Not measured here", and a development stand-in is a "Test
+stand-in", never "Connected". A role that cannot see something is told so. The known gaps this leaves
+are F-89 … F-97 in `docs/DECISIONS.md`.
+
+### 23.6 Permissions
+
+**No permission was added, removed or re-scoped.** Simple screens call the same guards as the Advanced
+screens they present. The two new write actions (the AI profile and feature access) require both
+`platform.configuration.manage` and `platform.configuration.activate`, and `ConfigurationService`
+re-checks each.

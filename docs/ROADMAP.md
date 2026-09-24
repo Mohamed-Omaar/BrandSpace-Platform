@@ -35,6 +35,11 @@ The same holds for **current execution Phase 4 — Identity, Authentication and 
 (D-250 to D-255, `docs/SECURITY.md` §10.1), which closed F-19 and is NOT this document's delivered
 "Phase 4 — AI Gateway".
 
+The **Owner Control Center Simple + Advanced Mode pass** (D-307 to D-314,
+`docs/ADMIN-CONTROL-CENTER.md` §23) is a UX and productization pass over the delivered Control Center.
+It adds no platform capability: Simple mode presents the existing services for the owner, and Advanced
+keeps every technical screen unchanged.
+
 ---
 
 ## How to Read This Roadmap

@@ -683,6 +683,44 @@ scanning the form will notice each and might reasonably file a bug:
 - **The form is generated from the registry.** A provider that declares no settings and no credentials —
   which is every development double except the payment one — correctly shows no form at all.
 
+### 6.9 The Control Center's Simple mode (D-307 … D-314)
+
+**An APPROVED DESIGN-SYSTEM EXTENSION, not a port.** As §6.8 says, no Control Center screen has a demo
+reference, so the owner's Simple presentation of every console route was built under §6.2 from the
+platform's own language. It is a starting point the owner can correct in the parity pass.
+
+**Composed from:** `AppShell` (unchanged, plus one optional `hidden` flag on a nav item — below),
+`Card` (`plain`, `soft` and `lavender` tones), `SectionHeader`, `ContentGrid`, `Stack`, `MetricCard`,
+`StatusBadge`, `Banner`, `Field`, `LinkTabs`, `Avatar`, `buttonStyle`/`buttonClass`, `inputStyle` and
+`textareaStyle`, with `surfaceSoft` rows at `radiusTokens.control`. No new colour, shadow, font, radius
+or interaction model.
+
+**What is new, and why each is the smallest possible addition:**
+
+- **The mode switch** (`apps/admin/src/components/mode-switch.tsx`) is `LinkTabs`' treatment token for
+  token — the `surfaceMuted` track, the raised `surface` pill with the `brandPurplePressed` label and
+  `shadowTokens.card` — at the top bar's 38px control height. It is a separate component only because
+  the semantics differ: a choice between two states is a group of `aria-pressed` toggle buttons inside
+  a form (it works without script and reaches the server), not navigation.
+- **`ShellNavItem.hidden`** (`packages/ui/src/app-shell.tsx`). A route the shell knows for its top-bar
+  title and longest-match but does not draw. Needed because Simple mode must title an Advanced screen
+  opened by URL without putting the technical list back in the rail. The customer dashboard never sets
+  it; its navigation renders exactly as before.
+- **Guided setup steps** are numbered `Card`s whose header action is a `StatusBadge` (Done / To do /
+  Not possible here). Each status is READ from the Integrations Hub's view, never remembered.
+
+**Removed, not added:** the Control Center's top bar no longer renders `TopbarActions` (search, bell,
+"+ Create"), and the component is deleted from `packages/ui` because nothing renders it (D-309). The
+customer top bar (`TopbarLink`, `TopbarCreateMenu`) is untouched.
+
+**Status is a word first** (WCAG 1.4.1), exactly as §6.8: Connected, Test stand-in, Needs attention,
+Setup required, Disabled, Operational, Not measured here. A phone gets cards, not shrunk tables: every
+Simple list is a `ContentGrid` of cards that reflows to one column.
+
+**Proven** by `tests/e2e/owner-simple-mode.spec.ts` — every Simple screen in English and Arabic, `dir`
+asserted, axe (WCAG 2.2 AA tags) clean, and no inline-end overflow at 390px — and by
+`tests/unit/owner-simple-mode.test.ts`.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded in composition by D-277 §7 / D-279 (Phase 6 final).** The hero, its two floating
