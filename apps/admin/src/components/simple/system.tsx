@@ -25,7 +25,7 @@ import { ActionLink, formatCount, reasonText } from '../simple-ui';
  * rather than drawing a green light.
  */
 
-type SystemWord =
+export type SystemWord =
   'operational' | 'attention' | 'setup' | 'down' | 'connectionIssue' | 'notMeasured' | 'withheld';
 
 const TONE: Record<SystemWord, BadgeTone> = {
@@ -68,21 +68,18 @@ interface Row {
   readonly href: string | null;
 }
 
-export async function SimpleSystem({
-  locale,
-  actor,
-}: {
-  readonly locale: string;
-  readonly actor: AuthenticatedPlatformActor;
-}) {
+/**
+ * The System screen's rows and overall word — ONE computation, used by the
+ * System screen and by Home's "System" tile, so the two can never disagree.
+ */
+export function systemView(
+  locale: string,
+  system: Awaited<ReturnType<typeof loadSystemState>>,
+  readiness: Awaited<ReturnType<typeof loadReadiness>>,
+  billing: Awaited<ReturnType<typeof loadBillingIssues>>,
+): { readonly rows: readonly Row[]; readonly overall: SystemWord } {
   const copy = simpleCopy(locale);
   const base = `/${locale}/console`;
-  const [system, readiness, billing] = await Promise.all([
-    loadSystemState(),
-    loadReadiness(actor),
-    loadBillingIssues(),
-  ]);
-
   const rows: Row[] = [
     {
       key: 'database',
@@ -143,6 +140,29 @@ export async function SimpleSystem({
             )
           ? 'setup'
           : 'operational';
+  return { rows, overall };
+}
+
+/** The word for a system state, in the reader's language. */
+export function systemLabel(locale: string, word: SystemWord): string {
+  return label(locale, word);
+}
+
+export async function SimpleSystem({
+  locale,
+  actor,
+}: {
+  readonly locale: string;
+  readonly actor: AuthenticatedPlatformActor;
+}) {
+  const copy = simpleCopy(locale);
+  const [system, readiness, billing] = await Promise.all([
+    loadSystemState(),
+    loadReadiness(actor),
+    loadBillingIssues(),
+  ]);
+
+  const { rows, overall } = systemView(locale, system, readiness, billing);
 
   return (
     <Stack>

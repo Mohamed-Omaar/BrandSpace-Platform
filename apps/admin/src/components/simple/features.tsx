@@ -169,7 +169,7 @@ export async function SimpleFeatures({
           {outcome}
           <p style={{ margin: 0 }}>
             <ActionLink href={base} variant="ghost" testId="feature-back">
-              {`← ${copy('page.features')}`}
+              {fill(copy('common.backTo'), { page: copy('page.features') })}
             </ActionLink>
           </p>
           <Card title={fill(copy('feat.choose'), { feature: focus.name })} testId="feature-choose">
@@ -310,7 +310,7 @@ export async function SimpleFeatures({
             variant="ghost"
             testId="feature-back"
           >
-            {`← ${copy('common.back')}`}
+            {fill(copy('common.backTo'), { page: copy('common.back') })}
           </ActionLink>
         </p>
         <Card

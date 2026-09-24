@@ -335,7 +335,7 @@ export async function SimpleAiConnect({
     <Stack>
       <p style={{ margin: 0 }}>
         <ActionLink href={`${base}/ai`} variant="ghost" testId="ai-back">
-          {`← ${copy('page.ai')}`}
+          {fill(copy('common.backTo'), { page: copy('page.ai') })}
         </ActionLink>
       </p>
       <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
@@ -476,7 +476,7 @@ export async function SimpleAiProfile({
     <Stack>
       <p style={{ margin: 0 }}>
         <ActionLink href={`${base}/ai`} variant="ghost" testId="ai-back">
-          {`← ${copy('page.ai')}`}
+          {fill(copy('common.backTo'), { page: copy('page.ai') })}
         </ActionLink>
       </p>
       <ActionOutcome

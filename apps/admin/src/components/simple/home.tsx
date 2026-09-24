@@ -12,6 +12,7 @@ import {
 } from '../../server/owner-overview';
 import { currentEnvironment } from '../../server/platform-context';
 import type { AuthenticatedPlatformActor } from '@brandspace/auth';
+import { systemLabel, systemView } from './system';
 import {
   ActionLink,
   AreaBadge,
@@ -157,12 +158,9 @@ export async function SimpleHome({
       : readiness.verdict.status === 'unknown'
         ? copy('home.readyUnknown')
         : fill(copy('home.readyNo'), { count: readiness.verdict.remaining });
-  const systemWord =
-    system.report.status === 'ready'
-      ? copy('home.systemOperational')
-      : system.report.status === 'degraded'
-        ? copy('home.systemAttention')
-        : copy('home.systemDown');
+  // The System screen's own verdict, not a second opinion (optional tracing
+  // being off is "Setup required" there, so it must not read as a fault here).
+  const systemWord = systemLabel(locale, systemView(locale, system, readiness, billing).overall);
 
   return (
     <Stack>
