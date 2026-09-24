@@ -421,7 +421,9 @@ export default async function IntelligencePage({
                       </div>
                     ) : null}
 
-                    <SectionHeader title={t('insights.evidence')} />
+                    <div style={{ marginBlockStart: spacingTokens.sm }}>
+                      <SectionHeader title={t('insights.evidence')} />
+                    </div>
                     <ul
                       style={{
                         listStyle: 'none',

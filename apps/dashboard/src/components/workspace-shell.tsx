@@ -31,7 +31,7 @@ import {
   initialsFrom,
 } from '@brandspace/ui';
 import { switchLocalePath } from '../i18n/locale-path';
-import { translator, type MessageKey } from '../i18n/messages';
+import { customerRoleName, translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
 import { topbarModel } from '../server/topbar';
 import { copilotSurfaceForPath } from '../server/copilot-surface';
@@ -623,7 +623,7 @@ export async function WorkspaceShell({
         <ProfileCard
           label={t('nav.account')}
           name={identity}
-          role={roleName}
+          role={customerRoleName(roleName)}
           initials={initialsFrom(identity)}
         >
           {businessCount > 1 ? (

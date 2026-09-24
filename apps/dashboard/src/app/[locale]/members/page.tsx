@@ -25,7 +25,12 @@ import {
 import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
+import {
+  customerRoleName,
+  optionalMessage,
+  statusMessage,
+  translator,
+} from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import {
@@ -266,7 +271,7 @@ export default async function MembersPage({
           <option value="">{t('members.changeRole')}</option>
           {assignableRoles.map((r) => (
             <option key={r.id} value={r.id}>
-              {locale === 'ar' ? r.nameAr : r.nameEn}
+              {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
             </option>
           ))}
         </select>
@@ -432,7 +437,7 @@ export default async function MembersPage({
                         {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
                       </span>
                     </Cell>
-                    <Cell>{locale === 'ar' ? m.roleNameAr : m.roleNameEn}</Cell>
+                    <Cell>{customerRoleName(locale === 'ar' ? m.roleNameAr : m.roleNameEn)}</Cell>
                     <Cell>
                       <span data-testid={`member-access-${m.email}`}>
                         {accessLabel(m.brandScope)}
@@ -489,7 +494,7 @@ export default async function MembersPage({
                   fields: [
                     {
                       label: t('members.role'),
-                      value: locale === 'ar' ? m.roleNameAr : m.roleNameEn,
+                      value: customerRoleName(locale === 'ar' ? m.roleNameAr : m.roleNameEn),
                     },
                     { label: t('members.access.title'), value: accessLabel(m.brandScope) },
                     {
@@ -557,7 +562,9 @@ export default async function MembersPage({
                       {invitations.map((i) => (
                         <tr key={i.id} data-testid={`invitation-${i.email}`}>
                           <Cell>{i.email}</Cell>
-                          <Cell>{locale === 'ar' ? i.roleNameAr : i.roleNameEn}</Cell>
+                          <Cell>
+                            {customerRoleName(locale === 'ar' ? i.roleNameAr : i.roleNameEn)}
+                          </Cell>
                           <Cell>{accessLabel(i.brandScope)}</Cell>
                           <Cell>
                             <StatusBadge
@@ -580,7 +587,7 @@ export default async function MembersPage({
                         fields: [
                           {
                             label: t('members.role'),
-                            value: locale === 'ar' ? i.roleNameAr : i.roleNameEn,
+                            value: customerRoleName(locale === 'ar' ? i.roleNameAr : i.roleNameEn),
                           },
                           { label: t('members.access.title'), value: accessLabel(i.brandScope) },
                           {
@@ -625,7 +632,7 @@ export default async function MembersPage({
                   >
                     {assignableRoles.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {locale === 'ar' ? r.nameAr : r.nameEn}
+                        {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
                       </option>
                     ))}
                   </select>

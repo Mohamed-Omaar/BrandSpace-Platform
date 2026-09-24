@@ -967,7 +967,9 @@ export default async function OnboardingPage({
       <div
         data-testid="setup-wizard"
         data-view={view}
-        style={{ display: 'grid', gap: spacingTokens.lg }}
+        // Clear of the sticky header's fade, so a two-line description never
+        // runs into the step line beneath it.
+        style={{ display: 'grid', gap: spacingTokens.lg, paddingBlockStart: spacingTokens.md }}
       >
         <SetupProgress
           label={t('setup.stepsLabel')}

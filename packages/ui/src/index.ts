@@ -13,6 +13,7 @@ export * from './feature-card';
 export * from './feedback';
 export * from './icons';
 export * from './media';
+export * from './media-image';
 export * from './menu-style';
 export * from './overlays';
 export * from './overview-hero';

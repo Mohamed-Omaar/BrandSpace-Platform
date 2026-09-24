@@ -15,6 +15,7 @@ import {
   Field,
   IconTile,
   FolderIcon,
+  MediaImage,
   ImageIcon,
   LinkTabs,
   SideSheet,
@@ -1159,7 +1160,7 @@ function AssetTile({
              * nothing to optimise: the route already serves the bytes the
              * customer uploaded.
              */
-            <img
+            <MediaImage
               src={`/${locale}/assets/file/${asset.previewToken}`}
               alt={asset.name}
               style={{ inlineSize: '100%', blockSize: '100%', objectFit: 'cover' }}

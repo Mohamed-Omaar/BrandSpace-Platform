@@ -507,6 +507,35 @@ A `Card` above the studio: a `bodySm` strong title, the brand's palette as 1.25r
 brand's own colours as data, `cardBorder` hairline — the Asset Library brand-kit treatment at a smaller
 step), a `caption` / `textSecondary` summary line and a caption link. No new colour, font or shadow.
 
+### 6.3.23 Phase 6 final acceptance — the single-brand rail card (D-302)
+
+`BrandCard` is the `BrandSwitcher` trigger's own content (`brandCardContent`) on the same rail card
+surface (`railCardPad`, `radiusTokens.rail`, `shadowTokens.rail`) with no chevron and no menu — a
+link to the brand profile when the reader may read it. Nothing new: it is the switcher, minus the
+switch, for the business that has one brand.
+
+### 6.3.24 Phase 6 final acceptance — setup progress and the focused shell (D-303)
+
+`SetupProgress` is a `label`-scale line of text with a caption "Exit setup" link, over the `LinkTabs`
+track (`surfaceMuted`, 0.375rem, full radius) filled in `brandPurple`. The position is also in the
+text and the progressbar's value, never colour alone. The focused shell is the ordinary shell with
+its navigation sections and top-bar links withheld. No new colour, font, shadow or motion.
+
+### 6.3.25 Phase 6 final acceptance — the labelled Copilot control (D-304)
+
+`TopbarLink showLabel` keeps the square control's height and radius and adds the word beside the
+glyph, on `surfaceLavenderStrong` with `brandPurplePressed` text — the stepper's current-step pairing.
+The action row may wrap on the narrowest phones.
+
+### 6.3.26 Phase 6 final acceptance — the folder browser and the text-only card (D-305, D-306)
+
+Breadcrumbs are `bodySm` links with a `textMuted` slash separator; folder cards are `surface` cards
+with the `border` hairline, `radiusTokens.lg`, a `radiusTokens.md` `surfaceLavender` icon tile holding
+`FolderIcon` in `brandPurplePressed` (a new glyph drawn on the existing 24-unit stroke grid, like every
+icon in `icons.tsx`) and a `label`-scale name. The text-only content card uses `surfaceLavender`, a caption "Text post" label with `NoteIcon`
+in `brandPurplePressed`, and the post's words in `bodySm` / `textPrimary`. `MediaImage` is the
+existing `<img>` that removes itself on error so the tile's own neutral bed shows.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -848,6 +848,7 @@ export const messages = {
     // --- المحرّر ---
     'content.composer.eyebrow': 'إنشاء',
     'content.composer.title': 'منشور جديد',
+    'content.composer.editTitle': 'تحرير المنشور',
     'content.composer.back': 'العودة إلى المكتبة',
     'content.composer.brand': 'العلامة',
     'content.composer.brandPlaceholder': 'اختر العلامة التجارية',
@@ -3409,6 +3410,7 @@ export const messages = {
     // --- The composer ---
     'content.composer.eyebrow': 'Create',
     'content.composer.title': 'New post',
+    'content.composer.editTitle': 'Edit post',
     'content.composer.back': 'Back to the library',
     'content.composer.brand': 'Brand',
     'content.composer.brandPlaceholder': 'Select a brand',
@@ -5242,6 +5244,25 @@ export function translator(locale: string) {
 export function evidenceRefs(locale: string, refs: readonly number[]): string {
   const joined = refs.join(locale === 'ar' ? '، ' : ', ');
   return (optionalMessage(locale, 'insights.evidenceRefs') ?? '{refs}').replace('{refs}', joined);
+}
+
+/**
+ * A ROLE AS THE CUSTOMER READS IT (Phase 6 final acceptance, D-302).
+ *
+ * The catalogue names its two top roles after the backend's tenancy unit
+ * ("Workspace Owner"), and the customer never meets a workspace. The roles
+ * themselves, their keys and their permissions are unchanged; only these two
+ * names are said the customer's way. Every other role name passes through.
+ */
+const CUSTOMER_ROLE_NAMES: Readonly<Record<string, string>> = {
+  'Workspace Owner': 'Owner',
+  'Workspace Admin': 'Admin',
+  'مالك مساحة العمل': 'المالك',
+  'مدير مساحة العمل': 'المدير',
+};
+
+export function customerRoleName(name: string): string {
+  return CUSTOMER_ROLE_NAMES[name] ?? name;
 }
 
 export function evidenceLabel(locale: string, labelKey: string | null | undefined): string {

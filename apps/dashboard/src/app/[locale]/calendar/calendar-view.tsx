@@ -439,8 +439,10 @@ export function CalendarView({
                   listStyle: 'none',
                   margin: 0,
                   padding: 0,
-                  display: 'flex',
-                  flexWrap: 'wrap',
+                  // An even grid, not a ragged wrap: on a phone every draft is
+                  // one full-width row with its action at the end (D-306).
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 15rem), 1fr))',
                   gap: spacingTokens.xs,
                 }}
               >
@@ -456,6 +458,7 @@ export function CalendarView({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: spacingTokens.xs,
                       padding: `${spacingTokens.xs} ${spacingTokens.sm}`,
                       borderRadius: '0.8125rem',

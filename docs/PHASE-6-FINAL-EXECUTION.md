@@ -144,6 +144,10 @@ in-place reconnect), Strategy, Analytics / Intelligence, Brand Brain.
   **D-289** Campaign Project Room · **D-290** Calendar · **D-291** Publishing and reconnect-retry ·
   **D-292** Strategy · **D-293** Analytics / Intelligence · **D-294** Brand Brain and CopilotLink ·
   **D-295** preference learning · **D-296** recurring workflows and automation discovery · **D-297** the bell's feed · **D-298** settings, team, billing & usage, contextual history, Brand Profile reach · **D-299** empty states, microcopy, route error / not-found, overlay sweep · **D-300** carousel outline, exact quote · **D-301** Creative Studio identity and typography fix.
+- **Final acceptance pass (owner-approved correction):** **D-302** single-brand customer model, workspace
+  hidden · **D-303** five-step setup wizard · **D-304** labelled Copilot, one composer · **D-305** folder
+  browser and library paging · **D-306** remaining visual findings. Review set: 26 screens × desktop/phone
+  × EN/AR in `docs/visual-review/phase-6-final/` (`tests/e2e/phase6-final.screenshots.spec.ts`).
 
 ## 6. Deliberate exclusions (contract §52)
 

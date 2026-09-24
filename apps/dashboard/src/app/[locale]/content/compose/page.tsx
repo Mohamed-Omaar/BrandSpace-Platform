@@ -720,7 +720,7 @@ export default async function ComposePage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={translate('content.composer.title')}
+      heading={translate(draft ? 'content.composer.editTitle' : 'content.composer.title')}
       description={translate('content.subtitle')}
       activePath="/content"
       workspaceName={workspace.workspaceName}
