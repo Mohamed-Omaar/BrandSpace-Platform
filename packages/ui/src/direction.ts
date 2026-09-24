@@ -3,8 +3,9 @@ export const SUPPORTED_LOCALES = ['ar', 'en'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /**
- * The PUBLIC WEBSITE's and the Control Center's default (D-03, unchanged): the
- * marketing site leads with the launch market's language.
+ * The PUBLIC WEBSITE's default (D-03, unchanged): the marketing site leads with
+ * the launch market's language. The Control Center no longer uses it — see
+ * `CONTROL_CENTER_DEFAULT_LOCALE`.
  */
 export const DEFAULT_LOCALE: SupportedLocale = 'ar';
 
@@ -17,6 +18,16 @@ export const DEFAULT_LOCALE: SupportedLocale = 'ar';
  * brand writes to its audience is decided separately (content language).
  */
 export const CUSTOMER_DEFAULT_LOCALE: SupportedLocale = 'en';
+
+/**
+ * The CONTROL CENTER's default interface language (D-310): English.
+ *
+ * Owner decision, 2026-09-24 (Simple + Advanced mode contract §21): the owner
+ * console starts in English, and Arabic is full RTL when asked for with `/ar`.
+ * Interface language only — nothing here decides what a customer's content is
+ * written in.
+ */
+export const CONTROL_CENTER_DEFAULT_LOCALE: SupportedLocale = 'en';
 
 export type Direction = 'rtl' | 'ltr';
 

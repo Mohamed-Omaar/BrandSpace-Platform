@@ -8,6 +8,7 @@ import {
   getSupportModeService,
 } from '../../../server/platform-context';
 import { SUPPORT_COOKIE } from '../../../server/support-cookie';
+import { getConsoleMode } from '../../../server/console-mode-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,9 @@ export default async function ConsoleLayout({
       actorRole={actor.roleKey}
       permissionKeys={actor.permissionKeys}
       environment={currentEnvironment()}
+      // Presentation only (D-307). Read AFTER the actor is resolved and never
+      // passed to anything that authorizes.
+      mode={await getConsoleMode()}
       support={
         supportGrant
           ? {
