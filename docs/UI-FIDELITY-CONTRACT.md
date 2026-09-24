@@ -5,7 +5,18 @@
 > العرض التوضيحي المعتمد ليس مصدر إلهام — بل هو **المواصفة الملزمة** لواجهة المنتج.
 > يجب نقل الشيفرة الأصلية كما هي، لا إعادة تصميمها. أي انحراف مقصود يحتاج قرارًا مسجّلًا.
 
-**Status: binding on every customer-facing route from Phase 5A onward.**
+**Status: binding on every customer-facing route from Phase 5A onward — EXCEPT where superseded below.**
+
+> **SUPERSEDED FOR PRODUCT / UX / IA BY OWNER DECISION D-277 (2026-09-24).** The Phase 6 Final UX
+> Contract (`docs/PHASE-6-FINAL-UX-CONTRACT.md`) is now the product, UX and information-architecture
+> authority. For every surface it redesigns — Home, the sidebar, the Setup Wizard, Brand Brain,
+> Strategy, Campaigns, Content Library, Create Post, Assets, Calendar, Publishing, Analytics,
+> Intelligence, the global Copilot, Notifications and Settings — the rules below that forbid
+> repositioning, simplifying or reorganising a ported composition NO LONGER APPLY. What still applies
+> everywhere: the demo's and the design system's visual language (identity, colours, typography,
+> tokens, primitives), the token rule (§4 — no literals, no nearest-token approximation), accessibility,
+> responsive and RTL behaviour, and §4.2's rule against introducing a new visual language. Rebuilding an
+> old composition because the demo used it is now the mistake, not the safeguard.
 
 ---
 
