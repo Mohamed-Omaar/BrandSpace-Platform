@@ -43,6 +43,20 @@ async function expectAccessible(page: Page, label: string): Promise<void> {
   ).toEqual([]);
 }
 
+/**
+ * The Phase 3 suites in `admin-console` deliberately leave drafts open (a
+ * saved flag, a plan, a feature). A Simple change refuses to run over them —
+ * which is the product working — so a test that needs to change a setting
+ * first clears them through the SAME notice an owner would use.
+ */
+async function discardLeftovers(page: Page): Promise<void> {
+  if ((await page.getByTestId('open-draft-notice').count()) === 0) return;
+  await page.getByTestId('open-draft-reason').fill('Clear drafts left by an earlier suite');
+  await page.getByTestId('open-draft-confirm').check();
+  await page.getByTestId('open-draft-discard').click();
+  await expect(page).toHaveURL(/ok=DRAFT_DISCARDED/);
+}
+
 const SIMPLE_NAV = [
   'nav-nav.home',
   'nav-nav.customers',
@@ -234,6 +248,7 @@ test.describe('Simple writes go through the existing services', () => {
     const target = original.includes('Balanced') ? 'premium' : 'balanced';
 
     await page.goto(`${ADMIN_BASE_URL}/en/console/ai/profile?preview=${target}`);
+    await discardLeftovers(page);
     await expect(page.getByTestId('profile-preview')).toBeVisible();
     await page.getByTestId('profile-reason').fill('End-to-end check of the Simple profile switch');
     await page.getByTestId('profile-confirm').check();
@@ -273,6 +288,33 @@ test.describe('Simple writes go through the existing services', () => {
     await expect(page.getByTestId('setup-test-result')).not.toHaveText('Not tested yet.');
   });
 
+  test('an unfinished change is shown up front, and can be discarded deliberately', async ({
+    page,
+  }) => {
+    // Somebody saves a feature in Advanced and never activates it.
+    await signIn(page, 'en');
+    await page.goto(`${ADMIN_BASE_URL}/en/console/features`);
+    const form = page.getByTestId('feature-form');
+    await form.getByTestId('feature-key').fill(`e2e.draft.${randomUUID().slice(0, 8)}`);
+    await form.locator('[name="name.en"]').fill('Unfinished feature');
+    await form.locator('[name="name.ar"]').fill('ميزة غير مكتملة');
+    await form.getByTestId('feature-type').selectOption('boolean');
+    await form.getByTestId('save-feature').click();
+    await expect(page).toHaveURL(/ok=/);
+
+    // Simple mode says so before the owner starts, and offers no change control.
+    await useMode(page, 'simple');
+    await page.goto(`${ADMIN_BASE_URL}/en/console/features`);
+    await expect(page.getByTestId('open-draft-notice')).toBeVisible();
+    await expect(page.locator('[data-testid$="-change"]')).toHaveCount(0);
+
+    await page.getByTestId('open-draft-reason').fill('Stale draft from an abandoned edit');
+    await page.getByTestId('open-draft-confirm').check();
+    await page.getByTestId('open-draft-discard').click();
+    await expect(page).toHaveURL(/ok=DRAFT_DISCARDED/);
+    await expect(page.getByTestId('open-draft-notice')).toHaveCount(0);
+  });
+
   test('a feature is switched on for everyone and back, with a preview first', async ({ page }) => {
     // The registry is Advanced: create a boolean feature there, activated.
     const key = `e2e.simple.${randomUUID().slice(0, 8)}`;
@@ -292,6 +334,7 @@ test.describe('Simple writes go through the existing services', () => {
 
     await useMode(page, 'simple');
     await page.goto(`${ADMIN_BASE_URL}/en/console/features`);
+    await discardLeftovers(page);
     await expect(page.getByTestId(`feature-${key}-access`)).toHaveText('Off for every plan');
 
     await page.getByTestId(`feature-${key}-change`).click();

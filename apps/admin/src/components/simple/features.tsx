@@ -33,6 +33,8 @@ import {
   getPlatformPrisma,
 } from '../../server/platform-context';
 import { setFeatureAccessAction } from '../../app/[locale]/console/features/simple-actions';
+import { loadOpenDrafts } from '../../server/simple-config';
+import { OpenDraftNotice } from './open-drafts';
 import { AdvancedLink } from '../mode-switch';
 import { ActionLink, ActionOutcome, flash, formatCount } from '../simple-ui';
 
@@ -112,9 +114,18 @@ export async function SimpleFeatures({
   ]);
   const plans = readPlanCatalogue(plansPayload as unknown as Record<string, unknown>);
   const planKeys = plans.map((plan) => plan.key);
+  const mayManage = actor.permissionKeys.includes('platform.configuration.manage');
+  const drafts = await loadOpenDrafts(actor, ['feature-flags', 'entitlements']);
+  /*
+   * A change never runs over an unfinished draft of the same settings
+   * (D-312), so while one is open the change controls are withheld and the
+   * notice says why — rather than letting the owner fill a form that the
+   * action will then refuse.
+   */
   const mayChange =
-    actor.permissionKeys.includes('platform.configuration.manage') &&
-    actor.permissionKeys.includes('platform.configuration.activate');
+    mayManage &&
+    actor.permissionKeys.includes('platform.configuration.activate') &&
+    drafts.length === 0;
   const flags = flagsDoc.flags as readonly FlagShape[];
   const grants = entitlements.planEntitlements as readonly GrantShape[];
   const rows = [...entitlements.features]
@@ -148,7 +159,13 @@ export async function SimpleFeatures({
       ok={ok}
       error={error}
       reference={ref}
-      okText={(code) => (code === 'ACCESS_CHANGED' ? copy('feat.ok') : null)}
+      okText={(code) =>
+        code === 'ACCESS_CHANGED'
+          ? copy('feat.ok')
+          : code === 'DRAFT_DISCARDED'
+            ? copy('draft.ok')
+            : null
+      }
       errorText={(code) =>
         ['DRAFT_OPEN', 'UNCHANGED', 'NOT_SIMPLE'].includes(code)
           ? copy(`feat.error.${code}` as SimpleKey)
@@ -409,7 +426,16 @@ export async function SimpleFeatures({
       >
         {copy('feat.intro')}
       </p>
-      {!mayChange ? <Banner tone="info">{copy('feat.forbidden')}</Banner> : null}
+      <OpenDraftNotice
+        locale={locale}
+        drafts={drafts}
+        next={base}
+        advancedHref="/flags"
+        mayDiscard={mayManage}
+      />
+      {!mayChange && drafts.length === 0 ? (
+        <Banner tone="info">{copy('feat.forbidden')}</Banner>
+      ) : null}
       {rows.length === 0 ? (
         <Card testId="features-empty">
           <p style={{ margin: 0, ...typographyTokens.bodySm }}>{copy('feat.none')}</p>

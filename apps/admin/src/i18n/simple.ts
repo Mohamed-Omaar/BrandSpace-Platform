@@ -271,7 +271,7 @@ const en = {
   'profile.forbidden': 'Your role cannot change the AI profile.',
   'profile.ok': 'The {profile} profile is now active.',
   'profile.error.DRAFT_OPEN':
-    'Someone has an unfinished change to AI routing. Finish or discard it in Advanced › Configuration first.',
+    'Someone has an unfinished change to AI routing. Finish it in Advanced, or discard it here.',
   'profile.error.UNCHANGED': 'That profile is already active. Nothing was changed.',
   // System.
   'sys.overall': 'Overall',
@@ -549,9 +549,19 @@ const en = {
   'feat.forbidden': 'Your role cannot change feature access.',
   'feat.ok': 'Feature access changed.',
   'feat.error.DRAFT_OPEN':
-    'Someone has an unfinished change to features. Finish or discard it in Advanced first.',
+    'Someone has an unfinished change to features. Finish it in Advanced, or discard it here.',
   'feat.error.UNCHANGED': 'That is already how this feature is set. Nothing was changed.',
   'feat.error.NOT_SIMPLE': 'This feature is managed in Advanced mode.',
+  // An unfinished change blocking a Simple change.
+  'draft.title': 'An unfinished change is waiting',
+  'draft.body':
+    'A change to {what} was saved on {when} and never activated. Changes here are paused until it is finished or discarded, so nothing goes live that nobody reviewed.',
+  'draft.reason': 'Its reason: “{reason}”',
+  'draft.review': 'Review it in Advanced',
+  'draft.discard': 'Discard the unfinished change',
+  'draft.discardConfirm':
+    'I understand this throws that unfinished change away. Nothing customers see changes.',
+  'draft.ok': 'The unfinished change was discarded.',
 } as const;
 
 type Copy = { readonly [K in keyof typeof en]: string };
@@ -801,7 +811,7 @@ const ar: Copy = {
   'profile.forbidden': 'دورك لا يسمح بتغيير ملف الذكاء الاصطناعي.',
   'profile.ok': 'ملف {profile} مفعّل الآن.',
   'profile.error.DRAFT_OPEN':
-    'يوجد تغيير غير مكتمل على توجيه الذكاء الاصطناعي. أكمله أو ألغه من المتقدم › الإعدادات أولًا.',
+    'يوجد تغيير غير مكتمل على توجيه الذكاء الاصطناعي. أكمله من الوضع المتقدم أو تجاهله من هنا.',
   'profile.error.UNCHANGED': 'هذا الملف مفعّل بالفعل. لم يتغيّر شيء.',
   'sys.overall': 'الحالة العامة',
   'sys.operational': 'يعمل',
@@ -1064,9 +1074,18 @@ const ar: Copy = {
   'feat.forbidden': 'دورك لا يسمح بتغيير وصول الميزات.',
   'feat.ok': 'تغيّر وصول الميزة.',
   'feat.error.DRAFT_OPEN':
-    'يوجد تغيير غير مكتمل على الميزات. أكمله أو ألغه من الوضع المتقدم أولًا.',
+    'يوجد تغيير غير مكتمل على الميزات. أكمله من الوضع المتقدم أو تجاهله من هنا.',
   'feat.error.UNCHANGED': 'هذه الميزة مضبوطة هكذا بالفعل. لم يتغيّر شيء.',
   'feat.error.NOT_SIMPLE': 'هذه الميزة تُدار من الوضع المتقدم.',
+  'draft.title': 'يوجد تغيير غير مكتمل',
+  'draft.body':
+    'حُفظ تغيير على {what} في {when} ولم يُفعَّل. التغييرات هنا متوقفة حتى يُكمَل أو يُتجاهل، حتى لا يُنشر شيء لم يراجعه أحد.',
+  'draft.reason': 'سببه: «{reason}»',
+  'draft.review': 'مراجعته في الوضع المتقدم',
+  'draft.discard': 'تجاهل التغيير غير المكتمل',
+  'draft.discardConfirm':
+    'أفهم أن هذا يتخلص من ذلك التغيير غير المكتمل. لا يتغيّر شيء يراه العملاء.',
+  'draft.ok': 'تم تجاهل التغيير غير المكتمل.',
 };
 
 export type SimpleKey = keyof typeof en;

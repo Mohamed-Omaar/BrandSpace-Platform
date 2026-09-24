@@ -28,6 +28,8 @@ import {
   serviceActor,
 } from '../../server/platform-context';
 import { setAiProfileAction } from '../../app/[locale]/console/ai/actions';
+import { loadOpenDrafts } from '../../server/simple-config';
+import { OpenDraftNotice } from './open-drafts';
 import { AdvancedLink } from '../mode-switch';
 import { ActionLink, ActionOutcome, AreaBadge, SimpleSection, formatCount } from '../simple-ui';
 
@@ -465,9 +467,10 @@ export async function SimpleAiProfile({
     ? (requested as AiRoutingProfile)
     : summary.profile;
   const preview = await previewProfile(candidate);
-  const mayChange =
-    actor.permissionKeys.includes('platform.configuration.manage') &&
-    actor.permissionKeys.includes('platform.configuration.activate');
+  const mayManage = actor.permissionKeys.includes('platform.configuration.manage');
+  const mayChange = mayManage && actor.permissionKeys.includes('platform.configuration.activate');
+  const drafts = await loadOpenDrafts(actor, ['ai.capability-routing']);
+  const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const reference = typeof query['ref'] === 'string' ? query['ref'] : null;
   const candidateName = copy(`profile.${candidate}` as SimpleKey);
@@ -481,7 +484,8 @@ export async function SimpleAiProfile({
       </p>
       <ActionOutcome
         locale={locale}
-        ok={null}
+        ok={ok}
+        okText={(code) => (code === 'DRAFT_DISCARDED' ? copy('draft.ok') : null)}
         error={error}
         reference={reference}
         errorText={(code) =>
@@ -575,7 +579,14 @@ export async function SimpleAiProfile({
         <CapabilityList locale={locale} rows={preview.rows} testId="profile-capability" />
       </SimpleSection>
 
-      {candidate === summary.profile ? (
+      <OpenDraftNotice
+        locale={locale}
+        drafts={drafts}
+        next={`${base}/ai/profile`}
+        advancedHref="/configuration?domain=ai.capability-routing"
+        mayDiscard={mayManage}
+      />
+      {drafts.length > 0 ? null : candidate === summary.profile ? (
         <p
           style={{ margin: 0, ...typographyTokens.bodySm, fontWeight: 600 }}
           data-testid="profile-already-active"

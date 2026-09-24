@@ -80,5 +80,8 @@ export async function useMode(page: Page, mode: 'simple' | 'advanced'): Promise<
   if ((await target.getAttribute('aria-pressed')) !== 'true') {
     await target.click();
     await expect(target).toHaveAttribute('aria-pressed', 'true');
+    // The switch is a server action followed by a refresh of the whole
+    // console; let it settle so the next click does not land mid-render.
+    await page.waitForLoadState('networkidle');
   }
 }

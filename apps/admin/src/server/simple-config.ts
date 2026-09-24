@@ -99,3 +99,38 @@ export function refusalCode(error: unknown): string | null {
   }
   return null;
 }
+
+export interface OpenDraft {
+  readonly id: string;
+  readonly domain: ConfigDomain;
+  readonly versionNumber: number;
+  readonly changeReason: string;
+  readonly createdAt: Date;
+}
+
+/**
+ * The unfinished drafts of the given settings — what `proposeAndActivate`
+ * would refuse over. A Simple screen shows them BEFORE the owner starts a
+ * change, rather than after a refusal.
+ */
+export async function loadOpenDrafts(
+  actor: Actor,
+  domains: readonly ConfigDomain[],
+): Promise<readonly OpenDraft[]> {
+  const config = getConfigService();
+  const environment = currentEnvironment();
+  const perDomain = await Promise.all(
+    domains.map(async (domain) =>
+      (await config.listVersions(serviceActor(actor), domain, environment))
+        .filter((version) => version.status === 'DRAFT' || version.status === 'VALIDATED')
+        .map((version) => ({
+          id: version.id,
+          domain,
+          versionNumber: version.versionNumber,
+          changeReason: version.changeReason,
+          createdAt: version.createdAt,
+        })),
+    ),
+  );
+  return perDomain.flat();
+}
