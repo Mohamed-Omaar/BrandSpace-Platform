@@ -345,6 +345,24 @@ export function BellIcon(props: IconProps) {
   );
 }
 
+/**
+ * A speech bubble — the Notes entry in the customer top bar (P6-16).
+ *
+ * DRAWN, NOT BORROWED, and recorded as the one new glyph the top bar needed
+ * (CLAUDE.md §4.2 rule 4): the family had no mark for "a conversation", and
+ * reusing `SendIcon` or `PencilIcon` would say "publish" or "edit" to the
+ * person looking for their colleagues' notes. Same box, stroke and caps as
+ * every other icon here.
+ */
+export function NoteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z" />
+      <path d="M8 10h8M8 13h5" />
+    </Icon>
+  );
+}
+
 export function SendIcon(props: IconProps) {
   return (
     <Icon {...props}>

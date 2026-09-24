@@ -937,20 +937,28 @@ test.describe('the shell reproduces the demo geometry', () => {
   });
 
   test('the top bar controls', async ({ page }) => {
-    // `.search-button { width:230px; height:38px; border-radius:12px; font-size:10px }`
-    // and `.icon-button { width:38px; height:38px; border-radius:12px }`.
-    const search = page.getByTestId('topbar-search');
-    const searchBox = await search.boundingBox();
-    expect(searchBox?.width).toBe(230);
-    expect(searchBox?.height).toBe(38);
-    await expect(search).toHaveCSS('border-radius', '12px');
-    await expect(search).toHaveCSS('font-size', '10px');
-
-    const bell = page.getByTestId('topbar-notifications');
-    const bellBox = await bell.boundingBox();
-    expect(bellBox?.width).toBe(38);
-    expect(bellBox?.height).toBe(38);
-    await expect(bell).toHaveCSS('border-radius', '12px');
+    /*
+     * P6-16: the customer top bar is Review · Notes · Notifications · Copilot ·
+     * Create, every one a real destination. The search control is GONE rather
+     * than faked (D-276), so it must not come back as an empty shell.
+     *
+     * `.icon-button { width:38px; height:38px; border-radius:12px }` for each
+     * square action, `.primary-button.compact { min-height:38px;
+     * border-radius:12px; padding:0 15px; font-size:10px }` for Create.
+     */
+    await expect(page.getByTestId('topbar-search')).toHaveCount(0);
+    for (const key of ['review', 'notes', 'notifications', 'copilot']) {
+      const control = page.getByTestId(`topbar-${key}`);
+      const box = await control.boundingBox();
+      expect(box?.width, key).toBe(38);
+      expect(box?.height, key).toBe(38);
+      await expect(control).toHaveCSS('border-radius', '12px');
+    }
+    const create = page.getByTestId('topbar-create');
+    expect((await create.boundingBox())?.height).toBe(38);
+    await expect(create).toHaveCSS('border-radius', '12px');
+    await expect(create).toHaveCSS('padding-inline-start', '15px');
+    await expect(create).toHaveCSS('font-size', '10px');
   });
 
   test('the rail cards and the surfaces', async ({ page }) => {

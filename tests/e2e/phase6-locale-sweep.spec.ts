@@ -64,6 +64,7 @@ const ROUTES = [
   '/creative',
   '/strategy',
   '/notifications',
+  '/notes',
   '/integrations',
   '/members',
   '/permissions',

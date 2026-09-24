@@ -4,7 +4,8 @@ import {
   AppShell,
   BrandMark,
   ProfileCard,
-  TopbarActions,
+  TopbarCreateMenu,
+  TopbarLink,
   menuItemStyle,
   AlertIcon,
   CheckIcon,
@@ -38,6 +39,8 @@ import {
 import { switchLocalePath } from '../i18n/locale-path';
 import { translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
+import { topbarModel } from '../server/topbar';
+import { topbarCounts } from '../server/topbar-counts';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction } from '../app/[locale]/(auth)/actions';
@@ -481,6 +484,18 @@ export async function WorkspaceShell({
     switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
   const identity = customerName ?? workspaceName;
 
+  /*
+   * THE TOP BAR (P6-16): Review · Notes · Notifications · Copilot · Create,
+   * each to the screen that owns it, each on the permission that screen
+   * demands, and each dot drawn only from a real count (`topbar-counts.ts`).
+   */
+  const topbar = topbarModel({
+    locale,
+    permissionKeys,
+    requestPath,
+    counts: await topbarCounts(),
+  });
+
   const sections = navSections(permissionKeys, locale, activePath, t);
 
   /*
@@ -524,7 +539,7 @@ export async function WorkspaceShell({
          * rail rather than the top bar. The phase brief describes the Workspace
          * Selector as being "in the top bar"; in the implemented product it is
          * `headerStart`, the rail's identity block (D-59), and the top bar
-         * carries search, notifications, language and create. Putting the brand
+         * carries review, notes, notifications, Copilot, language and create. Putting the brand
          * selector in the top bar would have separated it from the thing it is
          * scoped BY and introduced the second navigation system the brief
          * forbids, so the stronger instruction — "beside the Workspace
@@ -575,31 +590,46 @@ export async function WorkspaceShell({
       }
       headerEnd={
         /*
-         * THE DEMO'S TOP-BAR ACTION SET (§9, §10): search, notifications, the
-         * language square and the purple create action. Search and
-         * notifications open an honest panel saying they are not connected yet
-         * rather than being greyed out — §10 asks for the composition to
-         * survive without the functionality being faked.
+         * THE CUSTOMER TOP BAR (P6-16). The demo's composition — square
+         * `.icon-button`s, the 38px language square and the purple
+         * `.primary-button.compact` — with every control leading to a real
+         * screen. The search control is gone rather than faked: no search
+         * domain exists behind it (D-276).
          */
-        <TopbarActions
-          labels={{
-            search: t('topbar.search'),
-            searchShortcut: t('topbar.searchShortcut'),
-            notifications: t('topbar.notifications'),
-            close: t('common.close'),
-            previewTitle: t('topbar.previewTitle'),
-            previewBody: t('topbar.previewBody'),
-            create: t('topbar.create'),
-          }}
-          language={
-            <LanguageSwitcher
-              href={localeHref(other)}
-              targetLocale={other}
-              targetLabel={other === 'ar' ? 'العربية' : 'English'}
-              ariaLabel={t('nav.language')}
-            />
-          }
-        />
+        <>
+          {topbar.links.map((link) => {
+            const count = link.count ?? 0;
+            return (
+              <TopbarLink
+                key={link.key}
+                href={link.href}
+                label={t(link.labelKey)}
+                glyph={link.key}
+                current={link.current}
+                testId={`topbar-${link.key}`}
+                indicator={
+                  link.countKey && count > 0
+                    ? { count, label: t(link.countKey).replace('{count}', String(count)) }
+                    : null
+                }
+              />
+            );
+          })}
+          <LanguageSwitcher
+            href={localeHref(other)}
+            targetLocale={other}
+            targetLabel={other === 'ar' ? 'العربية' : 'English'}
+            ariaLabel={t('nav.language')}
+          />
+          <TopbarCreateMenu
+            label={t('topbar.create')}
+            items={topbar.create.map((item) => ({
+              key: item.key,
+              href: item.href,
+              label: t(item.labelKey),
+            }))}
+          />
+        </>
       }
       /*
        * EVERY route gets the top-bar title, the Overview included: the
@@ -642,7 +672,7 @@ export async function WorkspaceShell({
         surface starts immediately underneath it.
 
         Page-level actions still render here when a page has them, because the
-        reference's top-bar actions are global (search, notifications, create)
+        top-bar actions are global (review, notes, notifications, Copilot, create)
         rather than page-specific.
       */}
       {hero ?? null}

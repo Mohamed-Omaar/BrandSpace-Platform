@@ -38,8 +38,10 @@ describe('the customer dictionary', () => {
     expect(shared.length).toBeGreaterThan(0);
     const untranslated = shared.filter(
       (key) =>
-        messages.ar[key as keyof typeof messages.ar] ===
-        messages.en[key as keyof typeof messages.en],
+        // Widened to `string`: the literal unions no longer overlap at all
+        // once no value is shared, which TypeScript reports as a mistake.
+        (messages.ar[key as keyof typeof messages.ar] as string) ===
+        (messages.en[key as keyof typeof messages.en] as string),
     );
     expect(untranslated).toEqual([]);
   });

@@ -14,6 +14,8 @@
 export { NotesService, NOTE_PERMISSION } from './notes';
 export type {
   NoteActor,
+  NoteInbox,
+  NoteInboxEntry,
   NoteRecord,
   NoteSubject,
   NoteSubjectType,

@@ -253,8 +253,13 @@ export function DropdownMenu({
    * radius and a very soft shadow, holding an avatar, two lines of text and a
    * chevron. The workspace switcher and the account button are cards; a
    * language menu in a top bar is a control.
+   *
+   * `primary` is the top bar's purple `.primary-button.compact` — `+ Create`
+   * (P6-16). It keeps the demo's exact button and adds no chevron: the demo
+   * draws none, and `aria-haspopup` already tells assistive technology that
+   * it opens a menu.
    */
-  readonly trigger?: 'control' | 'card';
+  readonly trigger?: 'control' | 'card' | 'primary';
   readonly fullWidth?: boolean;
   /** `block-start` opens upward — for a menu pinned to the foot of the rail. */
   readonly placement?: 'block-start' | 'block-end';
@@ -264,16 +269,41 @@ export function DropdownMenu({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const close = useCallback(() => setOpen(false), []);
-
+  /*
+   * THE MENU-BUTTON KEYS (WAI-ARIA APG). ArrowDown / ArrowUp on the trigger
+   * open the menu and move focus to its first / last item. Without this, arrow
+   * keys only worked once focus was already inside the menu — and nothing put
+   * it there — so a keyboard user had to Tab past the trigger to find the
+   * items. Found by the P6-16 top-bar suite on the Create menu.
+   */
+  const [focusOnOpen, setFocusOnOpen] = useState<'first' | 'last' | null>(null);
   useDismissOnOutsidePointer(wrapperRef, open, close);
   useOverlayBehaviour({ open, onClose: close, containerRef: menuRef, trap: false });
+  // AFTER `useOverlayBehaviour`, deliberately: that hook records where focus
+  // came from (the trigger) so Escape can return it there, and it must record
+  // it before this moves focus into the menu.
+  useEffect(() => {
+    if (!open || focusOnOpen === null || !menuRef.current) return;
+    const items = focusableWithin(menuRef.current);
+    (focusOnOpen === 'first' ? items[0] : items[items.length - 1])?.focus();
+    setFocusOnOpen(null);
+  }, [open, focusOnOpen]);
 
   return (
     // `min-inline-size: 0` and `max-inline-size: 100%`: the trigger's content is
     // `white-space: nowrap`, so without these it takes its MAX-CONTENT width and
     // pushes the header off the screen — 10px of overhang at 390px, which the
     // responsive suite caught by name.
-    <div ref={wrapperRef} style={{ position: 'relative', minInlineSize: 0, maxInlineSize: '100%' }}>
+    <div
+      ref={wrapperRef}
+      style={{
+        position: 'relative',
+        minInlineSize: 0,
+        maxInlineSize: '100%',
+        // The top bar's create button never shrinks, as `.compact` does not.
+        flexShrink: trigger === 'primary' ? 0 : undefined,
+      }}
+    >
       <button
         type="button"
         aria-haspopup="menu"
@@ -281,7 +311,19 @@ export function DropdownMenu({
         aria-controls={open ? id : undefined}
         data-testid={testId}
         onClick={() => setOpen((value) => !value)}
-        className={trigger === 'card' ? 'bs-pressable' : undefined}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          setFocusOnOpen(event.key === 'ArrowDown' ? 'first' : 'last');
+          setOpen(true);
+        }}
+        className={
+          trigger === 'card'
+            ? 'bs-pressable'
+            : trigger === 'primary'
+              ? 'bs-pressable bs-filled-brand'
+              : undefined
+        }
         /*
          * A CARD TRIGGER IS NAMED EXPLICITLY, because its visible copy can be
          * hidden. In a collapsed 78px rail the reference shows only the avatar,
@@ -291,39 +333,58 @@ export function DropdownMenu({
          */
         aria-label={trigger === 'card' ? label : undefined}
         style={
-          trigger === 'card'
+          trigger === 'primary'
             ? {
-                display: 'flex',
+                /* `.primary-button.compact { min-height: 38px; padding: 0 15px;
+                   border-radius: 12px; background: var(--purple); color: #fff }`
+                   — byte for byte the create button the top bar always drew. */
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: spacingTokens.sm,
-                inlineSize: '100%',
-                minInlineSize: 0,
-                overflow: 'hidden',
-                // `.workspace-switcher { padding: 10px; radius: 15px;
-                //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
-                padding: layoutTokens.railCardPad,
-                minBlockSize: '3.625rem',
-                border: '1px solid transparent',
-                borderRadius: radiusTokens.rail,
-                background: colorTokens.surface,
-                boxShadow: shadowTokens.rail,
-                color: colorTokens.textPrimary,
+                gap: spacingTokens['3xs'],
+                minBlockSize: layoutTokens.iconButton,
+                paddingInline: '0.9375rem',
+                flexShrink: 0,
+                border: 0,
+                borderRadius: radiusTokens.control,
+                background: colorTokens.brandPurple,
+                color: colorTokens.brandPurpleInk,
                 fontFamily: 'inherit',
-                textAlign: 'start',
+                ...typographyTokens.button,
                 cursor: 'pointer',
               }
-            : {
-                ...buttonStyle('neutral', 'sm'),
-                gap: spacingTokens.xs,
-                maxInlineSize: '100%',
-                inlineSize: fullWidth ? '100%' : undefined,
-                minInlineSize: 0,
-                overflow: 'hidden',
-              }
+            : trigger === 'card'
+              ? {
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: spacingTokens.sm,
+                  inlineSize: '100%',
+                  minInlineSize: 0,
+                  overflow: 'hidden',
+                  // `.workspace-switcher { padding: 10px; radius: 15px;
+                  //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
+                  padding: layoutTokens.railCardPad,
+                  minBlockSize: '3.625rem',
+                  border: '1px solid transparent',
+                  borderRadius: radiusTokens.rail,
+                  background: colorTokens.surface,
+                  boxShadow: shadowTokens.rail,
+                  color: colorTokens.textPrimary,
+                  fontFamily: 'inherit',
+                  textAlign: 'start',
+                  cursor: 'pointer',
+                }
+              : {
+                  ...buttonStyle('neutral', 'sm'),
+                  gap: spacingTokens.xs,
+                  maxInlineSize: '100%',
+                  inlineSize: fullWidth ? '100%' : undefined,
+                  minInlineSize: 0,
+                  overflow: 'hidden',
+                }
         }
       >
         {triggerContent}
-        {trigger === 'card' && placement === 'block-start' ? (
+        {trigger === 'primary' ? null : trigger === 'card' && placement === 'block-start' ? (
           // `.more { color: var(--muted); font-size: 11px }` — the demo's
           // profile affordance is an ellipsis, not a chevron.
           <span
@@ -344,6 +405,12 @@ export function DropdownMenu({
           role="menu"
           aria-label={label}
           data-testid={testId ? `${testId}-menu` : 'dropdown-menu'}
+          // Following a link in the menu closes it: a client-side navigation
+          // can keep this component mounted, and a menu left open over the
+          // page it led to reads as if the choice did not take.
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest('a[href]')) close();
+          }}
           onKeyDown={(event) => {
             if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
             event.preventDefault();

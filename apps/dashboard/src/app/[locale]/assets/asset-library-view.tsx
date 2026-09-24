@@ -94,6 +94,12 @@ type FormAction = (formData: FormData) => Promise<void>;
 
 export interface AssetLibraryViewProps {
   readonly locale: string;
+  /**
+   * `?upload=1` — the top bar's "Upload to the library" (P6-16) opens the
+   * library's OWN upload dialog, not a second upload path. Honoured only when
+   * the member may upload; the dialog's action refuses independently.
+   */
+  readonly openUpload?: boolean;
   readonly eyebrow: string;
   readonly title: string;
   readonly subtitle: string;
@@ -238,7 +244,7 @@ function filterHref(
 export function AssetLibraryView(props: AssetLibraryViewProps) {
   const t = translator(props.locale);
   const { filters, can, actions } = props;
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(props.openUpload === true && props.can.upload);
   const [folderOpen, setFolderOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const uploadFieldId = useId();

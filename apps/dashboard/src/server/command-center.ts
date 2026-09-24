@@ -614,7 +614,8 @@ async function assignedThreads(
   });
   return count === 0
     ? null
-    : { kind: 'notes-assigned', severity: 'waiting', count, href: '/overview' };
+    : // P6-16: the Notes surface exists now, and lists exactly these threads.
+      { kind: 'notes-assigned', severity: 'waiting', count, href: '/notes' };
 }
 
 async function unreadMentions(
@@ -635,12 +636,21 @@ async function unreadMentions(
       workspaceId: session.workspaceId,
       mentionedUserId: userId,
       readAt: null,
-      note: { thread: { ...brandIdScopeFilter(session.brandScope) } },
+      // P6-16: the SAME population `NotesService.unreadMentionCount` counts and
+      // the Notes surface lists — a live note, in a reachable thread, about
+      // work that still exists — so Home, the top-bar dot and /notes agree.
+      note: {
+        deletedAt: null,
+        thread: {
+          ...brandIdScopeFilter(session.brandScope),
+          NOT: { contentItem: { is: { deletedAt: { not: null } } } },
+        },
+      },
     },
   });
   return count === 0
     ? null
-    : { kind: 'notes-mentions', severity: 'waiting', count, href: '/overview' };
+    : { kind: 'notes-mentions', severity: 'waiting', count, href: '/notes' };
 }
 
 /**

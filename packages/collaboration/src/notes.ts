@@ -1,4 +1,4 @@
-import { AppError, brandIdScopeFilter } from '@brandspace/shared';
+import { AppError, brandIdQueryFilter, brandIdScopeFilter } from '@brandspace/shared';
 import type { Clock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 
@@ -76,6 +76,50 @@ export interface NoteRecord {
   readonly createdAt: Date;
   readonly mentionedUserIds: readonly string[];
 }
+
+/**
+ * One conversation as the global Notes surface lists it (P6-16).
+ *
+ * EVERYTHING HERE IS READ FROM THE THREAD AND ITS SUBJECT — the subject's own
+ * title, the brand's own name — so the list names what a thread is ABOUT
+ * without the page re-deriving it, and a subject the reader cannot open never
+ * contributes a title.
+ */
+export interface NoteInboxEntry {
+  readonly threadId: string;
+  readonly brandId: string;
+  readonly brandName: string;
+  readonly subjectType: NoteSubjectType;
+  readonly contentItemId: string | null;
+  readonly campaignId: string | null;
+  /** The content item's title or the campaign's name; null for a brand thread. */
+  readonly subjectTitle: string | null;
+  readonly status: NoteThreadStatus;
+  readonly assignedToUserId: string | null;
+  readonly updatedAt: Date;
+  /** Mentions of the reader in this thread they have not marked seen. */
+  readonly unreadMentions: number;
+  /** Why it is in the reader's list — the strongest reason wins. */
+  readonly reason: 'mentioned' | 'assigned' | 'participating' | 'open';
+  readonly lastNote: {
+    readonly authorUserId: string;
+    readonly body: string;
+    readonly createdAt: Date;
+  } | null;
+}
+
+export interface NoteInbox {
+  /** Threads that name, are assigned to, or were written in by the reader. */
+  readonly forYou: readonly NoteInboxEntry[];
+  /** Other OPEN conversations in the reader's brands. */
+  readonly open: readonly NoteInboxEntry[];
+}
+
+/** The longest excerpt of a note the inbox carries. */
+const EXCERPT = 180;
+
+/** How many threads each inbox section returns at most. */
+const INBOX_TAKE = 40;
 
 /**
  * The permission a member needs to take part at all.
@@ -437,13 +481,147 @@ export class NotesService {
    * the user alone would cross workspaces for anybody who belongs to two.
    */
   async unreadMentionCount(actor: NoteActor): Promise<number> {
+    /*
+     * P6-16: THE SAME ANSWER THE COMMAND CENTER GIVES. This used to count every
+     * unread mention of the person in the workspace, including mentions in
+     * threads about a brand they can no longer see — so the top bar would have
+     * promised a note the Notes surface could not show them. It now asks the
+     * permission and the brand scope the threads themselves are read under.
+     */
+    if (!actor.permissionKeys.includes(NOTE_PERMISSION)) return 0;
     return this.#db.noteMention.count({
       where: {
         workspaceId: this.#workspaceId,
         mentionedUserId: actor.userId,
         readAt: null,
+        note: {
+          deletedAt: null,
+          thread: {
+            ...brandIdScopeFilter(actor.brandScope),
+            // The inbox cannot list a thread about deleted content, so the dot
+            // must not count one either — the two always agree.
+            NOT: { contentItem: { is: { deletedAt: { not: null } } } },
+          },
+        },
       },
     });
+  }
+
+  /**
+   * THE GLOBAL NOTES SURFACE (P6-16): every conversation that concerns the
+   * reader, then the other open ones in their brands.
+   *
+   * NOTHING NEW IS STORED. Threads stay attached to the work they are about —
+   * this reads them across subjects, under the same permission, brand scope and
+   * workspace predicate every per-subject read uses, and each entry links back
+   * to its subject, where the conversation continues.
+   *
+   * `brandId` narrows to one brand (the rail's selection) and is INTERSECTED
+   * with the scope, never substituted for it (the D-267 shape).
+   */
+  async inbox(
+    actor: NoteActor,
+    options: { readonly brandId?: string | null } = {},
+  ): Promise<NoteInbox> {
+    this.#requirePermission(actor);
+    const scope = brandIdQueryFilter({
+      brandId: options.brandId ?? undefined,
+      brandScope: actor.brandScope,
+    });
+    const me = actor.userId;
+
+    const base = {
+      workspaceId: this.#workspaceId,
+      AND: [
+        ...scope.AND,
+        // A thread about a deleted content item has nowhere to link to.
+        { NOT: { contentItem: { is: { deletedAt: { not: null } } } } },
+      ],
+    };
+    const include = {
+      brand: { select: { name: true } },
+      contentItem: { select: { title: true } },
+      campaign: { select: { name: true } },
+      notes: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'desc' as const },
+        select: {
+          authorUserId: true,
+          body: true,
+          createdAt: true,
+          mentions: { where: { mentionedUserId: me }, select: { readAt: true } },
+        },
+      },
+    };
+
+    const concernsMe = {
+      OR: [
+        { assignedToUserId: me },
+        { createdByUserId: me },
+        { notes: { some: { deletedAt: null, authorUserId: me } } },
+        { notes: { some: { deletedAt: null, mentions: { some: { mentionedUserId: me } } } } },
+      ],
+    };
+
+    const mine = await this.#db.noteThread.findMany({
+      where: { ...base, ...concernsMe },
+      orderBy: { updatedAt: 'desc' },
+      take: INBOX_TAKE,
+      include,
+    });
+    const others = await this.#db.noteThread.findMany({
+      where: {
+        ...base,
+        status: 'OPEN',
+        id: { notIn: mine.map((thread) => thread.id) },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: INBOX_TAKE,
+      include,
+    });
+
+    const entry = (thread: (typeof mine)[number], forYou: boolean): NoteInboxEntry => {
+      const mentionsOfMe = thread.notes.flatMap((note) => note.mentions);
+      const unread = mentionsOfMe.filter((mention) => mention.readAt === null).length;
+      const reason: NoteInboxEntry['reason'] = !forYou
+        ? 'open'
+        : mentionsOfMe.length > 0
+          ? 'mentioned'
+          : thread.assignedToUserId === me
+            ? 'assigned'
+            : 'participating';
+      const last = thread.notes[0] ?? null;
+      return {
+        threadId: thread.id,
+        brandId: thread.brandId,
+        brandName: thread.brand.name,
+        subjectType: thread.subjectType as NoteSubjectType,
+        contentItemId: thread.contentItemId,
+        campaignId: thread.campaignId,
+        subjectTitle: thread.contentItem?.title ?? thread.campaign?.name ?? null,
+        status: thread.status as NoteThreadStatus,
+        assignedToUserId: thread.assignedToUserId,
+        updatedAt: thread.updatedAt,
+        unreadMentions: unread,
+        reason,
+        lastNote: last
+          ? {
+              authorUserId: last.authorUserId,
+              body: last.body.length > EXCERPT ? `${last.body.slice(0, EXCERPT - 1)}…` : last.body,
+              createdAt: last.createdAt,
+            }
+          : null,
+      };
+    };
+
+    const forYou = mine.map((thread) => entry(thread, true));
+    // Unread first, then most recent — what is waiting on the reader leads.
+    forYou.sort(
+      (a, b) =>
+        Number(b.unreadMentions > 0) - Number(a.unreadMentions > 0) ||
+        b.updatedAt.getTime() - a.updatedAt.getTime(),
+    );
+    return { forYou, open: others.map((thread) => entry(thread, false)) };
   }
 
   /** Mark this person's mentions in one thread as seen. */

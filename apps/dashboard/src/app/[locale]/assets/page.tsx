@@ -276,6 +276,7 @@ export default async function AssetsPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <AssetLibraryView
         locale={locale}
+        openUpload={query['upload'] === '1'}
         eyebrow={t('assets.eyebrow')}
         title={t('assets.title')}
         subtitle={t('assets.subtitle')}

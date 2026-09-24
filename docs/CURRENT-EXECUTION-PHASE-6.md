@@ -419,6 +419,16 @@ when its defect is reinstated is not evidence of anything.
 | 36  | P6-14: an Arabic key dropped (its placeholder no longer survives)                 | 1 unit              |
 | 37  | P6-15: the Team screen's member status returned to its raw enum                   | 1 unit              |
 | 38  | P6-15: one invitation status label dropped from the Arabic dictionary             | 1 unit              |
+| 39  | P6-16: Review offered on a key its route does not demand                          | 5 unit              |
+| 40  | P6-16: the Copilot entry drops the reader's screen                                | 1 unit              |
+| 41  | P6-16: a Create flow offered without its page's own gate                          | 1 unit              |
+| 42  | P6-16: the top-bar dot drawn with no count behind it                              | 1 unit              |
+| 43  | P6-16: the preview `TopbarActions` rendered in the customer shell again           | 1 unit              |
+| 44  | P6-16: the unread-mention count without brand scope                               | 1 isolation         |
+| 45  | P6-16: the rail's brand replacing the member's scope in the inbox                 | 1 isolation         |
+| 46  | P6-16: the inbox without its workspace predicate                                  | 1 isolation         |
+| 47  | P6-16: mentions in threads about deleted content counted                          | 1 isolation         |
+| 48  | P6-16: the unread-mention count without the Notes permission                      | 1 isolation         |
 
 Plant 9 was invalid on the first attempt — the substitute class `bs-control-PLANTED` contains the
 substring the scan looks for, so it passed. Recorded because a plant that does not actually remove
@@ -631,6 +641,44 @@ claimed**. F-90 (local `automation_rule` litter) — local only; green on a fres
 raising a batch. F-91 (prisma-config generating into a throwaway directory) — intact, untouched by Phase 6.
 F-92 (repeated-workflow / edit-preference signals have no honest source) and F-93 (API rate limits
 declared, not enforced) — open, recorded.
+
+---
+
+## 13. P6-16 — The customer top bar, integrated
+
+**Found in staging acceptance, after P6-15.** The top bar still rendered the design-system phase's
+`TopbarActions`: Search, Notifications and Create opened a "not connected yet" sheet, and the bell's
+purple dot was drawn on every page whatever the data. The Phase 6 specification requires
+**Review · Notes · Notifications · Copilot · Create**, each a real product action (D-276).
+
+| Action        | Destination                                    | Offered on                                 | Dot                                                    |
+| ------------- | ---------------------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| Review        | `/approvals` (existing)                        | `content.read`, as the route               | pending approvals in scope, for `content.approve` only |
+| Notes         | `/notes` (new reading of the existing domain)  | `NOTE_PERMISSION`, as the domain           | unread mentions (`unreadMentionCount`)                 |
+| Notifications | `/notifications` (existing)                    | every member, as the route                 | unread notifications (`unreadCount`)                   |
+| Copilot       | `/copilot?from=<the screen you are on>`        | `copilot.use`, as the route                | none                                                   |
+| Create        | content · campaign · AI creative · upload menu | each flow's page gate AND its creating key | none                                                   |
+
+**Search is removed**, not faked: no search domain exists behind it. **No new data model, migration or
+RLS change** — `NoteMention.readAt` already carried unread state.
+
+**Fixed on the way:** the Notes domain's unread count ignored brand scope and permission; the Command
+Center's count did not exclude deleted notes or subjects; Home's notes attention items led back to Home;
+the shared dropdown had no arrow-key opening, so the Create menu (and every other dropdown) could not be
+entered with the arrow keys from its trigger.
+
+**Visual design preserved.** Every control is the demo's own: `.icon-button` 38×38/12px, the existing
+lighter bell glyph, the rail's own check and spark icons, the `.notification-dot`, the 38px language
+square and `.primary-button.compact` for Create (the design-system geometry test now measures all five).
+One glyph was drawn — `NoteIcon`, a speech bubble — because the family had no mark for a conversation.
+
+**Tests.** `tests/unit/phase6-topbar.test.ts` (25 — permission parity read from each route's source,
+Copilot surface per path, create gating, no placeholder, bilingual strings),
+`tests/isolation/phase6-notes-inbox.test.ts` (7 — cross-tenant under RLS, brand scope, brand
+narrowing, permission, unread state, deleted subjects), `tests/e2e/phase6-topbar.spec.ts` (12 × desktop
+and phone — every destination reached, dots equal to the numbers their screens show, keyboard menu,
+focus rings by Tab, viewer and copywriter permissions, Arabic/RTL mirroring and fit, axe with the menu
+open in both directions), `/notes` added to the all-screens locale sweep. Plants 39–48.
 
 ---
 

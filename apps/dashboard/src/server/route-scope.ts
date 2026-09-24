@@ -121,6 +121,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * narrows it.
    */
   '/campaigns': 'brand-or-all',
+  /*
+   * P6-16. NOTES reads conversations across subjects. Every brand the member
+   * can see is a meaningful answer, and a brand on the rail narrows it — the
+   * same shape as the Command Center it feeds.
+   */
+  '/notes': 'brand-or-all',
 };
 
 /**

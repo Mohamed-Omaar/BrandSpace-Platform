@@ -76,10 +76,11 @@ const customerFiles = sources(DASHBOARD).filter(
 
 describe('P6-14 · every Arabic string is Arabic', () => {
   /**
-   * The only value that is legitimately the same in both languages: a keyboard
-   * shortcut glyph. Anything added here needs the same kind of reason.
+   * Values that are legitimately the same in both languages. Empty since P6-16
+   * removed the search control and its keyboard-shortcut glyph; anything added
+   * here needs that kind of reason.
    */
-  const SAME_IN_BOTH = new Set(['topbar.searchShortcut']);
+  const SAME_IN_BOTH = new Set<string>();
 
   const en = messages.en as Record<string, string>;
   const ar = messages.ar as Record<string, string>;

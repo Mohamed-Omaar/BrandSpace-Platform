@@ -285,6 +285,9 @@ take it on trust.
 | `/[locale]/billing/invoices/[invoiceId]/document` | **The invoice as a printable document.** The demo has no invoice at all, and this is not a screen in the first place: it is a document that happens to be served over HTTP, with no navigation, no shell and A4 proportions | Deliberately NOT the dashboard shell, and that absence is the design decision. It is the platform's typography scale, the platform's own `surface`, `textPrimary` and `textSecondary` tokens, one new token (`documentRule` — a rule weight that survives a printer, where the screen borders do not), and the same definition-list and table composition the invoice SCREEN uses — so the two say the same thing in the same order. Its `@page` rules and print colours are declared inline on the route, because an accounting document must not be alterable by a change to a shared stylesheet. Every amount renders through `formatMoney`, which takes its decimals from the currency itself | D-216 |
 | `/[locale]/settings/security` | **The customer's own security settings.** The demo has a signed-in product and no account-security screen anywhere — `#customer/security` is not in `app-1.js`'s navigation, not in `meta` and not in `page()`'s router. It is also not a new KIND of screen: it is a settings page for one person's second factor, which is why it is composed exactly like the settings pages beside it rather than designed for itself | `packages/ui`'s `SettingsSplit`, `Card`, `Field`, `buttonStyle`, `inputStyle` and the spacing and typography tokens, plus the shared shell and the same `CustomerBanner` every settings route uses — the IDENTICAL composition `/[locale]/settings` and `/[locale]/settings/brand` already use, in the same order, so a reader moving between the three meets one page design. The only additions are a `<code>` block for the otpauth string and a list of recovery codes in the same caption typography; nothing new was drawn, and no colour, font, shadow, layout system or interaction model was introduced | D-254 |
 
+| `/[locale]/settings/data` | **Data controls.** The demo has no data-controls screen — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. It is a settings page listing controls that already live elsewhere, and stating plainly which self-serve controls do not exist | `packages/ui`'s `SettingsSplit`, `Card`, `SectionHeader`, `StatusBadge` and ghost `buttonStyle` links — the SAME composition every other Settings section uses, so it reads as one of them. Nothing new was drawn | D-273 |
+| `/[locale]/notes` | **Notes across the product.** The demo has no notes or conversation route — its approvals, content and campaign placeholders carry no discussion, and there is no inbox of any kind to port | The IDENTICAL composition `/[locale]/notifications` uses — `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, the same list rows and the same inline-start border plus a worded badge for unread (never colour alone) — so the two inboxes are one design. Each row links back to the subject screen where the existing notes panel lives. Nothing new was drawn | D-276 |
+
 ### 6.3.1 Phase 6 P6-11 — additions inside screens that were already extensions
 
 `/analytics` and `/intelligence` were already §6 extensions (above). P6-11 adds content to them, and to
@@ -325,6 +328,16 @@ No geometry changed. Plan's table wrappers take the opaque `surface` + `radiusTo
 glow at 4.24:1; the card itself is untouched. Plan's tables and Brand Brain's `.bb-attention` take
 keyboard focus (visible only as the standard focus ring). Brand Profile's locale checkboxes take the
 approvals checkbox size. All three are corrections the owner may refine in the final parity pass.
+
+### 6.3.5 Phase 6 P6-16 — the customer top bar
+
+The top bar keeps the demo's composition and geometry exactly — `.icon-button` (38×38, soft fill, 12px
+radius), `.notification-dot`, the 38px `.language-button` and `.primary-button.compact` — and changes
+what each control DOES: Review, Notes, Notifications and Copilot are links to real screens and Create
+opens a `DropdownMenu` of real creation flows, its trigger the unchanged purple button with no chevron
+(the demo draws none; `aria-haspopup` carries it). The dot is drawn only from a real count. The search
+control is removed (D-276), which is the one visible difference from the demo's bar, recorded here
+rather than hidden. One glyph was added, `NoteIcon`, drawn to the family's own specification.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
@@ -380,7 +393,8 @@ that never relies on colour alone. Two differences, both necessary and neither a
 **THE CONFLICT, STATED RATHER THAN RESOLVED SILENTLY.** The Phase 8 brief describes the Workspace
 Selector as living "in the top bar" and asks for the Brand Selector beside it. In the IMPLEMENTED
 product the Workspace Selector is `AppShell`'s `headerStart` — the rail's identity block (D-59) — and
-the top bar carries search, notifications, the language square and the create action (§9, §10).
+the top bar carries review, notes, notifications, Copilot, the language square and the create action
+(§9, §10; D-276 replaced the search control, which had no domain behind it).
 
 Both instructions cannot be followed at once. The brand selector went to the RAIL, beneath the
 workspace card, because:

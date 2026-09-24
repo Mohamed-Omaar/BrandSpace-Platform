@@ -34,3 +34,33 @@ export function copilotSurface(value: string | null | undefined): CopilotEntrySu
 export function copilotHref(locale: string, from: CopilotEntrySurface): string {
   return `/${locale}/copilot?from=${from}`;
 }
+
+/**
+ * WHICH SCREEN THE READER IS ON, as a Copilot surface (P6-16).
+ *
+ * The top bar's Copilot entry is on every page, so it cannot pass a literal the
+ * way the in-page "Ask Copilot" links do. It reads the route instead, longest
+ * prefix first, and anything not listed opens the Copilot as `general` — the
+ * honest answer for a screen the Copilot has no description of.
+ */
+const SURFACE_FOR_ROUTE: readonly (readonly [string, CopilotEntrySurface])[] = [
+  ['/overview', 'overview'],
+  ['/analytics', 'analytics'],
+  ['/intelligence', 'intelligence'],
+  ['/brand-brain', 'brand_brain'],
+  ['/campaigns', 'campaigns'],
+  ['/calendar', 'calendar'],
+  ['/content', 'content'],
+  ['/automations', 'automations'],
+];
+
+/** `/en/content/compose?item=1` → `content`. A path without a locale is `general`. */
+export function copilotSurfaceForPath(requestPath: string | null | undefined): CopilotEntrySurface {
+  if (!requestPath) return 'general';
+  const [pathname = ''] = requestPath.split('?', 1);
+  const route = `/${pathname.split('/').filter(Boolean).slice(1).join('/')}`;
+  const match = SURFACE_FOR_ROUTE.find(
+    ([prefix]) => route === prefix || route.startsWith(`${prefix}/`),
+  );
+  return match ? match[1] : 'general';
+}
