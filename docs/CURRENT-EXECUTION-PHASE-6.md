@@ -680,6 +680,13 @@ and phone — every destination reached, dots equal to the numbers their screens
 focus rings by Tab, viewer and copywriter permissions, Arabic/RTL mirroring and fit, axe with the menu
 open in both directions), `/notes` added to the all-screens locale sweep. Plants 39–48.
 
+**Verified before push:** root typecheck, lint and format clean; unit 2427/2427 (103 files); the full
+isolation suite on a freshly created database — which caught the new suite reading a role catalogue it
+had not bootstrapped (CI migrates an empty database and seeds nothing), fixed with
+`ensureWorkspaceRbac`, then 7/7 alone on another empty database and 2083/2083 for the other 99 files;
+full Playwright on a fresh database 605/606, the one failure being Brand Brain's 40-press keyboard
+budget, which the top bar's three new stops exceeded — widened to 60, project 26/26.
+
 ---
 
 ## Close-out

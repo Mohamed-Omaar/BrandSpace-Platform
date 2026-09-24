@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NotesService, type NoteActor } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
-import { appRoleClient } from './fixtures';
+import { appRoleClient, ensureWorkspaceRbac } from './fixtures';
 
 /**
  * PHASE 6 · P6-16 — THE GLOBAL NOTES SURFACE AND THE TOP BAR'S NOTES DOT.
@@ -136,6 +136,10 @@ beforeAll(async () => {
   if (!connectionString) throw new Error('DATABASE_PLATFORM_URL is required.');
   platform = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   app = appRoleClient();
+  // CI migrates an EMPTY database and seeds nothing: the role catalogue this
+  // suite reads must be bootstrapped here, not inherited from whichever suite
+  // happened to run first.
+  await ensureWorkspaceRbac(platform);
 }, 60_000);
 
 afterAll(async () => {
