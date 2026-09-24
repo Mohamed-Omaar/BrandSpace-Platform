@@ -4,7 +4,7 @@ import {
   ConfigurationAiSource,
   REQUESTED_AI_CAPABILITIES,
   RoutingError,
-  resolveCapabilityRoute,
+  resolveRoute,
   tasksForCapability,
   type AiRoutingProfile,
 } from '@brandspace/ai-gateway';
@@ -310,6 +310,8 @@ export interface CapabilityPreview {
   readonly capability: string;
   readonly modelKey: string | null;
   readonly outcome: 'served' | 'switched_off' | 'no_model';
+  /** A task rule answered, so no profile changes this row. */
+  readonly fixedByRule: boolean;
 }
 
 export async function previewProfile(
@@ -326,20 +328,30 @@ export async function previewProfile(
   const rows = AI_CAPABILITIES.filter((capability) =>
     REQUESTED_AI_CAPABILITIES.includes(capability.key),
   ).map((capability): CapabilityPreview => {
-    const task = tasksForCapability(capability.key)[0];
-    if (!task) return { capability: capability.key, modelKey: null, outcome: 'no_model' };
+    const task = tasksForCapability(capability.key).find((candidate) => candidate.mvpApproved);
+    const none = { capability: capability.key, modelKey: null, fixedByRule: false };
+    if (!task) return { ...none, outcome: 'no_model' };
     try {
-      const route = resolveCapabilityRoute(
+      // The router's full entry point: a global task rule wins outright, and
+      // only when none applies does the capability layer — and so the profile
+      // — decide. Planless and workspace-less, so only global rules apply.
+      const route = resolveRoute(
         { taskKey: task.key, workspaceId: '00000000-0000-0000-0000-000000000000', planKey: null },
-        routing,
+        configuration.routingRules,
         configuration.models,
+        routing,
       );
-      return { capability: capability.key, modelKey: route.chain[0] ?? null, outcome: 'served' };
+      return {
+        capability: capability.key,
+        modelKey: route.chain[0] ?? null,
+        outcome: 'served',
+        fixedByRule: route.resolvedBy === 'task',
+      };
     } catch (error: unknown) {
       if (error instanceof RoutingError && error.reason === 'capability_disabled') {
-        return { capability: capability.key, modelKey: null, outcome: 'switched_off' };
+        return { ...none, outcome: 'switched_off' };
       }
-      return { capability: capability.key, modelKey: null, outcome: 'no_model' };
+      return { ...none, outcome: 'no_model' };
     }
   });
   const pricedModels = configuration.models.filter(
