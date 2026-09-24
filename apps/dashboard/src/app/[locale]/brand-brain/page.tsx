@@ -536,6 +536,7 @@ export default async function BrandBrainPage({
         layers={layers}
         gaps={gaps}
         copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
+        profileHref={can('brand.read') ? `/${locale}/settings/brand?brand=${brand.id}` : null}
         completionPercent={completion.percent}
         totalActiveItems={completion.totalActiveItems}
         sourceCount={sourceCount}

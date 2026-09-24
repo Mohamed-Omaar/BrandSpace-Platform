@@ -486,6 +486,14 @@ with a `surfaceMuted` initial disc, a `bodySm` headline, the excerpt in `textSec
 `caption` context line; unread adds a 3px `brandPurple` inline-start edge and the word "unread". The
 empty state is `StateMessage`. No new colour, font, shadow or interaction model.
 
+### 6.3.20 Phase 6 final — Billing & usage tabs, Team member column, post history (D-298)
+
+Billing & usage uses the existing `LinkTabs` primitive above each tab's unchanged cards. Team's member
+cell stacks a `bodySm` strong name, the address in `caption` / `textSecondary` and a `textMuted` joined
+line beside the existing tile avatar. "This post's history" is a `CustomerCard` below the Notes panel
+holding the campaign room's timeline list, now shared as `ActivityTimeline`. The Brand Brain head gains
+a ghost small "Brand profile" button next to "Ask about this brand". No new colour, font or shadow.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -327,8 +327,38 @@ export default async function MembersPage({
     );
   }
 
+  /*
+   * D-298 (§41/§45) — A PERSON, NOT AN ADDRESS. The first column is the
+   * member: their name where they gave one, the address under it, and when
+   * they joined. Nothing is invented for a member without a name.
+   */
+  const joined = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', { dateStyle: 'medium' });
+  const memberIdentity = (m: (typeof members)[number]) => (
+    <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+      {m.name?.trim() ? (
+        <strong data-testid={`member-name-${m.email}`} style={typographyTokens.bodySm}>
+          {m.name.trim()}
+        </strong>
+      ) : null}
+      <span
+        style={{
+          ...(m.name?.trim() ? typographyTokens.caption : typographyTokens.bodySm),
+          color: m.name?.trim() ? colorTokens.textSecondary : colorTokens.textPrimary,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {m.email}
+      </span>
+      {m.joinedAt ? (
+        <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+          {t('members.joined').replace('{date}', joined.format(m.joinedAt))}
+        </span>
+      ) : null}
+    </span>
+  );
+
   const memberHeaders = [
-    t('members.email'),
+    t('members.member'),
     t('members.role'),
     t('members.access.title'),
     t('members.status'),
@@ -394,11 +424,11 @@ export default async function MembersPage({
                         }}
                       >
                         <Avatar
-                          initials={initialsFrom(m.email)}
+                          initials={initialsFrom(m.name?.trim() || m.email)}
                           seed={avatarSeed(m.email)}
                           shape="tile"
                         />
-                        {m.email}
+                        {memberIdentity(m)}
                         {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
                       </span>
                     </Cell>
@@ -452,7 +482,7 @@ export default async function MembersPage({
                         overflowWrap: 'anywhere',
                       }}
                     >
-                      {m.email}
+                      {memberIdentity(m)}
                       {m.isWorkspaceOwner ? ownerBadge(`${m.email}-mobile`) : null}
                     </span>
                   ),

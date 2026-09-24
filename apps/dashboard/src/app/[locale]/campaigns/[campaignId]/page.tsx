@@ -17,8 +17,8 @@ import {
 import { isAppError, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { mediaForVariants } from '../../../../server/media-picker';
-import { activityActionLabel } from '../../../../server/activity-labels';
-import { ActivityLogService } from '@brandspace/activity';
+import { activityTimeline } from '../../../../server/activity-timeline';
+import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { messages, type MessageKey } from '../../../../i18n/messages';
 import { brandContextFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
@@ -241,45 +241,15 @@ export default async function CampaignDetailPage({
       })
     : null;
 
+  /* D-298 — the shared contextual timeline: the campaign and its posts. */
   const activity =
     tab === 'activity' || tab === 'overview'
-      ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
-          const page = await new ActivityLogService({
-            db,
-            workspaceId: workspace.workspaceId,
-          }).page({
-            viewer: {
-              userId: customer.userId,
-              permissionKeys: workspace.permissionKeys,
-              brandScope: workspace.brandScope,
-            },
-            filter: { resourceIds: [campaign.id, ...itemIds] },
-            take: tab === 'activity' ? 50 : 5,
-          });
-          const actorIds = [
-            ...new Set(page.entries.flatMap((entry) => (entry.actorId ? [entry.actorId] : []))),
-          ];
-          const members =
-            actorIds.length === 0
-              ? []
-              : await db.membership.findMany({
-                  where: { userId: { in: actorIds } },
-                  select: { userId: true, user: { select: { name: true, email: true } } },
-                });
-          const names = new Map(
-            members.map((member) => [member.userId, member.user.name ?? member.user.email]),
-          );
-          return page.entries.map((entry) => ({
-            id: entry.id,
-            action: entry.action,
-            at: entry.occurredAt,
-            actor:
-              entry.actorId === customer.userId
-                ? t('activity.you')
-                : entry.actorId
-                  ? (names.get(entry.actorId) ?? '—')
-                  : '—',
-          }));
+      ? await activityTimeline({
+          locale,
+          workspace,
+          userId: customer.userId,
+          resourceIds: [campaign.id, ...itemIds],
+          take: tab === 'activity' ? 50 : 5,
         })
       : [];
 
@@ -559,7 +529,7 @@ export default async function CampaignDetailPage({
 
             {activity.length > 0 ? (
               <Card title={t('campaigns.room.recentActivity')} testId="campaign-recent-activity">
-                <ActivityList entries={activity} dictionary={dictionary} dateFormat={dateFormat} />
+                <ActivityTimeline entries={activity} />
               </Card>
             ) : null}
 
@@ -976,38 +946,12 @@ export default async function CampaignDetailPage({
                 description={t('activity.emptyBody')}
               />
             ) : (
-              <ActivityList entries={activity} dictionary={dictionary} dateFormat={dateFormat} />
+              <ActivityTimeline entries={activity} />
             )}
           </Card>
         ) : null}
       </div>
     </WorkspaceShell>
-  );
-}
-
-function ActivityList({
-  entries,
-  dictionary,
-  dateFormat,
-}: {
-  readonly entries: readonly { id: string; action: string; at: Date; actor: string }[];
-  readonly dictionary: Readonly<Record<string, string | undefined>>;
-  readonly dateFormat: Intl.DateTimeFormat;
-}) {
-  return (
-    <ol style={listStyle}>
-      {entries.map((entry) => (
-        <li key={entry.id} style={rowStyle}>
-          <strong style={{ ...typographyTokens.bodySm, flex: '1 1 14rem' }}>
-            {activityActionLabel(entry.action, dictionary)}
-          </strong>
-          <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-            {entry.actor} ·{' '}
-            <time dateTime={entry.at.toISOString()}>{dateFormat.format(entry.at)} UTC</time>
-          </span>
-        </li>
-      ))}
-    </ol>
   );
 }
 

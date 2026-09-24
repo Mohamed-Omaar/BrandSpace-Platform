@@ -287,6 +287,8 @@ export const messages = {
     'members.title': 'الفريق',
     'members.invite': 'دعوة عضو',
     'members.email': 'البريد الإلكتروني',
+    'members.member': 'العضو',
+    'members.joined': 'انضم في {date}',
     'members.role': 'الدور',
     'members.status': 'الحالة',
     'members.memberStatus.INVITED': 'مدعو',
@@ -582,6 +584,7 @@ export const messages = {
     'bb.understands.some':
       'تفهم BrandSpace هذه العلامة من {facts} معلومة معتمدة في {areas} من {total} مجالات و{sources} مصادر معالجة.',
     'bb.askAboutBrand': 'اسأل عن هذه العلامة',
+    'bb.openProfile': 'ملف العلامة',
     'bb.layersTitle': 'ما تتذكره BrandSpace',
     'bb.layer.CANONICAL': 'معرفة العلامة',
     'bb.layer.CANONICAL.desc': 'ما هي العلامة: الهوية والجمهور والعروض والصوت والقواعد.',
@@ -1514,6 +1517,7 @@ export const messages = {
     'activity.actor.AUTOMATION': 'أتمتة',
     'activity.actor.COPILOT': 'المساعد',
     'activity.you': 'أنت',
+    'content.history.title': 'سجل هذا المنشور',
 
     'notifications.title': 'الإشعارات',
     'notifications.feed.all': 'الكل',
@@ -2124,6 +2128,8 @@ export const messages = {
     'creative.failed': 'تعذّر إنشاء الصورة. حاول مرة أخرى.',
     'creative.insufficientCredits': 'لا يوجد رصيد كافٍ لإنشاء صورة.',
     'nav.billing': 'الفوترة والاستخدام',
+    'billing.tabPayments': 'الخطة والمدفوعات',
+    'billing.tabUsage': 'الاستخدام والحدود',
     'billing.title': 'الفوترة والاستخدام',
     'billing.subtitle': 'خطتك، رصيدك، فواتيرك ومشترياتك.',
     'billing.currencyNotice': 'كل المبالغ بعملة مساحة العمل التي اخترتها عند إنشائها.',
@@ -2766,6 +2772,8 @@ export const messages = {
     'members.title': 'Team',
     'members.invite': 'Invite a member',
     'members.email': 'Email',
+    'members.member': 'Member',
+    'members.joined': 'Joined {date}',
     'members.role': 'Role',
     'members.status': 'Status',
     'members.memberStatus.INVITED': 'Invited',
@@ -3072,6 +3080,7 @@ export const messages = {
     'bb.understands.some':
       'BrandSpace understands this brand from {facts} approved facts across {areas} of {total} areas and {sources} processed sources.',
     'bb.askAboutBrand': 'Ask about this brand',
+    'bb.openProfile': 'Brand profile',
     'bb.layersTitle': 'What BrandSpace remembers',
     'bb.layer.CANONICAL': 'Brand knowledge',
     'bb.layer.CANONICAL.desc': 'What the brand is: identity, audience, offers, voice and rules.',
@@ -4029,6 +4038,7 @@ export const messages = {
     'activity.actor.AUTOMATION': 'Automation',
     'activity.actor.COPILOT': 'Copilot',
     'activity.you': 'You',
+    'content.history.title': "This post's history",
 
     'notifications.title': 'Notifications',
     'notifications.feed.all': 'All',
@@ -4675,6 +4685,8 @@ export const messages = {
     'creative.failed': 'The image could not be generated. Try again.',
     'creative.insufficientCredits': 'There are not enough credits to generate an image.',
     'nav.billing': 'Billing & usage',
+    'billing.tabPayments': 'Plan & payments',
+    'billing.tabUsage': 'Usage & limits',
     'billing.title': 'Billing & usage',
     'billing.subtitle': 'Your plan, your balance, your invoices and your purchases.',
     'billing.currencyNotice':

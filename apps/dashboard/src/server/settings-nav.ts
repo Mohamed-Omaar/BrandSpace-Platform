@@ -33,7 +33,6 @@ export type SettingsNavKey =
   | 'members'
   | 'permissions'
   | 'activity'
-  | 'plan'
   | 'billing';
 
 export interface SettingsNavEntry {
@@ -102,9 +101,18 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    * no permission here, exactly as its route does.
    */
   { key: 'activity', path: '/activity', labelKey: 'nav.activity', permission: null },
-  { key: 'plan', path: '/plan', labelKey: 'nav.plan', permission: 'billing.read' },
+  /*
+   * BILLING & USAGE IS ONE SECTION (Phase 6 final, D-277 §44/§46, D-298). The
+   * plan and payments (`/billing`) and the usage, limits and credit history
+   * (`/plan`) are two tabs of it, not two Settings rows. Both routes keep their
+   * own `billing.read` check; `/plan` is listed in `SETTINGS_SUBPATHS` so the
+   * sidebar still marks Settings current there.
+   */
   { key: 'billing', path: '/billing', labelKey: 'nav.billing', permission: 'billing.read' },
 ];
+
+/** Routes that are TABS of a Settings section rather than rows of their own. */
+export const SETTINGS_SUBPATHS: readonly string[] = ['/plan'];
 
 /**
  * The rows this member can actually open, with one marked current.
@@ -148,4 +156,7 @@ export function settingsLandingPath(permissionKeys: readonly string[]): string {
 }
 
 /** Every path that belongs to Settings, so the sidebar can mark it current. */
-export const SETTINGS_PATHS: readonly string[] = SETTINGS_NAV_ROUTES.map((route) => route.path);
+export const SETTINGS_PATHS: readonly string[] = [
+  ...SETTINGS_NAV_ROUTES.map((route) => route.path),
+  ...SETTINGS_SUBPATHS,
+];

@@ -15,7 +15,13 @@ import {
   translator,
   type MessageKey,
 } from '../../../../i18n/messages';
-import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
+import {
+  CustomerBanner,
+  CustomerCard,
+  WorkspaceShell,
+} from '../../../../components/workspace-shell';
+import { ActivityTimeline } from '../../../../components/activity-timeline';
+import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
 import { relativeTime } from '../../../../server/home';
@@ -682,6 +688,34 @@ export default async function ComposePage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
+  /*
+   * D-298 (§47) — THIS POST'S HISTORY, from the audit trail: the post, its
+   * variants, its review cycles, its calendar slots and its publish jobs. The
+   * ids are read under RLS; the events through the Activity service's own
+   * viewer grading.
+   */
+  const history = draft
+    ? await activityTimeline({
+        locale,
+        workspace,
+        userId: customer.userId,
+        resourceIds: await inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const where = { workspaceId: workspace.workspaceId, contentItemId: draft.id };
+          const [approvals, slots, jobs] = await Promise.all([
+            db.approval.findMany({ where, select: { id: true } }),
+            db.calendarSlot.findMany({ where, select: { id: true } }),
+            db.publishJob.findMany({ where, select: { id: true } }),
+          ]);
+          return [
+            draft.id,
+            ...draft.variants.map((variant) => variant.id),
+            ...[...approvals, ...slots, ...jobs].map((row) => row.id),
+          ];
+        }),
+        take: 8,
+      })
+    : [];
+
   return (
     <WorkspaceShell
       brandContext={brandContext}
@@ -777,6 +811,11 @@ export default async function ComposePage({
           returnPath={`/${locale}/content/compose?item=${draft.id}`}
           highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
         />
+      ) : null}
+      {history.length > 0 ? (
+        <CustomerCard title={translate('content.history.title')} testId="post-history">
+          <ActivityTimeline entries={history} testId="post-history-list" />
+        </CustomerCard>
       ) : null}
     </WorkspaceShell>
   );

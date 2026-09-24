@@ -12,6 +12,7 @@ import { optionalMessage, translator } from '../../../i18n/messages';
 import { ceilingFor, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
 import { SettingsFrame } from '../../../components/settings-frame';
+import { BillingTabs } from '../../../components/billing-tabs';
 import {
   CustomerCard,
   CustomerEmpty,
@@ -202,7 +203,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="plan">
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
+        <BillingTabs locale={locale} current="usage" />
         {/*
         `.dashboard-grid { grid-template-columns: 1.25fr .75fr }` — the plan on
         one side, this cycle's usage on the other, which is how the demo

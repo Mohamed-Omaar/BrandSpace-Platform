@@ -14,6 +14,7 @@ import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerc
 import { brandContextFor } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
+import { BillingTabs } from '../../../components/billing-tabs';
 import {
   CustomerBanner,
   CustomerCard,
@@ -102,6 +103,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       permissionKeys={workspace.permissionKeys}
     >
       <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
+        <BillingTabs locale={locale} current="billing" />
         {/* The three states dunning can put a workspace in, each said plainly and
           each stating what is NOT happening: nothing is being deleted. */}
         {subscription?.status === 'SUSPENDED' ? (

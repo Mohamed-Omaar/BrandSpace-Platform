@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
@@ -161,6 +162,7 @@ export function BrandBrainView({
   layers,
   gaps,
   copilotHref,
+  profileHref,
   completionPercent,
   totalActiveItems,
   sourceCount,
@@ -181,6 +183,8 @@ export function BrandBrainView({
   gaps: readonly { area: string; label: string }[];
   /** The global Copilot, scoped to Brand Brain; null when the member may not use it. */
   copilotHref: string | null;
+  /** D-298 (§11) — the brand's identity, one click from its knowledge; null without `brand.read`. */
+  profileHref: string | null;
   completionPercent: number;
   totalActiveItems: number;
   sourceCount: number;
@@ -274,6 +278,16 @@ export function BrandBrainView({
             >
               {t('bb.askAboutBrand')}
             </CopilotLink>
+          ) : null}
+          {profileHref ? (
+            <Link
+              href={profileHref}
+              className={buttonClass('ghost')}
+              style={buttonStyle('ghost', 'sm')}
+              data-testid="brand-brain-profile"
+            >
+              {t('bb.openProfile')}
+            </Link>
           ) : null}
         </div>
       </div>

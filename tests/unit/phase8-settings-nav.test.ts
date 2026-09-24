@@ -64,7 +64,8 @@ describe('P8: the settings nav offers only what the member can open', () => {
     });
     expect(items.map((item) => item.href)).toEqual([
       // D-277 §44 order: Workspace, Brand, Connections, Team, Roles &
-      // permissions, Security, Data controls, Activity, Plan, Billing.
+      // permissions, Security, Data controls, Activity, Billing & usage (D-298:
+      // plan and usage are one section with two tabs).
       '/ar/settings',
       '/ar/settings/brand',
       '/ar/integrations',
@@ -73,7 +74,6 @@ describe('P8: the settings nav offers only what the member can open', () => {
       '/ar/settings/security',
       '/ar/settings/data',
       '/ar/activity',
-      '/ar/plan',
       '/ar/billing',
     ]);
   });
