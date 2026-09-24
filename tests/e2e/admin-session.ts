@@ -48,11 +48,37 @@ export async function submitPassword(page: Page, locale: string): Promise<void> 
   await page.getByTestId('submit').click();
 }
 
-/** Full sign-in: password, then MFA. */
-export async function signIn(page: Page, locale = 'en'): Promise<void> {
+/**
+ * Full sign-in: password, then MFA — then the Control Center presentation the
+ * spec is about (D-307).
+ *
+ * SIMPLE IS THE PRODUCT'S DEFAULT; ADVANCED IS THIS HELPER'S. Every admin
+ * suite written before the Simple mode pass drives the technical screens —
+ * the JSON configuration lifecycle, the secret table, the flag editor — and
+ * those are exactly what Advanced mode keeps unchanged. So a suite gets
+ * Advanced unless it asks for Simple, and the owner suite
+ * (`owner-simple-mode.spec.ts`) asserts separately that a fresh session
+ * starts in Simple. Choosing the mode is a real click on the real switch,
+ * never a planted cookie: the switch itself is under test every time.
+ */
+export async function signIn(
+  page: Page,
+  locale = 'en',
+  options: { readonly mode?: 'simple' | 'advanced' } = {},
+): Promise<void> {
   await submitPassword(page, locale);
   await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/mfa`);
   await page.getByTestId('mfa-code').fill(totpCode(credentials().totpSecret));
   await page.getByTestId('submit').click();
   await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/console`);
+  await useMode(page, options.mode ?? 'advanced');
+}
+
+/** Switch the Control Center presentation with the top-bar control. */
+export async function useMode(page: Page, mode: 'simple' | 'advanced'): Promise<void> {
+  const target = page.getByTestId(`mode-${mode}`);
+  if ((await target.getAttribute('aria-pressed')) !== 'true') {
+    await target.click();
+    await expect(target).toHaveAttribute('aria-pressed', 'true');
+  }
 }

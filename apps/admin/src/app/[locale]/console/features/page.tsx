@@ -22,6 +22,9 @@ import {
   validateFeaturesAction,
 } from './actions';
 
+import { SimpleFeatures } from '../../../../components/simple/features';
+import { getConsoleMode } from '../../../../server/console-mode-cookie';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -122,6 +125,16 @@ export default async function FeaturesPage({
   const isArabic = locale === 'ar';
 
   const actor = await requirePageActor(locale, 'platform.configuration.read');
+  // Simple mode: who gets each feature, changed deliberately (D-307, D-314).
+  if ((await getConsoleMode()) === 'simple') {
+    return (
+      <SimpleFeatures
+        locale={locale}
+        actor={actor}
+        query={search as Record<string, string | string[] | undefined>}
+      />
+    );
+  }
   const mayEdit = actor.permissionKeys.includes('platform.configuration.manage');
   const mayActivate = actor.permissionKeys.includes('platform.configuration.activate');
 
