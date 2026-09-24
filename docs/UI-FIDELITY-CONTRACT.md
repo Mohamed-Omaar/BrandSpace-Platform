@@ -440,6 +440,12 @@ per tile (WCAG 2.5.8) feeding a bulk form of ordinary `Field` controls; and the 
 under the grid into the `SideSheet` (D-285), with the preview, a tint link for "Use in a post" and a muted
 link for Download. No new colour, font, shadow or interaction model.
 
+### 6.3.14 Phase 6 final — the Campaign Project Room (D-289)
+
+`/[locale]/campaigns/[id]` keeps its §6 extension composition (`Card`, `SectionHeader`, `StatusBadge`,
+`MetricCard`, `StateMessage`) and adds `LinkTabs` for its six sections, a three-card overview grid, list
+rows with a 3rem `AssetThumb`, and the edit form folded into a native `details`. No new visual treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

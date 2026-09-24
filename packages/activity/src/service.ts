@@ -75,6 +75,11 @@ export interface ActivityFilter {
   actorId?: string;
   since?: Date;
   until?: Date;
+  /**
+   * PHASE 6 FINAL (D-289) — only events about these rows: a campaign and its
+   * posts, for the campaign's own timeline. Narrows; never widens the scope.
+   */
+  resourceIds?: readonly string[];
 }
 
 export interface ActivityOptions {
@@ -231,6 +236,7 @@ function filterWhere(filter: ActivityFilter): Record<string, unknown> {
     ...(filter.brandId ? { brandId: filter.brandId } : {}),
     ...(filter.action ? { action: filter.action } : {}),
     ...(filter.actorId ? { actorId: filter.actorId } : {}),
+    ...(filter.resourceIds ? { resourceId: { in: [...filter.resourceIds] } } : {}),
     ...(filter.since || filter.until
       ? {
           occurredAt: {
