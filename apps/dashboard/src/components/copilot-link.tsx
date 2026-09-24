@@ -23,6 +23,7 @@ export function CopilotLink({
   style,
   testId,
   'data-testid': dataTestId,
+  request,
 }: {
   readonly href: string;
   readonly children: ReactNode;
@@ -30,18 +31,27 @@ export function CopilotLink({
   readonly style?: CSSProperties;
   readonly testId?: string;
   readonly 'data-testid'?: string;
+  /** D-296 — a request to put in the Copilot's box (not sent). */
+  readonly request?: string;
 }) {
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
-    const request = new CustomEvent(OPEN_COPILOT_EVENT, { cancelable: true });
+    const open = new CustomEvent(OPEN_COPILOT_EVENT, {
+      cancelable: true,
+      detail: { request: request ?? '' },
+    });
     // The drawer calls preventDefault on the event when it opens.
-    if (!window.dispatchEvent(request)) event.preventDefault();
+    if (!window.dispatchEvent(open)) event.preventDefault();
   };
   return (
     <Link
-      href={href}
+      href={
+        request
+          ? `${href}${href.includes('?') ? '&' : '?'}ask=${encodeURIComponent(request)}`
+          : href
+      }
       className={className}
       style={style}
       data-testid={testId ?? dataTestId}

@@ -111,8 +111,15 @@ export function CopilotView({
   labels,
   creditsLabel,
   subject = null,
+  initialRequest = '',
 }: {
   readonly locale: string;
+  /**
+   * D-296 — a request handed over by "Give to Copilot" (a recurring workflow
+   * BrandSpace noticed). Put in the box, NEVER sent: the person reads it and
+   * presses Propose, and the plan/confirm ceremony applies as always.
+   */
+  readonly initialRequest?: string;
   /**
    * WHAT THE READER IS LOOKING AT (D-277 §37, D-280) — a campaign, a post or an
    * insight, with the title to say so. Sent when the session opens; the server
@@ -159,7 +166,7 @@ export function CopilotView({
    * conversation.
    */
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [request, setRequest] = useState('');
+  const [request, setRequest] = useState(initialRequest.slice(0, 1_000));
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<readonly CopilotMessage[]>([]);
   const [plan, setPlan] = useState<PlanResponse | null>(null);

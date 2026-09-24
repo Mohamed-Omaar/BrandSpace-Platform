@@ -303,3 +303,111 @@ describe('D-295 · member_suggestion never crosses a workspace', () => {
 function RUN(): string {
   return randomUUID().slice(0, 8);
 }
+
+describe('D-296 · a recurring workflow is read from real rows', () => {
+  /** A post this person made on `made`, on the calendar for `planned`. */
+  async function madeAndPlanned(made: Date, planned: Date, userId = fixtures.a.userId) {
+    await inA(async (db) => {
+      const item = await db.contentItem.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          title: `Weekly ${randomUUID().slice(0, 6)}`,
+          status: 'SCHEDULED',
+          primaryLocale: 'AR',
+        },
+        select: { id: true },
+      });
+      await db.contentVariant.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          contentItemId: item.id,
+          platformKey: 'instagram',
+          locale: 'AR',
+          body: 'x',
+        },
+      });
+      await db.calendarSlot.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          contentItemId: item.id,
+          scheduledAtUtc: planned,
+          scheduledLocalTime: planned.toISOString().slice(0, 16),
+          timezone: 'UTC',
+          status: 'PLANNED',
+          platformKeys: ['instagram'],
+        },
+      });
+      await db.auditEvent.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          actorType: 'USER',
+          actorId: userId,
+          action: 'content.item.authored',
+          resourceType: 'ContentItem',
+          resourceId: item.id,
+          brandId: fixtures.a.brandId,
+          occurredAt: made,
+        },
+      });
+    });
+  }
+
+  const weeksAgo = (weeks: number, weekday: number) => {
+    const now = new Date();
+    const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12);
+    const today = new Date(base).getUTCDay();
+    return new Date(base - ((today - weekday + 7) % 7) * 86_400_000 - weeks * 7 * 86_400_000);
+  };
+  const workflows = (userId = fixtures.a.userId) =>
+    service()((s) => s.noticedWorkflows({ userId, brandId: fixtures.a.brandId, brandScope: [] }));
+
+  it('three weeks is not yet a habit; four distinct weeks is', async () => {
+    for (const weeks of [1, 2, 3]) {
+      await madeAndPlanned(
+        weeksAgo(weeks, 4),
+        new Date(weeksAgo(weeks, 4).getTime() + 3 * 86_400_000),
+      );
+    }
+    expect(await workflows()).toEqual([]);
+    await madeAndPlanned(weeksAgo(4, 4), new Date(weeksAgo(4, 4).getTime() + 3 * 86_400_000));
+    const found = await workflows();
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      key: 'weekly:4:instagram:ar:0',
+      createdWeekday: 4,
+      slotWeekday: 0,
+      repeats: 4,
+    });
+  });
+
+  it('another member’s posts are not your workflow', async () => {
+    expect(await workflows(randomUUID())).toEqual([]);
+  });
+
+  it('a workflow can be snoozed or dismissed, never accepted', async () => {
+    await service()((s) =>
+      s.decideWorkflow({
+        userId: fixtures.a.userId,
+        brandId: fixtures.a.brandId,
+        brandScope: [],
+        key: 'weekly:4:instagram:ar:0',
+        decision: 'snooze',
+      }),
+    );
+    expect(await workflows()).toEqual([]);
+    await expect(
+      service()((s) =>
+        s.decideWorkflow({
+          userId: fixtures.a.userId,
+          brandId: fixtures.a.brandId,
+          brandScope: [],
+          key: 'weekly:1:x:en:2',
+          decision: 'dismiss',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});

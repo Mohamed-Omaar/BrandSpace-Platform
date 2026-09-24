@@ -70,20 +70,25 @@ export function GlobalCopilot({
    */
   const [conversation, setConversation] = useState({ key: 0, context: '' });
 
-  const openHere = useCallback(() => {
-    const context = `${brand?.id ?? ''}|${surface}|${subject?.id ?? ''}`;
-    setConversation((current) =>
-      current.context === context ? current : { key: current.key + 1, context },
-    );
-    setOpen(true);
-  }, [brand?.id, surface, subject?.id]);
+  const [handedRequest, setHandedRequest] = useState('');
+  const openHere = useCallback(
+    (request = '') => {
+      setHandedRequest(request);
+      const context = `${brand?.id ?? ''}|${surface}|${subject?.id ?? ''}|${request}`;
+      setConversation((current) =>
+        current.context === context ? current : { key: current.key + 1, context },
+      );
+      setOpen(true);
+    },
+    [brand?.id, surface, subject?.id],
+  );
 
   const intercept = useCallback(
     (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      openHere();
+      openHere('');
     },
     [openHere],
   );
@@ -96,7 +101,8 @@ export function GlobalCopilot({
   useEffect(() => {
     const onRequest = (event: Event) => {
       event.preventDefault();
-      openHere();
+      const detail = (event as CustomEvent<{ request?: unknown }>).detail;
+      openHere(typeof detail?.request === 'string' ? detail.request : '');
     };
     window.addEventListener(OPEN_COPILOT_EVENT, onRequest);
     return () => window.removeEventListener(OPEN_COPILOT_EVENT, onRequest);
@@ -132,6 +138,7 @@ export function GlobalCopilot({
               brand={brand}
               surface={surface}
               subject={subject}
+              initialRequest={handedRequest}
               creditsLabel={null}
               labels={labels}
             />

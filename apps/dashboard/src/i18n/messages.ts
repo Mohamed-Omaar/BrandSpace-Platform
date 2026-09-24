@@ -1879,6 +1879,15 @@ export const messages = {
     'automations.empty': 'لا توجد قواعد بعد.',
     'automations.runsEmpty': 'لم تُشغَّل أي قاعدة بعد.',
     'automations.create': 'قاعدة جديدة',
+    'automations.discover.title': 'أتمت بالسؤال',
+    'automations.discover.body':
+      'أخبر المساعد بما تكرره، بكلماتك. يجهّز قاعدة من المشغلات والإجراءات المدعومة لتراجعها.',
+    'automations.discover.off': 'القاعدة التي يجهزها المساعد تبدأ متوقفة. أنت من يشغّلها.',
+    'automations.discover.publish': 'القاعدة التي تقترح النشر تسألك قبل أن يُنشر أي شيء.',
+    'automations.discover.home':
+      'عندما تلاحظ BrandSpace سير عمل متكررًا في عملك، تعرضه الصفحة الرئيسية هنا أيضًا.',
+    'automations.discover.cta': 'اسأل المساعد',
+    'automations.discover.example': 'عندما يُعتمد منشور، ضعه على التقويم وأعلمني.',
     'automations.nameLabel': 'الاسم',
     'automations.triggerLabel': 'الحدث',
     'automations.actionLabel': 'الإجراء',
@@ -2266,6 +2275,16 @@ export const messages = {
     'home.action.open': 'افتح',
     'home.recommended.title': 'توصيات BrandSpace',
     'home.preference.title': 'لاحظت BrandSpace تفضيلًا',
+    'home.workflow.title': 'أنت تكرر هذا',
+    'home.workflow.body':
+      'سير عمل متكرر من عملك أنت. يمكن للمساعد أن يساعد في إعداده؛ لا يتغير شيء حتى تؤكد.',
+    'home.workflow.badge': 'سير عمل متكرر',
+    'home.workflow.sentence':
+      'تنشئ منشورات {platform} باللغة {language} يوم {made} وتجدولها ليوم {planned} — منذ {count} أسابيع.',
+    'home.workflow.request':
+      'عادةً ما أنشئ منشور {platform} باللغة {language} يوم {made} وأجدوله ليوم {planned} (منذ {count} أسابيع). اقترح أتمتة لذلك من المشغلات والإجراءات المدعومة، واتركها متوقفة حتى أراجعها.',
+    'home.workflow.language.EN': 'الإنجليزية',
+    'home.workflow.language.AR': 'العربية',
     'home.preference.body': 'من تعديلاتك أنت. لا يتغير شيء إلا إذا جعلته افتراضيًا.',
     'home.preference.badge': 'تفضيل',
     'home.preference.shorter': 'عادةً ما تختصر مسودات {platform} بعد أن تكتبها BrandSpace.',
@@ -4392,6 +4411,17 @@ export const messages = {
     'automations.empty': 'No rules yet.',
     'automations.runsEmpty': 'No rule has run yet.',
     'automations.create': 'New rule',
+    'automations.discover.title': 'Automate by asking',
+    'automations.discover.body':
+      'Tell the Copilot what you keep doing, in your own words. It prepares a rule from the supported triggers and actions for you to review.',
+    'automations.discover.off': 'A rule the Copilot prepares starts switched off. You turn it on.',
+    'automations.discover.publish':
+      'A rule that proposes publishing still asks you before anything goes out.',
+    'automations.discover.home':
+      'When BrandSpace notices a recurring workflow in your work, Home offers it here too.',
+    'automations.discover.cta': 'Ask the Copilot',
+    'automations.discover.example':
+      'When a post is approved, put it on the calendar and let me know.',
     'automations.nameLabel': 'Name',
     'automations.triggerLabel': 'Event',
     'automations.actionLabel': 'Action',
@@ -4791,6 +4821,16 @@ export const messages = {
     'home.action.open': 'Open',
     'home.recommended.title': 'Recommended by BrandSpace',
     'home.preference.title': 'BrandSpace noticed a preference',
+    'home.workflow.title': 'You keep doing this',
+    'home.workflow.body':
+      'A recurring workflow from your own work. The Copilot can help set it up; nothing changes until you confirm.',
+    'home.workflow.badge': 'Recurring workflow',
+    'home.workflow.sentence':
+      'You make {language} {platform} posts on {made} and schedule them for {planned} — {count} weeks so far.',
+    'home.workflow.request':
+      'I usually make a {language} {platform} post on {made} and schedule it for {planned} ({count} weeks so far). Suggest an automation for this from the supported triggers and actions, and keep it switched off until I review it.',
+    'home.workflow.language.EN': 'English',
+    'home.workflow.language.AR': 'Arabic',
     'home.preference.body': 'From your own edits. Nothing changes unless you make it your default.',
     'home.preference.badge': 'Preference',
     'home.preference.shorter':
@@ -5056,6 +5096,14 @@ export function optionalMessage(locale: string, key: string): string | null {
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
+  WORKFLOW_SNOOZE: {
+    en: 'Okay — BrandSpace will ask again later.',
+    ar: 'حسنًا — ستسأل BrandSpace لاحقًا.',
+  },
+  WORKFLOW_DISMISS: {
+    en: 'Okay — BrandSpace won’t suggest this again.',
+    ar: 'حسنًا — لن تقترح BrandSpace هذا مجددًا.',
+  },
   PREFERENCE_ACCEPT: {
     en: 'Done. New drafts will follow this default.',
     ar: 'تم. ستتبع المسودات الجديدة هذا الافتراض.',

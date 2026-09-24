@@ -103,6 +103,8 @@ export default async function CopilotPage({
             locale={locale}
             brand={{ id: brand.id, name: brand.name }}
             surface={surface}
+            // D-296 — a request handed over without script; put in the box, never sent.
+            initialRequest={typeof query['ask'] === 'string' ? query['ask'].slice(0, 1_000) : ''}
             creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
             labels={copilotLabels(locale, session.customer.name ?? session.customer.email)}
           />

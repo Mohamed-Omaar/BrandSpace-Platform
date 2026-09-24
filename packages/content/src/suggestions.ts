@@ -1,6 +1,7 @@
 import { writeAuditEvent, type TenantScopedClient } from '@brandspace/database';
 import { AppError, brandScopeFilter, systemClock, type Clock } from '@brandspace/shared';
 import type { ContentPolicy } from './policy';
+import { partsInZone } from './timezone';
 
 /**
  * WHAT BRANDSPACE NOTICED ABOUT A PERSON'S OWN WORK (Phase 6 final, D-277 §8-§10,
@@ -137,6 +138,80 @@ export function preferenceInstructions(
   return out;
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * REPEATED WORKFLOWS (Phase 6 final, D-277 §10, D-296)
+ * ---------------------------------------------------------------------------
+ *
+ * ONE SUPPORTED SHAPE, not process mining: "this person makes a <language>
+ * <platform> post on <weekday> and puts it on the calendar for <weekday>".
+ * Read from real rows — the audited creation of a post by this person and the
+ * calendar slot it went onto — in the workspace's own zone, counted in
+ * DISTINCT WEEKS, past `workflowMinRepeats` inside `windowDays`.
+ *
+ * A noticed workflow is handed to the Copilot as a request the person reads
+ * and sends; any rule it prepares comes from the closed automation registry
+ * and starts DISABLED. Nothing here creates anything.
+ */
+export const WORKFLOW_SOURCE = 'content.created_then_scheduled';
+
+export interface WorkflowObservation {
+  /** The local calendar day the post was created on (YYYY-MM-DD, workspace zone). */
+  readonly createdDay: string;
+  readonly createdWeekday: number;
+  readonly slotWeekday: number;
+  readonly platformKey: string;
+  readonly locale: 'EN' | 'AR';
+}
+
+export interface NoticedWorkflow {
+  readonly key: string;
+  readonly createdWeekday: number;
+  readonly slotWeekday: number;
+  readonly platformKey: string;
+  readonly locale: 'EN' | 'AR';
+  /** Distinct weeks the pattern happened in. */
+  readonly repeats: number;
+}
+
+/** A local day's week, counted from 1970-01-05 (a Monday); only equality matters. */
+function weekOf(day: string): number {
+  const [year, month, date] = day.split('-').map(Number);
+  const utc = Date.UTC(year ?? 1970, (month ?? 1) - 1, date ?? 1);
+  return Math.floor((utc - Date.UTC(1970, 0, 5)) / (7 * 86_400_000));
+}
+
+export function noticeWorkflows(
+  observations: readonly WorkflowObservation[],
+  minRepeats: number,
+): NoticedWorkflow[] {
+  const groups = new Map<string, { sample: WorkflowObservation; weeks: Set<number> }>();
+  for (const row of observations) {
+    if (!PLATFORM_KEY.test(row.platformKey)) continue;
+    const key = `weekly:${row.createdWeekday}:${row.platformKey}:${row.locale.toLowerCase()}:${row.slotWeekday}`;
+    const group = groups.get(key) ?? { sample: row, weeks: new Set<number>() };
+    group.weeks.add(weekOf(row.createdDay));
+    groups.set(key, group);
+  }
+  return [...groups.entries()]
+    .filter(([, group]) => group.weeks.size >= minRepeats)
+    .map(([key, group]) => ({
+      key,
+      createdWeekday: group.sample.createdWeekday,
+      slotWeekday: group.sample.slotWeekday,
+      platformKey: group.sample.platformKey,
+      locale: group.sample.locale,
+      repeats: group.weeks.size,
+    }))
+    .sort((a, b) => b.repeats - a.repeats);
+}
+
+function localDay(instant: Date, timezone: string): { day: string; weekday: number } {
+  const parts = partsInZone(instant, timezone);
+  const day = `${String(parts.year).padStart(4, '0')}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+  return { day, weekday: new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() };
+}
+
 export type SuggestionDecision = 'accept' | 'dismiss' | 'snooze';
 
 const notNoticed = (): AppError =>
@@ -260,6 +335,101 @@ export class MemberSuggestionService {
     });
   }
 
+  /**
+   * Workflows this person repeats for this brand (D-296), minus any they have
+   * dismissed or snoozed. The shape is fixed; the numbers are configuration.
+   */
+  async noticedWorkflows(input: {
+    userId: string;
+    brandId: string;
+    brandScope: readonly string[];
+  }): Promise<NoticedWorkflow[]> {
+    const brand = await this.#db.brand.findFirst({
+      where: { id: input.brandId, ...brandScopeFilter(input.brandScope) },
+      select: { id: true },
+    });
+    if (!brand) return [];
+    const now = this.#clock.now();
+    const since = new Date(now.getTime() - this.#learning.windowDays * 86_400_000);
+    const created = await this.#db.auditEvent.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        brandId: input.brandId,
+        actorId: input.userId,
+        action: { in: ['content.item.generated', 'content.item.authored'] },
+        occurredAt: { gte: since },
+      },
+      select: { resourceId: true, occurredAt: true },
+      take: 500,
+    });
+    const itemIds = [
+      ...new Set(created.flatMap((row) => (row.resourceId ? [row.resourceId] : []))),
+    ];
+    if (itemIds.length === 0) return [];
+    const workspace = await this.#db.workspace.findUniqueOrThrow({
+      where: { id: this.#workspaceId },
+      select: { timezone: true },
+    });
+    const items = await this.#db.contentItem.findMany({
+      where: { id: { in: itemIds }, brandId: input.brandId, deletedAt: null },
+      select: {
+        id: true,
+        primaryLocale: true,
+        variants: { select: { platformKey: true }, orderBy: { platformKey: 'asc' }, take: 1 },
+        calendarSlots: {
+          where: { status: { not: 'CANCELLED' } },
+          select: { scheduledAtUtc: true },
+          orderBy: { scheduledAtUtc: 'asc' },
+          take: 1,
+        },
+      },
+    });
+    const createdAt = new Map(created.map((row) => [row.resourceId, row.occurredAt]));
+    const observations: WorkflowObservation[] = items.flatMap((item) => {
+      const at = createdAt.get(item.id);
+      const platform = item.variants[0]?.platformKey;
+      const slot = item.calendarSlots[0]?.scheduledAtUtc;
+      if (!at || !platform || !slot) return [];
+      const made = localDay(at, workspace.timezone);
+      const planned = localDay(slot, workspace.timezone);
+      return [
+        {
+          createdDay: made.day,
+          createdWeekday: made.weekday,
+          slotWeekday: planned.weekday,
+          platformKey: platform,
+          locale: item.primaryLocale === 'AR' ? 'AR' : 'EN',
+        },
+      ];
+    });
+    const decided = await this.#decidedKeys(input.userId, input.brandId, 'WORKFLOW', now);
+    return noticeWorkflows(observations, this.#learning.workflowMinRepeats).filter(
+      (row) => !decided.has(row.key),
+    );
+  }
+
+  /** "Not now" or "Don't suggest this again" for a workflow noticed NOW. */
+  async decideWorkflow(input: {
+    userId: string;
+    brandId: string;
+    brandScope: readonly string[];
+    key: string;
+    decision: 'dismiss' | 'snooze';
+  }): Promise<void> {
+    const noticed = await this.noticedWorkflows(input);
+    const match = noticed.find((row) => row.key === input.key);
+    if (!match) throw notNoticed();
+    await this.#record({
+      userId: input.userId,
+      brandId: input.brandId,
+      kind: 'WORKFLOW',
+      key: input.key,
+      decision: input.decision,
+      evidenceCount: match.repeats,
+      source: WORKFLOW_SOURCE,
+    });
+  }
+
   /** Keys with a standing decision: accepted, dismissed, or snoozed and not yet due. */
   async #decidedKeys(
     userId: string,
@@ -343,37 +513,5 @@ export class MemberSuggestionService {
       before: existing ? { status: existing.status } : null,
       after: { key: input.key, status, evidenceCount: input.evidenceCount },
     });
-  }
-
-  /** For C21 (D-296): workflow decisions share the table and the rules. */
-  protected async recordWorkflow(input: {
-    userId: string;
-    brandId: string;
-    key: string;
-    decision: 'dismiss' | 'snooze';
-    evidenceCount: number;
-    source: string;
-  }): Promise<void> {
-    await this.#record({ ...input, kind: 'WORKFLOW' });
-  }
-
-  protected decidedWorkflowKeys(userId: string, brandId: string): Promise<Set<string>> {
-    return this.#decidedKeys(userId, brandId, 'WORKFLOW', this.#clock.now());
-  }
-
-  protected get db(): TenantScopedClient {
-    return this.#db;
-  }
-
-  protected get workspaceId(): string {
-    return this.#workspaceId;
-  }
-
-  protected get learning(): ContentPolicy['learning'] {
-    return this.#learning;
-  }
-
-  protected get clock(): Clock {
-    return this.#clock;
   }
 }

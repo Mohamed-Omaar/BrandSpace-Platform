@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   noticePreferences,
+  noticeWorkflows,
   preferenceInstructions,
   preferenceKeyOf,
   TONE_KEYS,
@@ -87,5 +90,52 @@ describe('D-295 · an accepted preference becomes a closed instruction', () => {
     expect(lines[0]).toContain('linkedin');
     expect(lines[1]).toContain('friendly and warm');
     expect(lines.join(' ')).not.toContain('ignore');
+  });
+});
+
+describe('D-296 · a recurring workflow is counted in distinct weeks', () => {
+  const row = (createdDay: string) => ({
+    createdDay,
+    createdWeekday: 4,
+    slotWeekday: 0,
+    platformKey: 'instagram',
+    locale: 'AR' as const,
+  });
+
+  it('the same week twice is one repeat; four different weeks is a habit', () => {
+    expect(noticeWorkflows([row('2030-01-03'), row('2030-01-03')], 2)).toEqual([]);
+    const found = noticeWorkflows(
+      ['2030-01-03', '2030-01-10', '2030-01-17', '2030-01-24'].map(row),
+      4,
+    );
+    expect(found).toEqual([
+      {
+        key: 'weekly:4:instagram:ar:0',
+        createdWeekday: 4,
+        slotWeekday: 0,
+        platformKey: 'instagram',
+        locale: 'AR',
+        repeats: 4,
+      },
+    ]);
+  });
+
+  it('a key always fits the closed shape the database enforces', () => {
+    const [found] = noticeWorkflows(
+      ['2030-01-03', '2030-01-10'].map((day) => ({ ...row(day), platformKey: 'x' })),
+      2,
+    );
+    expect(found?.key).toMatch(/^[a-z0-9_.:-]{1,120}$/);
+  });
+});
+
+describe('D-296 · Give to Copilot hands over a request, never sends it', () => {
+  const read = (file: string) =>
+    readFileSync(path.join(path.resolve(__dirname, '../..'), file), 'utf8');
+
+  it('the link carries it as ?ask= for no-script, and the view only fills the box', () => {
+    expect(read('apps/dashboard/src/components/copilot-link.tsx')).toContain('ask=');
+    const view = read('apps/dashboard/src/app/[locale]/copilot/copilot-view.tsx');
+    expect(view).toContain('useState(initialRequest.slice(0, 1_000))');
   });
 });

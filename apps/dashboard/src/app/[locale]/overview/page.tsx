@@ -26,7 +26,7 @@ import { detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
-import { decidePreferenceAction } from './actions';
+import { decidePreferenceAction, decideWorkflowAction } from './actions';
 import { inAnalytics } from '../../../server/analytics-context';
 import { attentionItems, rankAttention, type AttentionItem } from '../../../server/command-center';
 import {
@@ -290,18 +290,33 @@ export default async function OverviewPage({
    * selected brand. Derived from the audit trail past the configured
    * thresholds; one already decided on is not shown again. Two at most.
    */
-  const noticedPreferences =
+  const { noticedPreferences, noticedWorkflows } =
     brandId && may('content.create')
-      ? (
-          await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
-            (await suggestions()).noticedPreferences({
-              userId: customer.userId,
-              brandId,
-              brandScope: workspace.brandScope,
-            }),
-          )
-        ).slice(0, 2)
-      : [];
+      ? await inContentStudio(workspace.workspaceId, async ({ suggestions }) => {
+          const service = await suggestions();
+          const scope = { userId: customer.userId, brandId, brandScope: workspace.brandScope };
+          return {
+            noticedPreferences: (await service.noticedPreferences(scope)).slice(0, 2),
+            // D-296 — a recurring workflow in this member's own work.
+            noticedWorkflows: (await service.noticedWorkflows(scope)).slice(0, 1),
+          };
+        })
+      : { noticedPreferences: [], noticedWorkflows: [] };
+  const weekdayName = (day: number) =>
+    new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+      weekday: 'long',
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(2023, 0, 1 + day)));
+  const workflowText = (workflow: (typeof noticedWorkflows)[number], template: MessageKey) =>
+    t(template)
+      .replace('{language}', t(`home.workflow.language.${workflow.locale}` as MessageKey))
+      .replace(
+        '{platform}',
+        optionalMessage(locale, `content.platform.${workflow.platformKey}`) ?? workflow.platformKey,
+      )
+      .replace('{made}', weekdayName(workflow.createdWeekday))
+      .replace('{planned}', weekdayName(workflow.slotWeekday))
+      .replace('{count}', String(workflow.repeats));
 
   const engagements = maySeeAnalytics
     ? await inAnalytics(workspace.workspaceId, async (services) => {
@@ -640,6 +655,63 @@ export default async function OverviewPage({
                           style={buttonStyle(decision === 'accept' ? 'primary' : 'ghost', 'sm')}
                           className={buttonClass(decision === 'accept' ? 'primary' : 'ghost')}
                           data-testid={`home-preference-${decision}-${preference.key}`}
+                        >
+                          {t(`home.preference.${decision}` as MessageKey)}
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
+
+        {/*
+          D-296 — A RECURRING WORKFLOW, drawn as its own kind (not an insight,
+          not a preference). "Give to Copilot" opens the Copilot with the
+          request written out for the person to read and send; any rule it
+          prepares comes from the closed registry and starts disabled.
+        */}
+        {noticedWorkflows.length > 0 && brandId ? (
+          <Card testId="home-workflow">
+            <SectionHeader title={t('home.workflow.title')} description={t('home.workflow.body')} />
+            <ul style={listStyle}>
+              {noticedWorkflows.map((workflow) => (
+                <li
+                  key={workflow.key}
+                  data-testid={`home-workflow-${workflow.key}`}
+                  style={{ ...rowStyle, alignItems: 'flex-start' }}
+                >
+                  <div style={{ display: 'grid', gap: spacingTokens['3xs'], flex: '1 1 14rem' }}>
+                    <StatusBadge tone="neutral" label={t('home.workflow.badge')} />
+                    <strong style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+                      {workflowText(workflow, 'home.workflow.sentence')}
+                    </strong>
+                  </div>
+                  <div style={actionsStyle}>
+                    {mayUseCopilot ? (
+                      <CopilotLink
+                        href={copilotHref(locale, 'overview')}
+                        request={workflowText(workflow, 'home.workflow.request')}
+                        style={buttonStyle('primary', 'sm')}
+                        className={buttonClass('primary')}
+                        testId={`home-workflow-copilot-${workflow.key}`}
+                      >
+                        {t('home.recommended.giveToCopilot')}
+                      </CopilotLink>
+                    ) : null}
+                    {(['snooze', 'dismiss'] as const).map((decision) => (
+                      <form key={decision} action={decideWorkflowAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="brandId" value={brandId} />
+                        <input type="hidden" name="key" value={workflow.key} />
+                        <input type="hidden" name="decision" value={decision} />
+                        <button
+                          type="submit"
+                          style={buttonStyle('ghost', 'sm')}
+                          className={buttonClass('ghost')}
+                          data-testid={`home-workflow-${decision}-${workflow.key}`}
                         >
                           {t(`home.preference.${decision}` as MessageKey)}
                         </button>

@@ -277,6 +277,48 @@ export default async function AutomationsPage({
           </div>
         ) : null}
 
+        {/*
+          D-277 §39, D-296 — HOW MOST PEOPLE SHOULD FIND AUTOMATION: by asking
+          the Copilot in their own words, or from a recurring workflow Home
+          noticed. The trigger/condition/action form below stays for people who
+          want to build a rule by hand. What is true is said plainly: a rule the
+          Copilot prepares starts switched off, and a proposed publish still
+          asks before anything goes out.
+        */}
+        {workspace.permissionKeys.includes('copilot.use') ? (
+          <Card testId="automations-discover">
+            <SectionHeader
+              title={t('automations.discover.title')}
+              description={t('automations.discover.body')}
+            />
+            <ul
+              style={{
+                margin: 0,
+                paddingInlineStart: '1.1rem',
+                display: 'grid',
+                gap: spacingTokens['3xs'],
+                ...typographyTokens.caption,
+                color: colorTokens.textSecondary,
+              }}
+            >
+              <li>{t('automations.discover.off')}</li>
+              <li>{t('automations.discover.publish')}</li>
+              <li>{t('automations.discover.home')}</li>
+            </ul>
+            <div style={{ marginBlockStart: spacingTokens.sm }}>
+              <CopilotLink
+                href={copilotHref(locale, 'automations')}
+                request={t('automations.discover.example')}
+                style={buttonStyle('primary', 'sm')}
+                className={buttonClass('primary')}
+                testId="automations-discover-copilot"
+              >
+                {t('automations.discover.cta')}
+              </CopilotLink>
+            </div>
+          </Card>
+        ) : null}
+
         {mayManage && formBrands.length > 0 ? (
           <Card title={t('automations.create')}>
             {/*

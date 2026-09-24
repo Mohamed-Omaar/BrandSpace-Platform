@@ -50,3 +50,33 @@ export async function decidePreferenceAction(formData: FormData): Promise<void> 
   revalidatePath(`/${locale}/overview`);
   redirect(destination);
 }
+
+/**
+ * "Not now" / "Don't suggest this again" for a recurring workflow (D-296).
+ * Accepting one is handing it to the Copilot — there is nothing to store.
+ */
+export async function decideWorkflowAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en') === 'ar' ? 'ar' : 'en';
+  const decision = String(formData.get('decision') ?? '');
+  const key = String(formData.get('key') ?? '');
+  const brandId = String(formData.get('brandId') ?? '');
+  let destination = `/${locale}/overview`;
+  try {
+    const { customer, workspace } = await requireWorkspace(locale, 'content.create');
+    if (decision !== 'dismiss' && decision !== 'snooze') throw new Error('decision');
+    await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
+      (await suggestions()).decideWorkflow({
+        userId: customer.userId,
+        brandId,
+        brandScope: workspace.brandScope,
+        key,
+        decision,
+      }),
+    );
+    destination += `?ok=WORKFLOW_${decision.toUpperCase()}`;
+  } catch (error: unknown) {
+    destination += `?error=${toPublicErrorCode(error)}`;
+  }
+  revalidatePath(`/${locale}/overview`);
+  redirect(destination);
+}

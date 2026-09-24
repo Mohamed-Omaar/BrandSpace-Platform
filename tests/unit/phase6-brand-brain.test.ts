@@ -56,7 +56,7 @@ describe('D-294 · "Give to Copilot" opens the one Copilot where you are', () =>
   it('the drawer listens for the request, and the link still works without script', () => {
     const link = read('apps/dashboard/src/components/copilot-link.tsx');
     const drawer = read('apps/dashboard/src/components/global-copilot.tsx');
-    expect(link).toMatch(/<Link\s+href=\{href\}/);
+    expect(link).toMatch(/<Link\s+href=\{/);
     expect(link).toContain('OPEN_COPILOT_EVENT');
     expect(drawer).toContain('window.addEventListener(OPEN_COPILOT_EVENT');
   });
