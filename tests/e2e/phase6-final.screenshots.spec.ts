@@ -16,7 +16,9 @@ import { E2E_CREDENTIALS_FILE, brandFixtures, repoRoot, type E2eAdminCredentials
  * `pnpm e2e:screenshots` and never in CI (F-33).
  *
  * The data is the seeded E2E estate (throwaway `@brandspace.test` accounts).
- * READ-ONLY: it opens sheets and drawers and never submits. Motion is frozen
+ * It opens sheets and drawers and never submits. The one thing it may write
+ * is a planned post for the calendar drawer, and only when the estate has
+ * none — so the set is complete on a fresh database — removed afterwards. Motion is frozen
  * so two runs of the same screen produce the same image. JPEG, full page, so
  * the set stays reviewable without bloating the repository.
  */
@@ -88,12 +90,65 @@ async function targets(): Promise<Targets> {
       orderBy: { scheduledAtUtc: 'desc' },
       select: { scheduledAtUtc: true, item: { select: { title: true } } },
     });
+    if (slot) {
+      return {
+        campaignId: campaign?.id ?? null,
+        assetId: asset?.id ?? null,
+        slotMonth: slot.scheduledAtUtc.toISOString().slice(0, 7),
+        slotTitle: slot.item.title,
+      };
+    }
+    // Nothing planned: plan one of our own, a month out, removed in cleanup().
+    const when = new Date(Date.now() + 30 * 86_400_000);
+    when.setUTCHours(10, 0, 0, 0);
+    const title = 'Review set — planned post';
+    const item = await prisma.contentItem.create({
+      data: { workspaceId, brandId, title, status: 'DRAFT', primaryLocale: 'EN' },
+      select: { id: true },
+    });
+    created.push(item.id);
+    await prisma.contentVariant.create({
+      data: {
+        workspaceId,
+        brandId,
+        contentItemId: item.id,
+        platformKey: 'instagram',
+        locale: 'EN',
+        body: 'A planned post, placed for the review set.',
+      },
+    });
+    await prisma.calendarSlot.create({
+      data: {
+        workspaceId,
+        brandId,
+        contentItemId: item.id,
+        scheduledAtUtc: when,
+        scheduledLocalTime: when.toISOString().slice(0, 16),
+        timezone: 'UTC',
+        status: 'PLANNED',
+        platformKeys: ['instagram'],
+      },
+    });
     return {
       campaignId: campaign?.id ?? null,
       assetId: asset?.id ?? null,
-      slotMonth: slot ? slot.scheduledAtUtc.toISOString().slice(0, 7) : null,
-      slotTitle: slot?.item.title ?? null,
+      slotMonth: when.toISOString().slice(0, 7),
+      slotTitle: title,
     };
+  });
+}
+
+/** Posts this run placed itself. */
+const created: string[] = [];
+
+async function cleanup(): Promise<void> {
+  if (created.length === 0) return;
+  await withPlatformPrisma(async (prisma) => {
+    await prisma.calendarSlot.deleteMany({ where: { contentItemId: { in: created } } });
+    await prisma.contentItem.updateMany({
+      where: { id: { in: created } },
+      data: { deletedAt: new Date() },
+    });
   });
 }
 
@@ -179,6 +234,7 @@ const SCREENS: readonly Screen[] = [
 ];
 
 test.describe.configure({ timeout: 600_000 });
+test.afterAll(cleanup);
 
 test('Phase 6 final review set: 17 screens × desktop/phone × English/Arabic', async ({ page }) => {
   mkdirSync(OUTPUT, { recursive: true });

@@ -372,8 +372,13 @@ export default defineConfig({
     // asserts a total; a concurrent suite storing a secret would break it.
     {
       name: 'chromium-desktop',
-      testIgnore:
+      testIgnore: [
         /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings)\.(spec|screenshots\.spec)\.ts/,
+        // EVERY capture run, not a list of them: a screenshots spec writes
+        // files for review and belongs only to `visual-review` (F-33). The
+        // Phase 6 set ran here because its name was not on the list above.
+        /\.screenshots\.spec\.ts$/,
+      ],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -382,8 +387,13 @@ export default defineConfig({
     },
     {
       name: 'chromium-mobile',
-      testIgnore:
+      testIgnore: [
         /(admin-console|plans-entitlements|secrets-pagination|customer-app|brand-brain-visual|brand-brain|brand-context|design-system|demo-reference|assets|content-studio|content-calendar|approvals|viewer-read-only|social-publishing|analytics-copilot|phase8-journey|phase8-creative-adaptation|phase8-flow|phase10-platform|production-email|phase4-security-settings)\.(spec|screenshots\.spec)\.ts/,
+        // EVERY capture run, not a list of them: a screenshots spec writes
+        // files for review and belongs only to `visual-review` (F-33). The
+        // Phase 6 set ran here because its name was not on the list above.
+        /\.screenshots\.spec\.ts$/,
+      ],
       use: { ...devices['Pixel 5'], launchOptions },
     },
     {
