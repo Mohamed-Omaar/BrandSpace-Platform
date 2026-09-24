@@ -396,3 +396,64 @@ export async function loadSystemState(): Promise<SystemState> {
   ]);
   return { databaseOk, report, tracingExporting: tracing.exporting };
 }
+
+/* ------------------------------------------------------------------------ */
+/* Customers — the facts a directory card shows                              */
+/* ------------------------------------------------------------------------ */
+
+export interface CustomerFacts {
+  readonly subscriptionStatus: string | null;
+  readonly trialEndsAt: Date | null;
+  readonly brands: number;
+  readonly creditsMilli: bigint | null;
+  readonly socialAccounts: number;
+}
+
+/**
+ * Per-card facts for ONE PAGE of the directory — bounded by the page's ids,
+ * four grouped reads regardless of page size. Counts and a balance only; no
+ * customer content is read.
+ */
+export async function loadCustomerFacts(
+  workspaceIds: readonly string[],
+): Promise<ReadonlyMap<string, CustomerFacts>> {
+  if (workspaceIds.length === 0) return new Map();
+  const prisma = getPlatformPrisma();
+  const ids = [...workspaceIds];
+  const [subscriptions, brands, wallets, connections] = await Promise.all([
+    prisma.workspaceSubscription.findMany({
+      where: { workspaceId: { in: ids } },
+      select: { workspaceId: true, status: true, trialEndsAt: true },
+    }),
+    prisma.brand.groupBy({
+      by: ['workspaceId'],
+      where: { workspaceId: { in: ids }, status: { not: 'ARCHIVED' } },
+      _count: { _all: true },
+    }),
+    prisma.creditWallet.findMany({
+      where: { workspaceId: { in: ids } },
+      select: { workspaceId: true, balanceMilliCredits: true },
+    }),
+    prisma.socialConnection.groupBy({
+      by: ['workspaceId'],
+      where: { workspaceId: { in: ids }, status: 'ACTIVE' },
+      _count: { _all: true },
+    }),
+  ]);
+  return new Map(
+    ids.map((id) => {
+      const subscription = subscriptions.find((row) => row.workspaceId === id);
+      return [
+        id,
+        {
+          subscriptionStatus: subscription?.status ?? null,
+          trialEndsAt:
+            subscription?.status === 'TRIALING' ? (subscription.trialEndsAt ?? null) : null,
+          brands: brands.find((row) => row.workspaceId === id)?._count._all ?? 0,
+          creditsMilli: wallets.find((row) => row.workspaceId === id)?.balanceMilliCredits ?? null,
+          socialAccounts: connections.find((row) => row.workspaceId === id)?._count._all ?? 0,
+        },
+      ];
+    }),
+  );
+}
