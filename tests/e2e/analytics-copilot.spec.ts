@@ -851,9 +851,10 @@ test.describe('P6-11 · analytics → intelligence → pulse', () => {
     if ((await next.count()) === 0) return; // nothing to do is a finished state
     for (const link of await next.locator('a').all()) {
       const href = await link.getAttribute('href');
-      // P6-12 added the card's "Ask Copilot" entry, which carries its context.
+      // P6-12 added the card's "Ask Copilot" entry, which carries its context;
+      // D-293 added "View evidence", which opens the one finding it rests on.
       expect(href).toMatch(
-        /^\/en\/((integrations|calendar|intelligence)|copilot\?from=analytics)$/,
+        /^\/en\/((integrations|calendar|intelligence)|intelligence\?insight=[0-9a-f-]{36}|copilot\?from=analytics)$/,
       );
       const response = await page.request.get(`${DASHBOARD_BASE_URL}${href}`);
       expect(response.status(), `${href} answers`).toBeLessThan(400);

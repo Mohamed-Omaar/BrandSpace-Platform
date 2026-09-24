@@ -25,6 +25,7 @@ import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
+import { measuredChanges, parseExplanation, pickText } from '../../../server/analytics-story';
 import { explainPeriodAction } from './actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -233,7 +234,25 @@ export default async function AnalyticsPage({
       { now, withinDays: days },
     );
 
-    return { summary, series, byProvider, topPosts, insights, period, shift };
+    /*
+     * D-293 — THE LATEST EXPLANATION a person has not dismissed, for the
+     * story at the top. Its claims were checked against its evidence before it
+     * was stored; it is read only by a member who may read insights.
+     */
+    const explanation = workspace.permissionKeys.includes('strategy.read')
+      ? await services.db.insight.findFirst({
+          where: {
+            workspaceId: workspace.workspaceId,
+            brandId: brand.id,
+            type: 'ANALYTICS_EXPLANATION',
+            status: { in: ['NEW', 'SEEN', 'ACCEPTED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, body: true, periodStart: true, periodEnd: true },
+        })
+      : null;
+
+    return { summary, series, byProvider, topPosts, insights, period, shift, explanation };
   });
 
   const nextSteps = analyticsNextSteps({
@@ -275,6 +294,15 @@ export default async function AnalyticsPage({
   }));
 
   const exportHref = `/${locale}/analytics/export?brand=${brand.id}&range=${days}`;
+
+  const changes = compare ? measuredChanges(data.summary.metrics) : [];
+  // "Explain the shift" is the Why card's own action now; listing it here too
+  // would be the same button twice.
+  const trySteps = nextSteps.filter((step) => step.key !== 'explain-shift');
+  const topPost = data.topPosts[0] ?? null;
+  const explained = parseExplanation(data.explanation?.body ?? null);
+  const cites = (refs: readonly number[]) =>
+    refs.length > 0 ? ` · ${t('strategy.rests')} ${refs.map((ref) => `e${ref}`).join(', ')}` : '';
 
   return (
     <WorkspaceShell
@@ -375,17 +403,187 @@ export default async function AnalyticsPage({
             <button type="submit" style={buttonStyle('neutral', 'sm')}>
               {t('analytics.apply')}
             </button>
-            {mayExport ? (
-              <Link
-                href={exportHref}
-                style={buttonStyle('ghost', 'sm')}
-                data-testid="analytics-export"
-              >
-                {t('analytics.export')}
-              </Link>
-            ) : null}
           </fieldset>
         </form>
+
+        {/*
+          D-293 — THE STORY FIRST: what changed, why it might matter, what to
+          try. Then the numbers it rests on. Every line below is either a
+          measurement (a template around a stored number) or a line of a stored
+          explanation whose claims were checked against cited evidence.
+        */}
+        <Card testId="analytics-what-changed">
+          <SectionHeader title={t('analytics.story.changed')} />
+          {changes.length === 0 && !data.shift && explained.notableChanges.length === 0 ? (
+            <p style={storyMuted} data-testid="analytics-nothing-changed">
+              {compare ? t('analytics.story.nothingChanged') : t('analytics.story.noComparison')}
+            </p>
+          ) : (
+            <ul style={storyList}>
+              {changes.map((change) => (
+                <li
+                  key={change.metricKey}
+                  style={storyLine}
+                  data-testid={`analytics-change-${change.metricKey}`}
+                >
+                  {t(change.changeMilli > 0 ? 'analytics.story.rose' : 'analytics.story.fell')
+                    .replace('{metric}', t(`analytics.metric.${change.metricKey}` as MessageKey))
+                    .replace('{change}', percent.format(Math.abs(change.changeMilli) / 1_000))
+                    .replace('{days}', number.format(days))}
+                </li>
+              ))}
+              {data.shift ? (
+                <li style={storyLine} data-testid="analytics-shift">
+                  <StatusBadge
+                    tone={data.shift.direction === 'above' ? 'success' : 'warning'}
+                    label={t(`analytics.shift.${data.shift.direction}` as MessageKey)}
+                  />{' '}
+                  {t('analytics.shift.body')
+                    .replace(
+                      '{metric}',
+                      t(`analytics.metric.${data.shift.metricKey}` as MessageKey),
+                    )
+                    .replace('{day}', day.format(data.shift.periodStart))
+                    .replace('{observed}', number.format(Number(data.shift.observedValue)))
+                    .replace('{baseline}', number.format(Number(data.shift.baselineValue)))
+                    .replace('{periods}', number.format(data.shift.baselinePeriods))
+                    .replace('{deviation}', percent.format(data.shift.deviationMilli / 1_000))
+                    .replace('{threshold}', percent.format(data.shift.thresholdMilli / 1_000))}
+                </li>
+              ) : null}
+              {topPost ? (
+                <li style={storyLine} data-testid="analytics-top-post">
+                  {t('analytics.story.topPost')
+                    .replace('{title}', topPost.title ?? t('publishing.untitled'))
+                    .replace('{value}', number.format(Number(topPost.value)))}
+                </li>
+              ) : null}
+              {explained.notableChanges.map((line, index) => (
+                <li key={`n${index}`} style={storyLine} dir="auto">
+                  {pickText(line.text, locale)}
+                  {cites(line.evidenceRefs)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card testId="analytics-why">
+          <SectionHeader title={t('analytics.story.why')} />
+          {explained.claims.length > 0 || explained.summary ? (
+            <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+              {explained.summary ? (
+                <p style={storyText} dir="auto">
+                  {pickText(explained.summary, locale)}
+                </p>
+              ) : null}
+              <ul style={storyList}>
+                {explained.claims.map((line, index) => (
+                  <li key={index} style={storyLine} dir="auto">
+                    {pickText(line.text, locale)}
+                    {cites(line.evidenceRefs)}
+                  </li>
+                ))}
+              </ul>
+              <p style={storyMuted}>{t('analytics.story.correlation')}</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+              <p style={storyMuted}>{t('analytics.story.noExplanation')}</p>
+              {mayExplain ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: spacingTokens.sm,
+                    alignItems: 'center',
+                  }}
+                >
+                  <ExplainForm
+                    locale={locale}
+                    brandId={brand.id}
+                    days={days}
+                    compare={compare}
+                    label={t('analytics.explain')}
+                    testId="analytics-explain-shift"
+                  />
+                  <span style={storyMuted}>{t('analytics.explainHint')}</span>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </Card>
+
+        <Card testId="analytics-next">
+          <SectionHeader
+            title={t('analytics.story.try')}
+            actions={
+              workspace.permissionKeys.includes('copilot.use') ? (
+                <Link
+                  href={copilotHref(locale, 'analytics')}
+                  style={buttonStyle('ghost', 'sm')}
+                  className={buttonClass('ghost')}
+                  data-testid="analytics-ask-copilot"
+                >
+                  {t('home.recommended.giveToCopilot')}
+                </Link>
+              ) : undefined
+            }
+          />
+          {explained.recommendations.length === 0 && trySteps.length === 0 ? (
+            <p style={storyMuted}>{t('analytics.story.nothingToTry')}</p>
+          ) : (
+            <ul style={storyList}>
+              {explained.recommendations.map((line, index) => (
+                <li
+                  key={`r${index}`}
+                  style={{ ...storyLine, display: 'grid', gap: spacingTokens['3xs'] }}
+                  data-testid={`analytics-try-${index}`}
+                >
+                  <span dir="auto">
+                    {pickText(line.text, locale)}
+                    {cites(line.evidenceRefs)}
+                  </span>
+                  {data.explanation ? (
+                    <Link
+                      href={`/${locale}/intelligence?insight=${data.explanation.id}`}
+                      style={{ ...typographyTokens.caption }}
+                    >
+                      {t('home.recommended.viewEvidence')}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+              {trySteps.map((step) => (
+                <li
+                  key={step.key}
+                  data-testid={`analytics-next-${step.key}`}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.sm,
+                    ...typographyTokens.bodySm,
+                  }}
+                >
+                  <span style={{ color: colorTokens.textPrimary }}>
+                    {t(`analytics.next.${step.key}` as MessageKey)}
+                  </span>
+                  {step.href ? (
+                    <Link
+                      href={`/${locale}${step.href}`}
+                      style={buttonStyle('ghost', 'sm')}
+                      className={buttonClass('ghost')}
+                    >
+                      {t(`analytics.next.${step.key}.action` as MessageKey)}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
         <SectionHeader title={t('analytics.totals')} />
         <ContentGrid>
@@ -439,108 +637,6 @@ export default async function AnalyticsPage({
             />
           )}
         </Card>
-
-        {/*
-          WHAT CHANGED — shown only when something did. The four numbers a
-          reader needs to disagree with the finding (observed, baseline, how many
-          periods the baseline spans, and the deviation against the configured
-          threshold) are all printed; "engagement dropped" with no baseline is a
-          claim, not a finding (anomalies.ts).
-        */}
-        {data.shift ? (
-          <Card testId="analytics-shift">
-            <SectionHeader
-              title={t('analytics.shift.title')}
-              actions={
-                <StatusBadge
-                  tone={data.shift.direction === 'above' ? 'success' : 'warning'}
-                  label={t(`analytics.shift.${data.shift.direction}` as MessageKey)}
-                />
-              }
-            />
-            <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
-              {t('analytics.shift.body')
-                .replace('{metric}', t(`analytics.metric.${data.shift.metricKey}` as MessageKey))
-                .replace('{day}', day.format(data.shift.periodStart))
-                .replace('{observed}', number.format(Number(data.shift.observedValue)))
-                .replace('{baseline}', number.format(Number(data.shift.baselineValue)))
-                .replace('{periods}', number.format(data.shift.baselinePeriods))
-                .replace('{deviation}', percent.format(data.shift.deviationMilli / 1_000))
-                .replace('{threshold}', percent.format(data.shift.thresholdMilli / 1_000))}
-            </p>
-          </Card>
-        ) : null}
-
-        {/*
-          WHAT NEXT — each step derived from a condition measured above and
-          gated on the permission of the screen it links to. Absent when there is
-          nothing to do: no "all good!" filler.
-        */}
-        {nextSteps.length > 0 ? (
-          <Card testId="analytics-next">
-            <SectionHeader
-              title={t('analytics.next.title')}
-              actions={
-                workspace.permissionKeys.includes('copilot.use') ? (
-                  <Link
-                    href={copilotHref(locale, 'analytics')}
-                    style={buttonStyle('ghost', 'sm')}
-                    className={buttonClass('ghost')}
-                    data-testid="analytics-ask-copilot"
-                  >
-                    {t('copilot.ask')}
-                  </Link>
-                ) : undefined
-              }
-            />
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'grid',
-                gap: spacingTokens.sm,
-              }}
-            >
-              {nextSteps.map((step) => (
-                <li
-                  key={step.key}
-                  data-testid={`analytics-next-${step.key}`}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: spacingTokens.sm,
-                    ...typographyTokens.bodySm,
-                  }}
-                >
-                  <span style={{ color: colorTokens.textPrimary }}>
-                    {t(`analytics.next.${step.key}` as MessageKey)}
-                  </span>
-                  {step.href ? (
-                    <Link
-                      href={`/${locale}${step.href}`}
-                      style={buttonStyle('ghost', 'sm')}
-                      className={buttonClass('ghost')}
-                    >
-                      {t(`analytics.next.${step.key}.action` as MessageKey)}
-                    </Link>
-                  ) : step.key === 'explain-shift' ? (
-                    <ExplainForm
-                      locale={locale}
-                      brandId={brand.id}
-                      days={days}
-                      compare={compare}
-                      label={t('analytics.explain')}
-                      testId="analytics-explain-shift"
-                    />
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        ) : null}
 
         <Card>
           <SectionHeader title={t('analytics.byPlatform')} />
@@ -658,6 +754,15 @@ export default async function AnalyticsPage({
             )}
           </Card>
         ) : null}
+
+        {/* §34 — reachable, but secondary: the story and the numbers come first. */}
+        {mayExport ? (
+          <p style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}>
+            <Link href={exportHref} data-testid="analytics-export">
+              {t('analytics.export')}
+            </Link>
+          </p>
+        ) : null}
       </Stack>
     </WorkspaceShell>
   );
@@ -704,3 +809,18 @@ function ExplainForm({
     </form>
   );
 }
+
+const storyList = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'grid',
+  gap: spacingTokens.sm,
+} as const;
+const storyLine = { ...typographyTokens.bodySm, color: colorTokens.textPrimary } as const;
+const storyText = { ...typographyTokens.body, margin: 0, color: colorTokens.textPrimary } as const;
+const storyMuted = {
+  ...typographyTokens.caption,
+  margin: 0,
+  color: colorTokens.textMuted,
+} as const;

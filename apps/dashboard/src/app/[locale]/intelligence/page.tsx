@@ -124,7 +124,7 @@ export default async function IntelligencePage({
   const inScope =
     brand !== null &&
     (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id));
-  const { insights, loop } = inScope
+  const { insights, loop, campaignNames } = inScope
     ? await inAnalytics(workspace.workspaceId, async (services) => {
         const where = {
           workspaceId: workspace.workspaceId,
@@ -183,9 +183,27 @@ export default async function IntelligencePage({
           }
           loopByInsight.set(row.insightId, entry);
         }
-        return { insights: ordered, loop: loopByInsight };
+        // D-293 — the SCOPE of a campaign-level finding, by name.
+        const campaignIds = [
+          ...new Set(ordered.flatMap((row) => (row.campaignId ? [row.campaignId] : []))),
+        ];
+        const campaigns = campaignIds.length
+          ? await services.db.campaign.findMany({
+              where: { id: { in: campaignIds } },
+              select: { id: true, name: true },
+            })
+          : [];
+        return {
+          insights: ordered,
+          loop: loopByInsight,
+          campaignNames: new Map(campaigns.map((row) => [row.id, row.name])),
+        };
       })
-    : { insights: [], loop: new Map<string, { pending: number; accepted: number }>() };
+    : {
+        insights: [],
+        loop: new Map<string, { pending: number; accepted: number }>(),
+        campaignNames: new Map<string, string>(),
+      };
 
   return (
     <WorkspaceShell
@@ -213,6 +231,22 @@ export default async function IntelligencePage({
          * of any finding here — "compared with what?"
          */}
         <CustomerBanner tone="info">{t('insights.noExternalData')}</CustomerBanner>
+
+        {/*
+          §36 — THE LOOP, SAID ONCE: a finding is not brand truth. It becomes a
+          potential learning only when a person proposes it, and Brand Brain
+          only when a person accepts it there.
+        */}
+        <ol data-testid="intelligence-loop-steps" style={loopStyle}>
+          {(['detected', 'evidence', 'proposed', 'reviewed', 'remembered'] as const).map(
+            (step, index) => (
+              <li key={step} style={loopStepStyle}>
+                <span style={loopNumberStyle}>{number.format(index + 1)}</span>
+                {t(`intelligence.loopStep.${step}` as MessageKey)}
+              </li>
+            ),
+          )}
+        </ol>
 
         {brand && workspace.permissionKeys.includes('copilot.use') ? (
           <div>
@@ -286,11 +320,23 @@ export default async function IntelligencePage({
                   >
                     <SectionHeader
                       title={localized(insight.title, locale)}
-                      description={`${t(`insights.type.${insight.type}` as MessageKey)} · ${t(
-                        'insights.basis',
-                      )}: ${t(`insights.basis.${insight.basis}` as MessageKey)} · ${stamp.format(
-                        insight.createdAt,
-                      )}`}
+                      description={[
+                        t(`insights.type.${insight.type}` as MessageKey),
+                        // §35 — the PERIOD the finding covers, and its SCOPE.
+                        `${stamp.format(insight.periodStart)} – ${stamp.format(insight.periodEnd)}`,
+                        insight.campaignId && campaignNames.get(insight.campaignId)
+                          ? `${t('intelligence.scope.campaign')}: ${campaignNames.get(insight.campaignId)}`
+                          : `${t('intelligence.scope.brand')}: ${brand.name}`,
+                        `${t('insights.basis')}: ${t(`insights.basis.${insight.basis}` as MessageKey)}`,
+                        // Confidence ONLY where one was computed; never a default.
+                        ...(insight.confidenceMilli === null
+                          ? []
+                          : [
+                              `${t('intelligence.confidence')}: ${number.format(
+                                Math.round(insight.confidenceMilli / 10),
+                              )}%`,
+                            ]),
+                      ].join(' · ')}
                       actions={
                         <StatusBadge
                           tone={insight.status === 'ACCEPTED' ? 'success' : 'neutral'}
@@ -404,6 +450,19 @@ export default async function IntelligencePage({
                             {t('insights.dismiss')}
                           </button>
                         </form>
+                      </div>
+                    ) : null}
+
+                    {workspace.permissionKeys.includes('copilot.use') ? (
+                      <div>
+                        <Link
+                          href={copilotHref(locale, 'intelligence')}
+                          style={buttonStyle('ghost', 'sm')}
+                          className={buttonClass('ghost')}
+                          data-testid={`intelligence-copilot-${insight.id}`}
+                        >
+                          {t('home.recommended.giveToCopilot')}
+                        </Link>
                       </div>
                     ) : null}
 
@@ -531,3 +590,29 @@ function NarrativeBlock({
     </section>
   );
 }
+
+const loopStyle = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: spacingTokens.sm,
+} as const;
+const loopStepStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: spacingTokens['2xs'],
+  ...typographyTokens.caption,
+  color: colorTokens.textSecondary,
+} as const;
+const loopNumberStyle = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  inlineSize: '1.25rem',
+  blockSize: '1.25rem',
+  borderRadius: '9999px',
+  background: colorTokens.surfaceMuted,
+  color: colorTokens.textPrimary,
+  fontWeight: 600,
+} as const;
