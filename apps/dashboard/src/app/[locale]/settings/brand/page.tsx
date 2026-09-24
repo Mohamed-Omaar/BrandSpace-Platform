@@ -5,6 +5,7 @@ import {
   StateMessage,
   buttonStyle,
   colorTokens,
+  layoutTokens,
   inputStyle,
   radiusTokens,
   spacingTokens,
@@ -17,6 +18,8 @@ import { settingsNavItems } from '../../../../server/settings-nav';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveBrandProfileAction } from './actions';
+
+import { EmptyAction } from '../../../../components/empty-action';
 
 export const dynamic = 'force-dynamic';
 
@@ -166,6 +169,16 @@ export default async function BrandProfilePage({
                 : t('brand.chooseBody')
             }
             testId="brand-profile-no-brand"
+            action={
+              brandContext.resolution.kind === 'empty' &&
+              workspace.permissionKeys.includes('brand.manage') ? (
+                <EmptyAction
+                  href={`/${locale}/brand-brain`}
+                  label={t('bb.createBrand')}
+                  testId="no-brand-create"
+                />
+              ) : undefined
+            }
           />
         ) : (
           <Card testId="brand-profile-card">
@@ -260,14 +273,21 @@ export default async function BrandProfilePage({
                   {(['AR', 'EN'] as const).map((value) => (
                     <label
                       key={value}
-                      style={{ display: 'flex', gap: spacingTokens.xs, alignItems: 'center' }}
+                      style={{
+                        display: 'flex',
+                        gap: spacingTokens.xs,
+                        alignItems: 'center',
+                        minBlockSize: layoutTokens.minTargetSize,
+                      }}
                     >
+                      {/* WCAG 2.5.8 target size, as the approvals checkboxes (P6-14). */}
                       <input
                         type="checkbox"
                         name="supportedLocales"
                         value={value}
                         defaultChecked={data.brand.supportedLocales.includes(value)}
                         disabled={!mayManage}
+                        style={{ inlineSize: '20px', blockSize: '20px', margin: 0 }}
                       />
                       <span style={typographyTokens.bodySm}>
                         {value === 'AR' ? t('brandProfile.localeAr') : t('brandProfile.localeEn')}

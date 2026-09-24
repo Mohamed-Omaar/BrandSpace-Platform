@@ -49,6 +49,40 @@ ALTER ROLE brandspace_migrator WITH PASSWORD :'migrator_password';
 ALTER ROLE brandspace_app      WITH PASSWORD :'app_password';
 ALTER ROLE brandspace_platform WITH PASSWORD :'platform_password';
 
+-- The migrator is the DDL identity, so it must own the schema it migrates.
+--
+-- CI creates each test database WITH OWNER brandspace_migrator, which makes this
+-- true implicitly through PostgreSQL's pg_database_owner default. Railway
+-- provisions the database first under its own owner, so creating the role alone
+-- is not enough there: Prisma reaches the database but cannot create
+-- _prisma_migrations in public. Make the documented contract explicit in every
+-- environment instead of depending on how the database happened to be created.
+ALTER SCHEMA public OWNER TO brandspace_migrator;
+
+-- One migration creates the private `app` schema that holds tenant-context
+-- helpers. CREATE SCHEMA is a DATABASE-level privilege in PostgreSQL, not a
+-- schema-level privilege. CI hid this because its database is created WITH
+-- OWNER brandspace_migrator; Railway provisions the database first under its
+-- own owner. Grant exactly the DDL capability migrations need without making
+-- the migrator a database owner, and explicitly keep it away from runtime
+-- identities.
+DO $$
+BEGIN
+  EXECUTE format(
+    'GRANT CREATE ON DATABASE %I TO brandspace_migrator',
+    current_database()
+  );
+  EXECUTE format(
+    'REVOKE CREATE ON DATABASE %I FROM brandspace_app',
+    current_database()
+  );
+  EXECUTE format(
+    'REVOKE CREATE ON DATABASE %I FROM brandspace_platform',
+    current_database()
+  );
+END
+$$;
+
 -- None of the three may ever bypass row-level security.
 ALTER ROLE brandspace_migrator NOBYPASSRLS NOSUPERUSER;
 ALTER ROLE brandspace_app      NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
@@ -77,6 +111,7 @@ REVOKE brandspace_migrator FROM brandspace_platform;
 DO $$
 DECLARE
   offending text;
+  schema_owner text;
 BEGIN
   SELECT string_agg(rolname, ', ') INTO offending
     FROM pg_roles
@@ -89,6 +124,29 @@ BEGIN
   IF pg_has_role('brandspace_app', 'brandspace_platform', 'MEMBER') THEN
     RAISE EXCEPTION
       'brandspace_app is a member of brandspace_platform; it could SET ROLE into the platform identity.';
+  END IF;
+
+  SELECT pg_get_userbyid(nspowner) INTO schema_owner
+    FROM pg_namespace
+   WHERE nspname = 'public';
+
+  IF schema_owner IS DISTINCT FROM 'brandspace_migrator' THEN
+    RAISE EXCEPTION
+      'public schema must be owned by brandspace_migrator, found %',
+      COALESCE(schema_owner, '<missing>');
+  END IF;
+
+  IF NOT has_database_privilege('brandspace_migrator', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION
+      'brandspace_migrator must have CREATE on database %',
+      current_database();
+  END IF;
+
+  IF has_database_privilege('brandspace_app', current_database(), 'CREATE')
+     OR has_database_privilege('brandspace_platform', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION
+      'runtime roles must not have CREATE on database %',
+      current_database();
   END IF;
 END
 $$;

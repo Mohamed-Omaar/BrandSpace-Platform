@@ -34,7 +34,7 @@ function failure(locale: string, error: unknown, action: string): string {
 }
 
 export async function markNotificationReadAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const id = String(formData.get('id') ?? '');
 
   let destination: string;
@@ -63,7 +63,7 @@ export async function markNotificationReadAction(formData: FormData): Promise<vo
 }
 
 export async function markAllNotificationsReadAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
 
   let destination: string;
   try {

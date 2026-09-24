@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { inWorkspace, membershipActor, requireWorkspace } from '../../../server/customer-context';
 import { customerLink } from '../../../server/email-links';
 
@@ -33,7 +33,7 @@ function failure(locale: string, error: unknown, action: string): string {
 }
 
 export async function inviteMemberAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -49,6 +49,9 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
         workspaceId: session.workspace.workspaceId,
         email: String(formData.get('email') ?? ''),
         roleId: String(formData.get('roleId') ?? ''),
+        // P6-13 — the brands the invitee will see. Validated and bounded by the
+        // inviter's own scope in the service; the form only proposes.
+        brandScope: brandScopeFrom(formData),
         inviter: {
           kind: 'member',
           userId: session.customer.userId,
@@ -57,6 +60,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
           // from the form.
           roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
         },
       });
 
@@ -80,7 +84,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
 }
 
 export async function resendInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -94,6 +98,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
           userId: session.customer.userId,
           roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
         },
       );
       await email.send({
@@ -113,7 +118,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
 }
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -128,6 +133,7 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
           userId: session.customer.userId,
           roleKey: session.workspace.roleKey,
           permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
         },
       ),
     );
@@ -140,7 +146,7 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
 }
 
 export async function changeRoleAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -162,7 +168,7 @@ export async function changeRoleAction(formData: FormData): Promise<void> {
 }
 
 export async function removeMemberAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -178,6 +184,48 @@ export async function removeMemberAction(formData: FormData): Promise<void> {
     destination = membersUrl(locale, { ok: 'MEMBER_REMOVED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'remove_member');
+  }
+  revalidatePath(`/${locale}/members`);
+  redirect(destination);
+}
+
+/**
+ * The brand access a form proposes: "all" is the empty list (every brand), and
+ * "selected" is the ticked brands. Nothing here decides anything — the service
+ * validates every id against the workspace and bounds it by the actor's own
+ * scope (`resolveGrantableBrandScope`).
+ */
+function brandScopeFrom(formData: FormData): string[] {
+  if (String(formData.get('access') ?? 'all') === 'all') return [];
+  const selected = formData.getAll('brandId').map((value) => String(value));
+  // "Only these brands" with none ticked is NOT "all brands" — reading it as
+  // the empty list would turn a narrowing into the widest grant there is.
+  if (selected.length === 0) throw new AppError('VALIDATION_FAILED', 'Choose at least one brand.');
+  return selected;
+}
+
+/**
+ * Change which brands a member sees (P6-13). The same authority as a role
+ * change — BrandScope is authorization — re-checked by the service.
+ */
+export async function changeBrandAccessAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+
+  try {
+    const session = await requireWorkspace(locale, 'member.assign_role');
+    const selected = brandScopeFrom(formData);
+    await inWorkspace(session.workspace.workspaceId, async ({ memberships }) =>
+      memberships.changeBrandAccess(
+        session.workspace.workspaceId,
+        { ...membershipActor(session), brandScope: session.workspace.brandScope },
+        String(formData.get('membershipId') ?? ''),
+        selected,
+      ),
+    );
+    destination = membersUrl(locale, { ok: 'BRAND_ACCESS_CHANGED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'change_brand_access');
   }
   revalidatePath(`/${locale}/members`);
   redirect(destination);

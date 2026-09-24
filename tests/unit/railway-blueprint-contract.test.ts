@@ -357,6 +357,19 @@ describe('the Railway blueprint satisfies the production environment contract', 
  * configuration nobody reads — which is configuration that drifts, and later
  * gets copied somewhere it changes behaviour.
  */
+describe('the marketing healthcheck uses a deterministic locale route', () => {
+  it('does not probe the locale redirect at /', () => {
+    const webStart = SOURCE.indexOf("const web = service('web', {");
+    const dashboardStart = SOURCE.indexOf("const dashboard = service('dashboard'", webStart);
+    expect(webStart).toBeGreaterThan(-1);
+    expect(dashboardStart).toBeGreaterThan(webStart);
+
+    const webBlock = SOURCE.slice(webStart, dashboardStart);
+    expect(webBlock).toContain("healthcheckPath: '/en/status'");
+    expect(webBlock).not.toContain("healthcheckPath: '/'");
+  });
+});
+
 describe('the client-origin contract is carried to its consumers only', () => {
   const CONSUMERS = ['dashboard', 'api'];
   const NON_CONSUMERS = ['web', 'admin', 'worker'];
@@ -387,5 +400,68 @@ describe('the client-origin contract is carried to its consumers only', () => {
     for (const service of [...CONSUMERS, ...NON_CONSUMERS]) {
       expect(blueprintVariablesFor(service)).not.toContain('TRUSTED_PROXY_HOPS');
     }
+  });
+});
+
+/**
+ * THE BLUEPRINT BUILDS STAGING AND PRODUCTION FROM ONE DESCRIPTION — Phase 5.
+ *
+ * WHY THAT MATTERS MORE THAN IT LOOKS. Two blueprints would drift, and the way
+ * they drift is silent: staging stops resembling production exactly where it is
+ * least convenient to keep them the same, and then staging stops being evidence
+ * about production. One file, one environment discriminator, asserted here.
+ *
+ * READ FROM THE SOURCE rather than by executing the blueprint, like every other
+ * assertion in this file: the Railway SDK is not run in CI, and the property
+ * under test is what the file DECLARES.
+ */
+describe('the blueprint supports staging as well as production', () => {
+  it('declares both environments', () => {
+    expect(SOURCE).toMatch(/environments:\s*\['production',\s*'staging'\]/);
+  });
+
+  it('keeps NODE_ENV=production in BOTH, because staging is a production build', () => {
+    /*
+     * D-97, and the single most dangerous thing to get wrong in this phase. Every
+     * built Next.js app sets NODE_ENV=production, staging included — so if the
+     * blueprint ever set NODE_ENV=staging to "be helpful", every production
+     * guard keyed on it would stop firing in staging and staging would prove
+     * nothing about production.
+     */
+    const common = objectLiteral('commonEnv');
+    expect(common).toMatch(/NODE_ENV:\s*'production'/);
+    expect(common).not.toMatch(/NODE_ENV:\s*isProduction/);
+  });
+
+  it('distinguishes the two by APP_ENV alone', () => {
+    const common = objectLiteral('commonEnv');
+    expect(common).toMatch(/APP_ENV:\s*isProduction\s*\?\s*'production'\s*:\s*'staging'/);
+  });
+
+  it('carries the client-origin contract into staging as well', () => {
+    /*
+     * The fragment is spread into the dashboard and the api unconditionally, so
+     * BOTH environments receive it. A staging service without it refuses to
+     * start (Phase 4, D-256) — which is the correct behaviour and would block
+     * the staging bootstrap, so the blueprint must supply it.
+     */
+    const declaration = SOURCE.slice(SOURCE.indexOf('const clientOriginEnv'));
+    expect(declaration.slice(0, 300)).toContain("CLIENT_ORIGIN_STRATEGY: 'railway-edge'");
+    // Not conditional on the environment: one value, both environments.
+    expect(declaration.slice(0, 300)).not.toContain('isProduction');
+  });
+
+  it('never chooses "direct", in either environment', () => {
+    // Behind Railway's edge the transport peer is a proxy, so `direct` would put
+    // every caller into one rate-limit bucket. Production refuses it outright.
+    expect(SOURCE).not.toMatch(/CLIENT_ORIGIN_STRATEGY:\s*'direct'/);
+  });
+
+  it('gives staging its OWN bucket and keys rather than production values', () => {
+    // The blueprint cannot compare two environments' values — only Railway can —
+    // so what it CAN do is refuse to hard-code either, and say so where an
+    // operator will read it.
+    const storage = objectLiteral('storageEnv');
+    expect(storage).toMatch(/MUST differ between production and staging/i);
   });
 });

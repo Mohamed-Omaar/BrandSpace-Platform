@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import {
   Banner,
   Field,
+  PasswordField,
   SearchableSelect,
   colorTokens,
   spacingTokens,
@@ -117,23 +118,36 @@ export default async function SignUpPage({
           />
         </Field>
 
-        <Field
-          label={t('signUp.password')}
-          htmlFor="password"
-          required
-          hint={t('signUp.passwordHint').replace('{min}', String(policy.signup.minPasswordLength))}
-        >
-          <input
-            className="bs-control"
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={policy.signup.minPasswordLength}
-            autoComplete="new-password"
-            style={authInputStyle()}
-          />
-        </Field>
+        {/*
+          The shared control (P6-03a). This screen already read the configured
+          minimum — it was the only one that did — so what it gains is the
+          reveal toggle, the confirmation and a rules list that keeps answering
+          as the customer types, instead of one hint sentence that states a
+          number and goes quiet.
+        */}
+        <PasswordField
+          id="password"
+          labels={{
+            label: t('signUp.password'),
+            show: t('password.show'),
+            hide: t('password.hide'),
+            confirmLabel: t('password.confirm'),
+            mismatch: t('password.mismatch'),
+            match: t('password.match'),
+            rulesLabel: t('password.rulesLabel'),
+          }}
+          minLength={policy.signup.minPasswordLength}
+          rules={[
+            {
+              label: t('password.rule.length').replace(
+                '{min}',
+                String(policy.signup.minPasswordLength),
+              ),
+              kind: 'min-length',
+            },
+            { label: t('password.rule.phrase'), kind: 'note' },
+          ]}
+        />
 
         <Field label={t('signUp.timezone')} htmlFor="timezone" required>
           <SearchableSelect

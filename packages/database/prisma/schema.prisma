@@ -302,6 +302,8 @@ model User {
   legalAcceptances   UserLegalAcceptance[]
   mfaRecoveryCodes   UserMfaRecoveryCode[]
 
+  memberSuggestions MemberSuggestion[]
+
   @@index([status])
   @@map("user")
 }
@@ -513,6 +515,11 @@ model Workspace {
   creditNoteLines     CreditNoteLine[]
   paymentAttempts     PaymentAttempt[]
   creditPackPurchases CreditPackPurchase[]
+  noteThreads         NoteThread[]
+  notes               Note[]
+  noteMentions        NoteMention[]
+
+  memberSuggestions MemberSuggestion[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -1132,7 +1139,7 @@ model EmailMessage {
 
   toEmail     String
   templateKey String
-  locale      Locale @default(AR)
+  locale      Locale @default(EN)
 
   /// Template variables, redacted before write. Never contains a raw token.
   variables Json?
@@ -1847,9 +1854,12 @@ model Brand {
   automationRules           AutomationRule[]
   automationRuns            AutomationRun[]
   automationEvents          AutomationEvent[]
+  noteThreads               NoteThread[]
 
   /// The composite target a brand-scoped child points at. It is what makes
   /// `(workspaceId, brandId)` provable rather than merely conventional.
+  memberSuggestions MemberSuggestion[]
+
   @@unique([workspaceId, id], name: "brand_workspace_scope")
   @@unique([workspaceId, slug])
   @@index([workspaceId, status])
@@ -2558,6 +2568,10 @@ model Asset {
   /// constraint is the backstop. See the migration for the partial unique index
   /// that makes re-uploading after a delete possible.
   /// The composite target versions, derivatives, sessions and jobs point at.
+  /// D-281. Conversations about this file.
+  noteThreads NoteThread[]
+  coverOf     ContentVariant[] @relation("ContentVariantCover")
+
   @@unique([workspaceId, id], name: "asset_workspace_scope")
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, kind])
@@ -2835,7 +2849,7 @@ model ContentItem {
   /// The locale the item was authored in. Variants carry their own, so an
   /// Arabic item with an English variant is a normal shape rather than a
   /// contradiction.
-  primaryLocale Locale   @default(AR)
+  primaryLocale Locale   @default(EN)
   /// The content pillar this belongs to, when the brand uses pillars.
   pillar        String?
   tags          String[] @default([])
@@ -2902,6 +2916,7 @@ model ContentItem {
   campaign           Campaign?           @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_item_campaign_fkey")
   metricObservations MetricObservation[]
   insightEvidence    InsightEvidence[]
+  noteThreads        NoteThread[]
 
   /// The composite target every variant points at (D-112).
   @@unique([workspaceId, id], name: "content_item_workspace_scope")
@@ -2951,6 +2966,11 @@ model ContentVariant {
   /// refused on that path.
   assetIds String[] @default([]) @db.Uuid
 
+  /// Phase 6 final (D-285) — a Reel's or video's cover image. The variant's own
+  /// brand or the shared shelf (trigger `content_variant_cover_scope`); deleting
+  /// the asset clears it.
+  coverAssetId String? @db.Uuid
+
   platformOptions Json?
 
   validationState  ContentValidationState @default(UNVALIDATED)
@@ -2977,6 +2997,7 @@ model ContentVariant {
   /// the difference between accepted and refused would answer whether that id
   /// exists. F-80 and F-83 are what this line prevents recurring.
   item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_variant_item_fkey")
+  cover     Asset?      @relation("ContentVariantCover", fields: [workspaceId, coverAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_variant_cover_fkey")
 
   publishJobs PublishJob[]
 
@@ -2989,6 +3010,7 @@ model ContentVariant {
   @@unique([contentItemId, platformKey, locale])
   @@index([workspaceId, contentItemId])
   @@index([workspaceId, brandId])
+  @@index([workspaceId, coverAssetId])
   @@index([expiresAt])
   @@map("content_variant")
 }
@@ -4295,6 +4317,7 @@ model Campaign {
   contentItems ContentItem[]
   insights     Insight[]
   evidence     InsightEvidence[]
+  noteThreads  NoteThread[]
 
   @@unique([workspaceId, id], name: "campaign_workspace_scope")
   @@unique([workspaceId, brandId, createdByUserId, idempotencyKey])
@@ -4504,6 +4527,16 @@ model CopilotSession {
   surface String  @default("general")
   locale  Locale  @default(EN)
   title   String?
+
+  /// WHAT THE PERSON WAS LOOKING AT when they opened the Copilot (Phase 6
+  /// final, D-277 §37, D-280): a campaign, a content item or an insight. Both
+  /// or neither — a CHECK enforces it. NO FOREIGN KEY, because the subject is
+  /// one of three tables; the orchestrator ADMITS it at open (same workspace by
+  /// RLS, same brand as the session, by query) and re-reads it on every turn,
+  /// so a subject deleted since is simply absent rather than dangling. Its
+  /// title reaches the model only inside the fenced untrusted block.
+  subjectType String?
+  subjectId   String? @db.Uuid
 
   lastMessageAt DateTime? @db.Timestamptz(6)
   archivedAt    DateTime? @db.Timestamptz(6)
@@ -5788,4 +5821,262 @@ model IntegrationHealthCheck {
   @@index([category, providerKey, environment, checkedAt(sort: Desc)], map: "integration_health_check_lookup_idx")
   @@index([checkedAt])
   @@map("integration_health_check")
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 6 — CONTEXTUAL COLLABORATION (P6-05)
+//
+// The one genuinely new tenant-owned capability in Phase 6. Everything else the
+// phase touches already had a domain behind it.
+//
+// NOTES ARE NOT BRAND BRAIN KNOWLEDGE, AND THE SEPARATION IS STRUCTURAL RATHER
+// THAN A CONVENTION SOMEBODY HAS TO REMEMBER. There is no foreign key from a
+// note into `BrandKnowledgeItem`, no shared table, and no write path from one to
+// the other anywhere in the product. A note is what a colleague said about a
+// piece of work; brand knowledge is what the brand has decided is true, carries
+// provenance and an authority level, and governs what every AI surface
+// generates. Letting a passing remark become governed memory — silently, because
+// it was typed into the same screen — is exactly the failure the four-layer
+// model with its HUMAN > DOCUMENT > AI_INFERRED precedence exists to prevent.
+// If a note SHOULD become knowledge, a person promotes it deliberately through
+// Brand Brain's own review, where it arrives with provenance saying where it
+// came from.
+// ---------------------------------------------------------------------------
+
+/// What a thread is attached to.
+///
+/// A DISCRIMINATOR BESIDE REAL FOREIGN KEYS, not instead of them. A single
+/// polymorphic `subjectId` with no constraint would have been less schema and
+/// would have left the database unable to tell a live subject from a deleted
+/// one — orphan threads accumulating against content nobody can open, and no
+/// cascade to clean them up. Each subject the product supports gets a nullable
+/// FK and a CHECK that exactly the right one is set.
+///
+/// It is an enum so that adding a subject is a migration with a constraint
+/// change, which is the point at which somebody has to decide what deleting
+/// that subject does to its conversation.
+enum NoteSubjectType {
+  /// A draft, a variant, a piece of work in the Content Studio.
+  CONTENT_ITEM
+  /// A campaign, as a project room.
+  CAMPAIGN
+  /// The brand itself — for conversations that are not about one artefact.
+  BRAND
+  /// A file in the Asset Library (Phase 6 final, D-277 §28, D-281).
+  ASSET
+}
+
+enum NoteThreadStatus {
+  OPEN
+  RESOLVED
+}
+
+/// How much a conversation matters (D-277 §28, D-281): Normal or Important and
+/// nothing more — not a priority scale, not a task status. A scale nobody
+/// applies consistently orders nothing.
+enum NoteImportance {
+  NORMAL
+  IMPORTANT
+}
+
+/// TENANT-OWNED, BRAND-SCOPED. One conversation about one thing.
+///
+/// THE THREAD CARRIES THE STATE AND THE NOTES CARRY THE WORDS. Resolve/reopen,
+/// assignment and the subject belong to the conversation, not to whichever
+/// message happened to be first — a design where the first note owns the thread
+/// makes deleting it either impossible or destructive.
+model NoteThread {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+
+  /// The brand this conversation belongs to.
+  ///
+  /// ALWAYS SET, including when the subject is a content item or a campaign,
+  /// because brand scope is how a member's visibility is filtered everywhere
+  /// else in the product (`brandIdScopeFilter`). Deriving it by joining to the
+  /// subject on every read would make the most common query a join and would
+  /// put the scoping rule in the query rather than in the row.
+  brandId String @db.Uuid
+
+  subjectType NoteSubjectType
+
+  /// Exactly one of these is set, matching `subjectType` — enforced by a CHECK
+  /// constraint in the migration, not by hope. When the subject is the BRAND
+  /// itself both are null and `brandId` is the subject.
+  contentItemId String? @db.Uuid
+  campaignId    String? @db.Uuid
+  /// D-281. The asset this conversation is about. A workspace-shared asset
+  /// (`brandId` NULL) is discussed within ONE brand — the thread's — and a
+  /// brand's own asset only within that brand; the `note_thread_asset_scope`
+  /// trigger refuses anything else.
+  assetId       String? @db.Uuid
+
+  status NoteThreadStatus @default(OPEN)
+
+  /// D-281. When the conversation needs an answer by — optional, and a date
+  /// rather than a workflow: there is no overdue state machine behind it.
+  dueAt      DateTime?      @db.Timestamptz(6)
+  importance NoteImportance @default(NORMAL)
+
+  createdByUserId  String  @db.Uuid
+  /// Who this is waiting on, when it is waiting on somebody in particular.
+  ///
+  /// OPTIONAL BECAUSE MOST COMMENTS ARE NOT TASKS. A thread that must always
+  /// name an assignee turns every passing remark into somebody's to-do list.
+  assignedToUserId String? @db.Uuid
+
+  resolvedAt       DateTime? @db.Timestamptz(6)
+  resolvedByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand       Brand        @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "note_thread_brand_fkey")
+  contentItem ContentItem? @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_content_item_fkey")
+  campaign    Campaign?    @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_campaign_fkey")
+  asset       Asset?       @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_asset_fkey")
+  notes       Note[]
+
+  @@unique([workspaceId, id], name: "note_thread_workspace_scope")
+  /// The subject's own conversation list, which is the most common read.
+  @@index([workspaceId, brandId, subjectType, status])
+  @@index([workspaceId, contentItemId])
+  @@index([workspaceId, campaignId])
+  @@index([workspaceId, assetId])
+  /// "What is waiting on me", for the Command Center.
+  @@index([workspaceId, assignedToUserId, status])
+  @@map("note_thread")
+}
+
+/// TENANT-OWNED. One message in a thread.
+model Note {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  threadId    String @db.Uuid
+
+  authorUserId String @db.Uuid
+
+  /// The message, as plain text.
+  ///
+  /// NOT MARKUP, AND NOT HTML. Everything a note needs to say fits in a
+  /// sentence, and accepting markup from one member and rendering it to another
+  /// is a stored-XSS surface bought for formatting nobody asked for. Mentions
+  /// are a separate table rather than a syntax parsed out of this at render
+  /// time, so what a note MEANS does not depend on re-parsing it identically
+  /// everywhere.
+  body String
+
+  /// Set when the author changes the text, so a reader can tell.
+  editedAt  DateTime? @db.Timestamptz(6)
+  /// Soft delete: the thread keeps its shape and the audit trail keeps its row.
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  thread    NoteThread    @relation(fields: [workspaceId, threadId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_thread_fkey")
+  mentions  NoteMention[]
+
+  @@unique([workspaceId, id], name: "note_workspace_scope")
+  @@index([workspaceId, threadId, createdAt])
+  @@map("note")
+}
+
+/// TENANT-OWNED. One person named in one note.
+///
+/// A ROW RATHER THAN A SYNTAX. Storing mentions as `@name` inside the body would
+/// mean every reader re-parses the text to know who was addressed, every rename
+/// silently breaks an old mention, and "is this waiting on me" becomes a LIKE
+/// query. The row is the fact; the body is the sentence.
+///
+/// THE MENTIONED PERSON IS A MEMBER OF THIS WORKSPACE, and the service checks
+/// that before the row is written. Without it, mentioning an arbitrary user id
+/// would tell the mentioner whether that account exists — and would put a
+/// notification in a stranger's list.
+model NoteMention {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  noteId      String @db.Uuid
+
+  mentionedUserId String @db.Uuid
+
+  /// When the mentioned person saw it. Null is unread, which is what the
+  /// Command Center counts.
+  readAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  note      Note      @relation(fields: [workspaceId, noteId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "note_mention_note_fkey")
+
+  /// One mention of one person per note: saying somebody's name twice in a
+  /// sentence is not two notifications.
+  @@unique([workspaceId, noteId, mentionedUserId])
+  @@unique([workspaceId, id], name: "note_mention_workspace_scope")
+  /// "What is unread for me", for the Command Center and the bell.
+  @@index([workspaceId, mentionedUserId, readAt])
+  @@map("note_mention")
+}
+
+/// PHASE 6 FINAL (D-277 §9-§10, D-295) — A PERSON'S DECISION ON SOMETHING
+/// BRANDSPACE NOTICED ABOUT THEIR OWN WORK.
+///
+/// THE OBSERVATIONS ARE NOT STORED HERE. They are derived, every time, from
+/// the immutable audit trail (`content.variant.shorten`, `content.variant.tone`,
+/// …) with the thresholds in the tenant's content configuration — so there is
+/// no second record of behaviour to drift from the first. What IS stored is the
+/// only thing that cannot be derived: what the person decided.
+///
+///   - a PREFERENCE accepted ("make this my default") influences that person's
+///     future generations for that brand, and nothing else;
+///   - DISMISSED means "don't suggest this again";
+///   - SNOOZED means "not now", until `snoozedUntil`.
+///
+/// A WORKFLOW suggestion is never "accepted" here: accepting one means handing
+/// it to the Copilot, whose automation rule starts DISABLED (D-296).
+///
+/// Per MEMBER and per BRAND: one person's habit is not the brand's truth, and
+/// nothing here ever writes to Brand Brain.
+model MemberSuggestion {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+  userId      String @db.Uuid
+
+  kind   MemberSuggestionKind
+  /// A closed-form key the detector produces, e.g. `shorter:linkedin`.
+  key    String
+  status MemberSuggestionStatus
+
+  /// How many observations the suggestion rested on when it was decided.
+  evidenceCount Int
+  /// Which recorded behaviour it came from, e.g. `content.inline_actions`.
+  source        String
+
+  decidedAt    DateTime  @db.Timestamptz(6)
+  snoozedUntil DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "member_suggestion_brand_fkey")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "member_suggestion_user_fkey")
+
+  @@unique([workspaceId, brandId, userId, kind, key])
+  @@index([workspaceId, userId, status])
+  @@map("member_suggestion")
+}
+
+enum MemberSuggestionKind {
+  PREFERENCE
+  WORKFLOW
+}
+
+enum MemberSuggestionStatus {
+  ACCEPTED
+  DISMISSED
+  SNOOZED
 }

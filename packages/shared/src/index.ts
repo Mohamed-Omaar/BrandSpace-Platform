@@ -9,6 +9,7 @@ export * from './file-signature';
 export * from './geography';
 export * from './logger';
 export * from './money';
+export * from './password-policy';
 export * from './permissions';
 export * from './public-error';
 export * from './redaction';

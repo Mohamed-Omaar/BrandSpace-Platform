@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { setupFactsFor } from '../../../server/setup-wizard';
+import { setupSteps } from '../../../server/setup-wizard-state';
 import { callSocialApi, inSocial } from '../../../server/social-context';
 import {
   optionalMessage,
@@ -9,6 +12,7 @@ import {
   translator,
   type MessageKey,
 } from '../../../i18n/messages';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -95,10 +99,44 @@ export default async function IntegrationsPage({
       ? statusMessage(landingStatus, locale)
       : null);
 
+  /*
+   * BACK INTO THE SETUP WIZARD (D-277 §6). The OAuth round trip always lands
+   * here — the API redirects to one configured address and must not grow a
+   * second — so a customer who connected from the wizard's "Connect socials"
+   * step is offered the way back. Only while the wizard is genuinely
+   * unfinished for the brand they are on, derived from the same real rows the
+   * wizard reads; an established customer reconnecting an account never sees it.
+   */
+  let resumeSetup = false;
+  if (landing !== null) {
+    const setupBrand = requiredBrand(await brandContextFor(workspace, '/onboarding'));
+    if (setupBrand) {
+      const steps = setupSteps(await setupFactsFor(workspace.workspaceId, setupBrand.id));
+      resumeSetup = steps.some((step) => step.key === 'goal' && !step.complete);
+    }
+  }
+
   const permissions = workspace.permissionKeys;
   const mayManage = permissions.includes('integrations.manage');
   const mayReadPublishing = permissions.includes('publishing.read');
   const mayManagePublishing = permissions.includes('publishing.manage');
+
+  /*
+   * D-291 — AFTER A RECONNECTION, THE WAY BACK TO WHAT IT FIXES. The OAuth
+   * round trip always lands here; when the account just reconnected is one a
+   * failed post was waiting on, say how many can be retried and link to them.
+   * Only a count and a link: each retry is still a person pressing Retry.
+   */
+  const retryableAfterReconnect =
+    landing === 'connected' && mayManagePublishing
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const failed = await services
+            .history()
+            .list({ brandScope: workspace.brandScope, statuses: ['FAILED'], limit: 100 });
+          return (await (await services.pipeline()).reconnectedRetryable(failed.map((j) => j.id)))
+            .size;
+        })
+      : 0;
 
   const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
     dateStyle: 'medium',
@@ -311,27 +349,48 @@ export default async function IntegrationsPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={permissions}
     >
-      {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
-      {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
-      <IntegrationsView
-        locale={locale}
-        t={t}
-        connections={connectionRows}
-        connectable={connectableProviders}
-        brands={brands}
-        publishing={publishRows}
-        mayManage={mayManage}
-        mayManagePublishing={mayManagePublishing}
-        pendingSelection={pendingSelection}
-        actions={{
-          connect: connectAccountAction,
-          disconnect: disconnectAccountAction,
-          check: checkAccountAction,
-          cancel: cancelPublishAction,
-          retry: retryPublishAction,
-          selectTarget: selectTargetAction,
-        }}
-      />
+      <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
+        {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
+        {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+        {retryableAfterReconnect > 0 ? (
+          <CustomerBanner tone="info">
+            {t('publishingHub.retryAfterReconnect').replace(
+              '{count}',
+              String(retryableAfterReconnect),
+            )}{' '}
+            <Link href={`/${locale}/publishing?tab=failed`} data-testid="retry-after-reconnect">
+              {t('publishingHub.retryAfterReconnectLink')}
+            </Link>
+          </CustomerBanner>
+        ) : null}
+        {resumeSetup ? (
+          <CustomerBanner tone="info">
+            {t('setup.resume.body')}{' '}
+            <Link href={`/${locale}/onboarding?step=connect`} data-testid="setup-resume">
+              {t('setup.resume.link')}
+            </Link>
+          </CustomerBanner>
+        ) : null}
+        <IntegrationsView
+          locale={locale}
+          t={t}
+          connections={connectionRows}
+          connectable={connectableProviders}
+          brands={brands}
+          publishing={publishRows}
+          mayManage={mayManage}
+          mayManagePublishing={mayManagePublishing}
+          pendingSelection={pendingSelection}
+          actions={{
+            connect: connectAccountAction,
+            disconnect: disconnectAccountAction,
+            check: checkAccountAction,
+            cancel: cancelPublishAction,
+            retry: retryPublishAction,
+            selectTarget: selectTargetAction,
+          }}
+        />
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

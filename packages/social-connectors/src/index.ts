@@ -59,7 +59,7 @@ export type {
   StartConnectionResult,
 } from './oauth';
 
-export { SocialConnectionService, toConnectionView } from './connections';
+export { EXPIRING_SOON_MS, SocialConnectionService, toConnectionView } from './connections';
 export type { ConnectionServiceOptions, ConnectionView } from './connections';
 
 export {

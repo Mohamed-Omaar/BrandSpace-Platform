@@ -145,6 +145,26 @@ export const STRICT_TENANT_MODELS = [
   'InvoiceLine',
   'CreditNote',
   'CreditNoteLine',
+  // Phase 6 (P6-05). Contextual collaboration: a thread about one piece of
+  // work, the messages in it, and who was named in each message.
+  //
+  // STRICT, and all three carry workspaceId directly rather than reaching it
+  // through a parent. A mention could have been resolved through its note and
+  // its thread, and that chain is exactly how a query comes to be written with
+  // no tenant predicate: "scoped by its parent" holds right up until somebody
+  // counts mentions for one person.
+  //
+  // THESE ARE NOT BRAND BRAIN. A note is what a colleague said about a piece of
+  // work; BrandKnowledgeItem is what the brand has decided is true and what
+  // every AI surface generates from. They share no table and no foreign key.
+  //
+  // (No apostrophes above: the block comment this replaced had one, and
+  // readRegistryList swallowed PaymentAttempt and CreditPackPurchase with it.
+  // The warning at the top of this block said so, and the gate caught it.)
+  'NoteThread',
+  'Note',
+  'NoteMention',
+  'MemberSuggestion',
   'PaymentAttempt',
   'CreditPackPurchase',
 ] as const;
@@ -352,6 +372,10 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   InvoiceLine: 'invoice_line',
   CreditNote: 'credit_note',
   CreditNoteLine: 'credit_note_line',
+  NoteThread: 'note_thread',
+  Note: 'note',
+  NoteMention: 'note_mention',
+  MemberSuggestion: 'member_suggestion',
   PaymentAttempt: 'payment_attempt',
   CreditPackPurchase: 'credit_pack_purchase',
   BillingEvent: 'billing_event',

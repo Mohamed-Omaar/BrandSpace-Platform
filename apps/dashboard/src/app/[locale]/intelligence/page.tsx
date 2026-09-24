@@ -1,9 +1,12 @@
+import Link from 'next/link';
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -13,13 +16,24 @@ import {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  evidenceLabel,
+  evidenceRefs,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
+import { insightNarrative, type NarrativeLine } from '../../../server/insight-narrative';
+import { INTELLIGENCE_INSIGHT_TYPES } from '../../../server/command-center';
+import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   analyseContentGapsAction,
   proposeLearningsAction,
   reviewIntelligenceAction,
 } from './actions';
+
+import { EmptyAction } from '../../../components/empty-action';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +92,18 @@ export default async function IntelligencePage({
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
+  const mayReadBrain = workspace.permissionKeys.includes('brand_brain.read');
+  /*
+   * THE DEEP LINK (P6-11). Analytics, Home's Pulse and the explain action all
+   * link here with `?insight=<id>`, and until now the page ignored it — the
+   * reader arrived at a list and had to find the one they were sent to. The id
+   * is only ever used INSIDE the scoped query below, so a foreign or invented
+   * id matches nothing and the page renders exactly as it would without it.
+   */
+  const focusId =
+    typeof query['insight'] === 'string' && /^[0-9a-f-]{36}$/i.test(query['insight'])
+      ? query['insight']
+      : null;
 
   const brandContext = await brandContextFor(
     session.workspace,
@@ -104,29 +130,89 @@ export default async function IntelligencePage({
    * brand rather than filtering a wider read afterwards, so an out-of-scope
    * brand returns nothing rather than being fetched and dropped.
    */
-  const insights =
-    brand && (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id))
-      ? await inAnalytics(workspace.workspaceId, async (services) =>
-          services.db.insight.findMany({
-            where: {
-              workspaceId: workspace.workspaceId,
-              brandId: brand.id,
-              type: {
-                in: [
-                  'CONTENT_GAP',
-                  'OPPORTUNITY',
-                  'ANALYTICS_EXPLANATION',
-                  'ANOMALY',
-                  'RECOMMENDATION',
-                ],
-              },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-            include: { evidence: { orderBy: { ordinal: 'asc' }, take: 8 } },
-          }),
-        )
-      : [];
+  const inScope =
+    brand !== null &&
+    (workspace.brandScope.length === 0 || workspace.brandScope.includes(brand.id));
+  const { insights, loop, campaignNames } = inScope
+    ? await inAnalytics(workspace.workspaceId, async (services) => {
+        const where = {
+          workspaceId: workspace.workspaceId,
+          brandId: brand.id,
+          type: { in: [...INTELLIGENCE_INSIGHT_TYPES] },
+        };
+        const include = { evidence: { orderBy: { ordinal: 'asc' as const }, take: 8 } };
+        const recent = await services.db.insight.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include,
+        });
+        /*
+         * The focused insight is read with the SAME predicate plus its id, so
+         * it is found only if it would have been listed anyway — just older
+         * than the ten most recent. It is then shown FIRST, once.
+         */
+        const focused =
+          focusId && !recent.some((row) => row.id === focusId)
+            ? await services.db.insight.findFirst({ where: { ...where, id: focusId }, include })
+            : null;
+        const ordered = focusId
+          ? [
+              ...(focused ? [focused] : recent.filter((row) => row.id === focusId)),
+              ...recent.filter((row) => row.id !== focusId),
+            ]
+          : recent;
+
+        /*
+         * WHERE EACH FINDING IS IN THE LEARNING LOOP. A learning proposed from
+         * an insight waits in Brand Brain's review queue, and nothing on this
+         * screen said so — the loop's PROPOSE step and its HUMAN REVIEW step
+         * were on two screens with no thread between them. Counted per insight
+         * and per status, only for a reader who may open Brand Brain.
+         */
+        const loopRows =
+          mayReadBrain && ordered.length > 0
+            ? await services.db.brandKnowledgeCandidate.groupBy({
+                by: ['insightId', 'status'],
+                where: {
+                  workspaceId: workspace.workspaceId,
+                  brandId: brand.id,
+                  insightId: { in: ordered.map((row) => row.id) },
+                },
+                _count: { _all: true },
+              })
+            : [];
+        const loopByInsight = new Map<string, { pending: number; accepted: number }>();
+        for (const row of loopRows) {
+          if (!row.insightId) continue;
+          const entry = loopByInsight.get(row.insightId) ?? { pending: 0, accepted: 0 };
+          if (row.status === 'PENDING') entry.pending += row._count._all;
+          if (row.status === 'ACCEPTED' || row.status === 'EDITED_ACCEPTED') {
+            entry.accepted += row._count._all;
+          }
+          loopByInsight.set(row.insightId, entry);
+        }
+        // D-293 — the SCOPE of a campaign-level finding, by name.
+        const campaignIds = [
+          ...new Set(ordered.flatMap((row) => (row.campaignId ? [row.campaignId] : []))),
+        ];
+        const campaigns = campaignIds.length
+          ? await services.db.campaign.findMany({
+              where: { id: { in: campaignIds } },
+              select: { id: true, name: true },
+            })
+          : [];
+        return {
+          insights: ordered,
+          loop: loopByInsight,
+          campaignNames: new Map(campaigns.map((row) => [row.id, row.name])),
+        };
+      })
+    : {
+        insights: [],
+        loop: new Map<string, { pending: number; accepted: number }>(),
+        campaignNames: new Map<string, string>(),
+      };
 
   return (
     <WorkspaceShell
@@ -155,11 +241,50 @@ export default async function IntelligencePage({
          */}
         <CustomerBanner tone="info">{t('insights.noExternalData')}</CustomerBanner>
 
+        {/*
+          §36 — THE LOOP, SAID ONCE: a finding is not brand truth. It becomes a
+          potential learning only when a person proposes it, and Brand Brain
+          only when a person accepts it there.
+        */}
+        <ol data-testid="intelligence-loop-steps" style={loopStyle}>
+          {(['detected', 'evidence', 'proposed', 'reviewed', 'remembered'] as const).map(
+            (step, index) => (
+              <li key={step} style={loopStepStyle}>
+                <span style={loopNumberStyle}>{number.format(index + 1)}</span>
+                {t(`intelligence.loopStep.${step}` as MessageKey)}
+              </li>
+            ),
+          )}
+        </ol>
+
+        {brand && workspace.permissionKeys.includes('copilot.use') ? (
+          <div>
+            <CopilotLink
+              href={copilotHref(locale, 'intelligence')}
+              style={buttonStyle('ghost', 'sm')}
+              className={buttonClass('ghost')}
+              data-testid="intelligence-ask-copilot"
+            >
+              {t('copilot.ask')}
+            </CopilotLink>
+          </div>
+        ) : null}
+
         {!brand ? (
           <StateMessage
             kind="empty"
             title={t('analytics.noBrandTitle')}
             description={t('analytics.noBrandBody')}
+            action={
+              brandContext.resolution.kind === 'empty' &&
+              workspace.permissionKeys.includes('brand.manage') ? (
+                <EmptyAction
+                  href={`/${locale}/brand-brain`}
+                  label={t('bb.createBrand')}
+                  testId="no-brand-create"
+                />
+              ) : undefined
+            }
           />
         ) : (
           <>
@@ -198,111 +323,236 @@ export default async function IntelligencePage({
                 description={t('intelligence.emptyBody')}
               />
             ) : (
-              insights.map((insight) => (
-                <Card key={insight.id} testId={`intelligence-${insight.id}`}>
-                  <SectionHeader
-                    title={localized(insight.title, locale)}
-                    description={`${t(`insights.type.${insight.type}` as MessageKey)} · ${t(
-                      'insights.basis',
-                    )}: ${t(`insights.basis.${insight.basis}` as MessageKey)} · ${stamp.format(
-                      insight.createdAt,
-                    )}`}
-                    actions={
-                      <StatusBadge
-                        tone={insight.status === 'ACCEPTED' ? 'success' : 'neutral'}
-                        label={t(`insights.status.${insight.status}` as MessageKey)}
-                      />
-                    }
-                  />
-
-                  {/*
-                   * THE EVIDENCE, AS A LIST OF MEASUREMENTS. Each line is a
-                   * metric, a value and a window a customer can check against
-                   * the analytics screen. The model's prose never supplies a
-                   * figure here.
-                   */}
-                  <SectionHeader title={t('insights.evidence')} />
-                  <ul
-                    style={{
-                      listStyle: 'none',
-                      margin: 0,
-                      padding: 0,
-                      display: 'grid',
-                      gap: '0.25rem',
-                    }}
-                    data-testid="intelligence-evidence"
+              insights.map((insight) => {
+                const narrative = insightNarrative({
+                  type: insight.type,
+                  body: insight.body,
+                  locale,
+                  shownEvidence: insight.evidence.map((row) => row.ordinal),
+                });
+                const learnings = loop.get(insight.id);
+                return (
+                  <Card
+                    key={insight.id}
+                    testId={`intelligence-${insight.id}`}
+                    tone={insight.id === focusId ? 'lavender' : 'plain'}
                   >
-                    {insight.evidence.map((row) => (
-                      <li
-                        key={row.id}
-                        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                    <SectionHeader
+                      title={localized(insight.title, locale)}
+                      description={[
+                        t(`insights.type.${insight.type}` as MessageKey),
+                        // §35 — the PERIOD the finding covers, and its SCOPE.
+                        `${stamp.format(insight.periodStart)} – ${stamp.format(insight.periodEnd)}`,
+                        insight.campaignId && campaignNames.get(insight.campaignId)
+                          ? `${t('intelligence.scope.campaign')}: ${campaignNames.get(insight.campaignId)}`
+                          : `${t('intelligence.scope.brand')}: ${brand.name}`,
+                        `${t('insights.basis')}: ${t(`insights.basis.${insight.basis}` as MessageKey)}`,
+                        // Confidence ONLY where one was computed; never a default.
+                        ...(insight.confidenceMilli === null
+                          ? []
+                          : [
+                              `${t('intelligence.confidence')}: ${number.format(
+                                Math.round(insight.confidenceMilli / 10),
+                              )}%`,
+                            ]),
+                      ].join(' · ')}
+                      actions={
+                        <StatusBadge
+                          tone={insight.status === 'ACCEPTED' ? 'success' : 'neutral'}
+                          label={t(`insights.status.${insight.status}` as MessageKey)}
+                        />
+                      }
+                    />
+
+                    {/*
+                     * THE EVIDENCE, AS A LIST OF MEASUREMENTS. Each line is a
+                     * metric, a value and a window a customer can check against
+                     * the analytics screen. The model's prose never supplies a
+                     * figure here.
+                     */}
+                    {insight.id === focusId ? (
+                      <p
+                        data-testid="intelligence-focused"
+                        style={{
+                          margin: 0,
+                          ...typographyTokens.caption,
+                          color: colorTokens.textSecondary,
+                        }}
                       >
-                        <strong style={{ color: colorTokens.textPrimary }}>e{row.ordinal}</strong>{' '}
-                        {row.metricKey
-                          ? t(`analytics.metric.${row.metricKey}` as MessageKey)
-                          : row.labelKey}
-                        {row.value === null ? '' : ` — ${number.format(Number(row.value))}`}
-                        {row.periodStart && row.periodEnd
-                          ? ` (${stamp.format(row.periodStart)} – ${stamp.format(row.periodEnd)})`
-                          : ''}
-                        {row.comparisonValue === null || row.comparisonValue === undefined
-                          ? ''
-                          : ` · ${t('insights.anomalyBaseline')} ${number.format(
-                              Number(row.comparisonValue),
-                            )}`}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {mayManage && insight.status !== 'ACCEPTED' ? (
-                    <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-                      <form action={reviewIntelligenceAction}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="insightId" value={insight.id} />
-                        <input type="hidden" name="decision" value="accept" />
-                        <button type="submit" style={buttonStyle('brand', 'sm')}>
-                          {t('insights.accept')}
-                        </button>
-                      </form>
-                      <form action={reviewIntelligenceAction}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="insightId" value={insight.id} />
-                        <input type="hidden" name="decision" value="dismiss" />
-                        <button type="submit" style={buttonStyle('ghost', 'sm')}>
-                          {t('insights.dismiss')}
-                        </button>
-                      </form>
-                    </div>
-                  ) : null}
-
-                  {/*
-                   * THE LAST STEP OF THE EXIT JOURNEY. Offered whatever the
-                   * insight's own review state, because a finding somebody has
-                   * already accepted is exactly the one worth remembering — and
-                   * gated on `brand_brain.review` rather than `strategy.manage`,
-                   * because the person asking for the inference is the person
-                   * who will have to judge it in the queue.
-                   */}
-                  {mayReview ? (
-                    <div style={{ display: 'grid', gap: spacingTokens['2xs'] }}>
-                      <form action={proposeLearningsAction}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="insightId" value={insight.id} />
-                        <button
-                          type="submit"
-                          style={buttonStyle('neutral', 'sm')}
-                          data-testid="propose-learnings"
-                        >
-                          {t('insights.proposeLearnings')}
-                        </button>
-                      </form>
-                      <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                        {t('insights.proposeLearningsHint')}
+                        {t('intelligence.focused')}
                       </p>
+                    ) : null}
+
+                    {/*
+                     * WHY · WHAT HAPPENED · WHAT NEXT (P6-11). The body the
+                     * provider wrote, re-parsed against its schema, each line
+                     * carrying the evidence ordinals it cites — so every sentence
+                     * points at a stored measurement below. An unparseable body
+                     * renders nothing here, and the evidence still stands alone.
+                     */}
+                    {narrative ? (
+                      <div
+                        data-testid="intelligence-narrative"
+                        style={{ display: 'grid', gap: spacingTokens.sm }}
+                      >
+                        <NarrativeBlock
+                          title={t('intelligence.why')}
+                          lines={[{ text: narrative.why, evidence: [] }]}
+                          testId="narrative-why"
+                          evidenceLabel={t('insights.evidence')}
+                          locale={locale}
+                        />
+                        <NarrativeBlock
+                          title={t('intelligence.happened')}
+                          lines={narrative.happened}
+                          testId="narrative-happened"
+                          evidenceLabel={t('insights.evidence')}
+                          locale={locale}
+                        />
+                        {narrative.next.length > 0 ? (
+                          <NarrativeBlock
+                            title={t('intelligence.next')}
+                            lines={narrative.next}
+                            testId="narrative-next"
+                            evidenceLabel={t('insights.evidence')}
+                            locale={locale}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div style={{ marginBlockStart: spacingTokens.sm }}>
+                      <SectionHeader title={t('insights.evidence')} />
                     </div>
-                  ) : null}
-                </Card>
-              ))
+                    <ul
+                      style={{
+                        listStyle: 'none',
+                        margin: 0,
+                        padding: 0,
+                        display: 'grid',
+                        gap: '0.25rem',
+                      }}
+                      data-testid="intelligence-evidence"
+                    >
+                      {insight.evidence.map((row) => (
+                        <li
+                          key={row.id}
+                          style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                        >
+                          <strong style={{ color: colorTokens.textPrimary }}>{row.ordinal}.</strong>{' '}
+                          {row.metricKey
+                            ? t(`analytics.metric.${row.metricKey}` as MessageKey)
+                            : evidenceLabel(locale, row.labelKey)}
+                          {row.value === null ? '' : ` — ${number.format(Number(row.value))}`}
+                          {row.periodStart && row.periodEnd
+                            ? ` (${stamp.format(row.periodStart)} – ${stamp.format(row.periodEnd)})`
+                            : ''}
+                          {row.comparisonValue === null || row.comparisonValue === undefined
+                            ? ''
+                            : ` · ${t('insights.anomalyBaseline')} ${number.format(
+                                Number(row.comparisonValue),
+                              )}`}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {mayManage && insight.status !== 'ACCEPTED' ? (
+                      <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+                        <form action={reviewIntelligenceAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="insightId" value={insight.id} />
+                          <input type="hidden" name="decision" value="accept" />
+                          <button type="submit" style={buttonStyle('brand', 'sm')}>
+                            {t('insights.accept')}
+                          </button>
+                        </form>
+                        <form action={reviewIntelligenceAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="insightId" value={insight.id} />
+                          <input type="hidden" name="decision" value="dismiss" />
+                          <button type="submit" style={buttonStyle('ghost', 'sm')}>
+                            {t('insights.dismiss')}
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+
+                    {workspace.permissionKeys.includes('copilot.use') ? (
+                      <div>
+                        <CopilotLink
+                          href={copilotHref(locale, 'intelligence')}
+                          style={buttonStyle('ghost', 'sm')}
+                          className={buttonClass('ghost')}
+                          data-testid={`intelligence-copilot-${insight.id}`}
+                        >
+                          {t('home.recommended.giveToCopilot')}
+                        </CopilotLink>
+                      </div>
+                    ) : null}
+
+                    {/*
+                     * THE LAST STEP OF THE EXIT JOURNEY. Offered whatever the
+                     * insight's own review state, because a finding somebody has
+                     * already accepted is exactly the one worth remembering — and
+                     * gated on `brand_brain.review` rather than `strategy.manage`,
+                     * because the person asking for the inference is the person
+                     * who will have to judge it in the queue.
+                     */}
+                    {mayReview ? (
+                      <div style={{ display: 'grid', gap: spacingTokens['2xs'] }}>
+                        <form action={proposeLearningsAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="insightId" value={insight.id} />
+                          <button
+                            type="submit"
+                            style={buttonStyle('neutral', 'sm')}
+                            data-testid="propose-learnings"
+                          >
+                            {t('insights.proposeLearnings')}
+                          </button>
+                        </form>
+                        <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                          {t('insights.proposeLearningsHint')}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/*
+                     * THE LOOP, MADE VISIBLE. Proposed learnings wait for a
+                     * person in Brand Brain; accepted ones are governed memory at
+                     * the lowest authority. Shown only when there is something to
+                     * say — no "0 learnings" line.
+                     */}
+                    {learnings && (learnings.pending > 0 || learnings.accepted > 0) ? (
+                      <p
+                        data-testid="intelligence-loop"
+                        style={{
+                          margin: 0,
+                          ...typographyTokens.caption,
+                          color: colorTokens.textSecondary,
+                        }}
+                      >
+                        {learnings.pending > 0
+                          ? t('intelligence.loop.pending').replace(
+                              '{count}',
+                              number.format(learnings.pending),
+                            )
+                          : null}
+                        {learnings.pending > 0 && learnings.accepted > 0 ? ' · ' : null}
+                        {learnings.accepted > 0
+                          ? t('intelligence.loop.accepted').replace(
+                              '{count}',
+                              number.format(learnings.accepted),
+                            )
+                          : null}{' '}
+                        <Link href={`/${locale}/brand-brain`} data-testid="intelligence-loop-link">
+                          {t('intelligence.loop.open')}
+                        </Link>
+                      </p>
+                    ) : null}
+                  </Card>
+                );
+              })
             )}
           </>
         )}
@@ -318,3 +568,77 @@ function localized(value: unknown, locale: string): string {
   const picked = locale === 'ar' ? record['ar'] : record['en'];
   return typeof picked === 'string' ? picked : '';
 }
+
+/**
+ * One of the three answers, as a short list whose lines cite their evidence.
+ *
+ * Composed from the typography and spacing tokens the evidence list below it
+ * already uses — a heading and a list — so it adds no visual treatment of its
+ * own (CLAUDE.md §4.2).
+ */
+function NarrativeBlock({
+  title,
+  lines,
+  testId,
+  evidenceLabel,
+  locale,
+}: {
+  title: string;
+  lines: readonly NarrativeLine[];
+  testId: string;
+  evidenceLabel: string;
+  locale: string;
+}) {
+  if (lines.length === 0) return null;
+  return (
+    <section data-testid={testId} style={{ display: 'grid', gap: spacingTokens['2xs'] }}>
+      <h3 style={{ margin: 0, ...typographyTokens.label, color: colorTokens.textPrimary }}>
+        {title}
+      </h3>
+      <ul
+        style={{ margin: 0, paddingInlineStart: spacingTokens.lg, display: 'grid', gap: '0.25rem' }}
+      >
+        {lines.map((line, index) => (
+          <li key={index} style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+            {line.text}
+            {line.evidence.length > 0 ? (
+              <span
+                title={evidenceLabel}
+                style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
+              >
+                {' '}
+                ({evidenceRefs(locale, line.evidence)})
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const loopStyle = {
+  listStyle: 'none',
+  margin: 0,
+  padding: 0,
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: spacingTokens.sm,
+} as const;
+const loopStepStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: spacingTokens['2xs'],
+  ...typographyTokens.caption,
+  color: colorTokens.textSecondary,
+} as const;
+const loopNumberStyle = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  inlineSize: '1.25rem',
+  blockSize: '1.25rem',
+  borderRadius: '9999px',
+  background: colorTokens.surfaceMuted,
+  color: colorTokens.textPrimary,
+  fontWeight: 600,
+} as const;

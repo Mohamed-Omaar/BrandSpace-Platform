@@ -64,6 +64,22 @@ export const contentPolicySchema = z.object({
     maxNoteLength: z.number().int().min(1),
     maxCyclesPerItem: z.number().int().min(1),
   }),
+  /** D-295/D-296 — thresholds for noticed preferences and repeated workflows. */
+  learning: z
+    .object({
+      preferenceMinObservations: z.number().int().min(2).default(4),
+      preferenceMinPosts: z.number().int().min(2).default(3),
+      workflowMinRepeats: z.number().int().min(2).default(4),
+      windowDays: z.number().int().min(7).default(90),
+      snoozeDays: z.number().int().min(1).default(30),
+    })
+    .default({
+      preferenceMinObservations: 4,
+      preferenceMinPosts: 3,
+      workflowMinRepeats: 4,
+      windowDays: 90,
+      snoozeDays: 30,
+    }),
 });
 
 export type ContentDialect = z.infer<typeof dialectSchema>;

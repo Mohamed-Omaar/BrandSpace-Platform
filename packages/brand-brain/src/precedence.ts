@@ -23,13 +23,21 @@ import type { BrandKnowledgeOrigin, BrandMemoryLayer } from '@brandspace/databas
  * compete.
  */
 
+/**
+ * The four memories, in authority order, highest first (D-64).
+ *
+ * EXPORTED SINCE P6-07, because a surface that explains the model needs the
+ * ORDER and the DEPTH, and re-listing them in a component is how the screen
+ * comes to have its own opinion that happens to agree today. Anything rendering
+ * "2 of 4" reads it from here, and `MEMORY_RANK` below is derived from it so
+ * the list and the ranking cannot disagree.
+ */
+export const BRAND_MEMORY_LAYERS = ['CANONICAL', 'STRATEGY', 'CONTENT', 'LEARNING'] as const;
+
 /** D-64 authority, highest first. Lower number wins. */
-const MEMORY_RANK: Readonly<Record<BrandMemoryLayer, number>> = {
-  CANONICAL: 0,
-  STRATEGY: 1,
-  CONTENT: 2,
-  LEARNING: 3,
-};
+const MEMORY_RANK: Readonly<Record<BrandMemoryLayer, number>> = Object.fromEntries(
+  BRAND_MEMORY_LAYERS.map((layer, index) => [layer, index]),
+) as Readonly<Record<BrandMemoryLayer, number>>;
 
 /** D-65 human precedence, highest first. Lower number wins. */
 const ORIGIN_RANK: Readonly<Record<BrandKnowledgeOrigin, number>> = {

@@ -42,6 +42,9 @@ export interface PublishJobView {
   readonly failureCode: string | null;
   readonly contentItemId: string;
   readonly calendarSlotId: string;
+  /** D-291 — which post version and which account; ids only, never a credential. */
+  readonly contentVariantId: string;
+  readonly socialConnectionId: string;
   /** Derived, so every surface agrees which buttons exist. */
   readonly canCancel: boolean;
   readonly canRetry: boolean;
@@ -65,6 +68,8 @@ export function toPublishJobView(job: PublishJob): PublishJobView {
     failureCode: job.failureCode,
     contentItemId: job.contentItemId,
     calendarSlotId: job.calendarSlotId,
+    contentVariantId: job.contentVariantId,
+    socialConnectionId: job.socialConnectionId,
     canCancel: job.status === 'PENDING' || job.status === 'QUEUED',
     canRetry:
       (job.status === 'FAILED' || job.status === 'VERIFICATION_PENDING') &&

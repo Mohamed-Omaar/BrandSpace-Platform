@@ -73,13 +73,20 @@ afterAll(async () => {
  * literal address inherits its own count from the previous run and the second
  * run of this suite fails on attempt one. The same trap as F-23, in a counter
  * rather than a seed.
+ *
+ * IPv6, FROM THE DOCUMENTATION PREFIX (2001:db8::/32), with 64 random bits.
+ * This drew from 198.18.x.y — about 65,000 addresses — while other tests in
+ * this file deliberately spend an address past its ceiling. A later "fresh"
+ * address that repeated a spent one started over the ceiling, and a test
+ * asserting a normal sign-in was refused (CI, isolation job on f0f57f3). At
+ * 2^64 a repeat, within a run or across runs, is not a practical event.
+ * `requestContext` carries an IPv6 address through every header shape used
+ * here unchanged.
  */
 function freshIp(): string {
-  const octets = randomUUID().replace(/-/g, '');
-  const a = Number.parseInt(octets.slice(0, 2), 16);
-  const b = Number.parseInt(octets.slice(2, 4), 16);
-  const c = Number.parseInt(octets.slice(4, 6), 16);
-  return `198.18.${a}.${b === 0 ? c || 1 : b}`;
+  const hex = randomUUID().replace(/-/g, '');
+  const groups = [0, 4, 8, 12].map((start) => hex.slice(start, start + 4));
+  return `2001:db8:0:0:${groups.join(':')}`;
 }
 
 /** A fresh ACTIVE customer with a working password. */

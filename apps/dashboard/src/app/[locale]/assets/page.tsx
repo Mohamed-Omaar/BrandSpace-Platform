@@ -1,11 +1,21 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  ASSET_VIEWS,
+  RECENT_DAYS,
+  rightsState,
+  viewKinds,
+  type AssetView,
+} from '../../../server/asset-views';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
+import { paletteFrom, typographyFrom } from '../../../server/brand-profile';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { NotesPanel } from '../../../components/notes-panel';
 import { AssetLibraryView, type AssetCardData, type FolderData } from './asset-library-view';
 import {
   addAssetVersionAction,
@@ -16,6 +26,7 @@ import {
   restoreAssetVersionAction,
   updateAssetAction,
   uploadAssetAction,
+  bulkAssetAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -71,6 +82,14 @@ export default async function AssetsPage({
   const scopeParam = single('scope');
   const selectedId = single('asset');
   /*
+   * PHASE 6 FINAL (D-287) — THE LIBRARY'S VIEWS. Each is a filter over real
+   * columns (kind, source, age, shelf, references), never a stored collection,
+   * which is why the screen calls them views.
+   */
+  const view = ASSET_VIEWS.includes(single('view') as AssetView)
+    ? (single('view') as AssetView)
+    : undefined;
+  /*
    * THE PAGE CURSOR — the read that was missing (PHASE 2).
    *
    * `AssetLibraryService.browse` has always returned `nextCursor`, and the view
@@ -124,7 +143,7 @@ export default async function AssetsPage({
    * only has to decide what was ASKED FOR, never what is allowed.
    */
   const contextBrand = brandFilterFor(brandContext);
-  const effectiveScope = scopeParam ?? contextBrand;
+  const effectiveScope = view === 'shared' ? 'shared' : (scopeParam ?? contextBrand);
   const browseScope: { brandId?: string | null; includeShared?: boolean } =
     effectiveScope === undefined
       ? {}
@@ -138,119 +157,242 @@ export default async function AssetsPage({
     brandScope: workspace.brandScope,
   };
 
-  const data = await inAssetLibrary(workspace.workspaceId, async (services) => {
-    const library = await services.library();
-    const policy = await services.policy();
-
-    const page = await library.browse({
-      actor,
-      ...browseScope,
-      ...(folderFilter ? { folderId: folderFilter } : {}),
-      ...(kindFilter ? { kinds: [kindFilter] } : {}),
-      ...(statusFilter ? { statuses: [statusFilter] } : {}),
-      ...(tagFilter ? { tags: [tagFilter] } : {}),
-      ...(search ? { search } : {}),
-      sort,
-      ...(cursor ? { cursor } : {}),
-      limit: 48,
-      includeArchived: statusFilter === 'ARCHIVED',
-    });
-
-    const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
-      library.listFolders(actor),
-      library.tagFacets(actor),
-      services.storageLimitGb(),
-      services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
-    ]);
-
-    const selected =
-      selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
-    const versions = selected ? await library.versions(selected.id, actor) : [];
-
-    /*
-     * A DOWNLOAD GRANT PER TILE, ISSUED ON THE SERVER.
-     *
-     * The client never receives a storage key or a path — only an opaque,
-     * expiring token bound to this workspace. Only SELECTABLE assets get one:
-     * a quarantined, processing, failed or archived file has no grant at all,
-     * so there is no path to its bytes rather than a broken one
-     * (docs/SECURITY.md §11.6-11.7).
-     */
-    const download = await services.download();
-    const cards: AssetCardData[] = await Promise.all(
-      page.items.map(async (asset) => {
-        const selectable = isSelectable(asset);
-        const grant =
-          selectable && canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)
-            ? await download
-                .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
+  /*
+   * PHASE 6 FINAL (D-277 §31, D-287) — THE BRAND KIT, A VIEW. Logos from the
+   * one library (the Brand Profile's own references), palette and typography
+   * from the Brand Profile. Nothing is copied; editing stays in Settings.
+   */
+  const kitBrandId =
+    brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null;
+  const brandKit = kitBrandId
+    ? await inAssetLibrary(workspace.workspaceId, async (services) => {
+        const brand = await services.db.brand.findFirst({
+          where: { id: kitBrandId, deletedAt: null },
+          select: {
+            name: true,
+            colorPalette: true,
+            typography: true,
+            primaryLogoAssetId: true,
+            secondaryLogoAssetId: true,
+          },
+        });
+        if (!brand) return null;
+        const download = await services.download();
+        const logos = await Promise.all(
+          (
+            [
+              ['primary', brand.primaryLogoAssetId],
+              ['secondary', brand.secondaryLogoAssetId],
+            ] as const
+          )
+            .filter((entry): entry is readonly ['primary' | 'secondary', string] => !!entry[1])
+            .map(async ([role, assetId]) => ({
+              role,
+              assetId,
+              token: await download
+                .grantFor({ assetId, actor, disposition: 'inline' })
                 .then((issued) => issued.grant.token)
-                .catch(() => null)
-            : null;
-        return {
-          id: asset.id,
-          name: asset.name,
-          kind: asset.kind,
-          status: asset.status,
-          scanStatus: asset.scanStatus,
-          mimeType: asset.mimeType,
-          sizeBytes: asset.sizeBytes,
-          width: asset.width,
-          height: asset.height,
-          tags: asset.tags,
-          folderId: asset.folderId,
-          version: asset.currentVersion,
-          createdAt: asset.createdAt.toISOString(),
-          failureReason: asset.failureReason,
-          selectable,
-          previewToken: grant,
-        };
-      }),
-    );
-
-    return {
-      cards,
-      hasMore: page.hasMore,
-      nextCursor: page.nextCursor,
-      folders: folders.map((folder): FolderData => ({
-        id: folder.id,
-        name: folder.name,
-        brandId: folder.brandId,
-        parentFolderId: folder.parentFolderId,
-      })),
-      tags: tags.map((facet) => ({ tag: facet.tag, count: facet.count })),
-      storageLimitGb,
-      storageUsedGb: usedCounter?.usedValue ?? 0,
-      maxFileBytes: policy.upload.maxFileBytes,
-      allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
-      selected: selected
-        ? {
-            id: selected.id,
-            name: selected.name,
-            kind: selected.kind,
-            status: selected.status,
-            scanStatus: selected.scanStatus,
-            mimeType: selected.mimeType,
-            sizeBytes: selected.sizeBytes,
-            width: selected.width,
-            height: selected.height,
-            tags: selected.tags,
-            folderId: selected.folderId,
-            version: selected.currentVersion,
-            createdAt: selected.createdAt.toISOString(),
-            failureReason: selected.failureReason,
-            selectable: isSelectable(selected),
-            previewToken: null,
-            versions: versions.map((version) => ({
-              versionNumber: version.versionNumber,
-              sizeBytes: version.sizeBytes,
-              scanStatus: version.scanStatus,
-              createdAt: version.createdAt.toISOString(),
+                .catch(() => null),
             })),
-          }
-        : null,
-    };
-  });
+        );
+        const fonts = typographyFrom(brand.typography);
+        return {
+          brandName: brand.name,
+          logos,
+          palette: paletteFrom(brand.colorPalette),
+          fonts: [fonts.heading, fonts.body].filter((font): font is string => !!font),
+        };
+      })
+    : null;
+
+  const { selectedBrandId, ...data } = await inAssetLibrary(
+    workspace.workspaceId,
+    async (services) => {
+      const library = await services.library();
+      const policy = await services.policy();
+
+      const page = await library.browse({
+        actor,
+        ...browseScope,
+        ...(folderFilter ? { folderId: folderFilter } : {}),
+        ...(kindFilter ? { kinds: [kindFilter] } : viewKinds(view)),
+        ...(view === 'ai' ? { sources: ['AI_GENERATED' as const] } : {}),
+        ...(view === 'uploaded' ? { sources: ['UPLOAD' as const] } : {}),
+        ...(view === 'recent'
+          ? { createdAfter: new Date(systemClock.now().getTime() - RECENT_DAYS * 86_400_000) }
+          : {}),
+        ...(view === 'unused' ? { unusedOnly: true } : {}),
+        ...(statusFilter ? { statuses: [statusFilter] } : {}),
+        ...(tagFilter ? { tags: [tagFilter] } : {}),
+        ...(search ? { search } : {}),
+        sort,
+        ...(cursor ? { cursor } : {}),
+        limit: 48,
+        includeArchived: statusFilter === 'ARCHIVED',
+      });
+
+      const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
+        library.listFolders(actor),
+        library.tagFacets(actor),
+        services.storageLimitGb(),
+        services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
+      ]);
+
+      const selected =
+        selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
+      const versions = selected ? await library.versions(selected.id, actor) : [];
+      // D-287 — where the file is used, from the real references, and how
+      // many posts use each tile on this page (one query).
+      const [uses, usage] = await Promise.all([
+        selected ? library.usage(selected.id, actor) : Promise.resolve([]),
+        library.usageCounts(page.items.map((asset) => asset.id)),
+      ]);
+      const now = systemClock.now();
+      const uploader = selected?.uploadedByUserId
+        ? await services.db.membership
+            .findFirst({
+              // Through the MEMBERSHIP, so only a person of this workspace is named.
+              where: { userId: selected.uploadedByUserId },
+              select: { user: { select: { name: true, email: true } } },
+            })
+            .then((row) => row?.user ?? null)
+            .catch(() => null)
+        : null;
+
+      /*
+       * A DOWNLOAD GRANT PER TILE, ISSUED ON THE SERVER.
+       *
+       * The client never receives a storage key or a path — only an opaque,
+       * expiring token bound to this workspace. Only SELECTABLE assets get one:
+       * a quarantined, processing, failed or archived file has no grant at all,
+       * so there is no path to its bytes rather than a broken one
+       * (docs/SECURITY.md §11.6-11.7).
+       */
+      const download = await services.download();
+      const cards: AssetCardData[] = await Promise.all(
+        page.items.map(async (asset) => {
+          const selectable = isSelectable(asset);
+          const grant =
+            selectable && canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)
+              ? await download
+                  .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
+                  .then((issued) => issued.grant.token)
+                  .catch(() => null)
+              : null;
+          return {
+            id: asset.id,
+            name: asset.name,
+            kind: asset.kind,
+            status: asset.status,
+            scanStatus: asset.scanStatus,
+            mimeType: asset.mimeType,
+            sizeBytes: asset.sizeBytes,
+            width: asset.width,
+            height: asset.height,
+            tags: asset.tags,
+            folderId: asset.folderId,
+            version: asset.currentVersion,
+            createdAt: asset.createdAt.toISOString(),
+            failureReason: asset.failureReason,
+            selectable,
+            previewToken: grant,
+            source: asset.source,
+            shared: asset.brandId === null,
+            rights: rightsState(asset.rightsExpiryAt, now),
+            usedIn: usage.get(asset.id) ?? 0,
+          };
+        }),
+      );
+
+      return {
+        // Which brand the selected asset belongs to (null = workspace-shared).
+        selectedBrandId: selected ? selected.brandId : null,
+        cards,
+        hasMore: page.hasMore,
+        nextCursor: page.nextCursor,
+        folders: folders.map((folder): FolderData => ({
+          id: folder.id,
+          name: folder.name,
+          brandId: folder.brandId,
+          parentFolderId: folder.parentFolderId,
+        })),
+        tags: tags.map((facet) => ({ tag: facet.tag, count: facet.count })),
+        storageLimitGb,
+        storageUsedGb: usedCounter?.usedValue ?? 0,
+        maxFileBytes: policy.upload.maxFileBytes,
+        allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
+        selected: selected
+          ? {
+              id: selected.id,
+              name: selected.name,
+              kind: selected.kind,
+              status: selected.status,
+              scanStatus: selected.scanStatus,
+              mimeType: selected.mimeType,
+              sizeBytes: selected.sizeBytes,
+              width: selected.width,
+              height: selected.height,
+              tags: selected.tags,
+              folderId: selected.folderId,
+              version: selected.currentVersion,
+              createdAt: selected.createdAt.toISOString(),
+              failureReason: selected.failureReason,
+              selectable: isSelectable(selected),
+              previewToken:
+                isSelectable(selected) &&
+                canPreviewWithoutDerivative(selected.mimeType, selected.sizeBytes)
+                  ? await download
+                      .grantFor({ assetId: selected.id, actor, disposition: 'inline' })
+                      .then((issued) => issued.grant.token)
+                      .catch(() => null)
+                  : null,
+              downloadToken: isSelectable(selected)
+                ? await download
+                    .grantFor({ assetId: selected.id, actor, disposition: 'attachment' })
+                    .then((issued) => issued.grant.token)
+                    .catch(() => null)
+                : null,
+              source: selected.source,
+              shared: selected.brandId === null,
+              brandName: selected.brandId
+                ? (brands.find((brand) => brand.id === selected.brandId)?.name ?? null)
+                : null,
+              license: selected.license,
+              rightsExpiryAt: selected.rightsExpiryAt?.toISOString() ?? null,
+              rights: rightsState(selected.rightsExpiryAt, now),
+              uploadedBy: uploader ? (uploader.name ?? uploader.email) : null,
+              usedIn: uses.length,
+              uses: uses.map((use) => ({
+                contentItemId: use.contentItemId,
+                title: use.title,
+                status: use.status,
+                campaignName: use.campaignName,
+                platformKeys: use.platformKeys,
+                asCover: use.asCover,
+                updatedAt: use.updatedAt.toISOString(),
+              })),
+              versions: versions.map((version) => ({
+                versionNumber: version.versionNumber,
+                sizeBytes: version.sizeBytes,
+                scanStatus: version.scanStatus,
+                createdAt: version.createdAt.toISOString(),
+              })),
+            }
+          : null,
+      };
+    },
+  );
+
+  /*
+   * THE BRAND AN ASSET'S CONVERSATION BELONGS TO (D-281): the asset's own, or —
+   * for a workspace-shared asset — the brand on the rail. With a shared asset
+   * and "All brands" there is no brand to talk in, and no panel.
+   */
+  const notesBrandId =
+    data.selected === null
+      ? null
+      : (selectedBrandId ??
+        (brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null));
 
   // The real outcome, in the reader's language, with the correlation id on a
   // failure — the one value that joins this screen to the redacted server log.
@@ -276,10 +418,23 @@ export default async function AssetsPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <AssetLibraryView
         locale={locale}
+        notes={
+          notesBrandId && selectedId && can(NOTE_PERMISSION) ? (
+            <NotesPanel
+              locale={locale}
+              subject={{ type: 'ASSET', assetId: selectedId, brandId: notesBrandId }}
+              returnPath={`/${locale}/assets?asset=${selectedId}`}
+              highlightThreadId={single('thread') ?? null}
+            />
+          ) : null
+        }
+        brandKit={brandKit}
+        openUpload={query['upload'] === '1'}
         eyebrow={t('assets.eyebrow')}
         title={t('assets.title')}
         subtitle={t('assets.subtitle')}
         brands={brands}
+        pastFirstPage={cursor !== undefined}
         {...data}
         filters={{
           ...(search ? { search } : {}),
@@ -287,7 +442,8 @@ export default async function AssetsPage({
           ...(statusFilter ? { status: statusFilter } : {}),
           ...(tagFilter ? { tag: tagFilter } : {}),
           ...(folderFilter ? { folder: folderFilter } : {}),
-          ...(effectiveScope ? { scope: effectiveScope } : {}),
+          ...(effectiveScope && view !== 'shared' ? { scope: effectiveScope } : {}),
+          ...(view ? { view } : {}),
           sort,
         }}
         can={{
@@ -309,6 +465,7 @@ export default async function AssetsPage({
           remove: deleteAssetAction,
           addVersion: addAssetVersionAction,
           restoreVersion: restoreAssetVersionAction,
+          bulk: bulkAssetAction,
         }}
       />
     </WorkspaceShell>

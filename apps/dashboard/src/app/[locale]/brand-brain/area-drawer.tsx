@@ -293,10 +293,30 @@ export function AreaDrawer({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {t('bb.version')} {item.version} · {item.originLabel}
+                    {t('bb.version')} {item.version} · {item.originLabel} ·{' '}
+                    {/*
+                      THE LAYER AND ITS AUTHORITY POSITION, together. "Strategy"
+                      alone says where the fact lives; "2 of 4" says what that
+                      means when two facts disagree — which is the question a
+                      reader actually has when they are looking at a conflict.
+                    */}
+                    <span title={t('bb.memory.authorityHint')} data-testid={`bb-memory-${item.id}`}>
+                      {item.memoryLabel} ({item.memoryRank}/{item.memoryDepth})
+                    </span>
                     {item.stale ? ` · ${t('bb.attention.stale_items')}` : ''}
                   </small>
                 </header>
+                {item.provenance ? (
+                  <small
+                    data-testid={`bb-provenance-${item.id}`}
+                    style={{
+                      color: colorTokens.textMuted,
+                      fontSize: typographyTokens.micro.fontSize,
+                    }}
+                  >
+                    {item.provenance}
+                  </small>
+                ) : null}
                 <p
                   style={{
                     margin: 0,
@@ -395,7 +415,58 @@ export function AreaDrawer({
                       {t('bb.reviewEvidence')}: {candidate.evidence.join(' / ')}
                     </small>
                   ) : null}
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  {/*
+                    P6-11 — THE LEARNING LOOP'S EVIDENCE STEP, AT THE REVIEW
+                    STEP. An analytics learning says where it came from, the
+                    measurements it rests on, and a link back to the finding —
+                    so the person deciding can check the inference rather than
+                    trust a sentence. Same micro caption as the document
+                    evidence line above it; nothing new is drawn.
+                  */}
+                  {candidate.source === 'ANALYTICS' ? (
+                    <small
+                      data-testid={`candidate-source-${candidate.id}`}
+                      style={{
+                        color: colorTokens.textMuted,
+                        fontSize: typographyTokens.micro.fontSize,
+                      }}
+                    >
+                      {t('bb.reviewFromAnalytics')}
+                      {candidate.measured ? ` · ${candidate.measured}` : ''}
+                      {candidate.sourceHref ? (
+                        <>
+                          {' · '}
+                          <a
+                            href={candidate.sourceHref}
+                            data-testid={`candidate-insight-${candidate.id}`}
+                          >
+                            {t('bb.reviewOpenFinding')}
+                          </a>
+                        </>
+                      ) : null}
+                    </small>
+                  ) : null}
+                  {/*
+                    A CONFLICT IS SAID, NOT SILENTLY RESOLVED. Accepting a
+                    learning never changes the human fact it disagrees with —
+                    the learning lands in the lowest-authority memory and
+                    precedence keeps the human one on top — and the reviewer is
+                    told exactly that before they decide.
+                  */}
+                  {candidate.conflict ? (
+                    <small
+                      role="note"
+                      data-testid={`candidate-conflict-${candidate.id}`}
+                      style={{
+                        color: colorTokens.textPrimary,
+                        fontSize: typographyTokens.micro.fontSize,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {candidate.conflict}
+                    </small>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <form action={reviewCandidateAction}>
                       <input type="hidden" name="locale" value={locale} />
                       <input type="hidden" name="area" value={area.area} />
@@ -423,6 +494,79 @@ export function AreaDrawer({
                       </button>
                     </form>
                   </div>
+                  {/*
+                    EDIT, THEN ACCEPT — the third of Accept / Edit / Dismiss.
+                    `accept_edited` has always been supported by the action and
+                    the service (which keeps the original extraction beside the
+                    reviewer's text); the drawer simply never offered it. A
+                    native disclosure, so it works without script and is
+                    keyboard-operable by default, holding the same inputs the
+                    "add knowledge" form below already uses.
+                  */}
+                  <details data-testid={`edit-${candidate.id}`}>
+                    <summary
+                      style={{
+                        cursor: 'pointer',
+                        fontSize: typographyTokens.caption.fontSize,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t('bb.reviewEdit')}
+                    </summary>
+                    <form
+                      action={reviewCandidateAction}
+                      style={{ display: 'grid', gap: 8, marginBlockStart: 8 }}
+                    >
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="area" value={area.area} />
+                      <input type="hidden" name="candidateId" value={candidate.id} />
+                      <input type="hidden" name="decision" value="accept_edited" />
+                      <input
+                        className={CONTROL_CLASS}
+                        name="titleEn"
+                        defaultValue={candidate.edit.titleEn}
+                        aria-label={t('bb.reviewEditTitleEn')}
+                        dir="ltr"
+                        style={drawerInputStyle}
+                      />
+                      <input
+                        className={CONTROL_CLASS}
+                        name="titleAr"
+                        defaultValue={candidate.edit.titleAr}
+                        aria-label={t('bb.reviewEditTitleAr')}
+                        dir="rtl"
+                        style={drawerInputStyle}
+                      />
+                      <textarea
+                        className={CONTROL_CLASS}
+                        name="bodyEn"
+                        rows={3}
+                        defaultValue={candidate.edit.bodyEn}
+                        aria-label={t('bb.reviewEditBodyEn')}
+                        dir="ltr"
+                        style={{ ...drawerInputStyle, resize: 'vertical' }}
+                      />
+                      <textarea
+                        className={CONTROL_CLASS}
+                        name="bodyAr"
+                        rows={3}
+                        defaultValue={candidate.edit.bodyAr}
+                        aria-label={t('bb.reviewEditBodyAr')}
+                        dir="rtl"
+                        style={{ ...drawerInputStyle, resize: 'vertical' }}
+                      />
+                      <button
+                        type="submit"
+                        data-testid={`accept-edited-${candidate.id}`}
+                        style={{
+                          ...reviewButtonStyle(colorTokens.ink, colorTokens.surface),
+                          justifySelf: 'start',
+                        }}
+                      >
+                        {t('bb.reviewAcceptEdited')}
+                      </button>
+                    </form>
+                  </details>
                 </article>
               ))
             )}
@@ -450,31 +594,31 @@ export function AreaDrawer({
               name="itemKey"
               required
               placeholder="identity.positioning"
-              aria-label="key"
+              aria-label={t('bb.newItem.key')}
               data-testid="new-item-key"
               style={drawerInputStyle}
             />
             <input
               className={CONTROL_CLASS}
               name="titleEn"
-              placeholder="Title (EN)"
-              aria-label="Title EN"
+              placeholder={t('bb.newItem.titleEn')}
+              aria-label={t('bb.newItem.titleEn')}
               data-testid="new-item-title-en"
               style={drawerInputStyle}
             />
             <input
               className={CONTROL_CLASS}
               name="titleAr"
-              placeholder="العنوان (AR)"
-              aria-label="Title AR"
+              placeholder={t('bb.newItem.titleAr')}
+              aria-label={t('bb.newItem.titleAr')}
               style={drawerInputStyle}
             />
             <textarea
               className={CONTROL_CLASS}
               name="bodyEn"
               rows={3}
-              placeholder="Body (EN)"
-              aria-label="Body EN"
+              placeholder={t('bb.newItem.bodyEn')}
+              aria-label={t('bb.newItem.bodyEn')}
               data-testid="new-item-body-en"
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
@@ -482,8 +626,8 @@ export function AreaDrawer({
               className={CONTROL_CLASS}
               name="bodyAr"
               rows={3}
-              placeholder="النص (AR)"
-              aria-label="Body AR"
+              placeholder={t('bb.newItem.bodyAr')}
+              aria-label={t('bb.newItem.bodyAr')}
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
             <button

@@ -39,7 +39,8 @@ export function publishNotifier(input: {
           providerKey: event.provider,
           ...(account ? { accountName: account.accountName } : {}),
         },
-        linkPath: '/integrations',
+        // D-277 §33/§40: to the Published tab, where the post and its link are.
+        linkPath: '/publishing?tab=published',
         brandId: event.brandId,
         resourceType: 'PublishJob',
         resourceId: event.jobId,
@@ -64,7 +65,9 @@ export function publishNotifier(input: {
           failureClass: event.failureClass,
           ...(account ? { accountName: account.accountName } : {}),
         },
-        linkPath: '/integrations',
+        // D-277 §33/§40: to the Failed tab, where the reason, Reconnect and
+        // Retry sit beside the post rather than on the connections page.
+        linkPath: '/publishing?tab=failed',
         brandId: event.brandId,
         resourceType: 'PublishJob',
         resourceId: event.jobId,

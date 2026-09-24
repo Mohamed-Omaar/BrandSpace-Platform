@@ -11,11 +11,22 @@ import type {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inSocial } from '../../../server/social-context';
+import { isBlocking, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
+import { copilotHref } from '../../../server/copilot-surface';
+import {
+  messages,
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CalendarView, type SchedulableDraft, type SlotDetail } from './calendar-view';
 import { cancelScheduleAction, rescheduleContentAction, scheduleContentAction } from './actions';
+import { submitForReviewAction } from '../content/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,6 +139,25 @@ export default async function CalendarPage({
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
 
+  /*
+   * PHASE 6 FINAL (D-277 §32, D-290) — THE FILTERS: brand, platform, campaign
+   * and status. They NARROW what the member may already see; the month is
+   * read under RLS and BrandScope first, then filtered here. A malformed value
+   * is simply ignored.
+   */
+  const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+  const filterBrand = UUID_PATTERN.test(single('brand') ?? '') ? single('brand') : undefined;
+  const filterCampaign = UUID_PATTERN.test(single('campaign') ?? '')
+    ? single('campaign')
+    : undefined;
+  const filterPlatform = /^[a-z0-9_-]{1,40}$/.test(single('platform') ?? '')
+    ? single('platform')
+    : undefined;
+  const FILTER_STATUSES = ['PLANNED', 'SCHEDULED', 'PUBLISHED', 'FAILED'] as const;
+  const filterStatus = (FILTER_STATUSES as readonly string[]).includes(single('status') ?? '')
+    ? single('status')
+    : undefined;
+
   const data = await inContentStudio(workspace.workspaceId, async (services) => {
     const calendar = await services.calendar();
     const library = await services.library();
@@ -147,11 +177,19 @@ export default async function CalendarPage({
      * `brandIdScopeFilter` reads an empty scope as UNRESTRICTED, which is the
      * platform rule, so passing it straight through is correct for both cases.
      */
-    const visible = await calendar.monthView({
-      year,
-      month,
-      brandScope: workspace.brandScope,
-    });
+    const visible = (
+      await calendar.monthView({
+        year,
+        month,
+        brandScope: workspace.brandScope,
+      })
+    ).filter(
+      (view) =>
+        (!filterBrand || view.slot.brandId === filterBrand) &&
+        (!filterCampaign || view.item.campaignId === filterCampaign) &&
+        (!filterPlatform || view.slot.platformKeys.includes(filterPlatform)) &&
+        (!filterStatus || view.slot.status === filterStatus),
+    );
 
     /*
      * CONTENT THAT CAN ACTUALLY BE SCHEDULED, and the "actually" is the point.
@@ -167,13 +205,72 @@ export default async function CalendarPage({
      * was the one status the screen hid. `SCHEDULED` is deliberately absent: it
      * is already on the calendar, and rescheduling has its own control.
      */
+    /*
+     * THE UNSCHEDULED TRAY (D-290): schedulable posts with a variant and NO
+     * live slot. A draft already planned on the calendar (waiting on approval)
+     * is not "unscheduled", so it is not offered twice. Both conditions are in
+     * the query (`unscheduledOnly`), so the page limit is never spent on posts
+     * the tray would drop.
+     */
     const schedulable = (
       await library.listItems({
         statuses: ['DRAFT', 'APPROVED'],
+        unscheduledOnly: true,
         limit: 200,
         brandScope: workspace.brandScope,
+        ...(filterBrand ? { brandId: filterBrand } : {}),
+        ...(filterCampaign ? { campaignId: filterCampaign } : {}),
+        ...(filterPlatform ? { platformKey: filterPlatform } : {}),
       })
     ).filter((item) => item.variants.length > 0);
+    /*
+     * THE ONE QUIET SUGGESTION (D-290): a weekday nothing went on for the last
+     * GAP_WEEKS whole weeks, from the brand's own slots. Read under RLS and the
+     * member's BrandScope (plus the brand filter); a cancelled slot is not a
+     * post. The UTC range is padded a day each side and narrowed by LOCAL date.
+     */
+    const gapRange = gapWindow(
+      formatLocalTime(now, timezone).slice(0, 10),
+      policy.calendar.weekStartsOn,
+    );
+    const gapSlots = await services.db.calendarSlot.findMany({
+      where: {
+        status: { not: 'CANCELLED' },
+        scheduledAtUtc: {
+          gte: new Date(Date.parse(`${gapRange.start}T00:00:00Z`) - 86_400_000),
+          lt: new Date(Date.parse(`${gapRange.end}T00:00:00Z`) + 86_400_000),
+        },
+        ...(filterBrand
+          ? { brandId: filterBrand }
+          : workspace.brandScope.length > 0
+            ? { brandId: { in: [...workspace.brandScope] } }
+            : {}),
+      },
+      select: { scheduledAtUtc: true },
+      take: 2_000,
+    });
+    const gapDays = emptyWeekdays(
+      gapSlots.map((slot) => formatLocalTime(slot.scheduledAtUtc, timezone).slice(0, 10)),
+      gapRange,
+    );
+    const [filterBrands, openNotes] = await Promise.all([
+      services.db.brand.findMany({
+        where: {
+          deletedAt: null,
+          ...(workspace.brandScope.length > 0 ? { id: { in: [...workspace.brandScope] } } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true },
+      }),
+      services.db.noteThread.groupBy({
+        by: ['contentItemId'],
+        where: {
+          contentItemId: { in: visible.map((view) => view.item.id) },
+          status: 'OPEN',
+        },
+        _count: { _all: true },
+      }),
+    ]);
 
     /*
      * PHASE 8 — THE REST OF WHAT A PLANNER IS LOOKING AT (AC-29.2).
@@ -216,6 +313,12 @@ export default async function CalendarPage({
       month,
       visible,
       schedulable,
+      gapDays,
+      filterBrands,
+      platformKeys: policy.platforms.map((platform) => platform.key),
+      openNotes: new Map(
+        openNotes.map((row) => [row.contentItemId ?? '', row._count._all] as const),
+      ),
       quotaLimit,
       quotaUsed: counter?.usedValue ?? 0,
       weekStartsOn: policy.calendar.weekStartsOn,
@@ -231,13 +334,54 @@ export default async function CalendarPage({
     month,
     visible,
     schedulable,
+    gapDays,
     quotaLimit,
     quotaUsed,
     weekStartsOn,
     now,
     approvalStates,
     campaignNames,
+    filterBrands,
+    platformKeys,
+    openNotes,
   } = data;
+
+  /*
+   * PHASE 6 · P6-10 — WHETHER EACH SCHEDULED POST HAS A ROUTE TO ITS PLATFORM.
+   *
+   * THE SILENCE THIS ENDS. `materialiseSlot` creates a job per ACTIVE
+   * connection with a matching variant; a brand with no connection for a
+   * channel produces no job, the sweep counts zero, and the slot stays
+   * `SCHEDULED` for ever with nothing written and nothing failed. So the month
+   * showed posts that read as on their way and had no route to a platform.
+   *
+   * READ THROUGH `inSocial` RATHER THAN THE STUDIO'S CLIENT, because that is
+   * where the publishing policy and the connection projection already live —
+   * and because the service it builds carries NEITHER a vault NOR an
+   * application resolver, so this page cannot open a credential (F-07).
+   */
+  const mayReadAccounts = workspace.permissionKeys.includes('integrations.read');
+  const readiness = await inSocial(workspace.workspaceId, async (services) =>
+    publishReadiness({
+      db: services.db,
+      workspaceId: workspace.workspaceId,
+      policy: await services.policy(),
+      brandScope: workspace.brandScope,
+      slots: visible.map((view) => ({
+        slotId: view.slot.id,
+        brandId: view.slot.brandId,
+        status: view.slot.status,
+        /*
+         * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
+         * connections against — and NOT `slot.platformKeys`, which records
+         * what was planned and is deliberately never updated.
+         */
+        variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
+      })),
+      now,
+    }),
+  );
+  const blockedCount = [...readiness.values()].filter((entry) => isBlocking(entry.state)).length;
 
   /*
    * THE COVER PICTURE OF EACH SCHEDULED POST (AC-29.2).
@@ -316,6 +460,7 @@ export default async function CalendarPage({
       ? (APPROVAL_STATE[approvalRow] ?? 'NOT_REQUIRED')
       : 'NOT_REQUIRED';
     const status = SLOT_STATUS[view.slot.status] ?? 'SCHEDULED';
+    const slotReadiness = readiness.get(view.slot.id) ?? null;
 
     const record: PostRecord = {
       id: view.slot.id,
@@ -354,6 +499,43 @@ export default async function CalendarPage({
         ? translate(`approvals.status.${approvalRow}` as MessageKey)
         : null,
       mediaCount: mediaIds.length,
+      // D-290 — what the drawer previews: the first version's words and cover.
+      itemStatus: view.item.status,
+      previewPlatform: view.variants[0]?.platformKey ?? null,
+      previewBody: view.variants[0]?.body ?? '',
+      previewMedia: cover
+        ? [{ id: cover.id, name: cover.name, kind: cover.kind, previewToken: cover.previewToken }]
+        : [],
+      openNotes: openNotes.get(view.item.id) ?? 0,
+      /*
+       * ABSENT RATHER THAN REASSURING for a slot that is not waiting to go
+       * out. `publishReadiness` assesses `SCHEDULED` alone, so a planned or an
+       * already-published slot has no entry and the dialog renders no row —
+       * the honest rendering of "this question does not apply" (D-184).
+       */
+      readiness: slotReadiness
+        ? {
+            label: translate(`calendar.readiness.${slotReadiness.state}` as MessageKey),
+            blocking: isBlocking(slotReadiness.state),
+            /*
+             * ONLY THE CHANNELS THAT ARE IN THE WAY. Listing the healthy ones
+             * beside them would bury the one line the planner has to act on.
+             *
+             * THE ACCOUNT'S NAME IS WITHHELD FROM A READER WHO MAY NOT SEE IT.
+             * This screen needs `content.read`; the connected accounts are an
+             * `integrations.read` surface. The STATE is about the reader's own
+             * post and is theirs to know; the account's display name is not,
+             * so it is dropped rather than the row being hidden.
+             */
+            channels: slotReadiness.channels
+              .filter((channel) => isBlocking(channel.state))
+              .map((channel) => ({
+                platformKey: channel.platformKey,
+                label: translate(`calendar.readiness.${channel.state}` as MessageKey),
+                accountName: mayReadAccounts ? channel.accountName : null,
+              })),
+          }
+        : null,
     });
   }
 
@@ -373,6 +555,9 @@ export default async function CalendarPage({
     });
   }
 
+  const todayIndex = days.findIndex((day) => day.isToday);
+  const weekIndex = todayIndex >= 0 ? Math.floor(todayIndex / 7) : 0;
+
   const weekdayNames = Array.from({ length: 7 }, (_unused, offset) =>
     // 2024-01-07 was a Sunday, so adding the configured start gives the right
     // first column whichever day the market begins its week on.
@@ -385,7 +570,7 @@ export default async function CalendarPage({
     month: 'long',
   }).format(new Date(firstOfMonthUtc));
 
-  const t = dictionaryFor(translate);
+  const t = dictionaryFor(translate, locale);
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
@@ -408,8 +593,65 @@ export default async function CalendarPage({
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+      {/*
+        THE MONTH'S BLOCKED POSTS, COUNTED — and `warning` rather than `error`,
+        because the screen is working exactly as intended and the reader still
+        has to be told. Rendered only when the count is non-zero: a banner
+        reading "0 posts will not go out" is noise on every healthy month.
+
+        THE LINK IS OFFERED ONLY TO SOMEBODY WHO CAN ACT ON IT. Connecting and
+        reconnecting an account needs `integrations.manage`; sending a member
+        without it to a route they will be refused is the dead control §20
+        forbids. The count is still shown, because knowing the post will not go
+        out is what lets them ask somebody who can fix it.
+      */}
+      {blockedCount > 0 ? (
+        <CustomerBanner tone="warning">
+          <span data-testid="calendar-readiness-banner">
+            {`${blockedCount} ${translate('calendar.readinessBlocked')}`}
+          </span>
+          {workspace.permissionKeys.includes('integrations.manage') ? (
+            <>
+              {' '}
+              <a href={`/${locale}/publishing?tab=accounts`} data-testid="calendar-readiness-fix">
+                {translate('calendar.readinessFix')}
+              </a>
+            </>
+          ) : null}
+        </CustomerBanner>
+      ) : null}
       <CalendarView
         locale={locale}
+        preselectItemId={single('item')}
+        weekIndex={weekIndex}
+        gaps={gapDays.map((day) =>
+          translate('calendar.gap.empty')
+            .replace('{weekday}', weekdayName(day, locale === 'ar' ? 'ar' : 'en'))
+            .replace('{weeks}', String(GAP_WEEKS)),
+        )}
+        copilotHref={
+          workspace.permissionKeys.includes('copilot.use') ? copilotHref(locale, 'calendar') : null
+        }
+        filters={{
+          brand: filterBrand ?? '',
+          campaign: filterCampaign ?? '',
+          platform: filterPlatform ?? '',
+          status: filterStatus ?? '',
+        }}
+        filterOptions={{
+          brands: filterBrands,
+          campaigns: [...campaignNames].map(([id, name]) => ({ id, name })),
+          platforms: platformKeys.map((key) => ({
+            key,
+            label: optionalMessage(locale, `content.platform.${key}`) ?? key,
+          })),
+          statuses: FILTER_STATUSES.map((status) => ({
+            key: status,
+            label: translate(
+              `content.status.${status === 'PLANNED' ? 'DRAFT' : status}` as MessageKey,
+            ),
+          })),
+        }}
         t={t}
         periodLabel={periodLabel}
         month={monthKey(year, month)}
@@ -422,11 +664,14 @@ export default async function CalendarPage({
           id: item.id,
           title: item.title,
           channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
+          status: item.status,
+          campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
         }))}
         timezone={timezone}
         quotaUsed={quotaUsed}
         quotaLimit={quotaLimit}
         canSchedule={workspace.permissionKeys.includes('content.schedule')}
+        canSubmit={workspace.permissionKeys.includes('content.submit')}
         postsOnDayLabel={translate('calendar.postsOnDay')}
         labels={{
           calendarLabel: translate('calendar.label'),
@@ -483,6 +728,7 @@ export default async function CalendarPage({
           schedule: scheduleContentAction,
           reschedule: rescheduleContentAction,
           cancel: cancelScheduleAction,
+          submitForReview: submitForReviewAction,
         }}
       />
     </WorkspaceShell>
@@ -490,6 +736,8 @@ export default async function CalendarPage({
 }
 
 const CALENDAR_KEYS = [
+  'calendar.emptySchedule',
+  'calendar.emptyCreate',
   'calendar.title',
   'calendar.eyebrow',
   'calendar.subtitle',
@@ -508,16 +756,56 @@ const CALENDAR_KEYS = [
   'calendar.noSchedulable',
   'calendar.noSchedulableBody',
   'calendar.openInStudio',
-  'calendar.mockTarget',
+  'calendar.slotDialogHint',
+  'calendar.readiness',
+  'calendar.readiness.READY',
+  'calendar.readiness.EXPIRING',
+  'calendar.readiness.NEEDS_REAUTH',
+  'calendar.readiness.NOT_CONNECTED',
+  'calendar.readiness.UNSUPPORTED',
   'calendar.channels',
   'calendar.campaign',
   'calendar.publishState',
   'calendar.approvalState',
+  'calendar.drawer.notes',
+  'calendar.drawer.requestApproval',
+  'calendar.filter.all',
+  'calendar.filter.apply',
+  'calendar.filter.brand',
+  'calendar.filter.campaign',
+  'calendar.filter.platform',
+  'calendar.filter.status',
+  'calendar.gap.ask',
+  'calendar.gap.title',
+  'calendar.tray.empty',
+  'calendar.tray.hint',
+  'calendar.tray.showAll',
+  'calendar.tray.showFewer',
+  'calendar.tray.title',
   'calendar.media',
   'calendar.scheduledFor',
   'common.close',
 ] as const satisfies readonly MessageKey[];
 
-function dictionaryFor(translate: (key: MessageKey) => string): Record<string, string> {
-  return Object.fromEntries(CALENDAR_KEYS.map((key) => [key, translate(key)]));
+function dictionaryFor(
+  translate: (key: MessageKey) => string,
+  locale: string,
+): Record<string, string> {
+  /*
+   * The calendar's own words, plus what the post drawer's preview reads
+   * (D-290) — status, platform, format and preview labels, nothing more.
+   */
+  const all = messages[locale === 'ar' ? 'ar' : 'en'] as Record<string, string>;
+  const preview = Object.fromEntries(
+    Object.entries(all).filter(
+      ([key]) =>
+        key.startsWith('content.status.') ||
+        key.startsWith('content.platform.') ||
+        key.startsWith('content.format.') ||
+        key.startsWith('content.preview.') ||
+        key.startsWith('editor.preview.') ||
+        key === 'content.media.video',
+    ),
+  );
+  return { ...preview, ...Object.fromEntries(CALENDAR_KEYS.map((key) => [key, translate(key)])) };
 }

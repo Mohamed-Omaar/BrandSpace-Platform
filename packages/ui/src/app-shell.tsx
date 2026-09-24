@@ -773,6 +773,9 @@ export function AppShell({
                 alignItems: 'center',
                 // `.topbar-actions { gap: 7px }`.
                 gap: layoutTokens.topbarActionGap,
+                // D-304 — a labelled Copilot control is wider than a square; on
+                // the narrowest phones the row wraps rather than overhangs.
+                flexWrap: 'wrap',
                 minInlineSize: 0,
                 flexShrink: 0,
               }}

@@ -1,9 +1,11 @@
+import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   spacingTokens,
@@ -19,9 +21,10 @@ import {
   type ConditionField,
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandIdQueryFilter, brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { copilotHref } from '../../../server/copilot-surface';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -111,6 +114,20 @@ export default async function AutomationsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = workspace.permissionKeys.includes('automation.manage');
+  const mayPublish = workspace.permissionKeys.includes('publishing.manage');
+
+  /*
+   * THE RAIL'S BRAND (P6-12, D-190). The page computed the brand context and
+   * then ignored it, listing every in-scope brand's rules whatever the rail
+   * said. One selected brand now narrows the lists and the authoring form;
+   * "all brands" shows the whole scope, as before.
+   */
+  const brandContext = await brandContextFor(
+    session.workspace,
+    '/automations',
+    typeof query['brand'] === 'string' ? query['brand'] : null,
+  );
+  const selectedBrand = requiredBrand(brandContext);
 
   const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.brand.findMany({
@@ -126,18 +143,84 @@ export default async function AutomationsPage({
   const { rules, runs } = await inAnalytics(workspace.workspaceId, async (services) => {
     const engine = await services.automations();
     return {
-      rules: await engine.listRules({ brandScope: workspace.brandScope }),
-      runs: await engine.listRuns({ brandScope: workspace.brandScope, take: 25 }),
+      rules: await engine.listRules({
+        brandId: selectedBrand?.id,
+        brandScope: workspace.brandScope,
+      }),
+      runs: await engine.listRuns({
+        brandId: selectedBrand?.id,
+        brandScope: workspace.brandScope,
+        take: 25,
+      }),
     };
   });
+
+  /*
+   * WHAT A PROPOSED PUBLISH WOULD PUBLISH (P6-12). The confirm button used to
+   * stand alone — no rule, no content — so a person authorised an external
+   * action on trust. Each waiting run is resolved to its rule's name and the
+   * content item's title, through the same brand-scope predicate as every
+   * other read here; a title the reader cannot see is reported as such, never
+   * shown.
+   */
+  const awaiting = runs.filter(
+    (run) =>
+      run.status === 'AWAITING_CONFIRMATION' &&
+      run.confirmationExpiresAt !== null &&
+      run.confirmationExpiresAt.getTime() > Date.now(),
+  );
+  const proposals = new Map<string, { rule: string | null; content: string | null }>();
+  if (awaiting.length > 0) {
+    await inWorkspace(workspace.workspaceId, async ({ db }) => {
+      const scoped = brandIdQueryFilter({ brandScope: workspace.brandScope });
+      const ruleRows = await db.automationRule.findMany({
+        where: {
+          workspaceId: workspace.workspaceId,
+          id: { in: awaiting.map((r) => r.ruleId) },
+          ...scoped,
+        },
+        select: { id: true, name: true },
+      });
+      const ruleNames = new Map(ruleRows.map((row) => [row.id, row.name]));
+      for (const run of awaiting) {
+        let contentItemId: string | null = null;
+        if (run.resourceId && run.resourceType === 'ContentItem') contentItemId = run.resourceId;
+        if (run.resourceId && run.resourceType === 'CalendarSlot') {
+          const slot = await db.calendarSlot.findFirst({
+            where: { id: run.resourceId, workspaceId: workspace.workspaceId, ...scoped },
+            select: { contentItemId: true },
+          });
+          contentItemId = slot?.contentItemId ?? null;
+        }
+        if (run.resourceId && run.resourceType === 'PublishJob') {
+          const job = await db.publishJob.findFirst({
+            where: { id: run.resourceId, workspaceId: workspace.workspaceId, ...scoped },
+            select: { contentItemId: true },
+          });
+          contentItemId = job?.contentItemId ?? null;
+        }
+        const item = contentItemId
+          ? await db.contentItem.findFirst({
+              where: { id: contentItemId, workspaceId: workspace.workspaceId, ...scoped },
+              select: { title: true },
+            })
+          : null;
+        proposals.set(run.id, {
+          rule: ruleNames.get(run.ruleId) ?? null,
+          content: item?.title ?? null,
+        });
+      }
+    });
+  }
+  const formBrands = selectedBrand
+    ? brands.filter((brand) => brand.id === selectedBrand.id)
+    : brands;
 
   const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'UTC',
   });
-
-  const brandContext = await brandContextFor(session.workspace, '/automations');
 
   return (
     <WorkspaceShell
@@ -161,7 +244,82 @@ export default async function AutomationsPage({
 
         <CustomerBanner tone="info">{t('automations.externalNotice')}</CustomerBanner>
 
-        {mayManage && brands.length > 0 ? (
+        {selectedBrand || workspace.permissionKeys.includes('copilot.use') ? (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: spacingTokens.sm,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            {selectedBrand ? (
+              <p
+                data-testid="automations-brand-filter"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+              >
+                {t('automations.brandFilter').replace('{brand}', selectedBrand.name)}
+              </p>
+            ) : (
+              <span />
+            )}
+            {workspace.permissionKeys.includes('copilot.use') ? (
+              <CopilotLink
+                href={copilotHref(locale, 'automations')}
+                style={buttonStyle('ghost', 'sm')}
+                className={buttonClass('ghost')}
+                data-testid="automations-ask-copilot"
+              >
+                {t('copilot.ask')}
+              </CopilotLink>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/*
+          D-277 §39, D-296 — HOW MOST PEOPLE SHOULD FIND AUTOMATION: by asking
+          the Copilot in their own words, or from a recurring workflow Home
+          noticed. The trigger/condition/action form below stays for people who
+          want to build a rule by hand. What is true is said plainly: a rule the
+          Copilot prepares starts switched off, and a proposed publish still
+          asks before anything goes out.
+        */}
+        {workspace.permissionKeys.includes('copilot.use') ? (
+          <Card testId="automations-discover">
+            <SectionHeader
+              title={t('automations.discover.title')}
+              description={t('automations.discover.body')}
+            />
+            <ul
+              style={{
+                margin: 0,
+                paddingInlineStart: '1.1rem',
+                display: 'grid',
+                gap: spacingTokens['3xs'],
+                ...typographyTokens.caption,
+                color: colorTokens.textSecondary,
+              }}
+            >
+              <li>{t('automations.discover.off')}</li>
+              <li>{t('automations.discover.publish')}</li>
+              <li>{t('automations.discover.home')}</li>
+            </ul>
+            <div style={{ marginBlockStart: spacingTokens.sm }}>
+              <CopilotLink
+                href={copilotHref(locale, 'automations')}
+                request={t('automations.discover.example')}
+                style={buttonStyle('primary', 'sm')}
+                className={buttonClass('primary')}
+                testId="automations-discover-copilot"
+              >
+                {t('automations.discover.cta')}
+              </CopilotLink>
+            </div>
+          </Card>
+        ) : null}
+
+        {mayManage && formBrands.length > 0 ? (
           <Card title={t('automations.create')}>
             {/*
               THE FORM IS BUILT FROM THE REGISTRY, ON THE SERVER, AND HANDED
@@ -180,7 +338,7 @@ export default async function AutomationsPage({
             <AutomationForm
               locale={locale}
               action={createAutomationAction}
-              brands={brands.map((brand) => ({ id: brand.id, name: brand.name }))}
+              brands={formBrands.map((brand) => ({ id: brand.id, name: brand.name }))}
               triggers={AUTOMATION_TRIGGERS.map((trigger) => ({
                 type: trigger.type,
                 label: t(`automations.trigger.${trigger.type}` as MessageKey),
@@ -272,7 +430,11 @@ export default async function AutomationsPage({
         <Card>
           <SectionHeader title={t('automations.rules')} />
           {rules.length === 0 ? (
-            <StateMessage kind="empty" title={t('automations.empty')} />
+            <StateMessage
+              kind="empty"
+              title={t('automations.empty')}
+              description={t('automations.emptyBody')}
+            />
           ) : (
             <ul
               style={{
@@ -318,13 +480,45 @@ export default async function AutomationsPage({
                             {t(rule.enabled ? 'automations.disable' : 'automations.enable')}
                           </button>
                         </form>
-                        <form action={deleteAutomationAction}>
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="ruleId" value={rule.id} />
-                          <button type="submit" style={buttonStyle('danger', 'sm')}>
-                            {t('automations.delete')}
-                          </button>
-                        </form>
+                        {/*
+                          DELETE ASKS TWICE (P6-12). It was one click away from
+                          the toggle beside it. A native disclosure, so it works
+                          without script and is keyboard-operable as is.
+                        */}
+                        <details data-testid={`automation-delete-${rule.id}`}>
+                          <summary
+                            style={{ ...buttonStyle('ghost', 'sm'), listStyle: 'none' }}
+                            className={buttonClass('ghost')}
+                          >
+                            {t('automations.deleteConfirm')}
+                          </summary>
+                          <form
+                            action={deleteAutomationAction}
+                            style={{
+                              display: 'grid',
+                              gap: spacingTokens.xs,
+                              marginBlockStart: spacingTokens.xs,
+                            }}
+                          >
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="ruleId" value={rule.id} />
+                            <span
+                              style={{
+                                ...typographyTokens.caption,
+                                color: colorTokens.textSecondary,
+                              }}
+                            >
+                              {t('automations.deleteConfirmBody')}
+                            </span>
+                            <button
+                              type="submit"
+                              style={buttonStyle('danger', 'sm')}
+                              className={buttonClass('danger')}
+                            >
+                              {t('automations.deleteConfirmSubmit')}
+                            </button>
+                          </form>
+                        </details>
                       </>
                     ) : null}
                   </span>
@@ -337,7 +531,11 @@ export default async function AutomationsPage({
         <Card>
           <SectionHeader title={t('automations.runs')} />
           {runs.length === 0 ? (
-            <StateMessage kind="empty" title={t('automations.runsEmpty')} />
+            <StateMessage
+              kind="empty"
+              title={t('automations.runsEmpty')}
+              description={t('automations.runsEmptyBody')}
+            />
           ) : (
             <ul
               style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '0.25rem' }}
@@ -354,9 +552,33 @@ export default async function AutomationsPage({
                     color: colorTokens.textSecondary,
                   }}
                 >
-                  <span>
-                    {t(`automations.trigger.${run.triggerType}` as MessageKey)} →{' '}
-                    {t(`automations.action.${run.actionType}` as MessageKey)}
+                  <span style={{ display: 'grid', gap: '0.125rem' }}>
+                    <span>
+                      {t(`automations.trigger.${run.triggerType}` as MessageKey)} →{' '}
+                      {t(`automations.action.${run.actionType}` as MessageKey)}
+                    </span>
+                    {run.failureCode ? (
+                      <span data-testid={`automation-run-failure-${run.id}`}>
+                        {t('automations.failure').replace('{code}', run.failureCode)}
+                      </span>
+                    ) : null}
+                    {proposals.has(run.id) ? (
+                      <span data-testid={`automation-proposal-${run.id}`}>
+                        <strong>{t('automations.previewTitle')}</strong>
+                        {' — '}
+                        {t('automations.previewRule').replace(
+                          '{rule}',
+                          proposals.get(run.id)?.rule ?? '—',
+                        )}
+                        {' · '}
+                        {proposals.get(run.id)?.content
+                          ? t('automations.previewContent').replace(
+                              '{content}',
+                              proposals.get(run.id)?.content ?? '',
+                            )
+                          : t('automations.previewUnknown')}
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ display: 'flex', gap: spacingTokens.sm }}>
                     <StatusBadge
@@ -385,15 +607,17 @@ export default async function AutomationsPage({
                       It posts the RUN's id and nothing else — the credential is
                       fetched server-side and never reaches this page.
                     */}
-                    {run.status === 'AWAITING_CONFIRMATION' &&
-                    run.confirmationExpiresAt !== null &&
-                    run.confirmationExpiresAt.getTime() > Date.now() ? (
+                    {proposals.has(run.id) && !mayPublish ? (
+                      <span>{t('automations.confirmNeedsPermission')}</span>
+                    ) : null}
+                    {proposals.has(run.id) && mayPublish ? (
                       <form action={confirmAutomationRunAction}>
                         <input type="hidden" name="locale" value={locale} />
                         <input type="hidden" name="runId" value={run.id} />
                         <button
                           type="submit"
                           style={buttonStyle('primary', 'sm')}
+                          className={buttonClass('primary')}
                           data-testid="automation-confirm"
                         >
                           {t('automations.confirmRun')}

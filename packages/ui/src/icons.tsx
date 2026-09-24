@@ -345,6 +345,24 @@ export function BellIcon(props: IconProps) {
   );
 }
 
+/**
+ * A speech bubble — the Notes entry in the customer top bar (P6-16).
+ *
+ * DRAWN, NOT BORROWED, and recorded as the one new glyph the top bar needed
+ * (CLAUDE.md §4.2 rule 4): the family had no mark for "a conversation", and
+ * reusing `SendIcon` or `PencilIcon` would say "publish" or "edit" to the
+ * person looking for their colleagues' notes. Same box, stroke and caps as
+ * every other icon here.
+ */
+export function NoteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5h-7.5L7 20.5V17H5a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 5 5.5z" />
+      <path d="M8 10h8M8 13h5" />
+    </Icon>
+  );
+}
+
 export function SendIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -378,6 +396,19 @@ export function ImageIcon(props: IconProps) {
       <rect x="3" y="4.5" width="18" height="15" rx="2" />
       <circle cx="8.75" cy="9.75" r="1.5" />
       <path d="m4 16.5 4.5-4 4 3.5 3-2.5 4.5 4" />
+    </Icon>
+  );
+}
+
+/**
+ * A FOLDER — the Media Library's folders (Phase 6 final acceptance, D-305).
+ * The same 24-unit box, stroke and joinery as every icon here; a folder tree
+ * that looked like a row of filter chips needed a glyph that says "folder".
+ */
+export function FolderIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.25h8.6A1.5 1.5 0 0 1 21 9.75v8.75A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5z" />
     </Icon>
   );
 }

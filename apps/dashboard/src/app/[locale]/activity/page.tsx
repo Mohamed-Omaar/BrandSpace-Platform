@@ -15,7 +15,9 @@ import {
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { activityService } from '../../../server/approvals-context';
-import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { messages, optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { activityActionLabel, activityResourceLabel } from '../../../server/activity-labels';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
@@ -104,6 +106,9 @@ export default async function ActivityPage({
     timeZone: 'UTC',
   });
 
+  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
+    Record<string, string | undefined>
+  >;
   const actorLabel = (entry: (typeof page.entries)[number]): string => {
     if (entry.actorId && entry.actorId === customer.userId) return t('activity.you');
     if (entry.actorId && actorNames.has(entry.actorId)) return actorNames.get(entry.actorId) ?? '—';
@@ -126,35 +131,36 @@ export default async function ActivityPage({
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <Stack>
-        <Card testId="activity-log">
-          <SectionHeader
-            eyebrow={t('activity.eyebrow')}
-            title={t('activity.title')}
-            description={
-              page.scope === 'none' ? undefined : t(`activity.scope.${page.scope}` as MessageKey)
-            }
-          />
-
-          {page.scope === 'none' ? (
-            <StateMessage
-              title={t('activity.noAccessTitle')}
-              description={t('activity.noAccessBody')}
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="activity">
+        <Stack>
+          <Card testId="activity-log">
+            <SectionHeader
+              eyebrow={t('activity.eyebrow')}
+              title={t('activity.title')}
+              description={
+                page.scope === 'none' ? undefined : t(`activity.scope.${page.scope}` as MessageKey)
+              }
             />
-          ) : (
-            <>
-              {/*
+
+            {page.scope === 'none' ? (
+              <StateMessage
+                title={t('activity.noAccessTitle')}
+                description={t('activity.noAccessBody')}
+              />
+            ) : (
+              <>
+                {/*
                 A GET form, so a filtered view is a real URL that can be
                 bookmarked, shared and reloaded — and so the page still filters
                 with scripting unavailable. The options are the action keys that
                 actually occur within the reader's scope, so the filter cannot
                 be used to probe for events they may not see.
               */}
-              <form method="get" style={filterFormStyle}>
-                <label htmlFor="activity-action" style={labelStyle}>
-                  {t('activity.filterAction')}
-                </label>
-                {/*
+                <form method="get" style={filterFormStyle}>
+                  <label htmlFor="activity-action" style={labelStyle}>
+                    {t('activity.filterAction')}
+                  </label>
+                  {/*
                   THE DESIGN SYSTEM'S OWN CONTROL, not a locally styled one.
                   `.bs-control` carries the fill, the radius and — the part that
                   matters — the visible focus treatment every other field in the
@@ -163,72 +169,77 @@ export default async function ActivityPage({
                   `tests/unit/design-system.test.ts` exists to catch. It caught
                   this one.
                 */}
-                <select
-                  id="activity-action"
-                  name="action"
-                  defaultValue={action ?? ''}
-                  className={CONTROL_CLASS}
-                  style={{ ...inputStyle(), inlineSize: 'auto', maxInlineSize: '100%' }}
-                  data-testid="activity-filter"
-                >
-                  <option value="">{t('activity.filterAll')}</option>
-                  {actions.map((key) => (
-                    <option key={key} value={key}>
-                      {key}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" style={buttonStyle('ghost')}>
-                  {t('activity.filterAction')}
-                </button>
-              </form>
+                  <select
+                    id="activity-action"
+                    name="action"
+                    defaultValue={action ?? ''}
+                    className={CONTROL_CLASS}
+                    style={{ ...inputStyle(), inlineSize: 'auto', maxInlineSize: '100%' }}
+                    data-testid="activity-filter"
+                  >
+                    <option value="">{t('activity.filterAll')}</option>
+                    {actions.map((key) => (
+                      <option key={key} value={key}>
+                        {activityActionLabel(key, dictionary)}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" style={buttonStyle('ghost')}>
+                    {t('activity.filterAction')}
+                  </button>
+                </form>
 
-              {page.entries.length === 0 ? (
-                <StateMessage
-                  title={t('activity.emptyTitle')}
-                  description={t('activity.emptyBody')}
-                />
-              ) : (
-                <ol style={listStyle} data-testid="activity-list">
-                  {page.entries.map((entry) => (
-                    <li key={entry.id} style={rowStyle} data-testid={`activity-${entry.id}`}>
-                      <div style={headRowStyle}>
-                        <strong style={actionStyle}>{entry.action}</strong>
-                        {entry.outcome === 'SUCCESS' ? null : (
-                          <StatusBadge
-                            label={t(`activity.outcome.${entry.outcome}` as MessageKey)}
-                            tone={entry.outcome === 'DENIED' ? 'warning' : 'danger'}
-                          />
-                        )}
-                      </div>
-                      <span style={metaStyle}>
-                        {actorLabel(entry)} ·{' '}
-                        <time dateTime={entry.occurredAt.toISOString()}>
-                          {dateFormat.format(entry.occurredAt)}
-                        </time>
-                        {entry.resourceType ? ` · ${entry.resourceType}` : ''}
-                        {entry.brandId && brandNames.has(entry.brandId)
-                          ? ` · ${brandNames.get(entry.brandId)}`
-                          : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+                {page.entries.length === 0 ? (
+                  <StateMessage
+                    title={t('activity.emptyTitle')}
+                    description={t('activity.emptyBody')}
+                  />
+                ) : (
+                  <ol style={listStyle} data-testid="activity-list">
+                    {page.entries.map((entry) => (
+                      <li key={entry.id} style={rowStyle} data-testid={`activity-${entry.id}`}>
+                        <div style={headRowStyle}>
+                          <strong style={actionStyle}>
+                            {activityActionLabel(entry.action, dictionary)}
+                          </strong>
+                          {entry.outcome === 'SUCCESS' ? null : (
+                            <StatusBadge
+                              label={t(`activity.outcome.${entry.outcome}` as MessageKey)}
+                              tone={entry.outcome === 'DENIED' ? 'warning' : 'danger'}
+                            />
+                          )}
+                        </div>
+                        <span style={metaStyle}>
+                          {actorLabel(entry)} ·{' '}
+                          <time dateTime={entry.occurredAt.toISOString()}>
+                            {dateFormat.format(entry.occurredAt)}
+                          </time>
+                          {activityResourceLabel(entry.resourceType, dictionary)
+                            ? ` · ${activityResourceLabel(entry.resourceType, dictionary)}`
+                            : ''}
+                          {entry.brandId && brandNames.has(entry.brandId)
+                            ? ` · ${brandNames.get(entry.brandId)}`
+                            : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
 
-              {page.nextCursor ? (
-                <Link
-                  href={buildHref(locale, action, page.nextCursor)}
-                  style={buttonStyle('ghost')}
-                  data-testid="activity-more"
-                >
-                  {t('activity.more')}
-                </Link>
-              ) : null}
-            </>
-          )}
-        </Card>
-      </Stack>
+                {page.nextCursor ? (
+                  <Link
+                    href={buildHref(locale, action, page.nextCursor)}
+                    style={buttonStyle('ghost')}
+                    data-testid="activity-more"
+                  >
+                    {t('activity.more')}
+                  </Link>
+                ) : null}
+              </>
+            )}
+          </Card>
+        </Stack>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

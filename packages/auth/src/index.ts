@@ -6,6 +6,7 @@ export * from './email-resend';
 export * from './email-templates';
 export * from './invitations';
 export * from './memberships';
+export * from './brand-access';
 export * from './mfa';
 export * from './password';
 export * from './platform-session';

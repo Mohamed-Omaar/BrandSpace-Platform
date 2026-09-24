@@ -233,12 +233,14 @@ async function main(): Promise<void> {
             where: { contentItemId: existing.id, status: { not: 'CANCELLED' } },
             data: { status: 'CANCELLED', cancelledAt: new Date() },
           });
-          if (existing.status !== 'DRAFT') {
-            await db.contentItem.update({
-              where: { id: existing.id },
-              data: { status: 'DRAFT' },
-            });
-          }
+          // Always written, so `updatedAt` moves too: the calendar's picker
+          // lists the most recently touched 200 schedulable posts, and a
+          // fixture that other suites' drafts have buried is not "the state
+          // the suite starts from".
+          await db.contentItem.update({
+            where: { id: existing.id },
+            data: { status: 'DRAFT' },
+          });
         }
 
         if (existing && existing.variants.length > 0) {

@@ -15,6 +15,7 @@
     "@brandspace/automation": "workspace:*",
     "@brandspace/billing": "workspace:*",
     "@brandspace/brand-brain": "workspace:*",
+    "@brandspace/collaboration": "workspace:*",
     "@brandspace/config": "workspace:*",
     "@brandspace/content": "workspace:*",
     "@brandspace/copilot": "workspace:*",

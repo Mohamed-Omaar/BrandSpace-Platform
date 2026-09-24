@@ -36,71 +36,78 @@ function navHrefs(): readonly string[] {
 }
 
 /**
- * THE EIGHTEEN AREAS, and the route each one is reached at.
+ * THE FINAL INFORMATION ARCHITECTURE (owner decision D-277, contract §3).
  *
- * Transcribed from `docs/PRODUCT.md` §5.0 rather than derived from the rail, so
- * the test fails if an area is quietly dropped from the product instead of
- * agreeing with whatever the rail currently says.
- *
- * BRAND PROFILE IS DELIBERATELY ABSENT (D-189): it is reached contextually from
- * the Brand Selector and from Settings, and is not a primary rail module.
+ * SUPERSEDES the eighteen-areas-on-the-rail inventory of D-188. The rail now
+ * carries the work, in order; administration and the conversational surfaces
+ * moved to Settings and the top bar. What this file still guarantees is the
+ * rule it was written for — a link that goes nowhere is not navigation — for
+ * the rail AND for every area that left it: each must still have a page, and
+ * each must still be reachable from the place the owner put it.
  */
-const FIXED_INVENTORY: Readonly<Record<string, string>> = {
-  'Command Center': '/overview',
-  'Brand Brain': '/brand-brain',
-  Assets: '/assets',
-  'AI Strategy': '/strategy',
-  Campaigns: '/campaigns',
-  'AI Content Studio': '/content',
-  'AI Creative Studio': '/creative',
-  Calendar: '/calendar',
-  Approvals: '/approvals',
-  'Social Accounts': '/integrations',
-  Analytics: '/analytics',
-  'Marketing Intelligence': '/intelligence',
-  Copilot: '/copilot',
-  Automations: '/automations',
-  Team: '/members',
-  Activity: '/activity',
-  Settings: '/settings',
-  'Billing & Usage': '/plan',
+const RAIL: readonly string[] = [
+  '/overview',
+  '/brand-brain',
+  '/strategy',
+  '/campaigns',
+  '/content',
+  '/creative',
+  '/assets',
+  '/calendar',
+  '/publishing',
+  '/analytics',
+  '/intelligence',
+  '/automations',
+  '/settings',
+];
+
+/** Areas that left the rail, and where the owner moved each (§3). */
+const MOVED: Readonly<Record<string, 'top bar' | 'settings'>> = {
+  '/approvals': 'top bar',
+  '/notes': 'top bar',
+  '/notifications': 'top bar',
+  '/copilot': 'top bar',
+  '/members': 'settings',
+  '/permissions': 'settings',
+  '/activity': 'settings',
+  '/plan': 'settings',
+  '/billing': 'settings',
+  '/integrations': 'settings',
 };
 
 describe('every navigation entry leads to a real screen', () => {
   const hrefs = navHrefs();
 
-  it('finds the rail, and it is not empty', () => {
-    expect(hrefs.length).toBeGreaterThan(10);
+  it("the rail is exactly the owner's list, in order", () => {
+    expect(hrefs).toEqual(RAIL);
   });
 
-  for (const href of navHrefs()) {
+  for (const href of hrefs) {
     it(`${href} has a page`, () => {
       const segment = href.replace(/^\//, '');
       expect(existsSync(resolve(APP_DIR, segment, 'page.tsx'))).toBe(true);
     });
 
     it(`${href} declares its brand scope`, () => {
-      // `scopeForPath` falls back to `workspace` for an undeclared route, which
-      // is inert rather than wrong — but a RAIL entry is a screen somebody
-      // opens, so its answer has to be a decision rather than a default.
+      if (href === '/settings') return; // resolves to the member's first settings section
       expect(Object.keys(ROUTE_SCOPES)).toContain(href);
       expect(['workspace', 'brand', 'brand-or-all']).toContain(scopeForPath(href));
     });
   }
-});
 
-describe('the fixed eighteen-area inventory is reachable', () => {
-  const hrefs = new Set(navHrefs());
-
-  for (const [area, href] of Object.entries(FIXED_INVENTORY)) {
-    it(`${area} is on the rail at ${href}`, () => {
-      expect(hrefs).toContain(href);
+  for (const [href, place] of Object.entries(MOVED)) {
+    it(`${href} left the rail but still has a page, reached from the ${place}`, () => {
+      expect(hrefs).not.toContain(href);
+      const segment = href.replace(/^\//, '');
+      expect(existsSync(resolve(APP_DIR, segment, 'page.tsx'))).toBe(true);
+      const source =
+        place === 'settings'
+          ? readFileSync(resolve(APP_DIR, '../../server/settings-nav.ts'), 'utf8')
+          : readFileSync(resolve(APP_DIR, '../../server/topbar.ts'), 'utf8') +
+            readFileSync(resolve(APP_DIR, '../../server/copilot-surface.ts'), 'utf8');
+      expect(source).toContain(`'${href}'`.replace("'/copilot'", 'copilot?from='));
     });
   }
-
-  it('is exactly eighteen areas', () => {
-    expect(Object.keys(FIXED_INVENTORY)).toHaveLength(18);
-  });
 
   it('does NOT put Brand Profile on the rail (D-189)', () => {
     expect(hrefs).not.toContain('/settings/brand');

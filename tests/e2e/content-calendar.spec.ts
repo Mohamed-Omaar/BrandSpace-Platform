@@ -278,8 +278,23 @@ test.describe('placing content on the calendar', () => {
     await agenda.locator('button').first().click();
     const dialog = page.getByTestId('calendar-slot-dialog');
     await expect(dialog).toBeVisible();
-    // AC-14.7 — the slot itself says its target is a mock.
-    await expect(dialog).toContainText(/mock|تجريبية/i);
+    /*
+     * P6-10 — THE DIALOG SAYS WHETHER THE POST HAS A ROUTE TO ITS PLATFORMS.
+     *
+     * WHAT THIS ASSERTION USED TO BE, and why it had to change. It read
+     * `toContainText(/mock|تجريبية/i)` against "Mock target — nothing publishes
+     * yet", which was true of Phase 5 and stopped being true the moment Phase 6
+     * shipped real connections and `apps/api`'s scheduler began sweeping due
+     * slots into publish jobs. A test asserting a sentence the product should
+     * no longer say is a test holding a defect in place, so the negative
+     * assertion below is deliberate: the words must be gone, not merely
+     * replaced.
+     *
+     * The readiness row is present because this slot is SCHEDULED, which is the
+     * only status `publishReadiness` assesses.
+     */
+    await expect(dialog.getByTestId('calendar-slot-readiness')).toBeVisible();
+    await expect(dialog).not.toContainText(/mock target|وجهة تجريبية/i);
 
     const moved = futureDate(28);
     await page.getByTestId('reschedule-date').fill(moved);

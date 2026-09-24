@@ -63,6 +63,45 @@ async function settled(page: Page, outcome: RegExp): Promise<void> {
 
 const HUB = `${ADMIN_BASE_URL}/en/console/integrations/email/resend`;
 
+/**
+ * Make Resend the active email provider, whatever the run inherited.
+ *
+ * WHY THIS EXISTS — Phase 5. The boundary test below sends through the internal
+ * delivery route and asserts that a Resend request reaches the recorder. It
+ * established NO precondition of its own: it depended on the journey test above
+ * having activated Resend and left it activated. That dependency was invisible
+ * for as long as the API memoised its resolved provider for sixty seconds
+ * regardless of configuration — a stale cache was standing in for a setup step.
+ *
+ * Once the provider began following the ACTIVATED VERSION (the real fix), the
+ * dependency became a failure instead of a coincidence, which is the correct
+ * outcome and the reason this helper is a setup step rather than a retry.
+ *
+ * Idempotent: if Resend is already active it does nothing, so the journey test
+ * above is unaffected and pays no second activation.
+ */
+async function ensureResendActive(page: Page): Promise<void> {
+  await signIn(page, 'en');
+  await page.goto(HUB);
+  if (/yes/i.test((await page.getByTestId('detail-enabled').innerText()).trim())) return;
+
+  await page.getByTestId('credential-input-apiKey').fill(FIXTURE_KEY);
+  await page.getByTestId('setting-fromEmail').fill(FROM_EMAIL);
+  await page.getByTestId('setting-fromName').fill('BrandSpace');
+  await page
+    .getByTestId('save-reason')
+    .fill('Test setup: Resend must be the active provider for the boundary assertions.');
+  await page.getByTestId('save-configuration').click();
+  await settled(page, /ok=CONFIGURATION_SAVED/);
+
+  await page
+    .getByTestId('integration-reason')
+    .fill('Test setup: activating Resend for the boundary assertions.');
+  await page.getByTestId('activate-integration').click();
+  await settled(page, /ok=INTEGRATION_ACTIVATED/);
+  await expect(page.getByTestId('detail-enabled')).toHaveText(/yes/i);
+}
+
 test.describe('the owner connects Resend, and a customer signup uses it', () => {
   test('configure, mask, test, activate, sign up, deliver', async ({ page }) => {
     /*
@@ -164,6 +203,7 @@ test.describe('the owner connects Resend, and a customer signup uses it', () => 
     await signup.locator('#name').fill('Email Journey Customer');
     await signup.locator('#email').fill(address);
     await signup.locator('#password').fill('An-Adequately-Long-Passphrase-9');
+    await signup.locator('#password-confirm').fill('An-Adequately-Long-Passphrase-9');
     await signup.locator('#timezone').fill('Asia/Riyadh');
     await signup.locator('#timezone').press('Enter');
     await expect(signup.locator('input[type="hidden"][name="timezone"]')).toHaveValue(
@@ -281,6 +321,15 @@ test.describe('the secret boundary, observed from outside', () => {
      */
     const api = `http://127.0.0.1:3103/v1/internal/email/deliver`;
     const token = 'e2e-only-internal-service-token-0123456789abcdef';
+
+    /*
+     * THIS TEST'S OWN PRECONDITION. The final assertion is that an accepted
+     * link reaches the TRANSPORT, which only means anything when a real
+     * provider is the active one. Inheriting that from another test made this
+     * pass for a reason it does not state.
+     */
+    test.setTimeout(120_000);
+    await ensureResendActive(page);
     await resetTransport(page);
 
     const base = {

@@ -78,7 +78,8 @@ const JOURNEY: readonly { readonly name: string; readonly path: string }[] = [
   { name: 'AI Creative Studio', path: '/creative' },
   { name: 'Approvals', path: '/approvals' },
   { name: 'Calendar', path: '/calendar' },
-  { name: 'Social Accounts — where publishing goes out', path: '/integrations' },
+  { name: 'Publishing — where posts go out (D-277)', path: '/publishing' },
+  { name: 'Settings > Connections — the accounts behind it', path: '/integrations' },
   { name: 'Analytics', path: '/analytics' },
   { name: 'Marketing Intelligence', path: '/intelligence' },
 ];
@@ -97,7 +98,7 @@ test.describe('the exit journey runs end to end', () => {
       // no page invents its own navigation and no page invents its own brand
       // picker (D-190).
       await expect(page.getByTestId('sidebar')).toBeVisible();
-      await expect(page.getByTestId('sidebar').getByTestId('workspace-switcher')).toBeVisible();
+      await expect(page.getByTestId('sidebar').getByTestId('workspace-switcher')).toHaveCount(0);
       await expect(page.getByTestId('sidebar').getByTestId('brand-switcher')).toBeVisible();
 
       // AND IT IS THE PAGE THAT WAS ASKED FOR, rather than a redirect to the

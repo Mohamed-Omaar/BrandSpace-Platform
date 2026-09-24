@@ -318,7 +318,20 @@ describe('every form control carries the class that makes it visible', () => {
     let scanned = 0;
 
     for (const file of sources) {
-      const source = read(file);
+      /*
+       * COMMENTS ARE BLANKED, NOT REMOVED (P6-02's lesson, applied here).
+       *
+       * A doc comment that MENTIONS a control — "each screen hand-rolled its own
+       * `<input type=\"password\">`" — is prose about the defect, not the defect.
+       * This scan reported one such sentence in `packages/ui/src/password-field.tsx`
+       * as an unstyled control while the real control below it carried
+       * `CONTROL_CLASS` correctly. Blanking with spaces of the same length keeps
+       * every remaining line number exact, so the failure still points at the
+       * line somebody has to open.
+       */
+      const source = read(file).replace(/\/\*[\s\S]*?\*\//g, (block) =>
+        block.replace(/[^\n]/g, ' '),
+      );
       for (const match of source.matchAll(controlPattern)) {
         const attributes = match[2] ?? '';
         if (EXEMPT_TYPES.some((type) => attributes.includes(type))) continue;
@@ -358,13 +371,24 @@ describe('every form control carries the class that makes it visible', () => {
      */
     const css = read('packages/ui/src/content-studio.css');
 
+    /*
+     * `background(-color)?`, because the two spellings paint the same pixels.
+     *
+     * What this asserts is the PROPERTY the `.bs-control` exemption trades
+     * away — that the control is visible — and a fill is a fill however it is
+     * written. The rules that render a select moved to the longhand in P6-02
+     * because the shorthand also resets `background-image`, which silently
+     * erased the one dropdown marker the product draws; see
+     * `docs/UI-FIDELITY-CONTRACT.md` §4 and `tests/unit/content-fidelity.test.ts`,
+     * which compares the two spellings as equal on both sides.
+     */
     // The demo's own field fill, on every control the composer renders.
     expect(css).toMatch(
-      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background: var\(--cs-soft\)/,
+      /\.cs-field textarea,\s*\.cs-field input,\s*\.cs-field select,\s*\.cs-input-like \{[^}]*background(-color)?: var\(--cs-soft\)/,
     );
     // And on the library's search box and its select.
-    expect(css).toMatch(/\.cs-search-field \{[^}]*background: var\(--cs-soft\)/);
-    expect(css).toMatch(/\.cs-select \{[^}]*background: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-search-field \{[^}]*background(-color)?: var\(--cs-soft\)/);
+    expect(css).toMatch(/\.cs-select \{[^}]*background(-color)?: var\(--cs-soft\)/);
 
     // The focus ring the demo omits and WCAG 2.2 AA requires.
     expect(css).toMatch(/\.content-page :focus-visible \{[^}]*outline: 2px solid/);

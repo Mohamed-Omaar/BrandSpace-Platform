@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@brandspace/database';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import { assertMayAssignRole } from './role-assignment';
+import { resolveGrantableBrandScope } from './brand-access';
 import { hashPassword } from './password';
 
 /**
@@ -150,6 +151,14 @@ export type Inviter =
        */
       readonly roleKey: string;
       readonly permissionKeys: readonly string[];
+      /**
+       * The inviter's OWN BrandScope (P6-13), from the resolved session.
+       *
+       * REQUIRED for the same reason `roleKey` is: empty means "all brands",
+       * the permissive value, so a call site that forgot it must be a compile
+       * error rather than an unrestricted grant.
+       */
+      readonly brandScope: readonly string[];
     }
   | {
       readonly kind: 'platform';
@@ -206,6 +215,11 @@ export interface InvitationSummary {
   readonly id: string;
   readonly email: string;
   readonly roleKey: string;
+  /** P6-13 — the role's own names, so the screen never shows a raw key. */
+  readonly roleNameEn: string;
+  readonly roleNameAr: string;
+  /** P6-13 — the brands the invitee will see; empty is every brand. */
+  readonly brandScope: readonly string[];
   readonly status: string;
   readonly expiresAt: Date;
   readonly createdAt: Date;
@@ -324,6 +338,17 @@ export class InvitationService {
       assertMayAssignRole(input.inviter.roleKey, role.key, 'Inviting a member');
     }
 
+    /*
+     * THE BRANDS THE INVITEE WILL SEE (P6-13). Validated against this
+     * workspace and bounded by the inviter's own scope — see `brand-access.ts`.
+     * Stored exactly as resolved, so acceptance hands on what was checked.
+     */
+    const brandScope = await resolveGrantableBrandScope(this.#prisma, {
+      workspaceId: input.workspaceId,
+      actorBrandScope: input.inviter.kind === 'member' ? input.inviter.brandScope : null,
+      requested: input.brandScope ?? [],
+    });
+
     // Already a member? Re-inviting would create a second membership path.
     const existingMember = await this.#prisma.membership.findFirst({
       where: { workspaceId: input.workspaceId, status: { not: 'REMOVED' }, user: { email } },
@@ -345,7 +370,7 @@ export class InvitationService {
             workspaceId: input.workspaceId,
             email,
             roleId: input.roleId,
-            brandScope: [...(input.brandScope ?? [])],
+            brandScope,
             tokenHash: hashInvitationToken(token),
             expiresAt,
             invitedByUserId: input.inviter.kind === 'member' ? input.inviter.userId : null,
@@ -421,6 +446,19 @@ export class InvitationService {
       assertMayAssignRole(inviter.roleKey, role.key, 'Resending an invitation');
     }
 
+    /*
+     * AND THE BRAND RULE, FOR THE SAME REASON (P6-13). A resend re-issues the
+     * grant with a fresh token, so a brand-restricted member re-sending an
+     * invitation for "every brand" would be minting access they do not hold.
+     * The stored scope is re-validated too: a brand deleted since the
+     * invitation was made is refused rather than carried forward.
+     */
+    const brandScope = await resolveGrantableBrandScope(this.#prisma, {
+      workspaceId,
+      actorBrandScope: inviter.kind === 'member' ? inviter.brandScope : null,
+      requested: existing.brandScope,
+    });
+
     return runAtomically(this.#prisma, async (tx) => {
       // Supersede first, so the partial unique index has room for the new row.
       const superseded = await tx.invitation.updateMany({
@@ -440,7 +478,7 @@ export class InvitationService {
           workspaceId,
           email: existing.email,
           roleId: existing.roleId,
-          brandScope: existing.brandScope,
+          brandScope,
           tokenHash: hashInvitationToken(token),
           expiresAt,
           invitedByUserId: inviter.kind === 'member' ? inviter.userId : null,
@@ -541,6 +579,9 @@ export class InvitationService {
       id: r.id,
       email: r.email,
       roleKey: r.role.key,
+      roleNameEn: r.role.nameEn,
+      roleNameAr: r.role.nameAr,
+      brandScope: r.brandScope,
       // Expiry is enforced on read as well as by the sweep, so a stale PENDING
       // row is displayed honestly as expired.
       status: r.status === 'PENDING' && r.expiresAt <= this.#clock.now() ? 'EXPIRED' : r.status,

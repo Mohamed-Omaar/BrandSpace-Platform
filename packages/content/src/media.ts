@@ -1,4 +1,4 @@
-import { AppError, assertBrandInScope } from '@brandspace/shared';
+import { AppError, assertBrandInScope, systemClock, type Clock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import { publishableAssetWhere, publishableMediaNotFound } from '@brandspace/assets';
 import type { ContentPolicy } from './policy';
@@ -61,15 +61,19 @@ export function tooManyMedia(platformKey: string, max: number): AppError {
 export interface MediaResolverOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
+  /** For rights expiry (D-286). The system clock unless a test fixes one. */
+  readonly clock?: Clock;
 }
 
 export class ContentMediaResolver {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
+  readonly #clock: Clock;
 
   constructor(options: MediaResolverOptions) {
     this.#db = options.db;
     this.#workspaceId = options.workspaceId;
+    this.#clock = options.clock ?? systemClock;
   }
 
   /**
@@ -112,6 +116,7 @@ export class ContentMediaResolver {
         workspaceId: this.#workspaceId,
         brandId: input.brandId,
         brandScope: input.brandScope,
+        now: this.#clock.now(),
       }),
       select: {
         id: true,

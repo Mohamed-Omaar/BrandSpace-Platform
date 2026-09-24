@@ -104,6 +104,25 @@ export interface WorkspaceEntitlementContext {
   readonly country: string;
   readonly betaGroups: readonly string[];
   readonly overrides: readonly WorkspaceOverrideRule[];
+  /**
+   * The workspace HAD a plan and that relationship has ENDED (P6-03b).
+   *
+   * `planKey: null` alone cannot tell two opposite situations apart, and they
+   * want opposite answers from an unstated quota:
+   *
+   *   - a workspace whose subscription was CANCELLED or EXPIRED, for which
+   *     `EntitlementService.contextFor` deliberately stops resolving the plan
+   *     so that "quota dimensions become none rather than unlimited" (D-246);
+   *   - a workspace that has NEVER had a plan — one created minutes ago in an
+   *     environment with no configured plans — which must still be usable
+   *     enough to create its first brand.
+   *
+   * Collapsing the two is what made the fix for the second break the first.
+   * `true` means ended; the default is `false`, so a caller that does not know
+   * gets the pre-commercial reading rather than silently withdrawing quotas
+   * from somebody whose subscription is fine.
+   */
+  readonly planEnded?: boolean;
 }
 
 export interface EntitlementCatalogue {
@@ -512,15 +531,58 @@ function resolveOwnRules(
     feature.valueType === 'enum' && typeof feature.defaultValue === 'string'
       ? feature.defaultValue
       : null;
+  /*
+   * A QUOTA WITH NO DECLARED DEFAULT STATES NO CEILING — IT DOES NOT STATE A
+   * CEILING OF ZERO (P6-03b).
+   *
+   * `enabled = defaultValue === true` is a BOOLEAN feature's rule, and applying
+   * it to a quota is what made a brand-new workspace unusable. A workspace on
+   * no plan resolved `limit.brands` here, got `enabled: false`, and
+   * `EntitlementService.limit()` turned that into 0 — so the first brand was
+   * refused with "this workspace has reached a limit on its plan", on a
+   * workspace that had no plan, had reached no limit, and had nothing to free.
+   *
+   * That is the exact collapse `limit()`'s own comment forbids: `null` is
+   * unlimited and `0` is none, and conflating them locks out the customers who
+   * have no stated ceiling. The engine was doing it on its own behalf.
+   *
+   * ABSENT IS NOT THE SAME AS OFF, and only the absent case moves:
+   *
+   *   - `defaultValue: <number>` still states that ceiling;
+   *   - `defaultValue: false` is a stated "none" — an owner decided it — and
+   *     stays off;
+   *   - `defaultValue: null` decided nothing, so nothing is what constrains it.
+   *
+   * AND ONLY FOR A WORKSPACE THAT HAS NEVER HAD A PLAN. Two other situations
+   * reach this rung and must keep the answer they already had:
+   *
+   *   - a workspace ON a plan that simply does not mention the dimension. The
+   *     plan is the statement, and it did not grant this — which is exactly the
+   *     distinction that makes a plan writing `limitValue: null` mean
+   *     "negotiated, unlimited" rather than "not mentioned".
+   *   - a workspace whose subscription ENDED. D-246 has `contextFor` stop
+   *     resolving the plan precisely so its quotas become none; handing it
+   *     unlimited instead would make cancellation an upgrade.
+   *
+   * NO ALLOWANCE IS INVENTED HERE. The ceiling remains whatever configuration
+   * states at a rung above this one — plan entitlement, workspace override, or
+   * a declared default. `unknown_feature` is a DIFFERENT rung and still fails
+   * closed, so a typo in a key still grants nothing.
+   */
+  const neverHadAPlan = context.planKey === null && context.planEnded !== true;
+  const quotaWithNoStatedCeiling =
+    feature.valueType === 'quota' && feature.defaultValue === null && neverHadAPlan;
   const enabled = feature.defaultValue === true;
   trace.push({
     source: 'feature_default',
     decided: true,
-    detail: `Feature default: ${JSON.stringify(feature.defaultValue)}`,
+    detail: quotaWithNoStatedCeiling
+      ? 'Feature default: null — a quota with no ceiling stated, so no ceiling applies.'
+      : `Feature default: ${JSON.stringify(feature.defaultValue)}`,
   });
   return {
     featureKey,
-    enabled: enabled || limitValue !== null || enumValue !== null,
+    enabled: enabled || limitValue !== null || enumValue !== null || quotaWithNoStatedCeiling,
     limitValue,
     enumValue,
     source: 'feature_default',

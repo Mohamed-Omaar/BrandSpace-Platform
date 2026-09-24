@@ -110,8 +110,13 @@ async function openLibrary(page: Page, locale = 'en'): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
 }
 
+/**
+ * The composer itself. `/content/compose` alone is the Create entry (D-283);
+ * `?mode=ai` is the address of "Generate with AI", which is what every
+ * composer test here drives.
+ */
 async function openComposer(page: Page, locale = 'en'): Promise<void> {
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/content/compose`);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/content/compose?mode=ai`);
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('content-composer')).toBeVisible();
 }
@@ -186,41 +191,62 @@ async function compose(page: Page, brief: string): Promise<void> {
 }
 
 test.describe('the content library', () => {
-  test('renders the ported composition and counts real rows', async ({ page }) => {
+  /*
+   * PHASE 6 FINAL (D-277 §15, D-282): MEDIA-FIRST, AND EVERY TAB A REAL STATE.
+   *
+   * The demo port's six fixed tabs and gradient cards are gone. A tab exists for
+   * every lifecycle state that has content (and always for drafts), each count
+   * is a real number, and the filters are a GET form — the URL is the view.
+   */
+  test('counts real rows, offers real filters, and switches grid and list', async ({ page }) => {
     await signIn(page);
     await openLibrary(page);
 
-    // The demo's composition, in the demo's order.
     await expect(page.getByTestId('content-library')).toBeVisible();
-    await expect(page.locator('.cs-view-toolbar')).toBeVisible();
-    await expect(page.locator('.cs-tabs')).toBeVisible();
-    await expect(page.locator('.cs-filter-row')).toBeVisible();
-
-    /*
-     * SIX TABS — the states that are REACHABLE, not the demo's five fixed ones.
-     *
-     * The rule (docs/UI-FIDELITY-CONTRACT.md §4.1) is that a tab exists when its
-     * state can actually occur, because a tab that can only ever read zero is an
-     * invented number. Phase 5B-2 rendered four; Phase 5B-3 added Changes
-     * requested and Approved, which became reachable when the approvals workflow
-     * shipped — and content in a state with no tab is content this screen
-     * cannot find. Scheduled and Published stay out until Phase 6.
-     */
-    await expect(page.locator('.cs-tabs button')).toHaveCount(6);
-
-    // Every count is a real number, not the demo's `· 28`.
-    for (const label of await page.locator('.cs-tabs button').allTextContents()) {
-      expect(label).toMatch(/·\s*\d+$/);
-      expect(label).not.toContain('· 28');
+    const tabs = page.getByTestId('content-tabs');
+    await expect(tabs).toBeVisible();
+    await expect(tabs.getByTestId('tab-all')).toHaveAttribute('aria-current', 'page');
+    await expect(tabs.getByTestId('tab-DRAFT')).toBeVisible();
+    // Every badge is a real count.
+    for (const badge of await tabs.locator('a span').allTextContents()) {
+      expect(badge.trim()).toMatch(/^\d+$/);
     }
+
+    for (const filter of [
+      'content-search',
+      'content-platform',
+      'content-format',
+      'content-language',
+    ]) {
+      await expect(page.getByTestId(filter)).toBeVisible();
+    }
+    await page.getByTestId('content-format').selectOption('POST');
+    await page.getByTestId('content-apply').click();
+    await expect(page).toHaveURL(/format=POST/);
+
+    await page.getByTestId('content-view').getByTestId('tab-list').click();
+    await expect(page.getByTestId('content-library')).toHaveAttribute('data-view', 'list');
+    await expect(page).toHaveURL(/view=list/);
+    await expect(page).toHaveURL(/format=POST/);
   });
 
   test('an empty library says so rather than borrowing a number', async ({ page }) => {
     await signIn(page);
-    // A status nothing can be in yet, so this is deterministic whatever earlier
-    // tests left behind.
     await page.goto(`${DASHBOARD_BASE_URL}/en/content?status=ARCHIVED&q=zzz-no-such-draft`);
     await expect(page.getByTestId('content-empty')).toBeVisible();
+  });
+
+  test('a text-only post shows its words, and Duplicate makes a new draft', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content?status=DRAFT`);
+    const card = page.getByTestId('content-card').first();
+    await expect(card).toBeVisible();
+    const itemId = (await card.getAttribute('data-item-id')) ?? '';
+    const duplicate = page.getByTestId(`content-duplicate-${itemId}`);
+    await expect(duplicate).toBeVisible();
+    await duplicate.click();
+    await page.waitForURL(/\/content\/compose\?item=.*ok=DUPLICATED/);
+    expect(page.url()).not.toContain(`item=${itemId}&`);
   });
 });
 
@@ -324,7 +350,9 @@ test.describe('generation', () => {
     } else {
       // Outcome 1.
       await expect(page.getByTestId('content-variant').first()).toBeVisible();
-      // AC-11.4: the sources come from retrieval, so a grounded draft has them.
+      // AC-11.4: the sources come from retrieval, so a grounded draft has them —
+      // one quiet "Using … Brand Brain" away (D-284).
+      await page.getByTestId('draft-brain').locator('summary').click();
       await expect(page.getByTestId('content-citations')).toBeVisible();
     }
 
@@ -434,8 +462,15 @@ test.describe('writing a post by hand', () => {
     await openComposer(page);
     const body = `Two channels, one campaign, at ${new Date().toISOString()}.`;
 
-    // TWO channels, so the fan-out is observable rather than assumed.
-    const channels = page.getByTestId('content-channel');
+    /*
+     * THE FORMAT FIRST (D-283 §18): it decides which channels can carry the
+     * post, and a channel that cannot is disabled rather than silently dropped
+     * at publish time.
+     */
+    await page.getByTestId('content-format').selectOption('REEL');
+
+    // TWO channels that CAN carry a reel, so the fan-out is observable.
+    const channels = page.locator('[data-testid="content-channel"]:not([disabled])');
     const count = await channels.count();
     const picked: string[] = [];
     for (let index = 0; index < count && picked.length < 2; index += 1) {
@@ -448,11 +483,6 @@ test.describe('writing a post by hand', () => {
     expect(picked.length).toBe(2);
 
     await page.getByTestId('content-brief').fill(body);
-    await page
-      .locator('select')
-      .filter({ hasText: /Reel|ريل/ })
-      .first()
-      .selectOption('REEL');
 
     /*
      * THE CAMPAIGN IS NOT ASSERTED HERE. It used to be, conditionally — "if the
@@ -1090,25 +1120,18 @@ test.describe('the composer is the demo, in both directions', () => {
     expect(fill).toBe('rgb(17, 17, 20)');
   });
 
-  test('the library grid uses the demo’s four columns and its breakpoints', async ({ page }) => {
+  test('the library grid fills the row and never scrolls sideways', async ({ page }) => {
+    // D-282: the library is a responsive design-system grid (auto-fill, 15rem
+    // minimum), not the demo port's fixed four columns.
     await signIn(page);
     await openLibrary(page);
-
-    const columns = async () =>
-      page
-        .locator('.cs-card-grid, .cs-empty')
-        .first()
-        .evaluate((el) =>
-          el.classList.contains('cs-card-grid') ? getComputedStyle(el).gridTemplateColumns : null,
-        );
-
-    await page.setViewportSize({ width: 1440, height: 900 });
-    const wide = await columns();
-    if (wide !== null) expect(wide.split(' ')).toHaveLength(4);
-
-    await page.setViewportSize({ width: 860, height: 900 });
-    const narrow = await columns();
-    if (narrow !== null) expect(narrow.split(' ')).toHaveLength(2);
+    for (const width of [1440, 860, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${width}px scrolls sideways`).toBeLessThanOrEqual(1);
+    }
   });
 });
 
@@ -1124,7 +1147,7 @@ test.describe('accessibility and keyboard', () => {
   for (const locale of ['en', 'ar'] as const) {
     test(`the library and the composer are clean under axe (${locale})`, async ({ page }) => {
       await signIn(page, locale);
-      for (const path of ['/content', '/content/compose']) {
+      for (const path of ['/content', '/content/compose', '/content/compose?mode=ai']) {
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${path}`);
         await page.waitForLoadState('domcontentloaded');
         const results = await new AxeBuilder({ page })

@@ -63,19 +63,30 @@ export async function analyseContentGapsAction(formData: FormData): Promise<void
   redirect(`/${locale}/intelligence?ok=GAPS_ANALYSED`);
 }
 
+/**
+ * WHERE A REVIEW RETURNS — a CLOSED SET. Home's "Recommended by BrandSpace"
+ * dismisses through this same action (D-277 §7); anything else returns to
+ * Intelligence, so a crafted `returnTo` cannot send the browser elsewhere.
+ */
+function reviewReturn(formData: FormData): '/overview' | '/intelligence' {
+  return formData.get('returnTo') === '/overview' ? '/overview' : '/intelligence';
+}
+
 export async function reviewIntelligenceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   await requireWorkspace(locale, 'strategy.manage');
   const insightId = String(formData.get('insightId') ?? '');
   const decision = String(formData.get('decision') ?? 'seen');
+  const back = reviewReturn(formData);
 
   const response = await callPhase7Api('/v1/insights/review', { insightId, decision });
   if (!response.ok) {
-    redirect(`/${locale}/intelligence?error=${codeFrom(response.payload)}`);
+    redirect(`/${locale}${back}?error=${codeFrom(response.payload)}`);
   }
   revalidatePath(`/${locale}/intelligence`);
+  revalidatePath(`/${locale}/overview`);
   redirect(
-    `/${locale}/intelligence?ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
+    `/${locale}${back}?ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
   );
 }
 

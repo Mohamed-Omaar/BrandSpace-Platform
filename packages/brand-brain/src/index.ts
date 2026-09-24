@@ -18,6 +18,7 @@ export {
 export type { AreaDefinition, OrbSlot } from './areas';
 
 export {
+  BRAND_MEMORY_LAYERS,
   comparePrecedence,
   mayOverwrite,
   memoryRank,

@@ -291,6 +291,14 @@ describe('the notification catalogue is closed and fully translated', () => {
         'automation.blocked',
         'automation.confirmation_required',
         'brand_brain.learning_proposed',
+        /*
+         * Phase 6 (P6-12) — what a NOTIFY rule sends. It used to reuse
+         * `automation.confirmation_required`, so a plain "tell me when content
+         * is approved" rule announced that something was waiting for a
+         * confirmation. The one notice that must never cry wolf now has the
+         * template to itself.
+         */
+        'automation.notice',
       ].sort(),
     );
   });

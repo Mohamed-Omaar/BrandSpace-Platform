@@ -1,37 +1,55 @@
-import { brandScopeFilter } from '@brandspace/shared';
-import '@brandspace/ui/content-studio.css';
+import { randomUUID } from 'node:crypto';
+import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
+import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { inAssetLibrary } from '../../../server/assets-context';
+import { relativeTime } from '../../../server/home';
+import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { ContentLibraryView, type ContentCardData } from './content-library-view';
+import { CONTENT_TYPES } from './content-types';
+import {
+  ContentLibrary,
+  type LibraryCard,
+  type LibraryIdea,
+  type LibraryStatus,
+} from './content-library';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The AI Content Studio library — Phase 5 scope item 3, docs/PRODUCT.md §5
- * module 7.
+ * THE CONTENT LIBRARY (Phase 6 final, D-277 §15, D-282).
  *
- * A DEMO PORT, not an extension: the approved demo has a real design for this
- * route (`postsPage()` in `demo/app-2.js`) and the manifest in
- * docs/UI-FIDELITY-CONTRACT.md §3 pins it. The client island below is the port;
- * this server component reads under RLS inside the workspace context and hands
- * it only what the screen renders.
+ * EVERY NUMBER IS COUNTED AND EVERY FILTER IS IN THE QUERY. The status tabs are
+ * a `groupBy` over the member's own brands; brand, campaign, format, platform
+ * and language narrow the query itself (`ContentLibraryService.listItems`), so
+ * a filter never runs over a page the database already truncated.
  *
- * EVERY NUMBER ON THIS PAGE IS COUNTED. The demo's `All · 28 / Drafts · 4 /
- * Review · 3` are invented; these are a `groupBy` over the member's own
- * workspace, and an empty library reads zero rather than borrowing an
- * encouraging number.
+ * THE MEDIA IS REAL. A card's picture is the post's first attached image,
+ * served through an expiring download grant issued for this viewer — the same
+ * mechanism the Asset Library uses — and only for an asset that is ready and
+ * clean. A text-only post shows its caption.
+ *
+ * "IDEAS WORTH MAKING" ARE GROUNDED OR ABSENT: a running campaign with no
+ * content yet, and an open content-gap insight from Intelligence. Nothing is
+ * suggested that the data does not show.
  */
-/*
- * PHASE 5B-3 ADDED THE TWO STATES A REVIEW PRODUCES. Without them an approved
- * item and one a reviewer sent back were counted by no tab and shown under no
- * filter — reachable only through a link somebody still had. The library is the
- * screen that is supposed to answer "where is my content?".
- */
-const STATUSES = ['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'ARCHIVED'] as const;
-type LibraryStatus = (typeof STATUSES)[number];
+const STATUSES: readonly LibraryStatus[] = [
+  'DRAFT',
+  'IN_REVIEW',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+  'SCHEDULED',
+  'PUBLISHING',
+  'PUBLISHED',
+  'PARTIALLY_PUBLISHED',
+  'FAILED',
+  'ARCHIVED',
+];
+/** Always offered, whatever their count: where new work starts. */
+const ALWAYS: ReadonlySet<LibraryStatus> = new Set(['DRAFT']);
+const PLATFORMS = ['instagram', 'facebook', 'linkedin', 'tiktok', 'x'] as const;
 
 export default async function ContentPage({
   params,
@@ -43,7 +61,9 @@ export default async function ContentPage({
   const { locale } = await params;
   const query = await searchParams;
   const translate = translator(locale);
+  const t = (key: string): string => optionalMessage(locale, key) ?? key;
   const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -56,13 +76,27 @@ export default async function ContentPage({
   const status = STATUSES.includes(rawStatus as LibraryStatus)
     ? (rawStatus as LibraryStatus)
     : undefined;
-
+  const campaign = single('campaign');
+  const rawFormat = single('format');
+  const format = (CONTENT_TYPES as readonly string[]).includes(rawFormat ?? '')
+    ? (rawFormat as (typeof CONTENT_TYPES)[number])
+    : undefined;
+  const rawPlatform = single('platform');
+  const platform = (PLATFORMS as readonly string[]).includes(rawPlatform ?? '')
+    ? rawPlatform
+    : undefined;
+  const language =
+    single('language') === 'AR' ? 'AR' : single('language') === 'EN' ? 'EN' : undefined;
+  const view = single('view') === 'list' ? 'list' : 'grid';
   /*
-   * THE MEMBER'S OWN BRANDS, not the workspace's. `brandScopeFilter`
-   * contributes nothing when the scope is empty and restricts the query when it
-   * is not — filtered here rather than refused afterwards, for the reason
-   * docs/SECURITY.md §4.2 gives (F-74).
+   * D-305 — A BOUNDED, PAGED LIBRARY. 48 posts a page; the 49th read only says
+   * whether there is a next page. A page number past the end shows an empty
+   * page with the way back, never an error.
    */
+  const PAGE_SIZE = 48;
+  const rawPage = Number.parseInt(single('page') ?? '1', 10);
+  const pageNumber = Number.isFinite(rawPage) ? Math.min(Math.max(rawPage, 1), 200) : 1;
+
   const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.brand.findMany({
       where: {
@@ -74,73 +108,243 @@ export default async function ContentPage({
       select: { id: true, name: true },
     }),
   );
+  const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
 
   const brandContext = await brandContextFor(workspace, '/content', brandFilter ?? null);
-
-  const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
-  /*
-   * THE GLOBAL CONTEXT DECIDES THE FILTER (D-190, D-192).
-   *
-   * `/content` is a BRAND-OR-ALL route: with a brand selected the library is
-   * that brand's, and with the rail on "All brands" it is everything this
-   * member may see — which is what it always showed, so the aggregate is the
-   * unchanged behaviour rather than a new one. `?brand=` still wins for this
-   * request, so existing links keep working; an id that is not one of the
-   * member's own resolves to no selection rather than being refused, because a
-   * stale link is a broken link and not an attempt at anything.
-   */
   const effectiveBrand = brandFilterFor(brandContext);
+  const now = systemClock.now();
 
-  const { cards, counts } = await inContentStudio(workspace.workspaceId, async (services) => {
-    const library = await services.library();
-    const [items, byStatus] = await Promise.all([
-      /*
-       * THE MEMBERSHIP SCOPE GOES INTO THE QUERY, ALONGSIDE the caller's own
-       * brand filter rather than instead of it (D-132).
-       *
-       * Without it, the brand DROPDOWN was scoped and the ITEMS were not: a
-       * member restricted to one brand received the titles and metadata of
-       * every other brand in the workspace as soon as they cleared the filter,
-       * and the status tabs counted those rows too. `brandIdQueryFilter`
-       * intersects the two, so an explicit brand narrows within the scope and
-       * can never widen past it.
-       */
-      library.listItems({
-        ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
+  const { items, hasMore, counts, campaigns, notes, owners } = await inContentStudio(
+    workspace.workspaceId,
+    async (services) => {
+      const library = await services.library();
+      const [listed, byStatus] = await Promise.all([
+        library.listItems({
+          ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
+          brandScope: workspace.brandScope,
+          ...(status ? { status } : {}),
+          ...(search ? { search } : {}),
+          ...(campaign ? { campaignId: campaign } : {}),
+          ...(format ? { contentType: format } : {}),
+          ...(platform ? { platformKey: platform } : {}),
+          ...(language ? { locale: language } : {}),
+          limit: PAGE_SIZE + 1,
+          offset: (pageNumber - 1) * PAGE_SIZE,
+        }),
+        library.countsByStatus({
+          ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
+          brandScope: workspace.brandScope,
+        }),
+      ]);
+      const scope = brandIdQueryFilter({
+        brandId: effectiveBrand,
         brandScope: workspace.brandScope,
-        ...(status ? { status } : {}),
-        ...(search ? { search } : {}),
-        limit: 48,
-      }),
-      library.countsByStatus({
-        ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
-        brandScope: workspace.brandScope,
-      }),
-    ]);
+      });
+      const [campaignRows, noteRows, ownerRows] = await Promise.all([
+        may('campaigns.read')
+          ? services.db.campaign.findMany({
+              where: { deletedAt: null, ...scope },
+              select: { id: true, name: true },
+              orderBy: { name: 'asc' },
+              take: 100,
+            })
+          : Promise.resolve([] as { id: string; name: string }[]),
+        listed.length > 0
+          ? services.db.noteThread.groupBy({
+              by: ['contentItemId'],
+              where: {
+                contentItemId: { in: listed.map((item) => item.id) },
+                status: 'OPEN',
+                ...brandIdQueryFilter({ brandScope: workspace.brandScope }),
+              },
+              _count: { _all: true },
+            })
+          : Promise.resolve([]),
+        services.db.membership.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            userId: {
+              in: [
+                ...new Set(
+                  listed.flatMap((item) => (item.createdByUserId ? [item.createdByUserId] : [])),
+                ),
+              ],
+            },
+          },
+          select: { userId: true, user: { select: { name: true, email: true } } },
+        }),
+      ]);
+      return {
+        items: listed.slice(0, PAGE_SIZE),
+        hasMore: listed.length > PAGE_SIZE,
+        counts: byStatus,
+        campaigns: campaignRows,
+        notes: new Map(noteRows.map((row) => [row.contentItemId, row._count._all])),
+        owners: new Map(
+          ownerRows.map((row) => [row.userId, row.user.name?.trim() || row.user.email]),
+        ),
+      };
+    },
+  );
 
+  /*
+   * THE FIRST PICTURE OF EACH POST, as an expiring grant — only for an asset
+   * that is ready, clean and previewable inline. A video is shown as a video,
+   * never as a broken image.
+   */
+  const firstAssets = items.map((item) => ({
+    itemId: item.id,
+    assetIds: [...new Set(item.variants.flatMap((variant) => variant.assetIds))],
+  }));
+  const wanted = [...new Set(firstAssets.flatMap((entry) => entry.assetIds.slice(0, 1)))];
+  const media = new Map<string, { kind: 'image'; src: string } | { kind: 'video' }>();
+  if (wanted.length > 0 && may('assets.read')) {
+    await inAssetLibrary(workspace.workspaceId, async (services) => {
+      const assets = await services.db.asset.findMany({
+        where: { id: { in: wanted }, deletedAt: null },
+      });
+      const download = await services.download();
+      const actor = {
+        userId: customer.userId,
+        permissionKeys: workspace.permissionKeys,
+        brandScope: workspace.brandScope,
+      };
+      for (const asset of assets) {
+        if (!isSelectable(asset)) continue;
+        if (asset.kind === 'VIDEO') {
+          media.set(asset.id, { kind: 'video' });
+        } else if (canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)) {
+          const grant = await download
+            .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
+            .then((issued) => issued.grant.token)
+            .catch(() => null);
+          if (grant) media.set(asset.id, { kind: 'image', src: `/${locale}/assets/file/${grant}` });
+        }
+      }
+    });
+  }
+
+  const campaignNames = new Map(campaigns.map((row) => [row.id, row.name]));
+  const cards: LibraryCard[] = items.map((item) => {
+    const assetIds = firstAssets.find((entry) => entry.itemId === item.id)?.assetIds ?? [];
+    const first = assetIds[0] ? media.get(assetIds[0]) : undefined;
+    const primary =
+      item.variants.find((variant) => variant.locale === item.primaryLocale) ?? item.variants[0];
     return {
-      cards: items.map((item): ContentCardData => ({
-        id: item.id,
-        title: item.title,
-        status: item.status as LibraryStatus,
-        brandName: brandNames.get(item.brandId) ?? null,
-        updatedAt: item.updatedAt.toISOString(),
-        variantCount: item.variants.length,
-        channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
-        insufficientKnowledge: item.insufficientKnowledge,
-      })),
-      counts: {
-        all: STATUSES.reduce((sum, key) => sum + (byStatus[key] ?? 0), 0),
-        DRAFT: byStatus.DRAFT ?? 0,
-        IN_REVIEW: byStatus.IN_REVIEW ?? 0,
-        CHANGES_REQUESTED: byStatus.CHANGES_REQUESTED ?? 0,
-        APPROVED: byStatus.APPROVED ?? 0,
-        ARCHIVED: byStatus.ARCHIVED ?? 0,
-      },
+      id: item.id,
+      title: item.title,
+      status: item.status as LibraryStatus,
+      contentType: item.contentType,
+      locale: item.primaryLocale,
+      platforms: [...new Set(item.variants.map((variant) => variant.platformKey))],
+      campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
+      brandName: brandNames.get(item.brandId) ?? null,
+      updatedLabel: relativeTime(item.updatedAt, now, locale),
+      updatedAt: item.updatedAt.toISOString(),
+      openNotes: notes.get(item.id) ?? 0,
+      ownerName: item.createdByUserId ? (owners.get(item.createdByUserId) ?? null) : null,
+      media: first ? { ...first, count: assetIds.length } : { kind: 'none' },
+      excerpt: (primary?.body ?? '').slice(0, 280),
     };
   });
 
-  const t = dictionaryFor(translate);
+  /* ------------------------------------------------------------- ideas */
+  const ideas: LibraryIdea[] = [];
+  if (may('content.create')) {
+    const grounded = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+      const scope = brandIdQueryFilter({
+        brandId: effectiveBrand,
+        brandScope: workspace.brandScope,
+      });
+      const [empty, gaps] = await Promise.all([
+        may('campaigns.read')
+          ? db.campaign.findMany({
+              where: {
+                deletedAt: null,
+                status: { in: ['PLANNED', 'ACTIVE'] },
+                contentItems: { none: { deletedAt: null } },
+                ...scope,
+              },
+              select: { id: true, name: true },
+              orderBy: { updatedAt: 'desc' },
+              take: 2,
+            })
+          : Promise.resolve([] as { id: string; name: string }[]),
+        may('strategy.read')
+          ? db.insight.findMany({
+              where: {
+                type: 'CONTENT_GAP',
+                status: { in: ['NEW', 'SEEN'] },
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                ...scope,
+              },
+              select: { id: true, title: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            })
+          : Promise.resolve([] as { id: string; title: unknown }[]),
+      ]);
+      return { empty, gaps };
+    });
+    for (const row of grounded.empty) {
+      ideas.push({
+        key: `campaign-${row.id}`,
+        title: translate('content.ideas.emptyCampaignTitle').replace('{campaign}', row.name),
+        body: translate('content.ideas.emptyCampaignBody'),
+        href: `/${locale}/content/compose?campaign=${row.id}`,
+        action: translate('content.ideas.createForCampaign'),
+      });
+    }
+    for (const row of grounded.gaps) {
+      const title = row.title as { en?: string; ar?: string } | null;
+      const text = (locale === 'ar' ? (title?.ar ?? title?.en) : (title?.en ?? title?.ar)) ?? '';
+      ideas.push({
+        key: `gap-${row.id}`,
+        title: text || translate('content.ideas.gapTitle'),
+        body: translate('content.ideas.gapBody'),
+        href: `/${locale}/intelligence?insight=${row.id}`,
+        action: translate('content.ideas.viewEvidence'),
+      });
+    }
+  }
+
+  /* -------------------------------------------------------------- tabs */
+  const filters: Record<string, string> = Object.fromEntries(
+    Object.entries({
+      q: search,
+      status,
+      brand: brandFilter,
+      campaign,
+      format,
+      platform,
+      language,
+      view: view === 'list' ? 'list' : undefined,
+    }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+  const tabHref = (next: string | undefined) => {
+    const params = new URLSearchParams(filters);
+    if (next) params.set('status', next);
+    else params.delete('status');
+    const text = params.toString();
+    return `/${locale}/content${text ? `?${text}` : ''}`;
+  };
+  const total = STATUSES.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+  const tabs = [
+    {
+      id: 'all',
+      href: tabHref(undefined),
+      label: translate('content.tab.all'),
+      badge: String(total),
+    },
+    ...STATUSES.filter((key) => ALWAYS.has(key) || (counts[key] ?? 0) > 0 || key === status).map(
+      (key) => ({
+        id: key,
+        href: tabHref(key),
+        label: t(`content.status.${key}`),
+        badge: String(counts[key] ?? 0),
+      }),
+    ),
+  ];
 
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
@@ -162,57 +366,32 @@ export default async function ContentPage({
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
-      <ContentLibraryView
+      <ContentLibrary
         locale={locale}
         t={t}
         cards={cards}
-        counts={counts}
-        brands={brands}
-        filters={{
-          ...(search ? { search } : {}),
-          ...(status ? { status } : {}),
-          ...(effectiveBrand ? { brand: effectiveBrand } : {}),
+        tabs={tabs}
+        currentStatus={status ?? 'all'}
+        filters={filters}
+        view={view}
+        ideas={ideas}
+        duplicateToken={randomUUID()}
+        paging={{ page: pageNumber, hasMore }}
+        can={{ create: may('content.create'), submit: may('content.submit') }}
+        options={{
+          brands:
+            brands.length > 1
+              ? brands.map((brand) => ({ value: brand.id, label: brand.name }))
+              : [],
+          campaigns: campaigns.map((row) => ({ value: row.id, label: row.name })),
+          platforms: PLATFORMS.map((key) => ({ value: key, label: t(`content.platform.${key}`) })),
+          formats: CONTENT_TYPES.map((key) => ({ value: key, label: t(`content.type.${key}`) })),
+          languages: [
+            { value: 'EN', label: translate('content.language.EN') },
+            { value: 'AR', label: translate('content.language.AR') },
+          ],
         }}
-        canCreate={workspace.permissionKeys.includes('content.create')}
       />
     </WorkspaceShell>
   );
-}
-
-/**
- * The client island's strings, resolved on the SERVER.
- *
- * A plain record rather than the translator itself: a function cannot cross the
- * server/client boundary, and shipping the whole dictionary to the browser to
- * render one screen is how a message file becomes a bundle. Keys are listed
- * explicitly so a missing one is a compile error rather than an empty span.
- */
-const LIBRARY_KEYS = [
-  'content.eyebrow',
-  'content.title',
-  'content.create',
-  'content.search',
-  'content.filter.brand',
-  'content.filter.allBrands',
-  'content.tab.all',
-  'content.tab.draft',
-  'content.tab.review',
-  'content.tab.archived',
-  'content.emptyTitle',
-  'content.emptyBody',
-  'content.emptyFilteredTitle',
-  'content.emptyFilteredBody',
-  'content.tab.changesRequested',
-  'content.tab.approved',
-  'content.status.DRAFT',
-  'content.status.IN_REVIEW',
-  'content.status.CHANGES_REQUESTED',
-  'content.status.APPROVED',
-  'content.status.ARCHIVED',
-  'content.variantCount',
-  'content.variantCountPlural',
-] as const satisfies readonly MessageKey[];
-
-function dictionaryFor(translate: (key: MessageKey) => string): Record<string, string> {
-  return Object.fromEntries(LIBRARY_KEYS.map((key) => [key, translate(key)]));
 }

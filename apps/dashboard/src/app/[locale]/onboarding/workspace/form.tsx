@@ -40,11 +40,14 @@ function validationFields(payload: ApiFailurePayload | null): string[] {
  */
 export function CreateWorkspaceForm({
   locale,
+  defaultEmail,
   countries,
   timezones,
   labels,
 }: {
   locale: string;
+  /** The signed-in customer's own address — a visible, editable suggestion. */
+  defaultEmail: string;
   countries: readonly SearchableOption[];
   timezones: readonly SearchableOption[];
   labels: {
@@ -184,9 +187,15 @@ export function CreateWorkspaceForm({
           id="defaultLocale"
           name="defaultLocale"
           required
+          /*
+           * THE LANGUAGE THE READER IS ALREADY USING, which is English unless
+           * they asked for `/ar` (D-277). A visible, changeable preselection of
+           * the interface language — not a business default: country, timezone
+           * and billing currency are still never guessed (D-194).
+           */
+          defaultValue={locale === 'ar' ? 'AR' : 'EN'}
           style={authInputStyle()}
         >
-          <option value="">{labels.choose}</option>
           <option value="AR">{labels.localeAr}</option>
           <option value="EN">{labels.localeEn}</option>
         </select>
@@ -214,6 +223,7 @@ export function CreateWorkspaceForm({
           name="billingEmail"
           type="email"
           required
+          defaultValue={defaultEmail}
           autoComplete="email"
           style={authInputStyle()}
         />

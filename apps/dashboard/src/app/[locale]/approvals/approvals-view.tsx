@@ -1,3 +1,4 @@
+import type React from 'react';
 import Link from 'next/link';
 import {
   AssetThumb,
@@ -16,6 +17,7 @@ import {
   type BadgeTone,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
+import { EmptyAction } from '../../../components/empty-action';
 
 /**
  * The Approvals screen — Phase 5B-3, docs/PRODUCT.md §5 module 14.
@@ -76,6 +78,13 @@ export interface ReviewSubjectView {
   readonly requestNote: string | null;
   readonly requestedByLabel: string;
   readonly mayDecide: boolean;
+  /**
+   * PHASE 6 FINAL (D-288) — the post as it will look, and the conversation
+   * about it, beside the verdict. Rendered by the page (the preview is the
+   * composer's own adapter; the conversation is the ordinary Notes panel).
+   */
+  readonly previews?: React.ReactNode;
+  readonly conversation?: React.ReactNode;
   readonly variants: readonly {
     readonly id: string;
     readonly platformKey: string;
@@ -157,6 +166,18 @@ export function ApprovalsView({
             description={`${t('approvals.requestedBy')} ${review.requestedByLabel}`}
           />
           {review.requestNote ? <p style={noteStyle}>{review.requestNote}</p> : null}
+          {review.previews ? (
+            <div
+              data-testid="review-previews"
+              style={{
+                display: 'grid',
+                gap: spacingTokens.md,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))',
+              }}
+            >
+              {review.previews}
+            </div>
+          ) : null}
           <ul style={listStyle} data-testid="review-variants">
             {review.variants.map((variant) => (
               <li key={variant.id} style={rowStyle}>
@@ -211,6 +232,7 @@ export function ApprovalsView({
               action={actions.decide}
             />
           ) : null}
+          {review.conversation ?? null}
         </Card>
       ) : null}
 
@@ -272,6 +294,14 @@ export function ApprovalsView({
             <StateMessage
               title={t('approvals.mineEmptyTitle')}
               description={t('approvals.mineEmptyBody')}
+              action={
+                <EmptyAction
+                  href={`/${locale}/content?status=DRAFT`}
+                  label={t('approvals.mineEmptyAction')}
+                  testId="approvals-mine-empty-action"
+                  tone="neutral"
+                />
+              }
             />
           ) : (
             <ul style={listStyle} data-testid="approvals-mine-list">

@@ -4,6 +4,7 @@ import {
   writeAuditEvent,
   type PublishFailureClass,
   type PublishJob,
+  type SocialConnection,
   type SocialProvider,
   type TenantScopedClient,
 } from '@brandspace/database';
@@ -22,6 +23,18 @@ import {
   publishJobNotRetryable,
 } from './errors';
 import { capabilitiesFor, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
+
+/**
+ * The failures an ACCOUNT caused, which a reconnection of that account fixes
+ * (D-291). Deliberately not derived from `needsReconnect`: `AUTH_EXPIRED` is a
+ * token the refresh could not renew, and after that the fix is also a
+ * reconnection. Never an indeterminate class.
+ */
+const RECONNECT_RETRY_CLASSES: ReadonlySet<string> = new Set([
+  'AUTH_EXPIRED',
+  'AUTH_REVOKED',
+  'INSUFFICIENT_SCOPE',
+]);
 import type { ConnectorRegistry } from './registry';
 import type { SocialTokenVault } from './token-vault';
 
@@ -1197,6 +1210,153 @@ export class PublishPipelineService {
       after: { status: 'QUEUED' },
     });
     return { jobId: job.id, status: 'QUEUED', failureClass: null, externalPostId: null };
+  }
+
+  /**
+   * RETRY THROUGH THE SAME ACCOUNT, RECONNECTED (Phase 6 final, D-277 §33, D-291).
+   *
+   * THE GAP THIS CLOSES. A post that failed because its ACCOUNT was broken
+   * (`AUTH_REVOKED`, `INSUFFICIENT_SCOPE`, `AUTH_EXPIRED`) could not be tried
+   * again after the customer fixed the account: `retry()` refuses the classes
+   * a retry alone cannot fix (`manualRetryUseful: false`) — correctly, while
+   * the account is still broken — and nothing said when it no longer was.
+   *
+   * WHAT IS ALLOWED, AND NOTHING MORE:
+   *   - the job is FAILED with one of those account classes — never an
+   *     indeterminate one, whose last request may have landed;
+   *   - the account the post was meant for is ACTIVE now and its credential
+   *     was renewed AFTER the failure: the job's own connection reconnected in
+   *     place, or — after a disconnect — a new connection for the SAME brand,
+   *     provider and external account, never "some other page on the same
+   *     platform";
+   *   - on a new connection, no job already exists for the slot, variant and
+   *     that connection. The job is RE-BOUND rather than duplicated: one job
+   *     per slot and account keeps the slot's lifecycle (derived from all its
+   *     jobs) honest, and the idempotency key becomes exactly the one
+   *     `materialiseSlot` would have written. Nothing was published under the
+   *     old key — the failure was a determinate refusal.
+   *
+   * IT ONLY QUEUES. Every check in `#preflight` — approval, cancellation,
+   * content, rights, lateness — runs again before anything is sent, and the
+   * request is a person pressing Retry: nothing does this on their behalf.
+   */
+  async retryOnReconnectedAccount(input: {
+    jobId: string;
+    actorUserId: string;
+    brandScope: readonly string[];
+  }): Promise<ExecuteResult> {
+    const job = await this.#db.publishJob.findFirst({
+      where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
+    });
+    if (!job) throw publishJobNotFound();
+    if (job.status !== 'FAILED' || !RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) {
+      throw publishJobNotRetryable();
+    }
+    const replacement = await this.#reconnectedConnection(job);
+    if (!replacement) throw publishJobNotRetryable();
+
+    const rebinding = replacement.id !== job.socialConnectionId;
+    const idempotencyKey = rebinding
+      ? publishIdempotencyKey({
+          workspaceId: this.#workspaceId,
+          calendarSlotId: job.calendarSlotId,
+          socialConnectionId: replacement.id,
+          contentVariantId: job.contentVariantId,
+        })
+      : job.idempotencyKey;
+    if (rebinding) {
+      const clash = await this.#db.publishJob.findFirst({
+        where: { workspaceId: this.#workspaceId, idempotencyKey },
+        select: { id: true },
+      });
+      if (clash) throw publishJobNotRetryable();
+    }
+
+    const now = this.#clock.now();
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        socialConnectionId: replacement.id,
+        idempotencyKey,
+        status: 'QUEUED',
+        attemptCount: 0,
+        maxAttempts: this.#policy.retry.maxAttempts,
+        nextAttemptAt: now,
+        completedAt: null,
+        claimedAt: null,
+        failureClass: null,
+        failureCode: null,
+      },
+    });
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'social.post.retry_requested',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'PublishJob',
+      resourceId: job.id,
+      brandId: job.brandId,
+      before: {
+        status: job.status,
+        failureClass: job.failureClass,
+        socialConnectionId: job.socialConnectionId,
+      },
+      after: { status: 'QUEUED', socialConnectionId: replacement.id, via: 'reconnected_account' },
+    });
+    return { jobId: job.id, status: 'QUEUED', failureClass: null, externalPostId: null };
+  }
+
+  /**
+   * Which of these failed jobs could be retried through a reconnected account
+   * — for the screen, so the button exists exactly when the action would be
+   * accepted. Read-only; the same rule as `retryOnReconnectedAccount`.
+   */
+  async reconnectedRetryable(jobIds: readonly string[]): Promise<ReadonlySet<string>> {
+    if (jobIds.length === 0) return new Set();
+    const jobs = await this.#db.publishJob.findMany({
+      where: { workspaceId: this.#workspaceId, id: { in: [...jobIds] }, status: 'FAILED' },
+    });
+    const ready = new Set<string>();
+    for (const job of jobs) {
+      if (!RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) continue;
+      if (await this.#reconnectedConnection(job)) ready.add(job.id);
+    }
+    return ready;
+  }
+
+  /**
+   * The same account, renewed since the job failed and ACTIVE now — or null.
+   *
+   * Either the job's own connection, reconnected in place (the normal case,
+   * `SocialOAuthService#connect`), or — after a disconnect and a fresh
+   * connection — the new row for the SAME brand, provider and external
+   * account. "Renewed since" is a credential written after the failure
+   * (`connectedAt` or `lastRefreshedAt`), so a connection that was merely
+   * active all along does not turn a stale failure into a retry.
+   */
+  async #reconnectedConnection(job: PublishJob): Promise<SocialConnection | null> {
+    const failedAt = job.completedAt ?? job.updatedAt;
+    const renewed = (connection: SocialConnection) =>
+      [connection.connectedAt, connection.lastRefreshedAt].some(
+        (at) => at !== null && at.getTime() > failedAt.getTime(),
+      );
+    const own = await this.#db.socialConnection.findFirst({
+      where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
+    });
+    if (!own) return null;
+    if (own.status === 'ACTIVE') return renewed(own) ? own : null;
+    const replacement = await this.#db.socialConnection.findFirst({
+      where: {
+        workspaceId: this.#workspaceId,
+        brandId: job.brandId,
+        provider: job.provider,
+        externalAccountId: own.externalAccountId,
+        status: 'ACTIVE',
+        id: { not: own.id },
+      },
+      orderBy: [{ connectedAt: 'desc' }, { id: 'desc' }],
+    });
+    return replacement && renewed(replacement) ? replacement : null;
   }
 
   // -------------------------------------------------------------------------

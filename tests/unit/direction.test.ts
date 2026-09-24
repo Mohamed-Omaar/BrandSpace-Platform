@@ -23,7 +23,7 @@ describe('bilingual direction', () => {
     expect(htmlLangForLocale('en')).toBe('en');
   });
 
-  it('defaults to Arabic, matching the Saudi/GCC launch market (D-03)', () => {
+  it('the PUBLIC SITE and Control Center default to Arabic (D-03); the customer app is English (D-277)', () => {
     expect(DEFAULT_LOCALE).toBe('ar');
   });
 

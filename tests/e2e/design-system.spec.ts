@@ -122,13 +122,13 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
     await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
 
     // The label is visible when expanded.
-    await expect(page.getByTestId('nav-members')).toContainText(/\w/);
+    await expect(page.getByTestId('nav-content')).toContainText(/\w/);
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(shell).toHaveAttribute('data-sidebar-state', 'collapsed');
     // Collapsed, the item is still THERE and still reachable — only its text is
     // gone. A collapsed sidebar that removes navigation is not a collapse.
-    await expect(page.getByTestId('nav-members')).toBeVisible();
+    await expect(page.getByTestId('nav-content')).toBeVisible();
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
@@ -172,7 +172,7 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'expanded');
-    await expect(page.getByTestId('active-workspace')).toBeVisible();
+    await expect(page.getByTestId('active-brand')).toBeVisible();
   });
 
   test('a collapsed item explains itself on keyboard focus, not only on hover', async ({
@@ -181,11 +181,11 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
     await signInAndEnterWorkspace(page);
     await page.click('[data-testid="toggle-sidebar"]');
     // WCAG 1.4.13: content available on hover must also be available on focus.
-    const item = page.getByTestId('nav-members');
+    const item = page.getByTestId('nav-content');
     await item.focus();
     // The tooltip of THAT item, not whichever one happens to be first in the
     // document — the sidebar renders one per link.
-    const tooltip = page.locator('span:has(> span > [data-testid="nav-members"]) [role="tooltip"]');
+    const tooltip = page.locator('span:has(> span > [data-testid="nav-content"]) [role="tooltip"]');
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toHaveText(/\w/);
   });
@@ -243,18 +243,18 @@ test.describe('mobile navigation is a drawer, not a squeezed sidebar', () => {
     expect(focused).toBe('open-navigation');
   });
 
-  test('keeps the workspace context while navigating from the drawer', async ({ page }) => {
+  test('keeps the brand context while navigating from the drawer', async ({ page }) => {
     await signInAndEnterWorkspace(page);
-    const workspace = await page.getByTestId('active-workspace').textContent();
+    const brand = await page.getByTestId('active-brand').textContent();
 
     await page.click('[data-testid="open-navigation"]');
     // Scoped to the drawer: the sidebar renders the same link, and at this
     // width it is hidden, so an unscoped selector resolves to two elements and
     // clicks the invisible one.
-    await page.getByTestId('navigation-drawer').getByTestId('nav-members').click();
-    await page.waitForURL(/\/en\/members/);
+    await page.getByTestId('navigation-drawer').getByTestId('nav-content').click();
+    await page.waitForURL(/\/en\/content/);
 
-    await expect(page.getByTestId('active-workspace')).toHaveText(workspace ?? '');
+    await expect(page.getByTestId('active-brand')).toHaveText(brand ?? '');
     // The drawer closes on navigation rather than covering the page it opened.
     await expect(page.getByTestId('navigation-drawer')).toBeHidden();
   });
@@ -937,31 +937,74 @@ test.describe('the shell reproduces the demo geometry', () => {
   });
 
   test('the top bar controls', async ({ page }) => {
-    // `.search-button { width:230px; height:38px; border-radius:12px; font-size:10px }`
-    // and `.icon-button { width:38px; height:38px; border-radius:12px }`.
-    const search = page.getByTestId('topbar-search');
-    const searchBox = await search.boundingBox();
-    expect(searchBox?.width).toBe(230);
-    expect(searchBox?.height).toBe(38);
-    await expect(search).toHaveCSS('border-radius', '12px');
-    await expect(search).toHaveCSS('font-size', '10px');
-
-    const bell = page.getByTestId('topbar-notifications');
-    const bellBox = await bell.boundingBox();
-    expect(bellBox?.width).toBe(38);
-    expect(bellBox?.height).toBe(38);
-    await expect(bell).toHaveCSS('border-radius', '12px');
+    /*
+     * P6-16: the customer top bar is Review · Notes · Notifications · Copilot ·
+     * Create, every one a real destination. The search control is GONE rather
+     * than faked (D-276), so it must not come back as an empty shell.
+     *
+     * `.icon-button { width:38px; height:38px; border-radius:12px }` for each
+     * square action, `.primary-button.compact { min-height:38px;
+     * border-radius:12px; padding:0 15px; font-size:10px }` for Create.
+     */
+    await expect(page.getByTestId('topbar-search')).toHaveCount(0);
+    for (const key of ['review', 'notes', 'notifications']) {
+      const control = page.getByTestId(`topbar-${key}`);
+      const box = await control.boundingBox();
+      expect(box?.width, key).toBe(38);
+      expect(box?.height, key).toBe(38);
+      await expect(control).toHaveCSS('border-radius', '12px');
+    }
+    // D-304 — the Copilot is a LABELLED control: the same height and radius,
+    // wider, with its name on screen rather than a spark to decode.
+    const copilot = page.getByTestId('topbar-copilot');
+    const copilotBox = await copilot.boundingBox();
+    expect(copilotBox?.height).toBe(38);
+    expect(copilotBox?.width ?? 0).toBeGreaterThan(38);
+    await expect(copilot).toHaveCSS('border-radius', '12px');
+    await expect(page.getByTestId('topbar-copilot-label')).toHaveText('Copilot');
+    const create = page.getByTestId('topbar-create');
+    expect((await create.boundingBox())?.height).toBe(38);
+    await expect(create).toHaveCSS('border-radius', '12px');
+    await expect(create).toHaveCSS('padding-inline-start', '15px');
+    await expect(create).toHaveCSS('font-size', '10px');
   });
 
   test('the rail cards and the surfaces', async ({ page }) => {
     // `.experience-current` and `.profile-button` — 16px radius, 10px/8px padding.
-    for (const testId of ['workspace-switcher', 'profile-menu']) {
+    for (const testId of ['brand-switcher', 'profile-menu']) {
       await expect(page.getByTestId(testId)).toHaveCSS('border-radius', '16px');
     }
+    /*
+     * TWO DEMO CLASSES, TWO SETS OF NUMBERS — and this test used to assert one
+     * of them against whichever element happened to be first in the DOM.
+     *
+     * `[data-surface="card"]` is worn by BOTH `MetricCard` and the generic
+     * `Card`, and the demo gives them different geometry on purpose: a
+     * statistic is a smaller plane than a section. `.first()` therefore only
+     * ever found a metric because the metrics grid happened to be the first
+     * card on Overview. P6-04 put the Command Center's attention card above it,
+     * `.first()` began resolving to a generic surface card, and the test
+     * reported 18px against an expectation of 20px — reading as a design-system
+     * regression when nothing in `packages/ui` had changed at all.
+     *
+     * The locators below name what they mean. Scoping to the metrics grid is
+     * what makes the assertion about a METRIC rather than about DOM order, so
+     * adding another card to this page can no longer break it.
+     */
     // `.metric { border-radius:20px; padding:20px; background:rgba(255,255,255,.72) }`
-    const metric = page.locator('[data-surface="card"]').first();
+    const metric = page.getByTestId('overview-metrics').locator('[data-surface="card"]').first();
     await expect(metric).toHaveCSS('border-radius', '20px');
     await expect(metric).toHaveCSS('padding', '20px');
     await expect(metric).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.72)');
+
+    /*
+     * `.surface-card { border-radius: 18px; padding: 22px }` — the OTHER half,
+     * which the positional locator was hiding rather than covering. Asserting
+     * it here means a change to `cardStyle` fails on the card it actually
+     * changed, instead of surfacing as a confusing metric failure.
+     */
+    const surface = page.getByTestId('overview-upcoming');
+    await expect(surface).toHaveCSS('border-radius', '18px');
+    await expect(surface).toHaveCSS('padding', '22px');
   });
 });

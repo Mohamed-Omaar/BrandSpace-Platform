@@ -27,12 +27,53 @@ const log = createLogger({ context: { component: 'dashboard.integrations' } });
  *   - cancel / retry touch only tenant tables, so they run here.
  */
 
-function pageUrl(locale: string, params: Record<string, string> = {}): string {
-  const search = new URLSearchParams(params).toString();
-  return `/${locale}/integrations${search ? `?${search}` : ''}`;
+function pageUrl(
+  locale: string,
+  params: Record<string, string> = {},
+  back: ReturnTo = { path: '/integrations' },
+): string {
+  const search = new URLSearchParams({
+    ...(back.path === '/onboarding' ? { step: 'connect' } : {}),
+    ...(back.tab ? { tab: back.tab } : {}),
+    ...params,
+  });
+  const query = search.toString();
+  return `/${locale}${back.path}${query ? `?${query}` : ''}`;
 }
 
-function failure(locale: string, error: unknown, action: string): string {
+/**
+ * WHERE AN ACTION RETURNS TO — a CLOSED SET, never a caller-supplied URL.
+ *
+ * The same cancel, retry and check controls now appear on Publishing (Phase 6
+ * final, D-277) and on Settings > Connections, and the Setup Wizard's
+ * "Connect socials" step starts the same OAuth flow (§6). The form names which
+ * screen it came from; anything outside this set returns to Connections, so a
+ * crafted `returnTo` cannot send the browser anywhere else.
+ */
+interface ReturnTo {
+  readonly path: '/integrations' | '/publishing' | '/onboarding';
+  readonly tab?: 'queue' | 'published' | 'failed' | 'accounts' | undefined;
+}
+
+const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
+
+function returnToOf(formData: FormData): ReturnTo {
+  const requested = String(formData.get('returnTo') ?? '');
+  if (requested === '/onboarding') return { path: '/onboarding' };
+  if (requested !== '/publishing') return { path: '/integrations' };
+  const tab = String(formData.get('tab') ?? '');
+  return {
+    path: '/publishing',
+    tab: PUBLISHING_TABS.has(tab) ? (tab as ReturnTo['tab']) : undefined,
+  };
+}
+
+function failure(
+  locale: string,
+  error: unknown,
+  action: string,
+  back: ReturnTo = { path: '/integrations' },
+): string {
   const correlationId = randomUUID();
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No account name and no provider text either side.
@@ -41,7 +82,7 @@ function failure(locale: string, error: unknown, action: string): string {
     action,
     ...internalErrorFields(error),
   });
-  return pageUrl(locale, { error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { error: toPublicErrorCode(error), ref: correlationId }, back);
 }
 
 /** The API's refusal code, or a stable INTERNAL. Never its prose. */
@@ -59,7 +100,8 @@ function actorOf(session: WorkspaceSession) {
 
 /** Begin an OAuth authorization and send the customer to the provider. */
 export async function connectAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
@@ -68,11 +110,11 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
 
     const result = await callSocialApi('/v1/social/connect', { provider, brandId });
     if (!result.ok) {
-      destination = pageUrl(locale, { error: upstreamCode(result.payload) });
+      destination = pageUrl(locale, { error: upstreamCode(result.payload) }, back);
     } else {
       const url = (result.payload as { authorizationUrl?: unknown }).authorizationUrl;
       if (typeof url !== 'string') {
-        destination = pageUrl(locale, { error: 'INTERNAL' });
+        destination = pageUrl(locale, { error: 'INTERNAL' }, back);
       } else {
         /*
          * STRAIGHT TO THE PROVIDER. The authorization URL is the only thing
@@ -88,7 +130,7 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
     // `redirect()` throws by design; re-throw so Next can handle it.
     if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error;
     if ((error as { digest?: string }).digest?.startsWith('NEXT_REDIRECT')) throw error;
-    destination = failure(locale, error, 'connect');
+    destination = failure(locale, error, 'connect', back);
   }
   revalidatePath(`/${locale}/integrations`);
   redirect(destination!);
@@ -96,7 +138,7 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
 
 /** Disconnect, revoking at the provider where it can be reached. */
 export async function disconnectAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
@@ -116,7 +158,8 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
 
 /** Ask the provider whether this grant still works. */
 export async function checkAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.read');
@@ -125,18 +168,20 @@ export async function checkAccountAction(formData: FormData): Promise<void> {
       `/v1/social/connections/${encodeURIComponent(connectionId)}/check`,
     );
     destination = result.ok
-      ? pageUrl(locale, { ok: 'ACCOUNT_CHECKED' })
-      : pageUrl(locale, { error: upstreamCode(result.payload) });
+      ? pageUrl(locale, { ok: 'ACCOUNT_CHECKED' }, back)
+      : pageUrl(locale, { error: upstreamCode(result.payload) }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'check');
+    destination = failure(locale, error, 'check', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   redirect(destination);
 }
 
 /** Cancel a post that has not left yet. */
 export async function cancelPublishAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -144,18 +189,20 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).cancel({ jobId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ok: 'POST_CANCELLED' });
+    destination = pageUrl(locale, { ok: 'POST_CANCELLED' }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'cancel');
+    destination = failure(locale, error, 'cancel', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);
 }
 
 /** Try a failed post again, after a human has fixed whatever was wrong. */
 export async function retryPublishAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -163,11 +210,37 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).retry({ jobId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' });
+    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'retry');
+    destination = failure(locale, error, 'retry', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
+  revalidatePath(`/${locale}/calendar`);
+  redirect(destination);
+}
+
+/**
+ * Retry a post that failed on a broken account, through the same account now
+ * reconnected (D-291). A person pressing Retry; the pipeline decides whether
+ * it is allowed and re-checks everything before anything is sent.
+ */
+export async function retryOnReconnectedAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'publishing.manage');
+    const jobId = String(formData.get('jobId') ?? '');
+    await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
+      (await pipeline()).retryOnReconnectedAccount({ jobId, ...actorOf(session) }),
+    );
+    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' }, back);
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'retry-reconnected', back);
+  }
+  revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);
 }
@@ -185,7 +258,7 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
  * writes a credential, and the dashboard holds no key material at all (F-07).
  */
 export async function selectTargetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');

@@ -202,25 +202,29 @@ test.describe('workspace selection and switching', () => {
     ).toBeVisible();
 
     await enterWorkspace(page, customer.workspaceSlug);
-    await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
+    const firstBrand = await page.getByTestId('active-brand').first().innerText();
 
-    // Phase 2C moved "switch workspace" INTO the workspace switcher menu, so
-    // the menu is opened first. The assertions either side are unchanged: what
-    // is being tested is that a member of two workspaces reaches the picker and
-    // lands in a correctly scoped second workspace.
-    await page.click('[data-testid="workspace-switcher"]');
+    // D-302 — no workspace card in the rail. A member of two businesses
+    // switches from the account menu, which offers it only because there are
+    // two. What is tested is unchanged: the picker is reached, and the second
+    // context is correctly scoped.
+    await expect(page.getByTestId('workspace-switcher')).toHaveCount(0);
+    await page.click('[data-testid="profile-menu"]');
     await page.click('[data-testid="switch-workspace"]');
     await enterWorkspace(page, customer.secondWorkspaceSlug);
-    // A new, correctly scoped context — not the previous workspace's data.
-    await expect(page.getByTestId('active-workspace')).not.toContainText(customer.workspaceName);
+    // A new, correctly scoped context — not the previous business's brand.
+    await expect(page.getByTestId('active-brand').first()).not.toHaveText(firstBrand);
   });
 
-  test('the workspace name and role are always visible', async ({ page }) => {
+  test('the brand and the role are always visible, and the workspace is not a card', async ({
+    page,
+  }) => {
     const { customer } = credentials();
     await signIn(page, customer.email, customer.password);
     await enterWorkspace(page, customer.workspaceSlug);
-    await expect(page.getByTestId('active-workspace')).toBeVisible();
-    await expect(page.getByTestId('active-role')).toBeVisible();
+    await expect(page.getByTestId('active-brand').first()).toBeVisible();
+    await expect(page.getByTestId('profile-role')).toBeVisible();
+    await expect(page.getByTestId('active-workspace')).toHaveCount(0);
   });
 });
 
@@ -290,6 +294,11 @@ test.describe('invitation acceptance', () => {
     expect(shortIsValid).toBe(false);
 
     await page.fill('[data-testid="invitation-password"]', password);
+    // P6-03a: the confirmation field. It is the customer's own check against a
+    // typo and is deliberately NOT submitted — the server validates the
+    // password itself — but it is required, so the form will not submit
+    // without it.
+    await page.fill('#invite-password-confirm', password);
     await page.click('[data-testid="invitation-setup-submit"]');
 
     // Signed in, in the workspace, in one step.
@@ -311,7 +320,9 @@ test.describe('invitation acceptance', () => {
     await page.click('[data-testid="invitation-accept"]');
 
     await expect(page).toHaveURL(/\/en\/overview/);
-    await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
+    // D-302 — the rail names the brand, not the workspace; landing inside the
+    // business is the overview rendering with its brand identity.
+    await expect(page.getByTestId('active-brand').first()).toBeVisible();
   });
 });
 
@@ -343,10 +354,15 @@ test.describe('RBAC is enforced by the server, not by hidden buttons', () => {
     await enterWorkspace(page, customer.workspaceSlug);
 
     await expect(page.getByTestId('nav-members')).toHaveCount(0);
-    await expect(page.getByTestId('nav-settings')).toHaveCount(0);
-    // But the permissions page is open to every member — it shows the truth
-    // about their own grants.
-    await expect(page.getByTestId('nav-permissions')).toBeVisible();
+    // D-277: Settings is on the rail for every member, and opens on the first
+    // section THIS member may read — for a viewer, Roles & permissions, which
+    // shows the truth about their own grants — never on a 404.
+    const settings = page.getByTestId('nav-settings');
+    await expect(settings).toBeVisible();
+    await expect(settings).toHaveAttribute('href', '/en/permissions');
+    await settings.click();
+    await page.waitForURL(/\/en\/permissions$/);
+    await expect(page.getByTestId('settings-nav')).not.toContainText('Team');
   });
 
   test('the owner CAN reach every page the viewer cannot', async ({ page }) => {
@@ -439,7 +455,7 @@ test.describe('the team page performs real work', () => {
 
     await page.click(`[data-testid="revoke-${invitee}"]`);
     await expect(page.getByTestId('success-banner')).toBeVisible();
-    await expect(page.getByTestId(`invitation-${invitee}`)).toContainText('REVOKED');
+    await expect(page.getByTestId(`invitation-${invitee}`)).toContainText('Revoked');
   });
 
   test('refuses to remove the last owner, with a safe message', async ({ page }) => {
@@ -499,7 +515,10 @@ test.describe('settings save through the tenant-scoped path', () => {
     await page.click('[data-testid="settings-save"]');
 
     await expect(page.getByTestId('success-banner')).toBeVisible();
-    await expect(page.getByTestId('active-workspace')).toContainText(renamed);
+    // D-302 — the business name is no longer a rail card; it is read back from
+    // the saved settings themselves.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await expect(page.locator('#name')).toHaveValue(renamed);
 
     // Put the name back, so a re-run starts from the same state.
     await page.fill('#name', customer.workspaceName);
@@ -540,13 +559,22 @@ test.describe('bilingual: Arabic RTL and English LTR', () => {
       await signIn(page, customer.email, customer.password, locale.code);
       await enterWorkspace(page, customer.workspaceSlug, locale.code);
       await expect(page.locator('html')).toHaveAttribute('dir', locale.dir);
-      await expect(page.getByTestId('active-workspace')).toBeVisible();
+      await expect(page.getByTestId('active-brand').first()).toBeVisible();
     });
   }
 
-  test('a locale-less path redirects to the default locale', async ({ page }) => {
-    await page.goto(`${DASHBOARD_BASE_URL}/sign-in`);
+  test('a locale-less path redirects to the customer default — English (D-277)', async ({
+    page,
+  }) => {
+    for (const path of ['/sign-in', '/sign-up', '/reset', '/']) {
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      await expect(page, path).toHaveURL(/\/en(\/|$)/);
+      await expect(page.locator('html'), path).toHaveAttribute('dir', 'ltr');
+    }
+    // An explicit /ar is honoured and stays Arabic, right to left.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
     await expect(page).toHaveURL(/\/ar\/sign-in/);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   });
 
   test('an unsupported locale is a 404', async ({ page }) => {

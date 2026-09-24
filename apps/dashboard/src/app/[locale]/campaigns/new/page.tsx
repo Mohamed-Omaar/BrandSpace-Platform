@@ -9,6 +9,18 @@ import { createCampaignAction } from '../actions';
 import { CampaignFormView } from '../campaign-form-view';
 import { formLabels } from '../labels';
 
+/** The campaign domain's objectives (`CampaignObjective`), for the prefill only. */
+const CAMPAIGN_OBJECTIVES: readonly string[] = [
+  'AWARENESS',
+  'ENGAGEMENT',
+  'TRAFFIC',
+  'LEADS',
+  'RETENTION',
+  'LAUNCH',
+];
+
+import { EmptyAction } from '../../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -37,6 +49,11 @@ export default async function NewCampaignPage({
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
 
+  const requestedChannels = (
+    Array.isArray(query['channels']) ? query['channels'] : [query['channels']]
+  )
+    .filter((value): value is string => typeof value === 'string')
+    .slice(0, 10);
   const brandContext = await brandContextFor(workspace, '/campaigns/new', single('brand'));
   const selected = requiredBrand(brandContext);
 
@@ -86,6 +103,16 @@ export default async function NewCampaignPage({
               : t('campaigns.chooseBrandBody')
           }
           testId="campaign-no-brand"
+          action={
+            brandContext.resolution.kind === 'empty' &&
+            workspace.permissionKeys.includes('brand.manage') ? (
+              <EmptyAction
+                href={`/${locale}/brand-brain`}
+                label={t('bb.createBrand')}
+                testId="no-brand-create"
+              />
+            ) : undefined
+          }
         />
       ) : (
         <div style={{ display: 'grid', gap: spacingTokens.md }}>
@@ -93,14 +120,20 @@ export default async function NewCampaignPage({
             action={createCampaignAction}
             hidden={{ locale, brandId: selected.id }}
             values={{
-              name: '',
-              objective: 'AWARENESS',
-              briefAr: '',
-              briefEn: '',
+              // D-292 — a week of the accepted plan opens this form filled in.
+              // Values only; nothing is created until the person submits.
+              name: (single('name') ?? '').slice(0, 120),
+              objective: CAMPAIGN_OBJECTIVES.includes(single('objective') ?? '')
+                ? (single('objective') as string)
+                : 'AWARENESS',
+              briefAr: locale === 'ar' ? (single('brief') ?? '').slice(0, 1_000) : '',
+              briefEn: locale === 'ar' ? '' : (single('brief') ?? '').slice(0, 1_000),
               description: '',
               startDate: '',
               endDate: '',
-              channels: [],
+              channels: requestedChannels.filter((key) =>
+                platforms.some((platform) => platform.key === key),
+              ),
               status: 'DRAFT',
             }}
             labels={formLabels(t, t('campaigns.create'))}

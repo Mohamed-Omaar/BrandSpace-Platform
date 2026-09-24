@@ -21,6 +21,7 @@ import { getPrisma } from '@brandspace/database';
 import { InvitationService, SignupService } from '@brandspace/auth';
 import { TenantOnboardingPolicySource, type OnboardingPolicy } from '@brandspace/onboarding';
 import { withoutTenantContext } from '@brandspace/database';
+import { signupPolicy } from '../../../server/signup-policy';
 import { currentEnvironment } from '../../../server/customer-context';
 import { customerLink } from '../../../server/email-links';
 
@@ -79,7 +80,7 @@ function signInUrl(locale: string, params: Record<string, string> = {}): string 
 }
 
 export async function signInAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const next = String(formData.get('next') ?? '');
   let destination: string;
 
@@ -130,7 +131,7 @@ export async function signInAction(formData: FormData): Promise<void> {
 }
 
 export async function signOutAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const store = await cookies();
   const token = store.get(CUSTOMER_REALM.cookieName)?.value;
   if (token) {
@@ -150,7 +151,7 @@ export async function signOutAction(formData: FormData): Promise<void> {
  * URL — that is what stops this endpoint being an account-existence oracle.
  */
 export async function requestPasswordResetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
 
@@ -225,14 +226,27 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
 }
 
 export async function completePasswordResetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
   try {
     const password = String(formData.get('password') ?? '');
-    if (password.length < 12) {
-      // docs/SECURITY.md §3: length-first policy, minimum 12.
+    /*
+     * THE CONFIGURED MINIMUM, NOT A NUMBER TYPED HERE (P6-03a).
+     *
+     * This was `< 12`, which made it a second opinion about a value CLAUDE.md
+     * §2.2 puts in configuration — and the opinion that won, silently, on a
+     * screen whose own `minLength` attribute said something else.
+     *
+     * THE SERVER DOES NOT TRUST THE CONFIRMATION FIELD. The form carries one
+     * and the client compares them live, because catching a typo before submit
+     * is worth doing; what is checked HERE is the password itself. A client
+     * that omits the confirmation, or sends two that differ, changes nothing
+     * about what this accepts.
+     */
+    const { minPasswordLength } = await signupPolicy();
+    if (password.length < minPasswordLength) {
       throw Object.assign(new Error('too short'), { code: 'VALIDATION_FAILED' });
     }
     await getCustomerAuth().completePasswordReset(token, password);
@@ -256,7 +270,7 @@ export async function completePasswordResetAction(formData: FormData): Promise<v
  * unknown token, so a forwarded link reveals nothing.
  */
 export async function acceptInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
@@ -306,15 +320,17 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
  * whether the invited address is registered.
  */
 export async function onboardInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
   try {
     const password = String(formData.get('password') ?? '');
-    if (password.length < 12) {
-      // docs/SECURITY.md §3: length-first policy, minimum 12. Checked here so
-      // the invitation is not touched at all for a password that cannot work.
+    // The configured minimum (P6-03a), checked here so the invitation is not
+    // touched at all for a password that cannot work. The confirmation field is
+    // the client's own check and is not what this trusts.
+    const { minPasswordLength } = await signupPolicy();
+    if (password.length < minPasswordLength) {
       throw Object.assign(new Error('too short'), { code: 'VALIDATION_FAILED' });
     }
 
@@ -351,7 +367,7 @@ export async function onboardInvitationAction(formData: FormData): Promise<void>
 
 /** Select the workspace this session acts in. Membership is re-verified. */
 export async function switchWorkspaceAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const workspaceId = String(formData.get('workspaceId') ?? '');
   let destination: string;
 
@@ -402,7 +418,7 @@ function isRedirectError(error: unknown): boolean {
  * nothing about who has an account.
  */
 export async function signUpAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
 
@@ -438,7 +454,7 @@ export async function signUpAction(formData: FormData): Promise<void> {
 
 /** Ask for another verification link. Rate-limited and silent about the result. */
 export async function resendVerificationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
   try {
@@ -479,7 +495,7 @@ export async function resendVerificationAction(formData: FormData): Promise<void
  * failure simply returns to the same page — there is nothing to revoke.
  */
 export async function verifyMfaAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const store = await cookies();
   const token = store.get(CUSTOMER_REALM.cookieName)?.value;
   if (!token) redirect(signInUrl(locale));

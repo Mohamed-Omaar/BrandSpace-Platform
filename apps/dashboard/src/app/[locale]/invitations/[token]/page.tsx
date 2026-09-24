@@ -1,10 +1,11 @@
-import { Field, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { PasswordField, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { InvitationService } from '@brandspace/auth';
 import { getPrisma } from '@brandspace/database';
 import { getCustomer } from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
-import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
+import { AuthCard, authButtonStyle } from '../../../../components/auth-card';
 import { acceptInvitationAction, onboardInvitationAction } from '../../(auth)/actions';
+import { signupPolicy } from '../../../../server/signup-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,7 @@ export default async function InvitationPage({
   const { locale, token } = await params;
   const query = await searchParams;
   const t = translator(locale);
+  const { minPasswordLength } = await signupPolicy();
 
   // `peek` MANAGES ITS OWN CONTEXT: it reads the invitation under the
   // token scope (migration 20260903100000), then reads the workspace and role
@@ -121,30 +123,33 @@ export default async function InvitationPage({
               invitation row; letting the form supply one would make this a way
               to create an account for somebody else's address.
             */}
-            <Field label={t('invite.password')} htmlFor="invite-password" required>
-              <input
-                className="bs-control"
-                id="invite-password"
-                name="password"
-                type="password"
-                required
-                minLength={12}
-                autoComplete="new-password"
-                aria-describedby="invite-password-hint"
-                data-testid="invitation-password"
-                style={authInputStyle()}
-              />
-            </Field>
-            <p
-              id="invite-password-hint"
-              style={{
-                ...typographyTokens.caption,
-                color: colorTokens.textSecondary,
-                margin: 0,
+            {/*
+              The shared control and the CONFIGURED minimum (P6-03a). The hint
+              paragraph is gone because the rules list below the field says the
+              same thing and keeps saying it as the customer types, rather than
+              stating a number once and going quiet.
+            */}
+            <PasswordField
+              id="invite-password"
+              testId="invitation-password"
+              labels={{
+                label: t('invite.password'),
+                show: t('password.show'),
+                hide: t('password.hide'),
+                confirmLabel: t('password.confirm'),
+                mismatch: t('password.mismatch'),
+                match: t('password.match'),
+                rulesLabel: t('password.rulesLabel'),
               }}
-            >
-              {t('invite.passwordHint')}
-            </p>
+              minLength={minPasswordLength}
+              rules={[
+                {
+                  label: t('password.rule.length').replace('{min}', String(minPasswordLength)),
+                  kind: 'min-length',
+                },
+                { label: t('password.rule.phrase'), kind: 'note' },
+              ]}
+            />
             <button type="submit" data-testid="invitation-setup-submit" style={authButtonStyle()}>
               {t('invite.setUpSubmit')}
             </button>

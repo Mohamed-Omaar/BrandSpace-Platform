@@ -16,6 +16,7 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import { BrandBrainRetriever, fenceUntrusted, type Citation } from '@brandspace/brand-brain';
 import { briefTooLong, contentItemNotFound, unsupportedPlatform } from './errors';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
+import { preferenceInstructions, TONE_KEYS } from './suggestions';
 import { findPlatform, type ContentDialect } from './policy';
 import { resolveContentExpiry, type RetentionInput } from './retention';
 import { validateVariant } from './validation';
@@ -72,7 +73,14 @@ const SYSTEM_INSTRUCTION = [
  * instruction from a browser is a prompt the customer writes and the platform
  * pays for. Each maps to a fixed directive below.
  */
-export const CONTENT_TOOLS = ['rewrite', 'shorten', 'expand', 'tone', 'translate'] as const;
+export const CONTENT_TOOLS = [
+  'rewrite',
+  'shorten',
+  'expand',
+  'tone',
+  'translate',
+  'hashtags',
+] as const;
 export type ContentTool = (typeof CONTENT_TOOLS)[number];
 
 const TOOL_DIRECTIVE: Record<ContentTool, string> = {
@@ -87,7 +95,32 @@ const TOOL_DIRECTIVE: Record<ContentTool, string> = {
     'brand voice, and write naturally in the requested Arabic dialect rather',
     'than transliterating the source sentence structure.',
   ].join(' '),
+  // PHASE 6 FINAL (D-284) — hashtags only. The caption the model returns is
+  // DISCARDED below: this tool may not change a word the person wrote.
+  hashtags:
+    'Keep the caption exactly as it is. Propose hashtags that fit it and the brand, within the platform limit.',
 };
+
+/**
+ * AN AI CAROUSEL STARTS AS AN OUTLINE (Phase 6 final, D-277 §23, D-300).
+ *
+ * For a carousel the caption opens with a slide outline — a hook, the points,
+ * a call to action, one line per slide — and the caption follows. It is TEXT
+ * in the caption the person reads, edits and previews, because the durable
+ * model has no per-slide text: pretending otherwise would be the fake text
+ * layer §23 forbids. The visuals are then chosen or generated slide by slide
+ * with the existing controls. Every other format gets no instruction at all.
+ */
+export function carouselOutlineInstruction(
+  contentType: ContentItem['contentType'] | undefined,
+): readonly string[] {
+  if (contentType !== 'CAROUSEL') return [];
+  return [
+    'This post is a CAROUSEL. Begin each body with a slide outline, one line per slide:',
+    '"Slide 1 — <hook>", then one line per point, and a last "Slide N — <call to action>", 3 to 7 slides in all.',
+    'Then a blank line, then the caption. The outline is words only: do not describe images you were not given.',
+  ];
+}
 
 export interface StudioOptions extends ContentLibraryOptions {
   readonly gateway: AiGateway;
@@ -143,6 +176,15 @@ export class ContentStudioService extends ContentLibraryService {
     platformKeys: readonly string[];
     planKey: string | null;
     actorBrandScope: readonly string[];
+    /**
+     * D-300 — what the generation will be asked with: the format (a carousel
+     * carries its outline instruction), the language (and so the dialect) and
+     * the member (their accepted defaults, D-295). Without them the quote was
+     * a shorter prompt than the one then reserved.
+     */
+    contentType?: ContentItem['contentType'] | undefined;
+    locale?: Locale | undefined;
+    actorUserId?: string | undefined;
   }): Promise<AiQuote> {
     assertBrandInScope(input.actorBrandScope, input.brandId);
     this.#assertBrief(input.brief);
@@ -155,7 +197,10 @@ export class ContentStudioService extends ContentLibraryService {
       planKey: input.planKey,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.brief, input.platformKeys),
+        prompt: await this.#generationPrompt({
+          ...input,
+          dialect: input.locale === 'AR' ? await this.resolveDialectFor(input.brandId) : undefined,
+        }),
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },
     });
@@ -250,7 +295,7 @@ export class ContentStudioService extends ContentLibraryService {
       idempotencyKey: `content-studio:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.brief, input.platformKeys, dialect, input.locale),
+        prompt: await this.#generationPrompt({ ...input, dialect }),
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },
     });
@@ -332,36 +377,7 @@ export class ContentStudioService extends ContentLibraryService {
     planKey: string | null;
     actorBrandScope: readonly string[];
   }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
-    // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
-    const variant = await this.db.contentVariant.findFirst({
-      where: {
-        id: input.variantId,
-        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
-      },
-    });
-    if (!variant) throw contentItemNotFound();
-
-    const platform = findPlatform(this.policy, variant.platformKey);
-    if (!platform) throw unsupportedPlatform();
-
-    const dialect = await this.resolveDialectFor(variant.brandId);
-    const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
-    const targetLocale = input.targetLocale ?? variant.locale;
-
-    const instruction = [
-      SYSTEM_INSTRUCTION,
-      TOOL_DIRECTIVE[input.tool],
-      input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
-      `Target language: ${targetLocale === 'AR' ? 'Arabic' : 'English'}.`,
-      targetLocale === 'AR' ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
-      `Keep it under ${platform.maxBodyChars} characters.`,
-      'Respond with JSON: {"body": string, "hashtags": string[]}.',
-      '',
-      'Caption to edit:',
-      variant.body ?? '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    const { variant, platform, dialect, targetLocale, request } = await this.#toolRequest(input);
 
     const result = await this.#gateway.execute({
       workspaceId: this.workspaceId,
@@ -369,11 +385,7 @@ export class ContentStudioService extends ContentLibraryService {
       taskKey: 'caption.generate',
       planKey: input.planKey,
       idempotencyKey: `content-tool:${input.idempotencyKey}`,
-      input: {
-        kind: 'text',
-        prompt: instruction,
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
-      },
+      input: request,
     });
 
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
@@ -389,16 +401,23 @@ export class ContentStudioService extends ContentLibraryService {
     /* c8 ignore next -- the parser guarantees one variant under singleBody. */
     if (!produced) throw generationFailed(null);
 
-    const validation = validateVariant(platform, {
-      body: produced.body,
-      hashtags: produced.hashtags,
-    });
+    /*
+     * THE HASHTAG TOOL KEEPS THE PERSON'S WORDS. Whatever caption the model
+     * sent back is ignored, and the tags are bounded by the platform's own
+     * ceiling rather than trusted to have followed the instruction.
+     */
+    const hashtagsOnly = input.tool === 'hashtags';
+    const body = hashtagsOnly ? (variant.body ?? '') : produced.body;
+    const hashtags = hashtagsOnly
+      ? produced.hashtags.slice(0, platform.maxHashtags)
+      : produced.hashtags;
+    const validation = validateVariant(platform, { body, hashtags });
 
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
-        body: produced.body,
-        hashtags: produced.hashtags,
+        body,
+        hashtags,
         locale: targetLocale,
         arabicDialect: targetLocale === 'AR' ? dialect.key : null,
         // An edited variant is AI_ASSISTED, not AI_GENERATED: a person chose
@@ -422,8 +441,24 @@ export class ContentStudioService extends ContentLibraryService {
       resourceType: 'ContentVariant',
       resourceId: variant.id,
       brandId: variant.brandId,
-      after: { platformKey: variant.platformKey, locale: targetLocale, dialect: dialect.key },
+      after: {
+        platformKey: variant.platformKey,
+        locale: targetLocale,
+        dialect: dialect.key,
+        // D-295 — what the edit WAS, in closed terms, so a repeated habit can
+        // be noticed from the audit trail: the tone chosen (a closed key, never
+        // free text) and whether it reworked words BrandSpace had generated.
+        ...(input.tool === 'tone' && input.argument && TONE_KEYS[input.argument]
+          ? { tone: TONE_KEYS[input.argument] }
+          : {}),
+        afterGeneration: variant.origin === 'AI_GENERATED',
+      },
     });
+
+    // PHASE 6 FINAL (D-284) — an AI edit is an edit. Before this, an inline
+    // tool could rewrite an APPROVED caption and leave the item saying
+    // "Approved" over words nobody had reviewed.
+    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
 
     return {
       variant: updated,
@@ -433,6 +468,84 @@ export class ContentStudioService extends ContentLibraryService {
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * PHASE 6 FINAL (D-284) — WHAT ONE INLINE EDIT WOULD COST, before it runs.
+   *
+   * The SAME request `applyTool` sends — same variant read under the same
+   * BrandScope predicate, same retrieval, same instruction — handed to the
+   * gateway's quote instead of its execute. It reserves nothing and writes no
+   * `ai_request`, exactly like the generation quote.
+   */
+  async quoteTool(input: {
+    variantId: string;
+    tool: ContentTool;
+    argument?: string | undefined;
+    targetLocale?: Locale | undefined;
+    planKey: string | null;
+    actorBrandScope: readonly string[];
+  }): Promise<AiQuote> {
+    const { request } = await this.#toolRequest(input);
+    return this.#gateway.quote({
+      workspaceId: this.workspaceId,
+      taskKey: 'caption.generate',
+      planKey: input.planKey,
+      input: request,
+    });
+  }
+
+  /** The one place an inline edit's request is built, for the quote and the run. */
+  async #toolRequest(input: {
+    variantId: string;
+    tool: ContentTool;
+    argument?: string | undefined;
+    targetLocale?: Locale | undefined;
+    actorBrandScope: readonly string[];
+  }) {
+    // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
+    const variant = await this.db.contentVariant.findFirst({
+      where: {
+        id: input.variantId,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+    });
+    if (!variant) throw contentItemNotFound();
+
+    const platform = findPlatform(this.policy, variant.platformKey);
+    if (!platform) throw unsupportedPlatform();
+
+    const dialect = await this.resolveDialectFor(variant.brandId);
+    const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
+    const targetLocale = input.targetLocale ?? variant.locale;
+
+    const instruction = [
+      SYSTEM_INSTRUCTION,
+      TOOL_DIRECTIVE[input.tool],
+      input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
+      `Target language: ${targetLocale === 'AR' ? 'Arabic' : 'English'}.`,
+      targetLocale === 'AR' ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      `Keep it under ${platform.maxBodyChars} characters.`,
+      `Use at most ${platform.maxHashtags} hashtags.`,
+      'Respond with JSON: {"body": string, "hashtags": string[]}.',
+      '',
+      'Caption to edit:',
+      variant.body ?? '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return {
+      variant,
+      platform,
+      dialect,
+      targetLocale,
+      request: {
+        kind: 'text' as const,
+        prompt: instruction,
+        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+      },
+    };
+  }
 
   #assertBrief(brief: string): void {
     if (brief.length > this.policy.generation.maxBriefChars) throw briefTooLong();
@@ -450,11 +563,54 @@ export class ContentStudioService extends ContentLibraryService {
     });
   }
 
+  /**
+   * THE ONE GENERATION PROMPT, for the quote and the charge alike (D-300), so
+   * the price confirmed is the price of the request actually made (AC-11.1).
+   */
+  async #generationPrompt(input: {
+    readonly brandId: string;
+    readonly brief: string;
+    readonly platformKeys: readonly string[];
+    readonly dialect?: ContentDialect | undefined;
+    readonly locale?: Locale | undefined;
+    readonly actorUserId?: string | undefined;
+    readonly contentType?: ContentItem['contentType'] | undefined;
+  }): Promise<string> {
+    // D-295 — this person's ACCEPTED defaults for this brand, as instructions
+    // built from the closed preference keys only.
+    const accepted = input.actorUserId
+      ? await this.db.memberSuggestion.findMany({
+          where: {
+            workspaceId: this.workspaceId,
+            brandId: input.brandId,
+            userId: input.actorUserId,
+            kind: 'PREFERENCE',
+            status: 'ACCEPTED',
+          },
+          select: { key: true },
+        })
+      : [];
+    return this.#prompt(
+      input.brief,
+      input.platformKeys,
+      input.dialect,
+      input.locale,
+      preferenceInstructions(
+        accepted.map((row) => row.key),
+        input.platformKeys,
+      ),
+      input.contentType,
+    );
+  }
+
   #prompt(
     brief: string,
     platformKeys: readonly string[],
     dialect?: ContentDialect,
     locale?: Locale,
+    /** D-295 — the author's accepted defaults (closed-key instructions). */
+    authorDefaults: readonly string[] = [],
+    contentType?: ContentItem['contentType'],
   ): string {
     const platforms = platformKeys
       .map((key) => {
@@ -473,6 +629,10 @@ export class ContentStudioService extends ContentLibraryService {
       // D-115 reaches the prompt only when the output is Arabic. Naming a
       // dialect on an English caption would be noise the model has to ignore.
       locale === 'AR' && dialect ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      ...(authorDefaults.length > 0
+        ? ['Defaults this author chose for their own drafts:', ...authorDefaults]
+        : []),
+      ...carouselOutlineInstruction(contentType),
       'Respond with JSON: {"title": string, "variants": [{"platformKey": string, "body": string, "hashtags": string[]}]}.',
       '',
       'Brief:',

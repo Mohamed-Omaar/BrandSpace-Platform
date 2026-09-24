@@ -786,7 +786,7 @@ test.describe('automations', () => {
       return;
     }
     // The empty state, and it says so in words.
-    await expect(page.getByText(/no rule has run yet/i).first()).toBeVisible();
+    await expect(page.getByText(/no automation has run yet/i).first()).toBeVisible();
   });
 
   test('is clean under axe in both directions', async ({ page }) => {
@@ -799,5 +799,182 @@ test.describe('automations', () => {
         .analyze();
       expect(results.violations, `${locale} automations`).toEqual([]);
     }
+  });
+});
+
+/*
+ * PHASE 6 · P6-11 — WHAT HAPPENED, WHY, AND WHAT NEXT.
+ *
+ * The loop's screens, driven for real: Analytics offers "why?", the answer is
+ * read in Marketing Intelligence as three sections that cite stored evidence,
+ * and Home carries the result in its one ranked list. Nothing here asserts a
+ * particular finding — the seeded series decides whether there is a shift and
+ * whether the explanation has enough data, and a test that assumed either would
+ * be asserting on the fixture rather than the product. Each branch the product
+ * can honestly take is accepted, and each is checked for what it must say.
+ */
+test.describe('P6-11 · analytics → intelligence → pulse', () => {
+  test('"why?" is answered in Marketing Intelligence, or honestly declined', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+
+    const explain = page.getByTestId('analytics-explain');
+    await expect(explain).toBeVisible();
+    /*
+     * WAIT FOR THE REDIRECT'S OWN MARKER, not for a path. The page starts on
+     * `/analytics?range=…`, which already matches "analytics with a query", so a
+     * path pattern resolves before the action has even run. Every outcome of the
+     * explain action carries `ok=` or `error=`, and the starting URL carries
+     * neither.
+     */
+    await Promise.all([page.waitForURL(/[?&](ok|error)=/), explain.click()]);
+
+    if (new URL(page.url()).pathname.endsWith('/intelligence')) {
+      // Landed on the finding it produced: focused, and read as three answers.
+      expect(new URL(page.url()).searchParams.get('insight')).toMatch(/^[0-9a-f-]{36}$/);
+      await expect(page.getByTestId('intelligence-focused')).toBeVisible();
+      const narrative = page.getByTestId('intelligence-narrative').first();
+      await expect(narrative.getByTestId('narrative-why')).toBeVisible();
+      await expect(narrative.getByTestId('narrative-happened')).toBeVisible();
+      // Every figure on the card still comes from the stored evidence rows.
+      await expect(page.getByTestId('intelligence-evidence').first()).toBeVisible();
+    } else {
+      // Not enough data is an ANSWER, and nothing was charged for it.
+      await expect(page.getByText(/not enough performance data/i)).toBeVisible();
+    }
+  });
+
+  test('a next step is only ever a link somewhere real', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+    const next = page.getByTestId('analytics-next');
+    if ((await next.count()) === 0) return; // nothing to do is a finished state
+    for (const link of await next.locator('a').all()) {
+      const href = await link.getAttribute('href');
+      // P6-12 added the card's "Ask Copilot" entry, which carries its context;
+      // D-293 added "View evidence", which opens the one finding it rests on.
+      expect(href).toMatch(
+        /^\/en\/((integrations|calendar|intelligence)|intelligence\?insight=[0-9a-f-]{36}|copilot\?from=analytics)$/,
+      );
+      const response = await page.request.get(`${DASHBOARD_BASE_URL}${href}`);
+      expect(response.status(), `${href} answers`).toBeLessThan(400);
+    }
+  });
+
+  test('Home names the list Pulse, in both languages', async ({ page }) => {
+    await signIn(page);
+    await expect(page.getByTestId('attention-card')).toContainText('Pulse');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/overview`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('attention-card')).toContainText('النبض');
+  });
+
+  test('intelligence is clean under axe in both directions', async ({ page }) => {
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/intelligence`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} intelligence`).toEqual([]);
+    }
+  });
+
+  test('intelligence does not scroll sideways on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    for (const path of ['/en/intelligence', '/ar/intelligence', '/en/overview']) {
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${path} scrolls sideways on a phone`).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+/*
+ * PHASE 6 · P6-12 — THE COPILOT IN CONTEXT, AND AUTOMATIONS THAT SAY WHAT THEY DO.
+ *
+ * The model's output is not asserted: it is a deterministic development double
+ * here, and a test that assumed a particular plan would be testing the double.
+ * What is asserted is what the PRODUCT guarantees whatever the plan is.
+ */
+test.describe('P6-12 · copilot and automations', () => {
+  test('Home opens the Copilot with Home as its context, on the rail’s brand', async ({ page }) => {
+    await signIn(page);
+    const entry = page.getByTestId('overview-copilot-open');
+    await expect(entry).toBeVisible();
+    // Without script it is still the full screen's link (D-294)…
+    await expect(entry).toHaveAttribute('href', '/en/copilot?from=overview');
+    // …and with it, the Copilot opens OVER Home rather than taking you away.
+    await entry.click();
+    await expect(page.getByTestId('copilot-drawer')).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/en/overview');
+    const context = page.getByTestId('copilot-drawer').getByTestId('copilot-context');
+    await expect(context).toBeVisible();
+    // The brand every step will act on, and where the conversation started.
+    await expect(context).toContainText(/Acting on /);
+    await expect(context).toContainText(/opened from Home/);
+    // No second brand picker: the rail is the one source of brand context.
+    await expect(page.getByTestId('copilot-brand')).toHaveCount(0);
+  });
+
+  test('an unknown ?from= is not echoed anywhere', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=${encodeURIComponent('<b>x</b>')}`);
+    await expect(page.getByTestId('copilot-context')).not.toContainText('opened from');
+    await expect(page.locator('main')).not.toContainText('<b>x</b>');
+  });
+
+  test('declining a plan closes it, and nothing runs', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/copilot?from=campaigns`);
+    await page.getByTestId('copilot-request').fill('Create an autumn awareness campaign.');
+    await page.getByTestId('copilot-propose').click();
+    const outcome = await settle(page);
+    if (outcome !== 'plan') return; // a refusal is an honest answer too
+    const reject = page.getByTestId('copilot-reject');
+    if ((await reject.count()) === 0) return; // a read-only plan needs no decision
+    const cancelled = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/copilot/cancel') && response.request().method() === 'POST',
+    );
+    await reject.click();
+    expect((await cancelled).status()).toBeLessThan(500);
+    await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
+    await expect(page.getByTestId('copilot-result')).toHaveCount(0);
+  });
+
+  test('the Copilot screen is clean under axe in both directions', async ({ page }) => {
+    await signIn(page);
+    for (const locale of ['en', 'ar']) {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/copilot?from=analytics`);
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(results.violations, `${locale} copilot`).toEqual([]);
+    }
+  });
+
+  test('deleting a rule asks first', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    const form = page.getByTestId('automation-form');
+    const name = `E2E delete ${Date.now()}`;
+    await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-submit').click();
+    await page.waitForLoadState('networkidle');
+
+    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    const confirmDelete = row.getByRole('button', { name: /delete this rule/i });
+    // Not reachable in one click: the destructive button is behind a disclosure.
+    await expect(confirmDelete).toBeHidden();
+    await row.locator('summary').click();
+    await expect(confirmDelete).toBeVisible();
+    await confirmDelete.click();
+    await page.waitForLoadState('networkidle');
+    // The rule is gone — whether the list remains or gives way to its empty state.
+    await expect(page.locator('main')).not.toContainText(name);
   });
 });

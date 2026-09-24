@@ -3,6 +3,7 @@ import {
   ContentStudioService,
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
+  contentToolQuoteRequestSchema,
   contentToolRequestSchema,
   readRetentionFacts,
   resolveContentPolicy,
@@ -272,6 +273,9 @@ export function registerContentRoutes(app: FastifyInstance): void {
               platformKeys: parsed.data.platformKeys,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,
+              contentType: parsed.data.contentType,
+              locale: parsed.data.locale,
+              actorUserId: caller.userId,
             }),
           { prisma: getPrisma() },
         );
@@ -348,6 +352,50 @@ export function registerContentRoutes(app: FastifyInstance): void {
         });
       } catch (error: unknown) {
         return fail(reply, 'generate', error);
+      }
+    },
+  );
+
+  /*
+   * PHASE 6 FINAL (D-284) — the estimate for one inline edit, before it runs.
+   * Read permission and the quote rate limit, exactly as the generation quote:
+   * it reserves nothing, writes no `ai_request` and moves no credit.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/content/tool/quote',
+    {
+      scope: 'workspace',
+      permission: READ_PERMISSION,
+      rateLimit: 'ai.quote',
+      confirmation: 'not_required',
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const caller = await resolveCaller(req, reply, READ_PERMISSION);
+      if (!caller) return reply;
+
+      const parsed = contentToolQuoteRequestSchema.safeParse(req.body);
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+
+      const facts = await workspaceFacts(caller.workspaceId);
+      try {
+        const quote = await withWorkspace(
+          caller.workspaceId,
+          async (db) =>
+            (await studioFor(caller, db)).quoteTool({
+              variantId: parsed.data.variantId,
+              tool: parsed.data.tool,
+              argument: parsed.data.argument,
+              targetLocale: parsed.data.targetLocale,
+              planKey: facts.planKey,
+              actorBrandScope: caller.brandScope,
+            }),
+          { prisma: getPrisma() },
+        );
+        return reply.send({ estimateMilli: quote.estimateMilli.toString() });
+      } catch (error: unknown) {
+        return fail(reply, 'toolQuote', error);
       }
     },
   );

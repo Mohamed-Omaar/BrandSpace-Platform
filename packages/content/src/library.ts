@@ -6,7 +6,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { brandIdQueryFilter } from '@brandspace/shared';
+import { AppError, brandIdQueryFilter } from '@brandspace/shared';
 import {
   contentItemNotFound,
   draftLimitReached,
@@ -100,8 +100,29 @@ export class ContentLibraryService {
      * campaign returns nothing rather than anything.
      */
     campaignId?: string | undefined;
+    /**
+     * PHASE 6 FINAL (D-277 §15) — the library's format, platform and language
+     * filters. In the query, for the same reason as every filter above: a page
+     * the database already truncated cannot be filtered honestly afterwards.
+     */
+    contentType?: ContentItem['contentType'] | undefined;
+    /** Items with at least one variant for this platform. */
+    platformKey?: string | undefined;
+    locale?: ContentItem['primaryLocale'] | undefined;
     search?: string | undefined;
+    /**
+     * PHASE 6 FINAL (D-290) — the calendar's unscheduled tray: only items
+     * with at least one variant and NO live slot (one not CANCELLED, PUBLISHED
+     * or FAILED). In the query, so the page limit is spent on rows the tray
+     * can actually offer rather than on posts already on the calendar.
+     */
+    unscheduledOnly?: boolean | undefined;
     limit?: number | undefined;
+    /**
+     * Rows to skip, for a paged library (Phase 6 final acceptance, D-305).
+     * Bounded, so a crafted address cannot ask the database to walk a table.
+     */
+    offset?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
     return this.db.contentItem.findMany({
       where: {
@@ -114,6 +135,9 @@ export class ContentLibraryService {
             ? { status: { in: [...input.statuses] } }
             : {}),
         ...(input.campaignId ? { campaignId: input.campaignId } : {}),
+        ...(input.contentType ? { contentType: input.contentType } : {}),
+        ...(input.locale ? { primaryLocale: input.locale } : {}),
+        ...(input.platformKey ? { variants: { some: { platformKey: input.platformKey } } } : {}),
         /*
          * Search is over the TITLE only, and deliberately.
          *
@@ -124,10 +148,19 @@ export class ContentLibraryService {
          * of anything the member can open.
          */
         ...(input.search ? { title: { contains: input.search, mode: 'insensitive' } } : {}),
+        ...(input.unscheduledOnly
+          ? {
+              ...(input.platformKey ? {} : { variants: { some: {} } }),
+              calendarSlots: {
+                none: { status: { notIn: ['CANCELLED', 'PUBLISHED', 'FAILED'] } },
+              },
+            }
+          : {}),
       },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
       take: Math.min(input.limit ?? 50, 200),
+      skip: Math.max(0, Math.min(Math.trunc(input.offset ?? 0), 10_000)),
     });
   }
 
@@ -541,6 +574,11 @@ export class ContentLibraryService {
     hashtags?: readonly string[];
     firstComment?: string | null;
     assetIds?: readonly string[] | undefined;
+    /**
+     * PHASE 6 FINAL (D-285) — the cover image. Undefined leaves it; null clears
+     * it; an id must be an IMAGE this variant's brand may use, READY and CLEAN.
+     */
+    coverAssetId?: string | null | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
   }): Promise<ContentVariant> {
@@ -555,10 +593,18 @@ export class ContentLibraryService {
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
 
+    /*
+     * ABSENT MEANS "LEAVE IT" (Phase 6 final, D-284). A form that has no first
+     * comment field — every platform that does not take one — used to save
+     * `null` over whatever was stored. Only an explicit value, empty included,
+     * changes it now.
+     */
+    const firstComment =
+      input.firstComment === undefined ? variant.firstComment : input.firstComment || null;
     const validation = validateVariant(platform, {
       body: input.body,
       ...(input.hashtags ? { hashtags: input.hashtags } : {}),
-      firstComment: input.firstComment ?? null,
+      firstComment,
     });
 
     /*
@@ -581,13 +627,32 @@ export class ContentLibraryService {
             policy: this.policy,
           });
 
+    let cover: string | null | undefined;
+    if (input.coverAssetId === undefined || input.coverAssetId === null) {
+      cover = input.coverAssetId;
+    } else {
+      const [resolved] = await new ContentMediaResolver({
+        db: this.db,
+        workspaceId: this.workspaceId,
+      }).resolve({
+        assetIds: [input.coverAssetId],
+        brandId: variant.brandId,
+        brandScope: input.actorBrandScope,
+      });
+      if (!resolved || resolved.kind !== 'IMAGE') {
+        throw new AppError('VALIDATION_FAILED', 'A cover must be an image.');
+      }
+      cover = resolved.id;
+    }
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
-        firstComment: input.firstComment ?? null,
+        firstComment,
         origin: variant.origin === 'HUMAN' ? 'HUMAN' : 'AI_ASSISTED',
         characterCount: validation.characterCount,
         validationState: validation.state,
@@ -609,6 +674,7 @@ export class ContentLibraryService {
         characterCount: validation.characterCount,
         validationState: validation.state,
         ...(media === undefined ? {} : { mediaCount: media.length }),
+        ...(cover === undefined ? {} : { cover: cover === null ? 'cleared' : 'set' }),
       },
     });
 
@@ -632,12 +698,16 @@ export class ContentLibraryService {
      * something already planned is a Phase 6 question — there is a slot pointing
      * at it — and this phase does not answer it by silently unscheduling.
      */
-    await this.#revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
+    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
     return updated;
   }
 
-  /** See `editVariant`. Separate so the reason has somewhere to live. */
-  async #revokeApprovalOnEdit(
+  /**
+   * See `editVariant`. Separate so the reason has somewhere to live, and
+   * PROTECTED so the studio's AI edits obey the same rule (D-284): a caption an
+   * inline tool rewrote is as changed as one a person retyped.
+   */
+  protected async revokeApprovalOnEdit(
     actorUserId: string,
     contentItemId: string,
     brandId: string,

@@ -10,7 +10,10 @@ import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inNotes } from '../../../server/notes-context';
+import { resolveContentLanguage } from '../../../server/content-language';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
+import { translator } from '../../../i18n/messages';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
 
@@ -158,13 +161,13 @@ export async function listCampaignOptionsAction(
  * not thereby a member who may add to the brand's library.
  */
 export async function createManualDraftAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'content.create');
     const brandId = String(formData.get('brandId') ?? '');
     const title = String(formData.get('title') ?? '');
-    const contentLocale = String(formData.get('contentLocale') ?? 'AR') === 'EN' ? 'EN' : 'AR';
+    const explicitLanguage = formData.get('contentLocale');
     /*
      * THE TYPE THE COMPOSER ALREADY ASKED FOR (PHASE 2 correction).
      *
@@ -225,10 +228,15 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const itemId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
       const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
+      // Explicit choice, then the brand's own preference, then English (D-277).
+      const brand = await services.db.brand.findFirst({
+        where: { id: brandId, workspaceId: session.workspace.workspaceId },
+        select: { defaultLocale: true },
+      });
       const created = await library.createManualItem({
         brandId,
         title,
-        locale: contentLocale,
+        locale: resolveContentLanguage(explicitLanguage, brand?.defaultLocale),
         ...(contentType ? { contentType } : {}),
         variants: platformKeys.map((platformKey) => ({
           platformKey,
@@ -244,7 +252,11 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
       return created.item.id;
     });
 
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      ok: 'SAVED',
+      ...attachParam(formData),
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'createManualDraft', '/compose');
   }
@@ -252,9 +264,21 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
   redirect(destination);
 }
 
+/**
+ * PHASE 6 FINAL (D-285) — AN IMAGE CARRIED FROM THE CREATIVE STUDIO.
+ *
+ * Only ever an id to OFFER on the new draft: the draft editor puts it on the
+ * slides, unsaved, and the ordinary save resolves it against the brand and the
+ * platform like any other media. Nothing is attached by this parameter alone.
+ */
+function attachParam(formData: FormData): { attach?: string } {
+  const value = String(formData.get('attach') ?? '');
+  return /^[0-9a-f-]{36}$/i.test(value) ? { attach: value } : {};
+}
+
 /** Save a person's own edit to a caption. No gateway, no credits. */
 export async function saveVariantAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -281,11 +305,26 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
       ? formData.getAll('assetIds').map((value) => String(value))
       : undefined;
 
+    const rawCover = formData.get('coverAssetId');
+    const coverAssetId =
+      rawCover === null
+        ? undefined
+        : String(rawCover).trim() === ''
+          ? null
+          : String(rawCover).trim();
+    // Present only where the platform takes one; absent leaves it untouched.
+    const rawComment = formData.get('firstComment');
+    const firstComment =
+      rawComment === null ? undefined : String(rawComment).trim().slice(0, 2_200);
+
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
       (await library()).editVariant({
         variantId,
         body,
         hashtags,
+        ...(firstComment === undefined ? {} : { firstComment }),
+        // PHASE 6 FINAL (D-285) — present only where a cover can be chosen.
+        ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
       }),
@@ -315,7 +354,7 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
  * missing field — the control always submits, and `''` unlinks.
  */
 export async function setContentCampaignAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -334,7 +373,11 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
         },
       }),
     );
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CAMPAIGN_LINKED' });
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      ok: 'CAMPAIGN_LINKED',
+      ...attachParam(formData),
+    });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
@@ -364,7 +407,7 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
  * different one would be a brand chosen by a POST body.
  */
 export async function uploadComposerMediaAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -432,7 +475,7 @@ function isRedirectError(error: unknown): boolean {
  * pipeline; the service refuses them, and this action has no way to name one.
  */
 export async function transitionItemAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const raw = String(formData.get('to') ?? '');
   const to = raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
@@ -466,10 +509,21 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
  * endpoint, and the hidden button is a courtesy.
  */
 export async function submitForReviewAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const note = String(formData.get('note') ?? '');
   const assignedTo = String(formData.get('assignedToUserId') ?? '');
+  const fromLibrary = formData.get('returnTo') === '/content';
+  // D-290 — the calendar's post drawer returns to the same month (a closed set).
+  const fromCalendar = formData.get('returnTo') === '/calendar';
+  const month = String(formData.get('month') ?? '');
+  const calendarUrl = (params: Record<string, string>) => {
+    const search = new URLSearchParams({
+      ...(/^\d{4}-\d{2}$/.test(month) ? { month } : {}),
+      ...params,
+    }).toString();
+    return `/${locale === 'ar' ? 'ar' : 'en'}/calendar?${search}`;
+  };
 
   let destination: string;
   try {
@@ -482,18 +536,92 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
         note,
       }),
     );
+    // The library's quick action returns to the library (a closed set, D-282).
+    destination = fromCalendar
+      ? calendarUrl({ ok: 'SUBMITTED' })
+      : fromLibrary
+        ? pageUrl(locale, '', { ok: 'SUBMITTED' })
+        : pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
+  } catch (error: unknown) {
+    if (fromCalendar) {
+      const failed = new URL(failure(locale, error, 'submitForReview', ''), 'http://x');
+      destination = calendarUrl({
+        error: failed.searchParams.get('error') ?? '',
+        ref: failed.searchParams.get('ref') ?? '',
+      });
+    } else {
+      destination = fromLibrary
+        ? failure(locale, error, 'submitForReview', '')
+        : failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+    }
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/calendar`);
+  revalidatePath(`/${locale}/approvals`);
+  redirect(destination);
+}
+
+/**
+ * PHASE 6 FINAL (D-277 §29, D-288) — "I MADE THE CHANGES": ONE FLOW.
+ *
+ * After a reviewer requests changes, the author answers the reviewer's thread
+ * (optionally), marks it resolved and sends the post for review again — one
+ * button instead of three screens. Nothing here is a second workflow: the
+ * reply and the resolve are the ordinary notes calls, and the resubmission is
+ * the SAME `approvals.submit` the Send for review button uses, with the same
+ * permission, policy, audit and cycle numbering. The note text travels as the
+ * request note so the reviewer sees what changed.
+ *
+ * A THREAD THAT CANNOT BE RESOLVED DOES NOT BLOCK THE RESUBMISSION: the
+ * approval is the source of truth, the conversation is its companion.
+ */
+export async function resubmitAfterChangesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  const reply = String(formData.get('reply') ?? '').trim();
+  const threadIds = formData
+    .getAll('threadId')
+    .map(String)
+    .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 10);
+
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.submit');
+    try {
+      await inNotes(locale, async ({ service, actor }) => {
+        for (const threadId of threadIds) {
+          if (reply !== '') await service.reply({ actor, threadId, body: reply });
+          await service.resolve({ actor, threadId });
+        }
+      });
+    } catch (noteFailure: unknown) {
+      log.warn('changes-requested thread could not be closed', {
+        itemId,
+        ...internalErrorFields(noteFailure),
+      });
+    }
+    await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
+      (await approvals()).submit({
+        itemId,
+        actor: approvalActorOf(session),
+        assignedToUserId: null,
+        note: reply,
+      }),
+    );
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'submitForReview', '/compose', { item: itemId });
+    destination = failure(locale, error, 'resubmitAfterChanges', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   revalidatePath(`/${locale}/approvals`);
+  revalidatePath(`/${locale}/notes`);
   redirect(destination);
 }
 
 /** Withdraw an open review, returning the item to a draft. */
 export async function cancelReviewAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const approvalId = String(formData.get('approvalId') ?? '');
 
@@ -526,7 +654,7 @@ export async function cancelReviewAction(formData: FormData): Promise<void> {
  * PostgreSQL even if this function were bypassed entirely.
  */
 export async function saveRetentionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'workspace.update');
@@ -574,5 +702,67 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
     destination = `/${locale}/settings?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings`);
+  redirect(destination);
+}
+
+/**
+ * DUPLICATE A POST (D-277 §15, D-282) — a NEW draft carrying the source's
+ * words, media, format, language, campaign and tags, through the ordinary
+ * manual-create path: the same platform checks, the same brand-scope check,
+ * the same audit. The source is read under the member's BrandScope, so a post
+ * they cannot open cannot be copied.
+ *
+ * NOTHING ABOUT THE SOURCE'S LIFECYCLE IS COPIED — no approval, no schedule,
+ * no publication: a duplicate is a draft. A campaign is kept only for a member
+ * who may file content under campaigns, the same rule the composer applies.
+ * The form's per-render token is the idempotency key, so a double click makes
+ * one copy.
+ */
+export async function duplicateContentAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  const token = String(formData.get('token') ?? '').slice(0, 120) || randomUUID();
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.create');
+    const mayFile = session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION);
+    const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const [library, policy] = await Promise.all([services.library(), services.policy()]);
+      const source = await library.getItem(itemId, session.workspace.brandScope);
+      const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
+      const created = await library.createManualItem({
+        brandId: source.brandId,
+        title: translator(locale)('content.duplicateTitle').replace('{title}', source.title),
+        contentType: source.contentType,
+        locale: source.primaryLocale,
+        variants: source.variants
+          .filter((variant) => variant.locale === source.primaryLocale)
+          .map((variant) => ({
+            platformKey: variant.platformKey,
+            body: variant.body ?? '',
+            hashtags: variant.hashtags,
+            // A first comment travels only to a platform that still takes one:
+            // the operator may have switched it off since it was written.
+            firstComment: policy.platforms.find((p) => p.key === variant.platformKey)
+              ?.allowsFirstComment
+              ? variant.firstComment
+              : null,
+            linkUrl: variant.linkUrl,
+            assetIds: variant.assetIds,
+          })),
+        campaignId: mayFile ? source.campaignId : null,
+        pillar: source.pillar,
+        tags: source.tags,
+        idempotencyKey: `duplicate:${token}`,
+        expiresAt: resolveContentExpiry(policy, facts, systemClock),
+        ...actorOf(session),
+      });
+      return created.item.id;
+    });
+    destination = pageUrl(locale, '/compose', { item: copyId, ok: 'DUPLICATED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'duplicate', '');
+  }
+  revalidatePath(`/${locale}/content`);
   redirect(destination);
 }

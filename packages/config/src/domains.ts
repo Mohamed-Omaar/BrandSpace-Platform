@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ABSOLUTE_MAX_PASSWORD_LENGTH, ABSOLUTE_MIN_PASSWORD_LENGTH } from '@brandspace/shared';
 
 /**
  * Configuration domains and their schemas.
@@ -964,6 +965,31 @@ const contentStudioSchema = z.object({
       maxNoteLength: z.number().int().min(40).max(4_000).default(1_000),
       /** How many review cycles one item may go through before it is stuck. */
       maxCyclesPerItem: z.number().int().min(1).max(100).default(25),
+    })
+    .default({}),
+
+  /**
+   * PHASE 6 FINAL (D-277 §9-§10, D-295/D-296) — WHEN A HABIT IS WORTH SAYING.
+   *
+   * BrandSpace notices a PREFERENCE (the same inline edit on the same platform,
+   * after generation) and a REPEATED WORKFLOW (the same kind of post made the
+   * same way on the same weekday) only past these thresholds, read from the
+   * audit trail inside a window. Conservative on purpose: one edit is not a
+   * preference, and a suggestion nobody asked for must be earned. Operator
+   * configuration, not code (CLAUDE.md §2.2).
+   */
+  learning: z
+    .object({
+      /** Observations before a preference is suggested. */
+      preferenceMinObservations: z.number().int().min(2).max(100).default(4),
+      /** …across at least this many different posts, so one post edited five times is not a habit. */
+      preferenceMinPosts: z.number().int().min(2).max(100).default(3),
+      /** Repetitions before a workflow is suggested. */
+      workflowMinRepeats: z.number().int().min(2).max(100).default(4),
+      /** How far back the audit trail is read, in days. */
+      windowDays: z.number().int().min(7).max(365).default(90),
+      /** How long "Not now" lasts. */
+      snoozeDays: z.number().int().min(1).max(365).default(30),
     })
     .default({}),
 });
@@ -2047,7 +2073,12 @@ const onboardingSchema = z.object({
        * A FLOOR, NOT A COMPOSITION RULE. Length is the property that actually
        * resists guessing; forced symbol classes mostly produce `Password1!`.
        */
-      minPasswordLength: z.number().int().min(10).max(128).default(12),
+      minPasswordLength: z
+        .number()
+        .int()
+        .min(ABSOLUTE_MIN_PASSWORD_LENGTH)
+        .max(ABSOLUTE_MAX_PASSWORD_LENGTH)
+        .default(ABSOLUTE_MIN_PASSWORD_LENGTH),
       /** How long a verification link is good for. */
       verificationTtlMinutes: z.number().int().min(15).max(10_080).default(1_440),
       /** How often a customer may ask for another one. */

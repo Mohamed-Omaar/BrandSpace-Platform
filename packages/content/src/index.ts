@@ -6,15 +6,21 @@
  * through `@brandspace/ai-gateway`, which is the only package permitted to know
  * a provider exists.
  */
-export { ContentStudioService, CONTENT_TOOLS } from './studio';
+export { ContentStudioService, CONTENT_TOOLS, carouselOutlineInstruction } from './studio';
 export type { ContentTool, GenerateInput, GenerationResult, StudioOptions } from './studio';
 
 export {
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
+  contentToolQuoteRequestSchema,
   contentToolRequestSchema,
 } from './requests';
-export type { ContentGenerateRequest, ContentQuoteRequest, ContentToolRequest } from './requests';
+export type {
+  ContentGenerateRequest,
+  ContentQuoteRequest,
+  ContentToolQuoteRequest,
+  ContentToolRequest,
+} from './requests';
 
 export { ContentLibraryService } from './library';
 export type { ContentLibraryOptions } from './library';
@@ -123,3 +129,18 @@ export { CampaignService, campaignNotFound, campaignVersionConflict } from './ca
 export { ContentMediaResolver, mediaNotFound, tooManyMedia } from './media';
 export type { MediaResolverOptions, ResolvedMedia } from './media';
 export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';
+export {
+  MemberSuggestionService,
+  PREFERENCE_SOURCE,
+  TONE_KEYS,
+  WORKFLOW_SOURCE,
+  noticeWorkflows,
+  type NoticedWorkflow,
+  type WorkflowObservation,
+  noticePreferences,
+  preferenceInstructions,
+  preferenceKeyOf,
+  type NoticedPreference,
+  type SuggestionDecision,
+  type ToolObservation,
+} from './suggestions';

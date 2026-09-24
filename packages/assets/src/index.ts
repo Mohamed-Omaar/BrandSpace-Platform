@@ -49,6 +49,7 @@ export {
   isSelectable,
   type AssetLibraryServiceOptions,
   type AssetPage,
+  type AssetUse,
   type AssetSortField,
   type BrowseAssetsInput,
   type SortDirection,

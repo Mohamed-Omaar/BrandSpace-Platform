@@ -60,7 +60,7 @@ function actorOf(session: WorkspaceSession) {
 
 /** AC-14.1 — place a draft on the calendar at a chosen date and time. */
 export async function scheduleContentAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const period = periodOf(formData);
   let destination: string;
   try {
@@ -93,7 +93,7 @@ export async function scheduleContentAction(formData: FormData): Promise<void> {
 
 /** AC-14.8 — move a slot to another date or time. */
 export async function rescheduleContentAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const period = periodOf(formData);
   let destination: string;
   try {
@@ -119,7 +119,7 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
 
 /** AC-14.8 — take a slot off the calendar; the draft goes back to DRAFT. */
 export async function cancelScheduleAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const period = periodOf(formData);
   let destination: string;
   try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Banner,
   Button,
@@ -10,7 +10,6 @@ import {
   StateMessage,
   StatusBadge,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
   type CopilotLabels,
@@ -59,6 +58,14 @@ interface PlanStep {
   readonly preview: readonly { labelKey: string; before?: string; after: string }[];
 }
 
+interface InspectionCall {
+  readonly ordinal: number;
+  readonly toolKey: string;
+  readonly status: string;
+  readonly failureCode: string | null;
+  readonly result: unknown;
+}
+
 interface PlanResponse {
   readonly summary?: { ar: string; en: string };
   readonly planId?: string;
@@ -70,12 +77,14 @@ interface PlanResponse {
   readonly confirmationToken?: string | null;
   readonly rejectedToolKeys?: readonly string[];
   readonly steps?: readonly PlanStep[];
+  readonly inspection?: readonly InspectionCall[] | null;
   readonly error?: { code?: string };
 }
 
 interface ExecutionResponse {
   readonly status?: string;
   readonly undoStatus?: string;
+  readonly undoExpiresAt?: string | null;
   readonly toolCalls?: readonly {
     ordinal: number;
     toolKey: string;
@@ -87,44 +96,95 @@ interface ExecutionResponse {
   readonly error?: { code?: string };
 }
 
+/** Preview values that are machine keys, and the message stem that names them. */
+const TRANSLATED_PREVIEW: Readonly<Record<string, string>> = {
+  'copilot.preview.trigger': 'automations.trigger.',
+  'copilot.preview.action': 'automations.action.',
+  'copilot.preview.ruleEnabled': 'copilot.ruleEnabled.',
+};
+
 export function CopilotView({
   locale,
-  brands,
+  brand,
+  surface,
   labels,
   creditsLabel,
+  subject = null,
+  initialRequest = '',
 }: {
   readonly locale: string;
-  readonly brands: readonly CopilotBrand[];
+  /**
+   * D-296 — a request handed over by "Give to Copilot" (a recurring workflow
+   * BrandSpace noticed). Put in the box, NEVER sent: the person reads it and
+   * presses Propose, and the plan/confirm ceremony applies as always.
+   */
+  readonly initialRequest?: string;
+  /**
+   * WHAT THE READER IS LOOKING AT (D-277 §37, D-280) — a campaign, a post or an
+   * insight, with the title to say so. Sent when the session opens; the server
+   * admits it against the brand or refuses the conversation.
+   */
+  readonly subject?: {
+    readonly type: 'CAMPAIGN' | 'CONTENT_ITEM' | 'INSIGHT';
+    readonly id: string;
+    readonly title: string;
+  } | null;
+  /** The rail's selected brand — the ONLY brand this conversation acts on (D-190). */
+  readonly brand: CopilotBrand;
+  /** Where the Copilot was opened from; a key from the closed surface list. */
+  readonly surface: string;
   readonly labels: CopilotLabels;
   /** Omitted where no real balance can be read. Nothing is invented (§2.2). */
   readonly creditsLabel: string | null;
 }) {
   /*
    * THE DICTIONARY IS RESOLVED HERE, FROM THE LOCALE — never handed in as a
-   * function.
-   *
-   * A server component may pass this client component only SERIALIZABLE props,
-   * and a translator is a closure: React refuses it at render time with
-   * "Functions cannot be passed directly to Client Components", which takes the
-   * whole screen down rather than degrading. The locale is a string, the
-   * message catalogue is a module this bundle already contains, and the two
-   * together give exactly the same text with nothing crossing the boundary that
-   * cannot cross it.
-   *
-   * Every string this component renders is still a translation key — CLAUDE.md
-   * §4 — and both languages still come from one catalogue.
+   * function. A server component may pass this client component only
+   * SERIALIZABLE props, and a translator is a closure.
    */
   const dictionary = locale === 'ar' ? catalogue.ar : catalogue.en;
   const t = (key: MessageKey): string => dictionary[key];
+  /** A key that may not exist (a machine value's label): the value itself if not. */
+  const tOr = (key: string, fallback: string): string =>
+    (dictionary as Record<string, string>)[key] ?? fallback;
 
-  const [brandId, setBrandId] = useState(brands[0]?.id ?? '');
-  const [request, setRequest] = useState('');
+  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+    maximumFractionDigits: 2,
+  });
+  const time = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  /*
+   * ONE CONVERSATION PER VISIT (P6-12). Every submit used to open a NEW
+   * session, so the history the orchestrator carefully fences into each turn
+   * was always empty and "now make it shorter" meant nothing. The session is
+   * opened on the first request and reused; the brand is fixed for the visit,
+   * so a different brand in the rail is a different page load and a new
+   * conversation.
+   */
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [request, setRequest] = useState(initialRequest.slice(0, 1_000));
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<readonly CopilotMessage[]>([]);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [execution, setExecution] = useState<ExecutionResponse | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  /*
+   * THE CONFIRMATION WINDOW IS SHOWN CLOSING, NOT DISCOVERED CLOSED. While a
+   * plan waits, the clock ticks so the expiry is stated and, once passed, the
+   * confirm button stands down with a sentence rather than failing on click.
+   */
+  const awaiting = Boolean(plan?.requiresConfirmation && !execution && token);
+  useEffect(() => {
+    if (!awaiting) return;
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [awaiting]);
 
   const post = async (path: string, body: unknown): Promise<unknown> => {
     const response = await fetch(path, {
@@ -135,21 +195,30 @@ export function CopilotView({
     return response.json().catch(() => ({ error: { code: 'INTERNAL' } }));
   };
 
+  const openSession = async (): Promise<string | null> => {
+    if (sessionId) return sessionId;
+    const opened = (await post('/api/copilot/session', {
+      brandId: brand.id,
+      surface,
+      locale: locale === 'ar' ? 'AR' : 'EN',
+      subject: subject ? { type: subject.type, id: subject.id } : null,
+    })) as { sessionId?: string; error?: { code?: string } };
+    if (!opened.sessionId) {
+      setErrorCode(opened.error?.code ?? 'INTERNAL');
+      return null;
+    }
+    setSessionId(opened.sessionId);
+    return opened.sessionId;
+  };
+
   const propose = async (): Promise<void> => {
     if (request.trim().length === 0 || busy) return;
     setBusy(true);
     setErrorCode(null);
     setExecution(null);
     try {
-      const opened = (await post('/api/copilot/session', {
-        brandId: brandId || null,
-        surface: 'general',
-        locale: locale === 'ar' ? 'AR' : 'EN',
-      })) as { sessionId?: string; error?: { code?: string } };
-      if (!opened.sessionId) {
-        setErrorCode(opened.error?.code ?? 'INTERNAL');
-        return;
-      }
+      const active = await openSession();
+      if (!active) return;
 
       setMessages((current) => [
         ...current,
@@ -157,20 +226,24 @@ export function CopilotView({
       ]);
 
       const result = (await post('/api/copilot/turn', {
-        sessionId: opened.sessionId,
+        sessionId: active,
         // NO brandId. The session owns its brand; see the turn route (P7-R1).
         request,
-        // ONE KEY PER REQUEST TEXT, so a double click replays the first turn
-        // rather than paying for a second.
-        idempotencyKey: `copilot:${opened.sessionId}:${digest(request)}`,
+        // ONE KEY PER REQUEST TEXT IN THIS CONVERSATION, so a double click
+        // replays the first turn rather than paying for a second.
+        idempotencyKey: `copilot:${active}:${digest(request)}`,
       })) as PlanResponse;
 
       if (result.error?.code) {
+        // A conversation the server no longer admits (expired, or the brand
+        // scope narrowed) is dropped, so the next request opens a fresh one.
+        if (result.error.code === 'NOT_FOUND') setSessionId(null);
         setErrorCode(result.error.code);
         return;
       }
       setPlan(result);
       setToken(result.confirmationToken ?? null);
+      setNow(Date.now());
       const summary = locale === 'ar' ? result.summary?.ar : result.summary?.en;
       if (summary) {
         setMessages((current) => [
@@ -209,6 +282,26 @@ export function CopilotView({
     }
   };
 
+  /*
+   * DECLINING IS A SERVER ACT NOW (P6-12). The plan is cancelled where it
+   * lives, its confirmation token cleared and `copilot.plan_cancelled` audited
+   * — it no longer sits open until its window lapses. The local state is
+   * cleared whatever the answer: a plan that had already expired cannot be
+   * cancelled and does not need to be.
+   */
+  const reject = async (): Promise<void> => {
+    const planId = plan?.planId;
+    setPlan(null);
+    setToken(null);
+    if (!planId || busy) return;
+    setBusy(true);
+    try {
+      await post('/api/copilot/cancel', { planId });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const undo = async (): Promise<void> => {
     if (!plan?.planId || busy) return;
     setBusy(true);
@@ -229,9 +322,22 @@ export function CopilotView({
 
   const steps = plan?.steps ?? [];
   const external = plan?.highestActionClass === 'EXTERNAL_OR_DESTRUCTIVE';
+  const expiresAt = plan?.confirmationExpiresAt ? Date.parse(plan.confirmationExpiresAt) : null;
+  const expired = expiresAt !== null && expiresAt <= now;
+  const costMilli = Number(plan?.estimatedCreditsMilli ?? '0');
+  const previewValue = (labelKey: string, value: string): string => {
+    const stem = TRANSLATED_PREVIEW[labelKey];
+    return stem ? tOr(`${stem}${value}`, value) : value;
+  };
+  const stepTitle = (toolKey: string): string => {
+    const step = steps.find((entry) => entry.toolKey === toolKey);
+    return step ? t(`copilot.tool.${step.messageKey}` as MessageKey) : toolKey;
+  };
 
   const tools: readonly CopilotToolRun[] = steps.map((step) => {
-    const call = execution?.toolCalls?.find((entry) => entry.ordinal === step.ordinal);
+    const call =
+      execution?.toolCalls?.find((entry) => entry.ordinal === step.ordinal) ??
+      plan?.inspection?.find((entry) => entry.ordinal === step.ordinal);
     return {
       id: String(step.ordinal),
       title: t(`copilot.tool.${step.messageKey}` as MessageKey),
@@ -246,7 +352,7 @@ export function CopilotView({
   });
 
   const proposedAction: CopilotProposedAction | undefined =
-    plan && plan.requiresConfirmation && !execution
+    plan && plan.requiresConfirmation && !execution && !expired
       ? {
           id: plan.planId ?? 'plan',
           title: t('copilot.plan'),
@@ -255,24 +361,26 @@ export function CopilotView({
           preview: steps.flatMap((step) =>
             step.preview.map((line) => ({
               label: t(line.labelKey as MessageKey),
-              before: line.before,
-              after: line.after,
+              before:
+                line.before === undefined ? undefined : previewValue(line.labelKey, line.before),
+              after: previewValue(line.labelKey, line.after),
             })),
           ),
         }
       : undefined;
 
+  const executionTone =
+    execution?.status === 'COMPLETED'
+      ? 'success'
+      : execution?.status === 'FAILED'
+        ? 'danger'
+        : 'neutral';
+
   return (
     <div style={{ display: 'grid', gap: spacingTokens.lg }}>
       {/*
-       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE.
-       *
-       * `errorCode` is a code from a closed set that the SERVER chose; the
-       * sentence is chosen here, from the same bilingual catalogue every other
-       * string on this screen comes from. A code the catalogue does not know
-       * renders the generic sentence rather than itself — which is what keeps a
-       * provider message, a stack frame or a schema error off this banner
-       * whatever a future error path does.
+       * A REFUSAL IN THE READER'S LANGUAGE, NEVER A MACHINE CODE. A code the
+       * catalogue does not know renders the generic sentence rather than itself.
        */}
       {errorCode ? (
         <Banner tone="error" testId="copilot-error">
@@ -280,54 +388,26 @@ export function CopilotView({
         </Banner>
       ) : null}
 
-      <Card title={t('copilot.promptLabel')}>
-        <div style={{ display: 'grid', gap: spacingTokens.sm }}>
-          {brands.length > 1 ? (
-            <label style={{ display: 'grid', gap: '0.25rem' }}>
-              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                {t('analytics.brandLabel')}
-              </span>
-              <select
-                className="bs-control"
-                value={brandId}
-                onChange={(event) => setBrandId(event.target.value)}
-                data-testid="copilot-brand"
-              >
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-
-          <label style={{ display: 'grid', gap: '0.25rem' }}>
-            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-              {t('copilot.promptLabel')}
-            </span>
-            <input
-              className="bs-control"
-              style={inputStyle()}
-              value={request}
-              maxLength={2_000}
-              placeholder={t('copilot.promptPlaceholder')}
-              onChange={(event) => setRequest(event.target.value)}
-              data-testid="copilot-request"
-            />
-          </label>
-
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={() => void propose()}
-            disabled={busy || request.trim().length === 0}
-            data-testid="copilot-propose"
-          >
-            {t('copilot.send')}
-          </Button>
-        </div>
-      </Card>
+      {/*
+        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
+        "What would you like to get done?" field above the conversation, whose
+        own composer then sat inert beneath it: two places to type one thing.
+        Now the header states what the conversation is about, the plan and its
+        results follow, and the one composer is the conversation's own.
+      */}
+      <p
+        data-testid="copilot-context"
+        style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+      >
+        {t('copilot.contextBrand').replace('{brand}', brand.name)}
+        {surface !== 'general'
+          ? ` · ${t('copilot.contextFrom').replace(
+              '{screen}',
+              tOr(`copilot.surface.${surface}`, surface),
+            )}`
+          : ''}
+        {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
+      </p>
 
       {plan && steps.length === 0 ? (
         <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
@@ -341,7 +421,13 @@ export function CopilotView({
         <Card testId="copilot-plan">
           <SectionHeader
             title={t('copilot.plan')}
-            description={`${t('copilot.estimatedCost')}: ${plan.estimatedCreditsMilli ?? '0'}`}
+            description={
+              costMilli > 0
+                ? `${t('copilot.estimatedCost')}: ${number.format(costMilli / 1_000)} ${t(
+                    'copilot.credits',
+                  )}`
+                : t('copilot.noCost')
+            }
             actions={
               <StatusBadge
                 tone={external ? 'warning' : 'neutral'}
@@ -352,84 +438,178 @@ export function CopilotView({
             }
           />
           {/*
-           * THE EXTERNAL WARNING IS ITS OWN BANNER, not a line in a list. A
-           * plan that would leave the platform must not look like a plan that
-           * would not, and a reader skimming a preview should meet that
-           * difference before they meet the button.
+           * THE EXTERNAL WARNING IS ITS OWN BANNER, not a line in a list. A plan
+           * that would leave the platform must not look like one that would not.
            */}
-          {external ? <Banner tone="warning">{t('copilot.externalWarning')}</Banner> : null}
+          {external ? (
+            <Banner tone="warning">{t('copilot.externalWarning')}</Banner>
+          ) : (
+            /*
+             * AND THE OPPOSITE IS SAID TOO (D-277 §38): a plan that stays inside
+             * BrandSpace says so before it is confirmed, so "create two drafts"
+             * is never mistaken for "post two things".
+             */
+            <p
+              data-testid="copilot-nothing-published"
+              style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+            >
+              {t('copilot.nothingWillPublish')}
+            </p>
+          )}
 
           <ol style={{ display: 'grid', gap: spacingTokens.sm, paddingInlineStart: '1.25rem' }}>
-            {steps.map((step) => (
-              <li key={step.ordinal} style={{ ...typographyTokens.bodySm }}>
-                <strong>{t(`copilot.tool.${step.messageKey}` as MessageKey)}</strong>{' '}
-                <span style={{ color: colorTokens.textSecondary }}>
-                  ({t(`copilot.actionClass.${step.actionClass}` as MessageKey)}
-                  {step.undoable ? '' : ` · ${t('copilot.notUndoable')}`})
-                </span>
-                {step.preview.length > 0 ? (
-                  <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
-                    {step.preview.map((line) => (
-                      <li
-                        key={`${step.ordinal}-${line.labelKey}`}
-                        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
-                      >
-                        {t(line.labelKey as MessageKey)}: {line.after}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            ))}
+            {steps.map((step) => {
+              const call = execution?.toolCalls?.find((entry) => entry.ordinal === step.ordinal);
+              return (
+                <li
+                  key={step.ordinal}
+                  style={{ ...typographyTokens.bodySm }}
+                  data-testid={`copilot-step-${step.ordinal}`}
+                >
+                  <strong>{t(`copilot.tool.${step.messageKey}` as MessageKey)}</strong>{' '}
+                  <span style={{ color: colorTokens.textSecondary }}>
+                    ({t(`copilot.actionClass.${step.actionClass}` as MessageKey)}
+                    {step.undoable ? '' : ` · ${t('copilot.notUndoable')}`})
+                  </span>
+                  {step.preview.length > 0 ? (
+                    <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+                      {step.preview.map((line) => (
+                        <li
+                          key={`${step.ordinal}-${line.labelKey}`}
+                          style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                        >
+                          {t(line.labelKey as MessageKey)}:{' '}
+                          {line.before !== undefined && line.before !== line.after ? (
+                            <>
+                              <s>{previewValue(line.labelKey, line.before)}</s> →{' '}
+                            </>
+                          ) : null}
+                          {previewValue(line.labelKey, line.after)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {call ? (
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                      {' '}
+                      · {tOr(`copilot.toolStatus.${call.status}`, call.status)}
+                      {call.failureCode
+                        ? ` (${tOr(`copilot.failure.${call.failureCode}`, t('copilot.failureOther'))})`
+                        : ''}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
 
+          {plan.inspection && plan.inspection.length > 0 ? (
+            <InspectionResults
+              calls={plan.inspection}
+              title={t('copilot.inspection.title')}
+              stepTitle={stepTitle}
+              t={tOr}
+              number={number}
+              time={time}
+            />
+          ) : null}
+
           {plan.requiresConfirmation && !execution ? (
-            <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={() => void confirm()}
-                disabled={busy || token === null}
-                data-testid="copilot-confirm"
+            expired ? (
+              <p
+                data-testid="copilot-expired"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
               >
-                {t('copilot.confirm')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setPlan(null);
-                  // THE TOKEN IS DROPPED ON CANCEL. A customer who said "no" must
-                  // not still be holding a live credential for the plan they
-                  // rejected.
-                  setToken(null);
-                }}
-                disabled={busy}
-                data-testid="copilot-reject"
-              >
-                {t('copilot.reject')}
-              </Button>
-              {plan.confirmationExpiresAt ? (
-                <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                  {t('copilot.confirmationExpires')}: {plan.confirmationExpiresAt}
-                </span>
-              ) : null}
-            </div>
+                {t('copilot.expired')}
+              </p>
+            ) : (
+              <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => void confirm()}
+                  disabled={busy || token === null}
+                  data-testid="copilot-confirm"
+                >
+                  {t('copilot.confirm')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void reject()}
+                  disabled={busy}
+                  data-testid="copilot-reject"
+                >
+                  {t('copilot.reject')}
+                </Button>
+                {expiresAt !== null ? (
+                  <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                    {t('copilot.confirmationExpires')}: {time.format(new Date(expiresAt))}
+                  </span>
+                ) : null}
+              </div>
+            )
           ) : null}
 
           {execution ? (
             <div style={{ display: 'grid', gap: spacingTokens.sm }} data-testid="copilot-result">
-              <StatusBadge tone="success" label={String(execution.status ?? '')} />
-              {execution.undoStatus === 'AVAILABLE' ? (
-                <Button
-                  variant="neutral"
-                  size="sm"
-                  onClick={() => void undo()}
-                  disabled={busy}
-                  data-testid="copilot-undo"
+              <StatusBadge
+                tone={executionTone}
+                label={tOr(
+                  `copilot.status.${execution.status ?? ''}`,
+                  String(execution.status ?? ''),
+                )}
+              />
+              {/*
+               * WHAT CHANGED, SAID EXACTLY (D-277 §38): one line per step that
+               * ran, from the server's own tool-call record — and, unless a
+               * publish step actually succeeded, that nothing was published.
+               */}
+              <ul
+                data-testid="copilot-changed"
+                style={{ margin: 0, paddingInlineStart: '1rem', ...typographyTokens.caption }}
+              >
+                {(execution.toolCalls ?? [])
+                  .filter((call) => call.status === 'SUCCEEDED')
+                  .map((call) => (
+                    <li key={call.ordinal}>✓ {stepTitle(call.toolKey)}</li>
+                  ))}
+              </ul>
+              {(execution.toolCalls ?? []).some(
+                (call) => call.toolKey === 'publishing.publish_now' && call.status === 'SUCCEEDED',
+              ) ? null : (
+                <p
+                  data-testid="copilot-nothing-was-published"
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    color: colorTokens.textSecondary,
+                  }}
                 >
-                  {t('copilot.undo')}
-                </Button>
+                  {t('copilot.nothingPublished')}
+                </p>
+              )}
+              {execution.undoStatus === 'AVAILABLE' ? (
+                <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => void undo()}
+                    disabled={busy}
+                    data-testid="copilot-undo"
+                  >
+                    {t('copilot.undo')}
+                  </Button>
+                  {execution.undoExpiresAt ? (
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                      {t('copilot.undoUntil')}: {time.format(new Date(execution.undoExpiresAt))}
+                    </span>
+                  ) : null}
+                </div>
+              ) : execution.undoStatus && execution.undoStatus !== 'NOT_APPLICABLE' ? (
+                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                  {tOr(`copilot.undoStatus.${execution.undoStatus}`, execution.undoStatus)}
+                </span>
               ) : null}
               {(execution.refused?.length ?? 0) > 0 ? (
                 <div data-testid="copilot-undo-refused">
@@ -440,7 +620,7 @@ export function CopilotView({
                         key={`${entry.ordinal}-${entry.reason}`}
                         style={{ ...typographyTokens.caption }}
                       >
-                        {t(`copilot.undoReason.${entry.reason}` as MessageKey)}
+                        {tOr(`copilot.undoReason.${entry.reason}`, t('copilot.failureOther'))}
                       </li>
                     ))}
                   </ul>
@@ -453,8 +633,7 @@ export function CopilotView({
 
       {/*
        * THE APPROVED VISUAL SHELL, carrying the real conversation. It is the same
-       * component the design showcase renders; what changed in Phase 7 is that
-       * the data behind it is real.
+       * component the design showcase renders; the data behind it is real.
        */}
       <Card>
         <CopilotBody
@@ -467,16 +646,142 @@ export function CopilotView({
             : {})}
           {...(proposedAction ? { proposedAction } : {})}
           onApprove={() => void confirm()}
-          onReject={() => {
-            setPlan(null);
-            setToken(null);
+          onReject={() => void reject()}
+          composer={{
+            value: request,
+            onChange: setRequest,
+            onSubmit: () => void propose(),
+            busy,
+            maxLength: 2_000,
+            inputTestId: 'copilot-request',
+            submitTestId: 'copilot-propose',
           }}
-          // The composer above is the real one; the shell's own field would be a
-          // second place to type the same thing.
-          disabled
         />
       </Card>
     </div>
+  );
+}
+
+/**
+ * WHAT A READ-ONLY PLAN FOUND (P6-12 — the Inspect step).
+ *
+ * Rendered from the tool results the server returned, which are METADATA by
+ * construction: counts, statuses, ids, titles and STORED figures. A metric with
+ * no value shows its named reason, never a zero. A result shape this component
+ * does not recognise shows nothing rather than a raw object.
+ */
+function InspectionResults({
+  calls,
+  title,
+  stepTitle,
+  t,
+  number,
+  time,
+}: {
+  calls: readonly InspectionCall[];
+  title: string;
+  stepTitle: (toolKey: string) => string;
+  t: (key: string, fallback: string) => string;
+  number: Intl.NumberFormat;
+  time: Intl.DateTimeFormat;
+}) {
+  return (
+    <section data-testid="copilot-inspection" style={{ display: 'grid', gap: spacingTokens.sm }}>
+      <h3 style={{ margin: 0, ...typographyTokens.label }}>{title}</h3>
+      {calls.map((call) => (
+        <div key={call.ordinal} style={{ display: 'grid', gap: '0.25rem' }}>
+          <strong style={{ ...typographyTokens.bodySm }}>{stepTitle(call.toolKey)}</strong>
+          {call.status !== 'SUCCEEDED' ? (
+            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+              {t(`copilot.toolStatus.${call.status}`, call.status)}
+            </span>
+          ) : (
+            <InspectionLines call={call} t={t} number={number} time={time} />
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function InspectionLines({
+  call,
+  t,
+  number,
+  time,
+}: {
+  call: InspectionCall;
+  t: (key: string, fallback: string) => string;
+  number: Intl.NumberFormat;
+  time: Intl.DateTimeFormat;
+}) {
+  const result = (call.result ?? {}) as Record<string, unknown>;
+  const lines: string[] = [];
+  const list = (key: string): Record<string, unknown>[] =>
+    Array.isArray(result[key]) ? (result[key] as Record<string, unknown>[]) : [];
+
+  switch (call.toolKey) {
+    case 'analytics.summary':
+      for (const metric of list('metrics')) {
+        const key = String(metric['metricKey'] ?? '');
+        const value = metric['value'];
+        const label = t(`analytics.metric.${key}`, key);
+        lines.push(
+          typeof value === 'string'
+            ? `${label}: ${number.format(Number(value))}`
+            : `${label}: ${t(`analytics.absent.${String(metric['absent'] ?? '')}`, t('analytics.noValue', '—'))}`,
+        );
+      }
+      if (result['containsMockData'] === true) lines.push(t('analytics.mockNotice', ''));
+      break;
+    case 'brand.context':
+      lines.push(
+        t('copilot.inspection.brandContext', '')
+          .replace('{items}', number.format(Number(result['knowledgeItems'] ?? 0)))
+          .replace('{chunks}', number.format(Number(result['documentChunks'] ?? 0))),
+      );
+      break;
+    case 'content.search':
+      for (const item of list('items').slice(0, 10)) {
+        lines.push(
+          `${String(item['title'] ?? '')} — ${t(`content.status.${String(item['status'])}`, String(item['status'] ?? ''))}`,
+        );
+      }
+      break;
+    case 'calendar.lookup':
+      for (const slot of list('slots').slice(0, 10)) {
+        const at = Date.parse(String(slot['scheduledAtUtc'] ?? ''));
+        lines.push(
+          `${Number.isNaN(at) ? '' : time.format(new Date(at))} — ${t(`content.status.${String(slot['status'])}`, String(slot['status'] ?? ''))}`,
+        );
+      }
+      break;
+    case 'campaign.list':
+      for (const campaign of list('campaigns').slice(0, 10)) {
+        lines.push(
+          `${String(campaign['name'] ?? '')} — ${t(`campaigns.status.${String(campaign['status'])}`, String(campaign['status'] ?? ''))}`,
+        );
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (lines.length === 0) {
+    return (
+      <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+        {t('copilot.inspection.nothing', '')}
+      </span>
+    );
+  }
+  return (
+    <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+      {lines.map((line, index) => (
+        <li key={index} style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+          {line}
+        </li>
+      ))}
+    </ul>
   );
 }
 

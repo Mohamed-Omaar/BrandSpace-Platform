@@ -62,6 +62,13 @@ export const NOTIFICATION_TEMPLATES = {
   'automation.confirmation_required': { severity: 'warning' },
   /** An automation stopped because its creator no longer has the authority. */
   'automation.blocked': { severity: 'warning' },
+  /**
+   * P6-12 — A NOTIFY rule fired. Its OWN template: authoring used to write
+   * `automation.confirmation_required` into every NOTIFY rule, so a plain
+   * "tell me when content is approved" rule arrived saying something was
+   * waiting for confirmation — the one message that must never be cried wolf.
+   */
+  'automation.notice': { severity: 'info' },
   /** A metric moved far enough from its baseline to be worth a look. */
   'analytics.anomaly_detected': { severity: 'info' },
   /** An inferred learning is waiting in the Brand Brain review queue. */

@@ -213,12 +213,17 @@ test.describe('accessibility', () => {
 });
 
 test.describe('navigation', () => {
-  test('the sidebar offers the screen to a member who may see it', async ({ page }) => {
+  test('the sidebar offers Publishing, and Settings offers Connections (D-277)', async ({
+    page,
+  }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
-    const link = page.locator('a[href$="/en/integrations"]').first();
-    await expect(link).toBeVisible();
-    await link.click();
+    await page.getByTestId('nav-publishing').first().click();
+    await page.waitForURL(/\/en\/publishing$/);
+    await expect(page.getByTestId('publishing-tabs')).toBeVisible();
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'Connections' }).click();
     await page.waitForURL(/\/en\/integrations$/);
     await expect(page.locator('[data-testid="connected-accounts"]')).toBeVisible();
   });

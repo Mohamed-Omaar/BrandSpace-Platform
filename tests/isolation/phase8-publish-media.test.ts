@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withWorkspace } from '@brandspace/database';
+import { systemClock } from '@brandspace/shared';
 import { PublishMediaResolver, publishableAssetWhere } from '@brandspace/assets';
 import { InMemoryObjectStore } from '@brandspace/storage';
 import {
@@ -356,6 +357,7 @@ describe('another tenant cannot be published on your behalf', () => {
       workspaceId: fixtures.a.workspaceId,
       brandId: fixtures.a.brandId,
       brandScope: [],
+      now: systemClock.now(),
     });
     const rows = await withWorkspace(
       fixtures.a.workspaceId,

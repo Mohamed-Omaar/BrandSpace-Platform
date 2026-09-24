@@ -1,10 +1,20 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
-import { ORB_AREAS, ORB_SLOTS, areaDefinition, localizedFrom } from '@brandspace/brand-brain';
+import {
+  BRAND_MEMORY_LAYERS,
+  ORB_AREAS,
+  ORB_SLOTS,
+  areaDefinition,
+  localizedFrom,
+  memoryRank,
+} from '@brandspace/brand-brain';
 import { requireWorkspace } from '../../../server/customer-context';
+import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
+import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { NotesPanel } from '../../../components/notes-panel';
 import { statusMessage } from '../../../i18n/messages';
 import {
   BrandBrainView,
@@ -193,9 +203,25 @@ export default async function BrandBrainPage({
             title: true,
             body: true,
             origin: true,
+            /*
+             * THE MEMORY LAYER (P6-07).
+             *
+             * The screen showed WHERE an item came from — human, document, AI —
+             * and never WHICH OF THE FOUR MEMORIES it lives in. That is half the
+             * model, and the half that decides precedence: Canonical outranks
+             * Strategy outranks Content outranks Learning, always, and not as a
+             * tie-break (`memoryRank`). A reader could see that a fact was
+             * AI-inferred but not that it sat in the lowest-authority layer and
+             * therefore could never overwrite anything above it.
+             */
+            memory: true,
             version: true,
             status: true,
             confidenceMilli: true,
+            // D-294 — provenance on every value: when, who, from what.
+            updatedAt: true,
+            createdByUserId: true,
+            sourceDocumentId: true,
           },
           // Bounded: a brand with thousands of items must not send them all to
           // a browser. The drawer pages the rest.
@@ -215,6 +241,15 @@ export default async function BrandBrainPage({
                 confidenceMilli: true,
                 evidence: true,
                 targetItemId: true,
+                /*
+                 * P6-11 — WHERE IT CAME FROM AND WHAT IT CONTRADICTS. The queue
+                 * showed neither, so an analytics inference and a document
+                 * extract looked identical, and a learning that disagreed with
+                 * a human-approved fact was presented as if it did not.
+                 */
+                sourceKind: true,
+                insightId: true,
+                conflictsWithItemId: true,
               },
             })
           : [],
@@ -237,6 +272,56 @@ export default async function BrandBrainPage({
       };
     },
   );
+
+  /*
+   * D-294 — WHO ADDED A VALUE AND WHICH DOCUMENT IT CAME FROM, by name. Read
+   * under the workspace's own RLS: members of this workspace, documents of
+   * this brand. An id that resolves to nothing simply shows no name.
+   */
+  const provenanceNames = await inBrandBrain(workspace.workspaceId, async ({ db }) => {
+    const userIds = [
+      ...new Set(items.flatMap((item) => (item.createdByUserId ? [item.createdByUserId] : []))),
+    ];
+    const documentIds = [
+      ...new Set(items.flatMap((item) => (item.sourceDocumentId ? [item.sourceDocumentId] : []))),
+    ];
+    const [members, documents] = await Promise.all([
+      userIds.length
+        ? db.membership.findMany({
+            where: { userId: { in: userIds } },
+            select: { userId: true, user: { select: { name: true, email: true } } },
+          })
+        : [],
+      documentIds.length
+        ? db.brandSourceDocument.findMany({
+            where: { id: { in: documentIds }, brandId: brand.id },
+            select: { id: true, fileName: true },
+          })
+        : [],
+    ]);
+    return {
+      people: new Map(
+        members.map((member) => [member.userId, member.user.name?.trim() || member.user.email]),
+      ),
+      documents: new Map(documents.map((document) => [document.id, document.fileName])),
+    };
+  });
+  const provenanceDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    dateStyle: 'medium',
+    timeZone: 'UTC',
+  });
+  const provenanceOf = (item: (typeof items)[number]): string =>
+    [
+      `${t('bb.provenance.updated')} ${provenanceDay.format(item.updatedAt)}`,
+      item.createdByUserId && provenanceNames.people.get(item.createdByUserId)
+        ? `${t('bb.provenance.by')} ${provenanceNames.people.get(item.createdByUserId)}`
+        : null,
+      item.sourceDocumentId && provenanceNames.documents.get(item.sourceDocumentId)
+        ? `${t('bb.provenance.from')} ${provenanceNames.documents.get(item.sourceDocumentId)}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
   const itemsByArea = new Map<string, typeof items>();
   for (const item of items) {
@@ -265,8 +350,22 @@ export default async function BrandBrainPage({
         body: pick(localizedFrom(item.body), locale),
         origin: item.origin,
         originLabel: t(`bb.origin.${item.origin}` as MessageKey),
+        memory: item.memory,
+        memoryLabel: t(`bb.memory.${item.memory}` as MessageKey),
+        /*
+         * THE AUTHORITY POSITION, FROM THE ENGINE RATHER THAN FROM A LIST HERE.
+         *
+         * `memoryRank` is what `comparePrecedence` and `mayOverwrite` actually
+         * consult, so reading it is the difference between the screen EXPLAINING
+         * the rule and the screen having its own opinion that happens to agree
+         * today. 1 is the highest authority, which is the direction a reader
+         * expects from a ranking.
+         */
+        memoryRank: memoryRank(item.memory) + 1,
+        memoryDepth: BRAND_MEMORY_LAYERS.length,
         version: item.version,
         stale: item.status === 'STALE',
+        provenance: provenanceOf(item),
       })),
     };
   });
@@ -290,16 +389,70 @@ export default async function BrandBrainPage({
     ];
   });
 
-  const candidateData: CandidateData[] = candidates.map((candidate) => ({
-    id: candidate.id,
-    area: candidate.area,
-    itemKey: candidate.itemKey,
-    title: pick(localizedFrom(candidate.extractedTitle), locale),
-    body: pick(localizedFrom(candidate.extractedBody), locale),
-    confidencePercent: Math.round(candidate.confidenceMilli / 10),
-    evidence: evidenceLabels(candidate.evidence),
-    replacesExisting: candidate.targetItemId !== null,
-  }));
+  const itemTitles = new Map(
+    items.map((item) => [item.id, pick(localizedFrom(item.title), locale) || item.itemKey]),
+  );
+  const reviewNumber = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const reviewPercent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+    style: 'percent',
+    maximumFractionDigits: 1,
+  });
+  const reviewDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  const candidateData: CandidateData[] = candidates.map((candidate) => {
+    const title = localizedFrom(candidate.extractedTitle);
+    const body = localizedFrom(candidate.extractedBody);
+    const fromAnalytics = candidate.sourceKind === 'ANALYTICS';
+    /*
+     * THE NUMBERS THE INFERENCE WAS DRAWN FROM, in the reader's own language
+     * and number format. Parsed rather than cast (learning-review.ts): a row
+     * that does not match yields no sentence, and the link to the source
+     * insight still stands.
+     */
+    const measured = fromAnalytics ? analyticsEvidence(candidate.evidence) : null;
+    const conflict = conflictNote({
+      conflictsWithItemId: candidate.conflictsWithItemId,
+      titleOf: (id) => itemTitles.get(id) ?? null,
+    });
+    return {
+      id: candidate.id,
+      area: candidate.area,
+      itemKey: candidate.itemKey,
+      title: pick(title, locale),
+      body: pick(body, locale),
+      confidencePercent: Math.round(candidate.confidenceMilli / 10),
+      evidence: fromAnalytics ? [] : evidenceLabels(candidate.evidence),
+      replacesExisting: candidate.targetItemId !== null,
+      source: fromAnalytics ? 'ANALYTICS' : 'DOCUMENT',
+      sourceHref:
+        fromAnalytics && candidate.insightId && can('strategy.read')
+          ? `/${locale}/intelligence?brand=${brand.id}&insight=${candidate.insightId}`
+          : null,
+      measured: measured
+        ? t('bb.reviewMeasured')
+            .replace('{metric}', t(`analytics.metric.${measured.metricKey}` as MessageKey))
+            .replace('{observed}', reviewNumber.format(Number(measured.observedValue)))
+            .replace('{baseline}', reviewNumber.format(Number(measured.baselineValue)))
+            .replace('{deviation}', reviewPercent.format(measured.deviationMilli / 1_000))
+            .replace('{from}', reviewDay.format(measured.periodStart))
+            .replace('{to}', reviewDay.format(measured.periodEnd))
+        : null,
+      conflict: conflict
+        ? conflict.title
+          ? t('bb.reviewConflictNamed').replaceAll('{title}', conflict.title)
+          : t('bb.reviewConflict')
+        : null,
+      edit: {
+        titleEn: title.en ?? '',
+        titleAr: title.ar ?? '',
+        bodyEn: body.en ?? '',
+        bodyAr: body.ar ?? '',
+      },
+    };
+  });
 
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,
@@ -322,6 +475,37 @@ export default async function BrandBrainPage({
           ? `${source.pageCount} · ${source.chunkCount}`
           : `${source.chunkCount}`,
   }));
+
+  /*
+   * D-294 — THE FOUR LAYERS, COUNTED. Approved values per memory (only ACTIVE
+   * items; a stale value is still shown in its area but is not counted as
+   * current knowledge), plus the learnings still waiting on a person.
+   */
+  const activeIn = (memory: string) =>
+    items.filter((item) => item.status === 'ACTIVE' && item.memory === memory).length;
+  const pendingLearnings = candidates.filter(
+    (candidate) => candidate.sourceKind === 'ANALYTICS',
+  ).length;
+  const layers = (['CANONICAL', 'STRATEGY', 'CONTENT', 'LEARNING'] as const).map((memory) => ({
+    key: memory,
+    label: t(`bb.layer.${memory}` as MessageKey),
+    description: t(`bb.layer.${memory}.desc` as MessageKey),
+    count: activeIn(memory),
+    pending: memory === 'LEARNING' ? pendingLearnings : 0,
+  }));
+  const gaps = areaCards
+    .filter((area) => area.status === 'EMPTY')
+    .map((area) => ({ area: area.area, label: area.label }));
+  const areasWithKnowledge = areaCards.filter((area) => area.activeItems > 0).length;
+  const readySourceCount = sources.filter((source) => source.status === 'READY').length;
+  const understanding =
+    completion.totalActiveItems === 0
+      ? t('bb.understands.none')
+      : t('bb.understands.some')
+          .replace('{facts}', reviewNumber.format(completion.totalActiveItems))
+          .replace('{areas}', reviewNumber.format(areasWithKnowledge))
+          .replace('{total}', reviewNumber.format(areaCards.length))
+          .replace('{sources}', reviewNumber.format(readySourceCount));
 
   return (
     <WorkspaceShell
@@ -347,6 +531,12 @@ export default async function BrandBrainPage({
       <BrandBrainView
         locale={locale}
         brandId={brand.id}
+        brandName={brand.name}
+        understanding={understanding}
+        layers={layers}
+        gaps={gaps}
+        copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
+        profileHref={can('brand.read') ? `/${locale}/settings/brand?brand=${brand.id}` : null}
         completionPercent={completion.percent}
         totalActiveItems={completion.totalActiveItems}
         sourceCount={sourceCount}
@@ -362,6 +552,28 @@ export default async function BrandBrainPage({
           remove: can('brand_brain.delete'),
           chat: can('brand_brain.chat'),
         }}
+      />
+
+      {/*
+        THE BRAND-LEVEL CONVERSATION (P6-07, P6-09).
+      
+        Attached to the BRAND rather than to any one fact, because the questions
+        that belong here are about the brand as a whole — whether the tone has
+        moved, whether a rule still holds, what a conflicting pair should
+        resolve to.
+      
+        AND IT IS STILL NOT BRAND KNOWLEDGE. A thread here reads beside the four
+        memories and never enters them: a remark about the brand is not a fact
+        the brand has decided, and promoting one is a deliberate act through
+        this screen's own review, where it arrives with provenance. The
+        separation is structural — `packages/collaboration` has no dependency on
+        `packages/brand-brain` in either direction.
+      */}
+      <NotesPanel
+        locale={locale}
+        subject={{ type: 'BRAND', brandId: brand.id }}
+        returnPath={`/${locale}/brand-brain`}
+        highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
       />
     </WorkspaceShell>
   );

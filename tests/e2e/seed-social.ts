@@ -91,9 +91,15 @@ async function enableProviders(prisma: PrismaClient, actor: ConfigActor): Promis
   const configuration = new ConfigurationService({ prisma, cacheTtlMs: 0 });
   const current = await configuration.get('publishing', ENVIRONMENT);
 
-  const capability = (scopes: string[], targetKind: string) => ({
+  /*
+   * EACH PROVIDER DECLARES THE SHAPES IT ACCEPTS, as an owner would. Text and
+   * image everywhere keeps the publishing journeys independent of the format
+   * work; the extras are what the Create Post format filter (D-283 §18) reads,
+   * so a reel is offered on Instagram and TikTok and not on LinkedIn.
+   */
+  const capability = (scopes: string[], targetKind: string, extraKinds: string[]) => ({
     enabled: true,
-    postKinds: ['text', 'image'],
+    postKinds: ['text', 'image', ...extraKinds],
     maxBodyCharacters: 2_200,
     maxHashtags: 30,
     maxMediaItems: 10,
@@ -108,11 +114,16 @@ async function enableProviders(prisma: PrismaClient, actor: ConfigActor): Promis
   const draft = await configuration.createDraft(actor, 'publishing', ENVIRONMENT, REASON, {
     ...current,
     providers: {
-      facebook: capability(['pages_manage_posts'], 'page'),
-      instagram: capability(['instagram_content_publish'], 'business_account'),
-      tiktok: capability(['video.publish'], 'creator_account'),
-      linkedin: capability(['w_member_social'], 'organization'),
-      x: capability(['tweet.write'], 'profile'),
+      facebook: capability(['pages_manage_posts'], 'page', ['carousel', 'video', 'reel', 'story']),
+      instagram: capability(['instagram_content_publish'], 'business_account', [
+        'carousel',
+        'video',
+        'reel',
+        'story',
+      ]),
+      tiktok: capability(['video.publish'], 'creator_account', ['video', 'reel']),
+      linkedin: capability(['w_member_social'], 'organization', ['carousel', 'video', 'article']),
+      x: capability(['tweet.write'], 'profile', ['video', 'thread']),
     },
   });
 

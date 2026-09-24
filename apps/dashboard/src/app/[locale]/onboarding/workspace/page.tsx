@@ -36,7 +36,7 @@ export default async function CreateWorkspacePage({
 }) {
   const { locale } = await params;
   const t = translator(locale);
-  await requireCustomer(locale);
+  const customer = await requireCustomer(locale);
 
   // Already a member of something: this page is for the first one.
   const token = await getSessionToken();
@@ -87,6 +87,7 @@ export default async function CreateWorkspacePage({
       ) : null}
       <CreateWorkspaceForm
         locale={locale}
+        defaultEmail={customer.email}
         countries={countries}
         timezones={timezones}
         labels={{

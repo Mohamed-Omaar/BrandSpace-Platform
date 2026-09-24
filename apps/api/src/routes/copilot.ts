@@ -5,13 +5,21 @@ import {
   TenantAnalyticsPolicySource,
   createAnalyticsRegistry,
 } from '@brandspace/analytics';
+import { TenantAutomationPolicySource } from '@brandspace/automation';
 import {
+  COPILOT_SUBJECT_TYPES,
+  COPILOT_SURFACE_KEYS,
   CopilotOrchestrator,
   CopilotPlanService,
   CopilotUndoService,
   TenantCopilotPolicySource,
+  findTool,
   resolveLiveAuthorization,
+  type CopilotSubjectType,
+  type CopilotSurface,
+  type ExecutorContext,
   type ExternalActionPort,
+  type LiveAuthorization,
 } from '@brandspace/copilot';
 import {
   CampaignService,
@@ -35,6 +43,7 @@ import { AppError, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 // ONE IMPLEMENTATION OF THE PLAN CEILING, shared with the automation route.
 import { scheduleQuota } from './schedule-quota';
+import { automationRuleCheck, copilotAutomationPort } from './copilot-automation';
 import {
   configurationService,
   copilotDenialSink,
@@ -74,8 +83,27 @@ const COPILOT_PERMISSION = 'copilot.use';
 
 const sessionSchema = z.object({
   brandId: z.string().uuid().nullable().default(null),
-  surface: z.string().max(40).default('general'),
+  /*
+   * A CLOSED SET (P6-12). The surface reaches the model's instructions — the one
+   * part of the prompt that is not fenced — so a free string here would be a
+   * caller-controlled line in the system instruction.
+   */
+  surface: z.enum(COPILOT_SURFACE_KEYS as [CopilotSurface, ...CopilotSurface[]]).default('general'),
   locale: z.enum(['AR', 'EN']).default('EN'),
+  /*
+   * WHAT THE PERSON IS LOOKING AT (D-280): a kind from a closed set and an id.
+   * The orchestrator admits it against the session's brand or refuses to open
+   * the session, with the same 404 an unknown brand gets.
+   */
+  subject: z
+    .object({
+      type: z.enum(
+        COPILOT_SUBJECT_TYPES as unknown as [CopilotSubjectType, ...CopilotSubjectType[]],
+      ),
+      id: z.string().uuid(),
+    })
+    .nullable()
+    .default(null),
 });
 
 /*
@@ -98,6 +126,78 @@ const confirmSchema = z.object({
 });
 
 const undoSchema = z.object({ planId: z.string().uuid() });
+
+const cancelSchema = z.object({ planId: z.string().uuid() });
+
+/** The automations domain as the Copilot may reach it — see copilot-automation.ts. */
+async function automationPort(db: TenantScopedClient, workspaceId: string) {
+  const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
+  return copilotAutomationPort({ db, workspaceId, policy });
+}
+
+/**
+ * Everything a plan's steps may reach, assembled once per execution.
+ *
+ * ONE BUILDER for `/confirm` and for the read-only inspection `/turn` now runs
+ * (P6-12), so an inspected plan and a confirmed one see exactly the same
+ * collaborators — two copies of this list would drift the first time a tool was
+ * added.
+ */
+async function executionContextFor(input: {
+  db: TenantScopedClient;
+  workspaceId: string;
+  planKey: string | null;
+  retention: Awaited<ReturnType<typeof workspaceFacts>>;
+  correlationId: string;
+}): Promise<(authorization: LiveAuthorization) => ExecutorContext> {
+  const { db, workspaceId } = input;
+  const contentPolicy = await resolveContentPolicy(configurationService(), currentEnvironment());
+  const analyticsPolicy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+  const workspace = await db.workspace.findFirst({
+    where: { id: workspaceId },
+    select: { timezone: true },
+  });
+  const automations = await automationPort(db, workspaceId);
+  return (authorization) => ({
+    db,
+    workspaceId,
+    authorization,
+    planKey: input.planKey,
+    clock: systemClock,
+    correlationId: input.correlationId,
+    // Replaced per step by the plan service with the step's own key.
+    idempotencyKey: input.correlationId,
+    analytics: new AnalyticsQueryService({
+      db,
+      workspaceId,
+      policy: analyticsPolicy,
+      registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+    }),
+    campaigns: new CampaignService({ db, workspaceId }),
+    calendar: new ContentCalendarService({
+      db,
+      workspaceId,
+      policy: contentPolicy,
+      timezone: workspace?.timezone ?? 'UTC',
+      quota: scheduleQuota(db, workspaceId),
+      /*
+       * AC-14.6 — the calendar asks the APPROVALS MODULE whether this brand
+       * requires approval, rather than reading one workspace-wide default. The
+       * assistant is subject to the brand's own gate exactly as a person is.
+       */
+      approvalGate: new ContentApprovalService({ db, workspaceId, policy: contentPolicy }),
+    }),
+    studio: new ContentStudioService({
+      db,
+      workspaceId,
+      policy: contentPolicy,
+      gateway: gateway(),
+    }),
+    retention: input.retention,
+    externalActions: externalActions(db),
+    automations,
+  });
+}
 
 /**
  * The publish port, wired HERE and nowhere else.
@@ -274,6 +374,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               brandId: parsed.data.brandId,
               surface: parsed.data.surface,
               locale: parsed.data.locale,
+              subject: parsed.data.subject,
               expiresAt: resolveContentExpiry(contentPolicy, facts, systemClock),
             });
           },
@@ -369,12 +470,54 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               // What the AI work in this plan would cost, quoted through the
               // gateway's own route resolution so the price shown is the price
               // reserved.
-              estimatedCreditsMilli: await estimateFor(turn.steps.length, facts.planKey),
+              estimatedCreditsMilli: await estimateFor(
+                turn.steps,
+                caller.workspaceId,
+                facts.planKey,
+              ),
               idempotencyKey: `plan:${body.idempotencyKey}`,
               expiresAt,
+              automationRules: automationRuleCheck,
             });
 
-            return { turn, created };
+            /*
+             * INSPECT (P6-12). A plan that only READS was confirmed at creation
+             * and, until now, could never run: `/confirm` requires a token a
+             * read-only plan is deliberately not given, so every read tool was
+             * offered and none executed. It runs here, through the same
+             * `execute` — live authorization, per-step permission, brand and
+             * entitlement checks, audit — because there is nothing for a person
+             * to confirm about a read. A replayed turn finds its plan already
+             * executed and reads the stored calls back instead of running twice.
+             */
+            let inspection: Awaited<ReturnType<CopilotPlanService['execute']>> | null = null;
+            if (
+              !created.plan.requiresConfirmation &&
+              created.steps.length > 0 &&
+              created.plan.status === 'CONFIRMED'
+            ) {
+              inspection = await plans.execute({
+                planId: created.plan.id,
+                userId: caller.userId,
+                entitlements: entitlementGate(db, caller.workspaceId),
+                context: await executionContextFor({
+                  db,
+                  workspaceId: caller.workspaceId,
+                  planKey: facts.planKey,
+                  retention: facts,
+                  correlationId: created.plan.id,
+                }),
+              });
+            }
+            const readBack =
+              inspection === null && !created.plan.requiresConfirmation
+                ? await db.copilotToolCall.findMany({
+                    where: { workspaceId: caller.workspaceId, planId: created.plan.id },
+                    orderBy: { ordinal: 'asc' },
+                  })
+                : null;
+
+            return { turn, created, inspection, readBack };
           },
           { prisma: getPrisma() },
         );
@@ -401,6 +544,24 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           // RETURNED EXACTLY ONCE. Only its hash is stored.
           confirmationToken: result.created.confirmationToken,
           creditsChargedMilli: result.turn.creditsChargedMilli.toString(),
+          /*
+           * WHAT A READ-ONLY PLAN FOUND. Tool results are METADATA by
+           * construction (`ExecutorResult.result`): ids, counts, statuses and
+           * stored figures — never brand knowledge text, never a provider
+           * payload — and they are scoped by the same predicates the tools ran
+           * under. Null when the plan changes state and waits for a person.
+           */
+          inspection: (() => {
+            const calls = result.inspection?.toolCalls ?? result.readBack;
+            if (!calls) return null;
+            return calls.map((call) => ({
+              ordinal: call.ordinal,
+              toolKey: call.toolKey,
+              status: call.status,
+              failureCode: call.failureCode,
+              result: call.resultJson ?? null,
+            }));
+          })(),
         });
       } catch (error: unknown) {
         return fail(reply, 'copilot turn', error);
@@ -437,10 +598,6 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
 
       try {
         const facts = await workspaceFacts(caller.workspaceId);
-        const contentPolicy = await resolveContentPolicy(
-          configurationService(),
-          currentEnvironment(),
-        );
 
         const outcome = await withWorkspace(
           caller.workspaceId,
@@ -462,61 +619,16 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               userId: caller.userId,
             });
 
-            const analyticsPolicy = await new TenantAnalyticsPolicySource(
-              db,
-              currentEnvironment(),
-            ).load();
-            const workspace = await db.workspace.findFirst({
-              where: { id: caller.workspaceId },
-              select: { timezone: true },
-            });
-
             return plans.execute({
               planId: body.planId,
               userId: caller.userId,
               entitlements: entitlementGate(db, caller.workspaceId),
-              context: (authorization) => ({
+              context: await executionContextFor({
                 db,
                 workspaceId: caller.workspaceId,
-                authorization,
                 planKey: facts.planKey,
-                clock: systemClock,
-                correlationId: body.planId,
-                // Replaced per step by the plan service with the step's own key.
-                idempotencyKey: body.planId,
-                analytics: new AnalyticsQueryService({
-                  db,
-                  workspaceId: caller.workspaceId,
-                  policy: analyticsPolicy,
-                  registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
-                }),
-                campaigns: new CampaignService({ db, workspaceId: caller.workspaceId }),
-                calendar: new ContentCalendarService({
-                  db,
-                  workspaceId: caller.workspaceId,
-                  policy: contentPolicy,
-                  timezone: workspace?.timezone ?? 'UTC',
-                  quota: scheduleQuota(db, caller.workspaceId),
-                  /*
-                   * AC-14.6 — the calendar asks the APPROVALS MODULE whether this
-                   * brand requires approval, rather than reading one
-                   * workspace-wide default. The assistant is subject to the
-                   * brand's own gate exactly as a person is.
-                   */
-                  approvalGate: new ContentApprovalService({
-                    db,
-                    workspaceId: caller.workspaceId,
-                    policy: contentPolicy,
-                  }),
-                }),
-                studio: new ContentStudioService({
-                  db,
-                  workspaceId: caller.workspaceId,
-                  policy: contentPolicy,
-                  gateway: gateway(),
-                }),
                 retention: facts,
-                externalActions: externalActions(db),
+                correlationId: body.planId,
               }),
             });
           },
@@ -540,6 +652,55 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
         });
       } catch (error: unknown) {
         return fail(reply, 'copilot confirm', error);
+      }
+    },
+  );
+
+  /**
+   * Decline a plan (P6-12).
+   *
+   * `CopilotPlanService.cancel` has existed since Phase 7 and no route called
+   * it, so "reject" in the dashboard only forgot the plan locally: the row
+   * stayed AWAITING_CONFIRMATION until its window lapsed, still counting
+   * against the open-plan ceiling — five rejections in ten minutes and the
+   * customer could not ask for anything. Cancelling clears the confirmation
+   * token and writes `copilot.plan_cancelled`. Only the plan's own author can
+   * cancel it, and a plan that is not theirs is refused like one that does not
+   * exist.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/copilot/cancel',
+    { scope: 'workspace', permission: COPILOT_PERMISSION, rateLimit: 'workspace.write' },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, COPILOT_PERMISSION);
+      if (!caller) return;
+      const parsed = cancelSchema.safeParse(req.body);
+      if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+
+      try {
+        await withWorkspace(
+          caller.workspaceId,
+          async (db) => {
+            const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
+            const plans = new CopilotPlanService({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              denialSink: copilotDenialSink(caller.workspaceId),
+            });
+            await plans.cancel({
+              planId: parsed.data.planId,
+              userId: caller.userId,
+              reason: 'declined_by_customer',
+            });
+          },
+          { prisma: getPrisma() },
+        );
+        return reply.send({ planId: parsed.data.planId, status: 'CANCELLED' });
+      } catch (error: unknown) {
+        return fail(reply, 'copilot cancel', error);
       }
     },
   );
@@ -599,6 +760,9 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
                   workspaceId: caller.workspaceId,
                   policy: contentPolicy,
                 }),
+                // P6-12 — a rule the assistant composed is removed through the
+                // engine's own delete, which re-checks `automation.manage`.
+                automations: await automationPort(db, caller.workspaceId),
               },
             });
           },
@@ -626,16 +790,27 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
  * no generating step costs nothing, and the UI shows no number rather than a zero
  * that reads as "free for ever".
  */
-async function estimateFor(stepCount: number, planKey: string | null): Promise<bigint> {
-  if (stepCount === 0) return 0n;
+async function estimateFor(
+  steps: readonly { toolKey: string }[],
+  workspaceId: string,
+  planKey: string | null,
+): Promise<bigint> {
+  /*
+   * ONLY A STEP THAT SPENDS CREDITS IS QUOTED (P6-12). This used to quote a
+   * caption generation for ANY plan with a step in it, so "list my campaigns"
+   * was shown a cost it would never incur — and under a placeholder workspace
+   * id, so the quote was not even this workspace's route resolution.
+   */
+  const spending = steps.filter((step) => findTool(step.toolKey)?.spendsCredits === true);
+  if (spending.length === 0) return 0n;
   try {
     const quote = await gateway().quote({
-      workspaceId: '00000000-0000-4000-8000-000000000000',
+      workspaceId,
       taskKey: 'caption.generate',
       planKey,
       input: { kind: 'text', prompt: 'x'.repeat(400) },
     });
-    return quote.estimateMilli;
+    return quote.estimateMilli * BigInt(spending.length);
   } catch {
     // A routing failure here must not fail the turn: the plan is still valid and
     // the customer is shown no estimate rather than a wrong one.

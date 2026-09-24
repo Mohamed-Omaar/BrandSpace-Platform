@@ -5,7 +5,18 @@
 > العرض التوضيحي المعتمد ليس مصدر إلهام — بل هو **المواصفة الملزمة** لواجهة المنتج.
 > يجب نقل الشيفرة الأصلية كما هي، لا إعادة تصميمها. أي انحراف مقصود يحتاج قرارًا مسجّلًا.
 
-**Status: binding on every customer-facing route from Phase 5A onward.**
+**Status: binding on every customer-facing route from Phase 5A onward — EXCEPT where superseded below.**
+
+> **SUPERSEDED FOR PRODUCT / UX / IA BY OWNER DECISION D-277 (2026-09-24).** The Phase 6 Final UX
+> Contract (`docs/PHASE-6-FINAL-UX-CONTRACT.md`) is now the product, UX and information-architecture
+> authority. For every surface it redesigns — Home, the sidebar, the Setup Wizard, Brand Brain,
+> Strategy, Campaigns, Content Library, Create Post, Assets, Calendar, Publishing, Analytics,
+> Intelligence, the global Copilot, Notifications and Settings — the rules below that forbid
+> repositioning, simplifying or reorganising a ported composition NO LONGER APPLY. What still applies
+> everywhere: the demo's and the design system's visual language (identity, colours, typography,
+> tokens, primitives), the token rule (§4 — no literals, no nearest-token approximation), accessibility,
+> responsive and RTL behaviour, and §4.2's rule against introducing a new visual language. Rebuilding an
+> old composition because the demo used it is now the mistake, not the safeguard.
 
 ---
 
@@ -126,20 +137,22 @@ Recorded under rule 9. Nothing else deviates.
 
 Recorded under rule 9. Nothing else deviates.
 
-| Deviation                                                                 | Authority        | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`copilotPanel()` — the composer's third column — is not rendered**      | Phase boundary   | The AI Copilot is Phase 7 (`docs/ROADMAP.md`). Shipping its markup with nothing behind it would be a screen that lies about what the product does. The `.composer` grid therefore carries two tracks (`minmax(350px,1fr) 340px`) rather than three; every other declaration is the demo's                                                                                                                                                                                                                                                                                                                                                                                  |
-| **`socialPreview()`'s static mock becomes the generated variants**        | Rules 5 and 6    | The demo's second column is a hard-coded Instagram post with an invented sentence. It is replaced, in the same column and the same `surface-card`, by the real variants: the caption per channel, its count against that channel's CONFIGURED limit, the computed validation, the retrieved sources and the five editing tools                                                                                                                                                                                                                                                                                                                                             |
-| **The "Campaign" and "Publish" pickers become Language and Content type** | Phase boundary   | Campaigns and scheduling belong to the Social Calendar, not to scope item 3. The `.form-row` geometry — `1fr 1fr`, `gap:10px`, collapsing to one column at 640px — is ported unchanged and carries this scope's own two controls                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **`.media-strip` and `.thumb` are not ported at all**                     | Rule 2           | Attaching media is the publishing pipeline's, and `content_variant.assetIds` has no customer-facing picker in this scope item. Porting a stylesheet for an element nothing renders would be dead code claiming to be fidelity                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **The tab strip lists the states that are REACHABLE**                     | Rules 5 and 6    | The demo ships five fixed tabs (All / Drafts / Review / Scheduled / Published) with invented counts. The rule applied instead is that a tab exists when its state can actually occur: a tab that can only ever read zero is an invented number. Phase 5B-2 therefore rendered four; **Phase 5B-3 renders six**, because Changes requested and Approved became reachable when the approvals workflow shipped — and content in a state with no tab is content the library cannot find, which is the one thing that screen is for. Scheduled and Published stay out until Phase 6. The `.tabs` treatment, the counts' position and the `·` separator are unchanged throughout |
-| **Real data replaces every demo literal**                                 | Rules 5 and 6    | `All · 28`, the eight invented posts, "NEW CHAPTER" and the scripted caption are demo values. Their POSITION, TYPOGRAPHY and TREATMENT are unchanged; the counts are `groupBy` results, the cards are real drafts and the art carries the draft's own title                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **`post-art` gradients are chosen from the draft id**                     | Rule 5           | The demo assigns one of four gradients per invented card by hand. A real library has no such list, so the gradient is derived deterministically from the row's id: a draft keeps the same face across reloads, and the visual fixture renders the same page every run rather than one that has to be re-approved                                                                                                                                                                                                                                                                                                                                                           |
-| **Physical directions become logical properties**                         | `CLAUDE.md` §4   | `text-align: left` on `.post-card` renders Arabic backwards. `text-align: start` is identical in LTR. The same one-class substitution the Brand Brain port records                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **`--muted` is one step darker (`#6A6A72`)**                              | `tokens.ts`      | The demo's `#717179` measures 4.44:1 on its own `--soft`, where the draft status pill and the search placeholder sit — under the AA 4.5:1 minimum at 8px and 9px. This is NOT a new decision: `packages/ui/src/tokens.ts` already carries `#6A6A72` as the platform's documented deviation for this exact value. Measured 4.92:1 on `#F5F5F6`                                                                                                                                                                                                                                                                                                                              |
-| **A visible `:focus-visible` ring is added**                              | D-85's precedent | The demo sets `outline: 0` on every field and ships no focus rule at all — it is a prototype nobody tabs through. WCAG 2.2 AA requires a visible indicator. The ring is drawn OUTSIDE the control, so the approved resting appearance is unchanged                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **The search field gains a visually hidden `<label>`**                    | `CLAUDE.md` §4   | The demo names its search box with a `placeholder` alone, which is not an accessible name. The placeholder stays exactly as the demo wrote it; the label is `.cs-sr-only` and changes no pixel                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **`.select-like` is a real `<select>`**                                   | Rule 5           | A `<div>` in the demo because a prototype has no options. The demo's own rule already groups `.select-like` with the filter-row buttons, so `.cs-select` carries those declarations verbatim                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Deviation                                                                                               | Authority             | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`copilotPanel()` — the composer's third column — is not rendered**                                    | Phase boundary        | The AI Copilot is Phase 7 (`docs/ROADMAP.md`). Shipping its markup with nothing behind it would be a screen that lies about what the product does. The `.composer` grid therefore carries two tracks (`minmax(350px,1fr) 340px`) rather than three; every other declaration is the demo's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **`socialPreview()`'s static mock becomes the generated variants**                                      | Rules 5 and 6         | The demo's second column is a hard-coded Instagram post with an invented sentence. It is replaced, in the same column and the same `surface-card`, by the real variants: the caption per channel, its count against that channel's CONFIGURED limit, the computed validation, the retrieved sources and the five editing tools                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **The "Campaign" and "Publish" pickers become Language and Content type**                               | Phase boundary        | Campaigns and scheduling belong to the Social Calendar, not to scope item 3. The `.form-row` geometry — `1fr 1fr`, `gap:10px`, collapsing to one column at 640px — is ported unchanged and carries this scope's own two controls                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **`.media-strip` and `.thumb` are not ported at all**                                                   | Rule 2                | Attaching media is the publishing pipeline's, and `content_variant.assetIds` has no customer-facing picker in this scope item. Porting a stylesheet for an element nothing renders would be dead code claiming to be fidelity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **The tab strip lists the states that are REACHABLE**                                                   | Rules 5 and 6         | The demo ships five fixed tabs (All / Drafts / Review / Scheduled / Published) with invented counts. The rule applied instead is that a tab exists when its state can actually occur: a tab that can only ever read zero is an invented number. Phase 5B-2 therefore rendered four; **Phase 5B-3 renders six**, because Changes requested and Approved became reachable when the approvals workflow shipped — and content in a state with no tab is content the library cannot find, which is the one thing that screen is for. Scheduled and Published stay out until Phase 6. The `.tabs` treatment, the counts' position and the `·` separator are unchanged throughout                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Real data replaces every demo literal**                                                               | Rules 5 and 6         | `All · 28`, the eight invented posts, "NEW CHAPTER" and the scripted caption are demo values. Their POSITION, TYPOGRAPHY and TREATMENT are unchanged; the counts are `groupBy` results, the cards are real drafts and the art carries the draft's own title                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **`post-art` gradients are chosen from the draft id**                                                   | Rule 5                | The demo assigns one of four gradients per invented card by hand. A real library has no such list, so the gradient is derived deterministically from the row's id: a draft keeps the same face across reloads, and the visual fixture renders the same page every run rather than one that has to be re-approved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Physical directions become logical properties**                                                       | `CLAUDE.md` §4        | `text-align: left` on `.post-card` renders Arabic backwards. `text-align: start` is identical in LTR. The same one-class substitution the Brand Brain port records                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **`--muted` is one step darker (`#6A6A72`)**                                                            | `tokens.ts`           | The demo's `#717179` measures 4.44:1 on its own `--soft`, where the draft status pill and the search placeholder sit — under the AA 4.5:1 minimum at 8px and 9px. This is NOT a new decision: `packages/ui/src/tokens.ts` already carries `#6A6A72` as the platform's documented deviation for this exact value. Measured 4.92:1 on `#F5F5F6`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **A visible `:focus-visible` ring is added**                                                            | D-85's precedent      | The demo sets `outline: 0` on every field and ships no focus rule at all — it is a prototype nobody tabs through. WCAG 2.2 AA requires a visible indicator. The ring is drawn OUTSIDE the control, so the approved resting appearance is unchanged                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **The search field gains a visually hidden `<label>`**                                                  | `CLAUDE.md` §4        | The demo names its search box with a `placeholder` alone, which is not an accessible name. The placeholder stays exactly as the demo wrote it; the label is `.cs-sr-only` and changes no pixel                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **`.select-like` is a real `<select>`**                                                                 | Rule 5                | A `<div>` in the demo because a prototype has no options. The demo's own rule already groups `.select-like` with the filter-row buttons, so `.cs-select` carries those declarations verbatim                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **One dropdown marker, drawn by the product and mirrored for RTL**                                      | Phase 6 brief (P6-02) | The consequence of the row above, which the row above did not follow through. A `<div>` has no affordance; a real `<select>` gets the browser's arrow — at the physical edge, different in every browser, unmirrored in Arabic, and on `.cs-select` sitting beside design-system selects wearing the product's chevron. The demo never had either marker, so there is no demo answer to port and the choice is between two inconsistencies. The owner authorised the consistent one. `tokens.css` draws the marker for **every** `select` (the element, not a class, so a call site cannot forget it); `.cs-select` and `.cs-field select` set only `--bs-select-chevron-inset` and `--bs-select-chevron-space`, because a 36px control at 9px type cannot spare the default trailing room. **Where the browser supports `appearance: base-select` the product's chevron stands down** and the native `::picker-icon` is the single marker — the two were being painted on top of each other, which is the doubled arrow the owner reported. The demo's fill, radius, padding, type and geometry are unchanged |
+| **`background: <colour>` is written as `background-color: <colour>` on the rules that render a select** | Phase 6 brief (P6-02) | The two paint the same pixels; they differ in what they RESET. The shorthand also clears `background-image`, and `.cs-select` / `.cs-field select` outrank an element rule on specificity — so the shorthand silently erased the marker above and handed the control back to the browser. Narrow and checked rather than asserted: `tests/unit/content-fidelity.test.ts` treats the two spellings as equal **only** where the demo's value is a bare colour, so a gradient, an image or a layered background is still compared literally and `.cs-gradient-*` cannot drift through this door. The VALUE is unchanged, so a genuine change of fill still fails                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -278,10 +291,250 @@ take it on trust.
 | `/[locale]/intelligence` | **Marketing Intelligence.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router | `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, `Field`, `Button` and the tokens; the shared shell — deliberately the SAME composition, in the same order and with the same spacing, as `/[locale]/strategy`, so a reader moving between Analytics, Intelligence and Strategy is reading one product rather than three. The evidence list is the identical markup `/strategy` renders its evidence with | D-198 |
 
 | `/[locale]/billing`, `/billing/invoices/[invoiceId]`, `/billing/checkout/[outcome]` | **Billing & Usage.** The demo's `#customer/billing` route is `simpleFeaturePage('billing')` — the "Future product preview" placeholder with three identical cards. There is no plan grid, no invoice table, no invoice document and no checkout return state in the Landing repository at the pinned commit | `packages/ui`'s `Card`, `SectionHeader`, `Banner`, `StateMessage`, `DataTable`, `Field`, `Button` and the tokens; the shared shell. The subscription/credits pair is the SAME `bs-split-main` composition `/[locale]/plan` already uses, deliberately, so a reader moving between "what am I entitled to" and "what do I owe" meets one page design. The plan and pack grids are the auto-fit card grid the Campaigns list uses; the invoice list is the `DataTable` the members and activity routes use; the invoice document is the `Card` + definition-list composition the settings routes use. Nothing new was drawn, and no amount is rendered anywhere except through `formatMoney`, which takes the number of decimals from the currency itself | D-204, D-205 |
-| `/[locale]/onboarding`, `/onboarding/workspace` | **The first-run checklist and workspace creation.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. Signing up is the one journey a product demo has no reason to draw | `Card`, `SectionHeader`, `Field`, `Button` and the tokens; the shared shell for the checklist, and `AuthCard` — the existing sign-in/reset composition — for creation, because creating a first workspace happens before there is a workspace for the shell to be about. The checklist rows are the same list geometry `/[locale]/plan`'s usage list uses, with the same hairline separators | D-210 |
+| `/[locale]/onboarding`, `/onboarding/workspace` | **The first-run Setup Wizard and workspace creation.** Absent from the demo entirely — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. Signing up is the one journey a product demo has no reason to draw. Since D-278 the checklist is a guided wizard (§6.3.6) | `Card`, `Field`, `StatusBadge`, the button variants and the tokens inside the shared shell; the stepper reuses the `LinkTabs` track-and-pill treatment. `AuthCard` — the existing sign-in/reset composition — for creation, because creating a first workspace happens before there is a workspace for the shell to be about | D-210, D-278 |
 | `/[locale]/sign-up`, `/sign-up/sent`, `/verify`, `/mfa` | **Signup, verification and the second factor.** The demo has a marketing site and a signed-in product; it has no account-creation flow at all | `AuthCard`, `Field`, `Banner` and the auth control styles — the IDENTICAL composition `/sign-in` and `/reset` already use, in the same order. A reader arriving from the marketing site meets the same card they will meet again at every later sign-in | D-206 |
 | `/[locale]/billing/invoices/[invoiceId]/document` | **The invoice as a printable document.** The demo has no invoice at all, and this is not a screen in the first place: it is a document that happens to be served over HTTP, with no navigation, no shell and A4 proportions | Deliberately NOT the dashboard shell, and that absence is the design decision. It is the platform's typography scale, the platform's own `surface`, `textPrimary` and `textSecondary` tokens, one new token (`documentRule` — a rule weight that survives a printer, where the screen borders do not), and the same definition-list and table composition the invoice SCREEN uses — so the two say the same thing in the same order. Its `@page` rules and print colours are declared inline on the route, because an accounting document must not be alterable by a change to a shared stylesheet. Every amount renders through `formatMoney`, which takes its decimals from the currency itself | D-216 |
 | `/[locale]/settings/security` | **The customer's own security settings.** The demo has a signed-in product and no account-security screen anywhere — `#customer/security` is not in `app-1.js`'s navigation, not in `meta` and not in `page()`'s router. It is also not a new KIND of screen: it is a settings page for one person's second factor, which is why it is composed exactly like the settings pages beside it rather than designed for itself | `packages/ui`'s `SettingsSplit`, `Card`, `Field`, `buttonStyle`, `inputStyle` and the spacing and typography tokens, plus the shared shell and the same `CustomerBanner` every settings route uses — the IDENTICAL composition `/[locale]/settings` and `/[locale]/settings/brand` already use, in the same order, so a reader moving between the three meets one page design. The only additions are a `<code>` block for the otpauth string and a list of recovery codes in the same caption typography; nothing new was drawn, and no colour, font, shadow, layout system or interaction model was introduced | D-254 |
+
+| `/[locale]/settings/data` | **Data controls.** The demo has no data-controls screen — not in `app-1.js`'s navigation, not in `meta`, not in `page()`'s router. It is a settings page listing controls that already live elsewhere, and stating plainly which self-serve controls do not exist | `packages/ui`'s `SettingsSplit`, `Card`, `SectionHeader`, `StatusBadge` and ghost `buttonStyle` links — the SAME composition every other Settings section uses, so it reads as one of them. Nothing new was drawn | D-273 |
+| `/[locale]/notes` | **Notes across the product.** The demo has no notes or conversation route — its approvals, content and campaign placeholders carry no discussion, and there is no inbox of any kind to port | The IDENTICAL composition `/[locale]/notifications` uses — `Card`, `SectionHeader`, `StateMessage`, `StatusBadge`, the same list rows and the same inline-start border plus a worded badge for unread (never colour alone) — so the two inboxes are one design. Each row links back to the subject screen where the existing notes panel lives. Nothing new was drawn | D-276 |
+
+| `/[locale]/publishing` | **Publishing — Queue, Published, Failed, Accounts.** The demo has no publishing screen; its closest route is `simpleFeaturePage`. The owner's final IA (D-277 §33) makes publishing one customer concept instead of a technical Integrations page | The `LinkTabs` strip (the existing `Tabs` visual treatment, as URL navigation), `Card`, `SectionHeader`, `StateMessage`, `StatusBadge` and `buttonStyle` actions, with the SAME list rows `/notifications` and `/notes` use. Nothing new was drawn | D-277 |
+
+### 6.3.1 Phase 6 P6-11 — additions inside screens that were already extensions
+
+`/analytics` and `/intelligence` were already §6 extensions (above). P6-11 adds content to them, and to
+the Brand Brain review drawer, composed entirely from what those screens already use:
+
+- **Analytics** — a _What changed_ card and a _What to do next_ card: `Card`, `SectionHeader`,
+  `StatusBadge`, a token-styled list, and `buttonStyle` + `buttonClass` links and forms. No new
+  component.
+- **Intelligence** — _Why · What happened · What to do next_ blocks: a `label`-token heading over a
+  `bodySm` list, the same scale as the evidence list beneath it. The deep-linked finding uses the existing
+  `Card` tone `lavender` — an existing surface tone, not a new highlight treatment.
+- **Brand Brain review drawer (a ported demo surface)** — the additions are the drawer's OWN micro
+  caption style for source/measurement/conflict lines, and an _Edit, then accept_ disclosure whose
+  inputs reuse `CONTROL_CLASS` + `drawerInputStyle` and whose button reuses `reviewButtonStyle`, exactly
+  as the drawer's existing "add knowledge" form does. Nothing in the ported geometry changed.
+
+### 6.3.2 Phase 6 P6-12 — Copilot and Automations additions
+
+Both routes were already §6 extensions. The Copilot screen keeps the ported `CopilotBody` shell and
+adds, inside its existing plan `Card`, a context caption, before → after in preview lines, an
+inspection results list and localized status — `typographyTokens` captions and lists only. Automations
+adds a brand caption, a proposal line on waiting runs, and a native `<details>` delete confirmation
+styled with `buttonStyle` + `buttonClass`. The "Ask Copilot" entries on Home, Analytics, Intelligence
+and Automations are ghost/primary `buttonStyle` links. Nothing new is drawn.
+
+### 6.3.3 Phase 6 P6-13 — Team, Activity, Settings and Plan additions
+
+`/settings/data` is a new §6 extension composed only of `SettingsSplit`, `Card`, `SectionHeader`,
+`StatusBadge` and ghost `buttonStyle` links — the same parts every other Settings section uses. The Team
+screen adds a Brand access column to its existing `DataTable`/`RecordList` pair and a `<details>` form
+whose radios and checkboxes use native controls held to `layoutTokens.minTargetSize`, as the approvals
+checkboxes are. Activity and Plan change words, not layout. Nothing new is drawn.
+
+### 6.3.4 Phase 6 P6-14 — accessibility corrections to existing screens
+
+No geometry changed. Plan's table wrappers take the opaque `surface` + `radiusTokens.lg` that
+`DataTable` already has, because the demo's translucent `.surface-card` put 9px headings on the ambient
+glow at 4.24:1; the card itself is untouched. Plan's tables and Brand Brain's `.bb-attention` take
+keyboard focus (visible only as the standard focus ring). Brand Profile's locale checkboxes take the
+approvals checkbox size. All three are corrections the owner may refine in the final parity pass.
+
+### 6.3.5 Phase 6 P6-16 — the customer top bar
+
+The top bar keeps the demo's composition and geometry exactly — `.icon-button` (38×38, soft fill, 12px
+radius), `.notification-dot`, the 38px `.language-button` and `.primary-button.compact` — and changes
+what each control DOES: Review, Notes, Notifications and Copilot are links to real screens and Create
+opens a `DropdownMenu` of real creation flows, its trigger the unchanged purple button with no chevron
+(the demo draws none; `aria-haspopup` carries it). The dot is drawn only from a real count. The search
+control is removed (D-276), which is the one visible difference from the demo's bar, recorded here
+rather than hidden. One glyph was added, `NoteIcon`, drawn to the family's own specification.
+
+### 6.3.6 Phase 6 final — the first-run Setup Wizard (D-277 §6, D-278)
+
+`/[locale]/onboarding` stopped being a checklist of links and became one guided journey: Workspace →
+Brand → Learn → Review → Connect → First goal → "You're ready to start". No reference draws it, so it is
+an extension composed only of what ships: the shell, `Card` for each step, `Field` and the control
+classes for the brand form, the `brand` button for the one primary action per step and `neutral` for
+"Skip for now", `StatusBadge` for a document's reading state and a connection's health. The stepper is
+an ordered list of links carrying the `LinkTabs` treatment token for token (muted track, raised white
+pill with the pressed-purple label for the current step) plus the success tint for a finished step; its
+"done" state is spoken as text, not only drawn as a tick. The review step shows each extracted fact as a
+soft-surface card with the same Accept / Edit, then accept / Reject controls the Brand Brain drawer
+uses. No new colour, radius, shadow, font or motion.
+
+### 6.3.7 Phase 6 final — the global Copilot drawer (D-277 §37, D-280)
+
+`CopilotDrawer` is the demo's `.side-drawer` transcribed exactly as `PostDetailDrawer` already transcribes
+it (430px, inset 20px, 28px radius, the drawer surface, blur and shadow) with the existing
+`CopilotHeader` on top and the existing `CopilotView` inside. The 300px `CopilotPanel` is unchanged and
+remains the composer's docked column. The context line gains one clause, "looking at “…”", in the same
+caption style. No new colour, radius, shadow or motion.
+
+### 6.3.8 Phase 6 final — Notes as conversations (D-277 §28, D-281)
+
+The notes panel keeps its `Card` composition. Each note gains a 28px initial avatar in the lavender
+tint with the pressed-purple letter (the same treatment Home's notes preview uses), the author in
+bold and a relative time; the thread header gains `StatusBadge`s for Important (accent tone) and
+Due / Overdue (neutral / danger), and a plain "waiting on" caption. Assignment, due date and
+importance sit behind one native `<details>` disclosure in caption type, so a thread still reads as a
+conversation. The @-mention suggestions are a small surface listbox (surface background, `md` radius,
+the overlay shadow, lavender active row) under the field — the dropdown-menu treatment already in
+`menu-style`. A deep-linked thread is drawn with the lavender surface and the purple border. No new
+colour, font, radius or motion.
+
+### 6.3.9 Phase 6 final — the media-first Content Library (D-277 §15, D-282)
+
+`/[locale]/content` is no longer the `postsPage()` port: the owner's contract replaced the gradient
+cards. The screen is composed from `LinkTabs` (status and Grid / List), the ordinary controls in a GET
+form, `Card` (for "Ideas worth making"), `StatusBadge`, `AssetMedia` and the button variants. A card is
+the surface-card treatment (`surfaceCardAlpha`, `cardBorder`, `2xl` radius) holding a square media well
+in `surfaceSoft` with the `lg` radius; a text-only post shows its caption in `bodySm` / `textSecondary`
+there. The composer (`/content/compose`) remains the demo port until its own workstream. The
+manifest rows above for `/[locale]/content` now pin only the composer.
+
+### 6.3.10 Phase 6 final — the Create Post entry (D-277 §17-§19, D-283)
+
+`/[locale]/content/compose` without a draft opens on "What would you like to create?": four link cards
+in a responsive grid using the surface-card treatment (`surfaceCardAlpha`, `cardBorder`, `2xl` radius)
+with the `brandPurpleTint` icon tile, plus the idea and repurpose pickers composed from `Card`,
+`StateMessage`, `StatusBadge` and the button variants. This is an APPROVED DESIGN-SYSTEM EXTENSION —
+the demo's `composer()` has no entry step. The composer port itself is unchanged in geometry; inside
+it the format selector moves above the channel chips (it decides which chips are enabled), a goal
+selector joins the pre-draft form in AI mode, and the primary-action class swaps between Generate and
+Save draft by mode — all with the port's own `cs-field`, `cs-channel`, `cs-dark-button` and
+`cs-ghost-button` classes.
+
+### 6.3.11 Phase 6 final — the draft editor (D-277 §20-§22, D-284)
+
+With a draft open, `/[locale]/content/compose` renders `.cs-draft-layout`: three tracks (context
+200–240px, editor fluid, preview 280–340px), collapsing to editor + preview at 1180px and to one
+column at 760px. It is an APPROVED DESIGN-SYSTEM EXTENSION built only from the port's own classes and
+colours (`cs-surface-card`, `cs-field`, `cs-channel` as the variant tabs, `cs-notice`, `cs-hint`,
+`cs-counter`, `cs-citations`; `--cs-purple`, `--cs-soft`, `--cs-muted`, the port's warning and error
+values). The preview track is where the demo's `copilotPanel()` column sat (§4.1): it now holds the
+live `SocialPostPreview` rather than a Copilot, which is global (D-280). The pre-draft form keeps the
+two-track `.cs-composer` port unchanged.
+
+### 6.3.12 Phase 6 final — slides, the media drawer and the paged carousel (D-285)
+
+The variant's media is `.cs-slides` / `.cs-slide-list`: rows on `--cs-soft` with the port's 13px radius,
+a 3.25rem `AssetThumb`, the slide label in the port's type scale and `cs-channel` action chips; a dragged
+row is outlined in `--cs-purple`. "Add media" opens `SideSheet` — a new `packages/ui` overlay that is the
+Copilot drawer's geometry (`drawerAlpha`, blur, `3xl` radius, `shadowTokens.drawer`, `drawerWidth`) with
+`Dialog`'s focus trap, Escape and restoration; the reason it exists is that `CopilotDrawer` is bound to
+Copilot labels. Its library grid is `.cs-media-grid` / `.cs-media-choice` in the same tokens. The
+`SocialPostPreview` carousel gains paging only when a caller passes `slides` and the three slide labels:
+two round arrows in the existing play-button treatment (white 0.9, `surfaceInk`), the logical chevron
+icons that flip in Arabic, and `CarouselDots`' existing `active` state. No new colour, font, shadow or
+interaction model.
+
+### 6.3.13 Phase 6 final — Asset Library views, badges and detail drawer (D-287)
+
+`/[locale]/assets` keeps its §6 extension (D-98) and adds: a `LinkTabs` row of views above the filters;
+tile badges in `StatusBadge` tones already in use (info = AI generated, neutral = Shared, warning =
+Rights expiring, danger = Rights expired) and a caption line for "Used in"; a 24px selection checkbox
+per tile (WCAG 2.5.8) feeding a bulk form of ordinary `Field` controls; and the detail moved from a card
+under the grid into the `SideSheet` (D-285), with the preview, a tint link for "Use in a post" and a muted
+link for Download. No new colour, font, shadow or interaction model.
+
+### 6.3.14 Phase 6 final — the Campaign Project Room (D-289)
+
+`/[locale]/campaigns/[id]` keeps its §6 extension composition (`Card`, `SectionHeader`, `StatusBadge`,
+`MetricCard`, `StateMessage`) and adds `LinkTabs` for its six sections, a three-card overview grid, list
+rows with a 3rem `AssetThumb`, and the edit form folded into a native `details`. No new visual treatment.
+
+### 6.3.15 Phase 6 final — the calendar's tray, filters and post drawer (D-290)
+
+`/[locale]/calendar` keeps the approved `ContentCalendar` grid, agenda and chips unchanged, and adds: a
+filter row of native selects, the Unscheduled tray on the grid's `surfaceMuted` panel treatment with the
+existing compact button, a caption-sized "BrandSpace noticed" line, and the post detail moved from the
+centred `Dialog` into the shared `SideSheet` (D-285) holding the existing `VariantPreview`. The grid's
+only new behaviour is a drop target on each day cell. No new colour, font, shadow or interaction model.
+
+### 6.3.16 Phase 6 final — Publishing rows (D-291)
+
+`/[locale]/publishing` keeps its §6 extension (`LinkTabs`, `Card`, `StatusBadge`, list rows) and gives each
+job row a 3rem `AssetThumb` column — or a `surfaceMuted` tile with the title's first letter for a text-only
+post — plus a readiness `StatusBadge` and a `success`-token line for "Account reconnected". No new visual
+treatment.
+
+### 6.3.17 Phase 6 final — Strategy as a plan (D-292)
+
+`/[locale]/strategy` keeps its §6 extension primitives (`Card`, `SectionHeader`, `StatusBadge`, list rows)
+in a two-column auto-fit grid for Audience / Key messages and Pillars / Channel mix. Shares are drawn as a
+6px `surfaceMuted` track with a `brandPurple` fill beside the number (the number is the fact; the bar is
+`aria-hidden`). Proposals use a dashed `border` frame to read as not-yet-accepted. No new colour, font or
+shadow.
+
+### 6.3.18 Phase 6 final — Brand Brain's head, layers and provenance (D-294)
+
+`/[locale]/brand-brain` keeps the ported orb, hero, area grid, intel and sources cards unchanged. The
+page head's demo headline is replaced by the brand's name inside the same `.bb-page-head` `h2 strong`,
+with the understanding sentence in its `p` and a neutral compact button. Below the hero, a four-tile
+strip on `surface` with a `border` hairline and the `h3` type step, and a caption line of ghost buttons
+for gaps. Provenance is a `micro` caption under each item in the area drawer. No new colour, font or
+shadow; the orb is untouched.
+
+### 6.3.19 Phase 6 final — the bell's feed (D-297)
+
+The top bar's bell opens the existing `SideSheet` primitive (the same sheet the Calendar and Content
+drawers use). Tabs are `neutral` / `ghost` small buttons in a wrapping row; rows are a two-column grid
+with a `surfaceMuted` initial disc, a `bodySm` headline, the excerpt in `textSecondary`, and a
+`caption` context line; unread adds a 3px `brandPurple` inline-start edge and the word "unread". The
+empty state is `StateMessage`. No new colour, font, shadow or interaction model.
+
+### 6.3.20 Phase 6 final — Billing & usage tabs, Team member column, post history (D-298)
+
+Billing & usage uses the existing `LinkTabs` primitive above each tab's unchanged cards. Team's member
+cell stacks a `bodySm` strong name, the address in `caption` / `textSecondary` and a `textMuted` joined
+line beside the existing tile avatar. "This post's history" is a `CustomerCard` below the Notes panel
+holding the campaign room's timeline list, now shared as `ActivityTimeline`. The Brand Brain head gains
+a ghost small "Brand profile" button next to "Ask about this brand". No new colour, font or shadow.
+
+### 6.3.21 Phase 6 final — empty-state actions and whole-screen states (D-299)
+
+Empty-state actions are small `brand` (first step) or `neutral` (secondary) buttons in
+`StateMessage`'s existing action slot. The route error and not-found pages centre the same
+`StateMessage` on `shellSurface`, max 32rem, with the same small buttons and a `caption` / `textMuted`
+reference line. No new colour, font, shadow or interaction model.
+
+### 6.3.22 Phase 6 final — Creative Studio identity card (D-301)
+
+A `Card` above the studio: a `bodySm` strong title, the brand's palette as 1.25rem round swatches (the
+brand's own colours as data, `cardBorder` hairline — the Asset Library brand-kit treatment at a smaller
+step), a `caption` / `textSecondary` summary line and a caption link. No new colour, font or shadow.
+
+### 6.3.23 Phase 6 final acceptance — the single-brand rail card (D-302)
+
+`BrandCard` is the `BrandSwitcher` trigger's own content (`brandCardContent`) on the same rail card
+surface (`railCardPad`, `radiusTokens.rail`, `shadowTokens.rail`) with no chevron and no menu — a
+link to the brand profile when the reader may read it. Nothing new: it is the switcher, minus the
+switch, for the business that has one brand.
+
+### 6.3.24 Phase 6 final acceptance — setup progress and the focused shell (D-303)
+
+`SetupProgress` is a `label`-scale line of text with a caption "Exit setup" link, over the `LinkTabs`
+track (`surfaceMuted`, 0.375rem, full radius) filled in `brandPurple`. The position is also in the
+text and the progressbar's value, never colour alone. The focused shell is the ordinary shell with
+its navigation sections and top-bar links withheld. No new colour, font, shadow or motion.
+
+### 6.3.25 Phase 6 final acceptance — the labelled Copilot control (D-304)
+
+`TopbarLink showLabel` keeps the square control's height and radius and adds the word beside the
+glyph, on `surfaceLavenderStrong` with `brandPurplePressed` text — the stepper's current-step pairing.
+The action row may wrap on the narrowest phones.
+
+### 6.3.26 Phase 6 final acceptance — the folder browser and the text-only card (D-305, D-306)
+
+Breadcrumbs are `bodySm` links with a `textMuted` slash separator; folder cards are `surface` cards
+with the `border` hairline, `radiusTokens.lg`, a `radiusTokens.md` `surfaceLavender` icon tile holding
+`FolderIcon` in `brandPurplePressed` (a new glyph drawn on the existing 24-unit stroke grid, like every
+icon in `icons.tsx`) and a `label`-scale name. The text-only content card uses `surfaceLavender`, a caption "Text post" label with `NoteIcon`
+in `brandPurplePressed`, and the post's words in `bodySm` / `textPrimary`. `MediaImage` is the
+existing `<img>` that removes itself on error so the tile's own neutral bed shows.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
@@ -337,7 +590,8 @@ that never relies on colour alone. Two differences, both necessary and neither a
 **THE CONFLICT, STATED RATHER THAN RESOLVED SILENTLY.** The Phase 8 brief describes the Workspace
 Selector as living "in the top bar" and asks for the Brand Selector beside it. In the IMPLEMENTED
 product the Workspace Selector is `AppShell`'s `headerStart` — the rail's identity block (D-59) — and
-the top bar carries search, notifications, the language square and the create action (§9, §10).
+the top bar carries review, notes, notifications, Copilot, the language square and the create action
+(§9, §10; D-276 replaced the search control, which had no domain behind it).
 
 Both instructions cannot be followed at once. The brand selector went to the RAIL, beneath the
 workspace card, because:
@@ -430,6 +684,15 @@ scanning the form will notice each and might reasonably file a bug:
   which is every development double except the payment one — correctly shows no form at all.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
+
+> **Superseded in composition by D-277 §7 / D-279 (Phase 6 final).** The hero, its two floating
+> cards, the metric card and the surface card keep the demo's geometry and treatment; what changed is
+> the ORDER and CONTENT the owner specified: greeting + selected brand, then What needs you (one action
+> per row), Recommended by BrandSpace (≤3 grounded insights), Notes from your team, Coming up this
+> week (day-grouped), and the Performance snapshot LAST. The floating cards now carry the real 28-day
+> engagement figure and the next scheduled item (the decorative mini chart is gone). Plan, credits,
+> members, activity and the notification count left Home. The sections below describe the earlier
+> composition and remain as history.
 
 The Overview is the one 5B-3 screen with a REAL demo design behind it: `overview()` in
 `demo/app-2.js`, whose hero, two floating cards, four-across metric row and 1.45/0.8 dashboard split

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { Button, ButtonRow, IconButton } from './primitives';
 import { ChevronEndIcon, ChevronStartIcon } from './icons';
@@ -73,10 +73,13 @@ function MonthGrid({
   days,
   labels,
   onOpenPost,
+  onDropDay,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
+  /** PHASE 6 FINAL (D-290) — a dragged draft dropped on a day. */
+  readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
 }) {
   return (
     <div
@@ -144,6 +147,15 @@ function MonthGrid({
               key={day.key}
               role="gridcell"
               data-testid={`calendar-day-${day.key}`}
+              {...(onDropDay
+                ? {
+                    onDragOver: (event: React.DragEvent<HTMLDivElement>) => event.preventDefault(),
+                    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+                      event.preventDefault();
+                      onDropDay(day.key, event.dataTransfer.getData('text/plain'));
+                    },
+                  }
+                : {})}
               aria-label={`${day.longLabel} — ${labels.postsOnDay(day.posts.length)}`}
               style={{
                 // `.day { min-height: 132px; padding: 10px;
@@ -218,14 +230,23 @@ function Agenda({
   days,
   labels,
   onOpenPost,
+  emptyAction,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
+  readonly emptyAction?: ReactNode;
 }) {
   const withPosts = days.filter((day) => day.posts.length > 0);
   if (withPosts.length === 0) {
-    return <StateMessage title={labels.emptyPeriodTitle} description={labels.emptyPeriodBody} />;
+    return (
+      <StateMessage
+        title={labels.emptyPeriodTitle}
+        description={labels.emptyPeriodBody}
+        action={emptyAction}
+        testId="calendar-agenda-empty"
+      />
+    );
   }
   return (
     <ol
@@ -307,6 +328,9 @@ export function ContentCalendar({
   onNext,
   onToday,
   busy,
+  weekIndex = 0,
+  onDropDay,
+  emptyAction,
 }: {
   readonly periodLabel: string;
   readonly days: readonly CalendarDay[];
@@ -330,8 +354,27 @@ export function ContentCalendar({
   readonly onToday?: (() => void) | undefined;
   /** Marks the grid busy while a navigation is in flight. */
   readonly busy?: boolean | undefined;
+  /**
+   * PHASE 6 FINAL (D-290) — which row of the month the Week view shows (the
+   * week containing today, when the caller knows it). The first row otherwise.
+   */
+  readonly weekIndex?: number | undefined;
+  /** A dragged item dropped on a day. Drag is never the only way to schedule. */
+  readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /** D-299 (§43) — what an empty agenda offers: the caller's next step. */
+  readonly emptyAction?: ReactNode;
 }) {
   const [view, setView] = useState<CalendarView>('month');
+  /*
+   * D-306 — AGENDA FIRST ON A PHONE. Below the wide breakpoint the grid is
+   * never drawn, so the switcher now SAYS Agenda there instead of claiming a
+   * month view the reader cannot see. Month and Week stay one tap away.
+   */
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      setView('agenda');
+    }
+  }, []);
 
   const viewButton = (value: CalendarView, label: string) => (
     <button
@@ -460,18 +503,19 @@ export function ContentCalendar({
         useless at 390px.
       */}
       {view === 'agenda' ? (
-        <Agenda days={days} labels={labels} onOpenPost={onOpenPost} />
+        <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
       ) : (
         <>
           <div className="bs-wide-only">
             <MonthGrid
-              days={view === 'week' ? days.slice(0, 7) : days}
+              days={view === 'week' ? days.slice(weekIndex * 7, weekIndex * 7 + 7) : days}
               labels={labels}
               onOpenPost={onOpenPost}
+              onDropDay={onDropDay}
             />
           </div>
           <div className="bs-narrow-only">
-            <Agenda days={days} labels={labels} onOpenPost={onOpenPost} />
+            <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
           </div>
         </>
       )}

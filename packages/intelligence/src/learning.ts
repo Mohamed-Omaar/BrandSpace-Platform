@@ -1,4 +1,5 @@
 import { writeAuditEvent, type Insight, type TenantScopedClient } from '@brandspace/database';
+import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { BrandKnowledgeService } from '@brandspace/brand-brain';
 import {
   detectAnomalies,
@@ -184,6 +185,12 @@ export class LearningWriteBackService {
         },
       });
     }
+
+    await notifyLearningReviewers(this.#db, this.#workspaceId, {
+      brandId: insight.brandId,
+      insightId: insight.id,
+      createdCandidateIds: proposed.filter((p) => p.created).map((p) => p.candidateId),
+    });
 
     return { proposed, skipped: [] };
   }
@@ -374,3 +381,60 @@ export function confidenceFor(deviationMilli: number, occurrences: number): numb
 
 /** Re-exported so callers do not reach past this module for the insight type. */
 export type { Insight };
+
+/**
+ * Tell the people who can review it that a learning is waiting (P6-11).
+ *
+ * Returns how many notices were new. Exported so the isolation suite can pin
+ * who is told without first manufacturing an analytics anomaly.
+ *
+ * `brand_brain.learning_proposed` was declared in the notification catalogue
+ * in Phase 7 and nothing ever sent it, so the learning loop's HUMAN REVIEW
+ * step depended on somebody happening to open Brand Brain. It is sent here,
+ * in the same transaction that created the candidates, so a proposal and its
+ * notice commit or roll back together.
+ *
+ * ONLY WHEN SOMETHING NEW WAS CREATED. Re-proposing from the same insight
+ * finds the pending candidates it already made (`created: false`) and says
+ * nothing — the inbox is not a log of button presses.
+ *
+ * TO THE REVIEWERS OF THIS BRAND, via `resolveRecipients`: an active member
+ * whose role carries `brand_brain.review` and whose BrandScope admits the
+ * brand. A member restricted to another brand is not told this brand has
+ * anything to review.
+ *
+ * IDEMPOTENT ON THE FIRST NEW CANDIDATE. Each batch of new candidates is one
+ * notice; a retried request that creates nothing new creates no notice, and
+ * a replay of the same batch collides on the unique key.
+ *
+ * A POINTER, NOT A COPY. No title, no body, no figure: the reader follows the
+ * link and meets the learning under Brand Brain's own permission checks.
+ */
+export async function notifyLearningReviewers(
+  db: TenantScopedClient,
+  workspaceId: string,
+  input: {
+    readonly brandId: string;
+    readonly insightId: string;
+    readonly createdCandidateIds: readonly string[];
+  },
+): Promise<number> {
+  const first = [...input.createdCandidateIds].sort()[0];
+  if (!first) return 0;
+  const reviewers = await resolveRecipients({
+    db,
+    workspaceId,
+    permissionKey: 'brand_brain.review',
+    brandId: input.brandId,
+  });
+  return new NotificationService({ db, workspaceId }).create({
+    userIds: reviewers,
+    templateKey: 'brand_brain.learning_proposed',
+    payload: {},
+    linkPath: '/brand-brain',
+    brandId: input.brandId,
+    resourceType: 'Insight',
+    resourceId: input.insightId,
+    idempotencyKey: `brand_brain.learning_proposed:${first}`,
+  });
+}

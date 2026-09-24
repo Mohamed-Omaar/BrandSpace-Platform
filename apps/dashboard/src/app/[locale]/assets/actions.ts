@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import type { AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
@@ -76,7 +76,7 @@ function optionalId(formData: FormData, field: string): string | null {
 }
 
 export async function uploadAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.upload');
@@ -110,23 +110,28 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function createAssetFolderAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.manage_taxonomy');
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid folder name');
 
+    const parentFolderId = optionalId(formData, 'parentFolderId');
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
       await service.createFolder({
         actor: assetActor(session),
         name,
         brandId: optionalId(formData, 'brandId'),
-        parentFolderId: optionalId(formData, 'parentFolderId'),
+        parentFolderId,
       });
     });
-    destination = pageUrl(locale, { ok: 'ASSET_FOLDER_CREATED' });
+    // D-305 — back to where the folder was created, so it is visible at once.
+    destination = pageUrl(locale, {
+      ok: 'ASSET_FOLDER_CREATED',
+      ...(parentFolderId ? { folder: parentFolderId } : {}),
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'create-folder');
   }
@@ -135,13 +140,31 @@ export async function createAssetFolderAction(formData: FormData): Promise<void>
 }
 
 export async function updateAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.edit');
     const rawTags = String(formData.get('tags') ?? '');
     const name = String(formData.get('name') ?? '').trim();
+    /*
+     * PHASE 6 FINAL (D-286/D-287) — LICENCE, RIGHTS AND FOLDER. Each is changed
+     * only when its field was on the form; an empty value clears it. The rights
+     * date is the last day the licence covers, so it ends at the close of that
+     * day (UTC) — the publishability predicate refuses the file after it.
+     */
+    const rawLicense = formData.get('license');
+    const license =
+      rawLicense === null ? undefined : String(rawLicense).trim().slice(0, 500) || null;
+    const rawRights = formData.get('rightsExpiryAt');
+    const rightsExpiryAt =
+      rawRights === null
+        ? undefined
+        : /^\d{4}-\d{2}-\d{2}$/.test(String(rawRights))
+          ? new Date(`${String(rawRights)}T23:59:59.999Z`)
+          : null;
+    const rawFolder = formData.get('folderId');
+    const folderId = rawFolder === null ? undefined : String(rawFolder) || null;
 
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
@@ -149,6 +172,9 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
         assetId,
         actor: assetActor(session),
         ...(name.length > 0 ? { name } : {}),
+        ...(license === undefined ? {} : { license }),
+        ...(rightsExpiryAt === undefined ? {} : { rightsExpiryAt }),
+        ...(folderId === undefined ? {} : { folderId }),
         // Split on commas so a single text field can carry a tag list. The
         // SERVICE normalises, de-duplicates and enforces the ceiling; this only
         // has to turn one string into many.
@@ -166,8 +192,64 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/**
+ * PHASE 6 FINAL (D-287) — BULK: archive, tag or move several files at once.
+ *
+ * NOT A NEW SERVICE PATH. Each file goes through the same `archive` /
+ * `updateMetadata` call the single-file controls use, with the same permission,
+ * BrandScope, folder rules and audit event per file. A file the member may not
+ * change is skipped and counted, never a reason to stop the rest.
+ */
+export async function bulkAssetAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const operation = String(formData.get('operation') ?? '');
+    const permission = operation === 'archive' ? 'assets.archive' : 'assets.edit';
+    const session = await requireWorkspace(locale, permission);
+    const ids = [...new Set(formData.getAll('assetIds').map(String))].slice(0, 100);
+    if (ids.length === 0 || !['archive', 'tag', 'move'].includes(operation)) {
+      throw new AppError('VALIDATION_FAILED', 'Nothing to do.');
+    }
+    const tag = String(formData.get('tag') ?? '').trim();
+    const folder = String(formData.get('folderId') ?? '');
+    let changed = 0;
+    let skipped = 0;
+    await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
+      const service = await library();
+      const actor = assetActor(session);
+      for (const assetId of ids) {
+        try {
+          if (operation === 'archive') {
+            await service.archive(assetId, actor);
+          } else if (operation === 'tag') {
+            if (tag === '') throw new AppError('VALIDATION_FAILED', 'A tag is required.');
+            const current = await service.get(assetId, actor);
+            await service.updateMetadata({ assetId, actor, tags: [...current.tags, tag] });
+          } else {
+            await service.updateMetadata({ assetId, actor, folderId: folder || null });
+          }
+          changed += 1;
+        } catch (error: unknown) {
+          if (error instanceof AppError && error.code === 'VALIDATION_FAILED' && tag === '') {
+            throw error;
+          }
+          skipped += 1;
+        }
+      }
+    });
+    destination = pageUrl(locale, {
+      ok: skipped > 0 || changed === 0 ? 'ASSETS_BULK_PARTIAL' : 'ASSETS_BULK_DONE',
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'bulk-assets');
+  }
+  revalidatePath(`/${locale}/assets`);
+  redirect(destination);
+}
+
 export async function archiveAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -185,7 +267,7 @@ export async function archiveAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function restoreAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -203,7 +285,7 @@ export async function restoreAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.delete');
@@ -221,7 +303,7 @@ export async function deleteAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function addAssetVersionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -261,7 +343,7 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
 }
 
 export async function restoreAssetVersionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {

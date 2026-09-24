@@ -25,7 +25,15 @@ import type { MessageKey } from '../i18n/messages';
 
 /** The Settings-section destinations, in the order they are shown. */
 export type SettingsNavKey =
-  'settings' | 'brand' | 'security' | 'members' | 'permissions' | 'plan' | 'billing';
+  | 'settings'
+  | 'brand'
+  | 'security'
+  | 'connections'
+  | 'data'
+  | 'members'
+  | 'permissions'
+  | 'activity'
+  | 'billing';
 
 export interface SettingsNavEntry {
   readonly key: SettingsNavKey;
@@ -52,12 +60,17 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
   },
   { key: 'brand', path: '/settings/brand', labelKey: 'brand.profile', permission: 'brand.read' },
   /*
-   * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
-   * the reader their OWN second factor and their own sessions, which belong to
-   * the person rather than to the workspace. No permission gates it because
-   * there is no other person whose security it could show.
+   * P6-13 — CONNECTIONS, reached from Settings as well as from the PUBLISH
+   * group. The connected accounts are workspace configuration as much as a
+   * publishing tool, and a person looking in Settings for "where are our
+   * accounts" was not told. The same route, not a second screen.
    */
-  { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
+  {
+    key: 'connections',
+    path: '/integrations',
+    labelKey: 'settings.connections',
+    permission: 'integrations.read',
+  },
   { key: 'members', path: '/members', labelKey: 'nav.members', permission: 'member.read' },
   /*
    * PERMISSIONS IS OPEN TO EVERY MEMBER ON PURPOSE. It shows the reader their
@@ -65,9 +78,41 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    * definition — `requireWorkspace(locale)` with no permission argument.
    */
   { key: 'permissions', path: '/permissions', labelKey: 'perms.title', permission: null },
-  { key: 'plan', path: '/plan', labelKey: 'nav.plan', permission: 'billing.read' },
+  /*
+   * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
+   * the reader their OWN second factor and their own sessions, which belong to
+   * the person rather than to the workspace. No permission gates it because
+   * there is no other person whose security it could show.
+   */
+  { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
+  /*
+   * P6-13 — DATA CONTROLS: one page naming every control this product has over
+   * a workspace's data, and saying plainly which ones it does not have yet.
+   */
+  {
+    key: 'data',
+    path: '/settings/data',
+    labelKey: 'settings.data',
+    permission: 'workspace.update',
+  },
+  /*
+   * ACTIVITY (Phase 6 final, D-277 §44/§47) — the workspace's audit trail,
+   * graded by what the reader may see rather than refused, which is why it asks
+   * no permission here, exactly as its route does.
+   */
+  { key: 'activity', path: '/activity', labelKey: 'nav.activity', permission: null },
+  /*
+   * BILLING & USAGE IS ONE SECTION (Phase 6 final, D-277 §44/§46, D-298). The
+   * plan and payments (`/billing`) and the usage, limits and credit history
+   * (`/plan`) are two tabs of it, not two Settings rows. Both routes keep their
+   * own `billing.read` check; `/plan` is listed in `SETTINGS_SUBPATHS` so the
+   * sidebar still marks Settings current there.
+   */
   { key: 'billing', path: '/billing', labelKey: 'nav.billing', permission: 'billing.read' },
 ];
+
+/** Routes that are TABS of a Settings section rather than rows of their own. */
+export const SETTINGS_SUBPATHS: readonly string[] = ['/plan'];
 
 /**
  * The rows this member can actually open, with one marked current.
@@ -93,3 +138,25 @@ export function settingsNavItems(input: {
     selected: route.key === input.selected,
   }));
 }
+
+/**
+ * WHERE "SETTINGS" OPENS for this member (Phase 6 final, D-277 §3/§44).
+ *
+ * Settings is now the single home of workspace administration, and it is on
+ * the sidebar for EVERY member — but its first section, Workspace, needs
+ * `workspace.update`. So the sidebar entry opens the first section this member
+ * may actually read, in the order above, rather than a 404. Security, Roles &
+ * permissions and Activity ask no permission, so there is always one.
+ */
+export function settingsLandingPath(permissionKeys: readonly string[]): string {
+  const first = SETTINGS_NAV_ROUTES.find(
+    (route) => route.permission === null || permissionKeys.includes(route.permission),
+  );
+  return first ? first.path : '/settings/security';
+}
+
+/** Every path that belongs to Settings, so the sidebar can mark it current. */
+export const SETTINGS_PATHS: readonly string[] = [
+  ...SETTINGS_NAV_ROUTES.map((route) => route.path),
+  ...SETTINGS_SUBPATHS,
+];

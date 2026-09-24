@@ -10,19 +10,28 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
   buttonStyle,
   colorTokens,
   initialsFrom,
   inputStyle,
+  layoutTokens,
   spacingTokens,
   statusTone,
   typographyTokens,
   visuallyHiddenStyle,
   type MediaSeed,
 } from '@brandspace/ui';
+import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { statusMessage, translator } from '../../../i18n/messages';
+import {
+  customerRoleName,
+  optionalMessage,
+  statusMessage,
+  translator,
+} from '../../../i18n/messages';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import {
   changeRoleAction,
@@ -30,9 +39,24 @@ import {
   removeMemberAction,
   resendInvitationAction,
   revokeInvitationAction,
+  changeBrandAccessAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Brand-access choices sit in a tight list, so each row holds the WCAG 2.5.8
+ * minimum target height and the control itself is sized like the approvals
+ * checkboxes — a default 13px box stacked 4px apart fails the target-size rule
+ * on a phone.
+ */
+const accessChoiceStyle = {
+  display: 'flex',
+  gap: spacingTokens.xs,
+  alignItems: 'center',
+  minBlockSize: layoutTokens.minTargetSize,
+} as const;
+const accessInputStyle = { inlineSize: '20px', blockSize: '20px', margin: 0 } as const;
 
 /**
  * Team: members and invitations.
@@ -71,7 +95,7 @@ export default async function MembersPage({
 
   // Every read runs inside the tenant context, so RLS — not a `where` clause
   // this page remembered — is what keeps another tenant's rows out.
-  const { members, invitations, invitationTotal, roles, assignable } = await inWorkspace(
+  const { members, invitations, invitationTotal, roles, assignable, brands } = await inWorkspace(
     workspace.workspaceId,
     async ({ db, memberships, invitations: invitationService }) => ({
       members: await memberships.list(workspace.workspaceId),
@@ -90,10 +114,134 @@ export default async function MembersPage({
       // Only the roles THIS member may hand out. The service refuses anything
       // else, so the list cannot be used to escalate by editing an option value.
       assignable: memberships.assignableRoleKeys(workspace.roleKey),
+      /*
+       * THE BRANDS THIS VIEWER CAN SEE — the only brands they may grant, and
+       * the only brand NAMES this page shows. A member's access to a brand the
+       * viewer cannot see is counted ("and 2 more"), never named.
+       */
+      brands: await db.brand.findMany({
+        where: {
+          workspaceId: workspace.workspaceId,
+          deletedAt: null,
+          ...brandScopeFilter(workspace.brandScope),
+        },
+        select: { id: true, name: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
     }),
   );
+  const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
+  const viewerRestricted = workspace.brandScope.length > 0;
+
+  /** "All brands", or the brands by name — counting any the viewer cannot see. */
+  function accessLabel(scope: readonly string[]): string {
+    if (scope.length === 0) return t('members.access.all');
+    const named = scope.flatMap((id) => {
+      const name = brandNames.get(id);
+      return name ? [name] : [];
+    });
+    const hidden = scope.length - named.length;
+    return hidden > 0
+      ? `${named.join('، ')}${named.length > 0 ? ' ' : ''}${t('members.access.more').replace('{count}', String(hidden))}`
+      : named.join(locale === 'ar' ? '، ' : ', ');
+  }
+
+  /**
+   * The brand-access controls, shared by the invitation form and the
+   * per-member editor. "All brands" is offered only to a viewer who holds it
+   * themselves; a restricted viewer can grant only a subset of their own.
+   * Native radios and checkboxes, so it works without script.
+   */
+  function accessFields(idPrefix: string, current: readonly string[]) {
+    const all = current.length === 0 && !viewerRestricted;
+    return (
+      <fieldset
+        style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
+        data-testid={`${idPrefix}-access`}
+      >
+        <legend style={{ ...typographyTokens.label, marginBlockEnd: spacingTokens.xs }}>
+          {t('members.access.title')}
+        </legend>
+        {!viewerRestricted ? (
+          <label style={accessChoiceStyle}>
+            <input
+              type="radio"
+              name="access"
+              value="all"
+              defaultChecked={all}
+              style={accessInputStyle}
+            />
+            <span style={typographyTokens.bodySm}>{t('members.access.all')}</span>
+          </label>
+        ) : null}
+        <label style={accessChoiceStyle}>
+          <input
+            type="radio"
+            name="access"
+            value="selected"
+            defaultChecked={!all}
+            style={accessInputStyle}
+          />
+          <span style={typographyTokens.bodySm}>{t('members.access.selected')}</span>
+        </label>
+        <div
+          style={{
+            display: 'grid',
+            gap: spacingTokens['2xs'],
+            paddingInlineStart: spacingTokens.lg,
+          }}
+        >
+          {brands.map((brand) => (
+            <label key={brand.id} style={accessChoiceStyle}>
+              <input
+                type="checkbox"
+                name="brandId"
+                value={brand.id}
+                defaultChecked={current.includes(brand.id)}
+                style={accessInputStyle}
+              />
+              <span style={typographyTokens.bodySm}>{brand.name}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
+
+  function accessForm(membershipId: string, current: readonly string[], testKey: string) {
+    return (
+      <details data-testid={`brand-access-${testKey}`}>
+        <summary
+          style={{ ...buttonStyle('ghost', 'sm'), listStyle: 'none' }}
+          className={buttonClass('ghost')}
+        >
+          {t('members.access.change')}
+        </summary>
+        <form
+          action={changeBrandAccessAction}
+          style={{ display: 'grid', gap: spacingTokens.sm, marginBlockStart: spacingTokens.xs }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="membershipId" value={membershipId} />
+          {accessFields(`member-${testKey}`, current)}
+          <button
+            type="submit"
+            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral')}
+            data-testid={`save-brand-access-${testKey}`}
+          >
+            {t('common.save')}
+          </button>
+        </form>
+      </details>
+    );
+  }
 
   const assignableRoles = roles.filter((r) => assignable.includes(r.key));
+
+  /** A membership or invitation status in the reader's language (P6-15). */
+  const statusLabel = (kind: 'memberStatus' | 'inviteStatus', status: string): string =>
+    optionalMessage(locale, `members.${kind}.${status}`) ?? status;
 
   const may = (key: string) => workspace.permissionKeys.includes(key);
   const mayManage = may('member.assign_role') || may('member.remove');
@@ -123,7 +271,7 @@ export default async function MembersPage({
           <option value="">{t('members.changeRole')}</option>
           {assignableRoles.map((r) => (
             <option key={r.id} value={r.id}>
-              {locale === 'ar' ? r.nameAr : r.nameEn}
+              {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
             </option>
           ))}
         </select>
@@ -184,9 +332,40 @@ export default async function MembersPage({
     );
   }
 
+  /*
+   * D-298 (§41/§45) — A PERSON, NOT AN ADDRESS. The first column is the
+   * member: their name where they gave one, the address under it, and when
+   * they joined. Nothing is invented for a member without a name.
+   */
+  const joined = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', { dateStyle: 'medium' });
+  const memberIdentity = (m: (typeof members)[number]) => (
+    <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+      {m.name?.trim() ? (
+        <strong data-testid={`member-name-${m.email}`} style={typographyTokens.bodySm}>
+          {m.name.trim()}
+        </strong>
+      ) : null}
+      <span
+        style={{
+          ...(m.name?.trim() ? typographyTokens.caption : typographyTokens.bodySm),
+          color: m.name?.trim() ? colorTokens.textSecondary : colorTokens.textPrimary,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {m.email}
+      </span>
+      {m.joinedAt ? (
+        <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+          {t('members.joined').replace('{date}', joined.format(m.joinedAt))}
+        </span>
+      ) : null}
+    </span>
+  );
+
   const memberHeaders = [
-    t('members.email'),
+    t('members.member'),
     t('members.role'),
+    t('members.access.title'),
     t('members.status'),
     ...(mayManage ? [t('members.actions')] : []),
   ];
@@ -205,30 +384,35 @@ export default async function MembersPage({
       customerName={session.customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {error && <Banner tone="error">{statusMessage(error, locale, ref)}</Banner>}
-      {ok && statusMessage(ok, locale) && (
-        <Banner tone="success">{statusMessage(ok, locale)}</Banner>
-      )}
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="members">
+        {error && <Banner tone="error">{statusMessage(error, locale, ref)}</Banner>}
+        {ok && statusMessage(ok, locale) && (
+          <Banner tone="success">{statusMessage(ok, locale)}</Banner>
+        )}
 
-      <Stack>
-        <Card
-          title={t('members.title')}
-          testId="members-card"
-          footer={
-            <p
-              data-testid="last-owner-rule"
-              style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-            >
-              {t('members.lastOwner')}
-            </p>
-          }
-        >
-          <div className="bs-wide-only">
-            <DataTable headers={memberHeaders} caption={t('members.title')} testId="members-table">
-              {members.map((m) => (
-                <tr key={m.membershipId} data-testid={`member-${m.email}`}>
-                  <Cell>
-                    {/*
+        <Stack>
+          <Card
+            title={t('members.title')}
+            testId="members-card"
+            footer={
+              <p
+                data-testid="last-owner-rule"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+              >
+                {t('members.lastOwner')}
+              </p>
+            }
+          >
+            <div className="bs-wide-only">
+              <DataTable
+                headers={memberHeaders}
+                caption={t('members.title')}
+                testId="members-table"
+              >
+                {members.map((m) => (
+                  <tr key={m.membershipId} data-testid={`member-${m.email}`}>
+                    <Cell>
+                      {/*
                       `.record-main { display: flex; gap: 9px; align-items: center }`
                       with `.record-main .avatar { border-radius: 11px }` — the
                       demo's directory rows lead with a rounded identity tile,
@@ -236,182 +420,236 @@ export default async function MembersPage({
                       scannable. The initials come from the address already
                       shown beside them; nothing new is invented.
                     */}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.5625rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Avatar
+                          initials={initialsFrom(m.name?.trim() || m.email)}
+                          seed={avatarSeed(m.email)}
+                          shape="tile"
+                        />
+                        {memberIdentity(m)}
+                        {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
+                      </span>
+                    </Cell>
+                    <Cell>{customerRoleName(locale === 'ar' ? m.roleNameAr : m.roleNameEn)}</Cell>
+                    <Cell>
+                      <span data-testid={`member-access-${m.email}`}>
+                        {accessLabel(m.brandScope)}
+                      </span>
+                    </Cell>
+                    <Cell>
+                      <StatusBadge
+                        label={statusLabel('memberStatus', m.status)}
+                        tone={statusTone(m.status)}
+                      />
+                    </Cell>
+                    {mayManage ? (
+                      <Cell>
+                        <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
+                          {may('member.assign_role') && assignableRoles.length > 0
+                            ? roleForm(m.membershipId, m.email)
+                            : null}
+                          {may('member.assign_role') &&
+                          !m.isWorkspaceOwner &&
+                          assignable.includes(m.roleKey)
+                            ? accessForm(m.membershipId, m.brandScope, m.email)
+                            : null}
+                          {may('member.remove') ? removeForm(m.membershipId, m.email) : null}
+                        </div>
+                      </Cell>
+                    ) : null}
+                  </tr>
+                ))}
+              </DataTable>
+            </div>
+
+            {/* The same members, shaped for a phone: column headings become
+              visible labels instead of disappearing off the side. */}
+            <div className="bs-narrow-only">
+              <RecordList
+                testId="members-list"
+                actionsLabel={t('members.actions')}
+                records={members.map((m) => ({
+                  id: m.membershipId,
+                  title: (
                     <span
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '0.5625rem',
+                        gap: spacingTokens.xs,
                         flexWrap: 'wrap',
+                        overflowWrap: 'anywhere',
                       }}
                     >
-                      <Avatar
-                        initials={initialsFrom(m.email)}
-                        seed={avatarSeed(m.email)}
-                        shape="tile"
-                      />
-                      {m.email}
-                      {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
+                      {memberIdentity(m)}
+                      {m.isWorkspaceOwner ? ownerBadge(`${m.email}-mobile`) : null}
                     </span>
-                  </Cell>
-                  <Cell>{locale === 'ar' ? m.roleNameAr : m.roleNameEn}</Cell>
-                  <Cell>
-                    <StatusBadge label={m.status} tone={statusTone(m.status)} />
-                  </Cell>
-                  {mayManage ? (
-                    <Cell>
-                      <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
-                        {may('member.assign_role') && assignableRoles.length > 0
-                          ? roleForm(m.membershipId, m.email)
-                          : null}
-                        {may('member.remove') ? removeForm(m.membershipId, m.email) : null}
-                      </div>
-                    </Cell>
-                  ) : null}
-                </tr>
-              ))}
-            </DataTable>
-          </div>
-
-          {/* The same members, shaped for a phone: column headings become
-              visible labels instead of disappearing off the side. */}
-          <div className="bs-narrow-only">
-            <RecordList
-              testId="members-list"
-              actionsLabel={t('members.actions')}
-              records={members.map((m) => ({
-                id: m.membershipId,
-                title: (
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: spacingTokens.xs,
-                      flexWrap: 'wrap',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {m.email}
-                    {m.isWorkspaceOwner ? ownerBadge(`${m.email}-mobile`) : null}
-                  </span>
-                ),
-                fields: [
-                  {
-                    label: t('members.role'),
-                    value: locale === 'ar' ? m.roleNameAr : m.roleNameEn,
-                  },
-                  {
-                    label: t('members.status'),
-                    value: <StatusBadge label={m.status} tone={statusTone(m.status)} />,
-                  },
-                ],
-                actions: mayManage ? (
-                  <>
-                    {may('member.assign_role') && assignableRoles.length > 0
-                      ? roleForm(`${m.membershipId}-m`, `${m.email}-mobile`)
-                      : null}
-                    {may('member.remove') ? removeForm(m.membershipId, `${m.email}-mobile`) : null}
-                  </>
-                ) : undefined,
-              }))}
-            />
-          </div>
-        </Card>
-
-        {may('member.invite') && (
-          <Card title={t('members.invitations')} testId="invitations-card">
-            {invitations.length === 0 ? (
-              <StateMessage
-                title={t('members.noInvitations')}
-                description={t('members.noInvitationsHint')}
+                  ),
+                  fields: [
+                    {
+                      label: t('members.role'),
+                      value: customerRoleName(locale === 'ar' ? m.roleNameAr : m.roleNameEn),
+                    },
+                    { label: t('members.access.title'), value: accessLabel(m.brandScope) },
+                    {
+                      label: t('members.status'),
+                      value: (
+                        <StatusBadge
+                          label={statusLabel('memberStatus', m.status)}
+                          tone={statusTone(m.status)}
+                        />
+                      ),
+                    },
+                  ],
+                  actions: mayManage ? (
+                    <>
+                      {may('member.assign_role') && assignableRoles.length > 0
+                        ? roleForm(`${m.membershipId}-m`, `${m.email}-mobile`)
+                        : null}
+                      {may('member.assign_role') &&
+                      !m.isWorkspaceOwner &&
+                      assignable.includes(m.roleKey)
+                        ? accessForm(m.membershipId, m.brandScope, `${m.email}-mobile`)
+                        : null}
+                      {may('member.remove')
+                        ? removeForm(m.membershipId, `${m.email}-mobile`)
+                        : null}
+                    </>
+                  ) : undefined,
+                }))}
               />
-            ) : (
-              <>
-                {invitationTotal > invitations.length && (
-                  <p
-                    data-testid="invitations-capped"
-                    role="status"
-                    style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
-                  >
-                    {locale === 'ar'
-                      ? `عرض أحدث ${invitations.length} من ${invitationTotal}`
-                      : `Showing the most recent ${invitations.length} of ${invitationTotal}`}
-                  </p>
-                )}
-                <div className="bs-wide-only">
-                  <DataTable
-                    headers={[
-                      t('members.email'),
-                      t('members.role'),
-                      t('members.status'),
-                      t('members.actions'),
-                    ]}
-                    caption={t('members.invitations')}
-                    testId="invitations-table"
-                  >
-                    {invitations.map((i) => (
-                      <tr key={i.id} data-testid={`invitation-${i.email}`}>
-                        <Cell>{i.email}</Cell>
-                        <Cell>{i.roleKey}</Cell>
-                        <Cell>
-                          <StatusBadge label={i.status} tone={statusTone(i.status)} />
-                        </Cell>
-                        <Cell>{invitationActions(i.id, i.email, i.status)}</Cell>
-                      </tr>
-                    ))}
-                  </DataTable>
-                </div>
-                <div className="bs-narrow-only">
-                  <RecordList
-                    testId="invitations-list"
-                    actionsLabel={t('members.actions')}
-                    records={invitations.map((i) => ({
-                      id: i.id,
-                      title: <span style={{ overflowWrap: 'anywhere' }}>{i.email}</span>,
-                      fields: [
-                        { label: t('members.role'), value: i.roleKey },
-                        {
-                          label: t('members.status'),
-                          value: <StatusBadge label={i.status} tone={statusTone(i.status)} />,
-                        },
-                      ],
-                      actions: invitationActions(i.id, `${i.email}-mobile`, i.status) ?? undefined,
-                    }))}
-                  />
-                </div>
-              </>
-            )}
-
-            <form
-              action={inviteMemberAction}
-              style={{ marginBlockStart: spacingTokens.lg, maxInlineSize: '28rem' }}
-            >
-              <input type="hidden" name="locale" value={locale} />
-              <Field label={t('members.email')} htmlFor="invite-email" required>
-                <input
-                  className="bs-control"
-                  id="invite-email"
-                  name="email"
-                  type="email"
-                  required
-                  style={inputStyle()}
-                />
-              </Field>
-              <Field label={t('members.role')} htmlFor="invite-role" required>
-                <select className="bs-control" id="invite-role" name="roleId" style={inputStyle()}>
-                  {assignableRoles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {locale === 'ar' ? r.nameAr : r.nameEn}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Button type="submit" data-testid="invite-submit">
-                {t('members.invite')}
-              </Button>
-            </form>
+            </div>
           </Card>
-        )}
-      </Stack>
+
+          {may('member.invite') && (
+            <Card title={t('members.invitations')} testId="invitations-card">
+              {invitations.length === 0 ? (
+                <StateMessage
+                  title={t('members.noInvitations')}
+                  description={t('members.noInvitationsHint')}
+                />
+              ) : (
+                <>
+                  {invitationTotal > invitations.length && (
+                    <p
+                      data-testid="invitations-capped"
+                      role="status"
+                      style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                    >
+                      {locale === 'ar'
+                        ? `عرض أحدث ${invitations.length} من ${invitationTotal}`
+                        : `Showing the most recent ${invitations.length} of ${invitationTotal}`}
+                    </p>
+                  )}
+                  <div className="bs-wide-only">
+                    <DataTable
+                      headers={[
+                        t('members.email'),
+                        t('members.role'),
+                        t('members.access.title'),
+                        t('members.status'),
+                        t('members.actions'),
+                      ]}
+                      caption={t('members.invitations')}
+                      testId="invitations-table"
+                    >
+                      {invitations.map((i) => (
+                        <tr key={i.id} data-testid={`invitation-${i.email}`}>
+                          <Cell>{i.email}</Cell>
+                          <Cell>
+                            {customerRoleName(locale === 'ar' ? i.roleNameAr : i.roleNameEn)}
+                          </Cell>
+                          <Cell>{accessLabel(i.brandScope)}</Cell>
+                          <Cell>
+                            <StatusBadge
+                              label={statusLabel('inviteStatus', i.status)}
+                              tone={statusTone(i.status)}
+                            />
+                          </Cell>
+                          <Cell>{invitationActions(i.id, i.email, i.status)}</Cell>
+                        </tr>
+                      ))}
+                    </DataTable>
+                  </div>
+                  <div className="bs-narrow-only">
+                    <RecordList
+                      testId="invitations-list"
+                      actionsLabel={t('members.actions')}
+                      records={invitations.map((i) => ({
+                        id: i.id,
+                        title: <span style={{ overflowWrap: 'anywhere' }}>{i.email}</span>,
+                        fields: [
+                          {
+                            label: t('members.role'),
+                            value: customerRoleName(locale === 'ar' ? i.roleNameAr : i.roleNameEn),
+                          },
+                          { label: t('members.access.title'), value: accessLabel(i.brandScope) },
+                          {
+                            label: t('members.status'),
+                            value: (
+                              <StatusBadge
+                                label={statusLabel('inviteStatus', i.status)}
+                                tone={statusTone(i.status)}
+                              />
+                            ),
+                          },
+                        ],
+                        actions:
+                          invitationActions(i.id, `${i.email}-mobile`, i.status) ?? undefined,
+                      }))}
+                    />
+                  </div>
+                </>
+              )}
+
+              <form
+                action={inviteMemberAction}
+                style={{ marginBlockStart: spacingTokens.lg, maxInlineSize: '28rem' }}
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <Field label={t('members.email')} htmlFor="invite-email" required>
+                  <input
+                    className="bs-control"
+                    id="invite-email"
+                    name="email"
+                    type="email"
+                    required
+                    style={inputStyle()}
+                  />
+                </Field>
+                <Field label={t('members.role')} htmlFor="invite-role" required>
+                  <select
+                    className="bs-control"
+                    id="invite-role"
+                    name="roleId"
+                    style={inputStyle()}
+                  >
+                    {assignableRoles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {brands.length > 0 ? (
+                  <div style={{ marginBlockEnd: spacingTokens.md }}>
+                    {accessFields('invite', [])}
+                  </div>
+                ) : null}
+                <Button type="submit" data-testid="invite-submit">
+                  {t('members.invite')}
+                </Button>
+              </form>
+            </Card>
+          )}
+        </Stack>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

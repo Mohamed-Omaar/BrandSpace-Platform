@@ -160,9 +160,8 @@ test('1 · a workspace is chosen and a brand is active', async ({ page }) => {
   await enter(page);
 
   const rail = page.getByTestId('sidebar');
-  await expect(rail.getByTestId('workspace-switcher')).toContainText(
-    credentials().customer.workspaceName ?? '',
-  );
+  // D-302 — the workspace is chosen at sign-in and is not a rail card.
+  await expect(rail.getByTestId('workspace-switcher')).toHaveCount(0);
   // THE BRAND IS NAMED, not guessed: the card either names one or says it has
   // none, and "none" is not a state this journey can proceed from.
   await expect(rail.getByTestId('active-brand')).toHaveText(
@@ -285,7 +284,7 @@ test('5 · a campaign is created through the form and appears in the list', asyn
 
 test('6 · content is created and filed under the campaign', async ({ page }) => {
   expect(state.campaignId, 'step 5 must have created a campaign').toBeTruthy();
-  await enter(page, '/content/compose');
+  await enter(page, '/content/compose?mode=ai');
 
   await page.getByTestId('content-brief').fill(CONTENT_TITLE);
   /*
@@ -365,6 +364,9 @@ test('7 · a picture is uploaded from the composer into the one library', async 
 
   const name = `journey-${RUN}.png`;
   state.uploadedAssetName = name;
+  // D-285: uploading lives in the composer's media drawer, still in the post.
+  await page.locator('[data-testid^="content-media-"][data-testid$="-add"]').first().click();
+  await page.getByTestId('media-tab-upload').click();
   await expect(page.getByTestId('composer-upload-form')).toBeVisible();
   await page.getByTestId('composer-upload-file').setInputFiles({
     name,
@@ -472,16 +474,31 @@ test('9 · media is attached to the variant and shows in the social preview', as
    * and that ticking one attaches it. The picker is inside the variant's own
    * form, so choosing media and saving the caption are one submission.
    */
-  const picker = variantForm.locator('[data-testid^="content-media-"]').first();
-  const options = picker.locator('input[type="checkbox"]');
-  await expect.poll(async () => options.count(), { timeout: 60_000 }).toBeGreaterThan(0);
-  await options.first().check();
-  await clickAndSettle(variantForm.locator('button[type="submit"]').first(), page);
+  /*
+   * D-285: the library opens in the composer's media drawer. The picture the
+   * scanner has cleared may take a moment to be offered, so the drawer is
+   * reopened on a fresh read until it is.
+   */
+  const addButton = variantForm.locator('[data-testid^="content-media-"][data-testid$="-add"]');
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        await addButton.first().click();
+        const count = await page.locator('[data-testid^="media-choose-"]:not([disabled])').count();
+        if (count === 0) await page.getByTestId('media-drawer-close').click();
+        return count;
+      },
+      { timeout: 60_000, intervals: [2_000] },
+    )
+    .toBeGreaterThan(0);
+  await page.locator('[data-testid^="media-choose-"]:not([disabled])').first().click();
+  await clickAndSettle(variantForm.locator('[data-testid^="editor-save-"]').first(), page);
 
   // SAVED, AND SHOWN. The preview is the approved `SocialPostPreview` fed the
   // real caption and the real picture — what will actually be published.
   const reopened = page.getByTestId('content-variant').first();
-  const chosen = reopened.locator('[data-testid^="content-media-"] input[type="checkbox"]:checked');
+  const chosen = reopened.locator('[data-testid*="-slide-"][data-asset-id]');
   await expect(chosen).toHaveCount(1);
   await expect(page.locator('[data-testid^="content-preview-"]').first()).toBeVisible();
   await expect(page.getByTestId('preview-media').first()).toBeVisible();

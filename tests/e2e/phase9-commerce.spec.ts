@@ -45,6 +45,7 @@ async function signUpAndVerify(page: Page, locale = 'en'): Promise<NewCustomer> 
   await page.fill('#name', 'Phase 9 Journey');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
+  await page.fill('#password-confirm', PASSWORD);
   await page.fill('#timezone', 'Europe/London');
   await page.press('#timezone', 'Enter');
   // THE TERMS CHECKBOX IS REQUIRED AND VERSIONED. The form renders it from the
@@ -153,13 +154,11 @@ test.describe('a stranger becomes a paying customer', () => {
     await signIn(page, customer.email);
     await createWorkspace(page, { country: 'SA' });
 
-    // --- The first-run checklist is DERIVED, so the workspace step is already
-    // done and the plan step is not.
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
-      'data-complete',
-      'true',
-    );
-    await expect(page.locator('[data-testid="onboarding-step-plan"]')).toHaveAttribute(
+    // --- The first-run wizard is DERIVED: the business account exists (it is
+    // not a customer-visible step since D-303) and the brand step is not done.
+    // (Choosing a plan is not a setup step since D-277 §6.)
+    await expect(page.getByTestId('setup-progress-text')).toContainText('1');
+    await expect(page.locator('[data-testid="onboarding-step-brand"]')).toHaveAttribute(
       'data-complete',
       'false',
     );
@@ -330,10 +329,8 @@ test.describe('a stranger becomes a paying customer', () => {
     // must not block identity/onboarding; checkout policy is a later concern.
     await createWorkspace(page, { country: 'DE' });
 
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
-      'data-complete',
-      'true',
-    );
+    // The business account was created and the wizard runs inside it.
+    await expect(page.getByTestId('setup-wizard')).toHaveAttribute('data-view', 'brand');
   });
 });
 

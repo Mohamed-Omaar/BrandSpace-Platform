@@ -40,9 +40,6 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * commercial model does not have.
    */
   '/billing': 'workspace',
-  // Phase 9. The first-run checklist is a workspace-wide view of what has been
-  // set up; it points at brand screens rather than being one.
-  '/onboarding': 'workspace',
   '/settings': 'workspace',
   '/workspaces': 'workspace',
   '/no-workspace': 'workspace',
@@ -54,6 +51,13 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * brands' tones of voice averaged together is not a tone of voice.
    */
   '/brand-brain': 'brand',
+  /*
+   * THE SETUP WIZARD (Phase 6 final, D-277 §6). It used to be a workspace-wide
+   * checklist of links; it is now a guided journey whose every step after the
+   * first is about ONE brand — its documents, its knowledge, its accounts, its
+   * goal. A single-brand workspace resolves to its brand; with several it asks.
+   */
+  '/onboarding': 'brand',
   /*
    * BRAND PROFILE is the canonical identity of one brand by definition (D-189).
    */
@@ -114,6 +118,11 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
   '/assets': 'brand-or-all',
   '/approvals': 'brand-or-all',
   '/integrations': 'brand-or-all',
+  /*
+   * PUBLISHING (Phase 6 final, D-277): the queue, history and account health
+   * across the brands a member can see, narrowed by the rail's brand.
+   */
+  '/publishing': 'brand-or-all',
   '/automations': 'brand-or-all',
   /*
    * THE CAMPAIGN LIST aggregates honestly: a multi-brand owner planning a
@@ -121,6 +130,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
    * narrows it.
    */
   '/campaigns': 'brand-or-all',
+  /*
+   * P6-16. NOTES reads conversations across subjects. Every brand the member
+   * can see is a meaningful answer, and a brand on the rail narrows it — the
+   * same shape as the Command Center it feeds.
+   */
+  '/notes': 'brand-or-all',
 };
 
 /**

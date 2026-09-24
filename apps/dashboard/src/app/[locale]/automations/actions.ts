@@ -58,10 +58,11 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
         conditions: conditions as never,
         actionType: String(formData.get('actionType') ?? '') as AutomationActionType,
         // `NOTIFY` is the only action with a required parameter, and its value is
-        // a template key from the closed catalogue rather than customer text.
+        // a template key from the closed catalogue rather than customer text —
+        // its OWN template (P6-12), not the "waiting for your confirmation" one.
         actionConfig:
           formData.get('actionType') === 'NOTIFY'
-            ? { templateKey: 'automation.confirmation_required' }
+            ? { templateKey: 'automation.notice' }
             : formData.get('actionType') === 'PLACE_ON_CALENDAR'
               ? { offsetHours: 24 }
               : {},

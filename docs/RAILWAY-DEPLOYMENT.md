@@ -223,11 +223,15 @@ replica, region EU West.
 
 | Service     | Build command                                        | Start command                               | Healthcheck     | Drain | Watch paths                                                       |
 | ----------- | ---------------------------------------------------- | ------------------------------------------- | --------------- | ----- | ----------------------------------------------------------------- |
-| `web`       | _(Railpack default)_                                 | `pnpm --filter @brandspace/web start`       | `/`             | 30 s  | `apps/web/**`, `packages/ui/**`, `packages/shared/**`, root files |
+| `web`       | _(Railpack default)_                                 | `pnpm --filter @brandspace/web start`       | `/en/status`    | 30 s  | `apps/web/**`, `packages/ui/**`, `packages/shared/**`, root files |
 | `dashboard` | `prisma generate && pnpm --filter …/dashboard build` | `pnpm --filter @brandspace/dashboard start` | `/`             | 30 s  | `apps/dashboard/**`, `packages/**`, root files                    |
 | `admin`     | `prisma generate && pnpm --filter …/admin build`     | `pnpm --filter @brandspace/admin start`     | `/`             | 30 s  | `apps/admin/**`, `packages/**`, root files                        |
 | `api`       | `prisma generate`                                    | `pnpm --filter @brandspace/api start`       | `/health/ready` | 30 s  | `apps/api/**`, `packages/**`, root files                          |
 | `worker`    | `prisma generate`                                    | `pnpm --filter @brandspace/worker start`    | `/`             | 120 s | `apps/worker/**`, `packages/**`, root files                       |
+
+The web healthcheck uses `/en/status` rather than `/`: the bilingual router redirects the bare root
+with HTTP 307, while the status page is a deterministic verification route that returns a successful
+response for Railway.
 
 **No pre-deploy command on any application service.** Migrations are a separate
 job — §4 explains why.

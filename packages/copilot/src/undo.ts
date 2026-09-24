@@ -44,7 +44,11 @@ import { findTool } from './tools';
  */
 
 export type CompensationKind =
-  'campaign.archive' | 'campaign.restore_values' | 'content.archive' | 'calendar.cancel';
+  | 'campaign.archive'
+  | 'campaign.restore_values'
+  | 'content.archive'
+  | 'calendar.cancel'
+  | 'automation.remove';
 
 export interface UndoServiceOptions {
   readonly db: TenantScopedClient;
@@ -61,6 +65,14 @@ export interface UndoCollaborators {
    * collaborator would let the next surface do it again.
    */
   readonly library: ContentLibraryService;
+  /**
+   * P6-12 — removes a rule the Copilot composed. Optional because only a
+   * surface wired with the automations domain can compose one; a contract met
+   * without it is refused as `no_contract` rather than skipped.
+   */
+  readonly automations?: {
+    deleteRule(input: { ruleId: string; actor: LiveAuthorization }): Promise<void>;
+  };
 }
 
 export interface UndoOutcome {
@@ -328,6 +340,28 @@ export class CopilotUndoService {
           actorUserId: authorization.userId,
           actorBrandScope: authorization.brandScope,
         });
+        return null;
+      }
+
+      case 'automation.remove': {
+        /*
+         * ONLY WHILE IT IS STILL WHAT THE ASSISTANT MADE. A rule somebody has
+         * since ENABLED is live automation — removing it would silently stop
+         * work a person switched on — and one somebody EDITED carries their
+         * decisions. Both are refused, as the campaign contracts refuse.
+         */
+        if (!collaborators.automations) return 'no_contract';
+        const ruleId = String(contract['ruleId']);
+        const expectedVersion = Number(contract['expectedVersion']);
+        const rule = await this.#db.automationRule.findFirst({
+          where: { id: ruleId, workspaceId: this.#workspaceId, ...scoped },
+          select: { version: true, enabled: true, deletedAt: true },
+        });
+        if (!rule) return 'already_gone';
+        if (rule.deletedAt) return null;
+        if (rule.enabled) return 'rule_enabled_since';
+        if (rule.version !== expectedVersion) return 'changed_since';
+        await collaborators.automations.deleteRule({ ruleId, actor: authorization });
         return null;
       }
 

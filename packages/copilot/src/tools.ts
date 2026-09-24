@@ -163,6 +163,40 @@ export const COPILOT_TOOLS = [
   // They change tenant state and they can be put back. Each one has an explicit
   // compensation contract in `undo.ts` — not "run the opposite command and
   // hope" — and each contract refuses when the resource moved underneath it.
+  /*
+   * P6-12 — THE COPILOT MAY COMPOSE AN AUTOMATION, AND MAY NOT TURN ONE ON.
+   *
+   * The rule goes through `AutomationEngine.createRule` — the same door the
+   * Automations screen uses — so the trigger/action pairing, the condition
+   * contracts, the rule limits and "the author must hold the ACTION's own
+   * permission" are enforced exactly as they are for a person. And it is
+   * ALWAYS created DISABLED: the executor passes `enabled: false` and nothing
+   * in the arguments can change that, so the one step that makes a rule act
+   * on its own — enabling it — stays a human decision on the Automations
+   * screen. A rule whose action is external (`PROPOSE_PUBLISH`) additionally
+   * waits for a human confirmation on every run (the engine's own contract).
+   *
+   * UNDOABLE, with a contract that removes the rule only while it is still
+   * disabled and unedited.
+   */
+  {
+    key: 'automation.create_rule',
+    input: brandArgument.extend({
+      name: z.string().min(1).max(120),
+      triggerType: z.string().min(1).max(60),
+      triggerConfig: z.record(z.string(), z.unknown()).default({}),
+      conditions: z.array(z.record(z.string(), z.unknown())).max(10).default([]),
+      actionType: z.string().min(1).max(60),
+      actionConfig: z.record(z.string(), z.unknown()).default({}),
+    }),
+    permission: 'automation.manage',
+    brandScope: 'required',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    spendsCredits: false,
+    undoable: true,
+    entitlementKey: 'ai.copilot',
+    messageKey: 'automationCreate',
+  },
   {
     key: 'campaign.create',
     input: brandArgument.extend({

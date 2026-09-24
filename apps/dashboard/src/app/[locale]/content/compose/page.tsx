@@ -1,13 +1,39 @@
+import type React from 'react';
 import { notFound } from 'next/navigation';
 import { CONTENT_TOOLS } from '@brandspace/content';
-import { brandScopeFilter } from '@brandspace/shared';
+import { CREATIVE_FORMATS } from '@brandspace/creative';
+import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
-import { listMediaOptions } from '../../../../server/media-picker';
-import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
-import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
+import { listMediaOptions, mediaForVariants } from '../../../../server/media-picker';
+import {
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../../i18n/messages';
+import {
+  CustomerBanner,
+  CustomerCard,
+  WorkspaceShell,
+} from '../../../../components/workspace-shell';
+import { ActivityTimeline } from '../../../../components/activity-timeline';
+import { activityTimeline } from '../../../../server/activity-timeline';
+import { NotesPanel } from '../../../../components/notes-panel';
+import { inSocial } from '../../../../server/social-context';
+import { relativeTime } from '../../../../server/home';
+import {
+  POST_GOALS,
+  createModeFrom,
+  goalForObjective,
+  platformsByFormat,
+  repurposeBrief,
+} from '../../../../server/create-post';
+import { GOAL_ITEM_KEY, goalFromTitle, goalLabels } from '../../../../server/setup-wizard-state';
+import { CreateEntry, IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
 import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
@@ -17,6 +43,7 @@ import {
   uploadComposerMediaAction,
   saveVariantAction,
   submitForReviewAction,
+  resubmitAfterChangesAction,
   transitionItemAction,
 } from '../actions';
 import {
@@ -60,6 +87,18 @@ export default async function ComposePage({
   };
 
   const itemId = single('item');
+  /*
+   * HOW THE PERSON IS STARTING (D-277 §17, D-283). Without a draft and without
+   * a mode the page asks first; `?mode=` makes the choice an address. What the
+   * reader arrived with — a campaign — travels with every choice.
+   */
+  const mode = itemId ? null : createModeFrom(single('mode'));
+  const tk = (key: string): string => optionalMessage(locale, key) ?? key;
+  const carry: Record<string, string> = Object.fromEntries(
+    Object.entries({ campaign: single('campaign') }).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
 
   const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.brand.findMany({
@@ -69,7 +108,7 @@ export default async function ComposePage({
         ...brandScopeFilter(workspace.brandScope),
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, defaultLocale: true },
     }),
   );
 
@@ -186,6 +225,336 @@ export default async function ComposePage({
 
   if (itemId !== undefined && draft === null) notFound();
 
+  /*
+   * PHASE 6 FINAL (D-277 §29, D-288) — THE REVIEW FACTS THE EDITOR NEEDS.
+   *
+   * Whether this brand's policy requires approval before scheduling (which
+   * decides the primary next step), and — when the post came back with
+   * changes requested — the reviewer's reason and the thread the decision
+   * opened, derived from the approval record and the note it wrote (the
+   * reviewer's own words, on this post, after the decision). Nothing stored.
+   */
+  const reviewFacts = draft
+    ? await inContentStudio(workspace.workspaceId, async (services) => {
+        const approvals = await services.approvals();
+        const brandPolicy = await approvals.policyForBrand(draft.brandId);
+        if (draft.status !== 'CHANGES_REQUESTED') {
+          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+        }
+        const last = await services.db.approval.findFirst({
+          where: { contentItemId: draft.id, status: 'CHANGES_REQUESTED' },
+          orderBy: { decidedAt: 'desc' },
+          select: { decisionNote: true, decidedByUserId: true, decidedAt: true },
+        });
+        if (!last) {
+          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+        }
+        const [reviewer, threads] = await Promise.all([
+          last.decidedByUserId
+            ? services.db.membership.findFirst({
+                where: { userId: last.decidedByUserId },
+                select: { user: { select: { name: true, email: true } } },
+              })
+            : Promise.resolve(null),
+          last.decidedByUserId && last.decisionNote
+            ? services.db.noteThread.findMany({
+                where: {
+                  contentItemId: draft.id,
+                  status: 'OPEN',
+                  ...(last.decidedAt ? { createdAt: { gte: last.decidedAt } } : {}),
+                  notes: {
+                    some: { authorUserId: last.decidedByUserId, body: last.decisionNote },
+                  },
+                },
+                select: { id: true },
+                take: 5,
+              })
+            : Promise.resolve([] as { id: string }[]),
+        ]);
+        return {
+          requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+          changes: {
+            note: last.decisionNote,
+            reviewer: reviewer ? (reviewer.user.name ?? reviewer.user.email) : null,
+            threadIds: threads.map((thread) => thread.id),
+          },
+        };
+      })
+    : null;
+
+  const shell = (children: React.ReactNode) => (
+    <WorkspaceShell
+      brandContext={brandContext}
+      locale={locale}
+      heading={translate('content.composer.title')}
+      description={translate('content.subtitle')}
+      activePath="/content"
+      workspaceName={workspace.workspaceName}
+      roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
+      customerName={customer.name ?? customer.email}
+      permissionKeys={workspace.permissionKeys}
+    >
+      {children}
+    </WorkspaceShell>
+  );
+
+  /* ------------------------------------------------ §17 — the entry */
+  if (!itemId && mode === null) {
+    return shell(<CreateEntry locale={locale} t={tk} carry={carry} />);
+  }
+
+  const scope = brandIdQueryFilter({
+    brandId: composingBrandId ?? undefined,
+    brandScope: workspace.brandScope,
+  });
+  const now = systemClock.now();
+
+  /* ---------------------------------------- §17 — start from an idea */
+  if (mode === 'idea') {
+    const aiHref = (params: Record<string, string>) =>
+      `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode: 'ai', ...params }).toString()}`;
+    const found = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+      const [goal, pillars, empty, gaps] = await Promise.all([
+        composingBrandId
+          ? db.brandKnowledgeItem.findFirst({
+              where: {
+                brandId: composingBrandId,
+                area: 'STRATEGY',
+                itemKey: GOAL_ITEM_KEY,
+                status: { in: ['ACTIVE', 'STALE'] },
+              },
+              select: { title: true },
+            })
+          : Promise.resolve(null),
+        db.brandKnowledgeItem.findMany({
+          where: {
+            area: 'STRATEGY',
+            status: 'ACTIVE',
+            NOT: { itemKey: { startsWith: 'goal.' } },
+            ...scope,
+          },
+          select: { id: true, title: true },
+          take: 3,
+        }),
+        workspace.permissionKeys.includes('campaigns.read')
+          ? db.campaign.findMany({
+              where: {
+                deletedAt: null,
+                status: { in: ['DRAFT', 'PLANNED', 'ACTIVE'] },
+                contentItems: { none: { deletedAt: null } },
+                ...scope,
+              },
+              select: { id: true, name: true },
+              orderBy: { updatedAt: 'desc' },
+              take: 3,
+            })
+          : Promise.resolve([] as { id: string; name: string }[]),
+        workspace.permissionKeys.includes('strategy.read')
+          ? db.insight.findMany({
+              where: {
+                type: 'CONTENT_GAP',
+                status: { in: ['NEW', 'SEEN'] },
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                ...scope,
+              },
+              select: { id: true, title: true },
+              take: 2,
+            })
+          : Promise.resolve([] as { id: string; title: unknown }[]),
+      ]);
+      return { goal, pillars, empty, gaps };
+    });
+    const pick = (value: unknown) => {
+      const text = value as { en?: string; ar?: string } | null;
+      return (locale === 'ar' ? (text?.ar ?? text?.en) : (text?.en ?? text?.ar)) ?? '';
+    };
+    const ideas: IdeaOption[] = [];
+    // The stored title is the objective's ENGLISH label (D-278), whatever the
+    // reader's interface language.
+    const goal = goalForObjective(
+      goalFromTitle((found.goal?.title as { en?: string } | null)?.en, goalLabels('en')),
+    );
+    if (found.goal) {
+      const label = pick(found.goal.title);
+      ideas.push({
+        key: 'goal',
+        title: translate('create.idea.goalTitle').replace('{goal}', label),
+        reason: translate('create.idea.goalReason'),
+        href: aiHref({
+          brief: translate('create.idea.goalBrief').replace('{goal}', label),
+          ...(goal ? { goal } : {}),
+        }),
+      });
+    }
+    for (const pillar of found.pillars) {
+      const label = pick(pillar.title);
+      ideas.push({
+        key: `pillar-${pillar.id}`,
+        title: translate('create.idea.pillarTitle').replace('{pillar}', label),
+        reason: translate('create.idea.pillarReason'),
+        href: aiHref({ brief: translate('create.idea.pillarBrief').replace('{pillar}', label) }),
+      });
+    }
+    for (const row of found.empty) {
+      ideas.push({
+        key: `campaign-${row.id}`,
+        title: translate('create.idea.campaignTitle').replace('{campaign}', row.name),
+        reason: translate('create.idea.campaignReason'),
+        href: aiHref({
+          campaign: row.id,
+          brief: translate('create.idea.campaignBrief').replace('{campaign}', row.name),
+        }),
+      });
+    }
+    for (const row of found.gaps) {
+      const label = pick(row.title);
+      if (!label) continue;
+      ideas.push({
+        key: `gap-${row.id}`,
+        title: label,
+        reason: translate('create.idea.gapReason'),
+        href: aiHref({ brief: label }),
+      });
+    }
+    return shell(<IdeaPicker locale={locale} t={tk} ideas={ideas} />);
+  }
+
+  /* -------------------------------------------------- §17 — repurpose */
+  if (mode === 'repurpose') {
+    const search = single('q') ?? '';
+    const options = await inContentStudio(workspace.workspaceId, async (services) =>
+      (await services.library()).listItems({
+        ...(composingBrandId ? { brandId: composingBrandId } : {}),
+        brandScope: workspace.brandScope,
+        ...(search ? { search } : {}),
+        limit: 30,
+      }),
+    );
+    return shell(
+      <RepurposePicker
+        locale={locale}
+        t={tk}
+        search={search}
+        carry={carry}
+        options={options
+          .filter((item) => item.status !== 'ARCHIVED')
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            status: item.status,
+            contentType: item.contentType,
+            updatedLabel: relativeTime(item.updatedAt, now, locale),
+          }))}
+      />,
+    );
+  }
+
+  /*
+   * §17 — REPURPOSE, CONTINUED: the chosen post's own words become explicit,
+   * bounded source material in the brief. Read under the member's BrandScope;
+   * a post they cannot open is simply not a source.
+   */
+  const sourceId = !itemId ? single('source') : undefined;
+  const source = sourceId
+    ? await inContentStudio(workspace.workspaceId, async (services) =>
+        (await services.library()).getItem(sourceId, workspace.brandScope).catch(() => null),
+      )
+    : null;
+  const sourceBody = source
+    ? ((
+        source.variants.find((variant) => variant.locale === source.primaryLocale) ??
+        source.variants[0]
+      )?.body ?? '')
+    : '';
+  const initialBrief = source
+    ? repurposeBrief(
+        translate('create.repurpose.brief'),
+        { title: source.title, body: sourceBody },
+        policy.generation.maxBriefChars,
+      )
+    : (single('brief') ?? '').slice(0, policy.generation.maxBriefChars);
+
+  /* §19 — the campaign the reader came from, if it is one they may file under. */
+  const requestedCampaign = single('campaign');
+  const initialCampaignId =
+    requestedCampaign && campaigns.some((campaign) => campaign.id === requestedCampaign)
+      ? requestedCampaign
+      : '';
+
+  /* §19 — the recommended goal, from the brand's own first goal (D-278). */
+  const recommendedGoal = composingBrandId
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+        const row = await db.brandKnowledgeItem.findFirst({
+          where: {
+            brandId: composingBrandId,
+            area: 'STRATEGY',
+            itemKey: GOAL_ITEM_KEY,
+            status: { in: ['ACTIVE', 'STALE'] },
+          },
+          select: { title: true },
+        });
+        const title = (row?.title as { en?: string } | null)?.en;
+        return goalForObjective(goalFromTitle(title, goalLabels('en')));
+      })
+    : null;
+  /*
+   * D-295 — this member's ACCEPTED defaults for the brand, shown where they
+   * take effect, each with "Stop using". They reach the generator from the
+   * service itself (closed-key instructions); this is only the telling.
+   */
+  const authorDefaults = composingBrandId
+    ? (
+        await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
+          (await suggestions()).acceptedPreferences({
+            userId: customer.userId,
+            brandId: composingBrandId,
+          }),
+        )
+      ).flatMap((key) => {
+        const shorter = /^shorter:([a-z0-9_-]+)$/.exec(key);
+        const tone = /^tone:(friendly|professional):([a-z0-9_-]+)$/.exec(key);
+        const platform = (value: string) =>
+          optionalMessage(locale, `content.platform.${value}`) ?? value;
+        if (shorter) {
+          return [
+            {
+              key,
+              label: translate('create.defaults.shorter').replace(
+                '{platform}',
+                platform(shorter[1]!),
+              ),
+            },
+          ];
+        }
+        if (tone) {
+          return [
+            {
+              key,
+              label: translate('create.defaults.tone')
+                .replace('{platform}', platform(tone[2]!))
+                .replace('{tone}', translate(`home.preference.tone.${tone[1]}` as MessageKey)),
+            },
+          ];
+        }
+        return [];
+      })
+    : [];
+  const requestedGoal = single('goal');
+  const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
+
+  /* §18 — which formats each platform can carry, from the capability registry. */
+  const formatPlatforms = await inSocial(workspace.workspaceId, async (services) => {
+    const publishing = await services.policy();
+    return platformsByFormat(
+      CONTENT_TYPES,
+      policy.platforms.map((platform) => platform.key),
+      publishing.providers as unknown as Record<
+        string,
+        { enabled: boolean; postKinds: readonly string[] }
+      >,
+    );
+  }).catch(() => ({ POST: policy.platforms.map((platform) => platform.key) }));
+
   const platforms: ComposerPlatform[] = policy.platforms.map((platform) => ({
     key: platform.key,
     // The CONFIGURED label key, translated. The demo writes "◎ Instagram"
@@ -196,6 +565,7 @@ export default async function ComposePage({
     maxBodyChars: platform.maxBodyChars,
     maxHashtags: platform.maxHashtags,
     maxMediaItems: platform.maxMediaItems,
+    allowsFirstComment: platform.allowsFirstComment,
   }));
 
   const composerDraft: ComposerDraft | null = draft
@@ -205,6 +575,7 @@ export default async function ComposePage({
         status: draft.status as ComposerDraft['status'],
         openApprovalId,
         brandId: draft.brandId,
+        contentType: draft.contentType,
         campaignId: draft.campaignId,
         arabicDialect: draft.arabicDialect,
         insufficientKnowledge: draft.insufficientKnowledge,
@@ -225,6 +596,9 @@ export default async function ComposePage({
           characterCount: variant.characterCount,
           validationState: variant.validationState as 'VALID' | 'WARNINGS' | 'INVALID',
           assetIds: variant.assetIds,
+          firstComment: variant.firstComment,
+          coverAssetId: variant.coverAssetId,
+          updatedAt: variant.updatedAt.toISOString(),
         })),
       }
     : null;
@@ -237,7 +611,7 @@ export default async function ComposePage({
    * brand plus the workspace-shared shelf, so an option the member may not use
    * is never sent to the page — and re-resolved on save regardless.
    */
-  const mediaOptions = composerDraft
+  const offered = composerDraft
     ? await listMediaOptions({
         workspaceId: workspace.workspaceId,
         brandId: composerDraft.brandId,
@@ -246,6 +620,67 @@ export default async function ComposePage({
         brandScope: workspace.brandScope,
       })
     : [];
+  /*
+   * PHASE 6 FINAL — WHAT IS ALREADY ATTACHED IS ALWAYS DRAWABLE. The offer is
+   * the most recent library page; a slide or cover older than that page must
+   * still preview, so the attached ids are resolved on their own (same
+   * library, same grant, same READY/CLEAN rule) and joined in.
+   */
+  const attachedIds = composerDraft
+    ? composerDraft.variants.flatMap((variant) => [
+        ...variant.assetIds,
+        ...(variant.coverAssetId ? [variant.coverAssetId] : []),
+      ])
+    : [];
+  const attached = await mediaForVariants({
+    workspaceId: workspace.workspaceId,
+    userId: customer.userId,
+    permissionKeys: workspace.permissionKeys,
+    brandScope: workspace.brandScope,
+    assetIds: attachedIds.filter((id) => !offered.some((option) => option.id === id)),
+  });
+  const mediaOptions = [...offered, ...attached.values()];
+
+  /*
+   * PHASE 6 FINAL (D-285) — AN IMAGE CARRIED FROM THE CREATIVE STUDIO.
+   *
+   * `?asset=` before a draft exists, `?attach=` once it does. Offered only when
+   * it is READY, CLEAN, not deleted and this brand's own or shared — checked
+   * here under RLS and the member's BrandScope — and even then only put on the
+   * slides UNSAVED: the ordinary save re-resolves it like any other media.
+   */
+  const carriedId = itemId ? single('attach') : single('asset');
+  const carriedBrand = composerDraft?.brandId ?? composingBrandId;
+  const carried =
+    carriedId && carriedBrand && /^[0-9a-f-]{36}$/i.test(carriedId)
+      ? await (async () => {
+          const admissible = await inWorkspace(workspace.workspaceId, async ({ db }) =>
+            db.asset.findFirst({
+              where: {
+                id: carriedId,
+                deletedAt: null,
+                status: 'READY',
+                scanStatus: 'CLEAN',
+                OR: [{ brandId: null }, { brandId: carriedBrand }],
+              },
+              select: { id: true },
+            }),
+          );
+          if (!admissible) return null;
+          const found = await mediaForVariants({
+            workspaceId: workspace.workspaceId,
+            userId: customer.userId,
+            permissionKeys: workspace.permissionKeys,
+            brandScope: workspace.brandScope,
+            assetIds: [carriedId],
+          });
+          return found.get(carriedId) ?? null;
+        })()
+      : null;
+  const allMedia =
+    carried && !mediaOptions.some((option) => option.id === carried.id)
+      ? [...mediaOptions, carried]
+      : mediaOptions;
 
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
@@ -253,11 +688,39 @@ export default async function ComposePage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
+  /*
+   * D-298 (§47) — THIS POST'S HISTORY, from the audit trail: the post, its
+   * variants, its review cycles, its calendar slots and its publish jobs. The
+   * ids are read under RLS; the events through the Activity service's own
+   * viewer grading.
+   */
+  const history = draft
+    ? await activityTimeline({
+        locale,
+        workspace,
+        userId: customer.userId,
+        resourceIds: await inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const where = { workspaceId: workspace.workspaceId, contentItemId: draft.id };
+          const [approvals, slots, jobs] = await Promise.all([
+            db.approval.findMany({ where, select: { id: true } }),
+            db.calendarSlot.findMany({ where, select: { id: true } }),
+            db.publishJob.findMany({ where, select: { id: true } }),
+          ]);
+          return [
+            draft.id,
+            ...draft.variants.map((variant) => variant.id),
+            ...[...approvals, ...slots, ...jobs].map((row) => row.id),
+          ];
+        }),
+        take: 8,
+      })
+    : [];
+
   return (
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={translate('content.composer.title')}
+      heading={translate(draft ? 'content.composer.editTitle' : 'content.composer.title')}
       description={translate('content.subtitle')}
       activePath="/content"
       workspaceName={workspace.workspaceName}
@@ -278,8 +741,25 @@ export default async function ComposePage({
         maxVariants={policy.generation.maxVariantsPerRequest}
         draft={composerDraft}
         campaigns={campaigns}
-        mediaOptions={mediaOptions}
+        mediaOptions={allMedia}
+        carriedMedia={carried}
         tools={CONTENT_TOOLS}
+        now={now.getTime()}
+        review={reviewFacts}
+        mode={mode === 'write' ? 'write' : 'ai'}
+        initialBrief={initialBrief}
+        initialCampaignId={initialCampaignId}
+        sourceTitle={source?.title ?? null}
+        goals={POST_GOALS.map((key) => ({
+          key,
+          label: translate(`create.goal.${key}` as MessageKey),
+        }))}
+        recommendedGoal={recommendedGoal}
+        initialGoal={initialGoal}
+        authorDefaults={authorDefaults}
+        defaultsBrandId={composingBrandId ?? ''}
+        forgetDefault={decidePreferenceAction}
+        formatPlatforms={formatPlatforms}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
           edit: workspace.permissionKeys.includes('content.edit'),
@@ -287,11 +767,22 @@ export default async function ComposePage({
           archive: workspace.permissionKeys.includes('content.archive'),
           manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
           uploadMedia: workspace.permissionKeys.includes('assets.upload'),
+          schedule: workspace.permissionKeys.includes('content.schedule'),
+          // The Creative route's own gate (`assets.upload`), and generation
+          // needs content editing here because it changes this post.
+          generateMedia:
+            workspace.permissionKeys.includes('assets.upload') &&
+            workspace.permissionKeys.includes('content.edit'),
         }}
+        creativeFormats={CREATIVE_FORMATS.map((format) => ({
+          key: format.key,
+          label: translate(format.labelKey as MessageKey),
+        }))}
         actions={{
           save: saveVariantAction,
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
+          resubmit: resubmitAfterChangesAction,
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
@@ -299,6 +790,33 @@ export default async function ComposePage({
           listCampaignOptions: listCampaignOptionsAction,
         }}
       />
+
+      {/*
+        THE CONVERSATION ABOUT THIS DRAFT (P6-09).
+      
+        Rendered only once a draft EXISTS — there is nothing to have a
+        conversation about before the item has an id, and a panel offering to
+        discuss a thing that has not been created yet is a control that cannot
+        work.
+      
+        THIS IS WHERE A "NEEDS WORK" VERDICT LANDS. P6-06 puts the reviewer's
+        note on the content item; this is the screen the author opens next, so
+        the request and the work are finally on the same page and the author can
+        answer it rather than re-reading a closed approval cycle.
+      */}
+      {draft ? (
+        <NotesPanel
+          locale={locale}
+          subject={{ type: 'CONTENT_ITEM', contentItemId: draft.id }}
+          returnPath={`/${locale}/content/compose?item=${draft.id}`}
+          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+        />
+      ) : null}
+      {history.length > 0 ? (
+        <CustomerCard title={translate('content.history.title')} testId="post-history">
+          <ActivityTimeline entries={history} testId="post-history-list" />
+        </CustomerCard>
+      ) : null}
     </WorkspaceShell>
   );
 }
@@ -328,7 +846,113 @@ function translateOptional(
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
+/** The draft editor's own vocabulary (D-284). */
+const EDITOR_KEYS = [
+  'editor.next.schedule',
+  'editor.next.needsApproval',
+  'editor.changes.title',
+  'editor.changes.by',
+  'editor.changes.reply',
+  'editor.changes.resubmit',
+  'editor.issue.rightsExpired',
+  'editor.media.rightsExpired',
+  'editor.media.carried',
+  'editor.media.carriedBody',
+  'editor.media.attached',
+  'editor.media.slide',
+  'editor.media.none',
+  'editor.media.unavailable',
+  'editor.media.isCover',
+  'editor.media.moveEarlier',
+  'editor.media.moveLater',
+  'editor.media.replace',
+  'editor.media.useAsCover',
+  'editor.media.remove',
+  'editor.media.add',
+  'editor.media.drawerTitle',
+  'editor.media.replaceTitle',
+  'editor.media.drawerBody',
+  'editor.media.close',
+  'editor.media.tab.library',
+  'editor.media.tab.upload',
+  'editor.media.tab.generate',
+  'editor.media.added',
+  'editor.media.use',
+  'editor.media.addThis',
+  'editor.media.prompt',
+  'editor.media.format',
+  'editor.media.estimate',
+  'editor.media.generate',
+  'editor.media.generateHint',
+  'editor.media.generateFailed',
+  'editor.media.generating',
+  'editor.media.generateSlow',
+  'editor.preview.slide',
+  'editor.preview.previousSlide',
+  'editor.preview.nextSlide',
+  'editor.context.title',
+  'editor.lifecycle.label',
+  'editor.lifecycle.changesRequested',
+  'editor.brain.using',
+  'editor.brain.basedOn',
+  'editor.brain.noSources',
+  'editor.brain.open',
+  'editor.insufficientBody',
+  'editor.insufficient.add',
+  'editor.approvedWarning',
+  'editor.variants.label',
+  'editor.caption',
+  'editor.unsaved',
+  'editor.saved',
+  'editor.firstComment',
+  'editor.ai.label',
+  'editor.ai.shorten',
+  'editor.ai.rewrite',
+  'editor.ai.friendlier',
+  'editor.ai.professional',
+  'editor.ai.expand',
+  'editor.ai.hashtags',
+  'editor.ai.translate',
+  'editor.ai.hint',
+  'editor.ai.estimate',
+  'editor.ai.saveFirst',
+  'editor.saveBeforeReview',
+  'editor.preview.title',
+  'editor.preview.compare',
+  'editor.preview.single',
+  'editor.fix.shorten',
+  'editor.fix.media',
+  'editor.when.now',
+  'editor.when.minutes',
+  'editor.when.hours',
+  'editor.when.days',
+  'editor.issue.empty',
+  'editor.issue.tooLong',
+  'editor.issue.tooManyHashtags',
+  'editor.issue.tooMuchMedia',
+  'editor.issue.reelNeedsVideo',
+  'editor.issue.videoNeedsVideo',
+  'editor.issue.carouselNeedsSlides',
+  'editor.issue.storyNeedsMedia',
+  'content.tool.hashtags',
+] as const satisfies readonly MessageKey[];
+
 const COMPOSER_KEYS = [
+  'create.carousel.outlineHint',
+  // Phase 6 final — the draft editor (D-284).
+  ...EDITOR_KEYS,
+  // Phase 6 final — how the post was started, its goal and its format (D-283).
+  'create.format.unsupported',
+  'create.goal.label',
+  'create.goal.none',
+  'create.goal.recommended',
+  'create.defaults.title',
+  'create.defaults.forget',
+  'create.goal.instruction',
+  'create.write.label',
+  'create.write.placeholder',
+  'create.repurpose.from',
+  'create.repurpose.fromBody',
   // Phase 8 — the campaign control on an existing draft (AC-26.3).
   'campaigns.composerLabel',
   'campaigns.composerNone',

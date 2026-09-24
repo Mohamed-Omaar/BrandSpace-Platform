@@ -100,6 +100,13 @@ const CONTENT_POLICY: ContentPolicy = {
     maxSlotsPerDay: 25,
     requireApprovalBeforeScheduling: false,
   },
+  learning: {
+    preferenceMinObservations: 4,
+    preferenceMinPosts: 3,
+    workflowMinRepeats: 4,
+    windowDays: 90,
+    snoozeDays: 30,
+  },
   approvals: {
     requireApprovalBeforeScheduling: false,
     allowSelfApproval: false,
@@ -195,6 +202,8 @@ type ScopedDb = Parameters<Parameters<typeof withWorkspace>[1]>[0];
 
 /** What the provider returns next. Set per test. */
 let nextOutput = '';
+/** D-300 — the prompt the provider last received, so a test can read what was asked. */
+let lastPrompt = '';
 
 /**
  * A provider that returns exactly what the test scripted.
@@ -224,6 +233,7 @@ class ScriptedTextAdapter implements AiProviderAdapter {
     untrustedContext?: readonly string[] | undefined;
   }): Promise<TextResult> {
     const contextChars = (request.untrustedContext ?? []).reduce((n, c) => n + c.length, 0);
+    lastPrompt = request.prompt;
     return {
       text: nextOutput,
       usage: {
@@ -399,6 +409,48 @@ describe('AC-11.1 — the credit cost is known before anything is spent', () => 
       select: { creditsReservedMilli: true },
     });
     expect(request?.creditsReservedMilli).toBe(quote.estimateMilli);
+  });
+});
+
+describe('D-300 — an AI carousel starts as a slide outline', () => {
+  it('asks a carousel for an outline, prices it the same, and asks nothing of a post', async () => {
+    const brief = 'Five reasons independent retailers stock the spring collection.';
+    const quote = await inA((studio) =>
+      studio.quote({
+        brandId: fixtures.a.brandId,
+        brief,
+        platformKeys: ['instagram'],
+        planKey: null,
+        actorBrandScope: [],
+        contentType: 'CAROUSEL',
+        // What the generation below sends too — the quote is that prompt's price.
+        locale: 'EN',
+        actorUserId: fixtures.a.userId,
+      }),
+    );
+    nextOutput = reply([
+      {
+        platformKey: 'instagram',
+        body: 'Slide 1 — Why spring sells\nSlide 2 — Built for real life\nSlide 3 — Stock it now\n\nSpring, for real life.',
+      },
+    ]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), brief, contentType: 'CAROUSEL', idempotencyKey: key() }),
+    );
+    expect(lastPrompt).toContain('This post is a CAROUSEL');
+    expect(lastPrompt).toContain('Slide 1');
+    expect(generated.item.contentType).toBe('CAROUSEL');
+    // The outline is the caption's own text — no per-slide layer exists to fake.
+    expect(generated.variants[0]?.body).toMatch(/^Slide 1 — /);
+    const request = await platform.aiRequest.findUnique({
+      where: { id: generated.aiRequestId ?? '' },
+      select: { creditsReservedMilli: true },
+    });
+    expect(request?.creditsReservedMilli).toBe(quote.estimateMilli);
+
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Spring, for real life.' }]);
+    await inA((studio) => studio.generate({ ...baseInput(), brief, idempotencyKey: key() }));
+    expect(lastPrompt).not.toContain('CAROUSEL');
   });
 });
 
@@ -786,6 +838,104 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
     );
     expect(variant.validationState).toBe('VALID');
     expect(variant.characterCount).toBe(17);
+  });
+
+  it('D-284: quoting an inline edit reserves nothing, and a variant out of scope is a miss', async () => {
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Words to price.' }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+    const variantId = generated.variants[0]?.id ?? '';
+    const before = await platform.aiRequest.count({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+
+    const quote = await inA((studio) =>
+      studio.quoteTool({ variantId, tool: 'shorten', planKey: null, actorBrandScope: [] }),
+    );
+    expect(quote.estimateMilli).toBeGreaterThanOrEqual(0n);
+    expect(await platform.aiRequest.count({ where: { workspaceId: fixtures.a.workspaceId } })).toBe(
+      before,
+    );
+
+    // A member scoped to another brand gets the same miss a wrong id gets.
+    await expect(
+      inA((studio) =>
+        studio.quoteTool({
+          variantId,
+          tool: 'shorten',
+          planKey: null,
+          actorBrandScope: [randomUUID()],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      inA((studio) =>
+        studio.quoteTool({
+          variantId: randomUUID(),
+          tool: 'shorten',
+          planKey: null,
+          actorBrandScope: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('D-284: the hashtag tool changes the tags and never the caption', async () => {
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Keep these exact words.' }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+    nextOutput = JSON.stringify({
+      body: 'The model tried to rewrite it.',
+      hashtags: ['spring', 'sale'],
+    });
+    const { variant } = await inA((studio) =>
+      studio.applyTool({
+        variantId: generated.variants[0]?.id ?? '',
+        tool: 'hashtags',
+        idempotencyKey: key(),
+        actorUserId: fixtures.a.userId,
+        planKey: null,
+        actorBrandScope: [],
+      }),
+    );
+    expect(variant.body).toBe('Keep these exact words.');
+    expect(variant.hashtags).toEqual(['spring', 'sale']);
+  });
+
+  it('D-284: an AI edit of an APPROVED post returns it to Draft, audibly', async () => {
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Reviewed words.' }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+    const itemId = generated.item.id;
+    await inA((_studio, db) =>
+      db.contentItem.update({ where: { id: itemId }, data: { status: 'APPROVED' } }),
+    );
+
+    nextOutput = JSON.stringify({ body: 'Words nobody reviewed.', hashtags: [] });
+    await inA((studio) =>
+      studio.applyTool({
+        variantId: generated.variants[0]?.id ?? '',
+        tool: 'rewrite',
+        idempotencyKey: key(),
+        actorUserId: fixtures.a.userId,
+        planKey: null,
+        actorBrandScope: [],
+      }),
+    );
+
+    const after = await inA((_studio, db) =>
+      db.contentItem.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } }),
+    );
+    expect(after.status).toBe('DRAFT');
+    const revoked = await inA((_studio, db) =>
+      db.auditEvent.count({
+        where: { action: 'content.approval_revoked', resourceId: itemId },
+      }),
+    );
+    expect(revoked).toBe(1);
   });
 
   it("a customer's own edit costs no credits and keeps HUMAN provenance where it was", async () => {

@@ -25,18 +25,24 @@ export const contentQuoteRequestSchema = z.object({
   brandId: uuid,
   brief: z.string().min(1).max(BRIEF_SHAPE_LIMIT),
   platformKeys: z.array(z.string().min(1).max(64)).min(1).max(16),
-});
-
-export const contentGenerateRequestSchema = contentQuoteRequestSchema.extend({
-  locale: z.enum(['AR', 'EN']),
   /*
    * The SAME closed set the database enum declares. Spelt out rather than
    * derived from Prisma's generated type so an enum value added to the schema
    * does not silently become accepted on the wire before anything renders it.
+   *
+   * On the QUOTE as well as the generation (D-300): a carousel's prompt asks
+   * for a slide outline, so pricing it without the format would quote less
+   * than the generation then reserves.
    */
   contentType: z
     .enum(['POST', 'CAROUSEL', 'STORY', 'REEL', 'VIDEO', 'ARTICLE', 'THREAD'])
     .optional(),
+  /** Optional on the quote; the generation below requires it. */
+  locale: z.enum(['AR', 'EN']).optional(),
+});
+
+export const contentGenerateRequestSchema = contentQuoteRequestSchema.extend({
+  locale: z.enum(['AR', 'EN']),
   idempotencyKey: z.string().min(8).max(200),
 });
 
@@ -49,6 +55,12 @@ export const contentToolRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(200),
 });
 
+/** PHASE 6 FINAL (D-284) — what one inline AI edit would cost, before it runs. */
+export const contentToolQuoteRequestSchema = contentToolRequestSchema.omit({
+  idempotencyKey: true,
+});
+
+export type ContentToolQuoteRequest = z.infer<typeof contentToolQuoteRequestSchema>;
 export type ContentQuoteRequest = z.infer<typeof contentQuoteRequestSchema>;
 export type ContentGenerateRequest = z.infer<typeof contentGenerateRequestSchema>;
 export type ContentToolRequest = z.infer<typeof contentToolRequestSchema>;

@@ -68,7 +68,7 @@ function signupService(locale: string): SignupService {
  * with a lifetime nobody manages. The page tells the reader to finish now.
  */
 export async function beginMfaEnrolmentAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const customer = await requireCustomer(locale);
@@ -92,7 +92,7 @@ export async function beginMfaEnrolmentAction(formData: FormData): Promise<void>
  * is the only time they are shown — because it is: only their hashes are stored.
  */
 export async function confirmMfaEnrolmentAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const customer = await requireCustomer(locale);
@@ -120,7 +120,7 @@ export async function confirmMfaEnrolmentAction(formData: FormData): Promise<voi
 
 /** Turn the second factor off. Requires a working code, not merely a session. */
 export async function disableMfaAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const customer = await requireCustomer(locale);
@@ -145,7 +145,7 @@ export async function disableMfaAction(formData: FormData): Promise<void> {
  * asked for on purpose and behind a working code exactly like disabling.
  */
 export async function regenerateRecoveryCodesAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const customer = await requireCustomer(locale);
@@ -180,7 +180,7 @@ export async function regenerateRecoveryCodesAction(formData: FormData): Promise
  * rather than revoked, so acting on the suspicion does not sign them out too.
  */
 export async function signOutOtherSessionsAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const customer = await requireCustomer(locale);

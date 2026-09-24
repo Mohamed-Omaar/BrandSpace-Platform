@@ -3,6 +3,8 @@ import { eventsNeedingAttention } from '@brandspace/billing';
 import { INTEGRATION_CATEGORY_DEFINITIONS } from '@brandspace/integrations';
 import {
   SectionHeader,
+  buttonClass,
+  buttonStyle,
   colorTokens,
   fontTokens,
   spacingTokens,
@@ -233,7 +235,18 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
                     <input type="hidden" name="locale" value={locale} />
                     <input type="hidden" name="billingEventId" value={event.id} />
                     <input type="hidden" name="providerKey" value={event.providerKey} />
-                    <button type="submit" data-testid={`replay-${event.id}`}>
+                    {/*
+                      The design system's button, not the browser's (P6-02):
+                      this shipped bare, so a row of replay controls rendered in
+                      browser chrome inside a Control Center table. `neutral` at
+                      `sm` is the size the table's other row controls use.
+                    */}
+                    <button
+                      type="submit"
+                      data-testid={`replay-${event.id}`}
+                      className={buttonClass('neutral')}
+                      style={buttonStyle('neutral', 'sm')}
+                    >
                       {isArabic ? 'أعد التشغيل' : 'Replay'}
                     </button>
                   </form>

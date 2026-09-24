@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { MediaImage } from './media-image';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 
 /**
@@ -162,13 +163,13 @@ export function AssetMedia({
       }}
     >
       {/*
-        A PLAIN `<img>`, DELIBERATELY. This package is the design system and has
+        A PLAIN `<img>` (inside `MediaImage`, which only hides it on error), DELIBERATELY. This package is the design system and has
         no framework dependency; importing a Next.js image component here would
         make `@brandspace/ui` unusable outside that framework and would try to
         optimise a same-origin, short-lived, per-viewer grant — which is not a
         static asset and must not be cached by an optimiser.
       */}
-      <img
+      <MediaImage
         src={src}
         alt={alt}
         style={{

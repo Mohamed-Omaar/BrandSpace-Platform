@@ -390,6 +390,7 @@ export function CopilotBody({
   onApprove,
   onReject,
   disabled = false,
+  composer,
 }: {
   readonly labels: CopilotLabels;
   readonly state: CopilotState;
@@ -405,8 +406,27 @@ export function CopilotBody({
   readonly onReject?: (() => void) | undefined;
   /** True until a real provider exists: the composer is inert and says so. */
   readonly disabled?: boolean;
+  /**
+   * THE LIVE COMPOSER (Phase 6 final acceptance, D-304). When the caller owns
+   * the request, this field IS the one place to type it — controlled, sent by
+   * the send button or Enter — instead of a second, inert field under a first
+   * one. No attach control is drawn: nothing can be attached yet, and a
+   * control that does nothing is worse than none.
+   */
+  readonly composer?:
+    | {
+        readonly value: string;
+        readonly onChange: (value: string) => void;
+        readonly onSubmit: () => void;
+        readonly busy?: boolean | undefined;
+        readonly maxLength?: number | undefined;
+        readonly inputTestId?: string | undefined;
+        readonly submitTestId?: string | undefined;
+      }
+    | undefined;
 }) {
   const promptId = useId();
+  const live = composer !== undefined;
 
   return (
     <div
@@ -729,17 +749,32 @@ export function CopilotBody({
         >
           <textarea
             id={promptId}
-            data-testid="copilot-prompt"
+            data-testid={composer?.inputTestId ?? 'copilot-prompt'}
             rows={3}
-            disabled={disabled}
+            disabled={live ? false : disabled}
             placeholder={labels.promptPlaceholder}
-            aria-describedby={disabled ? `${promptId}-notice` : undefined}
+            aria-describedby={!live && disabled ? `${promptId}-notice` : undefined}
             className={CONTROL_CLASS}
+            {...(composer
+              ? {
+                  value: composer.value,
+                  maxLength: composer.maxLength,
+                  onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    composer.onChange(event.target.value),
+                  onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                    // Enter sends; Shift+Enter is a new line.
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      composer.onSubmit();
+                    }
+                  },
+                }
+              : {})}
             style={{
               ...textareaStyle(),
               background: 'transparent',
               boxShadow: 'none',
-              color: disabled ? colorTokens.textMuted : colorTokens.textPrimary,
+              color: !live && disabled ? colorTokens.textMuted : colorTokens.textPrimary,
             }}
           />
           <div
@@ -750,20 +785,25 @@ export function CopilotBody({
               justifyContent: 'flex-end',
             }}
           >
-            <IconButton
-              label={labels.attach}
-              variant="ghost"
-              size="sm"
-              circular
-              disabled={disabled}
-              icon={<PaperclipIcon size={16} />}
-            />
+            {live ? null : (
+              <IconButton
+                label={labels.attach}
+                variant="ghost"
+                size="sm"
+                circular
+                disabled={disabled}
+                icon={<PaperclipIcon size={16} />}
+              />
+            )}
             <Button
               variant="primary"
               size="sm"
-              disabled={disabled}
+              disabled={
+                composer ? composer.busy === true || composer.value.trim().length === 0 : disabled
+              }
               icon={<SendIcon size={16} />}
-              data-testid="copilot-send"
+              data-testid={composer?.submitTestId ?? 'copilot-send'}
+              {...(composer ? { onClick: () => composer.onSubmit() } : {})}
             >
               {labels.send}
             </Button>
@@ -774,7 +814,7 @@ export function CopilotBody({
           does nothing is precisely the "button that claims an unsupported
           action" this phase must not ship.
         */}
-        {disabled ? (
+        {!live && disabled ? (
           <p
             id={`${promptId}-notice`}
             data-testid="copilot-disabled-notice"
@@ -927,6 +967,79 @@ export function CopilotPanel({
         <div style={{ minBlockSize: 0 }}>{children}</div>
       </aside>
     </>
+  );
+}
+
+/**
+ * THE GLOBAL COPILOT DRAWER (Phase 6 final, D-277 §37).
+ *
+ * The Copilot opened from the top bar, over whatever screen the person is on,
+ * so the conversation can start from where they are rather than on a page of
+ * its own. THE DEMO'S `.side-drawer`, token for token — the same floating,
+ * inset, rounded panel `PostDetailDrawer` transcribes (430px, 22px padding,
+ * the drawer surface and shadow) — with the Copilot's own header on top. No
+ * new geometry: the 300px `CopilotPanel` stays the composer's docked column.
+ *
+ * A MODAL DIALOG: focus moves in, is trapped, Escape closes it from anywhere
+ * inside and focus returns to the top-bar control that opened it — the same
+ * `useOverlayBehaviour` every other overlay uses.
+ */
+export function CopilotDrawer({
+  open,
+  onClose,
+  labels,
+  children,
+  testId = 'copilot-drawer',
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly labels: CopilotLabels;
+  readonly children: ReactNode;
+  readonly testId?: string | undefined;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useOverlayBehaviour({ open, onClose, containerRef: panelRef });
+  if (!open) return null;
+  return (
+    <div
+      data-testid={`${testId}-scrim`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: zIndexTokens.drawer,
+        background: 'rgba(12, 12, 14, 0.25)',
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={labels.title}
+        data-testid={testId}
+        tabIndex={-1}
+        style={{
+          position: 'fixed',
+          insetBlock: layoutTokens.shellInset,
+          insetInlineEnd: layoutTokens.shellInset,
+          inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
+          zIndex: zIndexTokens.overlay,
+          overflowY: 'auto',
+          background: colorTokens.drawerAlpha,
+          backdropFilter: 'blur(24px)',
+          borderRadius: radiusTokens['3xl'],
+          boxShadow: shadowTokens.drawer,
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr',
+          alignContent: 'start',
+        }}
+      >
+        <CopilotHeader labels={labels} onClose={onClose} />
+        <div style={{ minBlockSize: 0, padding: '0 1.375rem 1.375rem' }}>{children}</div>
+      </div>
+    </div>
   );
 }
 

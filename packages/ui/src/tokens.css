@@ -618,27 +618,115 @@ h4 {
 }
 
 /*
- * SELECTS USE ONE GLOBAL CHEVRON.
+ * EVERY SELECT USES ONE GLOBAL CHEVRON — THE ELEMENT, NOT A CLASS.
  *
- * Native arrows sit against the physical edge and vary by browser. That made
- * the dropdown marker look cramped in both the customer dashboard and Control
- * Center. Replacing it once here keeps every select aligned, gives the label
- * enough trailing room, and mirrors the marker for RTL without per-page CSS.
+ * Native arrows sit against the physical edge, vary by browser, and do not
+ * mirror for Arabic. Replacing the marker once keeps every select aligned,
+ * gives the label enough trailing room, and mirrors for RTL without per-page
+ * CSS.
+ *
+ * THIS USED TO BE KEYED ON `.bs-control` / `.bs-select`, WHICH IS WHY THE
+ * PRODUCT SHOWED TWO DIFFERENT MARKERS SIDE BY SIDE (P6-02). Seven selects
+ * carry neither class — five in the composer with no class at all, the content
+ * library's `.cs-select`, and anything else that reaches for a local treatment
+ * — so they kept a browser-drawn arrow while every other select wore the
+ * chevron. `.cs-select` is the sharpest case: it renders the demo's
+ * `.select-like`, which in the demo is a static `<div>` with NO arrow at all,
+ * so the native one was never part of the approved design either.
+ *
+ * Keying it on the ELEMENT means a new select cannot opt out by forgetting a
+ * class, which is the only way this stays true.
+ *
+ * THE TWO CUSTOM PROPERTIES ARE HOW A SMALL CONTROL FITS. A 36px filter select
+ * at 9px type cannot spare 2.75rem of trailing room; it overrides the variables
+ * rather than the rule, so the marker stays the same glyph at the same optical
+ * inset for its size. Nothing overrides the IMAGE.
  */
-select.bs-control,
-select.bs-select {
+select {
+  --bs-select-chevron-inset: 0.9375rem;
+  --bs-select-chevron-space: 2.75rem;
+
   appearance: none;
   -webkit-appearance: none;
-  padding-inline-end: 2.75rem !important;
+  padding-inline-end: var(--bs-select-chevron-space);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234d4c53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 0.9375rem center;
+  background-position: right var(--bs-select-chevron-inset) center;
   background-size: 0.875rem;
 }
 
-html[dir='rtl'] select.bs-control,
-html[dir='rtl'] select.bs-select {
-  background-position: left 0.9375rem center;
+html[dir='rtl'] select {
+  background-position: left var(--bs-select-chevron-inset) center;
+}
+
+/*
+ * `!important` ONLY where an inline style would otherwise close the gap.
+ *
+ * `inputStyle()` sets `paddingInline` inline, and an inline declaration beats a
+ * class — so without this the label would run under the chevron on every
+ * control built by the design system. It is scoped to those controls because
+ * they are the ones with the inline padding; a select that styles itself in CSS
+ * needs no override to fight.
+ */
+select.bs-control,
+select.bs-select {
+  padding-inline-end: var(--bs-select-chevron-space) !important;
+}
+
+/*
+ * DATE AND TIME INPUTS KEEP THE PRODUCT'S GEOMETRY, NOT THE BROWSER'S (P6-02).
+ *
+ * The native picker indicator is a browser-drawn glyph with its own size and
+ * colour, and it sits at the PHYSICAL trailing edge — so in Arabic it appeared
+ * on the side opposite every other control's marker, and next to a normalised
+ * select it read as a different design language. Six date inputs ship: the
+ * accounting export, the campaign window and the calendar's two range fields.
+ *
+ * The indicator is kept — removing it would take the picker with it on the
+ * platforms that have no other affordance — and is given the product's own
+ * inset and a size that matches the chevron beside it.
+ */
+input[type='date'],
+input[type='datetime-local'],
+input[type='time'],
+input[type='month'],
+input[type='week'] {
+  --bs-picker-inset: 0.9375rem;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator,
+input[type='month']::-webkit-calendar-picker-indicator,
+input[type='week']::-webkit-calendar-picker-indicator {
+  margin-inline-start: var(--bs-picker-inset);
+  margin-inline-end: 0;
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
+input[type='time']::-webkit-calendar-picker-indicator:hover,
+input[type='month']::-webkit-calendar-picker-indicator:hover,
+input[type='week']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/*
+ * RTL PUTS THE PICKER WHERE THE READER EXPECTS IT. A date field in Arabic reads
+ * right to left, so its affordance belongs at the left edge — the same side the
+ * mirrored chevron goes to — and the browser will not do this on its own.
+ */
+html[dir='rtl'] input[type='date'],
+html[dir='rtl'] input[type='datetime-local'],
+html[dir='rtl'] input[type='time'],
+html[dir='rtl'] input[type='month'],
+html[dir='rtl'] input[type='week'] {
+  direction: ltr;
+  text-align: end;
 }
 
 /*
@@ -1040,6 +1128,34 @@ select option {
 }
 
 @supports (appearance: base-select) {
+  /*
+   * THE BROWSER DRAWS THE MARKER HERE, SO THE PRODUCT MUST NOT ALSO DRAW ONE.
+   *
+   * THIS IS THE "TWO DOWN ARROWS" DEFECT (P6-02). `appearance: base-select`
+   * and `appearance: none` are declared at the SAME specificity — `select.bs-control`
+   * is (0,1,1) and `select:not([multiple])` is (0,1,1), because `:not()` adds
+   * nothing but its argument does — so order decides, and this block is later.
+   * `base-select` therefore won, the browser drew its own `::picker-icon`, and
+   * the chevron background-image above was still painted underneath it. Two
+   * markers, on exactly the selects that had adopted the design system, in
+   * exactly the browsers that support customizable selects.
+   *
+   * The chevron is withdrawn rather than the native icon, because in this mode
+   * the native icon is the one that participates in the customizable-select
+   * treatment the rest of this block styles. The trailing space goes back to
+   * the control's ordinary padding for the same reason: nothing of ours is
+   * occupying it.
+   */
+  select {
+    background-image: none;
+    padding-inline-end: var(--bs-space-md);
+  }
+
+  select.bs-control,
+  select.bs-select {
+    padding-inline-end: var(--bs-space-md) !important;
+  }
+
   select:not([multiple]) {
     appearance: base-select;
   }
@@ -1060,6 +1176,17 @@ select option {
     min-block-size: 2.5rem;
     padding: var(--bs-space-sm) var(--bs-space-md);
     border-radius: var(--bs-radius-control);
+    /*
+     * A HAIRLINE OF AIR, SO TWO HIGHLIGHTED ROWS NEVER MERGE (P6-02).
+     *
+     * The rows are rounded but had no separation, so the selected row and the
+     * row the pointer was on — which are adjacent as soon as you move one step
+     * — met edge to edge and read as ONE taller lavender block with a pinched
+     * waist, rather than as two rows one of which is chosen. `.bs-dropdown-option`
+     * never showed this because its panel gives it room; the native list had
+     * none.
+     */
+    margin-block: 1px;
   }
 
   select:not([multiple]) option:hover,

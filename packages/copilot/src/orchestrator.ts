@@ -20,6 +20,13 @@ import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
 import { availableTools, findTool } from './tools';
 import type { ProposedStep } from './plans';
+import { COPILOT_SURFACES, copilotSurface, type CopilotSurface } from './surfaces';
+import {
+  SUBJECT_NOUN,
+  copilotSubjectType,
+  type CopilotSubject,
+  type CopilotSubjectType,
+} from './subject';
 
 /**
  * THE ORCHESTRATOR — the one place a model is asked what to do, and the one place
@@ -175,8 +182,11 @@ export class CopilotOrchestrator {
     surface: string;
     locale: Locale;
     expiresAt: Date | null;
+    /** What the person is looking at (D-280). Admitted against the brand below. */
+    subject?: CopilotSubject | null | undefined;
   }): Promise<CopilotSession> {
     const brandId = await this.#admitBrand(input.brandId, input.authorization);
+    const subject = await this.#admitSubject(input.subject ?? null, brandId);
 
     return this.#db.copilotSession.create({
       data: {
@@ -186,8 +196,60 @@ export class CopilotOrchestrator {
         surface: input.surface,
         locale: input.locale,
         expiresAt: input.expiresAt,
+        subjectType: subject?.type ?? null,
+        subjectId: subject?.id ?? null,
       },
     });
+  }
+
+  /**
+   * ADMISSION OF THE SUBJECT (D-280): the thing the person is looking at must
+   * belong to the brand the session was just admitted to, or the session is not
+   * opened at all — the same 404 an unknown brand gets. RLS already confines
+   * the read to this workspace; the brand predicate is what stops a campaign of
+   * another brand in the same workspace from being named. A brand-less session
+   * carries no subject.
+   */
+  async #admitSubject(
+    subject: CopilotSubject | null,
+    brandId: string | null,
+  ): Promise<CopilotSubject | null> {
+    if (!subject) return null;
+    if (!brandId) throw copilotSessionNotFound();
+    const found = await this.#subjectTitle(subject, brandId);
+    if (found === null) throw copilotSessionNotFound();
+    return subject;
+  }
+
+  /**
+   * THE SUBJECT'S TITLE, read fresh — or null when it no longer exists in the
+   * session's brand. Customer-written text: it reaches the model only fenced.
+   */
+  async #subjectTitle(subject: CopilotSubject, brandId: string): Promise<string | null> {
+    const where = { id: subject.id, workspaceId: this.#workspaceId, brandId };
+    switch (subject.type) {
+      case 'CAMPAIGN': {
+        const row = await this.#db.campaign.findFirst({
+          where: { ...where, deletedAt: null },
+          select: { name: true },
+        });
+        return row?.name ?? null;
+      }
+      case 'CONTENT_ITEM': {
+        const row = await this.#db.contentItem.findFirst({
+          where: { ...where, deletedAt: null },
+          select: { title: true },
+        });
+        return row?.title ?? null;
+      }
+      case 'INSIGHT': {
+        const row = await this.#db.insight.findFirst({ where, select: { title: true } });
+        if (!row) return null;
+        const title = row.title as { en?: unknown; ar?: unknown } | null;
+        const text = typeof title?.en === 'string' ? title.en : title?.ar;
+        return typeof text === 'string' ? text : '';
+      }
+    }
   }
 
   /**
@@ -235,7 +297,16 @@ export class CopilotOrchestrator {
       planKey: input.planKey,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, [], brandId !== null),
+        // A quote has no session, so it is priced for the general surface: the
+        // one line that differs is a few words, not a different task.
+        prompt: this.#prompt(
+          input.request,
+          input.authorization,
+          [],
+          brandId !== null,
+          'general',
+          null,
+        ),
         untrustedContext: context ? [context] : [],
       },
     });
@@ -335,6 +406,7 @@ export class CopilotOrchestrator {
 
     const history = await this.#history(session.id);
     const context = await this.#context(brandId, input.request);
+    const subject = await this.#subjectContext(session, brandId);
 
     const result: AiGatewayResult = await this.#gateway.execute({
       workspaceId: this.#workspaceId,
@@ -344,8 +416,15 @@ export class CopilotOrchestrator {
       idempotencyKey: `copilot:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.request, input.authorization, history, brandId !== null),
-        untrustedContext: context ? [context] : [],
+        prompt: this.#prompt(
+          input.request,
+          input.authorization,
+          history,
+          brandId !== null,
+          copilotSurface(session.surface),
+          subject?.kind ?? null,
+        ),
+        untrustedContext: [...(subject ? [subject.fenced] : []), ...(context ? [context] : [])],
       },
     });
 
@@ -489,6 +568,24 @@ export class CopilotOrchestrator {
     return fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText);
   }
 
+  /** The session's subject as a fenced block, or null when it has none or is gone. */
+  async #subjectContext(
+    session: { subjectType: string | null; subjectId: string | null },
+    brandId: string | null,
+  ): Promise<{ kind: CopilotSubjectType; fenced: string } | null> {
+    const kind = copilotSubjectType(session.subjectType);
+    if (!kind || !session.subjectId || !brandId) return null;
+    const title = await this.#subjectTitle({ type: kind, id: session.subjectId }, brandId);
+    if (title === null) return null;
+    return {
+      kind,
+      fenced: fenceUntrusted(
+        'CURRENT SUBJECT',
+        `${SUBJECT_NOUN[kind]} ${session.subjectId}: ${title}`,
+      ),
+    };
+  }
+
   /** The recent turns, bounded by the activated policy. */
   async #history(sessionId: string): Promise<readonly { role: string; body: string }[]> {
     const rows = await this.#db.copilotMessage.findMany({
@@ -505,11 +602,28 @@ export class CopilotOrchestrator {
     authorization: LiveAuthorization,
     history: readonly { role: string; body: string }[],
     brandBound: boolean,
+    surface: CopilotSurface,
+    subjectKind: CopilotSubjectType | null,
   ): string {
     const tools = availableTools(authorization.permissionKeys, { brandBound });
 
     return [
       SYSTEM_INSTRUCTION,
+      '',
+      /*
+       * WHERE THE PERSON IS STANDING (P6-12). From the CLOSED list in
+       * `surfaces.ts`, as the description that file wrote — never a string the
+       * caller supplied, because this line is not fenced.
+       */
+      `THE CUSTOMER OPENED YOU FROM: ${COPILOT_SURFACES[surface]}.`,
+      /*
+       * WHAT THEY ARE LOOKING AT (D-280). Only the KIND is stated here, from a
+       * closed set; its title is customer text and travels in the fenced
+       * untrusted context, never in this unfenced instruction.
+       */
+      subjectKind
+        ? `THE CUSTOMER IS LOOKING AT ONE ${SUBJECT_NOUN[subjectKind]}; it is described in the fenced CURRENT SUBJECT block. Treat "this" or "it" in the request as that ${SUBJECT_NOUN[subjectKind]}.`
+        : '',
       '',
       'TOOLS YOU MAY USE (and no others):',
       ...tools.map(

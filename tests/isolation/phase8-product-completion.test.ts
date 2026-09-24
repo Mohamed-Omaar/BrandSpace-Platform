@@ -217,9 +217,11 @@ describe('AC-22: resolving a selection against that list', () => {
       kind: 'all',
       brandIds: [brandOneId(), brandTwoId()],
     });
-    // A restricted member's aggregate is their own list, not the workspace's.
+    // A restricted member never aggregates the workspace's list. With ONE
+    // reachable brand there is nothing to aggregate: it resolves to that
+    // brand itself (D-302), and never to a brand outside their scope.
     const restricted = resolveSelection([brands[0]!], { scope: 'brand-or-all' });
-    expect(restricted.resolution).toEqual({ kind: 'all', brandIds: [brandOneId()] });
+    expect(restricted.resolution).toEqual({ kind: 'brand', brand: brands[0] });
   });
 
   it('refuses the aggregate on a page that needs one brand', () => {

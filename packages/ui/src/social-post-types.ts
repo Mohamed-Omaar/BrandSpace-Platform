@@ -61,6 +61,13 @@ export type PreviewMedia =
       /** More than one image makes it a carousel. */
       readonly count?: number;
       /**
+       * PHASE 6 FINAL (D-285) — the carousel's slides, in order, each with its
+       * own picture. With two or more and the slide labels below, the frame
+       * can be paged: arrows, dots and "Slide 2 of 5". `src`/`alt` above stay
+       * the first slide's, so a caller that passes no slides is unchanged.
+       */
+      readonly slides?: readonly { readonly src?: string | undefined; readonly alt: string }[];
+      /**
        * PHASE 8 — the REAL asset's bytes, as an opaque expiring grant.
        *
        * OPTIONAL, and the two cases are different products rather than two
@@ -110,6 +117,10 @@ export interface SocialPostPreviewLabels {
   readonly loadingMedia: string;
   readonly videoBadge: string;
   readonly carouselLabel: (count: number) => string;
+  /** PHASE 6 FINAL (D-285) — a paged carousel's position and arrows. Optional. */
+  readonly slideLabel?: (index: number, count: number) => string;
+  readonly previousSlide?: string;
+  readonly nextSlide?: string;
   readonly previewNotice: string;
   readonly aspectLabel: (aspect: PostAspect) => string;
   /** The action strip is decorative; these name it for a screen reader. */
