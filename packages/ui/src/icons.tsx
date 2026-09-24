@@ -401,6 +401,19 @@ export function ImageIcon(props: IconProps) {
 }
 
 /**
+ * A FOLDER — the Media Library's folders (Phase 6 final acceptance, D-305).
+ * The same 24-unit box, stroke and joinery as every icon here; a folder tree
+ * that looked like a row of filter chips needed a glyph that says "folder".
+ */
+export function FolderIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.25h8.6A1.5 1.5 0 0 1 21 9.75v8.75A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5z" />
+    </Icon>
+  );
+}
+
+/**
  * A TAG — the Brand Selector's glyph.
  *
  * Drawn in the same 24-unit box, the same stroke and the same joinery as every

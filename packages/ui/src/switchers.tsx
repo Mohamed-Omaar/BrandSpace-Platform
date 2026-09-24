@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { colorTokens, layoutTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
+import {
+  colorTokens,
+  layoutTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+} from './tokens';
 import { BuildingIcon, CheckIcon, TagIcon } from './icons';
 import { DropdownMenu } from './overlays';
 import { menuItemStyle } from './menu-style';
@@ -162,6 +169,124 @@ export function WorkspaceSwitcher({
 }
 
 /**
+ * THE BRAND CARD'S FACE — shared by the switcher's trigger and the single-brand
+ * card, so the two can never drift into two looks for one fact.
+ */
+function brandCardContent(current: { readonly name: string; readonly caption: string }) {
+  return (
+    <span
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: spacingTokens.sm,
+        minInlineSize: 0,
+        flex: '1 1 auto',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-grid',
+          placeItems: 'center',
+          // The workspace card's tile, to the pixel. A different size here
+          // would read as a different KIND of control.
+          inlineSize: layoutTokens.railAvatar,
+          blockSize: layoutTokens.railAvatar,
+          flexShrink: 0,
+          borderRadius: radiusTokens.control,
+          background: 'linear-gradient(145deg, #EEE5FF, #FFF5B3)',
+          color: colorTokens.textPrimary,
+        }}
+      >
+        <TagIcon size={16} />
+      </span>
+      <span
+        className="bs-rail-copy"
+        style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
+      >
+        <span
+          data-testid="active-brand"
+          style={{
+            ...typographyTokens.label,
+            color: colorTokens.textPrimary,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {current.name}
+        </span>
+        <span
+          data-testid="active-brand-caption"
+          style={{
+            ...typographyTokens.caption,
+            marginBlockStart: spacingTokens['3xs'],
+            color: colorTokens.textMuted,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {current.caption}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * ONE BRAND, NO MENU (Phase 6 final acceptance, D-302).
+ *
+ * A member who can reach exactly one brand has nothing to choose, and a
+ * dropdown with one row asks them to learn a concept — "a brand is a thing you
+ * select" — for no benefit. The same card, the same two lines, the same tile;
+ * a link to the brand's profile where the member may read it, plain otherwise.
+ * The selector returns, unchanged, the moment a second brand is reachable.
+ */
+export function BrandCard({
+  label,
+  current,
+  href,
+}: {
+  readonly label: string;
+  readonly current: { readonly name: string; readonly caption: string };
+  readonly href?: string | undefined;
+}) {
+  const style = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingTokens.sm,
+    inlineSize: '100%',
+    minInlineSize: 0,
+    overflow: 'hidden',
+    padding: layoutTokens.railCardPad,
+    minBlockSize: '3.625rem',
+    border: '1px solid transparent',
+    borderRadius: radiusTokens.rail,
+    background: colorTokens.surface,
+    boxShadow: shadowTokens.rail,
+    color: colorTokens.textPrimary,
+    textDecoration: 'none',
+    textAlign: 'start',
+  } as const;
+  return href ? (
+    <Link
+      href={href}
+      aria-label={label}
+      className="bs-pressable"
+      data-testid="brand-card"
+      style={style}
+    >
+      {brandCardContent(current)}
+    </Link>
+  ) : (
+    <div aria-label={label} role="group" data-testid="brand-card" style={style}>
+      {brandCardContent(current)}
+    </div>
+  );
+}
+
+/**
  * THE GLOBAL BRAND SELECTOR (D-190).
  *
  * IT IS THE WORKSPACE CARD'S SIBLING, NOT A SECOND NAVIGATION SYSTEM. Same
@@ -267,65 +392,7 @@ export function BrandSwitcher({
       testId="brand-switcher"
       align="start"
       trigger="card"
-      triggerContent={
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: spacingTokens.sm,
-            minInlineSize: 0,
-            flex: '1 1 auto',
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              display: 'inline-grid',
-              placeItems: 'center',
-              // The workspace card's tile, to the pixel. A different size here
-              // would read as a different KIND of control.
-              inlineSize: layoutTokens.railAvatar,
-              blockSize: layoutTokens.railAvatar,
-              flexShrink: 0,
-              borderRadius: radiusTokens.control,
-              background: 'linear-gradient(145deg, #EEE5FF, #FFF5B3)',
-              color: colorTokens.textPrimary,
-            }}
-          >
-            <TagIcon size={16} />
-          </span>
-          <span
-            className="bs-rail-copy"
-            style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
-          >
-            <span
-              data-testid="active-brand"
-              style={{
-                ...typographyTokens.label,
-                color: colorTokens.textPrimary,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {current.name}
-            </span>
-            <span
-              data-testid="active-brand-caption"
-              style={{
-                ...typographyTokens.caption,
-                marginBlockStart: spacingTokens['3xs'],
-                color: colorTokens.textMuted,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {current.caption}
-            </span>
-          </span>
-        </span>
-      }
+      triggerContent={brandCardContent(current)}
     >
       {allOption
         ? row('all', allOption.label, undefined, allOption.current, 'brand-option-all')

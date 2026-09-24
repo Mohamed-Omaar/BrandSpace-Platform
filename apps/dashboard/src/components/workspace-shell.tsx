@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import {
@@ -20,14 +21,13 @@ import {
   SendIcon,
   SettingsIcon,
   SparkIcon,
-  WorkspaceSwitcher,
+  BrandCard,
   BrandSwitcher,
   Banner,
   StateMessage,
   spacingTokens,
   type ShellNavSection,
   type Tone,
-  type WorkspaceOption,
   initialsFrom,
 } from '@brandspace/ui';
 import { switchLocalePath } from '../i18n/locale-path';
@@ -42,6 +42,7 @@ import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
+import { getCustomerAuth, getSessionToken } from '../server/customer-context';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction } from '../app/[locale]/(auth)/actions';
@@ -301,6 +302,7 @@ export async function WorkspaceShell({
   permissionKeys,
   availableWorkspaces = [],
   brandContext,
+  focus = false,
   children,
 }: {
   locale: string;
@@ -347,6 +349,14 @@ export async function WorkspaceShell({
    * appears; a page that does not simply has no second card.
    */
   brandContext?: BrandContext | undefined;
+  /**
+   * FOCUSED PRESENTATION (Phase 6 final acceptance, D-303) — the first-run
+   * Setup Wizard. The daily navigation and the top-bar actions step aside so
+   * the journey is the only thing on the screen; the brand, the language
+   * switch and the account menu (sign-out) remain. Authorization is the page's
+   * own, exactly as without it.
+   */
+  focus?: boolean | undefined;
   children: ReactNode;
 }) {
   const t = translator(locale);
@@ -384,7 +394,7 @@ export async function WorkspaceShell({
     counts: await topbarCounts(),
   });
 
-  const sections = navSections(permissionKeys, locale, activePath, t, brandContext);
+  const sections = focus ? [] : navSections(permissionKeys, locale, activePath, t, brandContext);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
@@ -414,13 +424,19 @@ export async function WorkspaceShell({
    */
   const mayReadBrandProfile = permissionKeys.includes('brand.read');
 
-  const workspaceOptions: readonly WorkspaceOption[] = availableWorkspaces.map((workspace) => ({
-    id: workspace.id,
-    name: workspace.name,
-    roleName: workspace.roleName,
-    href: `/${locale}/workspaces`,
-    current: workspace.current,
-  }));
+  /*
+   * HOW MANY BUSINESSES THIS PERSON BELONGS TO (D-302). "Switch business" is
+   * offered in the account menu only when there is another one to switch to;
+   * the count comes from the same membership listing the picker reads.
+   */
+  const businessCount =
+    availableWorkspaces.length > 0
+      ? availableWorkspaces.length
+      : (
+          await getCustomerAuth()
+            .listWorkspaces((await getSessionToken()) ?? '')
+            .catch(() => [])
+        ).length;
 
   return (
     <AppShell
@@ -435,32 +451,36 @@ export async function WorkspaceShell({
       }}
       headerStart={
         /*
-         * TWO CARDS, ONE STACK — the workspace, then the brand inside it.
+         * THE BRAND, AND ONLY THE BRAND (Phase 6 final acceptance, D-302).
          *
-         * THE BRAND CARD SITS WHERE THE WORKSPACE CARD ALREADY IS, which is the
-         * rail rather than the top bar. The phase brief describes the Workspace
-         * Selector as being "in the top bar"; in the implemented product it is
-         * `headerStart`, the rail's identity block (D-59), and the top bar
-         * carries review, notes, notifications, Copilot, language and create. Putting the brand
-         * selector in the top bar would have separated it from the thing it is
-         * scoped BY and introduced the second navigation system the brief
-         * forbids, so the stronger instruction — "beside the Workspace
-         * Selector" — decides, and the conflict is recorded in
-         * docs/UI-FIDELITY-CONTRACT.md §6.
+         * The workspace is the tenant boundary — membership, billing, RLS,
+         * audit — and it stays exactly that, underneath. It is no longer a card
+         * in the customer's rail: a standard business has one workspace and one
+         * brand, and "what is the difference between my workspace and my
+         * brand?" is a question the product should never make them ask. A
+         * member of more than one business switches from the account menu.
          *
-         * The order is containment: a brand lives inside a workspace, so it
-         * reads underneath it. Same card, same tile, same two lines.
+         * ONE REACHABLE BRAND IS A CARD, NOT A MENU. The selector returns,
+         * unchanged, when a second brand is reachable — which the plan's brand
+         * quota (`limit.brands`, the existing entitlement) is what permits. That
+         * is the future multi-brand mode, switched on by configuration rather
+         * than by code.
          */
-        <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-          <WorkspaceSwitcher
-            label={t('ws.switcherLabel')}
-            current={{ name: workspaceName, roleName }}
-            options={workspaceOptions}
-            manageHref={`/${locale}/workspaces`}
-            manageLabel={t('nav.switch')}
-            manageTestId="switch-workspace"
-          />
-          {brandContext ? (
+        brandContext ? (
+          brandContext.brands.length === 1 && brandContext.brands[0] ? (
+            <BrandCard
+              label={t('brand.cardLabel')}
+              current={{
+                name: brandContext.brands[0].name,
+                caption: t('brand.selectedCaption'),
+              }}
+              href={
+                mayReadBrandProfile
+                  ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
+                  : undefined
+              }
+            />
+          ) : (
             <BrandSwitcher
               label={t('brand.switcherLabel')}
               current={brandTrigger(brandContext, t)}
@@ -487,8 +507,8 @@ export async function WorkspaceShell({
                   }
                 : {})}
             />
-          ) : null}
-        </div>
+          )
+        ) : null
       }
       headerEnd={
         /*
@@ -499,7 +519,7 @@ export async function WorkspaceShell({
          * domain exists behind it (D-276).
          */
         <>
-          {topbar.links.map((link) => {
+          {(focus ? [] : topbar.links).map((link) => {
             const count = link.count ?? 0;
             const control = (
               <TopbarLink
@@ -509,6 +529,8 @@ export async function WorkspaceShell({
                 glyph={link.key}
                 current={link.current}
                 testId={`topbar-${link.key}`}
+                // D-304 — the Copilot is named on screen, not only by its spark.
+                showLabel={link.key === 'copilot'}
                 indicator={
                   link.countKey && count > 0
                     ? { count, label: t(link.countKey).replace('{count}', String(count)) }
@@ -570,14 +592,16 @@ export async function WorkspaceShell({
             targetLabel={other === 'ar' ? 'العربية' : 'English'}
             ariaLabel={t('nav.language')}
           />
-          <TopbarCreateMenu
-            label={t('topbar.create')}
-            items={topbar.create.map((item) => ({
-              key: item.key,
-              href: item.href,
-              label: t(item.labelKey),
-            }))}
-          />
+          {focus ? null : (
+            <TopbarCreateMenu
+              label={t('topbar.create')}
+              items={topbar.create.map((item) => ({
+                key: item.key,
+                href: item.href,
+                label: t(item.labelKey),
+              }))}
+            />
+          )}
         </>
       }
       /*
@@ -602,6 +626,16 @@ export async function WorkspaceShell({
           role={roleName}
           initials={initialsFrom(identity)}
         >
+          {businessCount > 1 ? (
+            <Link
+              href={`/${locale}/workspaces`}
+              role="menuitem"
+              data-testid="switch-workspace"
+              style={menuItemStyle()}
+            >
+              {t('ws.switchBusiness')}
+            </Link>
+          ) : null}
           <form action={signOutAction}>
             <input type="hidden" name="locale" value={locale} />
             <button type="submit" role="menuitem" data-testid="sign-out" style={menuItemStyle()}>

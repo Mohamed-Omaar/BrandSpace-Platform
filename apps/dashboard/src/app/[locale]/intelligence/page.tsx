@@ -16,7 +16,13 @@ import {
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { evidenceLabel, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  evidenceLabel,
+  evidenceRefs,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { insightNarrative, type NarrativeLine } from '../../../server/insight-narrative';
 import { INTELLIGENCE_INSIGHT_TYPES } from '../../../server/command-center';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -394,12 +400,14 @@ export default async function IntelligencePage({
                           lines={[{ text: narrative.why, evidence: [] }]}
                           testId="narrative-why"
                           evidenceLabel={t('insights.evidence')}
+                          locale={locale}
                         />
                         <NarrativeBlock
                           title={t('intelligence.happened')}
                           lines={narrative.happened}
                           testId="narrative-happened"
                           evidenceLabel={t('insights.evidence')}
+                          locale={locale}
                         />
                         {narrative.next.length > 0 ? (
                           <NarrativeBlock
@@ -407,6 +415,7 @@ export default async function IntelligencePage({
                             lines={narrative.next}
                             testId="narrative-next"
                             evidenceLabel={t('insights.evidence')}
+                            locale={locale}
                           />
                         ) : null}
                       </div>
@@ -428,7 +437,7 @@ export default async function IntelligencePage({
                           key={row.id}
                           style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
                         >
-                          <strong style={{ color: colorTokens.textPrimary }}>e{row.ordinal}</strong>{' '}
+                          <strong style={{ color: colorTokens.textPrimary }}>{row.ordinal}.</strong>{' '}
                           {row.metricKey
                             ? t(`analytics.metric.${row.metricKey}` as MessageKey)
                             : evidenceLabel(locale, row.labelKey)}
@@ -570,11 +579,13 @@ function NarrativeBlock({
   lines,
   testId,
   evidenceLabel,
+  locale,
 }: {
   title: string;
   lines: readonly NarrativeLine[];
   testId: string;
   evidenceLabel: string;
+  locale: string;
 }) {
   if (lines.length === 0) return null;
   return (
@@ -594,7 +605,7 @@ function NarrativeBlock({
                 style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
               >
                 {' '}
-                ({line.evidence.map((ref) => `e${ref}`).join(', ')})
+                ({evidenceRefs(locale, line.evidence)})
               </span>
             ) : null}
           </li>

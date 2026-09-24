@@ -62,7 +62,7 @@ test.describe('P6-16 · the customer top bar', () => {
     await signIn(page);
     const bar = topbar(page);
     const order = await bar
-      .locator('[data-testid^="topbar-"]:not([data-testid$="-dot"])')
+      .locator('[data-testid^="topbar-"]:not([data-testid$="-dot"]):not([data-testid$="-label"])')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid')));
     expect(order).toEqual([
       'topbar-review',
@@ -268,11 +268,13 @@ test.describe('P6-16 · the customer top bar', () => {
     const names: Record<string, string> = {
       'topbar-review': 'المراجعة',
       'topbar-notes': 'الملاحظات',
-      'topbar-copilot': 'المساعد',
     };
     for (const [testId, name] of Object.entries(names)) {
       await expect(page.getByTestId(testId)).toHaveAttribute('aria-label', new RegExp(`^${name}`));
     }
+    // D-304 — the Copilot's name is on screen, so it is its accessible name too.
+    await expect(page.getByTestId('topbar-copilot')).toHaveAccessibleName(/^المساعد/);
+    await expect(page.getByTestId('topbar-copilot-label')).toHaveText('المساعد');
     await expect(page.getByTestId('topbar-notifications')).toHaveAttribute(
       'aria-label',
       /^الإشعارات/,

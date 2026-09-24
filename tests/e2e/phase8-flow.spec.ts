@@ -160,9 +160,8 @@ test('1 · a workspace is chosen and a brand is active', async ({ page }) => {
   await enter(page);
 
   const rail = page.getByTestId('sidebar');
-  await expect(rail.getByTestId('workspace-switcher')).toContainText(
-    credentials().customer.workspaceName ?? '',
-  );
+  // D-302 — the workspace is chosen at sign-in and is not a rail card.
+  await expect(rail.getByTestId('workspace-switcher')).toHaveCount(0);
   // THE BRAND IS NAMED, not guessed: the card either names one or says it has
   // none, and "none" is not a state this journey can proceed from.
   await expect(rail.getByTestId('active-brand')).toHaveText(

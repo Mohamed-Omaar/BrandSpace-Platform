@@ -142,9 +142,38 @@ export const SETUP_GOALS = [
   'LEADS',
   'TRAFFIC',
   'LAUNCH',
+  'CONSISTENCY',
   'RETENTION',
+  'AUTHORITY',
 ] as const;
 export type SetupGoal = (typeof SETUP_GOALS)[number];
+
+/*
+ * GOALS THAT ARE NOT CAMPAIGN OBJECTIVES (Phase 6 final acceptance, D-303).
+ *
+ * "Post consistently" and "Build authority" are real first goals the owner
+ * asked for, and they are stored exactly as every goal is — a HUMAN item in the
+ * brand's STRATEGY memory. What they are NOT is a `CampaignObjective`, and
+ * nothing maps them onto one: `campaignObjectiveFor` answers null for them, so
+ * a campaign prefilled from the goal carries no objective rather than a
+ * different one the customer did not choose. (D-278's reason for leaving
+ * authority out was exactly that mapping; without it the goal is honest.)
+ */
+export const CAMPAIGN_OBJECTIVE_GOALS = [
+  'AWARENESS',
+  'ENGAGEMENT',
+  'LEADS',
+  'TRAFFIC',
+  'LAUNCH',
+  'RETENTION',
+] as const;
+export type CampaignObjectiveGoal = (typeof CAMPAIGN_OBJECTIVE_GOALS)[number];
+
+export function campaignObjectiveFor(goal: SetupGoal | null): CampaignObjectiveGoal | null {
+  return goal && (CAMPAIGN_OBJECTIVE_GOALS as readonly string[]).includes(goal)
+    ? (goal as CampaignObjectiveGoal)
+    : null;
+}
 
 /** The knowledge key the goal lives under, in the brand's STRATEGY memory. */
 export const GOAL_ITEM_KEY = 'goal.primary';

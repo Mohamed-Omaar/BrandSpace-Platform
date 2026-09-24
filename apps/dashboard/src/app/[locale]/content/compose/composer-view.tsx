@@ -544,10 +544,19 @@ export function ComposerView({
   return (
     <div className="content-page" data-testid="content-composer">
       <div className="cs-view-toolbar">
-        <div>
-          <span className="cs-section-kicker">{t['content.composer.eyebrow']}</span>
-          <h2>{draft ? draft.title : t['content.composer.title']}</h2>
-        </div>
+        {/*
+          D-306 — ONE HEADING. The page title ("New post") is the shell's h1;
+          this block repeated it. It now names the DRAFT being edited, and
+          says nothing more on a new post.
+        */}
+        {draft ? (
+          <div>
+            <span className="cs-section-kicker">{t['content.composer.eyebrow']}</span>
+            <h2>{draft.title}</h2>
+          </div>
+        ) : (
+          <span />
+        )}
         <Link className="cs-ghost-button cs-compact" href={`/${locale}/content`}>
           {t['content.composer.back']}
         </Link>

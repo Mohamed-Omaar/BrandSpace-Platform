@@ -98,7 +98,7 @@ test.describe('the exit journey runs end to end', () => {
       // no page invents its own navigation and no page invents its own brand
       // picker (D-190).
       await expect(page.getByTestId('sidebar')).toBeVisible();
-      await expect(page.getByTestId('sidebar').getByTestId('workspace-switcher')).toBeVisible();
+      await expect(page.getByTestId('sidebar').getByTestId('workspace-switcher')).toHaveCount(0);
       await expect(page.getByTestId('sidebar').getByTestId('brand-switcher')).toBeVisible();
 
       // AND IT IS THE PAGE THAT WAS ASKED FOR, rather than a redirect to the

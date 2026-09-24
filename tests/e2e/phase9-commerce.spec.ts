@@ -154,13 +154,10 @@ test.describe('a stranger becomes a paying customer', () => {
     await signIn(page, customer.email);
     await createWorkspace(page, { country: 'SA' });
 
-    // --- The first-run wizard is DERIVED, so the workspace step is already
-    // done and the brand step is not. (Choosing a plan is not a setup step
-    // since D-277 §6; the trial and the plans live in Settings > Plan/Billing.)
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
-      'data-complete',
-      'true',
-    );
+    // --- The first-run wizard is DERIVED: the business account exists (it is
+    // not a customer-visible step since D-303) and the brand step is not done.
+    // (Choosing a plan is not a setup step since D-277 §6.)
+    await expect(page.getByTestId('setup-progress-text')).toContainText('1');
     await expect(page.locator('[data-testid="onboarding-step-brand"]')).toHaveAttribute(
       'data-complete',
       'false',
@@ -332,10 +329,8 @@ test.describe('a stranger becomes a paying customer', () => {
     // must not block identity/onboarding; checkout policy is a later concern.
     await createWorkspace(page, { country: 'DE' });
 
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
-      'data-complete',
-      'true',
-    );
+    // The business account was created and the wizard runs inside it.
+    await expect(page.getByTestId('setup-wizard')).toHaveAttribute('data-view', 'brand');
   });
 });
 

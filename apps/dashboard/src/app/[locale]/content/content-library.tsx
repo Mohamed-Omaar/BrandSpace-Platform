@@ -93,6 +93,7 @@ export function ContentLibrary({
   ideas,
   can,
   duplicateToken,
+  paging,
 }: {
   readonly locale: string;
   readonly t: (key: string) => string;
@@ -112,7 +113,14 @@ export function ContentLibrary({
   readonly can: { readonly create: boolean; readonly submit: boolean };
   /** A per-render key so a double-clicked Duplicate makes one copy. */
   readonly duplicateToken: string;
+  /** D-305 — which page of the library this is, and whether another follows. */
+  readonly paging?: { readonly page: number; readonly hasMore: boolean } | undefined;
 }) {
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ ...filters, ...(page > 1 ? { page: String(page) } : {}) });
+    const search = params.toString();
+    return `/${locale}/content${search ? `?${search}` : ''}`;
+  };
   const viewHref = (next: 'grid' | 'list') => {
     const params = new URLSearchParams({ ...filters, view: next });
     return `/${locale}/content?${params.toString()}`;
@@ -234,7 +242,7 @@ export function ContentLibrary({
     </span>
   );
 
-  const media = (card: LibraryCard) => (
+  const media = (card: LibraryCard, compact = false) => (
     <Link
       href={`/${locale}/content/compose?item=${card.id}`}
       aria-label={card.title}
@@ -256,23 +264,56 @@ export function ContentLibrary({
           <PlayIcon size={32} aria-hidden="true" />
         </span>
       ) : (
-        /* A TEXT-ONLY POST SHOWS ITS WORDS, on a neutral surface (§15). */
+        /* A TEXT-ONLY POST IS A DESIGNED CARD, NOT A MISSING IMAGE (D-306 §23):
+           the lavender surface the Copilot and stepper already use, a "Text
+           post" label with the note glyph, and the post's own words in the body
+           type. The compact list tile keeps only the glyph. */
         <span
-          dir="auto"
           data-testid={`content-text-${card.id}`}
+          data-text-only="true"
           style={{
             position: 'absolute',
             inset: 0,
-            padding: spacingTokens.md,
-            ...typographyTokens.bodySm,
-            color: colorTokens.textSecondary,
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 7,
-            WebkitBoxOrient: 'vertical',
+            display: 'grid',
+            alignContent: compact ? 'center' : 'start',
+            justifyItems: compact ? 'center' : 'stretch',
+            gap: spacingTokens.xs,
+            padding: compact ? 0 : spacingTokens.md,
+            background: colorTokens.surfaceLavender,
+            color: colorTokens.brandPurplePressed,
           }}
         >
-          {card.excerpt || card.title}
+          {compact ? (
+            <NoteIcon size={20} aria-hidden="true" />
+          ) : (
+            <>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: spacingTokens['3xs'],
+                  ...typographyTokens.caption,
+                  fontWeight: 600,
+                }}
+              >
+                <NoteIcon size={14} aria-hidden="true" />
+                {t('content.textOnly')}
+              </span>
+              <span
+                dir="auto"
+                style={{
+                  ...typographyTokens.bodySm,
+                  color: colorTokens.textPrimary,
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 6,
+                  WebkitBoxOrient: 'vertical',
+                }}
+              >
+                {card.excerpt || card.title}
+              </span>
+            </>
+          )}
         </span>
       )}
       {card.media.kind !== 'none' && card.media.count > 1 ? (
@@ -475,7 +516,7 @@ export function ContentLibrary({
                 alignItems: 'center',
               }}
             >
-              <div style={{ inlineSize: '4rem' }}>{media(card)}</div>
+              <div style={{ inlineSize: '4rem' }}>{media(card, true)}</div>
               <div style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}>
                 <div
                   style={{
@@ -505,6 +546,44 @@ export function ContentLibrary({
           ))}
         </ul>
       )}
+
+      {paging && (paging.page > 1 || paging.hasMore) ? (
+        <nav
+          aria-label={t('content.paging.label')}
+          data-testid="content-paging"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: spacingTokens.sm,
+          }}
+        >
+          {paging.page > 1 ? (
+            <Link
+              href={pageHref(paging.page - 1)}
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              data-testid="content-page-previous"
+            >
+              {t('content.paging.previous')}
+            </Link>
+          ) : null}
+          <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+            {t('content.paging.page').replace('{page}', String(paging.page))}
+          </span>
+          {paging.hasMore ? (
+            <Link
+              href={pageHref(paging.page + 1)}
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              data-testid="content-page-next"
+            >
+              {t('content.paging.next')}
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
     </div>
   );
 }

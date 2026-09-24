@@ -197,6 +197,17 @@ function resolve(
   }
 
   /*
+   * ONE BRAND IS THAT BRAND, ON AN AGGREGATE PAGE TOO (Phase 6 final
+   * acceptance, D-302). "All brands" over a single brand is the same rows under
+   * a label that asks the reader to understand a concept they do not have. The
+   * standard customer has one visible brand, so every brand-capable page names
+   * it. Workspace-scoped pages keep their aggregate: they are about the
+   * business, not a brand.
+   */
+  const sole = brands.length === 1 ? brands[0] : undefined;
+  if (sole && scope === 'brand-or-all') return { kind: 'brand', brand: sole };
+
+  /*
    * NO SELECTION IS NOT A MISSING BRAND, IT IS A MISSING CHOICE — and what to
    * do about it depends entirely on what the page is.
    *

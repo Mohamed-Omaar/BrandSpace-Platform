@@ -59,12 +59,13 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 }
 
 test.describe('the global brand selector', () => {
-  test('sits beside the workspace selector and names the active brand', async ({ page }) => {
+  test('is the only identity card in the rail, and names the active brand', async ({ page }) => {
     await signIn(page);
 
-    // BOTH CARDS, IN THE SAME BLOCK. The brand card is the workspace card's
-    // sibling in the rail, not a second navigation system somewhere else.
-    await expect(rail(page).getByTestId('workspace-switcher')).toBeVisible();
+    // D-302 — the workspace is the tenant boundary, not a card the customer
+    // reads. This workspace reaches several brands, so the rail shows the
+    // brand SELECTOR (a single-brand business sees a plain brand card).
+    await expect(rail(page).getByTestId('workspace-switcher')).toHaveCount(0);
     await expect(rail(page).getByTestId('brand-switcher')).toBeVisible();
 
     // THE CARD NEVER LIES ABOUT WHICH BRAND YOU ARE ON: it either names one or

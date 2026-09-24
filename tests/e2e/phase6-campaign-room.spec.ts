@@ -170,7 +170,13 @@ test.describe('D-289 · the campaign project room', () => {
     await expect(page.getByTestId('campaign-what-changed')).toBeVisible();
     await expect(page.getByTestId('campaign-what-to-try')).toBeVisible();
 
-    await page.goto(at(r, 'tab=activity'));
+    // Activity is not a standing tab; the Overview links to the full trail.
+    await page.goto(at(r));
+    await expect(
+      page.getByTestId('campaign-tabs').getByRole('link', { name: 'Activity' }),
+    ).toHaveCount(0);
+    await page.getByTestId('campaign-all-activity').click();
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'activity');
     await expect(page.getByTestId('campaign-activity')).not.toContainText('No activity');
   });
 

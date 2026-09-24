@@ -202,25 +202,29 @@ test.describe('workspace selection and switching', () => {
     ).toBeVisible();
 
     await enterWorkspace(page, customer.workspaceSlug);
-    await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
+    const firstBrand = await page.getByTestId('active-brand').first().innerText();
 
-    // Phase 2C moved "switch workspace" INTO the workspace switcher menu, so
-    // the menu is opened first. The assertions either side are unchanged: what
-    // is being tested is that a member of two workspaces reaches the picker and
-    // lands in a correctly scoped second workspace.
-    await page.click('[data-testid="workspace-switcher"]');
+    // D-302 — no workspace card in the rail. A member of two businesses
+    // switches from the account menu, which offers it only because there are
+    // two. What is tested is unchanged: the picker is reached, and the second
+    // context is correctly scoped.
+    await expect(page.getByTestId('workspace-switcher')).toHaveCount(0);
+    await page.click('[data-testid="profile-menu"]');
     await page.click('[data-testid="switch-workspace"]');
     await enterWorkspace(page, customer.secondWorkspaceSlug);
-    // A new, correctly scoped context — not the previous workspace's data.
-    await expect(page.getByTestId('active-workspace')).not.toContainText(customer.workspaceName);
+    // A new, correctly scoped context — not the previous business's brand.
+    await expect(page.getByTestId('active-brand').first()).not.toHaveText(firstBrand);
   });
 
-  test('the workspace name and role are always visible', async ({ page }) => {
+  test('the brand and the role are always visible, and the workspace is not a card', async ({
+    page,
+  }) => {
     const { customer } = credentials();
     await signIn(page, customer.email, customer.password);
     await enterWorkspace(page, customer.workspaceSlug);
-    await expect(page.getByTestId('active-workspace')).toBeVisible();
-    await expect(page.getByTestId('active-role')).toBeVisible();
+    await expect(page.getByTestId('active-brand').first()).toBeVisible();
+    await expect(page.getByTestId('profile-role')).toBeVisible();
+    await expect(page.getByTestId('active-workspace')).toHaveCount(0);
   });
 });
 
@@ -316,7 +320,9 @@ test.describe('invitation acceptance', () => {
     await page.click('[data-testid="invitation-accept"]');
 
     await expect(page).toHaveURL(/\/en\/overview/);
-    await expect(page.getByTestId('active-workspace')).toContainText(customer.workspaceName);
+    // D-302 — the rail names the brand, not the workspace; landing inside the
+    // business is the overview rendering with its brand identity.
+    await expect(page.getByTestId('active-brand').first()).toBeVisible();
   });
 });
 
@@ -509,7 +515,10 @@ test.describe('settings save through the tenant-scoped path', () => {
     await page.click('[data-testid="settings-save"]');
 
     await expect(page.getByTestId('success-banner')).toBeVisible();
-    await expect(page.getByTestId('active-workspace')).toContainText(renamed);
+    // D-302 — the business name is no longer a rail card; it is read back from
+    // the saved settings themselves.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await expect(page.locator('#name')).toHaveValue(renamed);
 
     // Put the name back, so a re-run starts from the same state.
     await page.fill('#name', customer.workspaceName);
@@ -550,7 +559,7 @@ test.describe('bilingual: Arabic RTL and English LTR', () => {
       await signIn(page, customer.email, customer.password, locale.code);
       await enterWorkspace(page, customer.workspaceSlug, locale.code);
       await expect(page.locator('html')).toHaveAttribute('dir', locale.dir);
-      await expect(page.getByTestId('active-workspace')).toBeVisible();
+      await expect(page.getByTestId('active-brand').first()).toBeVisible();
     });
   }
 

@@ -39,10 +39,12 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
   await page.waitForURL(new RegExp(`/${locale}/overview$`));
 }
 
-const RUN = 'e2e-d292';
-const SUMMARY = `Teach first. ${RUN}`;
-const THEME = `Signs your cat is unwell ${RUN}`;
-const PROPOSAL_THEME = `Proposal theme ${RUN}`;
+// The suite's rows are known by their idempotency key, never by a tag in the
+// text: what the reader sees is a plan, not a test marker (D-306).
+const KEY_PREFIX = 'e2e-strategy-d292-';
+const SUMMARY = 'Teach first, sell second.';
+const THEME = 'Signs your cat is unwell';
+const PROPOSAL_THEME = 'Questions owners ask at the clinic';
 
 async function insight(status: 'ACCEPTED' | 'NEW', theme: string): Promise<string> {
   const loaded = credentials();
@@ -97,7 +99,7 @@ async function insight(status: 'ACCEPTED' | 'NEW', theme: string): Promise<strin
         periodStart: new Date(now.getTime() - 30 * 86_400_000),
         periodEnd: now,
         ...(status === 'ACCEPTED' ? { reviewedAt: now } : {}),
-        idempotencyKey: `e2e-strategy-${randomUUID()}`,
+        idempotencyKey: `${KEY_PREFIX}${randomUUID()}`,
       },
       select: { id: true },
     });
@@ -122,17 +124,16 @@ test.beforeAll(async () => {
     brandId: brandFixtures(loaded).primaryBrandId,
     type: 'STRATEGY' as const,
   };
-  const summaryOf = (body: unknown) =>
-    ((body as { summary?: { en?: string } } | null)?.summary?.en ?? '') as string;
+  const oursKey = (key: string | null) => key?.startsWith(KEY_PREFIX) === true;
   const existing = await withPlatformPrisma((prisma) =>
     prisma.insight.findMany({
       where: { ...where, status: { in: ['ACCEPTED', 'NEW', 'SEEN'] } },
-      select: { id: true, status: true, body: true },
+      select: { id: true, status: true, idempotencyKey: true },
     }),
   );
   // Another plan on screen would not be this suite's: retire it.
   const foreign = existing
-    .filter((row) => row.status === 'ACCEPTED' && summaryOf(row.body) !== SUMMARY)
+    .filter((row) => row.status === 'ACCEPTED' && !oursKey(row.idempotencyKey))
     .map((row) => row.id);
   if (foreign.length > 0) {
     await withPlatformPrisma((prisma) =>
@@ -142,7 +143,7 @@ test.beforeAll(async () => {
       }),
     );
   }
-  const ours = existing.filter((row) => summaryOf(row.body) === SUMMARY);
+  const ours = existing.filter((row) => oursKey(row.idempotencyKey));
   if (!ours.some((row) => row.status === 'ACCEPTED')) await insight('ACCEPTED', THEME);
   if (!ours.some((row) => row.status !== 'ACCEPTED')) await insight('NEW', PROPOSAL_THEME);
 });
@@ -154,7 +155,7 @@ test.describe('D-292 · the strategy reads as a plan', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/strategy`);
     await expect(page.getByTestId('strategy-objective')).toContainText('Your strategy');
-    await expect(page.getByTestId('strategy-summary')).toContainText(`Teach first. ${RUN}`);
+    await expect(page.getByTestId('strategy-summary')).toContainText(SUMMARY);
     await expect(page.getByTestId('strategy-pillars')).toContainText('Education');
     await expect(page.getByTestId('strategy-pillars')).toContainText('60%');
     await expect(page.getByTestId('strategy-channels')).toContainText('70%');

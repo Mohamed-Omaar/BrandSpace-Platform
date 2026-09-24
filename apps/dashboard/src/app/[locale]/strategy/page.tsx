@@ -18,7 +18,12 @@ import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { copilotHref } from '../../../server/copilot-surface';
-import { GOAL_ITEM_KEY, goalFromTitle, goalLabels } from '../../../server/setup-wizard-state';
+import {
+  GOAL_ITEM_KEY,
+  campaignObjectiveFor,
+  goalFromTitle,
+  goalLabels,
+} from '../../../server/setup-wizard-state';
 import {
   campaignHref,
   contentHref,
@@ -29,6 +34,7 @@ import {
 } from '../../../server/strategy-view';
 import {
   evidenceLabel,
+  evidenceRefs,
   optionalMessage,
   statusMessage,
   translator,
@@ -169,7 +175,7 @@ export default async function StrategyPage({
   const platformName = (key: string) => optionalMessage(locale, `content.platform.${key}`) ?? key;
   const refs = (rationale: Rationale) =>
     rationale.evidenceRefs.length > 0
-      ? ` · ${t('strategy.rests')} ${rationale.evidenceRefs.map((ref) => `e${ref}`).join(', ')}`
+      ? ` · ${t('strategy.rests')} ${evidenceRefs(locale, rationale.evidenceRefs)}`
       : '';
   const copilot = may('copilot.use') ? copilotHref(locale, 'strategy') : null;
   const brainHref = `/${locale}/brand-brain`;
@@ -390,7 +396,7 @@ export default async function StrategyPage({
                               locale,
                               week,
                               channels: leadingChannels(plan),
-                              objective: firstGoal,
+                              objective: campaignObjectiveFor(firstGoal),
                             })}
                             style={buttonStyle('neutral', 'sm')}
                             className={buttonClass('neutral')}
@@ -688,7 +694,7 @@ function EvidenceList({
     <ul style={{ ...listStyle, gap: spacingTokens['3xs'] }} data-testid="insight-evidence">
       {rows.map((row) => (
         <li key={row.id} style={metaStyle}>
-          <strong style={{ color: colorTokens.textPrimary }}>e{row.ordinal}</strong>{' '}
+          <strong style={{ color: colorTokens.textPrimary }}>{row.ordinal}.</strong>{' '}
           {row.metricKey
             ? t(`analytics.metric.${row.metricKey}` as MessageKey)
             : evidenceLabel(locale, row.labelKey)}

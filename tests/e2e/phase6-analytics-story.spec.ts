@@ -35,9 +35,9 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 }
 
 const TAG = 'e2e-d293';
-const CHANGE = `Arabic educational posts drew more saves. ${TAG}`;
-const CLAIM = `Saves rose in the same weeks educational posts went out. ${TAG}`;
-const TRY = `Plan two more educational carousels next month. ${TAG}`;
+const CHANGE = 'Arabic educational posts drew more saves.';
+const CLAIM = 'Saves rose in the same weeks educational posts went out.';
+const TRY = 'Plan two more educational carousels next month.';
 let insightId = '';
 
 test.beforeAll(async () => {
@@ -49,10 +49,19 @@ test.beforeAll(async () => {
       where: { workspaceId, brandId, type: 'ANALYTICS_EXPLANATION', idempotencyKey: TAG },
       select: { id: true },
     });
+    // The texts are what a customer would read — the tag is only the
+    // idempotency key, never visible copy (D-306) — so an existing row is
+    // rewritten to them too.
+    const body = {
+      summary: { en: 'Education carried the month.', ar: 'التعليم قاد الشهر.' },
+      notableChanges: [{ evidenceRefs: [1], text: { en: CHANGE, ar: CHANGE } }],
+      claims: [{ evidenceRefs: [1], text: { en: CLAIM, ar: CLAIM } }],
+      recommendations: [{ evidenceRefs: [1], text: { en: TRY, ar: TRY } }],
+    };
     if (existing) {
       await prisma.insight.update({
         where: { id: existing.id },
-        data: { status: 'NEW', createdAt: new Date() },
+        data: { status: 'NEW', createdAt: new Date(), body },
       });
       return existing.id;
     }
@@ -65,12 +74,7 @@ test.beforeAll(async () => {
         status: 'NEW',
         basis: 'OWN_PERFORMANCE',
         title: { en: 'Why this period moved', ar: 'لماذا تحركت هذه الفترة' },
-        body: {
-          summary: { en: `Education carried the month. ${TAG}`, ar: `التعليم قاد الشهر. ${TAG}` },
-          notableChanges: [{ evidenceRefs: [1], text: { en: CHANGE, ar: CHANGE } }],
-          claims: [{ evidenceRefs: [1], text: { en: CLAIM, ar: CLAIM } }],
-          recommendations: [{ evidenceRefs: [1], text: { en: TRY, ar: TRY } }],
-        },
+        body,
         periodStart: new Date(now.getTime() - 42 * 86_400_000),
         periodEnd: now,
         idempotencyKey: TAG,
@@ -103,7 +107,9 @@ test.describe('D-293 · analytics tells the story first', () => {
     await expect(page.getByTestId('analytics-why')).toContainText('not proof');
     const attempt = page.getByTestId('analytics-try-0');
     await expect(attempt).toContainText(TRY);
-    await expect(attempt).toContainText('e1');
+    // A citation in words, never the store's `e1` shorthand (D-306).
+    await expect(attempt).toContainText('evidence 1');
+    await expect(attempt).not.toContainText('e1');
 
     // The story is above the numbers, and the export is last.
     const order = await page.evaluate(() => {

@@ -208,7 +208,8 @@ test.describe('the Asset Library', () => {
     // rather than guessing.
     await dialog.getByRole('button', { name: 'Create' }).click();
     await page.waitForURL(new RegExp('/en/assets'));
-    await expect(page.getByTestId('assets-taxonomy')).toContainText(folderName);
+    // D-305 — folders are a location with cards, not a row of filter chips.
+    await expect(page.getByTestId('assets-folders')).toContainText(folderName);
   });
 });
 

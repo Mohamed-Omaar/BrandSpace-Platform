@@ -85,6 +85,9 @@ const OBJECTIVE_TO_GOAL: Readonly<Record<string, PostGoal>> = {
   LAUNCH: 'LAUNCH',
   TRAFFIC: 'PROMOTE',
   RETENTION: 'ENGAGE',
+  // D-303: a steady rhythm is kept by posts people answer; authority is earned by teaching.
+  CONSISTENCY: 'ENGAGE',
+  AUTHORITY: 'EDUCATE',
 };
 
 export function goalForObjective(objective: string | null | undefined): PostGoal | null {

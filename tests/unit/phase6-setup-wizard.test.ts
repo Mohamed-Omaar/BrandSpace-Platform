@@ -8,6 +8,8 @@ import {
   GOAL_ITEM_KEY,
   GOAL_KEY_PREFIX,
   SETUP_GOALS,
+  CAMPAIGN_OBJECTIVE_GOALS,
+  campaignObjectiveFor,
   SETUP_STEPS,
   goalFromTitle,
   goalKnowledge,
@@ -155,16 +157,29 @@ describe('D-277 §6 · the recommended first action', () => {
 });
 
 describe('D-277 §6 · the first goal lives in the brand’s strategy memory', () => {
-  it('the options are the product’s own campaign objectives', () => {
+  /*
+   * D-303 — two goals (consistency, authority) are goals and not campaign
+   * objectives. They are offered, stored as goals, and NEVER mapped onto an
+   * objective the customer did not choose.
+   */
+  it('maps a goal onto a campaign objective only when it IS one', () => {
     const schema = read('packages/database/prisma/schema.prisma');
     const objectives = /enum CampaignObjective \{([^}]*)\}/.exec(schema)?.[1] ?? '';
-    for (const goal of SETUP_GOALS) expect(objectives).toContain(goal);
+    for (const goal of CAMPAIGN_OBJECTIVE_GOALS) expect(objectives).toContain(goal);
+    for (const goal of SETUP_GOALS) {
+      const mapped = campaignObjectiveFor(goal);
+      if (mapped) expect(objectives).toContain(mapped);
+    }
+    expect(campaignObjectiveFor('AUTHORITY')).toBeNull();
+    expect(campaignObjectiveFor('CONSISTENCY')).toBeNull();
+    expect(campaignObjectiveFor('LEADS')).toBe('LEADS');
   });
 
   it('only a known goal or "unsure" is accepted', () => {
     expect(setupGoalFrom('LEADS')).toBe('LEADS');
+    expect(setupGoalFrom('AUTHORITY')).toBe('AUTHORITY');
     expect(setupGoalFrom('unsure')).toBe('unsure');
-    expect(setupGoalFrom('AUTHORITY')).toBeNull();
+    expect(setupGoalFrom('GROWTH')).toBeNull();
     expect(setupGoalFrom(null)).toBeNull();
   });
 

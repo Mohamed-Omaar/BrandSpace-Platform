@@ -372,6 +372,7 @@ export function TopbarLink({
   indicator,
   current = false,
   testId,
+  showLabel = false,
 }: {
   readonly href: string;
   readonly label: string;
@@ -380,6 +381,14 @@ export function TopbarLink({
   /** The reader is already on this destination. */
   readonly current?: boolean;
   readonly testId: string;
+  /**
+   * THE LABEL ON SCREEN, not only in `aria-label` (Phase 6 final acceptance,
+   * D-304). For the one control whose icon a new customer cannot be expected
+   * to decode — the Copilot's spark. Same 38px height and radius as the
+   * squares, the product's Copilot tint (lavender surface, pressed-purple
+   * text) and the glyph kept beside the word.
+   */
+  readonly showLabel?: boolean;
 }) {
   const active = indicator !== null && indicator !== undefined && indicator.count > 0;
   const name = active ? `${label}, ${indicator.label}` : label;
@@ -387,27 +396,33 @@ export function TopbarLink({
     <Link
       href={href}
       className="bs-control bs-pressable"
-      aria-label={name}
+      aria-label={showLabel ? undefined : name}
       title={name}
       aria-current={current ? 'page' : undefined}
       data-testid={testId}
       data-indicator={active ? String(indicator.count) : undefined}
       style={{
         position: 'relative',
-        display: 'grid',
+        display: showLabel ? 'inline-flex' : 'grid',
         placeItems: 'center',
-        inlineSize: layoutTokens.iconButton,
+        alignItems: 'center',
+        gap: showLabel ? spacingTokens['3xs'] : undefined,
+        inlineSize: showLabel ? 'auto' : layoutTokens.iconButton,
+        paddingInline: showLabel ? '0.75rem' : undefined,
         blockSize: layoutTokens.iconButton,
         flexShrink: 0,
         borderRadius: radiusTokens.control,
         border: '1px solid transparent',
-        color: colorTokens.textPrimary,
+        background: showLabel ? colorTokens.surfaceLavenderStrong : undefined,
+        color: showLabel ? colorTokens.brandPurplePressed : colorTokens.textPrimary,
         textDecoration: 'none',
+        ...(showLabel ? typographyTokens.button : {}),
       }}
     >
       <span aria-hidden="true" style={{ display: 'inline-flex' }}>
         <Glyph glyph={glyph} />
       </span>
+      {showLabel ? <span data-testid={`${testId}-label`}>{label}</span> : null}
       {active ? (
         /* `.notification-dot { right: 8px; top: 8px; width: 5px; height: 5px }`. */
         <span

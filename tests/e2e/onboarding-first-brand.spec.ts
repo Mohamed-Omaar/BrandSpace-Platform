@@ -108,13 +108,16 @@ test.describe('onboarding reaches a first real brand', () => {
     const email = await signUpVerifyAndSignIn(page);
     await createWorkspace(page);
 
-    // The wizard is showing, on the brand step, and only the workspace is done.
+    // The wizard is showing, on the brand step. D-303: the business account
+    // already exists and is not a step the customer sees — the journey is five
+    // steps, and it says where the reader is in it.
     const wizard = page.getByTestId('setup-wizard');
     await expect(wizard).toHaveAttribute('data-view', 'brand');
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
-      'data-complete',
-      'true',
-    );
+    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveCount(0);
+    await expect(page.getByTestId('setup-stepper').locator('li')).toHaveCount(5);
+    await expect(page.getByTestId('setup-progress-text')).toHaveText('Step 1 of 5 · Your brand');
+    // Focused: the daily navigation steps aside during first-run setup.
+    await expect(page.getByTestId('topbar-create')).toHaveCount(0);
     const brandStep = page.locator('[data-testid="onboarding-step-brand"]');
     await expect(brandStep).toHaveAttribute('data-complete', 'false');
 

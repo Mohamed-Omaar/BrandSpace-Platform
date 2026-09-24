@@ -118,6 +118,11 @@ export class ContentLibraryService {
      */
     unscheduledOnly?: boolean | undefined;
     limit?: number | undefined;
+    /**
+     * Rows to skip, for a paged library (Phase 6 final acceptance, D-305).
+     * Bounded, so a crafted address cannot ask the database to walk a table.
+     */
+    offset?: number | undefined;
   }): Promise<(ContentItem & { variants: ContentVariant[] })[]> {
     return this.db.contentItem.findMany({
       where: {
@@ -153,8 +158,9 @@ export class ContentLibraryService {
           : {}),
       },
       include: { variants: { orderBy: { platformKey: 'asc' } } },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
       take: Math.min(input.limit ?? 50, 200),
+      skip: Math.max(0, Math.min(Math.trunc(input.offset ?? 0), 10_000)),
     });
   }
 

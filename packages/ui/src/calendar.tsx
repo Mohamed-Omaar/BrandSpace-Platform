@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { Button, ButtonRow, IconButton } from './primitives';
 import { ChevronEndIcon, ChevronStartIcon } from './icons';
@@ -365,6 +365,16 @@ export function ContentCalendar({
   readonly emptyAction?: ReactNode;
 }) {
   const [view, setView] = useState<CalendarView>('month');
+  /*
+   * D-306 — AGENDA FIRST ON A PHONE. Below the wide breakpoint the grid is
+   * never drawn, so the switcher now SAYS Agenda there instead of claiming a
+   * month view the reader cannot see. Month and Week stay one tap away.
+   */
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      setView('agenda');
+    }
+  }, []);
 
   const viewButton = (value: CalendarView, label: string) => (
     <button

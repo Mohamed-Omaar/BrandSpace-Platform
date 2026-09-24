@@ -14,6 +14,7 @@ import {
   Dialog,
   Field,
   IconTile,
+  FolderIcon,
   ImageIcon,
   LinkTabs,
   SideSheet,
@@ -137,6 +138,8 @@ export interface AssetLibraryViewProps {
   readonly cards: readonly AssetCardData[];
   readonly hasMore: boolean;
   readonly nextCursor: string | null;
+  /** D-305 — the reader is past the first page, so the first is offered back. */
+  readonly pastFirstPage?: boolean | undefined;
   readonly folders: readonly FolderData[];
   readonly tags: ReadonlyArray<{ tag: string; count: number }>;
   readonly storageLimitGb: number | null;
@@ -293,6 +296,8 @@ function filterHref(
 export function AssetLibraryView(props: AssetLibraryViewProps) {
   const t = translator(props.locale);
   const { filters, can, actions } = props;
+  /** D-305 — the standard business: one brand, so no brand or shelf choice to make. */
+  const singleBrand = props.brands.length <= 1;
   const [uploadOpen, setUploadOpen] = useState(props.openUpload === true && props.can.upload);
   const [folderOpen, setFolderOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -489,7 +494,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             href: filterHref(props.locale, filters, { view: undefined }),
             label: t('assets.view.all'),
           },
-          ...ASSET_VIEWS.map((view) => ({
+          ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand).map((view) => ({
             id: view,
             href: filterHref(props.locale, filters, {
               view,
@@ -557,18 +562,42 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               alignItems: 'start',
             }}
           >
-            {/* One visual group per decision. This keeps scope/type/status scannable
-                instead of rendering them as one long sentence of chips. */}
-            <FilterGroup
-              label={t('assets.filter.context')}
-              allLabel={t('assets.filter.allAssets')}
-              current={filters.scope}
-              options={[
-                { value: 'shared', label: t('assets.filter.shared') },
-                ...props.brands.map((brand) => ({ value: brand.id, label: brand.name })),
-              ]}
-              hrefFor={(value) => filterHref(props.locale, filters, { scope: value })}
-            />
+            {/*
+              D-305 — ONE BRAND, NO SCOPE FILTER. A single-brand business sees its
+              brand's files (with the shared shelf) and no "Flow 54f8b0 · Flow …"
+              chip wall. Several brands get ONE compact select, not a chip per
+              brand.
+            */}
+            {singleBrand ? null : (
+              <label
+                style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}
+                data-testid="assets-brand-filter"
+              >
+                <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>
+                  {t('assets.filter.context')}
+                </span>
+                <select
+                  className={`${CONTROL_CLASS} bs-select`}
+                  style={inputStyle()}
+                  value={filters.scope ?? ''}
+                  onChange={(event) =>
+                    router.push(
+                      filterHref(props.locale, filters, {
+                        scope: event.target.value === '' ? undefined : event.target.value,
+                      }),
+                    )
+                  }
+                >
+                  <option value="">{t('assets.filter.allAssets')}</option>
+                  <option value="shared">{t('assets.filter.shared')}</option>
+                  {props.brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <FilterGroup
               label={t('assets.filter.kind')}
@@ -591,6 +620,21 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               }))}
               hrefFor={(value) => filterHref(props.locale, filters, { status: value })}
             />
+
+            {/* Tags are metadata to filter by, not places: they sit with the
+                other filters, the most-used first, never beside the folders. */}
+            {props.tags.length > 0 ? (
+              <FilterGroup
+                label={t('assets.tags')}
+                allLabel={t('assets.filter.all')}
+                current={filters.tag}
+                options={props.tags.slice(0, TAG_LIMIT).map((facet) => ({
+                  value: facet.tag,
+                  label: `${facet.tag} (${facet.count})`,
+                }))}
+                hrefFor={(value) => filterHref(props.locale, filters, { tag: value })}
+              />
+            ) : null}
           </div>
         </div>
       </Card>
@@ -608,40 +652,14 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         data-testid="assets-layout"
       >
         <Stack gap={spacingTokens.md}>
-          {(props.folders.length > 0 || props.tags.length > 0) && (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: spacingTokens.sm,
-                alignItems: 'center',
-              }}
-              data-testid="assets-taxonomy"
-            >
-              <FilterGroup
-                label={t('assets.folders')}
-                allLabel={t('assets.allFiles')}
-                current={filters.folder}
-                options={props.folders.map((folder) => ({
-                  value: folder.id,
-                  label: folder.name,
-                }))}
-                hrefFor={(value) => filterHref(props.locale, filters, { folder: value })}
-              />
-              {props.tags.length > 0 ? (
-                <FilterGroup
-                  label={t('assets.tags')}
-                  allLabel={t('assets.filter.all')}
-                  current={filters.tag}
-                  options={props.tags.map((facet) => ({
-                    value: facet.tag,
-                    label: `${facet.tag} (${facet.count})`,
-                  }))}
-                  hrefFor={(value) => filterHref(props.locale, filters, { tag: value })}
-                />
-              ) : null}
-            </div>
-          )}
+          {props.folders.length > 0 ? (
+            <FolderBrowser
+              folders={props.folders}
+              current={filters.folder}
+              hrefFor={(folder) => filterHref(props.locale, filters, { folder })}
+              t={t}
+            />
+          ) : null}
 
           {props.cards.length === 0 ? (
             <StateMessage
@@ -748,6 +766,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     locale={props.locale}
                     href={filterHref(props.locale, filters, { asset: asset.id } as never)}
                     bulkFormId={canBulk ? bulkFormId : null}
+                    showShared={!singleBrand}
                     t={t}
                   />
                 ))}
@@ -755,29 +774,50 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             </>
           )}
 
-          {props.hasMore && props.nextCursor ? (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <a
-                href={filterHref(props.locale, filters, {
-                  cursor: props.nextCursor,
-                } as never)}
-                className={CONTROL_CLASS}
-                data-testid="assets-load-more"
-                style={{
-                  // The same 24px floor as the filter links (WCAG 2.2 AA 2.5.8).
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  minBlockSize: '24px',
-                  ...typographyTokens.label,
-                  color: colorTokens.brandPurple,
-                  textDecoration: 'none',
-                  padding: `${spacingTokens.xs} ${spacingTokens.md}`,
-                  borderRadius: radiusTokens.md,
-                }}
-              >
-                {t('assets.loadMore')}
-              </a>
-            </div>
+          {props.pastFirstPage || (props.hasMore && props.nextCursor) ? (
+            <nav
+              aria-label={t('assets.paging')}
+              data-testid="assets-paging"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                gap: spacingTokens.sm,
+              }}
+            >
+              {props.pastFirstPage ? (
+                <Link
+                  href={filterHref(props.locale, filters, {})}
+                  className={buttonClass('neutral')}
+                  style={buttonStyle('neutral', 'sm')}
+                  data-testid="assets-first-page"
+                >
+                  {t('assets.firstPage')}
+                </Link>
+              ) : null}
+              {props.hasMore && props.nextCursor ? (
+                <a
+                  href={filterHref(props.locale, filters, {
+                    cursor: props.nextCursor,
+                  } as never)}
+                  className={CONTROL_CLASS}
+                  data-testid="assets-load-more"
+                  style={{
+                    // The same 24px floor as the filter links (WCAG 2.2 AA 2.5.8).
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    minBlockSize: '24px',
+                    ...typographyTokens.label,
+                    color: colorTokens.brandPurple,
+                    textDecoration: 'none',
+                    padding: `${spacingTokens.xs} ${spacingTokens.md}`,
+                    borderRadius: radiusTokens.md,
+                  }}
+                >
+                  {t('assets.loadMore')}
+                </a>
+              ) : null}
+            </nav>
           ) : null}
         </Stack>
       </div>
@@ -875,6 +915,29 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         <form action={actions.createFolder}>
           <input type="hidden" name="locale" value={props.locale} />
           <Stack gap={spacingTokens.md}>
+            {/*
+              D-305 — WHERE THE FOLDER GOES. Opened inside a folder, the new one
+              goes inside it by default; any folder (or the top level) can be
+              chosen instead. The tree is `parentFolderId`, and the service
+              refuses a parent deeper than the configured maximum.
+            */}
+            <Field htmlFor={`${folderFieldId}-parent`} label={t('assets.folderParent')}>
+              <select
+                id={`${folderFieldId}-parent`}
+                name="parentFolderId"
+                defaultValue={filters.folder ?? ''}
+                className={`${CONTROL_CLASS} bs-select`}
+                style={inputStyle()}
+                data-testid="assets-folder-parent"
+              >
+                <option value="">{t('assets.folderRoot')}</option>
+                {folderTree(props.folders).map(({ folder, depth }) => (
+                  <option key={folder.id} value={folder.id}>
+                    {`${'— '.repeat(depth)}${folder.name}`}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field htmlFor={`${folderFieldId}-name`} label={t('assets.folderName')}>
               <input
                 id={`${folderFieldId}-name`}
@@ -1023,6 +1086,7 @@ function AssetTile({
   locale,
   href,
   bulkFormId,
+  showShared,
   t,
 }: {
   readonly asset: AssetCardData;
@@ -1030,6 +1094,8 @@ function AssetTile({
   readonly href: string;
   /** The bulk form this tile's checkbox belongs to, when bulk actions exist. */
   readonly bulkFormId: string | null;
+  /** D-305 — "Shared" means something only when there is more than one brand. */
+  readonly showShared: boolean;
   readonly t: (key: MessageKey) => string;
 }) {
   const stateLabel = t(STATE_LABEL[asset.status]);
@@ -1149,7 +1215,9 @@ function AssetTile({
           {asset.source === 'AI_GENERATED' ? (
             <StatusBadge label={t('assets.badge.ai')} tone="info" />
           ) : null}
-          {asset.shared ? <StatusBadge label={t('assets.filter.shared')} tone="neutral" /> : null}
+          {asset.shared && showShared ? (
+            <StatusBadge label={t('assets.filter.shared')} tone="neutral" />
+          ) : null}
           {asset.rights === 'expiring' ? (
             <StatusBadge label={t('assets.badge.rightsExpiring')} tone="warning" />
           ) : null}
@@ -1611,5 +1679,185 @@ function SingleAction({
         {label}
       </Button>
     </form>
+  );
+}
+
+/** The most-used tags shown as filters; the rest stay searchable by name. */
+const TAG_LIMIT = 12;
+
+/** The folder tree flattened in display order, each with its depth. */
+function folderTree(
+  folders: readonly FolderData[],
+): readonly { folder: FolderData; depth: number }[] {
+  const out: { folder: FolderData; depth: number }[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    for (const folder of folders
+      .filter((candidate) => candidate.parentFolderId === parent)
+      .sort((a, b) => a.name.localeCompare(b.name))) {
+      out.push({ folder, depth });
+      // Bounded by the tree itself; a cycle is impossible in a parent pointer
+      // the service validates, and the guard below makes it harmless anyway.
+      if (depth < 16) walk(folder.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+/**
+ * FOLDERS THAT LOOK LIKE FOLDERS (Phase 6 final acceptance, D-305).
+ *
+ * The library's `AssetFolder` tree was shown as one row of filter chips, so a
+ * real hierarchy read as random filters. This is a location — a breadcrumb
+ * from "Media Library" to where the reader is — and the folders INSIDE that
+ * location as cards; the files below are the ones in it. An APPROVED
+ * DESIGN-SYSTEM EXTENSION: `Card`-like surfaces, the existing type scale and
+ * a new stroke glyph in the icon family.
+ */
+function FolderBrowser({
+  folders,
+  current,
+  hrefFor,
+  t,
+}: {
+  readonly folders: readonly FolderData[];
+  readonly current: string | undefined;
+  readonly hrefFor: (folder: string | undefined) => string;
+  readonly t: (key: MessageKey) => string;
+}) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const here = current ? (byId.get(current) ?? null) : null;
+  const trail: FolderData[] = [];
+  for (
+    let at = here;
+    at && trail.length < 16;
+    at = at.parentFolderId ? (byId.get(at.parentFolderId) ?? null) : null
+  ) {
+    trail.unshift(at);
+  }
+  const inside = folders
+    .filter((folder) => folder.parentFolderId === (here?.id ?? null))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const childCount = (id: string) =>
+    folders.filter((folder) => folder.parentFolderId === id).length;
+
+  return (
+    <section data-testid="assets-folders" style={{ display: 'grid', gap: spacingTokens.sm }}>
+      <nav aria-label={t('assets.location')} data-testid="assets-breadcrumbs">
+        <ol
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: spacingTokens.xs,
+            ...typographyTokens.bodySm,
+          }}
+        >
+          <li>
+            {here ? (
+              <Link href={hrefFor(undefined)} data-testid="assets-crumb-root">
+                {t('assets.root')}
+              </Link>
+            ) : (
+              <strong aria-current="page">{t('assets.root')}</strong>
+            )}
+          </li>
+          {trail.map((folder, index) => (
+            <li
+              key={folder.id}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: spacingTokens.xs }}
+            >
+              <span aria-hidden="true" style={{ color: colorTokens.textMuted }}>
+                /
+              </span>
+              {index === trail.length - 1 ? (
+                <strong aria-current="page" data-testid="assets-crumb-current">
+                  {folder.name}
+                </strong>
+              ) : (
+                <Link href={hrefFor(folder.id)}>{folder.name}</Link>
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      {inside.length > 0 ? (
+        <ul
+          aria-label={t('assets.folders')}
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(11rem, 100%), 1fr))',
+            gap: spacingTokens.sm,
+          }}
+        >
+          {inside.map((folder) => {
+            const count = childCount(folder.id);
+            return (
+              <li key={folder.id}>
+                <Link
+                  href={hrefFor(folder.id)}
+                  className="bs-pressable"
+                  data-testid={`assets-folder-${folder.id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacingTokens.sm,
+                    padding: spacingTokens.sm,
+                    borderRadius: radiusTokens.lg,
+                    background: colorTokens.surface,
+                    border: `1px solid ${colorTokens.border}`,
+                    color: colorTokens.textPrimary,
+                    textDecoration: 'none',
+                    minInlineSize: 0,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-grid',
+                      placeItems: 'center',
+                      inlineSize: '2.25rem',
+                      blockSize: '2.25rem',
+                      flexShrink: 0,
+                      borderRadius: radiusTokens.md,
+                      background: colorTokens.surfaceLavender,
+                      color: colorTokens.brandPurplePressed,
+                    }}
+                  >
+                    <FolderIcon size={18} />
+                  </span>
+                  <span style={{ display: 'grid', minInlineSize: 0 }}>
+                    <span
+                      style={{
+                        ...typographyTokens.label,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {folder.name}
+                    </span>
+                    {count > 0 ? (
+                      <span
+                        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                      >
+                        {t('assets.subfolders').replace('{count}', String(count))}
+                      </span>
+                    ) : null}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </section>
   );
 }

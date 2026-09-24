@@ -88,6 +88,14 @@ export default async function ContentPage({
   const language =
     single('language') === 'AR' ? 'AR' : single('language') === 'EN' ? 'EN' : undefined;
   const view = single('view') === 'list' ? 'list' : 'grid';
+  /*
+   * D-305 — A BOUNDED, PAGED LIBRARY. 48 posts a page; the 49th read only says
+   * whether there is a next page. A page number past the end shows an empty
+   * page with the way back, never an error.
+   */
+  const PAGE_SIZE = 48;
+  const rawPage = Number.parseInt(single('page') ?? '1', 10);
+  const pageNumber = Number.isFinite(rawPage) ? Math.min(Math.max(rawPage, 1), 200) : 1;
 
   const brands = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.brand.findMany({
@@ -106,7 +114,7 @@ export default async function ContentPage({
   const effectiveBrand = brandFilterFor(brandContext);
   const now = systemClock.now();
 
-  const { items, counts, campaigns, notes, owners } = await inContentStudio(
+  const { items, hasMore, counts, campaigns, notes, owners } = await inContentStudio(
     workspace.workspaceId,
     async (services) => {
       const library = await services.library();
@@ -120,7 +128,8 @@ export default async function ContentPage({
           ...(format ? { contentType: format } : {}),
           ...(platform ? { platformKey: platform } : {}),
           ...(language ? { locale: language } : {}),
-          limit: 48,
+          limit: PAGE_SIZE + 1,
+          offset: (pageNumber - 1) * PAGE_SIZE,
         }),
         library.countsByStatus({
           ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
@@ -166,7 +175,8 @@ export default async function ContentPage({
         }),
       ]);
       return {
-        items: listed,
+        items: listed.slice(0, PAGE_SIZE),
+        hasMore: listed.length > PAGE_SIZE,
         counts: byStatus,
         campaigns: campaignRows,
         notes: new Map(noteRows.map((row) => [row.contentItemId, row._count._all])),
@@ -366,6 +376,7 @@ export default async function ContentPage({
         view={view}
         ideas={ideas}
         duplicateToken={randomUUID()}
+        paging={{ page: pageNumber, hasMore }}
         can={{ create: may('content.create'), submit: may('content.submit') }}
         options={{
           brands:

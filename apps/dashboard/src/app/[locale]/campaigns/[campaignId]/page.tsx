@@ -427,7 +427,12 @@ export default async function CampaignDetailPage({
           label={t('campaigns.room.tabs')}
           testId="campaign-tabs"
           currentId={tab}
-          tabs={TABS.map((id) => ({
+          tabs={TABS.filter(
+            // ACTIVITY IS A FOOTNOTE, NOT A DESTINATION (D-306 §24): its latest
+            // entries sit in the Overview, and the full trail stays one link
+            // away at `?tab=activity` — a tab only while it is the one open.
+            (id) => id !== 'activity' || tab === 'activity',
+          ).map((id) => ({
             id,
             href: tabHref(id),
             label: t(`campaigns.room.tab.${id}` as MessageKey),
@@ -529,7 +534,19 @@ export default async function CampaignDetailPage({
             ) : null}
 
             {activity.length > 0 ? (
-              <Card title={t('campaigns.room.recentActivity')} testId="campaign-recent-activity">
+              <Card
+                title={t('campaigns.room.recentActivity')}
+                testId="campaign-recent-activity"
+                actions={
+                  <Link
+                    href={tabHref('activity')}
+                    data-testid="campaign-all-activity"
+                    style={{ ...typographyTokens.caption, color: colorTokens.brandPurplePressed }}
+                  >
+                    {t('campaigns.room.allActivity')}
+                  </Link>
+                }
+              >
                 <ActivityTimeline entries={activity} />
               </Card>
             ) : null}

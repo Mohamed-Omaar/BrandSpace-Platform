@@ -24,7 +24,7 @@ import { detectAnomalies, type MetricAbsenceReason } from '@brandspace/analytics
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { evidenceRefs, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
 import { measuredChanges, parseExplanation, pickText } from '../../../server/analytics-story';
 import { explainPeriodAction } from './actions';
@@ -315,7 +315,7 @@ export default async function AnalyticsPage({
   const topPost = data.topPosts[0] ?? null;
   const explained = parseExplanation(data.explanation?.body ?? null);
   const cites = (refs: readonly number[]) =>
-    refs.length > 0 ? ` · ${t('strategy.rests')} ${refs.map((ref) => `e${ref}`).join(', ')}` : '';
+    refs.length > 0 ? ` · ${t('strategy.rests')} ${evidenceRefs(locale, refs)}` : '';
 
   return (
     <WorkspaceShell

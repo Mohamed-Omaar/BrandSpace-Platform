@@ -37,7 +37,7 @@ import { CustomerBanner, CustomerCard, WorkspaceShell } from '../../../component
 import { reviewCandidateAction, uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
 import { createSetupBrandAction, saveFirstGoalAction } from './actions';
-import { SetupStepper } from './setup-stepper';
+import { SetupProgress, SetupStepper } from './setup-stepper';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +114,16 @@ export default async function OnboardingPage({
   const reference = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? (statusMessage(error, locale, reference) ?? t('setup.error')) : null;
+
+  /*
+   * D-303 — THE CUSTOMER'S JOURNEY IS FIVE STEPS. The business account (the
+   * workspace, the tenant boundary) already exists by the time the wizard
+   * runs, so it is not a step the customer sees; the state model keeps it,
+   * complete by construction.
+   */
+  const journey = steps.filter((step) => step.key !== 'workspace');
+  const position =
+    view === 'done' ? journey.length : journey.findIndex((step) => step.key === view) + 1;
 
   const href = (target: SetupView) => `/${locale}/onboarding?step=${target}`;
   const stepLabel = (key: string) => t(`setup.step.${key}` as MessageKey);
@@ -211,6 +221,9 @@ export default async function OnboardingPage({
               <input
                 id="setup-brand-name"
                 name="name"
+                // D-303 — the business name the account was set up with; the
+                // brand is usually the business, and the field stays editable.
+                defaultValue={workspace.workspaceName}
                 required
                 minLength={2}
                 maxLength={120}
@@ -283,35 +296,52 @@ export default async function OnboardingPage({
                 </label>
               ))}
             </fieldset>
-            <Field
-              label={t('setup.brand.colours')}
-              htmlFor="setup-brand-colours"
-              hint={t('setup.brand.coloursHint')}
-            >
-              <input
-                id="setup-brand-colours"
-                name="colorPalette"
-                maxLength={120}
-                dir="ltr"
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-              />
-            </Field>
-            {may('assets.upload') ? (
-              <Field
-                label={t('setup.brand.logo')}
-                htmlFor="setup-brand-logo"
-                hint={t('setup.brand.logoHint')}
+            {/*
+              D-303 — the optional identity details sit behind one disclosure,
+              so the first step asks only for what the brand needs to exist.
+            */}
+            <details data-testid="setup-brand-optional">
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  ...typographyTokens.label,
+                  marginBlockEnd: spacingTokens.sm,
+                }}
               >
-                <input
-                  id="setup-brand-logo"
-                  name="logo"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ font: 'inherit', ...typographyTokens.bodySm }}
-                />
-              </Field>
-            ) : null}
+                {t('setup.brand.optionalDetails')}
+              </summary>
+              <div style={{ display: 'grid', gap: spacingTokens.md }}>
+                <Field
+                  label={t('setup.brand.colours')}
+                  htmlFor="setup-brand-colours"
+                  hint={t('setup.brand.coloursHint')}
+                >
+                  <input
+                    id="setup-brand-colours"
+                    name="colorPalette"
+                    maxLength={120}
+                    dir="ltr"
+                    className={CONTROL_CLASS}
+                    style={inputStyle()}
+                  />
+                </Field>
+                {may('assets.upload') ? (
+                  <Field
+                    label={t('setup.brand.logo')}
+                    htmlFor="setup-brand-logo"
+                    hint={t('setup.brand.logoHint')}
+                  >
+                    <input
+                      id="setup-brand-logo"
+                      name="logo"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      style={{ font: 'inherit', ...typographyTokens.bodySm }}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+            </details>
             <div>
               <button
                 type="submit"
@@ -463,6 +493,17 @@ export default async function OnboardingPage({
       area,
       items: candidates.filter((candidate) => candidate.area === area),
     })).filter((group) => group.items.length > 0);
+    /*
+     * D-303 — ONE AREA OPEN AT A TIME. Every area is a disclosure titled with
+     * its count; the one the reader just acted in (the review action returns
+     * `?area=`) stays open, otherwise the first. Nothing is decided for them —
+     * each fact is still accepted, edited or rejected one by one.
+     */
+    const requestedArea = typeof query['area'] === 'string' ? query['area'] : null;
+    const openArea = groups.some((group) => group.area === requestedArea)
+      ? requestedArea
+      : (groups[0]?.area ?? null);
+    const toReview = groups.reduce((total, group) => total + group.items.length, 0);
 
     body = (
       <CustomerCard
@@ -500,19 +541,43 @@ export default async function OnboardingPage({
           </>
         ) : (
           <>
-            <div style={{ display: 'grid', gap: spacingTokens.lg }}>
+            {note(
+              t('setup.review.summary')
+                .replace('{count}', String(toReview))
+                .replace('{areas}', String(groups.length)),
+              'setup-review-summary',
+            )}
+            <div style={{ display: 'grid', gap: spacingTokens.sm }}>
               {groups.map((group) => (
-                <section key={group.area} aria-labelledby={`setup-area-${group.area}`}>
-                  <h3
-                    id={`setup-area-${group.area}`}
-                    style={{ margin: `0 0 ${spacingTokens.sm}`, ...typographyTokens.cardTitle }}
+                <details
+                  key={group.area}
+                  open={group.area === openArea}
+                  data-testid={`setup-area-${group.area}`}
+                  style={{
+                    borderRadius: radiusTokens.lg,
+                    border: `1px solid ${colorTokens.border}`,
+                    padding: spacingTokens.sm,
+                  }}
+                >
+                  <summary
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: spacingTokens.xs,
+                      ...typographyTokens.cardTitle,
+                    }}
                   >
                     {t(`bb.area.${areaDefinition(group.area).messageKey}` as MessageKey)}
-                  </h3>
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                      {t('setup.review.toReview').replace('{count}', String(group.items.length))}
+                    </span>
+                  </summary>
                   <ul
                     style={{
                       listStyle: 'none',
-                      margin: 0,
+                      margin: `${spacingTokens.sm} 0 0`,
                       padding: 0,
                       display: 'grid',
                       gap: spacingTokens.sm,
@@ -652,7 +717,7 @@ export default async function OnboardingPage({
                       );
                     })}
                   </ul>
-                </section>
+                </details>
               ))}
             </div>
             {actions(skip('connect'))}
@@ -858,7 +923,7 @@ export default async function OnboardingPage({
     ];
     body = (
       <CustomerCard
-        title={t('setup.done.title')}
+        title={t('setup.done.title').replace('{brand}', brand.name)}
         description={t('setup.done.body')}
         testId="setup-done"
       >
@@ -895,6 +960,7 @@ export default async function OnboardingPage({
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
+      focus
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
@@ -903,9 +969,23 @@ export default async function OnboardingPage({
         data-view={view}
         style={{ display: 'grid', gap: spacingTokens.lg }}
       >
+        <SetupProgress
+          label={t('setup.stepsLabel')}
+          position={position}
+          total={journey.length}
+          text={
+            view === 'done'
+              ? t('setup.progress.complete')
+              : t('setup.progress.step')
+                  .replace('{n}', String(position))
+                  .replace('{total}', String(journey.length))
+                  .replace('{step}', stepLabel(view))
+          }
+          exit={{ href: `/${locale}/overview`, label: t('setup.progress.exit') }}
+        />
         <SetupStepper
           label={t('setup.stepsLabel')}
-          steps={steps}
+          steps={journey}
           view={view}
           hasBrand={brand !== null}
           href={href}

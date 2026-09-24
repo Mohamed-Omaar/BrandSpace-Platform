@@ -10,7 +10,6 @@ import {
   StateMessage,
   StatusBadge,
   colorTokens,
-  inputStyle,
   spacingTokens,
   typographyTokens,
   type CopilotLabels,
@@ -389,55 +388,26 @@ export function CopilotView({
         </Banner>
       ) : null}
 
-      <Card title={t('copilot.promptLabel')}>
-        <div style={{ display: 'grid', gap: spacingTokens.sm }}>
-          {/*
-            WHAT THIS CONVERSATION IS ABOUT, stated rather than implied: the
-            brand every step will act on, and the screen it was opened from.
-          */}
-          <p
-            data-testid="copilot-context"
-            style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-          >
-            {t('copilot.contextBrand').replace('{brand}', brand.name)}
-            {surface !== 'general'
-              ? ` · ${t('copilot.contextFrom').replace(
-                  '{screen}',
-                  tOr(`copilot.surface.${surface}`, surface),
-                )}`
-              : ''}
-            {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
-          </p>
-
-          <label style={{ display: 'grid', gap: '0.25rem' }}>
-            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-              {t('copilot.promptLabel')}
-            </span>
-            <input
-              className="bs-control"
-              style={inputStyle()}
-              value={request}
-              maxLength={2_000}
-              placeholder={t('copilot.promptPlaceholder')}
-              onChange={(event) => setRequest(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void propose();
-              }}
-              data-testid="copilot-request"
-            />
-          </label>
-
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={() => void propose()}
-            disabled={busy || request.trim().length === 0}
-            data-testid="copilot-propose"
-          >
-            {t('copilot.send')}
-          </Button>
-        </div>
-      </Card>
+      {/*
+        D-304 — ONE ASSISTANT, ONE COMPOSER. This used to be a card with its own
+        "What would you like to get done?" field above the conversation, whose
+        own composer then sat inert beneath it: two places to type one thing.
+        Now the header states what the conversation is about, the plan and its
+        results follow, and the one composer is the conversation's own.
+      */}
+      <p
+        data-testid="copilot-context"
+        style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+      >
+        {t('copilot.contextBrand').replace('{brand}', brand.name)}
+        {surface !== 'general'
+          ? ` · ${t('copilot.contextFrom').replace(
+              '{screen}',
+              tOr(`copilot.surface.${surface}`, surface),
+            )}`
+          : ''}
+        {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
+      </p>
 
       {plan && steps.length === 0 ? (
         <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
@@ -677,9 +647,15 @@ export function CopilotView({
           {...(proposedAction ? { proposedAction } : {})}
           onApprove={() => void confirm()}
           onReject={() => void reject()}
-          // The composer above is the real one; the shell's own field would be a
-          // second place to type the same thing.
-          disabled
+          composer={{
+            value: request,
+            onChange: setRequest,
+            onSubmit: () => void propose(),
+            busy,
+            maxLength: 2_000,
+            inputTestId: 'copilot-request',
+            submitTestId: 'copilot-propose',
+          }}
         />
       </Card>
     </div>

@@ -172,7 +172,7 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'expanded');
-    await expect(page.getByTestId('active-workspace')).toBeVisible();
+    await expect(page.getByTestId('active-brand')).toBeVisible();
   });
 
   test('a collapsed item explains itself on keyboard focus, not only on hover', async ({
@@ -243,9 +243,9 @@ test.describe('mobile navigation is a drawer, not a squeezed sidebar', () => {
     expect(focused).toBe('open-navigation');
   });
 
-  test('keeps the workspace context while navigating from the drawer', async ({ page }) => {
+  test('keeps the brand context while navigating from the drawer', async ({ page }) => {
     await signInAndEnterWorkspace(page);
-    const workspace = await page.getByTestId('active-workspace').textContent();
+    const brand = await page.getByTestId('active-brand').textContent();
 
     await page.click('[data-testid="open-navigation"]');
     // Scoped to the drawer: the sidebar renders the same link, and at this
@@ -254,7 +254,7 @@ test.describe('mobile navigation is a drawer, not a squeezed sidebar', () => {
     await page.getByTestId('navigation-drawer').getByTestId('nav-content').click();
     await page.waitForURL(/\/en\/content/);
 
-    await expect(page.getByTestId('active-workspace')).toHaveText(workspace ?? '');
+    await expect(page.getByTestId('active-brand')).toHaveText(brand ?? '');
     // The drawer closes on navigation rather than covering the page it opened.
     await expect(page.getByTestId('navigation-drawer')).toBeHidden();
   });
@@ -947,13 +947,21 @@ test.describe('the shell reproduces the demo geometry', () => {
      * border-radius:12px; padding:0 15px; font-size:10px }` for Create.
      */
     await expect(page.getByTestId('topbar-search')).toHaveCount(0);
-    for (const key of ['review', 'notes', 'notifications', 'copilot']) {
+    for (const key of ['review', 'notes', 'notifications']) {
       const control = page.getByTestId(`topbar-${key}`);
       const box = await control.boundingBox();
       expect(box?.width, key).toBe(38);
       expect(box?.height, key).toBe(38);
       await expect(control).toHaveCSS('border-radius', '12px');
     }
+    // D-304 — the Copilot is a LABELLED control: the same height and radius,
+    // wider, with its name on screen rather than a spark to decode.
+    const copilot = page.getByTestId('topbar-copilot');
+    const copilotBox = await copilot.boundingBox();
+    expect(copilotBox?.height).toBe(38);
+    expect(copilotBox?.width ?? 0).toBeGreaterThan(38);
+    await expect(copilot).toHaveCSS('border-radius', '12px');
+    await expect(page.getByTestId('topbar-copilot-label')).toHaveText('Copilot');
     const create = page.getByTestId('topbar-create');
     expect((await create.boundingBox())?.height).toBe(38);
     await expect(create).toHaveCSS('border-radius', '12px');
@@ -963,7 +971,7 @@ test.describe('the shell reproduces the demo geometry', () => {
 
   test('the rail cards and the surfaces', async ({ page }) => {
     // `.experience-current` and `.profile-button` — 16px radius, 10px/8px padding.
-    for (const testId of ['workspace-switcher', 'profile-menu']) {
+    for (const testId of ['brand-switcher', 'profile-menu']) {
       await expect(page.getByTestId(testId)).toHaveCSS('border-radius', '16px');
     }
     /*

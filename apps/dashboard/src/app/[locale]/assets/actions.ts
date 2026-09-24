@@ -117,16 +117,21 @@ export async function createAssetFolderAction(formData: FormData): Promise<void>
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid folder name');
 
+    const parentFolderId = optionalId(formData, 'parentFolderId');
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
       await service.createFolder({
         actor: assetActor(session),
         name,
         brandId: optionalId(formData, 'brandId'),
-        parentFolderId: optionalId(formData, 'parentFolderId'),
+        parentFolderId,
       });
     });
-    destination = pageUrl(locale, { ok: 'ASSET_FOLDER_CREATED' });
+    // D-305 — back to where the folder was created, so it is visible at once.
+    destination = pageUrl(locale, {
+      ok: 'ASSET_FOLDER_CREATED',
+      ...(parentFolderId ? { folder: parentFolderId } : {}),
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'create-folder');
   }

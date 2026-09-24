@@ -434,6 +434,7 @@ export default async function AssetsPage({
         title={t('assets.title')}
         subtitle={t('assets.subtitle')}
         brands={brands}
+        pastFirstPage={cursor !== undefined}
         {...data}
         filters={{
           ...(search ? { search } : {}),
