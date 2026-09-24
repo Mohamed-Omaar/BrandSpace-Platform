@@ -76,7 +76,7 @@ function optionalId(formData: FormData, field: string): string | null {
 }
 
 export async function uploadAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.upload');
@@ -110,7 +110,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function createAssetFolderAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.manage_taxonomy');
@@ -135,7 +135,7 @@ export async function createAssetFolderAction(formData: FormData): Promise<void>
 }
 
 export async function updateAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -167,7 +167,7 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function archiveAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -185,7 +185,7 @@ export async function archiveAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function restoreAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -203,7 +203,7 @@ export async function restoreAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteAssetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'assets.delete');
@@ -221,7 +221,7 @@ export async function deleteAssetAction(formData: FormData): Promise<void> {
 }
 
 export async function addAssetVersionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
@@ -261,7 +261,7 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
 }
 
 export async function restoreAssetVersionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {

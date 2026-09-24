@@ -85,7 +85,7 @@ function localized(formData: FormData, prefix: string): LocalizedText {
 }
 
 export async function createBrandAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'brand.manage');
@@ -198,7 +198,7 @@ export async function createBrandAction(formData: FormData): Promise<void> {
 }
 
 export async function createKnowledgeAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
@@ -231,7 +231,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
 }
 
 export async function updateKnowledgeAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
@@ -264,7 +264,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
 }
 
 export async function archiveKnowledgeAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
@@ -285,7 +285,7 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
 }
 
 export async function rollbackKnowledgeAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
@@ -313,7 +313,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
 }
 
 export async function reviewCandidateAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
@@ -376,7 +376,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
  * old behaviour cannot return by accident or by a missing environment variable.
  */
 export async function uploadSourceAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {

@@ -59,7 +59,7 @@ function actorOf(session: WorkspaceSession) {
 
 /** Begin an OAuth authorization and send the customer to the provider. */
 export async function connectAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
@@ -96,7 +96,7 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
 
 /** Disconnect, revoking at the provider where it can be reached. */
 export async function disconnectAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
@@ -116,7 +116,7 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
 
 /** Ask the provider whether this grant still works. */
 export async function checkAccountAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.read');
@@ -136,7 +136,7 @@ export async function checkAccountAction(formData: FormData): Promise<void> {
 
 /** Cancel a post that has not left yet. */
 export async function cancelPublishAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -155,7 +155,7 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
 
 /** Try a failed post again, after a human has fixed whatever was wrong. */
 export async function retryPublishAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -185,7 +185,7 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
  * writes a credential, and the dashboard holds no key material at all (F-07).
  */
 export async function selectTargetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');

@@ -75,7 +75,12 @@ export interface ComposerDraft {
 export interface ComposerViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
-  readonly brands: readonly { id: string; name: string }[];
+  /**
+   * `defaultLocale` is the brand's CONTENT language preference — what a new
+   * post is written in when the author has not chosen (D-277). Never the UI
+   * locale: a team may run an Arabic-speaking brand from an English interface.
+   */
+  readonly brands: readonly { id: string; name: string; defaultLocale?: 'AR' | 'EN' }[];
   /**
    * The globally selected brand, or null when the rail is on "All brands".
    *
@@ -246,7 +251,9 @@ export function ComposerView({
     platforms[0] ? [platforms[0].key] : [],
   );
   const [brief, setBrief] = useState('');
-  const [contentLocale, setContentLocale] = useState<ContentLocale>(locale === 'ar' ? 'AR' : 'EN');
+  const [contentLocale, setContentLocale] = useState<ContentLocale>(
+    () => brands.find((brand) => brand.id === brandId)?.defaultLocale ?? 'EN',
+  );
   const [contentType, setContentType] = useState(contentTypes[0] ?? 'POST');
 
   /*

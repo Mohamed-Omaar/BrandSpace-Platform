@@ -20,7 +20,7 @@ const log = createLogger({ context: { component: 'dashboard.settings' } });
  * and routing consequences and belong to the Control Center.
  */
 export async function saveSettingsAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -28,7 +28,7 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
     const name = String(formData.get('name') ?? '').trim();
     if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A workspace name is required.');
 
-    const defaultLocale = String(formData.get('defaultLocale') ?? 'AR');
+    const defaultLocale = String(formData.get('defaultLocale') ?? 'EN');
     if (defaultLocale !== 'AR' && defaultLocale !== 'EN') {
       throw new AppError('VALIDATION_FAILED', 'Unsupported locale.');
     }

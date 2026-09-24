@@ -33,7 +33,7 @@ function failure(locale: string, error: unknown, action: string): string {
 }
 
 export async function inviteMemberAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -84,7 +84,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
 }
 
 export async function resendInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -118,7 +118,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
 }
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -146,7 +146,7 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
 }
 
 export async function changeRoleAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -168,7 +168,7 @@ export async function changeRoleAction(formData: FormData): Promise<void> {
 }
 
 export async function removeMemberAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {
@@ -209,7 +209,7 @@ function brandScopeFrom(formData: FormData): string[] {
  * change — BrandScope is authorization — re-checked by the service.
  */
 export async function changeBrandAccessAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
 
   try {

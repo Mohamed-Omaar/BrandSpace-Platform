@@ -549,9 +549,18 @@ test.describe('bilingual: Arabic RTL and English LTR', () => {
     });
   }
 
-  test('a locale-less path redirects to the default locale', async ({ page }) => {
-    await page.goto(`${DASHBOARD_BASE_URL}/sign-in`);
+  test('a locale-less path redirects to the customer default — English (D-277)', async ({
+    page,
+  }) => {
+    for (const path of ['/sign-in', '/sign-up', '/reset', '/']) {
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      await expect(page, path).toHaveURL(/\/en(\/|$)/);
+      await expect(page.locator('html'), path).toHaveAttribute('dir', 'ltr');
+    }
+    // An explicit /ar is honoured and stays Arabic, right to left.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/sign-in`);
     await expect(page).toHaveURL(/\/ar\/sign-in/);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   });
 
   test('an unsupported locale is a 404', async ({ page }) => {

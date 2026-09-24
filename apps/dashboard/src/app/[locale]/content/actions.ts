@@ -10,6 +10,7 @@ import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { resolveContentLanguage } from '../../../server/content-language';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
@@ -158,13 +159,13 @@ export async function listCampaignOptionsAction(
  * not thereby a member who may add to the brand's library.
  */
 export async function createManualDraftAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'content.create');
     const brandId = String(formData.get('brandId') ?? '');
     const title = String(formData.get('title') ?? '');
-    const contentLocale = String(formData.get('contentLocale') ?? 'AR') === 'EN' ? 'EN' : 'AR';
+    const explicitLanguage = formData.get('contentLocale');
     /*
      * THE TYPE THE COMPOSER ALREADY ASKED FOR (PHASE 2 correction).
      *
@@ -225,10 +226,15 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const itemId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
       const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
+      // Explicit choice, then the brand's own preference, then English (D-277).
+      const brand = await services.db.brand.findFirst({
+        where: { id: brandId, workspaceId: session.workspace.workspaceId },
+        select: { defaultLocale: true },
+      });
       const created = await library.createManualItem({
         brandId,
         title,
-        locale: contentLocale,
+        locale: resolveContentLanguage(explicitLanguage, brand?.defaultLocale),
         ...(contentType ? { contentType } : {}),
         variants: platformKeys.map((platformKey) => ({
           platformKey,
@@ -254,7 +260,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
 
 /** Save a person's own edit to a caption. No gateway, no credits. */
 export async function saveVariantAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -315,7 +321,7 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
  * missing field — the control always submits, and `''` unlinks.
  */
 export async function setContentCampaignAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -364,7 +370,7 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
  * different one would be a brand chosen by a POST body.
  */
 export async function uploadComposerMediaAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
@@ -432,7 +438,7 @@ function isRedirectError(error: unknown): boolean {
  * pipeline; the service refuses them, and this action has no way to name one.
  */
 export async function transitionItemAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const raw = String(formData.get('to') ?? '');
   const to = raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
@@ -466,7 +472,7 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
  * endpoint, and the hidden button is a courtesy.
  */
 export async function submitForReviewAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const note = String(formData.get('note') ?? '');
   const assignedTo = String(formData.get('assignedToUserId') ?? '');
@@ -493,7 +499,7 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
 
 /** Withdraw an open review, returning the item to a draft. */
 export async function cancelReviewAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   const approvalId = String(formData.get('approvalId') ?? '');
 
@@ -526,7 +532,7 @@ export async function cancelReviewAction(formData: FormData): Promise<void> {
  * PostgreSQL even if this function were bypassed entirely.
  */
 export async function saveRetentionAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'workspace.update');

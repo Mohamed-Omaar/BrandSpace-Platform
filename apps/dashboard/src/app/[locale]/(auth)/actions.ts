@@ -80,7 +80,7 @@ function signInUrl(locale: string, params: Record<string, string> = {}): string 
 }
 
 export async function signInAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const next = String(formData.get('next') ?? '');
   let destination: string;
 
@@ -131,7 +131,7 @@ export async function signInAction(formData: FormData): Promise<void> {
 }
 
 export async function signOutAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const store = await cookies();
   const token = store.get(CUSTOMER_REALM.cookieName)?.value;
   if (token) {
@@ -151,7 +151,7 @@ export async function signOutAction(formData: FormData): Promise<void> {
  * URL — that is what stops this endpoint being an account-existence oracle.
  */
 export async function requestPasswordResetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
 
@@ -226,7 +226,7 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
 }
 
 export async function completePasswordResetAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
@@ -270,7 +270,7 @@ export async function completePasswordResetAction(formData: FormData): Promise<v
  * unknown token, so a forwarded link reveals nothing.
  */
 export async function acceptInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
@@ -320,7 +320,7 @@ export async function acceptInvitationAction(formData: FormData): Promise<void> 
  * whether the invited address is registered.
  */
 export async function onboardInvitationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const token = String(formData.get('token') ?? '');
   let destination: string;
 
@@ -367,7 +367,7 @@ export async function onboardInvitationAction(formData: FormData): Promise<void>
 
 /** Select the workspace this session acts in. Membership is re-verified. */
 export async function switchWorkspaceAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const workspaceId = String(formData.get('workspaceId') ?? '');
   let destination: string;
 
@@ -418,7 +418,7 @@ function isRedirectError(error: unknown): boolean {
  * nothing about who has an account.
  */
 export async function signUpAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
 
@@ -454,7 +454,7 @@ export async function signUpAction(formData: FormData): Promise<void> {
 
 /** Ask for another verification link. Rate-limited and silent about the result. */
 export async function resendVerificationAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const email = String(formData.get('email') ?? '');
   let destination: string;
   try {
@@ -495,7 +495,7 @@ export async function resendVerificationAction(formData: FormData): Promise<void
  * failure simply returns to the same page — there is nothing to revoke.
  */
 export async function verifyMfaAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const store = await cookies();
   const token = store.get(CUSTOMER_REALM.cookieName)?.value;
   if (!token) redirect(signInUrl(locale));

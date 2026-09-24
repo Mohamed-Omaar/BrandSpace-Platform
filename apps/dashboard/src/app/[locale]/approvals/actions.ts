@@ -56,7 +56,7 @@ const VERDICTS: Record<string, ApprovalVerdict> = {
 
 /** Approve, request changes, or reject. */
 export async function decideApprovalAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const approvalId = String(formData.get('approvalId') ?? '');
   const verdict = VERDICTS[String(formData.get('verdict') ?? '')];
   const note = String(formData.get('note') ?? '');
@@ -144,7 +144,7 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
 
 /** Withdraw a request from the queue screen. */
 export async function withdrawApprovalAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const approvalId = String(formData.get('approvalId') ?? '');
 
   let destination: string;
@@ -173,7 +173,7 @@ export async function withdrawApprovalAction(formData: FormData): Promise<void> 
  * grant itself the right to approve its own work.
  */
 export async function saveApprovalPolicyAction(formData: FormData): Promise<void> {
-  const locale = String(formData.get('locale') ?? 'ar');
+  const locale = String(formData.get('locale') ?? 'en');
   const brandId = String(formData.get('brandId') ?? '');
 
   let destination: string;

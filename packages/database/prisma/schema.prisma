@@ -1135,7 +1135,7 @@ model EmailMessage {
 
   toEmail     String
   templateKey String
-  locale      Locale @default(AR)
+  locale      Locale @default(EN)
 
   /// Template variables, redacted before write. Never contains a raw token.
   variables Json?
@@ -2839,7 +2839,7 @@ model ContentItem {
   /// The locale the item was authored in. Variants carry their own, so an
   /// Arabic item with an English variant is a normal shape rather than a
   /// contradiction.
-  primaryLocale Locale   @default(AR)
+  primaryLocale Locale   @default(EN)
   /// The content pillar this belongs to, when the brand uses pillars.
   pillar        String?
   tags          String[] @default([])

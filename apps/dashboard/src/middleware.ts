@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
+import { CUSTOMER_DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
 /*
  * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
  *
@@ -82,7 +82,8 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
 }
 
 /**
- * Redirects a locale-less path to the default locale (Arabic — D-03), so every
+ * Redirects a locale-less path to the customer default locale (English —
+ * D-277, which replaced the D-03 Arabic default for the customer app), so every
  * route resolves to an explicit locale and `dir`/`lang` are always unambiguous.
  */
 export function middleware(request: NextRequest) {
@@ -92,7 +93,7 @@ export function middleware(request: NextRequest) {
    * ROUTE HANDLERS ARE NOT PAGES AND HAVE NO LOCALE.
    *
    * `/api/*` is a machine endpoint: the Brand Brain chat proxy posts to it as
-   * JSON. Redirecting it to `/ar/api/...` turned a POST into a 307 and then a
+   * JSON. Redirecting it to `/en/api/...` turned a POST into a 307 and then a
    * 404, and the browser surfaced it as "that request could not be completed" —
    * a chat that looked broken for a reason nothing in the chat code could
    * explain. Excluded here rather than in the matcher so the reason travels
@@ -106,7 +107,7 @@ export function middleware(request: NextRequest) {
   if (hasLocale) return secured(request);
 
   const url = request.nextUrl.clone();
-  url.pathname = `/${DEFAULT_LOCALE}${pathname === '/' ? '' : pathname}`;
+  url.pathname = `/${CUSTOMER_DEFAULT_LOCALE}${pathname === '/' ? '' : pathname}`;
   return secured(request, url);
 }
 
