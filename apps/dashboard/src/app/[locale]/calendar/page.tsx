@@ -736,6 +736,8 @@ export default async function CalendarPage({
 }
 
 const CALENDAR_KEYS = [
+  'calendar.emptySchedule',
+  'calendar.emptyCreate',
   'calendar.title',
   'calendar.eyebrow',
   'calendar.subtitle',

@@ -32,6 +32,8 @@ import {
   retryPublishAction,
 } from '../integrations/actions';
 
+import { EmptyAction } from '../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -329,7 +331,21 @@ export default async function PublishingPage({
       {tab !== 'accounts' ? (
         <Card testId={`publishing-${tab}`}>
           {data.jobs.length === 0 ? (
-            <StateMessage title={t(emptyKey[tab][0])} description={t(emptyKey[tab][1])} />
+            <StateMessage
+              title={t(emptyKey[tab][0])}
+              description={t(emptyKey[tab][1])}
+              action={
+                /* D-299 — the queue fills from the calendar; "no failures" is good news. */
+                tab !== 'failed' ? (
+                  <EmptyAction
+                    href={`/${locale}/calendar`}
+                    label={t('publishingHub.emptyAction')}
+                    testId="publishing-empty-calendar"
+                    tone="neutral"
+                  />
+                ) : undefined
+              }
+            />
           ) : (
             <ul style={listStyle} data-testid="publishing-rows">
               {data.jobs.map((job) => {
@@ -515,6 +531,15 @@ export default async function PublishingPage({
             <StateMessage
               title={t('integrations.emptyTitle')}
               description={t('integrations.emptyBody')}
+              action={
+                may('integrations.manage') ? (
+                  <EmptyAction
+                    href={`/${locale}/integrations`}
+                    label={t('publishingHub.connectAction')}
+                    testId="publishing-empty-connect"
+                  />
+                ) : undefined
+              }
             />
           ) : (
             <ul style={listStyle}>

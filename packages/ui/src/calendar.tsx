@@ -230,14 +230,23 @@ function Agenda({
   days,
   labels,
   onOpenPost,
+  emptyAction,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
+  readonly emptyAction?: ReactNode;
 }) {
   const withPosts = days.filter((day) => day.posts.length > 0);
   if (withPosts.length === 0) {
-    return <StateMessage title={labels.emptyPeriodTitle} description={labels.emptyPeriodBody} />;
+    return (
+      <StateMessage
+        title={labels.emptyPeriodTitle}
+        description={labels.emptyPeriodBody}
+        action={emptyAction}
+        testId="calendar-agenda-empty"
+      />
+    );
   }
   return (
     <ol
@@ -321,6 +330,7 @@ export function ContentCalendar({
   busy,
   weekIndex = 0,
   onDropDay,
+  emptyAction,
 }: {
   readonly periodLabel: string;
   readonly days: readonly CalendarDay[];
@@ -351,6 +361,8 @@ export function ContentCalendar({
   readonly weekIndex?: number | undefined;
   /** A dragged item dropped on a day. Drag is never the only way to schedule. */
   readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /** D-299 (§43) — what an empty agenda offers: the caller's next step. */
+  readonly emptyAction?: ReactNode;
 }) {
   const [view, setView] = useState<CalendarView>('month');
 
@@ -481,7 +493,7 @@ export function ContentCalendar({
         useless at 390px.
       */}
       {view === 'agenda' ? (
-        <Agenda days={days} labels={labels} onOpenPost={onOpenPost} />
+        <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
       ) : (
         <>
           <div className="bs-wide-only">
@@ -493,7 +505,7 @@ export function ContentCalendar({
             />
           </div>
           <div className="bs-narrow-only">
-            <Agenda days={days} labels={labels} onOpenPost={onOpenPost} />
+            <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
           </div>
         </>
       )}

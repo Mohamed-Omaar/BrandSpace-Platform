@@ -7,6 +7,8 @@ import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CreativeStudioView, type CreativeStudioLabels } from './creative-studio-view';
 
+import { EmptyAction } from '../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -105,6 +107,16 @@ export default async function CreativeStudioPage({
               : t('creative.noBrandBody')
           }
           testId="creative-no-brand"
+          action={
+            brandContext.resolution.kind === 'empty' &&
+            workspace.permissionKeys.includes('brand.manage') ? (
+              <EmptyAction
+                href={`/${locale}/brand-brain`}
+                label={t('bb.createBrand')}
+                testId="no-brand-create"
+              />
+            ) : undefined
+          }
         />
       ) : (
         <CreativeStudioView

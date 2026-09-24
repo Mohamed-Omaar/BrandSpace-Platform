@@ -19,6 +19,8 @@ import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveBrandProfileAction } from './actions';
 
+import { EmptyAction } from '../../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -167,6 +169,16 @@ export default async function BrandProfilePage({
                 : t('brand.chooseBody')
             }
             testId="brand-profile-no-brand"
+            action={
+              brandContext.resolution.kind === 'empty' &&
+              workspace.permissionKeys.includes('brand.manage') ? (
+                <EmptyAction
+                  href={`/${locale}/brand-brain`}
+                  label={t('bb.createBrand')}
+                  testId="no-brand-create"
+                />
+              ) : undefined
+            }
           />
         ) : (
           <Card testId="brand-profile-card">

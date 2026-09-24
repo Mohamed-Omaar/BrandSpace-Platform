@@ -494,6 +494,13 @@ line beside the existing tile avatar. "This post's history" is a `CustomerCard` 
 holding the campaign room's timeline list, now shared as `ActivityTimeline`. The Brand Brain head gains
 a ghost small "Brand profile" button next to "Ask about this brand". No new colour, font or shadow.
 
+### 6.3.21 Phase 6 final — empty-state actions and whole-screen states (D-299)
+
+Empty-state actions are small `brand` (first step) or `neutral` (secondary) buttons in
+`StateMessage`'s existing action slot. The route error and not-found pages centre the same
+`StateMessage` on `shellSurface`, max 32rem, with the same small buttons and a `caption` / `textMuted`
+reference line. No new colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

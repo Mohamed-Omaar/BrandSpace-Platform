@@ -195,6 +195,8 @@ type ScopedDb = Parameters<Parameters<typeof withWorkspace>[1]>[0];
 
 /** What the provider returns next. Set per test. */
 let nextOutput = '';
+/** D-300 — the prompt the provider last received, so a test can read what was asked. */
+let lastPrompt = '';
 
 /**
  * A provider that returns exactly what the test scripted.
@@ -224,6 +226,7 @@ class ScriptedTextAdapter implements AiProviderAdapter {
     untrustedContext?: readonly string[] | undefined;
   }): Promise<TextResult> {
     const contextChars = (request.untrustedContext ?? []).reduce((n, c) => n + c.length, 0);
+    lastPrompt = request.prompt;
     return {
       text: nextOutput,
       usage: {
@@ -399,6 +402,48 @@ describe('AC-11.1 — the credit cost is known before anything is spent', () => 
       select: { creditsReservedMilli: true },
     });
     expect(request?.creditsReservedMilli).toBe(quote.estimateMilli);
+  });
+});
+
+describe('D-300 — an AI carousel starts as a slide outline', () => {
+  it('asks a carousel for an outline, prices it the same, and asks nothing of a post', async () => {
+    const brief = 'Five reasons independent retailers stock the spring collection.';
+    const quote = await inA((studio) =>
+      studio.quote({
+        brandId: fixtures.a.brandId,
+        brief,
+        platformKeys: ['instagram'],
+        planKey: null,
+        actorBrandScope: [],
+        contentType: 'CAROUSEL',
+        // What the generation below sends too — the quote is that prompt's price.
+        locale: 'EN',
+        actorUserId: fixtures.a.userId,
+      }),
+    );
+    nextOutput = reply([
+      {
+        platformKey: 'instagram',
+        body: 'Slide 1 — Why spring sells\nSlide 2 — Built for real life\nSlide 3 — Stock it now\n\nSpring, for real life.',
+      },
+    ]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), brief, contentType: 'CAROUSEL', idempotencyKey: key() }),
+    );
+    expect(lastPrompt).toContain('This post is a CAROUSEL');
+    expect(lastPrompt).toContain('Slide 1');
+    expect(generated.item.contentType).toBe('CAROUSEL');
+    // The outline is the caption's own text — no per-slide layer exists to fake.
+    expect(generated.variants[0]?.body).toMatch(/^Slide 1 — /);
+    const request = await platform.aiRequest.findUnique({
+      where: { id: generated.aiRequestId ?? '' },
+      select: { creditsReservedMilli: true },
+    });
+    expect(request?.creditsReservedMilli).toBe(quote.estimateMilli);
+
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Spring, for real life.' }]);
+    await inA((studio) => studio.generate({ ...baseInput(), brief, idempotencyKey: key() }));
+    expect(lastPrompt).not.toContain('CAROUSEL');
   });
 });
 

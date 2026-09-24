@@ -430,7 +430,11 @@ export default async function AutomationsPage({
         <Card>
           <SectionHeader title={t('automations.rules')} />
           {rules.length === 0 ? (
-            <StateMessage kind="empty" title={t('automations.empty')} />
+            <StateMessage
+              kind="empty"
+              title={t('automations.empty')}
+              description={t('automations.emptyBody')}
+            />
           ) : (
             <ul
               style={{
@@ -527,7 +531,11 @@ export default async function AutomationsPage({
         <Card>
           <SectionHeader title={t('automations.runs')} />
           {runs.length === 0 ? (
-            <StateMessage kind="empty" title={t('automations.runsEmpty')} />
+            <StateMessage
+              kind="empty"
+              title={t('automations.runsEmpty')}
+              description={t('automations.runsEmptyBody')}
+            />
           ) : (
             <ul
               style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '0.25rem' }}

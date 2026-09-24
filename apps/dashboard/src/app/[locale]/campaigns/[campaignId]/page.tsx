@@ -19,6 +19,7 @@ import { inWorkspace, requireWorkspace } from '../../../../server/customer-conte
 import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { ActivityTimeline } from '../../../../components/activity-timeline';
+import { EmptyAction } from '../../../../components/empty-action';
 import { messages, type MessageKey } from '../../../../i18n/messages';
 import { brandContextFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
@@ -780,6 +781,14 @@ export default async function CampaignDetailPage({
                 kind="empty"
                 title={t('campaigns.room.assetsEmpty')}
                 description={t('campaigns.room.assetsEmptyBody')}
+                action={
+                  <EmptyAction
+                    href={tabHref('content')}
+                    label={t('campaigns.room.assetsEmptyAction')}
+                    testId="campaign-assets-empty-action"
+                    tone="neutral"
+                  />
+                }
               />
             ) : (
               <ul
@@ -943,7 +952,7 @@ export default async function CampaignDetailPage({
               <StateMessage
                 kind="empty"
                 title={t('activity.emptyTitle')}
-                description={t('activity.emptyBody')}
+                description={t('campaigns.room.activityEmptyBody')}
               />
             ) : (
               <ActivityTimeline entries={activity} />

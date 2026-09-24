@@ -7,6 +7,8 @@ import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CopilotView } from './copilot-view';
 
+import { EmptyAction } from '../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -96,6 +98,16 @@ export default async function CopilotPage({
               brandContext.resolution.kind === 'unselected'
                 ? t('brand.chooseBody')
                 : t('copilot.noBrandBody')
+            }
+            action={
+              brandContext.resolution.kind === 'empty' &&
+              workspace.permissionKeys.includes('brand.manage') ? (
+                <EmptyAction
+                  href={`/${locale}/brand-brain`}
+                  label={t('bb.createBrand')}
+                  testId="no-brand-create"
+                />
+              ) : undefined
             }
           />
         ) : (

@@ -3,6 +3,7 @@
 import type React from 'react';
 
 import { useId, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { AssetKind, AssetScanStatus, AssetStatus } from '@brandspace/database';
 import {
@@ -21,6 +22,8 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
+  buttonClass,
+  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -646,6 +649,33 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               title={filtered ? t('assets.emptyFilteredTitle') : t('assets.emptyTitle')}
               description={filtered ? t('assets.emptyFilteredBody') : t('assets.emptyBody')}
               testId="assets-empty"
+              action={
+                /*
+                 * D-299 (§43) — an empty library offers the two ways a file
+                 * arrives: Upload (the same dialog as the header's) and
+                 * Generate a visual (Creative, which asks `assets.upload` too).
+                 */
+                !filtered && can.upload ? (
+                  <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setUploadOpen(true)}
+                      data-testid="assets-empty-upload"
+                    >
+                      {t('assets.upload')}
+                    </Button>
+                    <Link
+                      href={`/${props.locale}/creative`}
+                      className={buttonClass('neutral')}
+                      style={buttonStyle('neutral', 'sm')}
+                      data-testid="assets-empty-generate"
+                    >
+                      {t('assets.emptyGenerate')}
+                    </Link>
+                  </span>
+                ) : undefined
+              }
             />
           ) : (
             <>

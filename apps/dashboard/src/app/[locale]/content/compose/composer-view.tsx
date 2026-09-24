@@ -449,10 +449,14 @@ export function ComposerView({
 
   const runQuote = async () => {
     setBusy('quote');
+    // D-300 — the same language and format the generation will send, so the
+    // price shown is the price reserved.
     const payload = await post('quote', {
       brandId,
       brief: generationBrief,
       platformKeys: selected,
+      locale: contentLocale,
+      contentType,
     });
     if (payload) setQuote(String(payload['estimateMilli'] ?? '0'));
     setBusy(null);
@@ -694,6 +698,12 @@ export function ComposerView({
                   </option>
                 ))}
               </select>
+              {/* D-300 (§23) — what Generate does differently for a carousel. */}
+              {contentType === 'CAROUSEL' ? (
+                <p className="cs-hint" data-testid="carousel-outline-hint">
+                  {t['create.carousel.outlineHint']}
+                </p>
+              ) : null}
             </div>
 
             <div className="cs-field">

@@ -19,6 +19,8 @@ const CAMPAIGN_OBJECTIVES: readonly string[] = [
   'LAUNCH',
 ];
 
+import { EmptyAction } from '../../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -101,6 +103,16 @@ export default async function NewCampaignPage({
               : t('campaigns.chooseBrandBody')
           }
           testId="campaign-no-brand"
+          action={
+            brandContext.resolution.kind === 'empty' &&
+            workspace.permissionKeys.includes('brand.manage') ? (
+              <EmptyAction
+                href={`/${locale}/brand-brain`}
+                label={t('bb.createBrand')}
+                testId="no-brand-create"
+              />
+            ) : undefined
+          }
         />
       ) : (
         <div style={{ display: 'grid', gap: spacingTokens.md }}>

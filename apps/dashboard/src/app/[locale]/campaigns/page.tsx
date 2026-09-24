@@ -20,6 +20,8 @@ import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-sh
 import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
 import { objectiveLabel, periodLabel, statusLabel } from './labels';
 
+import { EmptyAction } from '../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -158,11 +160,24 @@ export default async function CampaignsPage({
 
       {campaigns.length === 0 ? (
         brandContext.resolution.kind === 'empty' ? (
+          /*
+           * D-299 — `empty` means the workspace has NO brand, so "choose one"
+           * was wrong: the next step is to create one.
+           */
           <StateMessage
             kind="empty"
-            title={t('campaigns.chooseBrandTitle')}
-            description={t('campaigns.chooseBrandBody')}
+            title={t('brand.emptyTitle')}
+            description={t('campaigns.noBrandBody')}
             testId="campaigns-no-brand"
+            action={
+              workspace.permissionKeys.includes('brand.manage') ? (
+                <EmptyAction
+                  href={`/${locale}/brand-brain`}
+                  label={t('bb.createBrand')}
+                  testId="campaigns-empty-create-brand"
+                />
+              ) : undefined
+            }
           />
         ) : (
           <StateMessage
@@ -170,6 +185,15 @@ export default async function CampaignsPage({
             title={t('campaigns.emptyTitle')}
             description={t('campaigns.emptyBody')}
             testId="campaigns-empty"
+            action={
+              mayManage ? (
+                <EmptyAction
+                  href={`/${locale}/campaigns/new`}
+                  label={t('campaigns.emptyAction')}
+                  testId="campaigns-empty-create"
+                />
+              ) : undefined
+            }
           />
         )
       ) : (

@@ -279,6 +279,21 @@ export function BrandBrainView({
               {t('bb.askAboutBrand')}
             </CopilotLink>
           ) : null}
+          {/*
+            D-299 (§43) — AN EMPTY BRAIN SAYS WHAT TO DO FIRST: upload a
+            document (the sources card's own form, below) — the gaps line
+            under the hero opens each area to add knowledge by hand.
+          */}
+          {totalActiveItems === 0 && permissions.upload ? (
+            <a
+              href="#bb-sources"
+              className={buttonClass('brand')}
+              style={buttonStyle('brand', 'sm')}
+              data-testid="brand-brain-empty-upload"
+            >
+              {t('bb.emptyUpload')}
+            </a>
+          ) : null}
           {profileHref ? (
             <Link
               href={profileHref}
@@ -606,7 +621,7 @@ export function BrandBrainView({
           )}
         </div>
 
-        <div className="bb-source" data-testid="sources-card">
+        <div className="bb-source" id="bb-sources" data-testid="sources-card">
           <div className="bb-source-head">
             <h4>{t('bb.sourcesTitle')}</h4>
           </div>

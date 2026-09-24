@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   StateMessage,
   StatusBadge,
   statusTone,
+  buttonClass,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -269,6 +271,28 @@ export function CalendarView({
           ) : undefined
         }
         weekIndex={weekIndex}
+        emptyAction={
+          canSchedule ? (
+            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
+              <Button
+                variant="primary"
+                size="sm"
+                data-testid="calendar-empty-schedule"
+                onClick={() => setScheduling(true)}
+              >
+                {t['calendar.emptySchedule']}
+              </Button>
+              <Link
+                href={`/${locale}/content/compose`}
+                className={buttonClass('neutral')}
+                style={buttonStyle('neutral', 'sm')}
+                data-testid="calendar-empty-create"
+              >
+                {t['calendar.emptyCreate']}
+              </Link>
+            </span>
+          ) : undefined
+        }
         {...(canSchedule
           ? { onDropDay: (day: string, data: string) => openScheduleFor(data, day) }
           : {})}

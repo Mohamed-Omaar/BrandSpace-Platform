@@ -408,6 +408,18 @@ export function ContentLibrary({
           <StateMessage
             title={filtered ? t('content.emptyFilteredTitle') : t('content.emptyTitle')}
             description={filtered ? t('content.emptyFilteredBody') : t('content.emptyBody')}
+            action={
+              !filtered && can.create ? (
+                <Link
+                  href={`/${locale}/content/compose`}
+                  className={buttonClass('brand')}
+                  style={buttonStyle('brand', 'sm')}
+                  data-testid="content-empty-create"
+                >
+                  {t('content.emptyAction')}
+                </Link>
+              ) : undefined
+            }
           />
         </div>
       ) : view === 'grid' ? (

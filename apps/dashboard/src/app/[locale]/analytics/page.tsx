@@ -31,6 +31,8 @@ import { explainPeriodAction } from './actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 
+import { EmptyAction } from '../../../components/empty-action';
+
 export const dynamic = 'force-dynamic';
 
 /**
@@ -157,6 +159,16 @@ export default async function AnalyticsPage({
           kind="empty"
           title={unselected ? t('brand.chooseTitle') : t('analytics.noBrandTitle')}
           description={unselected ? t('brand.chooseBody') : t('analytics.noBrandBody')}
+          action={
+            brandContext.resolution.kind === 'empty' &&
+            workspace.permissionKeys.includes('brand.manage') ? (
+              <EmptyAction
+                href={`/${locale}/brand-brain`}
+                label={t('bb.createBrand')}
+                testId="no-brand-create"
+              />
+            ) : undefined
+          }
         />
       </WorkspaceShell>
     );

@@ -17,6 +17,7 @@ import {
   type BadgeTone,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
+import { EmptyAction } from '../../../components/empty-action';
 
 /**
  * The Approvals screen — Phase 5B-3, docs/PRODUCT.md §5 module 14.
@@ -293,6 +294,14 @@ export function ApprovalsView({
             <StateMessage
               title={t('approvals.mineEmptyTitle')}
               description={t('approvals.mineEmptyBody')}
+              action={
+                <EmptyAction
+                  href={`/${locale}/content?status=DRAFT`}
+                  label={t('approvals.mineEmptyAction')}
+                  testId="approvals-mine-empty-action"
+                  tone="neutral"
+                />
+              }
             />
           ) : (
             <ul style={listStyle} data-testid="approvals-mine-list">

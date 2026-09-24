@@ -9,6 +9,13 @@ export const messages = {
   ar: {
     'app.title': 'براندسبيس',
     'nav.overview': 'الرئيسية',
+    'errors.route.title': 'تعذّر تحميل هذه الشاشة',
+    'errors.route.body': 'لم يتغيّر أي شيء. حاول مرة أخرى، أو عد إلى الرئيسية.',
+    'errors.route.retry': 'حاول مرة أخرى',
+    'errors.route.home': 'العودة إلى الرئيسية',
+    'errors.route.reference': 'المرجع: {ref}',
+    'errors.notFound.title': 'لم نجد هذه الصفحة',
+    'errors.notFound.body': 'ربما نُقلت أو حُذفت، أو أنها غير متاحة لحسابك.',
     'nav.members': 'الفريق',
     'nav.settings': 'الإعدادات',
     'nav.plan': 'الخطة والاستخدام',
@@ -32,7 +39,8 @@ export const messages = {
     'notesInbox.description': 'كل محادثة تخصّك، وبقية المحادثات المفتوحة في علاماتك التجارية.',
     'notesInbox.forYou': 'تخصّك',
     'notesInbox.forYouHint': 'ذُكرت فيها، أو أُسندت إليك، أو شاركت فيها.',
-    'notesInbox.forYouEmpty': 'لا توجد محادثات تخصّك بعد.',
+    'notesInbox.forYouEmpty':
+      'لا شيء بانتظارك. عندما يذكرك أحد أو يسألك عن منشور أو حملة أو ملف أو علامة، سيظهر هنا.',
     'notesInbox.others': 'محادثات مفتوحة أخرى',
     'notesInbox.othersHint': 'المحادثات المفتوحة في العلامات التجارية التي يمكنك رؤيتها.',
     'notesInbox.othersEmpty': 'لا توجد محادثات مفتوحة أخرى.',
@@ -158,6 +166,8 @@ export const messages = {
     'publishingHub.scheduledFor': 'موعده',
     'publishingHub.publishedOn': 'نُشر في',
     'publishingHub.reconnect': 'إعادة ربط {provider}',
+    'publishingHub.emptyAction': 'افتح التقويم',
+    'publishingHub.connectAction': 'اربط حسابًا',
     'publishingHub.manageConnections': 'إدارة الاتصالات',
     'publishingHub.readiness.ready': 'جاهز للنشر',
     'publishingHub.readiness.reconnect': 'الحساب يحتاج إلى إعادة ربط',
@@ -436,7 +446,7 @@ export const messages = {
     'plan.usageUnstated': '{used} · لا حد معلن',
     'plan.usageBrands': 'العلامات',
     'plan.usageSocialAccounts': 'الحسابات المتصلة',
-    'plan.noFeatures': 'لا توجد ميزات مُعرَّفة في الإعدادات النشطة بعد.',
+    'plan.noFeatures': 'لا تتضمن هذه الخطة ميزات بعد.',
     // --- Phase 3 ---
     'plan.trial': 'التجربة',
     'plan.trialEnds': 'تنتهي التجربة',
@@ -515,6 +525,7 @@ export const messages = {
     'assets.storageOf': 'من',
     'assets.storageUnlimited': 'غير محدودة',
     'assets.emptyTitle': 'لا توجد ملفات بعد',
+    'assets.emptyGenerate': 'أنشئ صورة',
     'assets.emptyBody':
       'ارفع صور علامتك وشعاراتها وملفاتها المعتمدة. يُفحص كل ملف قبل أن يصبح متاحًا للاستخدام.',
     'assets.emptyFilteredTitle': 'لا نتائج',
@@ -585,6 +596,7 @@ export const messages = {
       'تفهم BrandSpace هذه العلامة من {facts} معلومة معتمدة في {areas} من {total} مجالات و{sources} مصادر معالجة.',
     'bb.askAboutBrand': 'اسأل عن هذه العلامة',
     'bb.openProfile': 'ملف العلامة',
+    'bb.emptyUpload': 'ارفع مستندات العلامة',
     'bb.layersTitle': 'ما تتذكره BrandSpace',
     'bb.layer.CANONICAL': 'معرفة العلامة',
     'bb.layer.CANONICAL.desc': 'ما هي العلامة: الهوية والجمهور والعروض والصوت والقواعد.',
@@ -803,6 +815,7 @@ export const messages = {
     'content.tab.review': 'قيد المراجعة',
     'content.tab.archived': 'مؤرشفة',
     'content.emptyTitle': 'لا توجد مسودات بعد',
+    'content.emptyAction': 'أنشئ منشورك الأول',
     'content.emptyBody':
       'اكتب وصفًا لما تريد نشره، وسيكتب الاستوديو صيغة لكل قناة اعتمادًا على عقل علامتك وحده.',
     'content.emptyFilteredTitle': 'لا نتائج',
@@ -810,8 +823,8 @@ export const messages = {
     'content.status.DRAFT': 'مسودة',
     'content.status.IN_REVIEW': 'قيد المراجعة',
     'content.status.ARCHIVED': 'مؤرشفة',
-    'content.variantCount': 'صيغة',
-    'content.variantCountPlural': 'صيغ',
+    'content.variantCount': 'نسخة',
+    'content.variantCountPlural': 'نسخ',
     'content.openDraft': 'فتح المسودة',
     // --- المحرّر ---
     'content.composer.eyebrow': 'إنشاء',
@@ -820,7 +833,7 @@ export const messages = {
     'content.composer.brand': 'العلامة',
     'content.composer.brandPlaceholder': 'اختر العلامة التجارية',
     'content.composer.channels': 'النشر إلى',
-    'content.composer.channelsHint': 'اختر قناة واحدة على الأقل. تُدار القنوات من إعدادات المنصة.',
+    'content.composer.channelsHint': 'اختر قناة واحدة على الأقل.',
     'content.composer.brief': 'ماذا تريد أن تنشر؟',
     'content.composer.briefPlaceholder':
       'مثال: أعلن عن مجموعة الربيع، بنبرة هادئة، مع دعوة لزيارة المتجر.',
@@ -870,6 +883,9 @@ export const messages = {
     'campaigns.room.calendarEmpty': 'لا شيء على التقويم بعد',
     'campaigns.room.calendarEmptyBody': 'جدوِل أحد منشورات هذه الحملة وسيظهر هنا.',
     'campaigns.room.openCalendar': 'افتح في التقويم',
+    'campaigns.room.assetsEmptyAction': 'أضف وسائط إلى منشور',
+    'campaigns.room.activityEmptyBody':
+      'تظهر هنا المسودات والمراجعات والجدولة الخاصة بهذه الحملة لحظة حدوثها.',
     'campaigns.room.assetsBody': 'الملفات التي تستخدمها منشورات هذه الحملة، من مكتبة الأصول.',
     'campaigns.room.assetsEmpty': 'لا ملفات مستخدمة بعد',
     'campaigns.room.assetsEmptyBody': 'أضف صورًا أو فيديو إلى منشورات هذه الحملة وستظهر هنا.',
@@ -1081,8 +1097,8 @@ export const messages = {
     'content.composer.quoteLabel': 'التكلفة التقديرية',
     'content.composer.quoteUnit': 'رصيد',
     'content.composer.quoteHint': 'هذه تقدير قبل الخصم، وهو المبلغ نفسه الذي سيُحجز عند التوليد.',
-    'content.composer.results': 'الصيغ المولّدة',
-    'content.composer.resultsEmpty': 'ستظهر الصيغ هنا بعد التوليد.',
+    'content.composer.results': 'النسخ المولّدة',
+    'content.composer.resultsEmpty': 'ستظهر نسخة لكل قناة هنا بعد كتابة المسودة.',
     'content.composer.dialect': 'اللهجة',
     'content.composer.characters': 'حرفًا',
     'content.composer.of': 'من',
@@ -1133,6 +1149,8 @@ export const messages = {
     'content.language.EN': 'الإنجليزية',
     'content.type.POST': 'منشور',
     'content.type.CAROUSEL': 'ألبوم',
+    'create.carousel.outlineHint':
+      'يكتب الذكاء الاصطناعي أولًا مخططًا للشرائح — افتتاحية ونقاط ودعوة لاتخاذ إجراء — في أول النص، لتراجعه وتعدّله. ثم اختر صورة لكل شريحة أو أنشئها.',
     'content.type.STORY': 'قصة',
     'content.type.REEL': 'ريل',
     'content.type.VIDEO': 'فيديو',
@@ -1161,6 +1179,8 @@ export const messages = {
     'calendar.next': 'الشهر التالي',
     'calendar.emptyDay': 'لا يوجد محتوى',
     'calendar.emptyTitle': 'لا يوجد محتوى مجدول',
+    'calendar.emptySchedule': 'جدولة مسودة',
+    'calendar.emptyCreate': 'إنشاء منشور',
     'calendar.emptyBody':
       'اختر مسودة جاهزة وحدّد موعد نشرها. يبقى المحتوى مسودة حتى تضعه على التقويم.',
     'calendar.postsOnDay': 'عدد المنشورات',
@@ -1291,7 +1311,7 @@ export const messages = {
     'publishing.code.verify.not_published':
       'تحقّقنا من المنصة ولم نجد المنشور. لم يُنشر شيء مرتين.',
     'publishing.code.recovery.claim_expired':
-      'انقطعت محاولة سابقة. أُعيدت المهمة إلى الانتظار بأمان.',
+      'انقطعت محاولة سابقة. أُعيد المنشور إلى قائمة الانتظار بأمان.',
     'nav.notifications': 'الإشعارات',
 
     'content.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -1312,6 +1332,7 @@ export const messages = {
       'يمكنك متابعة ما أرسلته للمراجعة، لكن اعتماد المحتوى يحتاج صلاحية المراجعة.',
     'approvals.mine': 'ما أرسلته',
     'approvals.mineEmptyTitle': 'لم ترسل شيئًا للمراجعة',
+    'approvals.mineEmptyAction': 'افتح المسودات',
     'approvals.mineEmptyBody': 'أرسل مسودة من استوديو المحتوى لتظهر هنا.',
     'approvals.requestedBy': 'أرسلها',
     'approvals.requestedAt': 'تاريخ الإرسال',
@@ -1539,10 +1560,10 @@ export const messages = {
     'notifications.emptyBody':
       'سنخبرك هنا عندما يحتاج محتوى إلى مراجعتك أو يصدر قرار بشأن ما أرسلته.',
     'notifications.view': 'عرض',
-    'notifications.template.approval.requested': 'محتوى بانتظار مراجعتك',
-    'notifications.template.approval.approved': 'تم اعتماد محتواك',
-    'notifications.template.approval.changes_requested': 'طُلب تعديل على محتواك',
-    'notifications.template.approval.rejected': 'رُفض محتواك',
+    'notifications.template.approval.requested': 'منشور بانتظار مراجعتك',
+    'notifications.template.approval.approved': 'تم اعتماد منشورك',
+    'notifications.template.approval.changes_requested': 'طُلبت تعديلات على منشورك',
+    'notifications.template.approval.rejected': 'رُفض منشورك',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
     'notifications.template.publishing.connection_needs_reauth': 'حساب متصل يحتاج إعادة ربط',
@@ -1669,7 +1690,7 @@ export const messages = {
     'insights.evidenceCount': 'عدد الأدلة',
     'insights.insufficientTitle': 'لا توجد بيانات كافية بعد',
     'insights.insufficientBody': 'لم يُستهلك أي رصيد. ستتوفر الشروح بعد تراكم قياسات كافية.',
-    'insights.empty': 'لا توجد رؤى بعد.',
+    'insights.empty': 'لا توجد رؤى بعد — تظهر عندما تتوفر بيانات كافية من منشوراتك المنشورة.',
     'insights.status.NEW': 'جديدة',
     'insights.status.SEEN': 'مقروءة',
     'insights.status.ACCEPTED': 'معتمدة',
@@ -1719,7 +1740,7 @@ export const messages = {
     'intelligence.loop.pending': '{count} من الدروس المقترحة من هذه النتيجة بانتظار المراجعة',
     'intelligence.loop.accepted': '{count} منها اعتُمد في عقل العلامة',
     'intelligence.loop.open': 'افتح عقل العلامة',
-    'intelligence.empty': 'لا توجد نتائج بعد.',
+    'intelligence.empty': 'لا توجد ملاحظات بعد',
     'intelligence.emptyBody':
       'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
     'strategy.title': 'الاستراتيجية',
@@ -1889,8 +1910,11 @@ export const messages = {
     'automations.subtitle': 'قاعدة واحدة: حدث، ثم شرط، ثم إجراء — بلا أكواد وبلا روابط خارجية.',
     'automations.rules': 'القواعد',
     'automations.runs': 'سجل التشغيل',
-    'automations.empty': 'لا توجد قواعد بعد.',
-    'automations.runsEmpty': 'لم تُشغَّل أي قاعدة بعد.',
+    'automations.empty': 'لا توجد أتمتة بعد',
+    'automations.emptyBody':
+      'تتولى الأتمتة الأعمال المتكررة عنك — تبدأ متوقفة، وتسألك قبل نشر أي شيء. اطلبها من المساعد أعلاه، أو ابنِها يدويًا.',
+    'automations.runsEmpty': 'لم تعمل أي أتمتة بعد',
+    'automations.runsEmptyBody': 'كل مرة تعمل فيها أتمتة، يظهر هنا ما فعلته ومتى.',
     'automations.create': 'قاعدة جديدة',
     'automations.discover.title': 'أتمت بالسؤال',
     'automations.discover.body':
@@ -2008,7 +2032,7 @@ export const messages = {
     'notifications.template.automation.confirmation_required':
       'أتمتة تنتظر موافقتك قبل إجراء خارجي',
     'notifications.template.automation.blocked': 'أتمتة توقّفت لعدم كفاية الصلاحية',
-    'notifications.template.automation.notice': 'نفّذت قاعدة أتمتة إشعارها',
+    'notifications.template.automation.notice': 'أرسلت إحدى الأتمتات تنبيهًا',
     'automations.previewTitle': 'ما الذي سيُنشر',
     'automations.previewRule': 'القاعدة: {rule}',
     'automations.previewContent': 'المحتوى: {content}',
@@ -2029,7 +2053,9 @@ export const messages = {
     'campaigns.new': 'حملة جديدة',
     'campaigns.emptyTitle': 'لا توجد حملات بعد',
     'campaigns.emptyBody':
-      'الحملة تجمع منشوراتك حول هدف واحد وفترة زمنية واحدة، فتصبح نتائجها قابلة للقراءة.',
+      'الحملات تجمع الاستراتيجية والمحتوى والمراجعة والتقويم والأداء في مكان واحد — هدف واحد، وفترة واحدة، ونتائج تُقرأ معًا.',
+    'campaigns.emptyAction': 'أنشئ حملتك الأولى',
+    'campaigns.noBrandBody': 'كل حملة تخص علامة تجارية. أنشئ علامتك الأولى، ثم خطّط حملاتها.',
     'campaigns.chooseBrandTitle': 'اختر علامة تجارية',
     'campaigns.chooseBrandBody': 'الحملة تخصّ علامة تجارية واحدة. اختر واحدة من المبدّل في الأعلى.',
     'campaigns.name': 'اسم الحملة',
@@ -2050,7 +2076,7 @@ export const messages = {
     'campaigns.archive': 'أرشفة الحملة',
     'campaigns.archiveHint': 'تختفي الحملة من القوائم النشطة. لا يُحذف أي محتوى.',
     'campaigns.back': 'كل الحملات',
-    'campaigns.contentCount': 'عناصر المحتوى',
+    'campaigns.contentCount': 'المنشورات',
     'campaigns.contentTitle': 'محتوى هذه الحملة',
     'campaigns.contentEmpty': 'لم يُربط أي محتوى بهذه الحملة بعد.',
     'campaigns.contentEmptyAction': 'اكتب منشورًا',
@@ -2328,7 +2354,7 @@ export const messages = {
     'home.notes.open.BRAND': 'فتح العلامة',
     'home.notes.resolve': 'إنهاء',
     'home.upcoming.title': 'القادم هذا الأسبوع',
-    'home.upcoming.empty': 'لا شيء مخطط أو مجدول للأيام السبعة القادمة.',
+    'home.upcoming.empty': 'لا شيء مخطط للأيام السبعة القادمة. جدوِل مسودة من التقويم وستظهر هنا.',
     'home.slot.PLANNED': 'مخطط',
     'home.slot.SCHEDULED': 'مجدول',
     'home.slot.PUBLISHING': 'قيد النشر',
@@ -2507,6 +2533,14 @@ export const messages = {
   en: {
     'app.title': 'BrandSpace',
     'nav.overview': 'Home',
+    'errors.route.title': 'This screen could not load',
+    'errors.route.body': 'Nothing was changed. Try again, or go back to Home.',
+    'errors.route.retry': 'Try again',
+    'errors.route.home': 'Back to Home',
+    'errors.route.reference': 'Reference: {ref}',
+    'errors.notFound.title': "We couldn't find that page",
+    'errors.notFound.body':
+      'It may have moved or been deleted, or it is not available to your account.',
     'nav.members': 'Team',
     'nav.settings': 'Settings',
     'nav.plan': 'Plan & usage',
@@ -2531,7 +2565,8 @@ export const messages = {
       'Every conversation that concerns you, and the other open ones in your brands.',
     'notesInbox.forYou': 'For you',
     'notesInbox.forYouHint': 'You were mentioned, assigned, or took part.',
-    'notesInbox.forYouEmpty': 'Nothing concerns you yet.',
+    'notesInbox.forYouEmpty':
+      'Nothing waiting on you. When someone mentions you or asks you something on a post, campaign, asset or brand, it lands here.',
     'notesInbox.others': 'Other open conversations',
     'notesInbox.othersHint': 'Open conversations in the brands you can see.',
     'notesInbox.othersEmpty': 'No other open conversations.',
@@ -2641,6 +2676,8 @@ export const messages = {
     'publishingHub.scheduledFor': 'Scheduled for',
     'publishingHub.publishedOn': 'Published',
     'publishingHub.reconnect': 'Reconnect {provider}',
+    'publishingHub.emptyAction': 'Open the calendar',
+    'publishingHub.connectAction': 'Connect an account',
     'publishingHub.manageConnections': 'Manage connections',
     'publishingHub.readiness.ready': 'Ready to publish',
     'publishingHub.readiness.reconnect': 'Account needs reconnecting',
@@ -2927,7 +2964,7 @@ export const messages = {
     'plan.usageUnstated': '{used} · no ceiling stated',
     'plan.usageBrands': 'Brands',
     'plan.usageSocialAccounts': 'Connected accounts',
-    'plan.noFeatures': 'No features are defined in the active configuration yet.',
+    'plan.noFeatures': 'This plan does not include any features yet.',
     // --- Phase 3 ---
     'plan.trial': 'Trial',
     'plan.trialEnds': 'Trial ends',
@@ -3007,6 +3044,7 @@ export const messages = {
     'assets.storageOf': 'of',
     'assets.storageUnlimited': 'Unlimited',
     'assets.emptyTitle': 'No files yet',
+    'assets.emptyGenerate': 'Generate a visual',
     'assets.emptyBody':
       'Upload your brand photography, logos and approved files. Every file is scanned before it becomes available for use.',
     'assets.emptyFilteredTitle': 'No matches',
@@ -3081,6 +3119,7 @@ export const messages = {
       'BrandSpace understands this brand from {facts} approved facts across {areas} of {total} areas and {sources} processed sources.',
     'bb.askAboutBrand': 'Ask about this brand',
     'bb.openProfile': 'Brand profile',
+    'bb.emptyUpload': 'Upload brand documents',
     'bb.layersTitle': 'What BrandSpace remembers',
     'bb.layer.CANONICAL': 'Brand knowledge',
     'bb.layer.CANONICAL.desc': 'What the brand is: identity, audience, offers, voice and rules.',
@@ -3262,7 +3301,7 @@ export const messages = {
     'content.eyebrow': 'Content library',
     'content.title': 'All posts',
     'content.subtitle':
-      'Drafts written from your Brand Brain — a variant per channel, and the sources behind each one.',
+      'Drafts written from your Brand Brain — a version per channel, and the sources behind each one.',
     'content.create': '+ Create post',
     'content.search': 'Search posts',
     'content.filter.brand': 'Brand',
@@ -3298,16 +3337,17 @@ export const messages = {
     'content.tab.review': 'In review',
     'content.tab.archived': 'Archived',
     'content.emptyTitle': 'No drafts yet',
+    'content.emptyAction': 'Create your first post',
     'content.emptyBody':
-      'Describe what you want to post and the studio writes a variant for each channel, from your Brand Brain and nothing else.',
+      'Describe what you want to post and the studio writes a version for each channel, from your Brand Brain and nothing else.',
     'content.emptyFilteredTitle': 'No results',
     'content.emptyFilteredBody':
       'No draft matches what you searched for. Try a different search or filter.',
     'content.status.DRAFT': 'Draft',
     'content.status.IN_REVIEW': 'In review',
     'content.status.ARCHIVED': 'Archived',
-    'content.variantCount': 'variant',
-    'content.variantCountPlural': 'variants',
+    'content.variantCount': 'version',
+    'content.variantCountPlural': 'versions',
     'content.openDraft': 'Open draft',
     // --- The composer ---
     'content.composer.eyebrow': 'Create',
@@ -3316,8 +3356,7 @@ export const messages = {
     'content.composer.brand': 'Brand',
     'content.composer.brandPlaceholder': 'Select a brand',
     'content.composer.channels': 'Publish to',
-    'content.composer.channelsHint':
-      'Choose at least one channel. Channels are configured by the platform.',
+    'content.composer.channelsHint': 'Choose at least one channel.',
     'content.composer.brief': 'What would you like to post?',
     'content.composer.briefPlaceholder':
       'For example: announce the spring collection, calm tone, invite people to visit the store.',
@@ -3368,6 +3407,9 @@ export const messages = {
     'campaigns.room.calendarEmptyBody':
       "Schedule one of this campaign's posts and it appears here.",
     'campaigns.room.openCalendar': 'Open in the calendar',
+    'campaigns.room.assetsEmptyAction': 'Add media to a post',
+    'campaigns.room.activityEmptyBody':
+      'Drafts, reviews and schedules for this campaign appear here as they happen.',
     'campaigns.room.assetsBody': "The files this campaign's posts use, from your Asset Library.",
     'campaigns.room.assetsEmpty': 'No files used yet',
     'campaigns.room.assetsEmptyBody':
@@ -3590,8 +3632,9 @@ export const messages = {
     'content.composer.quoteUnit': 'credits',
     'content.composer.quoteHint':
       'An estimate before anything is spent, and the same amount the generation reserves.',
-    'content.composer.results': 'Generated variants',
-    'content.composer.resultsEmpty': 'Variants appear here once the draft is written.',
+    'content.composer.results': 'Generated versions',
+    'content.composer.resultsEmpty':
+      'A version for each channel appears here once the draft is written.',
     'content.composer.dialect': 'Dialect',
     'content.composer.characters': 'characters',
     'content.composer.of': 'of',
@@ -3642,6 +3685,8 @@ export const messages = {
     'content.language.EN': 'English',
     'content.type.POST': 'Post',
     'content.type.CAROUSEL': 'Carousel',
+    'create.carousel.outlineHint':
+      'AI writes a slide outline first — a hook, the points, a call to action — at the top of the caption, for you to review and edit. Then choose or generate a visual for each slide.',
     'content.type.STORY': 'Story',
     'content.type.REEL': 'Reel',
     'content.type.VIDEO': 'Video',
@@ -3670,6 +3715,8 @@ export const messages = {
     'calendar.next': 'Next month',
     'calendar.emptyDay': 'Nothing planned',
     'calendar.emptyTitle': 'Nothing on the calendar yet',
+    'calendar.emptySchedule': 'Schedule a draft',
+    'calendar.emptyCreate': 'Create a post',
     'calendar.emptyBody':
       'Pick a draft that is ready and choose when it should go out. Content stays a draft until you place it here.',
     'calendar.postsOnDay': 'posts',
@@ -3810,7 +3857,7 @@ export const messages = {
     'publishing.code.verify.not_published':
       'We checked with the platform and the post is not there. Nothing was published twice.',
     'publishing.code.recovery.claim_expired':
-      'An earlier attempt was interrupted. The job was safely returned to the queue.',
+      'An earlier attempt was interrupted. The post was safely put back in the queue.',
     'nav.notifications': 'Notifications',
 
     'content.status.CHANGES_REQUESTED': 'Changes requested',
@@ -3831,6 +3878,7 @@ export const messages = {
       'You can follow what you sent for review, but approving content needs review permission.',
     'approvals.mine': 'What you sent',
     'approvals.mineEmptyTitle': 'You have not sent anything for review',
+    'approvals.mineEmptyAction': 'Open your drafts',
     'approvals.mineEmptyBody': 'Send a draft from the Content Studio and it will appear here.',
     'approvals.requestedBy': 'Sent by',
     'approvals.requestedAt': 'Sent',
@@ -4060,10 +4108,10 @@ export const messages = {
     'notifications.emptyBody':
       'We will tell you here when content needs your review, or when something you sent is decided.',
     'notifications.view': 'View',
-    'notifications.template.approval.requested': 'Content is waiting for your review',
-    'notifications.template.approval.approved': 'Your content was approved',
-    'notifications.template.approval.changes_requested': 'Changes were requested on your content',
-    'notifications.template.approval.rejected': 'Your content was turned down',
+    'notifications.template.approval.requested': 'A post is waiting for your review',
+    'notifications.template.approval.approved': 'Your post was approved',
+    'notifications.template.approval.changes_requested': 'Changes were requested on your post',
+    'notifications.template.approval.rejected': 'Your post was turned down',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
     'notifications.template.publishing.connection_needs_reauth':
@@ -4203,7 +4251,8 @@ export const messages = {
     'insights.insufficientTitle': 'Not enough data yet',
     'insights.insufficientBody':
       'Nothing was charged. Explanations become available once enough measurements have accumulated.',
-    'insights.empty': 'No insights yet.',
+    'insights.empty':
+      'No insights yet — they appear once your published posts have enough data behind them.',
     'insights.status.NEW': 'New',
     'insights.status.SEEN': 'Seen',
     'insights.status.ACCEPTED': 'Accepted',
@@ -4255,7 +4304,7 @@ export const messages = {
       '{count} learnings proposed from this finding are waiting for review',
     'intelligence.loop.accepted': '{count} accepted into Brand Brain',
     'intelligence.loop.open': 'Open Brand Brain',
-    'intelligence.empty': 'Nothing here yet.',
+    'intelligence.empty': 'No findings yet',
     'intelligence.emptyBody':
       'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',
     'strategy.title': 'Strategy',
@@ -4436,8 +4485,11 @@ export const messages = {
       'One rule: an event, a condition, an action — no code and no outbound links.',
     'automations.rules': 'Rules',
     'automations.runs': 'Run history',
-    'automations.empty': 'No rules yet.',
-    'automations.runsEmpty': 'No rule has run yet.',
+    'automations.empty': 'No automations yet',
+    'automations.emptyBody':
+      'Automations take repeat work off your hands — they start switched off and ask before anything goes out. Ask the Copilot above, or build one by hand.',
+    'automations.runsEmpty': 'No automation has run yet',
+    'automations.runsEmptyBody': 'Each time an automation runs, what it did and when appears here.',
     'automations.create': 'New rule',
     'automations.discover.title': 'Automate by asking',
     'automations.discover.body':
@@ -4557,7 +4609,7 @@ export const messages = {
     'notifications.template.automation.confirmation_required':
       'An automation is waiting for you to confirm an external action',
     'notifications.template.automation.blocked': 'An automation stopped: not enough permission',
-    'notifications.template.automation.notice': 'An automation rule sent its notice',
+    'notifications.template.automation.notice': 'An automation sent you a notice',
     'automations.previewTitle': 'What would be published',
     'automations.previewRule': 'Rule: {rule}',
     'automations.previewContent': 'Content: {content}',
@@ -4581,7 +4633,10 @@ export const messages = {
     'campaigns.new': 'New campaign',
     'campaigns.emptyTitle': 'No campaigns yet',
     'campaigns.emptyBody':
-      'A campaign gathers your posts around one objective and one period, so their results can be read together.',
+      'Campaigns keep strategy, content, review, calendar and performance together — one objective, one period, results read side by side.',
+    'campaigns.emptyAction': 'Create your first campaign',
+    'campaigns.noBrandBody':
+      'Every campaign belongs to a brand. Create your first brand, then plan its campaigns.',
     'campaigns.chooseBrandTitle': 'Choose a brand',
     'campaigns.chooseBrandBody':
       'A campaign belongs to one brand. Choose one from the selector above.',
@@ -4604,7 +4659,7 @@ export const messages = {
     'campaigns.archive': 'Archive campaign',
     'campaigns.archiveHint': 'The campaign leaves the active lists. No content is deleted.',
     'campaigns.back': 'All campaigns',
-    'campaigns.contentCount': 'Content items',
+    'campaigns.contentCount': 'Posts',
     'campaigns.contentTitle': 'Content in this campaign',
     'campaigns.contentEmpty': 'No content is linked to this campaign yet.',
     'campaigns.contentEmptyAction': 'Write a post',
@@ -4892,7 +4947,8 @@ export const messages = {
     'home.notes.open.BRAND': 'Open brand',
     'home.notes.resolve': 'Resolve',
     'home.upcoming.title': 'Coming up this week',
-    'home.upcoming.empty': 'Nothing is planned or scheduled for the next seven days.',
+    'home.upcoming.empty':
+      'Nothing is planned for the next seven days. Schedule a draft from the calendar and it appears here.',
     'home.slot.PLANNED': 'Planned',
     'home.slot.SCHEDULED': 'Scheduled',
     'home.slot.PUBLISHING': 'Publishing',
@@ -5223,7 +5279,10 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'Something went wrong and nothing was changed.',
     ar: 'حدث خطأ ولم يتغيّر شيء.',
   },
-  INVALID_JSON: { en: 'The payload is not valid.', ar: 'المحتوى غير صالح.' },
+  INVALID_JSON: {
+    en: 'That request could not be read. Please try again.',
+    ar: 'تعذّرت قراءة الطلب. يُرجى المحاولة مرة أخرى.',
+  },
   /*
    * THE THREE COMMERCIAL REFUSALS, which had no text at all.
    *

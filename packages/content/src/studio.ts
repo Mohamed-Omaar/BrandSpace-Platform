@@ -101,6 +101,27 @@ const TOOL_DIRECTIVE: Record<ContentTool, string> = {
     'Keep the caption exactly as it is. Propose hashtags that fit it and the brand, within the platform limit.',
 };
 
+/**
+ * AN AI CAROUSEL STARTS AS AN OUTLINE (Phase 6 final, D-277 §23, D-300).
+ *
+ * For a carousel the caption opens with a slide outline — a hook, the points,
+ * a call to action, one line per slide — and the caption follows. It is TEXT
+ * in the caption the person reads, edits and previews, because the durable
+ * model has no per-slide text: pretending otherwise would be the fake text
+ * layer §23 forbids. The visuals are then chosen or generated slide by slide
+ * with the existing controls. Every other format gets no instruction at all.
+ */
+export function carouselOutlineInstruction(
+  contentType: ContentItem['contentType'] | undefined,
+): readonly string[] {
+  if (contentType !== 'CAROUSEL') return [];
+  return [
+    'This post is a CAROUSEL. Begin each body with a slide outline, one line per slide:',
+    '"Slide 1 — <hook>", then one line per point, and a last "Slide N — <call to action>", 3 to 7 slides in all.',
+    'Then a blank line, then the caption. The outline is words only: do not describe images you were not given.',
+  ];
+}
+
 export interface StudioOptions extends ContentLibraryOptions {
   readonly gateway: AiGateway;
   readonly clock?: Clock;
@@ -155,6 +176,15 @@ export class ContentStudioService extends ContentLibraryService {
     platformKeys: readonly string[];
     planKey: string | null;
     actorBrandScope: readonly string[];
+    /**
+     * D-300 — what the generation will be asked with: the format (a carousel
+     * carries its outline instruction), the language (and so the dialect) and
+     * the member (their accepted defaults, D-295). Without them the quote was
+     * a shorter prompt than the one then reserved.
+     */
+    contentType?: ContentItem['contentType'] | undefined;
+    locale?: Locale | undefined;
+    actorUserId?: string | undefined;
   }): Promise<AiQuote> {
     assertBrandInScope(input.actorBrandScope, input.brandId);
     this.#assertBrief(input.brief);
@@ -167,7 +197,10 @@ export class ContentStudioService extends ContentLibraryService {
       planKey: input.planKey,
       input: {
         kind: 'text',
-        prompt: this.#prompt(input.brief, input.platformKeys),
+        prompt: await this.#generationPrompt({
+          ...input,
+          dialect: input.locale === 'AR' ? await this.resolveDialectFor(input.brandId) : undefined,
+        }),
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },
     });
@@ -262,29 +295,7 @@ export class ContentStudioService extends ContentLibraryService {
       idempotencyKey: `content-studio:${input.idempotencyKey}`,
       input: {
         kind: 'text',
-        prompt: this.#prompt(
-          input.brief,
-          input.platformKeys,
-          dialect,
-          input.locale,
-          // D-295 — this person's ACCEPTED defaults for this brand, as
-          // instructions built from the closed preference keys only.
-          preferenceInstructions(
-            (
-              await this.db.memberSuggestion.findMany({
-                where: {
-                  workspaceId: this.workspaceId,
-                  brandId: input.brandId,
-                  userId: input.actorUserId,
-                  kind: 'PREFERENCE',
-                  status: 'ACCEPTED',
-                },
-                select: { key: true },
-              })
-            ).map((row) => row.key),
-            input.platformKeys,
-          ),
-        ),
+        prompt: await this.#generationPrompt({ ...input, dialect }),
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },
     });
@@ -552,6 +563,46 @@ export class ContentStudioService extends ContentLibraryService {
     });
   }
 
+  /**
+   * THE ONE GENERATION PROMPT, for the quote and the charge alike (D-300), so
+   * the price confirmed is the price of the request actually made (AC-11.1).
+   */
+  async #generationPrompt(input: {
+    readonly brandId: string;
+    readonly brief: string;
+    readonly platformKeys: readonly string[];
+    readonly dialect?: ContentDialect | undefined;
+    readonly locale?: Locale | undefined;
+    readonly actorUserId?: string | undefined;
+    readonly contentType?: ContentItem['contentType'] | undefined;
+  }): Promise<string> {
+    // D-295 — this person's ACCEPTED defaults for this brand, as instructions
+    // built from the closed preference keys only.
+    const accepted = input.actorUserId
+      ? await this.db.memberSuggestion.findMany({
+          where: {
+            workspaceId: this.workspaceId,
+            brandId: input.brandId,
+            userId: input.actorUserId,
+            kind: 'PREFERENCE',
+            status: 'ACCEPTED',
+          },
+          select: { key: true },
+        })
+      : [];
+    return this.#prompt(
+      input.brief,
+      input.platformKeys,
+      input.dialect,
+      input.locale,
+      preferenceInstructions(
+        accepted.map((row) => row.key),
+        input.platformKeys,
+      ),
+      input.contentType,
+    );
+  }
+
   #prompt(
     brief: string,
     platformKeys: readonly string[],
@@ -559,6 +610,7 @@ export class ContentStudioService extends ContentLibraryService {
     locale?: Locale,
     /** D-295 — the author's accepted defaults (closed-key instructions). */
     authorDefaults: readonly string[] = [],
+    contentType?: ContentItem['contentType'],
   ): string {
     const platforms = platformKeys
       .map((key) => {
@@ -580,6 +632,7 @@ export class ContentStudioService extends ContentLibraryService {
       ...(authorDefaults.length > 0
         ? ['Defaults this author chose for their own drafts:', ...authorDefaults]
         : []),
+      ...carouselOutlineInstruction(contentType),
       'Respond with JSON: {"title": string, "variants": [{"platformKey": string, "body": string, "hashtags": string[]}]}.',
       '',
       'Brief:',

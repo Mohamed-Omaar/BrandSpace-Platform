@@ -273,6 +273,9 @@ export function registerContentRoutes(app: FastifyInstance): void {
               platformKeys: parsed.data.platformKeys,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,
+              contentType: parsed.data.contentType,
+              locale: parsed.data.locale,
+              actorUserId: caller.userId,
             }),
           { prisma: getPrisma() },
         );

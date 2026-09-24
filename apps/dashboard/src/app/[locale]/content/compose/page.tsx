@@ -938,6 +938,7 @@ const EDITOR_KEYS = [
 ] as const satisfies readonly MessageKey[];
 
 const COMPOSER_KEYS = [
+  'create.carousel.outlineHint',
   // Phase 6 final — the draft editor (D-284).
   ...EDITOR_KEYS,
   // Phase 6 final — how the post was started, its goal and its format (D-283).
