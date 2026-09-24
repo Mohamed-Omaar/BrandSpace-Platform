@@ -786,7 +786,7 @@ test.describe('automations', () => {
       return;
     }
     // The empty state, and it says so in words.
-    await expect(page.getByText(/no rule has run yet/i).first()).toBeVisible();
+    await expect(page.getByText(/no automation has run yet/i).first()).toBeVisible();
   });
 
   test('is clean under axe in both directions', async ({ page }) => {

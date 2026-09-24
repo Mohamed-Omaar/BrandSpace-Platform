@@ -141,19 +141,17 @@ async function fixture(input: {
 
 test.afterAll(async () => {
   if (made.length === 0) return;
+  /*
+   * REMOVED, NOT CANCELLED. A cancelled job still shows in the publishing
+   * history, newest first — and these are dated a week ahead, so every run's
+   * leftovers pushed other suites' seeded failures off its first page.
+   */
   await withPlatformPrisma(async (prisma) => {
     const now = new Date();
-    await prisma.publishJob.updateMany({
-      where: { id: { in: made.map((m) => m.jobId) }, status: { not: 'PUBLISHED' } },
-      data: { status: 'CANCELLED', cancelledAt: now },
-    });
-    await prisma.calendarSlot.updateMany({
-      where: { id: { in: made.map((m) => m.slotId) } },
-      data: { status: 'CANCELLED', cancelledAt: now },
-    });
-    await prisma.socialConnection.updateMany({
+    await prisma.publishJob.deleteMany({ where: { id: { in: made.map((m) => m.jobId) } } });
+    await prisma.calendarSlot.deleteMany({ where: { id: { in: made.map((m) => m.slotId) } } });
+    await prisma.socialConnection.deleteMany({
       where: { id: { in: made.map((m) => m.connectionId) } },
-      data: { status: 'REVOKED', revokedAt: now },
     });
     await prisma.contentItem.updateMany({
       where: { id: { in: made.map((m) => m.itemId) } },
