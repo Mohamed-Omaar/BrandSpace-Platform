@@ -122,13 +122,13 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
     await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
 
     // The label is visible when expanded.
-    await expect(page.getByTestId('nav-members')).toContainText(/\w/);
+    await expect(page.getByTestId('nav-content')).toContainText(/\w/);
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(shell).toHaveAttribute('data-sidebar-state', 'collapsed');
     // Collapsed, the item is still THERE and still reachable — only its text is
     // gone. A collapsed sidebar that removes navigation is not a collapse.
-    await expect(page.getByTestId('nav-members')).toBeVisible();
+    await expect(page.getByTestId('nav-content')).toBeVisible();
 
     await page.click('[data-testid="toggle-sidebar"]');
     await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
@@ -181,11 +181,11 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
     await signInAndEnterWorkspace(page);
     await page.click('[data-testid="toggle-sidebar"]');
     // WCAG 1.4.13: content available on hover must also be available on focus.
-    const item = page.getByTestId('nav-members');
+    const item = page.getByTestId('nav-content');
     await item.focus();
     // The tooltip of THAT item, not whichever one happens to be first in the
     // document — the sidebar renders one per link.
-    const tooltip = page.locator('span:has(> span > [data-testid="nav-members"]) [role="tooltip"]');
+    const tooltip = page.locator('span:has(> span > [data-testid="nav-content"]) [role="tooltip"]');
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toHaveText(/\w/);
   });
@@ -251,8 +251,8 @@ test.describe('mobile navigation is a drawer, not a squeezed sidebar', () => {
     // Scoped to the drawer: the sidebar renders the same link, and at this
     // width it is hidden, so an unscoped selector resolves to two elements and
     // clicks the invisible one.
-    await page.getByTestId('navigation-drawer').getByTestId('nav-members').click();
-    await page.waitForURL(/\/en\/members/);
+    await page.getByTestId('navigation-drawer').getByTestId('nav-content').click();
+    await page.waitForURL(/\/en\/content/);
 
     await expect(page.getByTestId('active-workspace')).toHaveText(workspace ?? '');
     // The drawer closes on navigation rather than covering the page it opened.

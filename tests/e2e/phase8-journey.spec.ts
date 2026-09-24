@@ -78,7 +78,8 @@ const JOURNEY: readonly { readonly name: string; readonly path: string }[] = [
   { name: 'AI Creative Studio', path: '/creative' },
   { name: 'Approvals', path: '/approvals' },
   { name: 'Calendar', path: '/calendar' },
-  { name: 'Social Accounts — where publishing goes out', path: '/integrations' },
+  { name: 'Publishing — where posts go out (D-277)', path: '/publishing' },
+  { name: 'Settings > Connections — the accounts behind it', path: '/integrations' },
   { name: 'Analytics', path: '/analytics' },
   { name: 'Marketing Intelligence', path: '/intelligence' },
 ];

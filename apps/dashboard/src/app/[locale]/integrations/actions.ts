@@ -27,12 +27,46 @@ const log = createLogger({ context: { component: 'dashboard.integrations' } });
  *   - cancel / retry touch only tenant tables, so they run here.
  */
 
-function pageUrl(locale: string, params: Record<string, string> = {}): string {
-  const search = new URLSearchParams(params).toString();
-  return `/${locale}/integrations${search ? `?${search}` : ''}`;
+function pageUrl(
+  locale: string,
+  params: Record<string, string> = {},
+  back: ReturnTo = { path: '/integrations' },
+): string {
+  const search = new URLSearchParams({ ...(back.tab ? { tab: back.tab } : {}), ...params });
+  const query = search.toString();
+  return `/${locale}${back.path}${query ? `?${query}` : ''}`;
 }
 
-function failure(locale: string, error: unknown, action: string): string {
+/**
+ * WHERE AN ACTION RETURNS TO — a CLOSED SET, never a caller-supplied URL.
+ *
+ * The same cancel, retry and check controls now appear on Publishing (Phase 6
+ * final, D-277) and on Settings > Connections. The form names which screen it
+ * came from; anything outside this set returns to Connections, so a crafted
+ * `returnTo` cannot send the browser anywhere else.
+ */
+interface ReturnTo {
+  readonly path: '/integrations' | '/publishing';
+  readonly tab?: 'queue' | 'published' | 'failed' | 'accounts' | undefined;
+}
+
+const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
+
+function returnToOf(formData: FormData): ReturnTo {
+  if (String(formData.get('returnTo') ?? '') !== '/publishing') return { path: '/integrations' };
+  const tab = String(formData.get('tab') ?? '');
+  return {
+    path: '/publishing',
+    tab: PUBLISHING_TABS.has(tab) ? (tab as ReturnTo['tab']) : undefined,
+  };
+}
+
+function failure(
+  locale: string,
+  error: unknown,
+  action: string,
+  back: ReturnTo = { path: '/integrations' },
+): string {
   const correlationId = randomUUID();
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No account name and no provider text either side.
@@ -41,7 +75,7 @@ function failure(locale: string, error: unknown, action: string): string {
     action,
     ...internalErrorFields(error),
   });
-  return pageUrl(locale, { error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { error: toPublicErrorCode(error), ref: correlationId }, back);
 }
 
 /** The API's refusal code, or a stable INTERNAL. Never its prose. */
@@ -117,6 +151,7 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
 /** Ask the provider whether this grant still works. */
 export async function checkAccountAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.read');
@@ -125,18 +160,20 @@ export async function checkAccountAction(formData: FormData): Promise<void> {
       `/v1/social/connections/${encodeURIComponent(connectionId)}/check`,
     );
     destination = result.ok
-      ? pageUrl(locale, { ok: 'ACCOUNT_CHECKED' })
-      : pageUrl(locale, { error: upstreamCode(result.payload) });
+      ? pageUrl(locale, { ok: 'ACCOUNT_CHECKED' }, back)
+      : pageUrl(locale, { error: upstreamCode(result.payload) }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'check');
+    destination = failure(locale, error, 'check', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   redirect(destination);
 }
 
 /** Cancel a post that has not left yet. */
 export async function cancelPublishAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -144,11 +181,12 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).cancel({ jobId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ok: 'POST_CANCELLED' });
+    destination = pageUrl(locale, { ok: 'POST_CANCELLED' }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'cancel');
+    destination = failure(locale, error, 'cancel', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);
 }
@@ -156,6 +194,7 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
 /** Try a failed post again, after a human has fixed whatever was wrong. */
 export async function retryPublishAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
+  const back = returnToOf(formData);
   let destination: string;
   try {
     const session = await requireWorkspace(locale, 'publishing.manage');
@@ -163,11 +202,12 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).retry({ jobId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' });
+    destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'retry');
+    destination = failure(locale, error, 'retry', back);
   }
   revalidatePath(`/${locale}/integrations`);
+  revalidatePath(`/${locale}/publishing`);
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);
 }

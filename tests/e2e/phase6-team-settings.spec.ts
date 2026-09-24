@@ -76,7 +76,7 @@ test.describe('P6-13 · team, activity, settings, plan', () => {
     // Reachable from the Settings navigation, alongside Connected accounts.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
     await expect(page.getByRole('link', { name: 'Data controls' }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Connected accounts' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Connections' }).first()).toBeVisible();
   });
 
   test('the Plan screen shows brands and accounts against their real ceilings', async ({

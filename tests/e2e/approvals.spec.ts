@@ -356,20 +356,26 @@ test.describe('accessibility and direction', () => {
     }
   }
 
-  test('the new routes are keyboard reachable from the navigation', async ({ page }) => {
+  test('the new routes are reachable where the final IA put them (D-277)', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     /*
-     * BY TEST ID, not by accessible name. "Approvals" is also the accessible
-     * name of the Command Center panel's own link, and a role query matching two
-     * elements is a strict-mode violation rather than a passing assertion — the
-     * nav item is what this test is about.
+     * Approvals and Notifications moved from the sidebar to the TOP BAR
+     * (Review, the bell); Activity moved into SETTINGS. Each is still a real,
+     * focusable link to the same route.
      */
+    await expect(page.getByTestId('topbar-review')).toHaveAttribute('href', '/en/approvals');
+    await expect(page.getByTestId('topbar-notifications')).toHaveAttribute(
+      'href',
+      '/en/notifications',
+    );
     for (const item of ['approvals', 'activity', 'notifications']) {
-      const link = page.getByTestId(`nav-${item}`);
-      await expect(link).toBeVisible({ timeout: 15_000 });
-      await expect(link).toHaveAttribute('href', `/en/${item}`);
+      await expect(page.getByTestId(`nav-${item}`)).toHaveCount(0);
     }
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await expect(
+      page.getByTestId('settings-nav').getByRole('link', { name: 'Activity' }),
+    ).toHaveAttribute('href', '/en/activity');
   });
 
   test('the approvals screen is responsive on a phone', async ({ page }) => {

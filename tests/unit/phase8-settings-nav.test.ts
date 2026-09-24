@@ -63,13 +63,16 @@ describe('P8: the settings nav offers only what the member can open', () => {
       selected: 'settings',
     });
     expect(items.map((item) => item.href)).toEqual([
+      // D-277 §44 order: Workspace, Brand, Connections, Team, Roles &
+      // permissions, Security, Data controls, Activity, Plan, Billing.
       '/ar/settings',
       '/ar/settings/brand',
-      '/ar/settings/security',
       '/ar/integrations',
-      '/ar/settings/data',
       '/ar/members',
       '/ar/permissions',
+      '/ar/settings/security',
+      '/ar/settings/data',
+      '/ar/activity',
       '/ar/plan',
       '/ar/billing',
     ]);
@@ -79,7 +82,7 @@ describe('P8: the settings nav offers only what the member can open', () => {
    * PERMISSIONS IS THE ONE ROW EVERY MEMBER GETS, because it shows the reader
    * their own effective permissions and the route asks for nothing.
    */
-  it('always offers the permissions row, and nothing else, to a plain member', () => {
+  it('always offers the rows every member may read — roles, security, activity — and nothing else', () => {
     const items = settingsNavItems({
       locale: 'en',
       permissionKeys: MEMBER_ONLY,
@@ -87,7 +90,11 @@ describe('P8: the settings nav offers only what the member can open', () => {
     });
     // SECURITY JOINS PERMISSIONS as a row every member gets: both are about the
     // reader themselves, and neither route asks for anything.
-    expect(items.map((item) => item.href)).toEqual(['/en/settings/security', '/en/permissions']);
+    expect(items.map((item) => item.href)).toEqual([
+      '/en/permissions',
+      '/en/settings/security',
+      '/en/activity',
+    ]);
   });
 
   /*
@@ -131,6 +138,7 @@ describe('P8: the settings nav permission column matches the routes themselves',
     '/permissions': 'apps/dashboard/src/app/[locale]/permissions/page.tsx',
     '/plan': 'apps/dashboard/src/app/[locale]/plan/page.tsx',
     '/billing': 'apps/dashboard/src/app/[locale]/billing/page.tsx',
+    '/activity': 'apps/dashboard/src/app/[locale]/activity/page.tsx',
   };
 
   it.each(SETTINGS_NAV_ROUTES.map((route) => [route.path, route.permission] as const))(

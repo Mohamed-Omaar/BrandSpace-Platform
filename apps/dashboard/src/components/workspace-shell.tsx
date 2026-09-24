@@ -7,14 +7,10 @@ import {
   TopbarCreateMenu,
   TopbarLink,
   menuItemStyle,
-  AlertIcon,
-  CheckIcon,
-  CreditIcon,
   HomeIcon,
   CalendarIcon,
   FlagIcon,
   LayersIcon,
-  ListIcon,
   ImageIcon,
   PencilIcon,
   PulseIcon,
@@ -23,9 +19,7 @@ import {
   LanguageSwitcher,
   SendIcon,
   SettingsIcon,
-  ShieldIcon,
   SparkIcon,
-  TeamIcon,
   WorkspaceSwitcher,
   BrandSwitcher,
   Banner,
@@ -40,6 +34,7 @@ import { switchLocalePath } from '../i18n/locale-path';
 import { translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
 import { topbarModel } from '../server/topbar';
+import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
@@ -100,21 +95,11 @@ const NAV: readonly NavEntry[] = [
     icon: <SparkIcon size={20} />,
   },
   {
-    href: '/content',
-    key: 'nav.content',
-    permission: 'content.read',
-    icon: <PencilIcon size={20} />,
+    href: '/strategy',
+    key: 'nav.strategy',
+    permission: 'strategy.read',
+    icon: <RouteIcon size={20} />,
   },
-  /*
-   * PHASE 8 — CAMPAIGNS. The entry appears now because the SCREEN exists now
-   * (D-188): the area has been on the fixed inventory since the contract was
-   * written, and adding a link before its route was real would have been the
-   * dead link §20 forbids. Gated on `campaigns.read`, matching the route.
-   *
-   * It reads between Content and Calendar because that is where it sits in the
-   * work: you plan a campaign, write content into it, then schedule that
-   * content.
-   */
   {
     href: '/campaigns',
     key: 'nav.campaigns',
@@ -124,25 +109,11 @@ const NAV: readonly NavEntry[] = [
     icon: <FlagIcon size={20} />,
   },
   {
-    href: '/calendar',
-    key: 'nav.calendar',
+    href: '/content',
+    key: 'nav.content',
     permission: 'content.read',
-    icon: <CalendarIcon size={20} />,
+    icon: <PencilIcon size={20} />,
   },
-  {
-    href: '/assets',
-    key: 'nav.assets',
-    permission: 'assets.read',
-    icon: <ImageIcon size={20} />,
-  },
-  /*
-   * PHASE 8 — THE AI CREATIVE STUDIO. The entry appears now because the SCREEN
-   * exists now (D-188). Gated on `assets.upload`, matching its route exactly:
-   * a generation writes a file into the library, so a member who may only read
-   * the library has nothing to do there.
-   *
-   * It reads after Assets because that is where its output goes.
-   */
   {
     href: '/creative',
     key: 'nav.creative',
@@ -151,82 +122,35 @@ const NAV: readonly NavEntry[] = [
     // product's mark for "a model did this", and it is what Brand Brain wears.
     icon: <SparkIcon size={20} />,
   },
-  /*
-   * Phase 5B-3. `/approvals` is gated on `content.read`, matching the route.
-   *
-   * This was briefly `null` — visible to every member — so that D-121's
-   * per-brand Viewer grant was reachable by somebody holding `workspace.read`
-   * and nothing else. D-62 supersedes D-121 and makes the Viewer strictly
-   * read-only, so the entry goes back to the permission the page requires:
-   * offering a link that answers 404 is the dead link §20 forbids.
-   *
-   * THE HIDDEN LINK IS TIDINESS, NOT SECURITY. `/approvals` and every action
-   * behind it refuse independently; nothing here is load-bearing.
-   *
-   * `/activity` is deliberately NOT changed: the Activity Log grades what a
-   * reader may see rather than refusing them, so its screen has an honest
-   * answer for every member.
-   */
   {
-    href: '/approvals',
-    key: 'nav.approvals',
+    href: '/assets',
+    key: 'nav.assets',
+    permission: 'assets.read',
+    icon: <ImageIcon size={20} />,
+  },
+  {
+    href: '/calendar',
+    key: 'nav.calendar',
     permission: 'content.read',
-    icon: <CheckIcon size={20} />,
+    icon: <CalendarIcon size={20} />,
   },
   /*
-   * Phase 6. Gated on `integrations.read`, matching the route exactly: a
-   * Viewer (read-only) holds `workspace.read` and nothing else (D-62, D-130),
-   * so they never see the entry and would get a 404 if they typed the path.
-   * The hidden link is tidiness; the route's own refusal is the control.
+   * PUBLISHING (D-277 §33): Queue · Published · Failed · Accounts. Gated on
+   * `publishing.read`, exactly as the route is. `SendIcon` reused: publishing
+   * IS sending.
    */
   {
-    href: '/integrations',
-    key: 'nav.integrations',
-    permission: 'integrations.read',
-    // `SendIcon` reused rather than a new glyph drawn: publishing IS sending,
-    // and §4.2 rule 4 puts reuse ahead of creation.
+    href: '/publishing',
+    key: 'nav.publishing',
+    permission: 'publishing.read',
     icon: <SendIcon size={20} />,
   },
-  /*
-   * Phase 7. Each gated on the permission its route requires, exactly as the
-   * Phase 6 entry is: offering a link that answers 404 is the dead link §20
-   * forbids, and the route's own refusal is the control.
-   *
-   * A Viewer (read-only) holds `workspace.read` and nothing else (D-62, D-130),
-   * so none of these four ever appears for them — and typing the path answers
-   * 404.
-   */
   {
     href: '/analytics',
     key: 'nav.analytics',
     permission: 'analytics.read',
-    /*
-     * EXISTING GLYPHS, NOT NEW ONES. §4.2 rule 4 puts reuse ahead of creation,
-     * and each of these four already means the right thing: a pulse is
-     * performance over time, a route is a plan, the spark is the Copilot's own
-     * mark everywhere else in the product, and sliders are rules somebody set.
-     */
     icon: <PulseIcon size={20} />,
   },
-  {
-    href: '/strategy',
-    key: 'nav.strategy',
-    permission: 'strategy.read',
-    icon: <RouteIcon size={20} />,
-  },
-  /*
-   * PHASE 8 — MARKETING INTELLIGENCE. On the fixed inventory since D-188 and
-   * linked now because its screen exists now. Gated on `strategy.read`,
-   * matching the route exactly.
-   *
-   * It reads between Strategy and the Copilot because that is where it sits in
-   * the work: the numbers say what happened, intelligence says what that means
-   * and what the brand should remember, strategy says what to do about it.
-   *
-   * `LayersIcon` reused rather than a new glyph drawn (§4.2 rule 4): the whole
-   * area is one thing laid over another — what this brand declared, against
-   * what it actually published.
-   */
   {
     href: '/intelligence',
     key: 'nav.intelligence',
@@ -234,119 +158,54 @@ const NAV: readonly NavEntry[] = [
     icon: <LayersIcon size={20} />,
   },
   {
-    href: '/copilot',
-    key: 'nav.copilot',
-    permission: 'copilot.use',
-    icon: <SparkIcon size={20} />,
-  },
-  {
     href: '/automations',
     key: 'nav.automations',
     permission: 'automation.read',
     icon: <SlidersIcon size={20} />,
   },
-  {
-    href: '/activity',
-    key: 'nav.activity',
-    permission: null,
-    icon: <ListIcon size={20} />,
-  },
-  {
-    href: '/notifications',
-    key: 'nav.notifications',
-    permission: null,
-    icon: <AlertIcon size={20} />,
-  },
-  { href: '/members', key: 'nav.members', permission: 'member.read', icon: <TeamIcon size={20} /> },
-  { href: '/permissions', key: 'perms.title', permission: null, icon: <ShieldIcon size={20} /> },
-  { href: '/plan', key: 'nav.plan', permission: 'billing.read', icon: <CreditIcon size={20} /> },
   /*
-   * Phase 9. SEPARATE FROM "Plan & usage", which answers "what am I entitled
-   * to". This answers "what do I owe, what have I bought, and what did I pay" —
-   * two different questions, and collapsing them would bury the invoices under
-   * an entitlement table.
+   * SETTINGS is for EVERY member: it holds Security, Roles & permissions and
+   * Activity, which ask no permission. Its href is resolved per member to the
+   * first section they may open (`settingsLandingPath`), so it never 404s.
    */
-  {
-    href: '/billing',
-    key: 'nav.billing',
-    permission: 'billing.read',
-    icon: <CreditIcon size={20} />,
-  },
-  {
-    href: '/onboarding',
-    key: 'nav.onboarding',
-    permission: null,
-    icon: <ListIcon size={20} />,
-  },
   {
     href: '/settings',
     key: 'nav.settings',
-    permission: 'workspace.update',
+    permission: null,
     icon: <SettingsIcon size={20} />,
   },
 ];
 
-/**
- * Which group each entry belongs to, and the order within it.
+/*
+ * THE FINAL INFORMATION ARCHITECTURE (owner decision D-277, contract §3).
  *
- * A TABLE OF HREFS rather than a restructured `NAV`, deliberately. Every entry
- * above carries the reasoning for its permission gate, its icon reuse and the
- * phase it arrived in — moving them into nested arrays would have rewritten all
- * of that to express one ordering. This says the ordering and leaves the
- * reasoning where it was written.
+ * Home, then the selected brand's Brand Brain — its group is TITLED WITH THE
+ * BRAND, so the rail itself says whose brain it is — then the work in order:
+ * PLAN, CREATE, PUBLISH, IMPROVE, AUTOMATE, and Settings last.
  *
- * IT IS CHECKED RATHER THAN TRUSTED: `navSections` below asserts that every
- * `NAV` entry appears exactly once here, so adding a route without placing it
- * cannot silently drop it out of the rail.
+ * NOT ON THE RAIL, AND WHERE THEY WENT: Approvals (top-bar Review, Home, the
+ * post and campaign screens), Notes (top-bar Notes, Home, the object itself),
+ * Notifications (the bell), Copilot (the top bar), Team, Roles & permissions,
+ * Activity, Plan, Billing and Connections (Settings), Onboarding (the first-run
+ * wizard). Every one of those routes still exists and still authorizes itself.
  */
-const NAV_GROUPS: readonly { titleKey: MessageKey; hrefs: readonly string[] }[] = [
-  { titleKey: 'nav.group.core', hrefs: ['/overview', '/brand-brain'] },
+const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
+  { titleKey: null, hrefs: ['/overview'] },
+  { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
   { titleKey: 'nav.group.create', hrefs: ['/content', '/creative', '/assets'] },
-  { titleKey: 'nav.group.publish', hrefs: ['/calendar', '/approvals', '/integrations'] },
+  { titleKey: 'nav.group.publish', hrefs: ['/calendar', '/publishing'] },
   { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
-  { titleKey: 'nav.group.automate', hrefs: ['/copilot', '/automations'] },
-  /*
-   * WORKSPACE holds four entries the brief's list does not name — `/permissions`,
-   * `/notifications`, `/plan` and `/onboarding`. They are real, reachable routes
-   * with real screens, and dropping them from the rail to match a list would
-   * have hidden working product rather than organised it. Each sits where its
-   * question belongs: what may I do, what happened to me, what am I entitled
-   * to, what is left to set up.
-   */
-  {
-    titleKey: 'nav.group.workspace',
-    hrefs: [
-      '/members',
-      '/permissions',
-      '/activity',
-      '/notifications',
-      '/onboarding',
-      '/plan',
-      '/billing',
-      '/settings',
-    ],
-  },
+  { titleKey: 'nav.group.automate', hrefs: ['/automations'] },
+  { titleKey: null, hrefs: ['/settings'] },
 ];
 
-/**
- * The rail's sections, filtered by the member's effective permissions.
- *
- * TWO INVARIANTS, BOTH ENFORCED HERE rather than left to review:
- *
- *   1. every `NAV` entry is placed in exactly one group — a route added without
- *      a placement would otherwise vanish from the rail silently, which is the
- *      opposite failure from a dead link and just as invisible;
- *   2. a group whose entries are ALL filtered out renders nothing — no heading,
- *      no divider. A titled group with nothing under it is dead navigation
- *      wearing a label, and a Viewer (D-62, D-130) holds `workspace.read` and
- *      nothing else, so most groups are empty for them.
- */
 function navSections(
   permissionKeys: readonly string[],
   locale: string,
   activePath: string | undefined,
   t: (key: MessageKey) => string,
+  brandContext: BrandContext | undefined,
 ): readonly ShellNavSection[] {
   const byHref = new Map(NAV.map((item) => [item.href, item]));
   const placed = NAV_GROUPS.flatMap((group) => group.hrefs);
@@ -363,15 +222,38 @@ function navSections(
       .filter((item): item is NavEntry => item !== undefined)
       .filter((item) => item.permission === null || permissionKeys.includes(item.permission))
       .map((item) => ({
-        href: `/${locale}${item.href}`,
+        href:
+          item.href === '/settings'
+            ? `/${locale}${settingsLandingPath(permissionKeys)}`
+            : `/${locale}${item.href}`,
         label: t(item.key),
         icon: item.icon,
-        active: activePath === item.href,
+        active:
+          activePath === item.href ||
+          (item.href === '/settings' &&
+            activePath !== undefined &&
+            SETTINGS_PATHS.includes(activePath)),
         // The existing convention, preserved: renaming these would drop the
         // end-to-end assertions that use them.
         testId: `nav-${item.href.slice(1)}`,
       }));
-    if (items.length > 0) sections.push({ title: t(group.titleKey), items });
+    if (items.length === 0) continue;
+    /*
+     * THE BRAND GROUP IS TITLED WITH THE BRAND (§3: "visually associated with
+     * the currently selected Brand"). "All brands" when that is the selection;
+     * the generic word only when there is no brand to name.
+     */
+    const title =
+      group.titleKey === 'nav.group.brand'
+        ? brandContext?.resolution.kind === 'brand'
+          ? brandContext.resolution.brand.name
+          : brandContext?.resolution.kind === 'all'
+            ? t('brand.allBrands')
+            : t('nav.group.brand')
+        : group.titleKey
+          ? t(group.titleKey)
+          : undefined;
+    sections.push({ title, items });
   }
   return sections;
 }
@@ -496,7 +378,7 @@ export async function WorkspaceShell({
     counts: await topbarCounts(),
   });
 
-  const sections = navSections(permissionKeys, locale, activePath, t);
+  const sections = navSections(permissionKeys, locale, activePath, t, brandContext);
 
   /*
    * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.

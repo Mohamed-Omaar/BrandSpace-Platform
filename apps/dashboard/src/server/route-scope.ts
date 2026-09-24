@@ -114,6 +114,11 @@ export const ROUTE_SCOPES: Readonly<Record<string, BrandScopeKind>> = {
   '/assets': 'brand-or-all',
   '/approvals': 'brand-or-all',
   '/integrations': 'brand-or-all',
+  /*
+   * PUBLISHING (Phase 6 final, D-277): the queue, history and account health
+   * across the brands a member can see, narrowed by the rail's brand.
+   */
+  '/publishing': 'brand-or-all',
   '/automations': 'brand-or-all',
   /*
    * THE CAMPAIGN LIST aggregates honestly: a multi-brand owner planning a

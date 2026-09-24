@@ -348,10 +348,15 @@ test.describe('RBAC is enforced by the server, not by hidden buttons', () => {
     await enterWorkspace(page, customer.workspaceSlug);
 
     await expect(page.getByTestId('nav-members')).toHaveCount(0);
-    await expect(page.getByTestId('nav-settings')).toHaveCount(0);
-    // But the permissions page is open to every member — it shows the truth
-    // about their own grants.
-    await expect(page.getByTestId('nav-permissions')).toBeVisible();
+    // D-277: Settings is on the rail for every member, and opens on the first
+    // section THIS member may read — for a viewer, Roles & permissions, which
+    // shows the truth about their own grants — never on a 404.
+    const settings = page.getByTestId('nav-settings');
+    await expect(settings).toBeVisible();
+    await expect(settings).toHaveAttribute('href', '/en/permissions');
+    await settings.click();
+    await page.waitForURL(/\/en\/permissions$/);
+    await expect(page.getByTestId('settings-nav')).not.toContainText('Team');
   });
 
   test('the owner CAN reach every page the viewer cannot', async ({ page }) => {

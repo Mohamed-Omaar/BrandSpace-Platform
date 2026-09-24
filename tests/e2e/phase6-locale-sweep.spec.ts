@@ -66,6 +66,7 @@ const ROUTES = [
   '/notifications',
   '/notes',
   '/integrations',
+  '/publishing',
   '/members',
   '/permissions',
   '/activity',

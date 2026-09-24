@@ -72,49 +72,74 @@ describe('P6-04 · every navigation entry is placed exactly once', () => {
     expect(unknown, 'a group names a route NAV does not define').toEqual([]);
   });
 
-  it('keeps all twenty-two entries — grouping is not a cull', () => {
-    // The count is asserted so that "tidying" the rail by dropping routes the
-    // brief's list does not name shows up as a failure rather than as a
-    // quieter sidebar. /permissions, /notifications, /plan and /onboarding are
-    // real screens.
-    //
-    // TWENTY-TWO, and the number is here because I got it wrong: the Phase 6
-    // audit said twenty-one, counted by eye. This test is the thing that
-    // counts, and it disagreed on the first run.
-    expect(navHrefs()).toHaveLength(22);
-    expect(groupedHrefs()).toHaveLength(22);
+  it('carries exactly the thirteen destinations of the final IA (D-277 §3)', () => {
+    // SUPERSEDED BY OWNER DECISION D-277. P6-04 kept all twenty-two entries on
+    // the rail; the owner's final information architecture moves Approvals,
+    // Notes, Notifications, Copilot, Team, Roles & permissions, Activity, Plan,
+    // Billing, Connections and Onboarding OFF it, to the top bar and Settings.
+    // The count still guards against a silent cull — of the NEW list.
+    expect(navHrefs()).toEqual([
+      '/overview',
+      '/brand-brain',
+      '/strategy',
+      '/campaigns',
+      '/content',
+      '/creative',
+      '/assets',
+      '/calendar',
+      '/publishing',
+      '/analytics',
+      '/intelligence',
+      '/automations',
+      '/settings',
+    ]);
+    expect(groupedHrefs()).toHaveLength(13);
   });
 });
 
-describe('P6-04 · the groups are the ones the brief names, in work order', () => {
-  it('declares exactly seven groups', () => {
-    const titles = [...code(SHELL).matchAll(/titleKey:\s*'(nav\.group\.[a-z]+)'/g)].map(
+describe("D-277 · the groups are the owner's, in work order", () => {
+  it('declares Home, the brand, Plan, Create, Publish, Improve, Automate, then Settings', () => {
+    const table = code(SHELL).slice(
+      code(SHELL).indexOf('const NAV_GROUPS'),
+      code(SHELL).indexOf('function navSections'),
+    );
+    const titles = [...table.matchAll(/titleKey:\s*(null|'nav\.group\.[a-z]+')/g)].map(
       (m) => m[1] as string,
     );
     expect(titles).toEqual([
-      'nav.group.core',
-      'nav.group.plan',
-      'nav.group.create',
-      'nav.group.publish',
-      'nav.group.improve',
-      'nav.group.automate',
-      'nav.group.workspace',
+      'null',
+      "'nav.group.brand'",
+      "'nav.group.plan'",
+      "'nav.group.create'",
+      "'nav.group.publish'",
+      "'nav.group.improve'",
+      "'nav.group.automate'",
+      'null',
     ]);
   });
 
   it('has an Arabic and an English string for every group title', () => {
-    // CLAUDE.md §4: both languages are first-class, and a group heading is
-    // user-facing copy like any other.
-    for (const group of ['core', 'plan', 'create', 'publish', 'improve', 'automate', 'workspace']) {
+    for (const group of ['brand', 'plan', 'create', 'publish', 'improve', 'automate']) {
       const occurrences = [...MESSAGES.matchAll(new RegExp(`'nav\\.group\\.${group}':`, 'g'))];
       expect(occurrences, `nav.group.${group} is not in both message tables`).toHaveLength(2);
     }
   });
 
-  it('opens with the Command Center and closes with the workspace itself', () => {
+  it('opens with Home and closes with Settings', () => {
     const grouped = groupedHrefs();
     expect(grouped[0]).toBe('/overview');
     expect(grouped[grouped.length - 1]).toBe('/settings');
+  });
+
+  it('titles the Brand Brain group with the selected brand', () => {
+    const builder = code(SHELL).slice(code(SHELL).indexOf('function navSections'));
+    expect(builder).toMatch(/group\.titleKey === 'nav\.group\.brand'/);
+    expect(builder).toMatch(/brandContext\.resolution\.brand\.name/);
+  });
+
+  it('opens Settings on the first section this member may read — never a 404', () => {
+    const builder = code(SHELL).slice(code(SHELL).indexOf('function navSections'));
+    expect(builder).toMatch(/settingsLandingPath\(permissionKeys\)/);
   });
 });
 
@@ -130,7 +155,7 @@ describe('P6-04 · grouping did not become a way to leak an entry', () => {
     // groups are empty for them. An empty titled group is dead navigation
     // wearing a label.
     const builder = code(SHELL).slice(code(SHELL).indexOf('function navSections'));
-    expect(builder).toMatch(/if \(items\.length > 0\)/);
+    expect(builder).toMatch(/if \(items\.length === 0\) continue;/);
   });
 
   it('keeps the testId convention the end-to-end suite depends on', () => {

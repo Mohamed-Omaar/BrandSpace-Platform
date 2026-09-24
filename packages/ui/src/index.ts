@@ -28,3 +28,4 @@ export * from './surfaces';
 export * from './switchers';
 export * from './topbar-actions';
 export * from './tokens';
+export * from './link-tabs';

@@ -9,6 +9,7 @@ import {
   translator,
   type MessageKey,
 } from '../../../i18n/messages';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -311,27 +312,29 @@ export default async function IntegrationsPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={permissions}
     >
-      {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
-      {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
-      <IntegrationsView
-        locale={locale}
-        t={t}
-        connections={connectionRows}
-        connectable={connectableProviders}
-        brands={brands}
-        publishing={publishRows}
-        mayManage={mayManage}
-        mayManagePublishing={mayManagePublishing}
-        pendingSelection={pendingSelection}
-        actions={{
-          connect: connectAccountAction,
-          disconnect: disconnectAccountAction,
-          check: checkAccountAction,
-          cancel: cancelPublishAction,
-          retry: retryPublishAction,
-          selectTarget: selectTargetAction,
-        }}
-      />
+      <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
+        {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
+        {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
+        <IntegrationsView
+          locale={locale}
+          t={t}
+          connections={connectionRows}
+          connectable={connectableProviders}
+          brands={brands}
+          publishing={publishRows}
+          mayManage={mayManage}
+          mayManagePublishing={mayManagePublishing}
+          pendingSelection={pendingSelection}
+          actions={{
+            connect: connectAccountAction,
+            disconnect: disconnectAccountAction,
+            check: checkAccountAction,
+            cancel: cancelPublishAction,
+            retry: retryPublishAction,
+            selectTarget: selectTargetAction,
+          }}
+        />
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

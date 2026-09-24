@@ -32,6 +32,7 @@ export type SettingsNavKey =
   | 'data'
   | 'members'
   | 'permissions'
+  | 'activity'
   | 'plan'
   | 'billing';
 
@@ -60,13 +61,6 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
   },
   { key: 'brand', path: '/settings/brand', labelKey: 'brand.profile', permission: 'brand.read' },
   /*
-   * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
-   * the reader their OWN second factor and their own sessions, which belong to
-   * the person rather than to the workspace. No permission gates it because
-   * there is no other person whose security it could show.
-   */
-  { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
-  /*
    * P6-13 — CONNECTIONS, reached from Settings as well as from the PUBLISH
    * group. The connected accounts are workspace configuration as much as a
    * publishing tool, and a person looking in Settings for "where are our
@@ -78,6 +72,20 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     labelKey: 'settings.connections',
     permission: 'integrations.read',
   },
+  { key: 'members', path: '/members', labelKey: 'nav.members', permission: 'member.read' },
+  /*
+   * PERMISSIONS IS OPEN TO EVERY MEMBER ON PURPOSE. It shows the reader their
+   * OWN effective permissions, which is information they already have by
+   * definition — `requireWorkspace(locale)` with no permission argument.
+   */
+  { key: 'permissions', path: '/permissions', labelKey: 'perms.title', permission: null },
+  /*
+   * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
+   * the reader their OWN second factor and their own sessions, which belong to
+   * the person rather than to the workspace. No permission gates it because
+   * there is no other person whose security it could show.
+   */
+  { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
   /*
    * P6-13 — DATA CONTROLS: one page naming every control this product has over
    * a workspace's data, and saying plainly which ones it does not have yet.
@@ -88,13 +96,12 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     labelKey: 'settings.data',
     permission: 'workspace.update',
   },
-  { key: 'members', path: '/members', labelKey: 'nav.members', permission: 'member.read' },
   /*
-   * PERMISSIONS IS OPEN TO EVERY MEMBER ON PURPOSE. It shows the reader their
-   * OWN effective permissions, which is information they already have by
-   * definition — `requireWorkspace(locale)` with no permission argument.
+   * ACTIVITY (Phase 6 final, D-277 §44/§47) — the workspace's audit trail,
+   * graded by what the reader may see rather than refused, which is why it asks
+   * no permission here, exactly as its route does.
    */
-  { key: 'permissions', path: '/permissions', labelKey: 'perms.title', permission: null },
+  { key: 'activity', path: '/activity', labelKey: 'nav.activity', permission: null },
   { key: 'plan', path: '/plan', labelKey: 'nav.plan', permission: 'billing.read' },
   { key: 'billing', path: '/billing', labelKey: 'nav.billing', permission: 'billing.read' },
 ];
@@ -123,3 +130,22 @@ export function settingsNavItems(input: {
     selected: route.key === input.selected,
   }));
 }
+
+/**
+ * WHERE "SETTINGS" OPENS for this member (Phase 6 final, D-277 §3/§44).
+ *
+ * Settings is now the single home of workspace administration, and it is on
+ * the sidebar for EVERY member — but its first section, Workspace, needs
+ * `workspace.update`. So the sidebar entry opens the first section this member
+ * may actually read, in the order above, rather than a 404. Security, Roles &
+ * permissions and Activity ask no permission, so there is always one.
+ */
+export function settingsLandingPath(permissionKeys: readonly string[]): string {
+  const first = SETTINGS_NAV_ROUTES.find(
+    (route) => route.permission === null || permissionKeys.includes(route.permission),
+  );
+  return first ? first.path : '/settings/security';
+}
+
+/** Every path that belongs to Settings, so the sidebar can mark it current. */
+export const SETTINGS_PATHS: readonly string[] = SETTINGS_NAV_ROUTES.map((route) => route.path);

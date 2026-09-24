@@ -11,6 +11,7 @@ import { brandContextFor } from '../../../server/brand-context';
 import { optionalMessage, translator } from '../../../i18n/messages';
 import { ceilingFor, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
+import { SettingsFrame } from '../../../components/settings-frame';
 import {
   CustomerCard,
   CustomerEmpty,
@@ -201,7 +202,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {/*
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="plan">
+        {/*
         `.dashboard-grid { grid-template-columns: 1.25fr .75fr }` — the plan on
         one side, this cycle's usage on the other, which is how the demo
         composes this screen. Three full-width cards stacked down the page was
@@ -214,227 +216,270 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
         that nothing holds it yet (§33). The rows keep the demo's `.list-item`
         geometry either way.
       */}
-      <div className="bs-split-main">
-        <CustomerCard title={t('plan.current')} testId="plan-card">
-          <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h3 }}>
-            {planName ?? t('plan.none')}
-          </p>
+        <div className="bs-split-main">
+          <CustomerCard title={t('plan.current')} testId="plan-card">
+            <p data-testid="current-plan" style={{ marginBlockStart: 0, ...typographyTokens.h3 }}>
+              {planName ?? t('plan.none')}
+            </p>
 
-          {/* Trial and cycle come from the subscription, which is the record
+            {/* Trial and cycle come from the subscription, which is the record
               that also pins the agreed price — so what is shown here cannot
               drift from what the customer actually agreed to. */}
-          {subscription ? (
-            <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', gap: spacingTokens.sm }}
-              >
-                <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-                  {t('plan.trial')}
-                </dt>
-                <dd
-                  data-testid="trial-status"
-                  style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
-                >
-                  {subscription.trialEndsAt && subscription.status === 'TRIALING'
-                    ? `${t('plan.trialEnds')} ${subscription.trialEndsAt.toISOString().slice(0, 10)}`
-                    : t('plan.trialNone')}
-                </dd>
-              </div>
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', gap: spacingTokens.sm }}
-              >
-                <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-                  {t('plan.cycle')}
-                </dt>
-                <dd
-                  data-testid="billing-cycle"
-                  style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
-                >
-                  {subscription.currentPeriodStart.toISOString().slice(0, 10)} →{' '}
-                  {subscription.currentPeriodEnd.toISOString().slice(0, 10)}
-                </dd>
-              </div>
-            </dl>
-          ) : mayReadBilling ? (
-            <p
-              data-testid="no-subscription"
-              style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}
-            >
-              {t('plan.noSubscription')}
-            </p>
-          ) : null}
-        </CustomerCard>
-
-        <CustomerCard title={t('plan.usageTitle')} testId="usage-card">
-          <dl style={{ margin: 0, display: 'grid' }}>
-            {usageRows.map((row, index) => (
-              <div
-                key={row.key}
-                data-testid={`usage-${row.key}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: spacingTokens.sm,
-                  paddingBlock: spacingTokens.sm,
-                  borderBlockStart: index === 0 ? 'none' : `1px solid ${colorTokens.hairline}`,
-                }}
-              >
-                <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
-                  {row.label}
-                </dt>
-                <dd
-                  data-testid={row.value === null ? undefined : row.valueTestId}
+            {subscription ? (
+              <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
+                <div
                   style={{
-                    margin: 0,
-                    ...typographyTokens.caption,
-                    color: row.value === null ? colorTokens.textMuted : colorTokens.textPrimary,
-                    fontWeight: row.value === null ? 400 : 700,
-                    textAlign: 'end',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.sm,
                   }}
                 >
-                  {row.value ?? row.unavailable}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </CustomerCard>
-      </div>
+                  <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
+                    {t('plan.trial')}
+                  </dt>
+                  <dd
+                    data-testid="trial-status"
+                    style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
+                  >
+                    {subscription.trialEndsAt && subscription.status === 'TRIALING'
+                      ? `${t('plan.trialEnds')} ${subscription.trialEndsAt.toISOString().slice(0, 10)}`
+                      : t('plan.trialNone')}
+                  </dd>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.sm,
+                  }}
+                >
+                  <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
+                    {t('plan.cycle')}
+                  </dt>
+                  <dd
+                    data-testid="billing-cycle"
+                    style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
+                  >
+                    {subscription.currentPeriodStart.toISOString().slice(0, 10)} →{' '}
+                    {subscription.currentPeriodEnd.toISOString().slice(0, 10)}
+                  </dd>
+                </div>
+              </dl>
+            ) : mayReadBilling ? (
+              <p
+                data-testid="no-subscription"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}
+              >
+                {t('plan.noSubscription')}
+              </p>
+            ) : null}
+          </CustomerCard>
 
-      {/* --- Credit allocations (Phase 3) ------------------------------- */}
-      {mayReadCredits ? (
-        <CustomerCard title={t('plan.allocations')} testId="allocations-card">
-          {grants.length === 0 ? (
-            <CustomerEmpty message={t('plan.allocNone')} />
+          <CustomerCard title={t('plan.usageTitle')} testId="usage-card">
+            <dl style={{ margin: 0, display: 'grid' }}>
+              {usageRows.map((row, index) => (
+                <div
+                  key={row.key}
+                  data-testid={`usage-${row.key}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.sm,
+                    paddingBlock: spacingTokens.sm,
+                    borderBlockStart: index === 0 ? 'none' : `1px solid ${colorTokens.hairline}`,
+                  }}
+                >
+                  <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
+                    {row.label}
+                  </dt>
+                  <dd
+                    data-testid={row.value === null ? undefined : row.valueTestId}
+                    style={{
+                      margin: 0,
+                      ...typographyTokens.caption,
+                      color: row.value === null ? colorTokens.textMuted : colorTokens.textPrimary,
+                      fontWeight: row.value === null ? 400 : 700,
+                      textAlign: 'end',
+                    }}
+                  >
+                    {row.value ?? row.unavailable}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CustomerCard>
+        </div>
+
+        {/* --- Credit allocations (Phase 3) ------------------------------- */}
+        {mayReadCredits ? (
+          <CustomerCard title={t('plan.allocations')} testId="allocations-card">
+            {grants.length === 0 ? (
+              <CustomerEmpty message={t('plan.allocNone')} />
+            ) : (
+              <div
+                style={tableSurface}
+                tabIndex={0}
+                role="group"
+                aria-label={t('plan.allocations')}
+              >
+                <table style={customerTableStyle()} data-testid="allocations-table">
+                  <thead>
+                    <tr>
+                      <th style={customerThStyle()}>{t('plan.allocSource')}</th>
+                      <th style={customerThStyle()}>{t('plan.allocRemaining')}</th>
+                      <th style={customerThStyle()}>{t('plan.reserved')}</th>
+                      <th style={customerThStyle()}>{t('plan.allocExpires')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grants.map((grant) => (
+                      <tr key={grant.id} data-testid={`allocation-${grant.id}`}>
+                        <td style={customerTdStyle()}>
+                          {optionalMessage(locale, `plan.grantSource.${grant.source}`) ??
+                            grant.source}
+                        </td>
+                        <td style={customerTdStyle()}>
+                          {Number(grant.remainingMilliCredits / 1000n)}
+                        </td>
+                        <td style={customerTdStyle()}>
+                          {Number(grant.reservedMilliCredits / 1000n)}
+                        </td>
+                        <td style={customerTdStyle()}>
+                          {grant.expiresAt
+                            ? ledgerDate.format(grant.expiresAt)
+                            : t('plan.allocNever')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p
+              data-testid="alloc-note"
+              style={{
+                marginBlockEnd: 0,
+                ...typographyTokens.caption,
+                color: colorTokens.textSecondary,
+              }}
+            >
+              {t('plan.allocNote')}
+            </p>
+            {/* D-11, stated plainly. A customer who does not know the platform
+              hard-stops will assume it bills them instead. */}
+            <p
+              data-testid="hard-stop-note"
+              style={{
+                marginBlockEnd: 0,
+                ...typographyTokens.caption,
+                color: colorTokens.textSecondary,
+              }}
+            >
+              {t('plan.hardStop')}
+            </p>
+          </CustomerCard>
+        ) : null}
+
+        {/* --- Usage against limits (Phase 3) ------------------------------ */}
+        <CustomerCard title={t('plan.quotaTitle')} testId="quota-card">
+          {counters.length === 0 ? (
+            <CustomerEmpty message={t('plan.quotaNone')} />
           ) : (
-            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.allocations')}>
-              <table style={customerTableStyle()} data-testid="allocations-table">
+            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.quotaTitle')}>
+              <table style={customerTableStyle()} data-testid="quota-table">
                 <thead>
                   <tr>
-                    <th style={customerThStyle()}>{t('plan.allocSource')}</th>
-                    <th style={customerThStyle()}>{t('plan.allocRemaining')}</th>
-                    <th style={customerThStyle()}>{t('plan.reserved')}</th>
-                    <th style={customerThStyle()}>{t('plan.allocExpires')}</th>
+                    <th style={customerThStyle()}>{t('plan.features')}</th>
+                    <th style={customerThStyle()}>{t('plan.quotaUsed')}</th>
+                    <th style={customerThStyle()}>{t('plan.limit')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grants.map((grant) => (
-                    <tr key={grant.id} data-testid={`allocation-${grant.id}`}>
-                      <td style={customerTdStyle()}>
-                        {optionalMessage(locale, `plan.grantSource.${grant.source}`) ??
-                          grant.source}
-                      </td>
-                      <td style={customerTdStyle()}>
-                        {Number(grant.remainingMilliCredits / 1000n)}
-                      </td>
-                      <td style={customerTdStyle()}>
-                        {Number(grant.reservedMilliCredits / 1000n)}
-                      </td>
-                      <td style={customerTdStyle()}>
-                        {grant.expiresAt
-                          ? ledgerDate.format(grant.expiresAt)
-                          : t('plan.allocNever')}
-                      </td>
-                    </tr>
-                  ))}
+                  {counters.map((counter) => {
+                    const decision = effective.decisions.find(
+                      (d) => d.featureKey === counter.featureKey,
+                    );
+                    return (
+                      <tr key={counter.featureKey} data-testid={`quota-${counter.featureKey}`}>
+                        <td style={customerTdStyle()}>{counter.featureKey}</td>
+                        <td style={customerTdStyle()}>{counter.used}</td>
+                        <td style={customerTdStyle()}>
+                          {decision?.limitValue ?? t('plan.unlimited')}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
-          <p
-            data-testid="alloc-note"
-            style={{
-              marginBlockEnd: 0,
-              ...typographyTokens.caption,
-              color: colorTokens.textSecondary,
-            }}
-          >
-            {t('plan.allocNote')}
-          </p>
-          {/* D-11, stated plainly. A customer who does not know the platform
-              hard-stops will assume it bills them instead. */}
-          <p
-            data-testid="hard-stop-note"
-            style={{
-              marginBlockEnd: 0,
-              ...typographyTokens.caption,
-              color: colorTokens.textSecondary,
-            }}
-          >
-            {t('plan.hardStop')}
-          </p>
         </CustomerCard>
-      ) : null}
 
-      {/* --- Usage against limits (Phase 3) ------------------------------ */}
-      <CustomerCard title={t('plan.quotaTitle')} testId="quota-card">
-        {counters.length === 0 ? (
-          <CustomerEmpty message={t('plan.quotaNone')} />
-        ) : (
-          <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.quotaTitle')}>
-            <table style={customerTableStyle()} data-testid="quota-table">
-              <thead>
-                <tr>
-                  <th style={customerThStyle()}>{t('plan.features')}</th>
-                  <th style={customerThStyle()}>{t('plan.quotaUsed')}</th>
-                  <th style={customerThStyle()}>{t('plan.limit')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {counters.map((counter) => {
-                  const decision = effective.decisions.find(
-                    (d) => d.featureKey === counter.featureKey,
-                  );
-                  return (
-                    <tr key={counter.featureKey} data-testid={`quota-${counter.featureKey}`}>
-                      <td style={customerTdStyle()}>{counter.featureKey}</td>
-                      <td style={customerTdStyle()}>{counter.used}</td>
-                      <td style={customerTdStyle()}>
-                        {decision?.limitValue ?? t('plan.unlimited')}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CustomerCard>
-
-      {/* --- Credit history (Phase 3) ------------------------------------ */}
-      {mayReadCredits ? (
-        <CustomerCard title={t('plan.history')} testId="credit-history-card">
-          {ledger.length === 0 ? (
-            <CustomerEmpty message={t('plan.historyNone')} />
-          ) : (
-            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.history')}>
-              <table style={customerTableStyle()} data-testid="credit-history-table">
-                <tbody>
-                  {ledger.map((entry) => (
-                    <tr key={entry.id} data-testid={`ledger-${entry.id}`}>
-                      <td style={customerTdStyle()}>{ledgerDate.format(entry.occurredAt)}</td>
-                      <td style={customerTdStyle()}>
-                        {number.format(Number(entry.amountMilliCredits / 1000n))}
-                      </td>
-                      {/* P6-14 — the entry's KIND in the reader's language. The
+        {/* --- Credit history (Phase 3) ------------------------------------ */}
+        {mayReadCredits ? (
+          <CustomerCard title={t('plan.history')} testId="credit-history-card">
+            {ledger.length === 0 ? (
+              <CustomerEmpty message={t('plan.historyNone')} />
+            ) : (
+              <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.history')}>
+                <table style={customerTableStyle()} data-testid="credit-history-table">
+                  <tbody>
+                    {ledger.map((entry) => (
+                      <tr key={entry.id} data-testid={`ledger-${entry.id}`}>
+                        <td style={customerTdStyle()}>{ledgerDate.format(entry.occurredAt)}</td>
+                        <td style={customerTdStyle()}>
+                          {number.format(Number(entry.amountMilliCredits / 1000n))}
+                        </td>
+                        {/* P6-14 — the entry's KIND in the reader's language. The
                           stored reason is English written by the system, so it is
                           shown only where a person wrote it (an adjustment or a
                           promotional grant), marked as its own direction. */}
+                        <td style={customerTdStyle()}>
+                          {optionalMessage(locale, `plan.ledgerType.${entry.type}`) ?? entry.type}
+                          {HUMAN_REASON_TYPES.has(entry.type) && entry.reason ? (
+                            <span
+                              dir="auto"
+                              style={{
+                                display: 'block',
+                                color: colorTokens.textSecondary,
+                                ...typographyTokens.caption,
+                              }}
+                            >
+                              {entry.reason}
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CustomerCard>
+        ) : null}
+
+        <CustomerCard title={t('plan.features')} testId="features-card">
+          {effective.decisions.length === 0 ? (
+            <CustomerEmpty message={t('plan.noFeatures')} />
+          ) : (
+            <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.features')}>
+              <table style={customerTableStyle()} data-testid="features-table">
+                <thead>
+                  <tr>
+                    <th style={customerThStyle()}>{t('plan.features')}</th>
+                    <th style={customerThStyle()}>{t('members.status')}</th>
+                    <th style={customerThStyle()}>{t('plan.limit')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {effective.decisions.map((d) => (
+                    <tr key={d.featureKey} data-testid={`feature-${d.featureKey}`}>
+                      <td style={customerTdStyle()}>{d.featureKey}</td>
                       <td style={customerTdStyle()}>
-                        {optionalMessage(locale, `plan.ledgerType.${entry.type}`) ?? entry.type}
-                        {HUMAN_REASON_TYPES.has(entry.type) && entry.reason ? (
-                          <span
-                            dir="auto"
-                            style={{
-                              display: 'block',
-                              color: colorTokens.textSecondary,
-                              ...typographyTokens.caption,
-                            }}
-                          >
-                            {entry.reason}
-                          </span>
-                        ) : null}
+                        {d.enabled ? t('common.enabled') : t('common.disabled')}
                       </td>
+                      <td style={customerTdStyle()}>{d.limitValue ?? t('plan.unlimited')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -442,39 +487,9 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
             </div>
           )}
         </CustomerCard>
-      ) : null}
 
-      <CustomerCard title={t('plan.features')} testId="features-card">
-        {effective.decisions.length === 0 ? (
-          <CustomerEmpty message={t('plan.noFeatures')} />
-        ) : (
-          <div style={tableSurface} tabIndex={0} role="group" aria-label={t('plan.features')}>
-            <table style={customerTableStyle()} data-testid="features-table">
-              <thead>
-                <tr>
-                  <th style={customerThStyle()}>{t('plan.features')}</th>
-                  <th style={customerThStyle()}>{t('members.status')}</th>
-                  <th style={customerThStyle()}>{t('plan.limit')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {effective.decisions.map((d) => (
-                  <tr key={d.featureKey} data-testid={`feature-${d.featureKey}`}>
-                    <td style={customerTdStyle()}>{d.featureKey}</td>
-                    <td style={customerTdStyle()}>
-                      {d.enabled ? t('common.enabled') : t('common.disabled')}
-                    </td>
-                    <td style={customerTdStyle()}>{d.limitValue ?? t('plan.unlimited')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CustomerCard>
-
-      {/* --- The upgrade prompt (Phase 3) -------------------------------- */}
-      {/*
+        {/* --- The upgrade prompt (Phase 3) -------------------------------- */}
+        {/*
         WHAT THIS DELIBERATELY DOES NOT SAY. It names the capabilities this
         workspace does not have, and nothing else: not which plan would grant
         them, not what that plan costs, not what any limit is set to. Those are
@@ -482,25 +497,28 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
         out is a configuration leak (CLAUDE.md §2.3). The route to a change is a
         conversation, not a number rendered from the plan catalogue.
       */}
-      {unavailable.length > 0 ? (
-        <CustomerCard title={t('plan.upgradeTitle')} testId="upgrade-card">
-          <p style={{ marginBlockStart: 0, ...typographyTokens.bodySm }}>{t('plan.upgradeBody')}</p>
-          <ul
-            data-testid="upgrade-list"
-            style={{ margin: 0, paddingInlineStart: spacingTokens.lg }}
-          >
-            {unavailable.map((decision) => (
-              <li
-                key={decision.featureKey}
-                data-testid={`upgrade-${decision.featureKey}`}
-                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-              >
-                {decision.featureKey}
-              </li>
-            ))}
-          </ul>
-        </CustomerCard>
-      ) : null}
+        {unavailable.length > 0 ? (
+          <CustomerCard title={t('plan.upgradeTitle')} testId="upgrade-card">
+            <p style={{ marginBlockStart: 0, ...typographyTokens.bodySm }}>
+              {t('plan.upgradeBody')}
+            </p>
+            <ul
+              data-testid="upgrade-list"
+              style={{ margin: 0, paddingInlineStart: spacingTokens.lg }}
+            >
+              {unavailable.map((decision) => (
+                <li
+                  key={decision.featureKey}
+                  data-testid={`upgrade-${decision.featureKey}`}
+                  style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+                >
+                  {decision.featureKey}
+                </li>
+              ))}
+            </ul>
+          </CustomerCard>
+        ) : null}
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }
