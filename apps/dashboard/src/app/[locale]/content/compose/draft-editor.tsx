@@ -60,7 +60,17 @@ export interface DraftEditorProps {
     archive: boolean;
     manageCampaigns: boolean;
     uploadMedia: boolean;
+    schedule?: boolean;
   };
+  /** D-288 — the approval policy and a changes request, when there is one. */
+  readonly review?: {
+    readonly requiresApproval: boolean;
+    readonly changes: {
+      readonly note: string | null;
+      readonly reviewer: string | null;
+      readonly threadIds: readonly string[];
+    } | null;
+  } | null;
   /** The Creative Studio's formats, for "Generate with AI" in the media drawer. */
   readonly creativeFormats: readonly CreativeFormatOption[];
   readonly canGenerateMedia: boolean;
@@ -74,6 +84,7 @@ export interface DraftEditorProps {
     cancelReview(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
     uploadMedia(formData: FormData): Promise<void>;
+    resubmit(formData: FormData): Promise<void>;
   };
 }
 
@@ -122,6 +133,7 @@ export function DraftEditor({
   creativeFormats,
   canGenerateMedia,
   attach = null,
+  review = null,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -707,6 +719,58 @@ export function DraftEditor({
               );
             })}
 
+            {review?.requiresApproval && draft.status === 'DRAFT' ? (
+              <p className="cs-hint" data-testid="editor-needs-approval">
+                {t['editor.next.needsApproval']}
+              </p>
+            ) : null}
+
+            {/*
+              D-288 — CHANGES REQUESTED, AS ONE FLOW: the reviewer's reason,
+              then "I made the changes" — an optional answer on their thread,
+              the thread resolved, and the post sent for review again.
+            */}
+            {draft.status === 'CHANGES_REQUESTED' ? (
+              <div className="cs-notice warning" data-testid="changes-requested-panel">
+                <b>
+                  {review?.changes?.reviewer
+                    ? fill(t['editor.changes.by'] ?? '{name}', { name: review.changes.reviewer })
+                    : t['editor.changes.title']}
+                </b>
+                {review?.changes?.note ? (
+                  <p dir="auto" data-testid="changes-requested-note">
+                    {review.changes.note}
+                  </p>
+                ) : null}
+                {can.submit ? (
+                  <form action={actions.resubmit} className="cs-field">
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    {(review?.changes?.threadIds ?? []).map((threadId) => (
+                      <input key={threadId} type="hidden" name="threadId" value={threadId} />
+                    ))}
+                    <label htmlFor={`${fieldId}-resubmit`}>{t['editor.changes.reply']}</label>
+                    <textarea
+                      id={`${fieldId}-resubmit`}
+                      name="reply"
+                      dir="auto"
+                      maxLength={2_000}
+                      data-testid="resubmit-reply"
+                    />
+                    <button
+                      type="submit"
+                      className="cs-dark-button"
+                      disabled={anyDirty}
+                      title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
+                      data-testid="resubmit-submit"
+                    >
+                      {t['editor.changes.resubmit']}
+                    </button>
+                  </form>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="cs-form-actions">
               {can.submit && draft.status === 'ARCHIVED' ? (
                 <form action={actions.transition}>
@@ -718,13 +782,21 @@ export function DraftEditor({
                   </button>
                 </form>
               ) : null}
-              {can.submit && (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED') ? (
+              {/*
+                D-288 — THE NEXT STEP FOLLOWS THE BRAND'S POLICY. A brand that
+                needs approval before scheduling asks for review first; one
+                that does not goes straight to the calendar, and review stays
+                available. An approved post's next step is always the calendar.
+              */}
+              {draft.status === 'DRAFT' && can.submit ? (
                 <form action={actions.submitForReview}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
                   <button
                     type="submit"
-                    className="cs-ghost-button cs-compact"
+                    className={
+                      review?.requiresApproval ? 'cs-dark-button' : 'cs-ghost-button cs-compact'
+                    }
                     disabled={anyDirty}
                     title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
                     data-testid="submit-for-review"
@@ -732,6 +804,18 @@ export function DraftEditor({
                     {t['content.composer.submit']}
                   </button>
                 </form>
+              ) : null}
+              {can.schedule &&
+              ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
+                draft.status === 'APPROVED') ? (
+                <Link
+                  className="cs-dark-button"
+                  href={`/${locale}/calendar?item=${draft.id}`}
+                  aria-disabled={anyDirty}
+                  data-testid="editor-schedule"
+                >
+                  {t['editor.next.schedule']}
+                </Link>
               ) : null}
               {can.submit && draft.status === 'IN_REVIEW' && draft.openApprovalId ? (
                 <form action={actions.cancelReview}>

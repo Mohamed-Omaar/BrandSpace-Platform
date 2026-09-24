@@ -1,3 +1,4 @@
+import type React from 'react';
 import Link from 'next/link';
 import {
   AssetThumb,
@@ -76,6 +77,13 @@ export interface ReviewSubjectView {
   readonly requestNote: string | null;
   readonly requestedByLabel: string;
   readonly mayDecide: boolean;
+  /**
+   * PHASE 6 FINAL (D-288) — the post as it will look, and the conversation
+   * about it, beside the verdict. Rendered by the page (the preview is the
+   * composer's own adapter; the conversation is the ordinary Notes panel).
+   */
+  readonly previews?: React.ReactNode;
+  readonly conversation?: React.ReactNode;
   readonly variants: readonly {
     readonly id: string;
     readonly platformKey: string;
@@ -157,6 +165,18 @@ export function ApprovalsView({
             description={`${t('approvals.requestedBy')} ${review.requestedByLabel}`}
           />
           {review.requestNote ? <p style={noteStyle}>{review.requestNote}</p> : null}
+          {review.previews ? (
+            <div
+              data-testid="review-previews"
+              style={{
+                display: 'grid',
+                gap: spacingTokens.md,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))',
+              }}
+            >
+              {review.previews}
+            </div>
+          ) : null}
           <ul style={listStyle} data-testid="review-variants">
             {review.variants.map((variant) => (
               <li key={variant.id} style={rowStyle}>
@@ -211,6 +231,7 @@ export function ApprovalsView({
               action={actions.decide}
             />
           ) : null}
+          {review.conversation ?? null}
         </Card>
       ) : null}
 

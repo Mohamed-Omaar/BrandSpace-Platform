@@ -237,3 +237,17 @@ export function previewLabels(t: Record<string, string>): SocialPostPreviewLabel
     actionsLabel: t['content.preview.actions'] ?? '',
   };
 }
+
+/**
+ * The same preview for a SERVER page (the approvals review): it takes the plain
+ * dictionary and builds the label functions here, on the client side of the
+ * boundary, because functions cannot cross it.
+ */
+export function DictionaryVariantPreview({
+  dictionary,
+  ...props
+}: Omit<Parameters<typeof VariantPreview>[0], 'labels'> & {
+  readonly dictionary: Record<string, string>;
+}) {
+  return <VariantPreview {...props} labels={previewLabels(dictionary)} />;
+}

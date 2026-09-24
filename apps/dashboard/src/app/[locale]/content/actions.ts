@@ -10,6 +10,7 @@ import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
+import { inNotes } from '../../../server/notes-context';
 import { resolveContentLanguage } from '../../../server/content-language';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 import { translator } from '../../../i18n/messages';
@@ -536,6 +537,64 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/${locale}/content`);
   revalidatePath(`/${locale}/approvals`);
+  redirect(destination);
+}
+
+/**
+ * PHASE 6 FINAL (D-277 §29, D-288) — "I MADE THE CHANGES": ONE FLOW.
+ *
+ * After a reviewer requests changes, the author answers the reviewer's thread
+ * (optionally), marks it resolved and sends the post for review again — one
+ * button instead of three screens. Nothing here is a second workflow: the
+ * reply and the resolve are the ordinary notes calls, and the resubmission is
+ * the SAME `approvals.submit` the Send for review button uses, with the same
+ * permission, policy, audit and cycle numbering. The note text travels as the
+ * request note so the reviewer sees what changed.
+ *
+ * A THREAD THAT CANNOT BE RESOLVED DOES NOT BLOCK THE RESUBMISSION: the
+ * approval is the source of truth, the conversation is its companion.
+ */
+export async function resubmitAfterChangesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  const reply = String(formData.get('reply') ?? '').trim();
+  const threadIds = formData
+    .getAll('threadId')
+    .map(String)
+    .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+    .slice(0, 10);
+
+  let destination: string;
+  try {
+    const session = await requireWorkspace(locale, 'content.submit');
+    try {
+      await inNotes(locale, async ({ service, actor }) => {
+        for (const threadId of threadIds) {
+          if (reply !== '') await service.reply({ actor, threadId, body: reply });
+          await service.resolve({ actor, threadId });
+        }
+      });
+    } catch (noteFailure: unknown) {
+      log.warn('changes-requested thread could not be closed', {
+        itemId,
+        ...internalErrorFields(noteFailure),
+      });
+    }
+    await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
+      (await approvals()).submit({
+        itemId,
+        actor: approvalActorOf(session),
+        assignedToUserId: null,
+        note: reply,
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SUBMITTED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'resubmitAfterChanges', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/approvals`);
+  revalidatePath(`/${locale}/notes`);
   redirect(destination);
 }
 

@@ -8,7 +8,11 @@ import { inWorkspace, requireWorkspace } from '../../../server/customer-context'
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
-import { statusMessage, translator } from '../../../i18n/messages';
+import { messages, statusMessage, translator } from '../../../i18n/messages';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { NotesPanel } from '../../../components/notes-panel';
+import { previewFormatFor } from '../../../server/composer-editor';
+import { DictionaryVariantPreview } from '../content/compose/variant-preview';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   ApprovalsView,
@@ -260,6 +264,8 @@ export default async function ApprovalsPage({
       })
     : new Map<string, { id: string; name: string; kind: string; previewToken: string | null }>();
 
+  // Only the preview's own keys cross to the client, not the whole dictionary.
+  const dictionary = previewDictionary(locale);
   const reviewView: ReviewSubjectView | null = review
     ? {
         approvalId: review.approvalId,
@@ -270,6 +276,36 @@ export default async function ApprovalsPage({
         requestNote: review.requestNote,
         requestedByLabel: nameOf(review.requestedByUserId),
         mayDecide: review.mayDecide,
+        previews: review.variants.map((v) => (
+          <DictionaryVariantPreview
+            key={v.id}
+            locale={locale}
+            platformKey={v.platformKey}
+            format={previewFormatFor(review.contentType)}
+            body={v.body}
+            hashtags={[...v.hashtags]}
+            media={[...v.assetIds]
+              .map((id) => reviewMedia.get(id))
+              .filter((item): item is NonNullable<typeof item> => item !== undefined)}
+            accountName={review.brandName}
+            accountHandle={`@${review.brandName.replace(/\s+/g, '').toLowerCase()}`}
+            status="DRAFT"
+            approval="NEEDS_APPROVAL"
+            dictionary={dictionary}
+            testId={`review-preview-${v.platformKey}`}
+          />
+        )),
+        conversation: workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+          <NotesPanel
+            locale={locale}
+            subject={{
+              type: 'CONTENT_ITEM',
+              contentItemId: review.itemId,
+            }}
+            returnPath={`/${locale}/approvals?review=${review.approvalId}`}
+            highlightThreadId={null}
+          />
+        ) : null,
         variants: review.variants.map((v) => ({
           id: v.id,
           platformKey: v.platformKey,
@@ -323,5 +359,21 @@ export default async function ApprovalsPage({
         }}
       />
     </WorkspaceShell>
+  );
+}
+
+/** The keys `previewLabels` reads, in this locale — and nothing else. */
+function previewDictionary(locale: string): Record<string, string> {
+  const all = messages[locale === 'ar' ? 'ar' : 'en'] as Record<string, string>;
+  return Object.fromEntries(
+    Object.entries(all).filter(
+      ([key]) =>
+        key.startsWith('content.status.') ||
+        key.startsWith('content.platform.') ||
+        key.startsWith('content.format.') ||
+        key.startsWith('content.preview.') ||
+        key.startsWith('editor.preview.') ||
+        key === 'content.media.video',
+    ),
   );
 }

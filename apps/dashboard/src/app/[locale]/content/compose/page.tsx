@@ -36,6 +36,7 @@ import {
   uploadComposerMediaAction,
   saveVariantAction,
   submitForReviewAction,
+  resubmitAfterChangesAction,
   transitionItemAction,
 } from '../actions';
 import {
@@ -216,6 +217,63 @@ export default async function ComposePage({
   );
 
   if (itemId !== undefined && draft === null) notFound();
+
+  /*
+   * PHASE 6 FINAL (D-277 §29, D-288) — THE REVIEW FACTS THE EDITOR NEEDS.
+   *
+   * Whether this brand's policy requires approval before scheduling (which
+   * decides the primary next step), and — when the post came back with
+   * changes requested — the reviewer's reason and the thread the decision
+   * opened, derived from the approval record and the note it wrote (the
+   * reviewer's own words, on this post, after the decision). Nothing stored.
+   */
+  const reviewFacts = draft
+    ? await inContentStudio(workspace.workspaceId, async (services) => {
+        const approvals = await services.approvals();
+        const brandPolicy = await approvals.policyForBrand(draft.brandId);
+        if (draft.status !== 'CHANGES_REQUESTED') {
+          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+        }
+        const last = await services.db.approval.findFirst({
+          where: { contentItemId: draft.id, status: 'CHANGES_REQUESTED' },
+          orderBy: { decidedAt: 'desc' },
+          select: { decisionNote: true, decidedByUserId: true, decidedAt: true },
+        });
+        if (!last) {
+          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+        }
+        const [reviewer, threads] = await Promise.all([
+          last.decidedByUserId
+            ? services.db.membership.findFirst({
+                where: { userId: last.decidedByUserId },
+                select: { user: { select: { name: true, email: true } } },
+              })
+            : Promise.resolve(null),
+          last.decidedByUserId && last.decisionNote
+            ? services.db.noteThread.findMany({
+                where: {
+                  contentItemId: draft.id,
+                  status: 'OPEN',
+                  ...(last.decidedAt ? { createdAt: { gte: last.decidedAt } } : {}),
+                  notes: {
+                    some: { authorUserId: last.decidedByUserId, body: last.decisionNote },
+                  },
+                },
+                select: { id: true },
+                take: 5,
+              })
+            : Promise.resolve([] as { id: string }[]),
+        ]);
+        return {
+          requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+          changes: {
+            note: last.decisionNote,
+            reviewer: reviewer ? (reviewer.user.name ?? reviewer.user.email) : null,
+            threadIds: threads.map((thread) => thread.id),
+          },
+        };
+      })
+    : null;
 
   const shell = (children: React.ReactNode) => (
     <WorkspaceShell
@@ -610,6 +668,7 @@ export default async function ComposePage({
         carriedMedia={carried}
         tools={CONTENT_TOOLS}
         now={now.getTime()}
+        review={reviewFacts}
         mode={mode === 'write' ? 'write' : 'ai'}
         initialBrief={initialBrief}
         initialCampaignId={initialCampaignId}
@@ -628,6 +687,7 @@ export default async function ComposePage({
           archive: workspace.permissionKeys.includes('content.archive'),
           manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
           uploadMedia: workspace.permissionKeys.includes('assets.upload'),
+          schedule: workspace.permissionKeys.includes('content.schedule'),
           // The Creative route's own gate (`assets.upload`), and generation
           // needs content editing here because it changes this post.
           generateMedia:
@@ -642,6 +702,7 @@ export default async function ComposePage({
           save: saveVariantAction,
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
+          resubmit: resubmitAfterChangesAction,
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
@@ -702,6 +763,12 @@ function translateOptional(
 
 /** The draft editor's own vocabulary (D-284). */
 const EDITOR_KEYS = [
+  'editor.next.schedule',
+  'editor.next.needsApproval',
+  'editor.changes.title',
+  'editor.changes.by',
+  'editor.changes.reply',
+  'editor.changes.resubmit',
   'editor.issue.rightsExpired',
   'editor.media.rightsExpired',
   'editor.media.carried',

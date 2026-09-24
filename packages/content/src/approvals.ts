@@ -168,6 +168,8 @@ export interface ReviewSubject {
   brandId: string;
   brandName: string;
   itemStatus: ContentItem['status'];
+  /** PHASE 6 FINAL — what the post is (a Reel is reviewed as a Reel). */
+  contentType: ContentItem['contentType'];
   status: ApprovalStatus;
   cycle: number;
   requestNote: string | null;
@@ -911,6 +913,7 @@ export class ContentApprovalService {
         title: true,
         brandId: true,
         status: true,
+        contentType: true,
         deletedAt: true,
         createdByUserId: true,
         brand: { select: { name: true } },
@@ -936,6 +939,7 @@ export class ContentApprovalService {
       brandId: item.brandId,
       brandName: item.brand.name,
       itemStatus: item.status,
+      contentType: item.contentType,
       status: approval.status,
       cycle: approval.cycle,
       requestNote: approval.requestNote,

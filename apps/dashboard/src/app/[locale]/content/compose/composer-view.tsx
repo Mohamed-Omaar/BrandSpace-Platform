@@ -135,12 +135,26 @@ export interface ComposerViewProps {
     archive: boolean;
     manageCampaigns: boolean;
     uploadMedia: boolean;
+    /** D-288 — may put this post on the calendar (`content.schedule`). */
+    schedule?: boolean;
     /** Creative generation from the media drawer (`assets.upload`, AI credits). */
     generateMedia?: boolean;
   };
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
+  /**
+   * PHASE 6 FINAL (D-288) — the brand's approval policy and, after changes were
+   * requested, the reviewer's reason and the thread it opened.
+   */
+  readonly review?: {
+    readonly requiresApproval: boolean;
+    readonly changes: {
+      readonly note: string | null;
+      readonly reviewer: string | null;
+      readonly threadIds: readonly string[];
+    } | null;
+  } | null;
   /** The server's clock at render, for "Saved 5 minutes ago". */
   readonly now?: number;
   /**
@@ -176,6 +190,8 @@ export interface ComposerViewProps {
     cancelReview(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
     uploadMedia(formData: FormData): Promise<void>;
+    /** D-288 — answer the reviewer, resolve their thread, and resubmit. */
+    resubmit(formData: FormData): Promise<void>;
     /**
      * WRITE THE POST YOURSELF — no model, no credits (D-224).
      *
@@ -236,6 +252,7 @@ export function ComposerView({
   now = 0,
   creativeFormats = [],
   carriedMedia = null,
+  review = null,
 }: ComposerViewProps) {
   const router = useRouter();
   const fieldId = useId();
@@ -585,6 +602,7 @@ export function ComposerView({
           can={can}
           creativeFormats={creativeFormats}
           attach={carriedMedia}
+          review={review}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
           actions={actions}
