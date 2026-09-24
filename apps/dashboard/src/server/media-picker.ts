@@ -1,5 +1,10 @@
 import 'server-only';
+import { systemClock } from '@brandspace/shared';
 import { inAssetLibrary } from './assets-context';
+
+function rightsLapsed(expiry: Date | null): boolean {
+  return expiry !== null && expiry.getTime() <= systemClock.now().getTime();
+}
 
 /**
  * THE MEDIA A COMPOSER MAY OFFER, AND A PREVIEW TOKEN FOR EACH (AC-27.2).
@@ -29,6 +34,8 @@ export interface MediaOption {
   readonly height: number | null;
   /** PHASE 6 FINAL — a video's length, when the processor measured it. */
   readonly durationMs: number | null;
+  /** D-286 — the licence has ended; the file can no longer be published. */
+  readonly rightsExpired: boolean;
   /** True for the workspace-shared shelf, so the screen can say so. */
   readonly shared: boolean;
   /** `null` when no inline preview can be issued; the row still lists. */
@@ -73,7 +80,13 @@ export async function listMediaOptions(input: {
 
     return Promise.all(
       page.items
-        .filter((asset) => asset.scanStatus === 'CLEAN' && asset.deletedAt === null)
+        // D-286: a lapsed licence is not offered, exactly as publishing refuses it.
+        .filter(
+          (asset) =>
+            asset.scanStatus === 'CLEAN' &&
+            asset.deletedAt === null &&
+            !rightsLapsed(asset.rightsExpiryAt),
+        )
         .map(async (asset): Promise<MediaOption> => {
           const token = await download
             .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
@@ -87,6 +100,7 @@ export async function listMediaOptions(input: {
             width: asset.width,
             height: asset.height,
             durationMs: asset.durationMs ?? null,
+            rightsExpired: false,
             shared: asset.brandId === null,
             previewToken: token,
           };
@@ -178,6 +192,8 @@ export async function mediaForVariants(input: {
         width: asset.width,
         height: asset.height,
         durationMs: asset.durationMs ?? null,
+        // Still drawn, so the author can see WHICH slide lapsed and replace it.
+        rightsExpired: rightsLapsed(asset.rightsExpiryAt),
         shared: asset.brandId === null,
         previewToken: token,
       });

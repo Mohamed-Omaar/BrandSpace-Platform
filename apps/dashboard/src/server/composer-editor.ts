@@ -71,6 +71,8 @@ export interface EditorVariantState {
   readonly hashtags: readonly string[];
   /** The KINDS of the attached media, in order ('IMAGE', 'VIDEO', …). */
   readonly mediaKinds: readonly string[];
+  /** D-286 — how many attached files have a lapsed licence. */
+  readonly expiredMedia?: number;
 }
 
 /** The formats that are a video before they are anything else. */
@@ -92,6 +94,15 @@ export function variantIssues(
       values: { platform: platform.label, over: characters - platform.maxBodyChars },
       severity: 'error',
       fix: 'shorten',
+    });
+  }
+
+  if ((variant.expiredMedia ?? 0) > 0) {
+    issues.push({
+      key: 'editor.issue.rightsExpired',
+      values: { count: variant.expiredMedia ?? 0 },
+      severity: 'error',
+      fix: 'media',
     });
   }
 

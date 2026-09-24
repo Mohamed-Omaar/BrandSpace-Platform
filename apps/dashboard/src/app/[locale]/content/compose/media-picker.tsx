@@ -38,6 +38,8 @@ export interface MediaOptionView {
   readonly width?: number | null;
   readonly height?: number | null;
   readonly durationMs?: number | null;
+  /** D-286 — attached, but its licence has ended. */
+  readonly rightsExpired?: boolean;
 }
 
 export interface MediaPickerLabels {

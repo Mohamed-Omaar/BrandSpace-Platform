@@ -81,10 +81,12 @@ export function MediaDrawer({
   const [attempt] = useState(() => crypto.randomUUID());
 
   const sorted = useMemo(() => {
-    if (!preferVertical) return options;
+    // D-286: a lapsed licence is never offered, even when it is already attached.
+    const offered = options.filter((option) => !option.rightsExpired);
+    if (!preferVertical) return offered;
     const vertical = (option: MediaOptionView) =>
       option.width && option.height ? option.height > option.width : false;
-    return [...options].sort((a, b) => Number(vertical(b)) - Number(vertical(a)));
+    return [...offered].sort((a, b) => Number(vertical(b)) - Number(vertical(a)));
   }, [options, preferVertical]);
 
   const post = async (path: string, body: unknown) => {

@@ -142,6 +142,7 @@ export function MediaSlides({
                       numbered ? option?.name : null,
                       aspect,
                       isCover ? t['editor.media.isCover'] : null,
+                      option?.rightsExpired ? t['editor.media.rightsExpired'] : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')}

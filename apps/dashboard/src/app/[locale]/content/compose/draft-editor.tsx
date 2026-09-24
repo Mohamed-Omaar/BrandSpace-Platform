@@ -493,6 +493,8 @@ export function DraftEditor({
                     body: value.body,
                     hashtags,
                     mediaKinds: mediaFor(value.assetIds).map((option) => option.kind),
+                    expiredMedia: mediaFor(value.assetIds).filter((option) => option.rightsExpired)
+                      .length,
                   })
                 : [];
               const characters = countCharacters(value.body);

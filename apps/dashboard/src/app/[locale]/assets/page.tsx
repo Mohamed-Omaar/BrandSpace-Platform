@@ -1,9 +1,17 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  ASSET_VIEWS,
+  RECENT_DAYS,
+  rightsState,
+  viewKinds,
+  type AssetView,
+} from '../../../server/asset-views';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
+import { paletteFrom, typographyFrom } from '../../../server/brand-profile';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
@@ -18,6 +26,7 @@ import {
   restoreAssetVersionAction,
   updateAssetAction,
   uploadAssetAction,
+  bulkAssetAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -73,6 +82,14 @@ export default async function AssetsPage({
   const scopeParam = single('scope');
   const selectedId = single('asset');
   /*
+   * PHASE 6 FINAL (D-287) — THE LIBRARY'S VIEWS. Each is a filter over real
+   * columns (kind, source, age, shelf, references), never a stored collection,
+   * which is why the screen calls them views.
+   */
+  const view = ASSET_VIEWS.includes(single('view') as AssetView)
+    ? (single('view') as AssetView)
+    : undefined;
+  /*
    * THE PAGE CURSOR — the read that was missing (PHASE 2).
    *
    * `AssetLibraryService.browse` has always returned `nextCursor`, and the view
@@ -126,7 +143,7 @@ export default async function AssetsPage({
    * only has to decide what was ASKED FOR, never what is allowed.
    */
   const contextBrand = brandFilterFor(brandContext);
-  const effectiveScope = scopeParam ?? contextBrand;
+  const effectiveScope = view === 'shared' ? 'shared' : (scopeParam ?? contextBrand);
   const browseScope: { brandId?: string | null; includeShared?: boolean } =
     effectiveScope === undefined
       ? {}
@@ -140,6 +157,54 @@ export default async function AssetsPage({
     brandScope: workspace.brandScope,
   };
 
+  /*
+   * PHASE 6 FINAL (D-277 §31, D-287) — THE BRAND KIT, A VIEW. Logos from the
+   * one library (the Brand Profile's own references), palette and typography
+   * from the Brand Profile. Nothing is copied; editing stays in Settings.
+   */
+  const kitBrandId =
+    brandContext.resolution.kind === 'brand' ? brandContext.resolution.brand.id : null;
+  const brandKit = kitBrandId
+    ? await inAssetLibrary(workspace.workspaceId, async (services) => {
+        const brand = await services.db.brand.findFirst({
+          where: { id: kitBrandId, deletedAt: null },
+          select: {
+            name: true,
+            colorPalette: true,
+            typography: true,
+            primaryLogoAssetId: true,
+            secondaryLogoAssetId: true,
+          },
+        });
+        if (!brand) return null;
+        const download = await services.download();
+        const logos = await Promise.all(
+          (
+            [
+              ['primary', brand.primaryLogoAssetId],
+              ['secondary', brand.secondaryLogoAssetId],
+            ] as const
+          )
+            .filter((entry): entry is readonly ['primary' | 'secondary', string] => !!entry[1])
+            .map(async ([role, assetId]) => ({
+              role,
+              assetId,
+              token: await download
+                .grantFor({ assetId, actor, disposition: 'inline' })
+                .then((issued) => issued.grant.token)
+                .catch(() => null),
+            })),
+        );
+        const fonts = typographyFrom(brand.typography);
+        return {
+          brandName: brand.name,
+          logos,
+          palette: paletteFrom(brand.colorPalette),
+          fonts: [fonts.heading, fonts.body].filter((font): font is string => !!font),
+        };
+      })
+    : null;
+
   const { selectedBrandId, ...data } = await inAssetLibrary(
     workspace.workspaceId,
     async (services) => {
@@ -150,7 +215,13 @@ export default async function AssetsPage({
         actor,
         ...browseScope,
         ...(folderFilter ? { folderId: folderFilter } : {}),
-        ...(kindFilter ? { kinds: [kindFilter] } : {}),
+        ...(kindFilter ? { kinds: [kindFilter] } : viewKinds(view)),
+        ...(view === 'ai' ? { sources: ['AI_GENERATED' as const] } : {}),
+        ...(view === 'uploaded' ? { sources: ['UPLOAD' as const] } : {}),
+        ...(view === 'recent'
+          ? { createdAfter: new Date(systemClock.now().getTime() - RECENT_DAYS * 86_400_000) }
+          : {}),
+        ...(view === 'unused' ? { unusedOnly: true } : {}),
         ...(statusFilter ? { statuses: [statusFilter] } : {}),
         ...(tagFilter ? { tags: [tagFilter] } : {}),
         ...(search ? { search } : {}),
@@ -170,6 +241,23 @@ export default async function AssetsPage({
       const selected =
         selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
       const versions = selected ? await library.versions(selected.id, actor) : [];
+      // D-287 — where the file is used, from the real references, and how
+      // many posts use each tile on this page (one query).
+      const [uses, usage] = await Promise.all([
+        selected ? library.usage(selected.id, actor) : Promise.resolve([]),
+        library.usageCounts(page.items.map((asset) => asset.id)),
+      ]);
+      const now = systemClock.now();
+      const uploader = selected?.uploadedByUserId
+        ? await services.db.membership
+            .findFirst({
+              // Through the MEMBERSHIP, so only a person of this workspace is named.
+              where: { userId: selected.uploadedByUserId },
+              select: { user: { select: { name: true, email: true } } },
+            })
+            .then((row) => row?.user ?? null)
+            .catch(() => null)
+        : null;
 
       /*
        * A DOWNLOAD GRANT PER TILE, ISSUED ON THE SERVER.
@@ -208,6 +296,10 @@ export default async function AssetsPage({
             failureReason: asset.failureReason,
             selectable,
             previewToken: grant,
+            source: asset.source,
+            shared: asset.brandId === null,
+            rights: rightsState(asset.rightsExpiryAt, now),
+            usedIn: usage.get(asset.id) ?? 0,
           };
         }),
       );
@@ -246,7 +338,39 @@ export default async function AssetsPage({
               createdAt: selected.createdAt.toISOString(),
               failureReason: selected.failureReason,
               selectable: isSelectable(selected),
-              previewToken: null,
+              previewToken:
+                isSelectable(selected) &&
+                canPreviewWithoutDerivative(selected.mimeType, selected.sizeBytes)
+                  ? await download
+                      .grantFor({ assetId: selected.id, actor, disposition: 'inline' })
+                      .then((issued) => issued.grant.token)
+                      .catch(() => null)
+                  : null,
+              downloadToken: isSelectable(selected)
+                ? await download
+                    .grantFor({ assetId: selected.id, actor, disposition: 'attachment' })
+                    .then((issued) => issued.grant.token)
+                    .catch(() => null)
+                : null,
+              source: selected.source,
+              shared: selected.brandId === null,
+              brandName: selected.brandId
+                ? (brands.find((brand) => brand.id === selected.brandId)?.name ?? null)
+                : null,
+              license: selected.license,
+              rightsExpiryAt: selected.rightsExpiryAt?.toISOString() ?? null,
+              rights: rightsState(selected.rightsExpiryAt, now),
+              uploadedBy: uploader ? (uploader.name ?? uploader.email) : null,
+              usedIn: uses.length,
+              uses: uses.map((use) => ({
+                contentItemId: use.contentItemId,
+                title: use.title,
+                status: use.status,
+                campaignName: use.campaignName,
+                platformKeys: use.platformKeys,
+                asCover: use.asCover,
+                updatedAt: use.updatedAt.toISOString(),
+              })),
               versions: versions.map((version) => ({
                 versionNumber: version.versionNumber,
                 sizeBytes: version.sizeBytes,
@@ -304,6 +428,7 @@ export default async function AssetsPage({
             />
           ) : null
         }
+        brandKit={brandKit}
         openUpload={query['upload'] === '1'}
         eyebrow={t('assets.eyebrow')}
         title={t('assets.title')}
@@ -316,7 +441,8 @@ export default async function AssetsPage({
           ...(statusFilter ? { status: statusFilter } : {}),
           ...(tagFilter ? { tag: tagFilter } : {}),
           ...(folderFilter ? { folder: folderFilter } : {}),
-          ...(effectiveScope ? { scope: effectiveScope } : {}),
+          ...(effectiveScope && view !== 'shared' ? { scope: effectiveScope } : {}),
+          ...(view ? { view } : {}),
           sort,
         }}
         can={{
@@ -338,6 +464,7 @@ export default async function AssetsPage({
           remove: deleteAssetAction,
           addVersion: addAssetVersionAction,
           restoreVersion: restoreAssetVersionAction,
+          bulk: bulkAssetAction,
         }}
       />
     </WorkspaceShell>

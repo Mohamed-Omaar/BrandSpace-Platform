@@ -431,6 +431,15 @@ two round arrows in the existing play-button treatment (white 0.9, `surfaceInk`)
 icons that flip in Arabic, and `CarouselDots`' existing `active` state. No new colour, font, shadow or
 interaction model.
 
+### 6.3.13 Phase 6 final — Asset Library views, badges and detail drawer (D-287)
+
+`/[locale]/assets` keeps its §6 extension (D-98) and adds: a `LinkTabs` row of views above the filters;
+tile badges in `StatusBadge` tones already in use (info = AI generated, neutral = Shared, warning =
+Rights expiring, danger = Rights expired) and a caption line for "Used in"; a 24px selection checkbox
+per tile (WCAG 2.5.8) feeding a bulk form of ordinary `Field` controls; and the detail moved from a card
+under the grid into the `SideSheet` (D-285), with the preview, a tint link for "Use in a post" and a muted
+link for Download. No new colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -702,6 +702,8 @@ function translateOptional(
 
 /** The draft editor's own vocabulary (D-284). */
 const EDITOR_KEYS = [
+  'editor.issue.rightsExpired',
+  'editor.media.rightsExpired',
   'editor.media.carried',
   'editor.media.carriedBody',
   'editor.media.attached',

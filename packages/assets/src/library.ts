@@ -3,6 +3,7 @@ import {
   type Asset,
   type AssetFolder,
   type AssetKind,
+  type AssetSource,
   type AssetStatus,
   type AssetVersion,
   type Prisma,
@@ -81,6 +82,26 @@ export interface BrowseAssetsInput {
   readonly cursor?: string | null | undefined;
   /** Include archived assets. Off by default: the library shows live work. */
   readonly includeArchived?: boolean | undefined;
+  /**
+   * PHASE 6 FINAL (D-287) — the library's derived VIEWS. Each is a filter over
+   * real columns, never a stored collection: where the file came from, how
+   * recent it is, and whether any post uses it.
+   */
+  readonly sources?: readonly AssetSource[] | undefined;
+  readonly createdAfter?: Date | undefined;
+  /** Only files no post, cover or brand logo references. */
+  readonly unusedOnly?: boolean | undefined;
+}
+
+/** PHASE 6 FINAL (D-287) — one post a file appears in. */
+export interface AssetUse {
+  readonly contentItemId: string;
+  readonly title: string;
+  readonly status: string;
+  readonly campaignName: string | null;
+  readonly platformKeys: readonly string[];
+  readonly asCover: boolean;
+  readonly updatedAt: Date;
 }
 
 export interface AssetPage {
@@ -130,6 +151,12 @@ export class AssetLibraryService {
     // `hasEvery`, not `hasSome`: selecting two tags means "both", which is what
     // a person filtering a library expects and what makes filters narrow.
     if (input.tags && input.tags.length > 0) where.tags = { hasEvery: [...input.tags] };
+    if (input.sources && input.sources.length > 0) where.source = { in: [...input.sources] };
+    if (input.createdAfter) where.createdAt = { gte: input.createdAfter };
+    if (input.unusedOnly) {
+      const used = await this.#usedAssetIds();
+      if (used.length > 0) where.id = { notIn: used };
+    }
     if (input.search && input.search.trim() !== '') {
       /*
        * NAME ONLY, and case-insensitively. Searching the storage key or the
@@ -157,6 +184,108 @@ export class AssetLibraryService {
       hasMore,
       nextCursor: hasMore && last ? encodeCursor(last, sort) : null,
     };
+  }
+
+  /* --- Usage (D-287) ----------------------------------------------------- */
+
+  /**
+   * WHERE A FILE IS USED — derived from the real references, never stored:
+   * `content_variant.assetIds`, `content_variant.coverAssetId`. Posts of a
+   * brand outside the reader's BrandScope are not listed (D-132), and a
+   * deleted post is not a use.
+   */
+  async usage(assetId: string, actor: AssetActor): Promise<readonly AssetUse[]> {
+    const asset = await this.get(assetId, actor);
+    const variants = await this.#db.contentVariant.findMany({
+      where: {
+        OR: [{ assetIds: { has: asset.id } }, { coverAssetId: asset.id }],
+        item: { deletedAt: null },
+        ...(actor.brandScope.length > 0 ? { brandId: { in: [...actor.brandScope] } } : {}),
+      },
+      select: {
+        platformKey: true,
+        coverAssetId: true,
+        item: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            updatedAt: true,
+            campaign: { select: { name: true } },
+          },
+        },
+      },
+      take: 200,
+    });
+    const byItem = new Map<string, AssetUse>();
+    for (const variant of variants) {
+      const current = byItem.get(variant.item.id);
+      byItem.set(variant.item.id, {
+        contentItemId: variant.item.id,
+        title: variant.item.title,
+        status: variant.item.status,
+        campaignName: variant.item.campaign?.name ?? null,
+        platformKeys: [...(current?.platformKeys ?? []), variant.platformKey],
+        asCover: (current?.asCover ?? false) || variant.coverAssetId === asset.id,
+        updatedAt: variant.item.updatedAt,
+      });
+    }
+    return [...byItem.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  }
+
+  /** How many posts use each of these files — one query for a page of tiles. */
+  async usageCounts(assetIds: readonly string[]): Promise<ReadonlyMap<string, number>> {
+    const counts = new Map<string, Set<string>>();
+    if (assetIds.length === 0) return new Map();
+    const variants = await this.#db.contentVariant.findMany({
+      where: {
+        OR: [{ assetIds: { hasSome: [...assetIds] } }, { coverAssetId: { in: [...assetIds] } }],
+        item: { deletedAt: null },
+      },
+      select: { assetIds: true, coverAssetId: true, contentItemId: true },
+      take: 2_000,
+    });
+    const wanted = new Set(assetIds);
+    for (const variant of variants) {
+      for (const id of [
+        ...variant.assetIds,
+        ...(variant.coverAssetId ? [variant.coverAssetId] : []),
+      ]) {
+        if (!wanted.has(id)) continue;
+        const items = counts.get(id) ?? new Set<string>();
+        items.add(variant.contentItemId);
+        counts.set(id, items);
+      }
+    }
+    return new Map([...counts].map(([id, items]) => [id, items.size]));
+  }
+
+  /**
+   * Every file some live post, cover or brand logo references. RAW SQL, with an
+   * explicit tenant predicate on every table (CLAUDE.md §5) — RLS applies too,
+   * because this runs on the tenant-scoped client.
+   */
+  async #usedAssetIds(): Promise<string[]> {
+    const rows = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT DISTINCT used.id::text AS id FROM (
+        SELECT unnest(v."assetIds") AS id
+          FROM "content_variant" v
+          JOIN "content_item" i ON i."id" = v."contentItemId" AND i."workspaceId" = v."workspaceId"
+         WHERE v."workspaceId" = ${this.#workspaceId}::uuid AND i."deletedAt" IS NULL
+        UNION
+        SELECT v."coverAssetId" AS id
+          FROM "content_variant" v
+          JOIN "content_item" i ON i."id" = v."contentItemId" AND i."workspaceId" = v."workspaceId"
+         WHERE v."workspaceId" = ${this.#workspaceId}::uuid AND i."deletedAt" IS NULL
+           AND v."coverAssetId" IS NOT NULL
+        UNION
+        SELECT b."primaryLogoAssetId" FROM "brand" b
+         WHERE b."workspaceId" = ${this.#workspaceId}::uuid AND b."primaryLogoAssetId" IS NOT NULL
+        UNION
+        SELECT b."secondaryLogoAssetId" FROM "brand" b
+         WHERE b."workspaceId" = ${this.#workspaceId}::uuid AND b."secondaryLogoAssetId" IS NOT NULL
+      ) used`;
+    return rows.map((row) => row.id);
   }
 
   async get(assetId: string, actor: AssetActor): Promise<Asset> {
