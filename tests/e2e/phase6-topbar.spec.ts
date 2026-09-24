@@ -89,7 +89,17 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(page.getByTestId('notes-for-you')).toBeVisible();
     await expect(page.getByTestId('notes-open')).toBeVisible();
 
+    // D-297 — the bell is still the link to the full screen (no-script path)…
+    await expect(page.getByTestId('topbar-notifications')).toHaveAttribute(
+      'href',
+      '/en/notifications',
+    );
+    // …and a plain click opens the feed over the screen, with "See all" to it.
     await page.getByTestId('topbar-notifications').click();
+    const feed = page.getByTestId('notifications-feed');
+    await expect(feed).toBeVisible();
+    await expect(feed.getByTestId('notifications-tab-mention')).toBeVisible();
+    await feed.getByTestId('notifications-see-all').click();
     await page.waitForURL(/\/en\/notifications$/);
     await expect(page.getByTestId('notifications')).toBeVisible();
   });

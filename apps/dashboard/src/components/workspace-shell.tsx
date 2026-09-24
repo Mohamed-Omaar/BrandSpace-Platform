@@ -38,6 +38,8 @@ import { copilotSurfaceForPath } from '../server/copilot-surface';
 import { copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
 import { GlobalCopilot } from './global-copilot';
+import { NotificationsBell } from './notifications-bell';
+import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
@@ -514,6 +516,33 @@ export async function WorkspaceShell({
                 }
               />
             );
+            // D-297 — the bell opens its feed over the screen (still a link without script).
+            if (link.key === 'notifications' && !link.current) {
+              return (
+                <NotificationsBell
+                  key={link.key}
+                  locale={locale}
+                  href={link.href}
+                  load={loadNotificationFeed}
+                  strings={{
+                    title: t('notifications.title'),
+                    close: t('common.close'),
+                    all: t('notifications.feed.all'),
+                    mentions: t('notifications.feed.mentions'),
+                    approvals: t('notifications.feed.approvals'),
+                    seeAll: t('notifications.feed.seeAll'),
+                    open: t('notifications.view'),
+                    unread: t('notifications.unread'),
+                    loading: t('notifications.feed.loading'),
+                    emptyTitle: t('notifications.emptyTitle'),
+                    emptyBody: t('notifications.emptyBody'),
+                    error: t('notifications.feed.error'),
+                  }}
+                >
+                  {control}
+                </NotificationsBell>
+              );
+            }
             return link === copilotLink ? (
               <GlobalCopilot
                 key={link.key}

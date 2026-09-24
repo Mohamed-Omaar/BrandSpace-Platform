@@ -478,6 +478,14 @@ strip on `surface` with a `border` hairline and the `h3` type step, and a captio
 for gaps. Provenance is a `micro` caption under each item in the area drawer. No new colour, font or
 shadow; the orb is untouched.
 
+### 6.3.19 Phase 6 final — the bell's feed (D-297)
+
+The top bar's bell opens the existing `SideSheet` primitive (the same sheet the Calendar and Content
+drawers use). Tabs are `neutral` / `ghost` small buttons in a wrapping row; rows are a two-column grid
+with a `surfaceMuted` initial disc, a `bodySm` headline, the excerpt in `textSecondary`, and a
+`caption` context line; unread adds a 3px `brandPurple` inline-start edge and the word "unread". The
+empty state is `StateMessage`. No new colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
