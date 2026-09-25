@@ -545,6 +545,15 @@ the role. `NoAccessPage` is the same state inside the normal `WorkspaceShell` (t
 `h1`), with the not-found screen's Home button. The Permissions table adds a `label`-scale
 `textSecondary` "From the role" line under each state.
 
+### 6.3.28 Prototype v90 Phase 2A — Home sections by role (A6, E7)
+
+Four cards, composed exactly like the Home cards beside them (`Card`, `SectionHeader`, the page's
+own `listStyle` / `rowStyle`, `quiet` empty lines, neutral `sm` buttons): "Waiting for your review"
+(`content.approve`), "Your work" — drafts, sent for review and scheduled, three columns in a
+`ContentGrid` (`content.create` or `content.submit`) — "Top posts" (`analytics.read`) and "Waiting for
+your feedback" (reads content, creates and approves nothing; links to the calendar). They sit between
+"What needs you" and "Recommended", so the owner's A → E order is unchanged.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

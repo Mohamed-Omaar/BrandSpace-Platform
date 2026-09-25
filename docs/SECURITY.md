@@ -1598,6 +1598,16 @@ require `content.read`; the navigation omits the entry, but the ROUTE's refusal 
 `approval_policy_client_approval_withdrawn`, for a future **External Review / Guest Approval**
 capability that will be its own narrow actor rather than a repurposed customer role.
 
+**Q12 (D-323) — the Viewer gains READ access to content in TWO releases, in this order.** Phase 2A
+ships the permission model only: `notes.manage` (resolve, reopen, assign, due date, importance,
+assigning a new thread, replying to a resolved thread) is split out of `content.read` and granted by
+the `…_notes_manage_permission` data migration to every role that already held `content.read`, so
+nobody loses anything; a member with `content.read` alone may start a thread and reply to an open
+one. Approvals render read-only for anyone without `content.approve`, and Copilot tools need
+`copilot.use`. `client_viewer` stays exactly `['workspace.read']` in Phase 2A. A separate, later
+release grants it `content.read` in the migration, the seed and the bootstrap together — and must be
+deployed after Phase 2A, never with it. Until then the D-62 paragraph above holds unchanged.
+
 **The escalation that is deliberately prevented.** `approvals.policy.manage` can turn self-approval
 on, so it is held only by the Workspace Owner and Workspace Admin — and NOT by the Marketing Manager,
 who can approve. A role able to both approve and change the approval policy could grant itself the

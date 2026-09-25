@@ -11,7 +11,8 @@ import {
   ROLE_DEFINITIONS,
   isOwnerOnlyPermission,
 } from '@brandspace/shared';
-import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from '@brandspace/collaboration';
+import { homeSectionsFor } from '../../apps/dashboard/src/server/home';
 import { messages, statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import {
   KNOWN_PAGE_PERMISSIONS,
@@ -387,5 +388,102 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     expect(read('apps/dashboard/src/app/[locale]/settings/brand/actions.ts')).toContain(
       "requireWorkspaceAction(locale, 'brand.manage')",
     );
+  });
+});
+
+describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () => {
+  const role = (key: string) => ROLE_DEFINITIONS.find((r) => r.key === key)?.permissionKeys ?? [];
+
+  it('chooses Home sections from permissions, per role', () => {
+    expect(homeSectionsFor(role('workspace_owner'))).toEqual({
+      reviewQueue: true,
+      myWork: true,
+      topPosts: true,
+      feedback: false,
+    });
+    expect(homeSectionsFor(role('approver'))).toMatchObject({ reviewQueue: true, myWork: false });
+    expect(homeSectionsFor(role('copywriter'))).toMatchObject({
+      reviewQueue: false,
+      myWork: true,
+      topPosts: false,
+    });
+    expect(homeSectionsFor(role('analyst'))).toMatchObject({ topPosts: true, myWork: false });
+    // The Viewer today reads no content, so it gets none of these sections…
+    expect(homeSectionsFor(role('client_viewer'))).toEqual({
+      reviewQueue: false,
+      myWork: false,
+      topPosts: false,
+      feedback: false,
+    });
+    // …and once a later release grants it `content.read`, the feedback section (E7).
+    expect(homeSectionsFor([...role('client_viewer'), 'content.read'])).toEqual({
+      reviewQueue: false,
+      myWork: false,
+      topPosts: false,
+      feedback: true,
+    });
+  });
+
+  it('the Viewer is NOT given content.read in Phase 2A', () => {
+    expect(role('client_viewer')).toEqual(['workspace.read']);
+  });
+
+  it('notes.manage goes to exactly the roles that read content, and not to the Viewer', () => {
+    expect(NOTE_MANAGE_PERMISSION).toBe('notes.manage');
+    for (const r of ROLE_DEFINITIONS.filter((d) => d.realm === 'workspace')) {
+      expect(r.permissionKeys.includes('notes.manage'), r.key).toBe(
+        r.permissionKeys.includes(NOTE_PERMISSION),
+      );
+    }
+    expect(role('client_viewer')).not.toContain('notes.manage');
+  });
+
+  it('the notes panel and Home offer triage only with notes.manage', () => {
+    const panel = read('apps/dashboard/src/components/notes-panel.tsx');
+    expect(panel).toContain('mayManage = actor.permissionKeys.includes(NOTE_MANAGE_PERMISSION)');
+    expect(panel).toMatch(
+      /\{status === 'RESOLVED' && !mayManage \? null : \(\s*<form\s*action=\{replyToNoteThreadAction\}/,
+    );
+    expect(panel).toMatch(
+      /\{mayManage \? \(\s*<form action=\{status === 'RESOLVED' \? reopenNoteThreadAction/,
+    );
+    expect(panel).toMatch(/\{mayManage \? \(\s*<details data-testid=\{`note-options-/);
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toContain("entry.status === 'OPEN' && mayManageNotes ? (");
+  });
+
+  it('the notes service asks notes.manage for every triage write', () => {
+    const service = read('packages/collaboration/src/notes.ts');
+    for (const method of ['resolve', 'reopen', 'assign', 'setDue', 'setImportance']) {
+      const body = service.slice(service.indexOf(`  async ${method}(`));
+      const end = body.indexOf('\n  }\n');
+      expect(body.slice(0, end), method).toContain('this.#requireManage(input.actor);');
+    }
+    expect(service).toContain(
+      "if (thread.status === 'RESOLVED') this.#requireManage(input.actor);",
+    );
+  });
+
+  it("Home lists the member's own work by createdBy/requestedBy, and feedback links to the calendar", () => {
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toMatch(
+      /createdByUserId: customer\.userId,\s*status: \{ in: \['DRAFT', 'CHANGES_REQUESTED'\] \}/,
+    );
+    expect(home).toContain('requestedByUserId: customer.userId');
+    expect(home).toContain('item: { createdByUserId: customer.userId, deletedAt: null }');
+    expect(home).toMatch(/testId="home-feedback"[\s\S]*?href=\{`\/\$\{locale\}\/calendar`\}/);
+    // A member without analytics is told the figure is hidden, not pending.
+    expect(home).toMatch(/!maySeeAnalytics\s*\?\s*t\('overview\.metric\.hidden'\)/);
+    for (const key of [
+      'home.role.review.title',
+      'home.role.drafts.title',
+      'home.role.sent.title',
+      'home.role.scheduled.title',
+      'home.role.top.title',
+      'home.role.feedback.title',
+      'home.role.feedback.open',
+    ]) {
+      both(key);
+    }
   });
 });

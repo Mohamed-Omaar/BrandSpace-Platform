@@ -11,7 +11,7 @@
  * them is visible in the dependency graph rather than resting on nobody writing
  * one.
  */
-export { NotesService, NOTE_PERMISSION } from './notes';
+export { NotesService, NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from './notes';
 export type {
   NoteActor,
   NoteInbox,

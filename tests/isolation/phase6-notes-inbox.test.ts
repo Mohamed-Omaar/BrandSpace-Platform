@@ -109,7 +109,8 @@ async function world(label: string): Promise<World> {
 }
 
 function actor(userId: string, overrides: Partial<NoteActor> = {}): NoteActor {
-  return { userId, permissionKeys: ['content.read'], brandScope: [], ...overrides };
+  // Every role that reads content also triages notes (Q12, `notes.manage`).
+  return { userId, permissionKeys: ['content.read', 'notes.manage'], brandScope: [], ...overrides };
 }
 
 function service(workspaceId: string, db: unknown = platform): NotesService {

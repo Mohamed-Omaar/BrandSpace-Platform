@@ -272,11 +272,26 @@ describe('the customer role matrix matches the Blueprint', () => {
      * conversation. It is a mutation wearing a question mark, and a read-only
      * role must not be able to spend money.
      */
+    /*
+     * ONE NAMED EXEMPTION, FOR ONE ROLE (Q12). `notes.manage` split note triage
+     * (resolve, assign, due date, importance) out of `content.read`, which the
+     * Analyst already held and used for exactly that. Keeping it means the
+     * split changed nothing for the Analyst; it changes no content, spends
+     * nothing and publishes nothing. The Viewer gets NO exemption: it may only
+     * comment.
+     */
+    const exemptFor: Readonly<Record<string, readonly string[]>> = {
+      analyst: ['notes.manage'],
+      client_viewer: [],
+    };
     for (const role of ['analyst', 'client_viewer']) {
       for (const key of mutating) {
+        if (exemptFor[role]?.includes(key)) continue;
         expect(grants(role), `${role} must not hold ${key}`).not.toContain(key);
       }
     }
+    expect(grants('analyst')).toContain('notes.manage');
+    expect(grants('client_viewer')).not.toContain('notes.manage');
 
     /*
      * AND THE PHASE 7 KEYS, NAMED RATHER THAN INFERRED. Every one of these

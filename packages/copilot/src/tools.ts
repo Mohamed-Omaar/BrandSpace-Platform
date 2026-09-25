@@ -387,6 +387,13 @@ export function availableTools(
    * conversation can ask and answer, and it cannot act on anything until it is
    * admitted to a brand.
    */
+  /*
+   * NO COPILOT, NO TOOLS (Q12, Q18). Every route into the Copilot already
+   * requires `copilot.use`; asking again here means a member who reads content
+   * but may not use the Copilot — the Viewer once it holds `content.read` — is
+   * offered nothing even if some future path forgot the route's gate.
+   */
+  if (!held.has('copilot.use')) return [];
   return (COPILOT_TOOLS as readonly ToolDefinition[]).filter(
     (tool) => held.has(tool.permission) && (brandBound || tool.brandScope !== 'required'),
   );

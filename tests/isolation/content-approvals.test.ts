@@ -568,6 +568,48 @@ describe('D-62 — the Viewer is strictly read-only, end to end', () => {
   });
 });
 
+describe('Q12 — a Viewer that READS content sees reviews and still decides nothing', () => {
+  /*
+   * Phase 2A builds the read-only Approvals the Viewer gets once a later
+   * release grants it `content.read`; the real role is unchanged here, so the
+   * grant is given to this fixture actor only. Reading the review subject is
+   * the read it gains; deciding, withdrawing and submitting stay refused.
+   */
+  const reader = (): ApprovalActor => ({
+    userId: '77777777-6666-4555-8444-333333333334',
+    roleKey: 'client_viewer',
+    permissionKeys: ['workspace.read', 'content.read'],
+    brandScope: [],
+  });
+
+  it('may read the review subject', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    const subject = await inA(({ approvals }) =>
+      approvals.reviewSubject({ approvalId: approval.id, actor: reader() }),
+    );
+    expect(subject).toBeTruthy();
+  });
+
+  it('may not decide, withdraw or submit', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    for (const verdict of ['APPROVE', 'REJECT'] as const) {
+      await expect(
+        inA(({ approvals }) =>
+          approvals.decide({ approvalId: approval.id, verdict, actor: reader() }),
+        ),
+      ).rejects.toThrow();
+    }
+    await expect(
+      inA(({ approvals }) => approvals.cancel({ approvalId: approval.id, actor: reader() })),
+    ).rejects.toThrow();
+    expect(await statusOf()).toBe('IN_REVIEW');
+  });
+});
+
 describe('withdrawing a review', () => {
   it('returns the item to a draft and closes the cycle', async () => {
     const approval = await inA(({ approvals }) =>

@@ -157,6 +157,15 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('content.archive', 'workspace', 'Archive a content draft'),
   def('content.schedule', 'workspace', 'Place content on the calendar and move it'),
   def('content.delete', 'workspace', 'Delete content permanently'),
+  /*
+   * Q12 — running a conversation, not just taking part in it. Starting a note
+   * thread and replying to an open one need `content.read` (the Notes
+   * permission); resolving, reopening, assigning, setting a due date or
+   * importance, and replying to a resolved thread need this as well. Granted
+   * to every role that held `content.read` when it was introduced, so no one
+   * lost anything (migration `…_notes_manage_permission`).
+   */
+  def('notes.manage', 'workspace', 'Resolve, assign and triage note threads'),
 
   /*
    * Phase 5B-3 — Approvals, Activity Log, Notifications.

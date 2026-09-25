@@ -104,6 +104,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // Phase 5B-2. Runs the brand's content end to end, short of deleting it —
       // including the calendar, which is the planning half of that job.
       'content.read',
+      // Q12 — triage of note threads; every role that could before still can.
+      'notes.manage',
       'content.create',
       'content.edit',
       'content.submit',
@@ -173,6 +175,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // for review and plans when it goes out. Archiving and deleting stay
       // elsewhere.
       'content.read',
+      // Q12 — triage of note threads; every role that could before still can.
+      'notes.manage',
       'content.create',
       'content.edit',
       'content.submit',
@@ -235,6 +239,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // deciding what it says, and the F-15 rule says an ungranted capability
       // is the recoverable mistake.
       'content.read',
+      // Q12 — triage of note threads; every role that could before still can.
+      'notes.manage',
       'content.create',
       'content.edit',
       'content.submit',
@@ -308,6 +314,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // one — by hand or with a model (D-231) — and it does not edit: an
       // approver who rewrites the thing they are approving is not approving it.
       'content.read',
+      // Q12 — triage of note threads; every role that could before still can.
+      'notes.manage',
       // Phase 5B-3 — scope item 6, and the authority this role was named for.
       // `approve` WITHOUT `edit`, and without `submit`: judging a proposal and
       // authoring one are different acts, and keeping them apart is what makes
@@ -352,6 +360,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'assets.read',
       // Phase 5B-2. READ-ONLY, symmetrically with the library above.
       'content.read',
+      // Q12 — triage of note threads; every role that could before still can.
+      'notes.manage',
       // NOTE: the Analyst's activity view is BRAND-SCOPED, which is what the
       // `audit.read` above already means (Phase 5B-3). No new key is needed,
       // and adding one would have widened a strictly read-only role.
