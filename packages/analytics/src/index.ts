@@ -70,6 +70,8 @@ export type {
 } from './ingestion';
 
 export { AnalyticsQueryService, changeInMilli } from './queries';
+export { countPublishedPosts, livePublishedPostWhere } from './published';
+export type { PublishedPostCountInput } from './published';
 export type {
   AnalyticsPeriod,
   AnalyticsQueryOptions,

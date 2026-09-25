@@ -626,3 +626,26 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     );
   });
 });
+
+describe('F5 · Home and Performance count published posts from the same live list', () => {
+  it('both call the one shared count, and no inline job count is left', () => {
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toContain('countPublishedPosts(db, {');
+    expect(home).not.toMatch(/publishJob\.count\(/);
+    const queries = read('packages/analytics/src/queries.ts');
+    expect(queries).toContain('const publishedPostCount = await countPublishedPosts(this.#db, {');
+    expect(queries).not.toMatch(/publishJob\.count\(/);
+  });
+
+  it('the live list is posts, not jobs, and leaves out archived and expired posts', () => {
+    const published = read('packages/analytics/src/published.ts');
+    expect(published).toContain('db.contentItem.count(');
+    expect(published).toContain('deletedAt: null,');
+    expect(published).toContain("status: { not: 'ARCHIVED' as const },");
+    expect(published).toContain('publishJobs: {');
+    const queries = read('packages/analytics/src/queries.ts');
+    expect(queries).toMatch(
+      /id: \{ in: candidateIds \},\s*deletedAt: null,\s*status: \{ not: 'ARCHIVED' \}/,
+    );
+  });
+});

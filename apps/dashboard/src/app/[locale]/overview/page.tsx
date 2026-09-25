@@ -27,7 +27,7 @@ import {
   type NoteInboxEntry,
 } from '@brandspace/collaboration';
 import { brandIdQueryFilter, systemClock } from '@brandspace/shared';
-import { detectAnomalies } from '@brandspace/analytics';
+import { countPublishedPosts, detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -281,13 +281,12 @@ export default async function OverviewPage({
               ...scope,
             },
           }),
-          db.publishJob.count({
-            where: {
-              workspaceId: workspace.workspaceId,
-              status: 'PUBLISHED',
-              publishedAt: { gte: new Date(now.getTime() - 28 * 86_400_000) },
-              ...scope,
-            },
+          // F5 — the same live list Performance counts: posts, not per-channel jobs.
+          countPublishedPosts(db, {
+            workspaceId: workspace.workspaceId,
+            brandId,
+            brandScope: workspace.brandScope,
+            period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
           }),
         ]);
         return { upcoming, inReview, published };

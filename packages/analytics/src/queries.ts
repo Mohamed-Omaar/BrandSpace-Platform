@@ -22,6 +22,7 @@ import {
   providerSupportsMetric,
 } from './metrics';
 import { freshnessFor, type AnalyticsPolicy } from './policy';
+import { countPublishedPosts } from './published';
 import type { AnalyticsRegistry } from './registry';
 
 /**
@@ -412,23 +413,33 @@ export class AnalyticsQueryService {
       },
       _sum: { value: true },
       orderBy: { _sum: { value: input.direction ?? 'desc' } },
-      take: Math.max(1, Math.min(input.limit, 50)),
+      // F5 — read a few more than asked, because an archived or expired post
+      // is dropped below and the observations carry no relation to filter on.
+      take: Math.max(1, Math.min(input.limit * 4, 200)),
     });
 
-    const itemIds = grouped.flatMap((row) => (row.contentItemId ? [row.contentItemId] : []));
-    if (itemIds.length === 0) return [];
+    const candidateIds = grouped.flatMap((row) => (row.contentItemId ? [row.contentItemId] : []));
+    if (candidateIds.length === 0) return [];
 
     // A SECOND SCOPED READ, not a join through an unscoped client. The titles come
-    // back under the same RLS and the same brand predicate the aggregate used.
+    // back under the same RLS and the same brand predicate the aggregate used —
+    // and only for LIVE posts (F5): an archived or expired post is not a "top
+    // post" any more than it is a published one.
     const items = await this.#db.contentItem.findMany({
       where: {
         workspaceId: this.#workspaceId,
-        id: { in: itemIds },
+        id: { in: candidateIds },
+        deletedAt: null,
+        status: { not: 'ARCHIVED' },
         ...brandIdQueryFilter({ brandScope: input.brandScope }),
       },
       select: { id: true, title: true },
     });
     const titles = new Map(items.map((item) => [item.id, item.title]));
+    const live = grouped
+      .filter((row) => row.contentItemId !== null && titles.has(row.contentItemId))
+      .slice(0, Math.max(1, Math.min(input.limit, 50)));
+    const itemIds = live.flatMap((row) => (row.contentItemId ? [row.contentItemId] : []));
 
     const jobs = await this.#db.publishJob.findMany({
       where: {
@@ -440,7 +451,7 @@ export class AnalyticsQueryService {
     });
     const publishedAt = new Map(jobs.map((job) => [job.contentItemId, job.publishedAt]));
 
-    return grouped.flatMap((row) => {
+    return live.flatMap((row) => {
       if (!row.contentItemId) return [];
       const value = row._sum.value;
       if (value === null) return [];
@@ -726,14 +737,13 @@ export class AnalyticsQueryService {
       select: { lastSucceededAt: true },
     });
 
-    const publishedPostCount = await this.#db.publishJob.count({
-      where: {
-        workspaceId: this.#workspaceId,
-        ...brandIdQueryFilter({ brandId: scope.brandId, brandScope }),
-        status: 'PUBLISHED',
-        publishedAt: { lte: period.end },
-        ...(scope.contentItemId ? { contentItemId: scope.contentItemId } : {}),
-      },
+    // F5 — the same live list Home counts: posts, not per-channel jobs.
+    const publishedPostCount = await countPublishedPosts(this.#db, {
+      workspaceId: this.#workspaceId,
+      brandId: scope.brandId,
+      brandScope,
+      contentItemId: scope.contentItemId,
+      period: { end: period.end },
     });
 
     const mock = await this.#db.metricObservation.count({
