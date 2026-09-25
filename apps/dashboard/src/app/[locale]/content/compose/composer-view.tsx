@@ -38,7 +38,6 @@ import { formatCredits } from '../../../../server/composer-editor';
 
 export type ContentLocale = 'AR' | 'EN';
 
-
 export interface ComposerPlatform {
   readonly key: string;
   readonly label: string;
