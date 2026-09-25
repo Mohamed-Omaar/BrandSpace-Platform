@@ -7,6 +7,7 @@ import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { DraftEditor } from './draft-editor';
 import { formatCredits } from '../../../../server/composer-editor';
+import { PlatformIcon, type SocialPlatform } from '@brandspace/ui';
 
 /**
  * The composer — a MECHANICAL PORT of the approved demo's `composer()`
@@ -36,6 +37,18 @@ import { formatCredits } from '../../../../server/composer-editor';
  */
 
 export type ContentLocale = 'AR' | 'EN';
+
+const SOCIAL_PLATFORM_KEYS = new Set<SocialPlatform>([
+  'instagram',
+  'facebook',
+  'linkedin',
+  'x',
+  'tiktok',
+]);
+
+function socialPlatformOf(value: string): SocialPlatform | null {
+  return SOCIAL_PLATFORM_KEYS.has(value as SocialPlatform) ? (value as SocialPlatform) : null;
+}
 
 export interface ComposerPlatform {
   readonly key: string;
@@ -742,7 +755,16 @@ export function ComposerView({
                       data-platform={platform.key}
                       onClick={() => toggle(platform.key)}
                     >
-                      {platform.label}
+                      {socialPlatformOf(platform.key) ? (
+                        <span className="cs-channel-icon" aria-hidden="true">
+                          <PlatformIcon
+                            platform={socialPlatformOf(platform.key) as SocialPlatform}
+                            size={14}
+                            tone="brand"
+                          />
+                        </span>
+                      ) : null}
+                      <span>{platform.label}</span>
                     </button>
                   );
                 })}
