@@ -28,18 +28,18 @@ describe('gigabytesFor (B-1)', () => {
   });
 });
 
-describe('the B-1 migration backfill (B-1)', () => {
-  it('divides by the same gigabyte the application uses', () => {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const sql = readFileSync(
-      path.resolve(
-        here,
-        '../../packages/database/prisma/migrations/20260925120000_storage_bytes_meter/migration.sql',
-      ),
-      'utf8',
-    );
-    const divisors = [...sql.matchAll(/::numeric \/ (\d+)/g)].map((m) => Number(m[1]));
-    expect(divisors.length).toBeGreaterThan(0);
-    expect(new Set(divisors)).toEqual(new Set([BYTES_PER_GB]));
-  });
+describe('the storage migration backfills (B-1, B-8)', () => {
+  it.each(['20260925120000_storage_bytes_meter', '20260925130000_storage_bytes_brand_sources'])(
+    '%s divides by the same gigabyte the application uses',
+    (migration) => {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const sql = readFileSync(
+        path.resolve(here, `../../packages/database/prisma/migrations/${migration}/migration.sql`),
+        'utf8',
+      );
+      const divisors = [...sql.matchAll(/::numeric \/ (\d+)/g)].map((m) => Number(m[1]));
+      expect(divisors.length).toBeGreaterThan(0);
+      expect(new Set(divisors)).toEqual(new Set([BYTES_PER_GB]));
+    },
+  );
 });

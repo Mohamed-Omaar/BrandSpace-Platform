@@ -9,8 +9,8 @@ import { gigabytesFor, QUOTA_FEATURES, quotaWindow, type UsageTx } from './usage
  * gigabytes, rounded up per file, so the `limit.storage_gb` counters held sums
  * of roundings rather than anything a customer stored. That cannot be undone by
  * arithmetic on the counter: the per-file sizes are only recoverable from the
- * rows that describe the files. The B-1 migration (`20260925120000_storage_
- * bytes_meter`) does the one-time backfill itself, with the SAME definition of
+ * rows that describe the files. The B-1 and B-8 migrations
+ * (`…_storage_bytes_meter`, `…_storage_bytes_brand_sources`) do the backfill, with the SAME definition of
  * "stored" as below, so no workspace starts at 0 bytes. This is the check that
  * can be run afterwards — dry run by default — and the repair for any drift
  * found later.
@@ -22,7 +22,8 @@ import { gigabytesFor, QUOTA_FEATURES, quotaWindow, type UsageTx } from './usage
  *     refunds precisely these bytes — a restored version shares its object, so
  *     it is counted once);
  *   - the declared size of every PENDING upload session, which `initiate`
- *     charged and `expireStaleSessions` or `complete` settles.
+ *     charged and `expireStaleSessions` or `complete` settles;
+ *   - every live Brand Brain source document (B-8), charged on upload.
  *
  * IT DOES NOTHING UNLESS ASKED. `apply: false` (the default for the command)
  * only reports. With `apply: true` each workspace is corrected in its OWN
@@ -68,6 +69,10 @@ async function measureStoredBytes(
         SELECT s."workspaceId", s."declaredSizeBytes"::bigint
           FROM "asset_upload_session" s
          WHERE s."status" = 'PENDING'
+        UNION ALL
+        SELECT d."workspaceId", d."byteSize"::bigint
+          FROM "brand_source_document" d
+         WHERE d."deletedAt" IS NULL
       ) t
      WHERE ${workspaceId}::uuid IS NULL OR t."workspaceId" = ${workspaceId}::uuid
      GROUP BY t."workspaceId"`;

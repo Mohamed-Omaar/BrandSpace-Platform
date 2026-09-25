@@ -8,6 +8,13 @@ import {
   assetPolicyFrom,
   type AssetActor,
 } from '@brandspace/assets';
+import {
+  BrandIngestionService,
+  ExtractorRegistry,
+  InMemoryObjectStore as BrainObjectStore,
+  PlainTextExtractor,
+  type IngestionPolicy,
+} from '@brandspace/brand-brain';
 import { defaultPayload } from '@brandspace/config';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
@@ -408,5 +415,132 @@ describe('B-1: recomputing a counter from what is stored', () => {
     expect(audit?.after).toEqual({ usedBytes: 3 * MIB, usedGb: 1 });
 
     expect(await recomputeStorageUsage(platform, { apply: false, workspaceId })).toEqual([]);
+  });
+});
+
+describe('B-8: Brand Brain uploads charge the same storage quota', () => {
+  const INGESTION: IngestionPolicy = {
+    allowedMimeTypes: ['text/plain'],
+    maxFileBytes: 4 * MIB,
+    maxDocumentsPerBrand: 50,
+    maxAttempts: 3,
+    retryBackoffSeconds: 60,
+    chunkTargetChars: 300,
+    chunkOverlapChars: 50,
+    maxChunksPerDocument: 50,
+    minimumCandidateConfidenceMilli: 400,
+  };
+  const extractors = () =>
+    new ExtractorRegistry([
+      new PlainTextExtractor({
+        maxPages: 50,
+        maxTextChars: 200_000,
+        maxArchiveEntries: 256,
+        maxArchiveBytes: 8 * MIB,
+        maxCompressionRatio: 200,
+        timeoutMs: 30_000,
+      }),
+    ]);
+
+  async function brandIn(workspaceId: string): Promise<string> {
+    const brand = await platform.brand.create({
+      data: {
+        workspaceId,
+        slug: `b8-${crypto.randomUUID().slice(0, 8)}`,
+        name: 'Storage Brand',
+        defaultLocale: 'EN',
+        status: 'ACTIVE',
+      },
+    });
+    return brand.id;
+  }
+
+  /** A text document of exactly `size` bytes, unique per call. */
+  function text(size: number): Uint8Array {
+    const stamp = `${crypto.randomUUID()} `;
+    return new TextEncoder().encode(stamp + 'a'.repeat(size - stamp.length));
+  }
+
+  function uploadSource(
+    workspaceId: string,
+    userId: string,
+    brandId: string,
+    bytes: Uint8Array,
+    options: { limitGb: number | null; key?: string; metered?: boolean },
+  ) {
+    return withWorkspace(
+      workspaceId,
+      async (db) =>
+        new BrandIngestionService({
+          db,
+          workspaceId,
+          store: new BrainObjectStore(),
+          policy: INGESTION,
+          extractors: extractors(),
+          ...(options.metered === false
+            ? {}
+            : {
+                storage: {
+                  usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+                  limitGb: options.limitGb,
+                },
+              }),
+        }).upload({
+          brandId,
+          fileName: 'guidelines.txt',
+          mimeType: 'text/plain',
+          bytes,
+          idempotencyKey: options.key ?? `b8-${crypto.randomUUID()}`,
+          actorUserId: userId,
+          actorBrandScope: [],
+        }),
+      { prisma: app },
+    );
+  }
+
+  it("charges exactly the document's bytes, on top of the files already stored", async () => {
+    const { workspaceId, userId } = await freshWorkspace();
+    const brandId = await brandIn(workspaceId);
+    await uploadFile(workspaceId, userId, photo(MIB), 1);
+    await uploadSource(workspaceId, userId, brandId, text(3 * MIB + 5), { limitGb: 1 });
+
+    expect((await counter(workspaceId))?.usedBytes).toBe(BigInt(4 * MIB + 5));
+    // The recompute measures the same things, so it finds nothing to correct.
+    expect(await recomputeStorageUsage(platform, { apply: false, workspaceId })).toEqual([]);
+  });
+
+  it('a retried upload is charged once', async () => {
+    const { workspaceId, userId } = await freshWorkspace();
+    const brandId = await brandIn(workspaceId);
+    const bytes = text(2 * MIB);
+    const key = `b8-retry-${crypto.randomUUID()}`;
+    await uploadSource(workspaceId, userId, brandId, bytes, { limitGb: 1, key });
+    await uploadSource(workspaceId, userId, brandId, bytes, { limitGb: 1, key });
+    expect((await counter(workspaceId))?.usedBytes).toBe(BigInt(2 * MIB));
+  });
+
+  it('is refused at the plan limit, and nothing is stored or charged', async () => {
+    const { workspaceId, userId } = await freshWorkspace();
+    const brandId = await brandIn(workspaceId);
+    await fill(workspaceId, BYTES_PER_GB - MIB);
+
+    await expect(
+      uploadSource(workspaceId, userId, brandId, text(MIB + 1), { limitGb: 1 }),
+    ).rejects.toMatchObject({ code: 'QUOTA_EXCEEDED' });
+    expect((await counter(workspaceId))?.usedBytes).toBe(BigInt(BYTES_PER_GB - MIB));
+    expect(await platform.brandSourceDocument.count({ where: { workspaceId } })).toBe(0);
+
+    // Exactly what remains still fits.
+    await uploadSource(workspaceId, userId, brandId, text(MIB), { limitGb: 1 });
+    expect((await counter(workspaceId))?.usedBytes).toBe(BigInt(BYTES_PER_GB));
+  });
+
+  it('refuses to upload at all without the storage meter wired in', async () => {
+    const { workspaceId, userId } = await freshWorkspace();
+    const brandId = await brandIn(workspaceId);
+    await expect(
+      uploadSource(workspaceId, userId, brandId, text(1_000), { limitGb: null, metered: false }),
+    ).rejects.toMatchObject({ code: 'INTERNAL' });
+    expect(await platform.brandSourceDocument.count({ where: { workspaceId } })).toBe(0);
   });
 });

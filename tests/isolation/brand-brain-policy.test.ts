@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withWorkspace } from '@brandspace/database';
+import { UsageService } from '@brandspace/entitlements';
 import { ConfigurationService, type ConfigActor } from '@brandspace/config';
 import {
   BrandIngestionService,
@@ -257,6 +258,11 @@ describe('the configured policy changes what the services actually do', () => {
         const ingestion = new BrandIngestionService({
           db: db as never,
           workspaceId: fixtures.a.workspaceId,
+          // B-8 — uploads charge the workspace storage quota; unlimited here.
+          storage: {
+            usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+            limitGb: null,
+          },
           store,
           policy: policy.ingestion,
           // The CONFIGURED limits, so this too would change with an activation.

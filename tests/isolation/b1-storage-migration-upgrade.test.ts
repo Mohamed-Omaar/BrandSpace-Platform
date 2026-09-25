@@ -22,6 +22,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../..');
 const migrationsDir = path.join(repoRoot, 'packages', 'database', 'prisma', 'migrations');
 const B1_MIGRATION = '20260925120000_storage_bytes_meter';
+const B8_MIGRATION = '20260925130000_storage_bytes_brand_sources';
 const EPOCH = '1970-01-01T00:00:00Z';
 const MIB = 1_048_576;
 const GB = 1024 * 1024 * 1024;
@@ -280,5 +281,121 @@ describe('B-1 migration: existing workspaces are backfilled, never left at 0 byt
       { relname: 'asset_version', forced: true },
       { relname: 'usage_counter', forced: true },
     ]);
+  });
+});
+
+/** A brand and one Brand Brain source document of `size` bytes. */
+async function sourceDocument(
+  client: Client,
+  workspaceId: string,
+  size: number,
+  deleted = false,
+): Promise<void> {
+  const brandId = randomUUID();
+  await client.query(
+    `INSERT INTO "brand" ("id", "workspaceId", "slug", "name", "updatedAt")
+     VALUES ($1, $2, $3, 'House Brand', now())`,
+    [brandId, workspaceId, `brand-${brandId.slice(0, 8)}`],
+  );
+  await client.query(
+    `INSERT INTO "brand_source_document"
+       ("id", "workspaceId", "brandId", "fileName", "mimeType", "byteSize",
+        "checksum", "storageKey", "status", "idempotencyKey", "updatedAt", "deletedAt")
+     VALUES ($1, $2, $3, 'guidelines.pdf', 'application/pdf', $4, $5, $6, 'READY', $7, now(), $8)`,
+    [
+      randomUUID(),
+      workspaceId,
+      brandId,
+      size,
+      randomUUID(),
+      `ws/${workspaceId}/${randomUUID()}`,
+      randomUUID(),
+      deleted ? new Date() : null,
+    ],
+  );
+}
+
+describe('B-8 migration: Brand Brain documents join every counter, recomputed', () => {
+  const database = `b8_upgrade_${randomUUID().slice(0, 8)}`;
+  let admin: Client;
+  let migrator: Client;
+  let platform: Client;
+  let mixed: { id: string; userId: string };
+  let brainOnly: { id: string; userId: string };
+
+  beforeAll(async () => {
+    admin = await connect(urlFor('migrator', 'postgres'));
+    await admin.query(`CREATE DATABASE "${database}"`);
+    const migratorUrl = urlFor('migrator', database);
+    const names = readdirSync(migrationsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    // Everything up to and including B-1, and not B-8.
+    for (const name of names) {
+      if (name >= B8_MIGRATION) break;
+      applyMigration(migratorUrl, name);
+    }
+    platform = await connect(urlFor('platform', database));
+
+    // Files B-1 already counted, plus documents nothing ever charged.
+    mixed = await workspace(platform, `b8-mixed-${database.slice(-6)}`);
+    const key = `obj/${randomUUID()}`;
+    await asset(platform, mixed.id, { storageKey: key, versions: [{ key, size: 2 * MIB }] });
+    await platform.query(
+      `INSERT INTO "usage_counter"
+         ("id", "workspaceId", "featureKey", "periodStart", "periodEnd",
+          "usedValue", "usedBytes", "updatedAt")
+       VALUES ($1, $2, 'limit.storage_gb', $3, '9999-01-01T00:00:00Z', 1, $4, now())`,
+      [randomUUID(), mixed.id, EPOCH, 2 * MIB],
+    );
+    await sourceDocument(platform, mixed.id, 5_000);
+    await sourceDocument(platform, mixed.id, 9_000, true); // deleted: not stored
+
+    brainOnly = await workspace(platform, `b8-brain-${database.slice(-6)}`);
+    await sourceDocument(platform, brainOnly.id, 123_456);
+
+    applyMigration(migratorUrl, B8_MIGRATION);
+    migrator = await connect(migratorUrl);
+  }, 180_000);
+
+  afterAll(async () => {
+    await platform?.end();
+    await migrator?.end();
+    if (admin) {
+      await dropThrowawayDatabase(admin, database);
+      await admin.end();
+    }
+  }, 60_000);
+
+  async function storage(workspaceId: string) {
+    const { rows } = await platform.query<{ usedBytes: string; usedValue: number }>(
+      `SELECT "usedBytes"::text AS "usedBytes", "usedValue"
+         FROM "usage_counter"
+        WHERE "workspaceId" = $1 AND "featureKey" = 'limit.storage_gb'`,
+      [workspaceId],
+    );
+    return rows.map((r) => ({ usedBytes: BigInt(r.usedBytes), usedValue: r.usedValue }));
+  }
+
+  it('adds live documents to what was already counted, once, and ignores deleted ones', async () => {
+    expect(await storage(mixed.id)).toEqual([{ usedBytes: BigInt(2 * MIB + 5_000), usedValue: 1 }]);
+  });
+
+  it('creates the counter for a workspace whose only storage is Brand Brain', async () => {
+    expect(await storage(brainOnly.id)).toEqual([{ usedBytes: 123_456n, usedValue: 1 }]);
+  });
+
+  it('leaves row-level security ENABLED and FORCED on every table it touched', async () => {
+    const { rows } = await migrator.query<{ relname: string; forced: boolean }>(
+      `SELECT relname, (relrowsecurity AND relforcerowsecurity) AS forced
+         FROM pg_class
+        WHERE relkind = 'r'
+          AND relname IN ('usage_counter', 'asset', 'asset_version', 'asset_upload_session',
+                          'brand_source_document')
+        ORDER BY relname`,
+    );
+    expect(rows.every((row) => row.forced)).toBe(true);
+    expect(rows).toHaveLength(5);
   });
 });
