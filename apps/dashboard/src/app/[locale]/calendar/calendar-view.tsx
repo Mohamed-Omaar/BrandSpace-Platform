@@ -116,6 +116,13 @@ export interface SlotReadinessDetail {
 
 export interface CalendarViewProps {
   readonly locale: string;
+  /**
+   * F2 — today and tomorrow in the workspace's zone (`YYYY-MM-DD`), and the
+   * time a new post is proposed for. Nothing before today can be chosen.
+   */
+  readonly today?: string;
+  readonly tomorrow?: string;
+  readonly defaultTime?: string;
   readonly t: Record<string, string>;
   readonly periodLabel: string;
   /** `YYYY-MM`, the month the URL asked for. */
@@ -177,6 +184,9 @@ export interface CalendarViewProps {
 
 export function CalendarView({
   locale,
+  today = '',
+  tomorrow = '',
+  defaultTime = '',
   t,
   periodLabel,
   month,
@@ -209,7 +219,9 @@ export function CalendarView({
   const [scheduling, setScheduling] = useState(preselected !== undefined);
   const [trayExpanded, setTrayExpanded] = useState(false);
   const [scheduleItem, setScheduleItem] = useState<string>(preselected ?? drafts[0]?.id ?? '');
-  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleDate, setScheduleDate] = useState(tomorrow);
+  // F2 — said when a post is dropped on a day that has passed.
+  const [pastDayNotice, setPastDayNotice] = useState(false);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
 
   /*
@@ -220,8 +232,15 @@ export function CalendarView({
    */
   const openScheduleFor = (itemId: string, date = '') => {
     if (!drafts.some((draft) => draft.id === itemId)) return;
+    // F2 — a day that has passed is not offered; say so rather than open a
+    // dialog the server would refuse.
+    if (date !== '' && today !== '' && date < today) {
+      setPastDayNotice(true);
+      return;
+    }
+    setPastDayNotice(false);
     setScheduleItem(itemId);
-    setScheduleDate(date);
+    setScheduleDate(date === '' ? tomorrow : date);
     setScheduling(true);
   };
 
@@ -251,6 +270,11 @@ export function CalendarView({
 
   return (
     <div data-testid="calendar-page" style={{ display: 'grid', gap: spacingTokens.lg }}>
+      {pastDayNotice ? (
+        <Banner tone="warning" testId="calendar-past-day">
+          {t['calendar.pastDay']}
+        </Banner>
+      ) : null}
       <ContentCalendar
         periodLabel={periodLabel}
         days={days}
@@ -582,6 +606,7 @@ export function CalendarView({
                   required
                   value={scheduleDate}
                   onChange={(event) => setScheduleDate(event.target.value)}
+                  {...(today ? { min: today } : {})}
                   data-testid="schedule-date"
                   style={inputStyle()}
                 />
@@ -593,6 +618,7 @@ export function CalendarView({
                   name="time"
                   type="time"
                   required
+                  defaultValue={defaultTime}
                   data-testid="schedule-time"
                   style={inputStyle()}
                 />
@@ -736,6 +762,7 @@ export function CalendarView({
                       type="date"
                       required
                       defaultValue={openSlot.date}
+                      {...(today ? { min: today } : {})}
                       data-testid="reschedule-date"
                       style={inputStyle()}
                     />

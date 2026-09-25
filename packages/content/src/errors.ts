@@ -81,9 +81,17 @@ export function invalidScheduleTime(): AppError {
   return new AppError('VALIDATION_FAILED', 'Choose a valid date and time.');
 }
 
-/** Earlier than the configured minimum notice, or already past. */
+/**
+ * Earlier than the configured minimum notice, or already past — including
+ * earlier TODAY (F2): the date and the time are compared together. The reason
+ * lets a screen say so instead of the generic "that was rejected".
+ */
+export const SCHEDULE_IN_PAST_REASON = 'schedule_in_past';
+
 export function scheduleTooSoon(): AppError {
-  return new AppError('VALIDATION_FAILED', 'Choose a time further ahead.');
+  return new AppError('VALIDATION_FAILED', 'Choose a time further ahead.', {
+    reason: SCHEDULE_IN_PAST_REASON,
+  });
 }
 
 /** Beyond the configured planning horizon. */

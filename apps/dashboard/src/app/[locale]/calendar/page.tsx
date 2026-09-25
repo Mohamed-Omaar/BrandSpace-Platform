@@ -1,4 +1,10 @@
-import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime, partsInZone } from '@brandspace/content';
+import {
+  DEFAULT_POST_TIME,
+  RESCHEDULABLE_SLOT_STATUSES,
+  formatLocalTime,
+  nextDayKey,
+  partsInZone,
+} from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type {
@@ -555,6 +561,8 @@ export default async function CalendarPage({
       longLabel: longFormatter.format(cell),
       inCurrentPeriod: cell.getUTCMonth() + 1 === month && cell.getUTCFullYear() === year,
       isToday: key === todayKey,
+      // F2 — a day before today, in the workspace's zone; nothing is planned on it.
+      isPast: key < todayKey,
       posts: byDay.get(key) ?? [],
     });
   }
@@ -626,6 +634,9 @@ export default async function CalendarPage({
       ) : null}
       <CalendarView
         locale={locale}
+        today={todayKey}
+        tomorrow={nextDayKey(todayKey)}
+        defaultTime={DEFAULT_POST_TIME}
         preselectItemId={single('item')}
         weekIndex={weekIndex}
         gaps={gapDays.map((day) =>
@@ -752,6 +763,7 @@ const CALENDAR_KEYS = [
   'calendar.scheduleTitle',
   'calendar.scheduleDraft',
   'calendar.scheduleDate',
+  'calendar.pastDay',
   'calendar.scheduleTime',
   'calendar.scheduleSubmit',
   'calendar.rescheduleTitle',

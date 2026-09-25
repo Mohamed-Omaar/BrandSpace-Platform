@@ -234,3 +234,33 @@ export function monthRangeUtc(
   const end = instantForIntent(`${pad(nextYear, 4)}-${pad(nextMonth)}-01T00:00`, timezone);
   return start && end ? { start, end } : null;
 }
+
+/**
+ * F2 — THE DAY AFTER a calendar day, as `YYYY-MM-DD`. Date arithmetic on the
+ * key itself, never "+24 hours" on an instant, so a daylight-saving change in
+ * the workspace's zone cannot land it on the same day or skip one.
+ */
+export function nextDayKey(dayKey: string): string {
+  const [year, month, day] = dayKey.split('-').map(Number);
+  const next = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, (day ?? 1) + 1));
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * F2 — the time a new post is proposed for when nobody has chosen one. A
+ * default the person sees and can change before anything is scheduled, not a
+ * rule anything enforces.
+ */
+export const DEFAULT_POST_TIME = '09:00';
+
+/**
+ * F2 — WHERE A PROPOSED TIME ON TODAY OR EARLIER MOVES TO: tomorrow at the
+ * default time. A day after today is kept as it is (`null` — nothing to move).
+ */
+export function bestTimeFor(input: {
+  readonly todayKey: string;
+  readonly dayKey: string;
+}): { readonly date: string; readonly time: string } | null {
+  if (input.dayKey > input.todayKey) return null;
+  return { date: nextDayKey(input.todayKey), time: DEFAULT_POST_TIME };
+}

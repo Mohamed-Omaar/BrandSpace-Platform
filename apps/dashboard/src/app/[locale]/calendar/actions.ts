@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { SCHEDULE_IN_PAST_REASON } from '@brandspace/content';
+import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
@@ -49,7 +50,18 @@ function failure(
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No caption and no title is written either side.
   log.warn('calendar action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: actionErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { ...extra, error: calendarErrorCode(error), ref: correlationId });
+}
+
+/**
+ * F2 — a time already past (earlier today included) gets its own words; the
+ * reason is machine-readable, never matched on a message.
+ */
+function calendarErrorCode(error: unknown): string {
+  if (isAppError(error) && error.publicDetails['reason'] === SCHEDULE_IN_PAST_REASON) {
+    return 'SCHEDULE_IN_PAST';
+  }
+  return actionErrorCode(error);
 }
 
 function actorOf(session: WorkspaceSession) {

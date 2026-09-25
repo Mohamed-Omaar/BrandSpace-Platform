@@ -1226,6 +1226,7 @@ export const messages = {
     'calendar.select': 'تحديد',
     'calendar.scheduleTitle': 'إضافة إلى التقويم',
     'calendar.scheduleDraft': 'المسودة',
+    'calendar.pastDay': 'مضى هذا اليوم. اختر اليوم أو يومًا لاحقًا.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
     'calendar.scheduleSubmit': 'أضف إلى التقويم',
@@ -3848,6 +3849,7 @@ export const messages = {
     'calendar.select': 'Select',
     'calendar.scheduleTitle': 'Add to the calendar',
     'calendar.scheduleDraft': 'Draft',
+    'calendar.pastDay': 'That day has passed. Choose today or a later day.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
     'calendar.scheduleSubmit': 'Add to calendar',
@@ -5379,6 +5381,11 @@ export function optionalMessage(locale: string, key: string): string | null {
  * reach the address bar, the browser history or an access log.
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
+  // F2 — a time already past, or inside the minimum notice, including earlier today.
+  SCHEDULE_IN_PAST: {
+    en: 'That time has already passed or is too soon. Choose a later time.',
+    ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
+  },
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
   WORKFLOW_SNOOZE: {
     en: 'Okay — BrandSpace will ask again later.',

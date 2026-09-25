@@ -49,7 +49,10 @@ export type {
 } from './approvals';
 
 export {
+  DEFAULT_POST_TIME,
   LOCAL_TIME_PATTERN,
+  bestTimeFor,
+  nextDayKey,
   formatLocalTime,
   instantForIntent,
   isKnownTimeZone,
@@ -93,6 +96,7 @@ export { purgeExpiredContent } from './purge';
 export type { ContentPurgeResult } from './purge';
 
 export {
+  SCHEDULE_IN_PAST_REASON,
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
   briefTooLong,

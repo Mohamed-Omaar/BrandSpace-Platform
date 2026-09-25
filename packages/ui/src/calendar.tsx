@@ -36,6 +36,11 @@ export interface CalendarDay {
   readonly longLabel: string;
   readonly inCurrentPeriod: boolean;
   readonly isToday: boolean;
+  /**
+   * F2 — before today. Marked on the cell (`data-past`) so a caller and a test
+   * can tell; how a drop on it is answered is the caller's decision.
+   */
+  readonly isPast?: boolean;
   readonly posts: readonly PostRecord[];
 }
 
@@ -147,6 +152,7 @@ function MonthGrid({
               key={day.key}
               role="gridcell"
               data-testid={`calendar-day-${day.key}`}
+              data-past={day.isPast ? 'true' : undefined}
               {...(onDropDay
                 ? {
                     onDragOver: (event: React.DragEvent<HTMLDivElement>) => event.preventDefault(),

@@ -613,6 +613,19 @@ describe('the bounds the activated policy sets', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
+  it('F2: refuses a time EARLIER TODAY — the date and the time are compared together', async () => {
+    const contentItemId = await makeDraft('Earlier today');
+    const now = new Date();
+    const earlier = formatLocalTime(new Date(now.getTime() - 90_000), ZONE);
+    // The same local day except in the 90 seconds after midnight — either way a past time.
+    await expect(
+      inA((calendar) => calendar.schedule({ contentItemId, localTime: earlier, ...actor() })),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      publicDetails: { reason: 'schedule_in_past' },
+    });
+  });
+
   it('refuses a date beyond the planning horizon', async () => {
     const contentItemId = await makeDraft('Too far');
     const far = formatLocalTime(new Date(Date.now() + 400 * 24 * 3_600_000), ZONE);

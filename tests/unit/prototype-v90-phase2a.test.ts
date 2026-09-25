@@ -13,6 +13,12 @@ import {
 } from '@brandspace/shared';
 import { NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from '@brandspace/collaboration';
 import { homeSectionsFor } from '../../apps/dashboard/src/server/home';
+import {
+  DEFAULT_POST_TIME,
+  bestTimeFor,
+  nextDayKey,
+  scheduleTooSoon,
+} from '../../packages/content/src/index';
 import { messages, statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import {
   KNOWN_PAGE_PERMISSIONS,
@@ -568,5 +574,55 @@ describe('F1 · every edit path, the campaign included, obeys the edit rules', (
       'Make a new copy',
     );
     both('content.action.duplicate');
+  });
+});
+
+describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00', () => {
+  it('tomorrow is calendar arithmetic on the day, across month, year and DST edges', () => {
+    expect(nextDayKey('2026-09-25')).toBe('2026-09-26');
+    expect(nextDayKey('2026-09-30')).toBe('2026-10-01');
+    expect(nextDayKey('2026-12-31')).toBe('2027-01-01');
+    expect(nextDayKey('2028-02-28')).toBe('2028-02-29');
+    // The nights clocks change in Europe and the US: still exactly the next day.
+    expect(nextDayKey('2026-03-28')).toBe('2026-03-29');
+    expect(nextDayKey('2026-11-01')).toBe('2026-11-02');
+  });
+
+  it('a best time on today or earlier moves to tomorrow at 09:00; a later day stays', () => {
+    expect(DEFAULT_POST_TIME).toBe('09:00');
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-25' })).toEqual({
+      date: '2026-09-26',
+      time: '09:00',
+    });
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-20' })).toEqual({
+      date: '2026-09-26',
+      time: '09:00',
+    });
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-27' })).toBeNull();
+  });
+
+  it('a past time is refused with its own reason and its own words', () => {
+    expect(scheduleTooSoon().publicDetails).toEqual({ reason: 'schedule_in_past' });
+    const actions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
+    expect(actions).toMatch(/SCHEDULE_IN_PAST_REASON\) \{\s*return 'SCHEDULE_IN_PAST';/);
+    expect(statusMessage('SCHEDULE_IN_PAST', 'en')).toContain('Choose a later time');
+    expect(statusMessage('SCHEDULE_IN_PAST', 'ar')).toBeTruthy();
+    both('calendar.pastDay');
+  });
+
+  it('the calendar proposes tomorrow at 09:00, offers nothing before today, and refuses a past drop', () => {
+    const page = read('apps/dashboard/src/app/[locale]/calendar/page.tsx');
+    expect(page).toContain('isPast: key < todayKey,');
+    expect(page).toContain('tomorrow={nextDayKey(todayKey)}');
+    expect(page).toContain('defaultTime={DEFAULT_POST_TIME}');
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain('useState(tomorrow)');
+    expect(view.match(/\{\.\.\.\(today \? \{ min: today \} : \{\}\)\}/g)).toHaveLength(2);
+    expect(view).toMatch(
+      /if \(date !== '' && today !== '' && date < today\) \{\s*setPastDayNotice\(true\);\s*return;/,
+    );
+    expect(read('packages/ui/src/calendar.tsx')).toContain(
+      "data-past={day.isPast ? 'true' : undefined}",
+    );
   });
 });

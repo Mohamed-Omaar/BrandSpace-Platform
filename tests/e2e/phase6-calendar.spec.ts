@@ -117,7 +117,8 @@ test.describe('D-290 · the calendar', () => {
     const { itemId } = await draft();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
-    const day = page.locator('[data-testid^="calendar-day-"]').nth(15);
+    // F2 — a day that has not passed: the grid's last day is never before today.
+    const day = page.locator('[data-testid^="calendar-day-"]:not([data-past])').last();
     const dayKey = ((await day.getAttribute('data-testid')) ?? '').replace('calendar-day-', '');
     /*
      * THE REAL HTML5 DRAG EVENTS, carrying one DataTransfer from the tray row
@@ -133,6 +134,40 @@ test.describe('D-290 · the calendar', () => {
     await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible();
     await expect(page.getByTestId('schedule-item')).toHaveValue(itemId);
     await expect(page.getByTestId('schedule-date')).toHaveValue(dayKey);
+  });
+
+  test('F2: dropping a post on a day that has passed says so and opens nothing', async ({
+    page,
+  }) => {
+    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    const { itemId } = await draft();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    const past = page.locator('[data-testid^="calendar-day-"][data-past="true"]');
+    test.skip((await past.count()) === 0, 'the month on screen starts today');
+    const transfer = await page.evaluateHandle(() => new DataTransfer());
+    await page.getByTestId(`calendar-tray-${itemId}`).dispatchEvent('dragstart', {
+      dataTransfer: transfer,
+    });
+    await past.first().dispatchEvent('dragover', { dataTransfer: transfer });
+    await past.first().dispatchEvent('drop', { dataTransfer: transfer });
+    await expect(page.getByTestId('calendar-past-day')).toContainText('That day has passed');
+    await expect(page.getByTestId('calendar-schedule-dialog')).toHaveCount(0);
+  });
+
+  test('F2: a new post is proposed for tomorrow at 09:00, and nothing before today is offered', async ({
+    page,
+  }) => {
+    const { itemId } = await draft();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    await page.getByTestId(`calendar-tray-schedule-${itemId}`).click();
+    const date = page.getByTestId('schedule-date');
+    const today = (await date.getAttribute('min')) ?? '';
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const proposed = await date.inputValue();
+    expect(proposed > today, `${proposed} is after ${today}`).toBe(true);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
   });
 
   test('the campaign filter narrows the tray to that campaign', async ({ page }) => {
