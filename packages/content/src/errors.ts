@@ -120,6 +120,15 @@ export function approvalRequiredBeforeScheduling(): AppError {
   return new AppError('CONFLICT', 'This content needs approval before it can be scheduled.');
 }
 
+/**
+ * B-4 — a slot that is publishing, or already published, cannot be moved: the
+ * jobs have been handed to the channel, and moving the plan would make the
+ * calendar disagree with what went out.
+ */
+export function slotNotReschedulable(): AppError {
+  return new AppError('CONFLICT', 'This post is already going out and cannot be moved.');
+}
+
 /** The item already has a live slot. Reschedule it rather than adding a second. */
 export function alreadyScheduled(): AppError {
   return new AppError('CONFLICT', 'This content is already on the calendar.');

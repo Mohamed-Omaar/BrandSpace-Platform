@@ -69,3 +69,13 @@ describe('B-3 · the composer warns before an edit withdraws a review', () => {
     both('notifications.template.approval.withdrawn_after_edit');
   });
 });
+
+describe('B-4 · the calendar only offers to move a plan that can move', () => {
+  const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+  const page = read('apps/dashboard/src/app/[locale]/calendar/page.tsx');
+
+  it('marks each slot and hides the reschedule form for the rest', () => {
+    expect(page).toContain('reschedulable: RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status)');
+    expect(view).toContain('canSchedule && openSlot.reschedulable !== false ? (');
+  });
+});

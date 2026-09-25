@@ -25,7 +25,7 @@ export type {
 export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
 export type { ContentLibraryOptions } from './library';
 
-export { ContentCalendarService } from './calendar';
+export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES } from './calendar';
 export type {
   ApprovalGate,
   CalendarOptions,

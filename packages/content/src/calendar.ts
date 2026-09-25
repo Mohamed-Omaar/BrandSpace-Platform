@@ -19,6 +19,7 @@ import {
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,
+  slotNotReschedulable,
   transitionNotAllowed,
 } from './errors';
 import type { ContentPolicy } from './policy';
@@ -124,6 +125,16 @@ export interface CalendarSlotView {
  * content is not ready, and planning it anyway would make the verdict advisory.
  */
 const SCHEDULABLE_FROM: readonly ContentItem['status'][] = ['DRAFT', 'APPROVED', 'SCHEDULED'];
+
+/**
+ * B-4 — the slot states a plan can still be moved from. Once publishing has
+ * started (PUBLISHING) or finished (PUBLISHED, PARTIALLY_PUBLISHED, FAILED),
+ * the slot records what happened and a reschedule is refused.
+ */
+export const RESCHEDULABLE_SLOT_STATUSES: readonly CalendarSlot['status'][] = [
+  'PLANNED',
+  'SCHEDULED',
+];
 
 export class ContentCalendarService {
   readonly #db: TenantScopedClient;
@@ -269,12 +280,20 @@ export class ContentCalendarService {
   }): Promise<CalendarSlotView> {
     const slot = await this.#requireSlot(input.slotId, input.actorBrandScope);
     if (slot.status === 'CANCELLED') throw calendarSlotNotFound();
+    // B-4 — only a plan that has not started going out can move.
+    if (!RESCHEDULABLE_SLOT_STATUSES.includes(slot.status)) throw slotNotReschedulable();
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, slot.id);
 
-    const moved = await this.#db.calendarSlot.update({
-      where: { id: slot.id },
+    /*
+     * B-4 — CONDITIONAL, NOT READ-THEN-WRITE. The status check above answers
+     * the common case with a clear error; this WHERE is what holds when the
+     * publisher claims the slot between that read and this write. A slot that
+     * started publishing in the meantime matches nothing and is not moved.
+     */
+    const claimed = await this.#db.calendarSlot.updateMany({
+      where: { id: slot.id, status: { in: [...RESCHEDULABLE_SLOT_STATUSES] } },
       data: {
         scheduledAtUtc: instant,
         scheduledLocalTime: input.localTime,
@@ -283,6 +302,8 @@ export class ContentCalendarService {
         timezone: this.#timezone,
       },
     });
+    if (claimed.count === 0) throw slotNotReschedulable();
+    const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
 
     await this.#audit('content.rescheduled', moved, input.actorUserId, {
       fromLocalTime: slot.scheduledLocalTime,
