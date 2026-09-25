@@ -247,7 +247,14 @@ export function IntegrationsView({
             {connections.map((row) => (
               <li key={row.id} style={rowStyle} data-testid={`connection-${row.id}`}>
                 <div style={headerRowStyle}>
-                  <span style={{ ...titleStyle, display: 'inline-flex', alignItems: 'center', gap: spacingTokens.xs }}>
+                  <span
+                    style={{
+                      ...titleStyle,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: spacingTokens.xs,
+                    }}
+                  >
                     {socialPlatformFromKey(row.provider) ? (
                       <PlatformIcon
                         platform={socialPlatformFromKey(row.provider)!}
@@ -393,7 +400,12 @@ export function IntegrationsView({
                 {connectable.map((option) => (
                   <li
                     key={option.provider}
-                    style={{ ...metaStyle, display: 'flex', alignItems: 'center', gap: spacingTokens.xs }}
+                    style={{
+                      ...metaStyle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: spacingTokens.xs,
+                    }}
                   >
                     {socialPlatformFromKey(option.provider) ? (
                       <PlatformIcon
