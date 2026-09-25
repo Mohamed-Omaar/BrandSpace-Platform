@@ -5405,6 +5405,15 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'Someone else changed this. Reload before saving.',
     ar: 'عدّل شخص آخر هذا. أعد التحميل قبل الحفظ.',
   },
+  /*
+   * B-1 — a version upload that lost a race to another upload or a restore.
+   * Nothing of it was kept (its object deleted, its storage given back), so
+   * the honest instruction is simply to try again.
+   */
+  ASSET_VERSION_CONFLICT: {
+    en: 'This asset changed while your version was being uploaded. Please try again.',
+    ar: 'تم تحديث هذا الملف أثناء رفع النسخة. حاول مرة أخرى.',
+  },
   RATE_LIMITED: {
     en: 'Too many attempts. Wait a moment and try again.',
     ar: 'محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.',

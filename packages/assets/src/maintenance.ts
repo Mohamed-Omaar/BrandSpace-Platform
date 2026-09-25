@@ -152,6 +152,8 @@ export class AssetMaintenanceService {
         }
       }
 
+      // Derivatives are deleted with the asset but were never charged to the
+      // customer's storage quota, so only the version bytes are refunded.
       for (const key of objectKeys) await this.#store.delete(key);
       // The derivative ROWS go with their objects; the version rows stay,
       // because `asset_version` is append-only and cannot be deleted at all.

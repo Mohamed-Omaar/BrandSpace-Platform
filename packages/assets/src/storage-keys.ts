@@ -42,6 +42,38 @@ export function assetObjectKey(input: {
 }
 
 /**
+ * Where the bytes of a version ADDED to an existing asset live — one key per
+ * upload ATTEMPT (B-1).
+ *
+ * WHY NOT `assetObjectKey`. Two uploads racing on the same asset both compute
+ * the same next version number. With the number alone in the key they would
+ * write the SAME object: the loser's bytes could overwrite the winner's after
+ * the winner had already recorded its checksum, and the database would then
+ * describe an object that no longer exists. The attempt id makes every write
+ * land somewhere only that attempt owns, so a loser can never touch a winner's
+ * object — and so a failed attempt can delete its own object knowing nothing
+ * else can be pointing at it.
+ *
+ * NOTHING EXISTING MOVES. Objects already stored keep their keys, and every
+ * `asset_version.storageKey` stays as written; readers always follow the
+ * stored key, never recompute it. The first version of an upload keeps
+ * `assetObjectKey`, whose single writer is guarded by its upload session.
+ */
+export function assetVersionAttemptKey(input: {
+  workspaceId: string;
+  brandId: string | null;
+  assetId: string;
+  versionNumber: number;
+  /** A fresh UUID per attempt. */
+  attemptId: string;
+}): string {
+  if (!/^[0-9a-f-]{36}$/i.test(input.attemptId)) {
+    throw new Error('A version attempt id must be a UUID.');
+  }
+  return `${assetObjectKey(input)}-${input.attemptId}`;
+}
+
+/**
  * Where a derivative lives.
  *
  * UNDER THE ASSET'S OWN PREFIX, so deleting an asset is a prefix operation on a

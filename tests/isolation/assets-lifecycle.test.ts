@@ -146,6 +146,9 @@ async function inA<T>(
         }),
         versions: new AssetVersionService({
           ...shared,
+          // B-1 — versions are charged to the same meter as uploads.
+          usage,
+          storageLimitGb: options.storageLimitGb ?? null,
           ...(options.clock ? { clock: options.clock } : {}),
         }),
         download: new AssetDownloadService({
@@ -163,6 +166,12 @@ async function inA<T>(
     },
     { prisma: app },
   );
+}
+
+/** A NEW version always queues a job; only a replay can return none. */
+function jobIdOf(added: { job: { id: string } | null }): string {
+  if (!added.job) throw new Error('a new version must queue a processing job');
+  return added.job.id;
 }
 
 let counter = 0;
@@ -1232,7 +1241,7 @@ describe('versions are append-only and restorable', () => {
       expect(added.asset.storageKey).not.toBe(v1Key);
       expect(await h.store.get(v1Key)).not.toBeNull();
 
-      await h.processing.process(added.job.id);
+      await h.processing.process(jobIdOf(added));
       const ready = await h.library.get(asset.id, actor());
       expect(ready.status).toBe('READY');
       expect(ready.scanStatus).toBe('CLEAN');
@@ -1249,7 +1258,7 @@ describe('versions are append-only and restorable', () => {
         bytes: png('revision-two'),
         actor: actor(),
       });
-      await h.processing.process(added.job.id);
+      await h.processing.process(jobIdOf(added));
 
       const restored = await h.versions.restoreVersion({
         assetId: asset.id,
@@ -1277,7 +1286,7 @@ describe('versions are append-only and restorable', () => {
           bytes: png('v2-capped'),
           actor: actor(),
         });
-        await h.processing.process(second.job.id);
+        await h.processing.process(jobIdOf(second));
 
         await expect(
           h.versions.addVersion({ assetId: asset.id, bytes: png('v3-capped'), actor: actor() }),
@@ -1398,7 +1407,7 @@ describe('archive, restore and delete', () => {
         bytes: png('audited-v2'),
         actor: actor(),
       });
-      await h.processing.process(added.job.id);
+      await h.processing.process(jobIdOf(added));
       await h.library.delete(asset.id, actor());
 
       const events = await h.db.auditEvent.findMany({

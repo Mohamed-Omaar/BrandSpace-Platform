@@ -25,6 +25,11 @@ import { gigabytesFor, QUOTA_FEATURES, quotaWindow, type UsageTx } from './usage
  *     charged and `expireStaleSessions` or `complete` settles;
  *   - every live Brand Brain source document (B-8), charged on upload.
  *
+ * AND NOTHING ELSE. A version row that shares a restored object is the same
+ * object and counts once; derivatives (thumbnails, previews) are not part of a
+ * customer's storage quota, so they are neither charged, refunded, backfilled
+ * nor counted here.
+ *
  * IT DOES NOTHING UNLESS ASKED. `apply: false` (the default for the command)
  * only reports. With `apply: true` each workspace is corrected in its OWN
  * transaction, behind the counter row's lock — the same lock every upload

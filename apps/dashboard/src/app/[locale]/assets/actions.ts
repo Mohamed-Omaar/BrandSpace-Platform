@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import type { AssetActor } from '@brandspace/assets';
+import { ASSET_CHANGED_REASON, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
   enqueue,
@@ -66,7 +66,20 @@ function failure(
   // either side — a file name is routinely the most sensitive string in the
   // record (docs/SECURITY.md §5.1).
   log.warn('asset action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { ...extra, error: assetErrorCode(error), ref: correlationId });
+}
+
+/**
+ * The code a screen shows. One asset refusal gets its own words: a version that
+ * lost a race to another upload is RETRYABLE and nothing of it was kept, which
+ * the generic "conflicts with the current state" does not tell the customer.
+ * Recognised by its machine-readable reason, never by its message.
+ */
+function assetErrorCode(error: unknown): string {
+  if (error instanceof AppError && error.publicDetails['reason'] === ASSET_CHANGED_REASON) {
+    return 'ASSET_VERSION_CONFLICT';
+  }
+  return toPublicErrorCode(error);
 }
 
 /** Read an optional id from a form, treating an empty string as absent. */
@@ -315,23 +328,26 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
     const job = await inAssetLibrary(session.workspace.workspaceId, async ({ versions }) => {
       const service = await versions();
       const added = await service.addVersion({ assetId, bytes, actor: assetActor(session) });
-      return added.job;
+      // A replay of the current version queued nothing new, so nothing is sent.
+      return added.replayed ? null : added.job;
     });
 
-    // The new bytes are unscanned, so the same dispatch discipline applies.
-    const dispatch = await enqueue('media-processing', PROCESS_ASSET, {
-      kind: PROCESS_ASSET,
-      workspaceId: session.workspace.workspaceId,
-      requestedByUserId: session.customer.userId,
-      idempotencyKey: `asset-${job.id}`,
-      processingJobId: job.id,
-    } satisfies ProcessAssetPayload);
+    if (job) {
+      // The new bytes are unscanned, so the same dispatch discipline applies.
+      const dispatch = await enqueue('media-processing', PROCESS_ASSET, {
+        kind: PROCESS_ASSET,
+        workspaceId: session.workspace.workspaceId,
+        requestedByUserId: session.customer.userId,
+        idempotencyKey: `asset-${job.id}`,
+        processingJobId: job.id,
+      } satisfies ProcessAssetPayload);
 
-    if (!dispatch.dispatched && mayProcessInline()) {
-      await inAssetLibrary(session.workspace.workspaceId, async ({ processing }) => {
-        const service = await processing();
-        await service.process(job.id);
-      });
+      if (!dispatch.dispatched && mayProcessInline()) {
+        await inAssetLibrary(session.workspace.workspaceId, async ({ processing }) => {
+          const service = await processing();
+          await service.process(job.id);
+        });
+      }
     }
 
     destination = pageUrl(locale, { ok: 'ASSET_VERSION_CREATED', asset: assetId });

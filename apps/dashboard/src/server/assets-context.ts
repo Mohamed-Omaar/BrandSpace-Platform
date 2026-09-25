@@ -10,7 +10,9 @@ import {
   type AssetActor,
   type AssetPolicy,
   type CatalogueReader,
+  type VersionCompensationFailure,
 } from '@brandspace/assets';
+import { writeAuditEvent } from '@brandspace/database';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { DownloadGrantIssuer, createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { createHmac } from 'node:crypto';
@@ -125,6 +127,39 @@ export interface AssetServices extends ScopedServices {
   storageLimitGb(): Promise<number | null>;
 }
 
+/**
+ * B-1 — a version attempt whose clean-up did not complete, RECORDED.
+ *
+ * A SEPARATE TRANSACTION, deliberately, as for a refused approval
+ * (`approvals-context.ts` `denialSink`): the failure is about to be rethrown
+ * and the request's own transaction rolls back with it, taking any audit row
+ * written there along. The record carries identifiers and a byte count only —
+ * never the storage key or file content — which is what reconciliation needs:
+ * `pnpm storage:recompute` (dry run) for the counter, and the attempt id to
+ * find an orphaned object.
+ */
+async function recordVersionCompensationFailure(
+  failure: VersionCompensationFailure,
+): Promise<void> {
+  await inWorkspace(failure.workspaceId, async ({ db }) =>
+    writeAuditEvent(db, failure.workspaceId, {
+      action: 'assets.version_compensation_failed',
+      actorType: 'SYSTEM',
+      resourceType: 'Asset',
+      resourceId: failure.assetId,
+      severity: 'WARNING',
+      outcome: 'ERROR',
+      reason: failure.failed.join(','),
+      after: {
+        attemptId: failure.attemptId,
+        versionNumber: failure.versionNumber,
+        bytes: failure.bytes,
+        failed: [...failure.failed],
+      },
+    }),
+  );
+}
+
 export async function inAssetLibrary<T>(
   workspaceId: string,
   fn: (services: AssetServices) => Promise<T>,
@@ -162,6 +197,11 @@ export async function inAssetLibrary<T>(
           workspaceId,
           store: objectStore(),
           policy: await policy(),
+          // B-1 — a new version is storage, charged to the same byte meter
+          // and the same plan ceiling as an ordinary upload.
+          usage: scoped.usage,
+          storageLimitGb: await storageLimitGb(),
+          onCompensationFailure: recordVersionCompensationFailure,
         }),
       download: async () =>
         new AssetDownloadService({

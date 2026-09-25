@@ -111,6 +111,30 @@ export function versionLimitReached(): AppError {
   return new AppError('QUOTA_EXCEEDED', 'This asset has reached its version limit.');
 }
 
+/**
+ * Why a version upload lost a race — the machine-readable reason carried in
+ * `publicDetails`, so a screen can say something more useful than a generic
+ * conflict without parsing a message.
+ */
+export const ASSET_CHANGED_REASON = 'asset_changed_during_version_upload';
+
+/**
+ * B-1 — ANOTHER VERSION (OR A RESTORE) LANDED WHILE THIS ONE WAS UPLOADING.
+ *
+ * The request was built on a version of the asset that is no longer current,
+ * so it is refused rather than silently stacked on top of somebody else's
+ * change. RETRYABLE: nothing of this attempt was kept — its object is deleted
+ * and its storage given back — so trying again is exactly the right response.
+ * Never a raw unique-constraint error and never a 500.
+ */
+export function assetChangedDuringVersionUpload(): AppError {
+  return new AppError(
+    'CONFLICT',
+    'This asset changed while your version was being uploaded. Please try again.',
+    { reason: ASSET_CHANGED_REASON, retryable: true },
+  );
+}
+
 export function uploadSessionExpired(): AppError {
   return new AppError('CONFLICT', 'This upload took too long and was cancelled. Please try again.');
 }

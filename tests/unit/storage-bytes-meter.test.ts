@@ -43,3 +43,56 @@ describe('the storage migration backfills (B-1, B-8)', () => {
     },
   );
 });
+
+describe('asset version storage (B-1, versions)', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
+
+  it('gives every version attempt an object key no other attempt can share', async () => {
+    const { assetObjectKey, assetVersionAttemptKey } =
+      await import('../../packages/assets/src/storage-keys');
+    const base = { workspaceId: 'w', brandId: null, assetId: 'a', versionNumber: 2 };
+    const one = assetVersionAttemptKey({
+      ...base,
+      attemptId: '11111111-1111-4111-8111-111111111111',
+    });
+    const two = assetVersionAttemptKey({
+      ...base,
+      attemptId: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(one).not.toBe(two);
+    // Never the plain version key an earlier object may already live at.
+    expect(one).not.toBe(assetObjectKey(base));
+    expect(one.startsWith(`${assetObjectKey(base)}-`)).toBe(true);
+    expect(() => assetVersionAttemptKey({ ...base, attemptId: '../escape' })).toThrow();
+  });
+
+  it('the dashboard charges versions to the same meter and records failed clean-ups', () => {
+    const context = read('apps/dashboard/src/server/assets-context.ts');
+    const versions = context.slice(context.indexOf('versions: async () =>'));
+    const block = versions.slice(0, versions.indexOf('}),'));
+    expect(block).toContain('usage: scoped.usage');
+    expect(block).toContain('storageLimitGb: await storageLimitGb()');
+    expect(block).toContain('onCompensationFailure: recordVersionCompensationFailure');
+    // Recorded on its OWN transaction, so the rollback of the failed request
+    // cannot take the record with it.
+    const recorder = context.slice(
+      context.indexOf('async function recordVersionCompensationFailure'),
+    );
+    expect(recorder).toContain('await inWorkspace(failure.workspaceId');
+    expect(recorder).toContain("action: 'assets.version_compensation_failed'");
+  });
+
+  it('tells the loser of a version race to retry, in both languages', async () => {
+    const { statusMessage } = await import('../../apps/dashboard/src/i18n/messages');
+    expect(statusMessage('ASSET_VERSION_CONFLICT', 'en')).toBe(
+      'This asset changed while your version was being uploaded. Please try again.',
+    );
+    expect(statusMessage('ASSET_VERSION_CONFLICT', 'ar')).toBe(
+      'تم تحديث هذا الملف أثناء رفع النسخة. حاول مرة أخرى.',
+    );
+    const actions = read('apps/dashboard/src/app/[locale]/assets/actions.ts');
+    expect(actions).toContain("error.publicDetails['reason'] === ASSET_CHANGED_REASON");
+    expect(actions).toContain("return 'ASSET_VERSION_CONFLICT'");
+  });
+});

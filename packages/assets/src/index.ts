@@ -21,7 +21,12 @@ export {
   signatureIsKnown,
   type NormalisedFileName,
 } from './file-safety';
-export { assetObjectKey, derivativeObjectKey, uploadStagingKey } from './storage-keys';
+export {
+  assetObjectKey,
+  assetVersionAttemptKey,
+  derivativeObjectKey,
+  uploadStagingKey,
+} from './storage-keys';
 export {
   createVirusScanner,
   EICAR_TEST_STRING,
@@ -59,7 +64,11 @@ export {
   type AssetProcessingServiceOptions,
   type ProcessAssetResult,
 } from './processing';
-export { AssetVersionService, type AssetVersionServiceOptions } from './versions';
+export {
+  AssetVersionService,
+  type AssetVersionServiceOptions,
+  type VersionCompensationFailure,
+} from './versions';
 export { AssetDownloadService, type AssetDownloadServiceOptions } from './download';
 export {
   AssetMaintenanceService,
