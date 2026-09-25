@@ -185,6 +185,8 @@ test.describe('D-290 · the calendar', () => {
   }) => {
     test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
     const { itemId, words } = await draft();
+    // A chip on the grid shows the post's TITLE, not its words.
+    const title = words.replace('Tray words', 'Tray post');
     const { month, day } = nextMonth();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
@@ -198,7 +200,7 @@ test.describe('D-290 · the calendar', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
     const chip = page
       .getByTestId(`calendar-day-${day(10)}`)
-      .locator('[data-testid^="calendar-post-"]', { hasText: words });
+      .locator('[data-testid^="calendar-post-"]', { hasText: title });
     await expect(chip).toHaveAttribute('draggable', 'true');
 
     const target = page.getByTestId(`calendar-day-${day(20)}`);
@@ -212,7 +214,7 @@ test.describe('D-290 · the calendar', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
     const moved = page
       .getByTestId(`calendar-day-${day(20)}`)
-      .locator('[data-testid^="calendar-post-"]', { hasText: words });
+      .locator('[data-testid^="calendar-post-"]', { hasText: title });
     await expect(moved).toBeVisible();
     await moved.click();
     await expect(page.getByTestId('reschedule-time')).toHaveValue('12:00');

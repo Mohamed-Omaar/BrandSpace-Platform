@@ -99,15 +99,19 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     page,
   }) => {
     await signInAsViewer(page);
-    for (const path of [
-      'en/not-a-real-area',
-      'en/campaigns/00000000-0000-4000-8000-000000000000',
-    ]) {
-      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
-      expect(response?.status(), path).toBe(404);
-      await expect(page.getByTestId('route-not-found'), path).toBeVisible();
-      await expect(page.getByTestId('route-no-access'), path).toHaveCount(0);
-    }
+    // A record inside a known area: the localized not-found screen.
+    const record = 'en/campaigns/00000000-0000-4000-8000-000000000000';
+    const response = await page.goto(`${DASHBOARD_BASE_URL}/${record}`);
+    expect(response?.status(), record).toBe(404);
+    await expect(page.getByTestId('route-not-found'), record).toBeVisible();
+    await expect(page.getByTestId('route-no-access'), record).toHaveCount(0);
+
+    // A path that matches no route at all is the framework's own 404 — it
+    // never reaches a page gate, so it can never say "No access".
+    const unknown = 'en/not-a-real-area';
+    const miss = await page.goto(`${DASHBOARD_BASE_URL}/${unknown}`);
+    expect(miss?.status(), unknown).toBe(404);
+    await expect(page.getByTestId('route-no-access'), unknown).toHaveCount(0);
   });
 
   test('PHASE 6: connected accounts and publishing are closed to a Viewer', async ({ page }) => {
