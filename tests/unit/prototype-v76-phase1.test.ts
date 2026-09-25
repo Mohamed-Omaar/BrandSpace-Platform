@@ -117,3 +117,34 @@ describe('B-7 · Restore is offered with the permission the server asks for', ()
     expect(actions).toContain('actorPermissionKeys: session.workspace.permissionKeys');
   });
 });
+
+describe('B-9 · disconnecting an account takes two deliberate steps', () => {
+  const view = read('apps/dashboard/src/app/[locale]/integrations/integrations-view.tsx');
+  const actions = read('apps/dashboard/src/app/[locale]/integrations/actions.ts');
+
+  it('the first click only opens the explanation; the second, separate button submits', () => {
+    const block = view.slice(view.indexOf('{mayManage ? (\n                    <details'));
+    expect(block).toContain('<summary');
+    expect(block).toContain('data-testid={`disconnect-${row.id}`}');
+    // The submit lives INSIDE the disclosure, after the explanation.
+    const summaryEnd = block.indexOf('</summary>');
+    const form = block.indexOf('<form action={actions.disconnect}');
+    expect(form).toBeGreaterThan(summaryEnd);
+    expect(block.indexOf("t('integrations.disconnectConfirmBody')")).toBeGreaterThan(form);
+    expect(block).toContain('name="intent" value="DISCONNECT"');
+    expect(block).toContain('data-testid={`disconnect-confirm-${row.id}`}');
+    expect(block).toContain("buttonStyle('danger')");
+  });
+
+  it('the server refuses a disconnect that did not come through the confirmation', () => {
+    const action = actions.slice(actions.indexOf('export async function disconnectAccountAction'));
+    const guard = action.indexOf("formData.get('intent') !== 'DISCONNECT'");
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(action.indexOf('callSocialApi('));
+  });
+
+  it('says what disconnecting does, in both languages', () => {
+    both('integrations.disconnectConfirmBody');
+    both('integrations.disconnectConfirmSubmit');
+  });
+});

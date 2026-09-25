@@ -1263,6 +1263,9 @@ export const messages = {
     'integrations.connectBody': 'سننقلك إلى المنصة لتمنح الإذن. لا نطلب كلمة المرور أبدًا.',
     'integrations.connect': 'ربط الحساب',
     'integrations.disconnect': 'فصل الحساب',
+    'integrations.disconnectConfirmBody':
+      'لن تُنشر المنشورات المجدولة لهذا الحساب ما دام مفصولًا. هل تريد فصله؟',
+    'integrations.disconnectConfirmSubmit': 'نعم، افصل الحساب',
     'integrations.check': 'فحص الاتصال',
     'integrations.provider': 'المنصة',
     'integrations.brand': 'العلامة التجارية',
@@ -3848,6 +3851,9 @@ export const messages = {
       'We send you to the platform to grant access. We never ask for your password.',
     'integrations.connect': 'Connect account',
     'integrations.disconnect': 'Disconnect',
+    'integrations.disconnectConfirmBody':
+      'Posts scheduled for this account will not be published while it is disconnected. Disconnect it?',
+    'integrations.disconnectConfirmSubmit': 'Yes, disconnect',
     'integrations.check': 'Check connection',
     'integrations.provider': 'Platform',
     'integrations.brand': 'Brand',
