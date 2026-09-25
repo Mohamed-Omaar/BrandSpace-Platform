@@ -1022,6 +1022,8 @@ export const messages = {
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
     'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. انسخه لإنشاء نسخة جديدة.',
+    'editor.inReviewWarning':
+      'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
       'تمت الموافقة على هذا المنشور. تعديل محتواه أو وسائطه سيعيده إلى مسودة ويتطلب مراجعة جديدة.',
     'editor.variants.label': 'نسخ المنصات',
@@ -1587,6 +1589,8 @@ export const messages = {
     'notifications.template.approval.approved': 'تم اعتماد منشورك',
     'notifications.template.approval.changes_requested': 'طُلبت تعديلات على منشورك',
     'notifications.template.approval.rejected': 'رُفض منشورك',
+    'notifications.template.approval.withdrawn_after_edit':
+      'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
     'notifications.template.publishing.connection_needs_reauth': 'حساب متصل يحتاج إعادة ربط',
@@ -3596,6 +3600,8 @@ export const messages = {
     'editor.insufficient.add': 'Add knowledge',
     'editor.published.readOnly':
       'This post has been published and can no longer be edited. Duplicate it to make a new version.',
+    'editor.inReviewWarning':
+      'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
       'This post was approved. Editing its content or media will return it to Draft and require review again.',
     'editor.variants.label': 'Platform versions',
@@ -4178,6 +4184,8 @@ export const messages = {
     'notifications.template.approval.approved': 'Your post was approved',
     'notifications.template.approval.changes_requested': 'Changes were requested on your post',
     'notifications.template.approval.rejected': 'Your post was turned down',
+    'notifications.template.approval.withdrawn_after_edit':
+      'A post waiting for your review was edited, so the review was withdrawn',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
     'notifications.template.publishing.connection_needs_reauth':

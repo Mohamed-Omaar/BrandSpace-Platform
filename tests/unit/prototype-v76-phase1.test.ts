@@ -53,3 +53,19 @@ describe('B-2 · a published post opens read-only, with Duplicate', () => {
     both('content.action.duplicate');
   });
 });
+
+describe('B-3 · the composer warns before an edit withdraws a review', () => {
+  const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+  const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+
+  it('shows the warning on a post in review, to a member who may edit', () => {
+    expect(editor).toMatch(/draft\.status === 'IN_REVIEW' && can\.edit \?/);
+    expect(editor).toContain('data-testid="editor-in-review-warning"');
+    expect(page).toContain("'editor.inReviewWarning',");
+    both('editor.inReviewWarning');
+  });
+
+  it('the reviewers are told in both languages', () => {
+    both('notifications.template.approval.withdrawn_after_edit');
+  });
+});

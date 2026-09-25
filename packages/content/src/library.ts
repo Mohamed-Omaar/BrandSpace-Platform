@@ -14,6 +14,7 @@ import {
   transitionNotAllowed,
   unsupportedPlatform,
 } from './errors';
+import { ContentApprovalService } from './approvals';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
@@ -774,6 +775,25 @@ export class ContentLibraryService {
         reason: 'edited_after_scheduling',
         after: { status: 'SCHEDULED', approvalStillCovers: false },
       });
+      return;
+    }
+
+    /*
+     * B-3 — AN EDIT IN REVIEW WITHDRAWS THE REVIEW. The reviewer was asked to
+     * judge the version that was sent; leaving the review open let them
+     * approve words that had changed underneath them. The withdrawal, the
+     * return to DRAFT, the audit event and the reviewers' notification happen
+     * here, in the edit's own transaction. The author sends it again.
+     *
+     * CHANGES_REQUESTED is left alone: its cycle is already decided, and
+     * editing is exactly what the reviewer asked for.
+     */
+    if (item.status === 'IN_REVIEW') {
+      await new ContentApprovalService({
+        db: this.db,
+        workspaceId: this.workspaceId,
+        policy: this.policy,
+      }).withdrawForEdit({ itemId: item.id, actorUserId });
       return;
     }
 

@@ -477,6 +477,12 @@ export function DraftEditor({
           </div>
         ) : null}
 
+        {draft.status === 'IN_REVIEW' && can.edit ? (
+          <div className="cs-notice warning" role="note" data-testid="editor-in-review-warning">
+            {t['editor.inReviewWarning']}
+          </div>
+        ) : null}
+
         {draft.status === 'APPROVED' && can.edit ? (
           <div className="cs-notice warning" role="note" data-testid="editor-approved-warning">
             {t['editor.approvedWarning']}

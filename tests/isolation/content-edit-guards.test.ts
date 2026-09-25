@@ -4,11 +4,17 @@ import type { AiGateway } from '@brandspace/ai-gateway';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import {
+  ContentApprovalService,
   ContentLibraryService,
   ContentStudioService,
   type ContentPolicy,
 } from '@brandspace/content';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  platformRoleClient,
+  type IsolationFixtures,
+} from './fixtures';
 
 /**
  * Prototype v76 alignment, Phase 1 — the content editing guards, against a
@@ -67,14 +73,41 @@ const CONTENT_POLICY: ContentPolicy = {
 
 let fixtures: IsolationFixtures;
 let app: PrismaClient;
+let platform: PrismaClient;
+/** A real, active approver in workspace A — a reviewer who can be told things. */
+let reviewerId: string;
 
 beforeAll(async () => {
   app = appRoleClient();
+  platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
+  const user = await platform.user.create({
+    data: {
+      email: `guard-reviewer-${crypto.randomUUID()}@example.test`,
+      name: 'Guard Reviewer',
+      status: 'ACTIVE',
+      locale: 'EN',
+      timezone: 'UTC',
+    },
+  });
+  const role = await platform.role.findFirstOrThrow({
+    where: { key: 'approver', realm: 'WORKSPACE' },
+  });
+  await platform.membership.create({
+    data: {
+      workspaceId: fixtures.a.workspaceId,
+      userId: user.id,
+      roleId: role.id,
+      status: 'ACTIVE',
+      brandScope: [],
+    },
+  });
+  reviewerId = user.id;
 }, 60_000);
 
 afterAll(async () => {
   await app?.$disconnect();
+  await platform?.$disconnect();
 });
 
 function inA<T>(fn: (db: TenantScopedClient) => Promise<T>): Promise<T> {
@@ -190,5 +223,122 @@ describe('B-2 · a published post is read-only', () => {
       );
       expect(await bodyOf(post.variantId)).toBe(`Edited while ${status}.`);
     }
+  });
+});
+
+describe('B-3 · editing a post in review withdraws the review', () => {
+  const authorActor = () => ({
+    userId: fixtures.a.userId,
+    roleKey: 'content_creator',
+    permissionKeys: ['content.read', 'content.submit'],
+    brandScope: [] as string[],
+  });
+  const reviewerActor = () => ({
+    userId: reviewerId,
+    roleKey: 'approver',
+    permissionKeys: ['content.read', 'content.approve'],
+    brandScope: [] as string[],
+  });
+  const approvals = (db: TenantScopedClient) =>
+    new ContentApprovalService({
+      db,
+      workspaceId: fixtures.a.workspaceId,
+      policy: CONTENT_POLICY,
+    });
+
+  async function inReview(assigned: boolean) {
+    const post = await freshPost();
+    const approval = await inA((db) =>
+      approvals(db).submit({
+        itemId: post.itemId,
+        actor: authorActor(),
+        ...(assigned ? { assignedToUserId: reviewerId } : {}),
+      }),
+    );
+    return { ...post, approvalId: approval.id };
+  }
+
+  const edit = (variantId: string, body: string) =>
+    inA((db) =>
+      library(db).editVariant({
+        variantId,
+        body,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+
+  it('cancels the review, returns the post to DRAFT, audits and tells the reviewer — together', async () => {
+    const post = await inReview(true);
+    await edit(post.variantId, 'Changed while the reviewer was reading.');
+
+    // Sequential: one transaction's client runs one query at a time.
+    const { approval, item, audit, notes } = await inA(async (db) => ({
+      approval: await db.approval.findUniqueOrThrow({ where: { id: post.approvalId } }),
+      item: await db.contentItem.findUniqueOrThrow({ where: { id: post.itemId } }),
+      audit: await db.auditEvent.findFirst({
+        where: { resourceId: post.approvalId, action: 'content.review_cancelled' },
+      }),
+      notes: await db.notification.findMany({
+        where: { resourceId: post.approvalId, templateKey: 'approval.withdrawn_after_edit' },
+      }),
+    }));
+    expect(approval.status).toBe('CANCELLED');
+    expect(item.status).toBe('DRAFT');
+    expect(audit?.reason).toBe('edited_during_review');
+    expect(notes.map((n) => n.userId)).toEqual([reviewerId]);
+    expect(notes[0]?.linkPath).toBe(`/content/compose?item=${post.itemId}`);
+  });
+
+  it('the reviewer can no longer approve the version that changed', async () => {
+    const post = await inReview(true);
+    await edit(post.variantId, 'A different caption.');
+    await expect(
+      inA((db) =>
+        approvals(db).decide({
+          approvalId: post.approvalId,
+          verdict: 'APPROVE',
+          actor: reviewerActor(),
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('an unassigned review tells everyone who could have picked it up, never the editor', async () => {
+    const post = await inReview(false);
+    await edit(post.variantId, 'Edited by the author.');
+    const recipients = await inA((db) =>
+      db.notification.findMany({
+        where: { resourceId: post.approvalId, templateKey: 'approval.withdrawn_after_edit' },
+        select: { userId: true },
+      }),
+    );
+    expect(recipients.map((r) => r.userId)).toContain(reviewerId);
+    expect(recipients.map((r) => r.userId)).not.toContain(fixtures.a.userId);
+  });
+
+  it('a post with changes requested stays there: editing is what was asked for', async () => {
+    const post = await inReview(true);
+    await inA((db) =>
+      approvals(db).decide({
+        approvalId: post.approvalId,
+        verdict: 'REQUEST_CHANGES',
+        actor: reviewerActor(),
+      }),
+    );
+    await edit(post.variantId, 'The requested change.');
+    const item = await inA((db) =>
+      db.contentItem.findUniqueOrThrow({ where: { id: post.itemId } }),
+    );
+    expect(item.status).toBe('CHANGES_REQUESTED');
+  });
+
+  it('the author can send the edited post for review again', async () => {
+    const post = await inReview(true);
+    await edit(post.variantId, 'Second version.');
+    const again = await inA((db) =>
+      approvals(db).submit({ itemId: post.itemId, actor: authorActor() }),
+    );
+    expect(again.cycle).toBe(2);
   });
 });

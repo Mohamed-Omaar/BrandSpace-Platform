@@ -906,6 +906,7 @@ const EDITOR_KEYS = [
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',
+  'editor.inReviewWarning',
   'editor.published.readOnly',
   'content.action.duplicate',
   'editor.variants.label',
