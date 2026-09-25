@@ -3,8 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { inWorkspace, membershipActor, requireWorkspace } from '../../../server/customer-context';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
+import {
+  inWorkspace,
+  membershipActor,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { customerLink } from '../../../server/email-links';
 
 const log = createLogger({ context: { component: 'dashboard.members' } });
@@ -29,7 +34,7 @@ function membersUrl(locale: string, params: Record<string, string> = {}): string
 function failure(locale: string, error: unknown, action: string): string {
   const correlationId = randomUUID();
   log.warn('member action failed', { correlationId, action, ...internalErrorFields(error) });
-  return membersUrl(locale, { error: toPublicErrorCode(error), ref: correlationId });
+  return membersUrl(locale, { error: actionErrorCode(error), ref: correlationId });
 }
 
 export async function inviteMemberAction(formData: FormData): Promise<void> {
@@ -37,7 +42,7 @@ export async function inviteMemberAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.invite');
+    const session = await requireWorkspaceAction(locale, 'member.invite');
     // Inside the tenant context, so RLS applies to every statement the service
     // runs — the second, independent layer CLAUDE.md §2.1 requires.
     // The invitation AND its outbox row are written in ONE transaction. The
@@ -88,7 +93,7 @@ export async function resendInvitationAction(formData: FormData): Promise<void> 
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.invite');
+    const session = await requireWorkspaceAction(locale, 'member.invite');
     await inWorkspace(session.workspace.workspaceId, async ({ invitations, email }) => {
       const issued = await invitations.resend(
         session.workspace.workspaceId,
@@ -122,7 +127,7 @@ export async function revokeInvitationAction(formData: FormData): Promise<void> 
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.invite');
+    const session = await requireWorkspaceAction(locale, 'member.invite');
     await inWorkspace(session.workspace.workspaceId, async ({ invitations }) =>
       invitations.revoke(
         session.workspace.workspaceId,
@@ -150,7 +155,7 @@ export async function changeRoleAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.assign_role');
+    const session = await requireWorkspaceAction(locale, 'member.assign_role');
     await inWorkspace(session.workspace.workspaceId, async ({ memberships }) =>
       memberships.changeRole(
         session.workspace.workspaceId,
@@ -172,7 +177,7 @@ export async function removeMemberAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.remove');
+    const session = await requireWorkspaceAction(locale, 'member.remove');
     await inWorkspace(session.workspace.workspaceId, async ({ memberships }) =>
       memberships.remove(
         session.workspace.workspaceId,
@@ -213,7 +218,7 @@ export async function changeBrandAccessAction(formData: FormData): Promise<void>
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'member.assign_role');
+    const session = await requireWorkspaceAction(locale, 'member.assign_role');
     const selected = brandScopeFrom(formData);
     await inWorkspace(session.workspace.workspaceId, async ({ memberships }) =>
       memberships.changeBrandAccess(

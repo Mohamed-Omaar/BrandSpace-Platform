@@ -486,3 +486,26 @@ export function assertRolePermissionsAreValid(): void {
     }
   }
 }
+
+/**
+ * THE PERMISSIONS ONLY THE OWNER HOLDS (E6).
+ *
+ * Derived, never listed: a key the Owner holds and no other workspace role
+ * does. Today that is ownership transfer, workspace deletion and changing the
+ * plan or payment method — the Admin's explicit deny list above. A denial
+ * message for one of these says "… is owner-only" instead of "ask the owner to
+ * change your role", because no role change short of ownership would help.
+ */
+export const OWNER_ONLY_PERMISSION_KEYS: readonly string[] = allWorkspacePermissionKeys.filter(
+  (key) =>
+    !ROLE_DEFINITIONS.some(
+      (role) =>
+        role.realm === 'workspace' &&
+        role.key !== 'workspace_owner' &&
+        role.permissionKeys.includes(key),
+    ),
+);
+
+export function isOwnerOnlyPermission(key: string): boolean {
+  return OWNER_ONLY_PERMISSION_KEYS.includes(key);
+}

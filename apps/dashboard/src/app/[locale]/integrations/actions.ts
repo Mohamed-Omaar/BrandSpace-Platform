@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { callSocialApi, inSocial } from '../../../server/social-context';
 
 const log = createLogger({ context: { component: 'dashboard.integrations' } });
@@ -82,7 +83,7 @@ function failure(
     action,
     ...internalErrorFields(error),
   });
-  return pageUrl(locale, { error: toPublicErrorCode(error), ref: correlationId }, back);
+  return pageUrl(locale, { error: actionErrorCode(error), ref: correlationId }, back);
 }
 
 /** The API's refusal code, or a stable INTERNAL. Never its prose. */
@@ -104,7 +105,7 @@ export async function connectAccountAction(formData: FormData): Promise<void> {
   const back = returnToOf(formData);
   let destination: string;
   try {
-    await requireWorkspace(locale, 'integrations.manage');
+    await requireWorkspaceAction(locale, 'integrations.manage');
     const provider = String(formData.get('provider') ?? '');
     const brandId = String(formData.get('brandId') ?? '');
 
@@ -141,7 +142,7 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    await requireWorkspace(locale, 'integrations.manage');
+    await requireWorkspaceAction(locale, 'integrations.manage');
     // B-9 — only the confirming button carries this. A post without it (a
     // replayed or scripted single click) is refused before anything is sent.
     if (formData.get('intent') !== 'DISCONNECT') {
@@ -167,7 +168,7 @@ export async function checkAccountAction(formData: FormData): Promise<void> {
   const back = returnToOf(formData);
   let destination: string;
   try {
-    await requireWorkspace(locale, 'integrations.read');
+    await requireWorkspaceAction(locale, 'integrations.read');
     const connectionId = String(formData.get('connectionId') ?? '');
     const result = await callSocialApi(
       `/v1/social/connections/${encodeURIComponent(connectionId)}/check`,
@@ -189,7 +190,7 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
   const back = returnToOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'publishing.manage');
+    const session = await requireWorkspaceAction(locale, 'publishing.manage');
     const jobId = String(formData.get('jobId') ?? '');
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).cancel({ jobId, ...actorOf(session) }),
@@ -210,7 +211,7 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
   const back = returnToOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'publishing.manage');
+    const session = await requireWorkspaceAction(locale, 'publishing.manage');
     const jobId = String(formData.get('jobId') ?? '');
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).retry({ jobId, ...actorOf(session) }),
@@ -235,7 +236,7 @@ export async function retryOnReconnectedAction(formData: FormData): Promise<void
   const back = returnToOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'publishing.manage');
+    const session = await requireWorkspaceAction(locale, 'publishing.manage');
     const jobId = String(formData.get('jobId') ?? '');
     await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
       (await pipeline()).retryOnReconnectedAccount({ jobId, ...actorOf(session) }),
@@ -266,7 +267,7 @@ export async function selectTargetAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    await requireWorkspace(locale, 'integrations.manage');
+    await requireWorkspaceAction(locale, 'integrations.manage');
     const selectionToken = String(formData.get('selectionToken') ?? '');
     const externalAccountId = String(formData.get('externalAccountId') ?? '');
 

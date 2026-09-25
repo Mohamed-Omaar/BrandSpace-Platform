@@ -28,6 +28,7 @@ import {
   UsageService,
 } from '@brandspace/entitlements';
 import { currentEnvironment, isProduction, requestContext } from '@brandspace/shared';
+import { permissionDenied } from './denial';
 
 /**
  * Server-only customer context.
@@ -278,8 +279,64 @@ export async function requireWorkspace(
     : undefined;
   if (!workspace) redirect(`/${locale}/workspaces`);
 
-  if (permissionKey && !workspace.permissionKeys.includes(permissionKey)) notFound();
+  if (permissionKey && !holdsPermission(workspace, permissionKey)) notFound();
   return { customer, workspace, token };
+}
+
+/**
+ * THE ONE PERMISSION TEST every gate in this app asks: does the session's
+ * role, as stored right now, grant this key? Pages, actions and route handlers
+ * differ only in how they SAY no.
+ */
+export function holdsPermission(
+  workspace: Pick<CustomerWorkspaceContext, 'permissionKeys'>,
+  permissionKey: string,
+): boolean {
+  return workspace.permissionKeys.includes(permissionKey);
+}
+
+/**
+ * `requireWorkspace` for a SERVER ACTION (A5, E6).
+ *
+ * Same session, same membership re-check, same permission test. The difference
+ * is the refusal: a page answers a missing permission with 404 (the page is
+ * not there for this member), but an action is posted from a screen the member
+ * can already see, and a 404 thrown inside an action's `try` was being caught
+ * and reported as "Something went wrong". This throws a FORBIDDEN that names
+ * the permission, so the failure path can say which one (`actionErrorCode`).
+ */
+export async function requireWorkspaceAction(
+  locale: string,
+  permissionKey: string,
+): Promise<WorkspaceSession> {
+  const session = await requireWorkspace(locale);
+  if (!holdsPermission(session.workspace, permissionKey)) {
+    throw permissionDenied(permissionKey);
+  }
+  return session;
+}
+
+/**
+ * The owner's name as the members see it — the "ask <owner>" in a denial
+ * (E6). Read inside the tenant context: the `user` policy already lets a
+ * member read the co-members of their own workspace, and nothing else.
+ */
+export async function workspaceOwnerName(workspaceId: string): Promise<string> {
+  const owner = await withWorkspace(
+    workspaceId,
+    (db) =>
+      db.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { owner: { select: { name: true, email: true } } },
+      }),
+    { prisma: prisma() },
+  );
+  return owner?.owner.name?.trim() || owner?.owner.email || '';
+}
+
+/** How a member is named in a denial: their name, else their address. */
+export function memberDisplayName(customer: Pick<AuthenticatedCustomer, 'name' | 'email'>): string {
+  return customer.name?.trim() || customer.email;
 }
 
 /**
@@ -310,7 +367,7 @@ export async function resolveApiWorkspace(
     ? available.find((w) => w.workspaceId === customer.activeWorkspaceId)
     : undefined;
   if (!workspace) return null;
-  if (permissionKey && !workspace.permissionKeys.includes(permissionKey)) return null;
+  if (permissionKey && !holdsPermission(workspace, permissionKey)) return null;
   return { customer, workspace, token };
 }
 

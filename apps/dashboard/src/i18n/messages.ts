@@ -336,6 +336,14 @@ export const messages = {
     'perms.permissionCountOne': 'صلاحية واحدة',
     'perms.permission': 'الصلاحية',
     'perms.eyebrow': 'التحكم في الوصول',
+    'perms.denied.title': 'غير متاح لدورك',
+    'perms.denied.body': 'ليس لدى {name} صلاحية “{permission}”.',
+    'perms.denied.hint': 'الصلاحيات تأتي من الدور · اطلب من {owner} تغيير دورك.',
+    'perms.denied.you': 'ليس لديك صلاحية “{permission}”.',
+    'perms.denied.hintOwner': 'الصلاحيات تأتي من الدور · اطلب من المالك تغيير دورك.',
+    'perms.denied.ownerOnly': '“{permission}” متاح للمالك فقط.',
+    'perms.denied.thisAction': 'هذا الإجراء',
+    'perms.fromRole': 'من الدور',
     'perms.desc.workspace.read': 'عرض مساحة العمل',
     'perms.desc.workspace.update': 'تغيير إعدادات مساحة العمل',
     'perms.desc.workspace.delete': 'حذف مساحة العمل',
@@ -2900,6 +2908,14 @@ export const messages = {
     'perms.permissionCountOne': '1 permission',
     'perms.permission': 'Permission',
     'perms.eyebrow': 'Access control',
+    'perms.denied.title': 'Not available with your role',
+    'perms.denied.body': "{name} doesn't have the “{permission}” permission.",
+    'perms.denied.hint': 'Permissions come from the role · ask {owner} to change your role.',
+    'perms.denied.you': "You don't have the “{permission}” permission.",
+    'perms.denied.hintOwner': 'Permissions come from the role · ask the owner to change your role.',
+    'perms.denied.ownerOnly': '“{permission}” is owner-only.',
+    'perms.denied.thisAction': 'this action',
+    'perms.fromRole': 'From the role',
     'perms.desc.workspace.read': 'View the workspace',
     'perms.desc.workspace.update': 'Change workspace settings',
     'perms.desc.workspace.delete': 'Delete the workspace',
@@ -5665,15 +5681,42 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
 };
 
 /** Render a status code. An unrecognised code renders nothing at all. */
+function fixedStatusText(code: string, locale: string): string | null {
+  const entry = STATUS_TEXT[code];
+  if (!entry) return null;
+  return locale === 'ar' ? entry.ar : entry.en;
+}
+
+/**
+ * A REFUSED ACTION THAT NAMES THE PERMISSION (E6).
+ *
+ * `FORBIDDEN:<permission>` or `FORBIDDEN_OWNER:<permission>`, as the action's
+ * failure path writes it (`actionErrorCode`). The permission is only ever a
+ * lookup key: it becomes words through `perms.desc.*`, so a key the dictionary
+ * does not hold — a typo, a crafted URL — falls back to the plain FORBIDDEN
+ * sentence rather than being echoed. No name reaches the URL; the banner says
+ * "the owner", and the screens that know the names say them (PermissionNotice).
+ */
+function deniedActionText(code: string, locale: string): string | null {
+  const match = /^FORBIDDEN(_OWNER)?:([a-z_]+(?:\.[a-z_]+)+)$/.exec(code);
+  if (!match) return null;
+  const permission = optionalMessage(locale, `perms.desc.${match[2]}`);
+  if (!permission) return fixedStatusText('FORBIDDEN', locale);
+  const fill = (key: string) =>
+    (optionalMessage(locale, key) ?? '').replace('{permission}', permission);
+  return match[1]
+    ? fill('perms.denied.ownerOnly')
+    : `${fill('perms.denied.you')} ${fill('perms.denied.hintOwner')}`;
+}
+
 export function statusMessage(
   code: string | null | undefined,
   locale: string,
   correlationId?: string,
 ): string | null {
   if (!code) return null;
-  const entry = STATUS_TEXT[code];
-  if (!entry) return null;
-  const text = locale === 'ar' ? entry.ar : entry.en;
+  const text = deniedActionText(code, locale) ?? fixedStatusText(code, locale);
+  if (text === null) return null;
   // The correlation id is an opaque uuid we generated: the ONE variable part,
   // and the only thing joining this screen to the redacted server log.
   const safeId = correlationId && /^[0-9a-f-]{36}$/i.test(correlationId) ? correlationId : null;

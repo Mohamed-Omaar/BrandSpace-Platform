@@ -9,7 +9,13 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import {
+  inWorkspace,
+  memberDisplayName,
+  requireWorkspace,
+  workspaceOwnerName,
+} from '../../../server/customer-context';
+import { PermissionNotice } from '../../../components/permission-notice';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -104,6 +110,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
     >
       <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
         <BillingTabs locale={locale} current="billing" />
+        {/* A5/E6 — changing the plan or payment method is owner-only; say so
+          once, where the buttons would be, instead of leaving them missing. */}
+        {mayManage ? null : (
+          <PermissionNotice
+            locale={locale}
+            permissionKey="billing.manage"
+            memberName={memberDisplayName(customer)}
+            ownerName={await workspaceOwnerName(workspace.workspaceId)}
+          />
+        )}
         {/* The three states dunning can put a workspace in, each said plainly and
           each stating what is NOT happening: nothing is being deleted. */}
         {subscription?.status === 'SUSPENDED' ? (

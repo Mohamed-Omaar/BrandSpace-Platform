@@ -3,13 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import {
-  assertBrandInScope,
-  createLogger,
-  internalErrorFields,
-  toPublicErrorCode,
-} from '@brandspace/shared';
-import { requireWorkspace } from '../../../server/customer-context';
+import { assertBrandInScope, createLogger, internalErrorFields } from '@brandspace/shared';
+import { requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 import { campaignFormFrom } from '../../../server/campaign-form';
 
@@ -42,7 +38,7 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
     assertBrandInScope(session.workspace.brandScope, brandId);
 
     const created = await inContentStudio(session.workspace.workspaceId, async (services) => {
@@ -72,7 +68,7 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('campaign create failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/campaigns/new?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/campaigns/new?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);
@@ -84,7 +80,7 @@ export async function updateCampaignAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
 
     await inContentStudio(session.workspace.workspaceId, async (services) => {
       const policy = await services.policy();
@@ -121,7 +117,7 @@ export async function updateCampaignAction(formData: FormData): Promise<void> {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('campaign update failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/campaigns/${campaignId}?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/campaigns/${campaignId}?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);
@@ -142,7 +138,7 @@ export async function archiveCampaignAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
     await inContentStudio(session.workspace.workspaceId, async (services) =>
       services.campaigns().archive({
         campaignId,
@@ -157,7 +153,7 @@ export async function archiveCampaignAction(formData: FormData): Promise<void> {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('campaign archive failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/campaigns/${campaignId}?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/campaigns/${campaignId}?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);

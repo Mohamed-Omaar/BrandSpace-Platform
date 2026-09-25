@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { createLogger, internalErrorFields } from '@brandspace/shared';
 import {
   checksumOf,
   createKnowledgeItemSchema,
@@ -18,7 +18,8 @@ import {
   mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { createBrandFor } from '../../../server/brand-creation';
 
@@ -94,7 +95,7 @@ function failure(
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No customer content is written either side.
   log.warn('brand brain action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId }, back);
+  return pageUrl(locale, { ...extra, error: actionErrorCode(error), ref: correlationId }, back);
 }
 
 function localized(formData: FormData, prefix: string): LocalizedText {
@@ -110,7 +111,7 @@ export async function createBrandAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand.manage');
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid brand name');
 
@@ -139,7 +140,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.edit');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const parsed = createKnowledgeItemSchema.parse({
       brandId: String(formData.get('brandId') ?? ''),
       area,
@@ -172,7 +173,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.edit');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const parsed = updateKnowledgeItemSchema.parse({
       itemId: String(formData.get('itemId') ?? ''),
       title: localized(formData, 'title'),
@@ -205,7 +206,7 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.delete');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.delete');
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
       await knowledge.archiveItem({
         itemId: String(formData.get('itemId') ?? ''),
@@ -226,7 +227,7 @@ export async function rollbackKnowledgeAction(formData: FormData): Promise<void>
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.edit');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const parsed = rollbackSchema.parse({
       itemId: String(formData.get('itemId') ?? ''),
       toVersion: Number(formData.get('toVersion') ?? 0),
@@ -255,7 +256,7 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
   const back = backTo(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.review');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
     const decision = String(formData.get('decision') ?? '');
     const parsed = reviewCandidateSchema.parse({
       candidateId: String(formData.get('candidateId') ?? ''),
@@ -324,7 +325,7 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
   const back = backTo(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.upload');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0) throw new Error('no file');
 

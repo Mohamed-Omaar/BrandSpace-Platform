@@ -103,7 +103,7 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
     );
     expect(page).toContain("schedule: may('content.schedule')");
     // The server half the link leads to, so the two cannot drift apart.
-    expect(calendarActions).toContain("requireWorkspace(locale, 'content.schedule')");
+    expect(calendarActions).toContain("requireWorkspaceAction(locale, 'content.schedule')");
   });
 });
 

@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain, assertBrandInScope } from '../../../server/brand-brain-context';
 import { createBrandFor } from '../../../server/brand-creation';
 import { rememberBrand } from '../../../server/brand-cookie';
@@ -44,7 +45,7 @@ function failure(locale: string, step: SetupView, error: unknown, action: string
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No brand name and no file name are written.
   log.warn('setup wizard action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, step, { error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, step, { error: actionErrorCode(error), ref: correlationId });
 }
 
 /**
@@ -66,7 +67,7 @@ export async function createSetupBrandAction(formData: FormData): Promise<void> 
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand.manage');
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
     const input = setupBrandFrom(formData);
     const { brandId } = await createBrandFor(session, input);
     await rememberBrand(session.workspace.workspaceId, brandId);
@@ -179,7 +180,7 @@ export async function saveFirstGoalAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'brand_brain.edit');
+    const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const goal = setupGoalFrom(formData.get('goal'));
     if (goal === null) throw new Error('unknown goal');
 

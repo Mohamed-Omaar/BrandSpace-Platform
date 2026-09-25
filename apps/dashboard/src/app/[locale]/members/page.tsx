@@ -23,7 +23,8 @@ import {
   type MediaSeed,
 } from '@brandspace/ui';
 import { brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, memberDisplayName, requireWorkspace } from '../../../server/customer-context';
+import { PermissionNotice } from '../../../components/permission-notice';
 import { brandContextFor } from '../../../server/brand-context';
 import {
   customerRoleName,
@@ -131,6 +132,9 @@ export default async function MembersPage({
     }),
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
+  // The owner is always a member, so their name comes from the list already read.
+  const owner = members.find((m) => m.isWorkspaceOwner);
+  const ownerName = owner?.name?.trim() || owner?.email || '';
   const viewerRestricted = workspace.brandScope.length > 0;
 
   /** "All brands", or the brands by name — counting any the viewer cannot see. */
@@ -652,6 +656,15 @@ export default async function MembersPage({
                 </Button>
               </form>
             </Card>
+          )}
+          {/* A5/E6 — the invite form is not offered; say why rather than leave a gap. */}
+          {!may('member.invite') && (
+            <PermissionNotice
+              locale={locale}
+              permissionKey="member.invite"
+              memberName={memberDisplayName(session.customer)}
+              ownerName={ownerName}
+            />
           )}
         </Stack>
       </SettingsFrame>

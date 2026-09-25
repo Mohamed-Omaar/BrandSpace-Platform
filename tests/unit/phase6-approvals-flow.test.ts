@@ -16,7 +16,7 @@ describe('D-288', () => {
     const flow = actions.slice(actions.indexOf('export async function resubmitAfterChangesAction'));
     expect(flow).toMatch(/\(await approvals\(\)\)\.submit\(/);
     expect(flow).toMatch(/service\.resolve\(\{ actor, threadId \}\)/);
-    expect(flow).toMatch(/requireWorkspace\(locale, 'content\.submit'\)/);
+    expect(flow).toMatch(/requireWorkspaceAction\(locale, 'content\.submit'\)/);
   });
 
   it('the next step is chosen by the brand policy, and scheduling needs its own permission', () => {

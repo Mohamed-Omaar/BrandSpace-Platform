@@ -4,11 +4,16 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
 import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import {
+  requireWorkspace,
+  type WorkspaceSession,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 import { inNotes } from '../../../server/notes-context';
 import { resolveContentLanguage } from '../../../server/content-language';
@@ -54,7 +59,7 @@ function failure(
   // side — a draft caption is routinely the most commercially sensitive string
   // in the record (docs/SECURITY.md §11).
   log.warn('content action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, path, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, path, { ...extra, error: actionErrorCode(error), ref: correlationId });
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -164,7 +169,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.create');
+    const session = await requireWorkspaceAction(locale, 'content.create');
     const brandId = String(formData.get('brandId') ?? '');
     const title = String(formData.get('title') ?? '');
     const explicitLanguage = formData.get('contentLocale');
@@ -282,7 +287,7 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.edit');
+    const session = await requireWorkspaceAction(locale, 'content.edit');
     const variantId = String(formData.get('variantId') ?? '');
     const body = String(formData.get('body') ?? '');
     const hashtags = String(formData.get('hashtags') ?? '')
@@ -358,7 +363,7 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'campaigns.manage');
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
     const raw = formData.get('campaignId');
     if (raw === null) notFound();
     const campaignId = String(raw).trim();
@@ -411,7 +416,7 @@ export async function uploadComposerMediaAction(formData: FormData): Promise<voi
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.upload');
+    const session = await requireWorkspaceAction(locale, 'assets.upload');
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0)
       throw new AppError('VALIDATION_FAILED', 'No file.');
@@ -488,7 +493,7 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
     // which only the item's own status can tell, so the service decides.
     const session =
       to === 'ARCHIVED'
-        ? await requireWorkspace(locale, 'content.archive')
+        ? await requireWorkspaceAction(locale, 'content.archive')
         : await requireWorkspace(locale);
 
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
@@ -537,7 +542,7 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
 
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.submit');
+    const session = await requireWorkspaceAction(locale, 'content.submit');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).submit({
         itemId,
@@ -597,7 +602,7 @@ export async function resubmitAfterChangesAction(formData: FormData): Promise<vo
 
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.submit');
+    const session = await requireWorkspaceAction(locale, 'content.submit');
     try {
       await inNotes(locale, async ({ service, actor }) => {
         for (const threadId of threadIds) {
@@ -640,7 +645,7 @@ export async function cancelReviewAction(formData: FormData): Promise<void> {
     // `content.submit` is what it takes to OPEN a review, so it is what it takes
     // to withdraw one. The service additionally requires the caller to be the
     // requester or somebody who could have decided it.
-    const session = await requireWorkspace(locale, 'content.submit');
+    const session = await requireWorkspaceAction(locale, 'content.submit');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: approvalActorOf(session) }),
     );
@@ -667,7 +672,7 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'workspace.update');
+    const session = await requireWorkspaceAction(locale, 'workspace.update');
     const raw = String(formData.get('retentionDays') ?? '').trim();
     const days = raw === '' ? null : Number.parseInt(raw, 10);
     if (days !== null && (!Number.isInteger(days) || days < 1)) {
@@ -709,7 +714,7 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
       action: 'saveRetention',
       ...internalErrorFields(error),
     });
-    destination = `/${locale}/settings?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/settings?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings`);
   redirect(destination);
@@ -734,7 +739,7 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
   const token = String(formData.get('token') ?? '').slice(0, 120) || randomUUID();
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.create');
+    const session = await requireWorkspaceAction(locale, 'content.create');
     const mayFile = session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION);
     const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);

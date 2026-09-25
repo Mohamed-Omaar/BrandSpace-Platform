@@ -4,13 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { getPrisma, withWorkspace, writeAuditEvent } from '@brandspace/database';
-import {
-  assertBrandInScope,
-  createLogger,
-  internalErrorFields,
-  toPublicErrorCode,
-} from '@brandspace/shared';
-import { requireWorkspace } from '../../../../server/customer-context';
+import { assertBrandInScope, createLogger, internalErrorFields } from '@brandspace/shared';
+import { requireWorkspaceAction } from '../../../../server/customer-context';
+import { actionErrorCode } from '../../../../server/denial';
 import { brandProfileFrom } from '../../../../server/brand-profile';
 
 const log = createLogger({ context: { component: 'dashboard.brand-profile' } });
@@ -40,7 +36,7 @@ export async function saveBrandProfileAction(formData: FormData): Promise<void> 
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'brand.manage');
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
     // BEFORE the read, not after (docs/SECURITY.md §4.2).
     assertBrandInScope(session.workspace.brandScope, brandId);
 
@@ -107,7 +103,7 @@ export async function saveBrandProfileAction(formData: FormData): Promise<void> 
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('brand profile save failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/settings/brand?brand=${brandId}&error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/settings/brand?brand=${brandId}&error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings/brand`);
   redirect(destination);

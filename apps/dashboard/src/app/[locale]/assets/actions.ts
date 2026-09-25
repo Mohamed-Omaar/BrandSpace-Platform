@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
 import { ASSET_CHANGED_REASON, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
@@ -11,7 +11,8 @@ import {
   mayProcessInline,
   type ProcessAssetPayload,
 } from '@brandspace/jobs';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inAssetLibrary } from '../../../server/assets-context';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 
@@ -79,7 +80,7 @@ function assetErrorCode(error: unknown): string {
   if (error instanceof AppError && error.publicDetails['reason'] === ASSET_CHANGED_REASON) {
     return 'ASSET_VERSION_CONFLICT';
   }
-  return toPublicErrorCode(error);
+  return actionErrorCode(error);
 }
 
 /** Read an optional id from a form, treating an empty string as absent. */
@@ -92,7 +93,7 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.upload');
+    const session = await requireWorkspaceAction(locale, 'assets.upload');
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0) throw new Error('no file');
 
@@ -126,7 +127,7 @@ export async function createAssetFolderAction(formData: FormData): Promise<void>
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.manage_taxonomy');
+    const session = await requireWorkspaceAction(locale, 'assets.manage_taxonomy');
     const name = String(formData.get('name') ?? '').trim();
     if (name.length === 0 || name.length > 120) throw new Error('invalid folder name');
 
@@ -157,7 +158,7 @@ export async function updateAssetAction(formData: FormData): Promise<void> {
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.edit');
+    const session = await requireWorkspaceAction(locale, 'assets.edit');
     const rawTags = String(formData.get('tags') ?? '');
     const name = String(formData.get('name') ?? '').trim();
     /*
@@ -219,7 +220,7 @@ export async function bulkAssetAction(formData: FormData): Promise<void> {
   try {
     const operation = String(formData.get('operation') ?? '');
     const permission = operation === 'archive' ? 'assets.archive' : 'assets.edit';
-    const session = await requireWorkspace(locale, permission);
+    const session = await requireWorkspaceAction(locale, permission);
     const ids = [...new Set(formData.getAll('assetIds').map(String))].slice(0, 100);
     if (ids.length === 0 || !['archive', 'tag', 'move'].includes(operation)) {
       throw new AppError('VALIDATION_FAILED', 'Nothing to do.');
@@ -266,7 +267,7 @@ export async function archiveAssetAction(formData: FormData): Promise<void> {
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.archive');
+    const session = await requireWorkspaceAction(locale, 'assets.archive');
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
       await service.archive(assetId, assetActor(session));
@@ -284,7 +285,7 @@ export async function restoreAssetAction(formData: FormData): Promise<void> {
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.restore');
+    const session = await requireWorkspaceAction(locale, 'assets.restore');
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
       await service.restore(assetId, assetActor(session));
@@ -301,7 +302,7 @@ export async function deleteAssetAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.delete');
+    const session = await requireWorkspaceAction(locale, 'assets.delete');
     const assetId = String(formData.get('assetId') ?? '');
     await inAssetLibrary(session.workspace.workspaceId, async ({ library }) => {
       const service = await library();
@@ -320,7 +321,7 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.version');
+    const session = await requireWorkspaceAction(locale, 'assets.version');
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0) throw new Error('no file');
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -363,7 +364,7 @@ export async function restoreAssetVersionAction(formData: FormData): Promise<voi
   const assetId = String(formData.get('assetId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.version');
+    const session = await requireWorkspaceAction(locale, 'assets.version');
     const versionNumber = Number(formData.get('versionNumber') ?? 0);
     if (!Number.isInteger(versionNumber) || versionNumber < 1) throw new Error('invalid version');
 

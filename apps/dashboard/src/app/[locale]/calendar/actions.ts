@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 
 const log = createLogger({ context: { component: 'dashboard.calendar' } });
@@ -48,7 +49,7 @@ function failure(
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No caption and no title is written either side.
   log.warn('calendar action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { ...extra, error: actionErrorCode(error), ref: correlationId });
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -64,7 +65,7 @@ export async function scheduleContentAction(formData: FormData): Promise<void> {
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const contentItemId = String(formData.get('contentItemId') ?? '');
     /*
      * The two halves of a wall-clock arrive as two fields, because that is what
@@ -97,7 +98,7 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const slotId = String(formData.get('slotId') ?? '');
     const date = String(formData.get('date') ?? '').trim();
     const time = String(formData.get('time') ?? '').trim();
@@ -123,7 +124,7 @@ export async function cancelScheduleAction(formData: FormData): Promise<void> {
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const slotId = String(formData.get('slotId') ?? '');
 
     await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>

@@ -1091,6 +1091,14 @@ Enforcement is at four layers — navigation, page loader, server action, and **
 the one that matters; the rest are convenience. A missing permission on a page is a `404`, not a `403`:
 which pages exist but are closed is itself information.
 
+**Refusals are explained, not disguised (prototype v90 A5/E6).** A server action is posted from a
+screen the member can already see, so its permission refusal is a `FORBIDDEN` that names the
+permission (`requireWorkspaceAction`), and the banner says which one and who can change the role —
+"… is owner-only" for the three owner-only keys. Only the permission KEY travels in the URL, and it
+becomes words through the dictionary; names never go into a URL. Controls a role does not offer are
+replaced by the same explanation (`PermissionNotice`). None of this is a second permission check: it
+reads the same `permissionKeys` the gates read.
+
 ### 20.4 Entitlements
 
 The precedence engine is **pure** and implements docs/ADMIN-CONTROL-CENTER.md §5.3 exactly, in order:

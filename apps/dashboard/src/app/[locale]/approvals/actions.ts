@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import type { ApprovalVerdict } from '@brandspace/content';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 import { inNotes } from '../../../server/notes-context';
 import { noteForChangesRequested } from '../../../server/approval-notes';
@@ -36,7 +37,7 @@ function failure(locale: string, error: unknown, action: string): string {
   // routinely candid, and the address bar, the browser history and the access
   // log are all places it must not appear (docs/SECURITY.md §11).
   log.warn('approvals action failed', { correlationId, action, ...internalErrorFields(error) });
-  return approvalsUrl(locale, { error: toPublicErrorCode(error), ref: correlationId });
+  return approvalsUrl(locale, { error: actionErrorCode(error), ref: correlationId });
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -79,7 +80,7 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
      * also re-checks the brand scope, the assignment and the cycle's snapshot.
      * A member with `content.read` alone reaches this action and is refused.
      */
-    const session = await requireWorkspace(locale, 'content.read');
+    const session = await requireWorkspaceAction(locale, 'content.read');
     const approval = await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).decide({ approvalId, verdict, actor: actorOf(session), note }),
     );
@@ -151,7 +152,7 @@ export async function withdrawApprovalAction(formData: FormData): Promise<void> 
   try {
     // `content.read` at the door as above; the service then requires the caller
     // to be the requester or somebody who holds `content.approve`.
-    const session = await requireWorkspace(locale, 'content.read');
+    const session = await requireWorkspaceAction(locale, 'content.read');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: actorOf(session) }),
     );
@@ -178,7 +179,7 @@ export async function saveApprovalPolicyAction(formData: FormData): Promise<void
 
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'approvals.policy.manage');
+    const session = await requireWorkspaceAction(locale, 'approvals.policy.manage');
     /*
      * An unchecked HTML checkbox posts nothing at all, so presence IS the value.
      *

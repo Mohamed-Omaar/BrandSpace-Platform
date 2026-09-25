@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
-import { toPublicErrorCode } from '@brandspace/shared';
 
 /**
  * A person's decision on a preference BrandSpace noticed (D-277 §9, D-295).
@@ -27,7 +27,7 @@ export async function decidePreferenceAction(formData: FormData): Promise<void> 
   const back = RETURNS.has(requested) ? requested : '/overview';
   let destination = `/${locale}${back}`;
   try {
-    const { customer, workspace } = await requireWorkspace(locale, 'content.create');
+    const { customer, workspace } = await requireWorkspaceAction(locale, 'content.create');
     if (!DECISIONS.has(decision)) throw new Error('decision');
     await inContentStudio(workspace.workspaceId, async ({ suggestions }) => {
       const service = await suggestions();
@@ -45,7 +45,7 @@ export async function decidePreferenceAction(formData: FormData): Promise<void> 
     });
     destination += `?ok=PREFERENCE_${decision.toUpperCase()}`;
   } catch (error: unknown) {
-    destination += `?error=${toPublicErrorCode(error)}`;
+    destination += `?error=${actionErrorCode(error)}`;
   }
   revalidatePath(`/${locale}/overview`);
   redirect(destination);
@@ -62,7 +62,7 @@ export async function decideWorkflowAction(formData: FormData): Promise<void> {
   const brandId = String(formData.get('brandId') ?? '');
   let destination = `/${locale}/overview`;
   try {
-    const { customer, workspace } = await requireWorkspace(locale, 'content.create');
+    const { customer, workspace } = await requireWorkspaceAction(locale, 'content.create');
     if (decision !== 'dismiss' && decision !== 'snooze') throw new Error('decision');
     await inContentStudio(workspace.workspaceId, async ({ suggestions }) =>
       (await suggestions()).decideWorkflow({
@@ -75,7 +75,7 @@ export async function decideWorkflowAction(formData: FormData): Promise<void> {
     );
     destination += `?ok=WORKFLOW_${decision.toUpperCase()}`;
   } catch (error: unknown) {
-    destination += `?error=${toPublicErrorCode(error)}`;
+    destination += `?error=${actionErrorCode(error)}`;
   }
   revalidatePath(`/${locale}/overview`);
   redirect(destination);
