@@ -22,7 +22,7 @@ export type {
   ContentToolRequest,
 } from './requests';
 
-export { ContentLibraryService } from './library';
+export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
 export type { ContentLibraryOptions } from './library';
 
 export { ContentCalendarService } from './calendar';

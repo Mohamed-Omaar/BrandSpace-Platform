@@ -1,6 +1,6 @@
 import type React from 'react';
 import { notFound } from 'next/navigation';
-import { CONTENT_TOOLS } from '@brandspace/content';
+import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
@@ -38,6 +38,7 @@ import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
   createManualDraftAction,
+  duplicateContentAction,
   listCampaignOptionsAction,
   setContentCampaignAction,
   uploadComposerMediaAction,
@@ -573,6 +574,7 @@ export default async function ComposePage({
         id: draft.id,
         title: draft.title,
         status: draft.status as ComposerDraft['status'],
+        readOnly: READ_ONLY_CONTENT_STATUSES.includes(draft.status),
         openApprovalId,
         brandId: draft.brandId,
         contentType: draft.contentType,
@@ -762,17 +764,20 @@ export default async function ComposePage({
         formatPlatforms={formatPlatforms}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
-          edit: workspace.permissionKeys.includes('content.edit'),
+          // B-2 — a published post is read-only whatever the member may do.
+          edit: workspace.permissionKeys.includes('content.edit') && !composerDraft?.readOnly,
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
           manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
-          uploadMedia: workspace.permissionKeys.includes('assets.upload'),
+          uploadMedia:
+            workspace.permissionKeys.includes('assets.upload') && !composerDraft?.readOnly,
           schedule: workspace.permissionKeys.includes('content.schedule'),
           // The Creative route's own gate (`assets.upload`), and generation
           // needs content editing here because it changes this post.
           generateMedia:
             workspace.permissionKeys.includes('assets.upload') &&
-            workspace.permissionKeys.includes('content.edit'),
+            workspace.permissionKeys.includes('content.edit') &&
+            !composerDraft?.readOnly,
         }}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
@@ -783,6 +788,7 @@ export default async function ComposePage({
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
           resubmit: resubmitAfterChangesAction,
+          duplicate: duplicateContentAction,
           cancelReview: cancelReviewAction,
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
@@ -900,6 +906,8 @@ const EDITOR_KEYS = [
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',
+  'editor.published.readOnly',
+  'content.action.duplicate',
   'editor.variants.label',
   'editor.caption',
   'editor.unsaved',

@@ -510,6 +510,8 @@ export class ContentStudioService extends ContentLibraryService {
       },
     });
     if (!variant) throw contentItemNotFound();
+    // B-2 — refused before the model is called, so it never costs a credit.
+    await this.assertEditable(variant.contentItemId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();

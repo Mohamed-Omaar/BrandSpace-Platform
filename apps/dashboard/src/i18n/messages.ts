@@ -1021,6 +1021,7 @@ export const messages = {
     'editor.insufficientBody':
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
+    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. انسخه لإنشاء نسخة جديدة.',
     'editor.approvedWarning':
       'تمت الموافقة على هذا المنشور. تعديل محتواه أو وسائطه سيعيده إلى مسودة ويتطلب مراجعة جديدة.',
     'editor.variants.label': 'نسخ المنصات',
@@ -3593,6 +3594,8 @@ export const messages = {
     'editor.insufficientBody':
       'BrandSpace needs more information before it can make a grounded draft about this topic.',
     'editor.insufficient.add': 'Add knowledge',
+    'editor.published.readOnly':
+      'This post has been published and can no longer be edited. Duplicate it to make a new version.',
     'editor.approvedWarning':
       'This post was approved. Editing its content or media will return it to Draft and require review again.',
     'editor.variants.label': 'Platform versions',

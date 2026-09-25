@@ -9,6 +9,7 @@ import {
 import { AppError, brandIdQueryFilter } from '@brandspace/shared';
 import {
   contentItemNotFound,
+  contentNotEditable,
   draftLimitReached,
   transitionNotAllowed,
   unsupportedPlatform,
@@ -39,6 +40,17 @@ import { validateVariant } from './validation';
  * editing tools and the quote live in `ContentStudioService`, which extends
  * this one and runs only where a gateway legitimately exists (`apps/api`).
  */
+/**
+ * B-2 — the statuses in which a post's words and media are a RECORD of what was
+ * sent and no longer change. The composer reads the same list to open such a
+ * post read-only with "Duplicate" instead of a Save that would be refused.
+ */
+export const READ_ONLY_CONTENT_STATUSES: readonly ContentItem['status'][] = [
+  'PUBLISHING',
+  'PUBLISHED',
+  'PARTIALLY_PUBLISHED',
+];
+
 export interface ContentLibraryOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -589,6 +601,8 @@ export class ContentLibraryService {
       where: { id: input.variantId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
     });
     if (!variant) throw contentItemNotFound();
+    // B-2 — before anything is resolved or written.
+    await this.assertEditable(variant.contentItemId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
@@ -700,6 +714,22 @@ export class ContentLibraryService {
      */
     await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
     return updated;
+  }
+
+  /**
+   * B-2 — PUBLISHED IS READ-ONLY. A post that is being sent, or was sent,
+   * describes what the audience received; editing it afterwards would make the
+   * record disagree with the channel, and its approval would cover words nobody
+   * approved. Checked by every path that changes a variant's content — the
+   * manual editor and the studio's AI tools, which check BEFORE the model is
+   * called so a refused edit never costs a credit. The way on is "Duplicate".
+   */
+  protected async assertEditable(contentItemId: string): Promise<void> {
+    const item = await this.db.contentItem.findUnique({
+      where: { id: contentItemId },
+      select: { status: true },
+    });
+    if (item && READ_ONLY_CONTENT_STATUSES.includes(item.status)) throw contentNotEditable();
   }
 
   /**

@@ -54,6 +54,7 @@ These items contradict recorded decisions or change security rules. Claude Code 
 ### Phase 1 progress
 
 - **B-1 fixed.** The `limit.storage_gb` counter carries the exact byte total in `usage_counter.usedBytes` (BIGINT), and upload admission compares only those bytes against `storage_gb × BYTES_PER_GB` in one conditional `INSERT … ON CONFLICT DO UPDATE … WHERE` (`UsageService.consumeBytes`); refunds (duplicate, unused declaration, expired session, purge) give back exact bytes (`refundBytes`). `usedValue` on that row is derived — the total's gigabytes rounded up once — and is used for display and reporting only. `BYTES_PER_GB` keeps its value (1024³) and is now defined once in `@brandspace/entitlements`. **Deployment:** the migration `20260925120000_storage_bytes_meter` adds the columns and backfills every workspace from its stored files in one transaction, so no existing workspace starts at 0 bytes; no ordering step is needed. `pnpm storage:recompute` (dry run by default, `--apply` to write, `--workspace <id>` for one) is the follow-up check. Not charged yet (unchanged, for a later phase): adding a new asset _version_.
+- **B-2 fixed.** `editVariant` and the studio's AI tools refuse (`CONFLICT`) while a post is `PUBLISHING`, `PUBLISHED` or `PARTIALLY_PUBLISHED` (`READ_ONLY_CONTENT_STATUSES`); the AI tools refuse before the model is called, so no credit is spent. The composer opens such a post read-only with a note and **Duplicate** (for members with `content.create`).
 
 ---
 

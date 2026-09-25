@@ -43,6 +43,18 @@ export function transitionNotAllowed(): AppError {
   return new AppError('CONFLICT', 'This content cannot move to that state yet.');
 }
 
+/**
+ * B-2 — a post that is publishing or has been published is a RECORD of what
+ * went out, and its words and media no longer change. A new version is a
+ * duplicate, which is a new draft.
+ */
+export function contentNotEditable(): AppError {
+  return new AppError(
+    'CONFLICT',
+    'Published content cannot be edited. Duplicate it to make a new version.',
+  );
+}
+
 /** The customer's brief is longer than the activated ceiling. */
 export function briefTooLong(): AppError {
   return new AppError('VALIDATION_FAILED', 'That brief is too long.');

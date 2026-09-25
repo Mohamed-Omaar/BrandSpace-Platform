@@ -55,6 +55,8 @@ export interface DraftEditorProps {
   readonly busy: string | null;
   readonly now: number;
   readonly can: {
+    /** B-2 — "Duplicate" makes a new post, so it needs `content.create`. */
+    create?: boolean;
     edit: boolean;
     submit: boolean;
     archive: boolean;
@@ -85,6 +87,7 @@ export interface DraftEditorProps {
     setCampaign(formData: FormData): Promise<void>;
     uploadMedia(formData: FormData): Promise<void>;
     resubmit(formData: FormData): Promise<void>;
+    duplicate?(formData: FormData): Promise<void>;
   };
 }
 
@@ -139,6 +142,8 @@ export function DraftEditor({
 }: DraftEditorProps) {
   const router = useRouter();
   const fieldId = useId();
+  // One copy per render of this post, however often "Duplicate" is clicked.
+  const duplicateToken = `composer:${draft.id}:${draft.variants.map((v) => v.updatedAt).join(',')}`;
   const [active, setActive] = useState(draft.variants[0]?.id ?? '');
   const [compare, setCompare] = useState(false);
   const [toneArgument, setToneArgument] = useState('');
@@ -449,6 +454,26 @@ export function DraftEditor({
         {attach && can.edit ? (
           <div className="cs-notice info" role="status" data-testid="editor-attached-media">
             {(t['editor.media.attached'] ?? '{name}').replace('{name}', attach.name)}
+          </div>
+        ) : null}
+
+        {draft.readOnly ? (
+          <div className="cs-notice info" role="note" data-testid="editor-published-readonly">
+            <p>{t['editor.published.readOnly']}</p>
+            {can.create && actions.duplicate ? (
+              <form action={actions.duplicate}>
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="itemId" value={draft.id} />
+                <input type="hidden" name="token" value={duplicateToken} />
+                <button
+                  type="submit"
+                  className="cs-ghost-button cs-compact"
+                  data-testid="editor-duplicate"
+                >
+                  {t['content.action.duplicate']}
+                </button>
+              </form>
+            ) : null}
           </div>
         ) : null}
 
