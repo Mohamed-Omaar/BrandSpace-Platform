@@ -668,10 +668,14 @@ describe('the design showcase cannot reach production', () => {
   const gate = read('apps/dashboard/src/app/[locale]/design-system/showcase-enabled.ts');
   const page = read('apps/dashboard/src/app/[locale]/design-system/page.tsx');
 
-  it('refuses a real deployment environment regardless of the opt-in flag', () => {
+  it('refuses production regardless of the opt-in flag', () => {
     expect(gate).toContain("'production'");
-    expect(gate).toContain("'staging'");
     expect(gate).toContain('PROTECTED_ENVIRONMENTS.has(appEnv)');
+  });
+
+  it('permits an explicitly enabled staging review', () => {
+    expect(gate).not.toContain("['production', 'staging']");
+    expect(gate).toContain('BRANDSPACE_DESIGN_SHOWCASE');
   });
 
   it('keys on APP_ENV, not NODE_ENV', () => {
