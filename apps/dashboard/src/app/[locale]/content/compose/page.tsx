@@ -777,7 +777,9 @@ export default async function ComposePage({
           edit: workspace.permissionKeys.includes('content.edit') && !composerDraft?.readOnly,
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
-          manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
+          // F1 — a published post's campaign is read-only like its words.
+          manageCampaigns:
+            workspace.permissionKeys.includes('campaigns.manage') && !composerDraft?.readOnly,
           uploadMedia:
             workspace.permissionKeys.includes('assets.upload') && !composerDraft?.readOnly,
           schedule: workspace.permissionKeys.includes('content.schedule'),

@@ -13,7 +13,8 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
-import { contentItemNotFound } from './errors';
+import { contentItemNotFound, contentNotEditable } from './errors';
+import { READ_ONLY_CONTENT_STATUSES } from './library';
 
 /**
  * THE CAMPAIGN DOMAIN — Phase 7, and the smallest honest version of
@@ -52,6 +53,19 @@ export interface CampaignServiceOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
   readonly clock?: Clock;
+  /**
+   * F1 — changing the campaign of a post in review withdraws the review, the
+   * same as any other edit. `ContentApprovalService` satisfies it. Optional so
+   * a caller that only files fresh drafts needs no approvals module; a change
+   * that needs it and finds it missing is refused rather than leaving the
+   * review open on a post that changed.
+   */
+  readonly reviewWithdrawal?: ReviewWithdrawalPort;
+}
+
+/** F1 — what a campaign change asks of the approvals module, and nothing more. */
+export interface ReviewWithdrawalPort {
+  withdrawForEdit(input: { itemId: string; actorUserId: string }): Promise<unknown>;
 }
 
 export interface CampaignActor {
@@ -90,10 +104,13 @@ export class CampaignService {
   readonly #workspaceId: string;
   readonly #clock: Clock;
 
+  readonly #reviewWithdrawal: ReviewWithdrawalPort | undefined;
+
   constructor(options: CampaignServiceOptions) {
     this.#db = options.db;
     this.#workspaceId = options.workspaceId;
     this.#clock = options.clock ?? systemClock;
+    this.#reviewWithdrawal = options.reviewWithdrawal;
   }
 
   async create(input: CreateCampaignInput): Promise<Campaign> {
@@ -278,7 +295,7 @@ export class CampaignService {
         deletedAt: null,
         ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
       },
-      select: { id: true, brandId: true, campaignId: true },
+      select: { id: true, brandId: true, campaignId: true, status: true },
     });
     if (!item) throw contentItemNotFound();
 
@@ -295,6 +312,17 @@ export class CampaignService {
      */
     if (input.campaignId === item.campaignId) return;
 
+    /*
+     * F1 — A CAMPAIGN CHANGE IS AN EDIT. A published post is a record of what
+     * went out, so its campaign is read-only like its words (B-2). A post in
+     * review is withdrawn from review, like any other edit (B-3): the reviewer
+     * was asked about the post as it was filed. APPROVED and SCHEDULED posts
+     * are left alone — the approval covers the words and media, not the
+     * campaign they are filed under (content-fingerprint.ts), so it still
+     * covers what goes out.
+     */
+    if (READ_ONLY_CONTENT_STATUSES.includes(item.status)) throw contentNotEditable();
+
     if (input.campaignId) {
       const campaign = await this.#require(input.campaignId, input.actor.brandScope);
       /*
@@ -310,6 +338,19 @@ export class CampaignService {
       where: { id: item.id },
       data: { campaignId: input.campaignId },
     });
+
+    if (item.status === 'IN_REVIEW') {
+      if (!this.#reviewWithdrawal) {
+        throw new AppError(
+          'CONFLICT',
+          'Changing the campaign of a post in review needs approvals.',
+        );
+      }
+      await this.#reviewWithdrawal.withdrawForEdit({
+        itemId: item.id,
+        actorUserId: input.actor.userId,
+      });
+    }
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: input.campaignId ? 'campaign.content_attached' : 'campaign.content_detached',

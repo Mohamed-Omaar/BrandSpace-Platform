@@ -4,6 +4,7 @@ import type { AiGateway } from '@brandspace/ai-gateway';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import {
+  CampaignService,
   ContentApprovalService,
   ContentCalendarService,
   ContentLibraryService,
@@ -580,4 +581,125 @@ describe('Q8 · editing a SCHEDULED post without content.schedule takes it off t
     ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect((await read(post.itemId, post.slotId)).slot.status).not.toBe('CANCELLED');
   });
+});
+
+describe('F1 · changing a post’s campaign is an edit', () => {
+  const authorActor = () => ({
+    userId: fixtures.a.userId,
+    roleKey: 'content_creator',
+    permissionKeys: ['content.read', 'content.submit'],
+    brandScope: [] as string[],
+  });
+  const approvals = (db: TenantScopedClient) =>
+    new ContentApprovalService({
+      db,
+      workspaceId: fixtures.a.workspaceId,
+      policy: CONTENT_POLICY,
+    });
+  /** As the dashboard builds it: the review withdrawal comes from the approvals module. */
+  const campaigns = (db: TenantScopedClient, withdrawal = true) =>
+    new CampaignService({
+      db,
+      workspaceId: fixtures.a.workspaceId,
+      ...(withdrawal
+        ? { reviewWithdrawal: { withdrawForEdit: (i) => approvals(db).withdrawForEdit(i) } }
+        : {}),
+    });
+
+  let campaignId: string;
+  let otherCampaignId: string;
+  beforeAll(async () => {
+    const make = (name: string) =>
+      inA((db) =>
+        db.campaign.create({
+          data: {
+            workspaceId: fixtures.a.workspaceId,
+            brandId: fixtures.a.brandId,
+            name,
+            objective: 'AWARENESS',
+          },
+          select: { id: true },
+        }),
+      );
+    campaignId = (await make(`F1 ${crypto.randomUUID().slice(0, 6)}`)).id;
+    otherCampaignId = (await make(`F1 other ${crypto.randomUUID().slice(0, 6)}`)).id;
+  });
+
+  const setCampaign = (itemId: string, id: string | null, withdrawal = true) =>
+    inA((db) =>
+      campaigns(db, withdrawal).setContentCampaign({
+        contentItemId: itemId,
+        campaignId: id,
+        actor: { userId: fixtures.a.userId, brandScope: [] },
+      }),
+    );
+
+  const state = (itemId: string, approvalId?: string) =>
+    inA(async (db) => ({
+      item: await db.contentItem.findUniqueOrThrow({ where: { id: itemId } }),
+      approval: approvalId
+        ? await db.approval.findUniqueOrThrow({ where: { id: approvalId } })
+        : null,
+    }));
+
+  it.each(['PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED'])(
+    'a %s post keeps its campaign: read-only like its words',
+    async (status) => {
+      const post = await freshPost();
+      await setStatus(post.itemId, status);
+      await expect(setCampaign(post.itemId, campaignId)).rejects.toMatchObject({
+        code: 'CONFLICT',
+      });
+      expect((await state(post.itemId)).item.campaignId).toBeNull();
+    },
+  );
+
+  it('a post in review is withdrawn from review and returns to DRAFT', async () => {
+    const post = await freshPost();
+    const approval = await inA((db) =>
+      approvals(db).submit({ itemId: post.itemId, actor: authorActor() }),
+    );
+    await setCampaign(post.itemId, campaignId);
+    const after = await state(post.itemId, approval.id);
+    expect(after.item.campaignId).toBe(campaignId);
+    expect(after.item.status).toBe('DRAFT');
+    expect(after.approval?.status).toBe('CANCELLED');
+  });
+
+  it('re-sending the campaign a post in review already has withdraws nothing', async () => {
+    const post = await freshPost();
+    await setCampaign(post.itemId, campaignId);
+    const approval = await inA((db) =>
+      approvals(db).submit({ itemId: post.itemId, actor: authorActor() }),
+    );
+    await setCampaign(post.itemId, campaignId);
+    const after = await state(post.itemId, approval.id);
+    expect(after.item.status).toBe('IN_REVIEW');
+    expect(after.approval?.status).toBe('PENDING');
+  });
+
+  it('without the approvals module the change is refused, and the review stays open', async () => {
+    const post = await freshPost();
+    const approval = await inA((db) =>
+      approvals(db).submit({ itemId: post.itemId, actor: authorActor() }),
+    );
+    await expect(setCampaign(post.itemId, campaignId, false)).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    const after = await state(post.itemId, approval.id);
+    expect(after.item.campaignId).toBeNull();
+    expect(after.approval?.status).toBe('PENDING');
+  });
+
+  it.each(['APPROVED', 'SCHEDULED', 'CHANGES_REQUESTED'])(
+    'a %s post changes campaign and keeps its status: the approval covers the post, not its filing',
+    async (status) => {
+      const post = await freshPost();
+      await setStatus(post.itemId, status);
+      await setCampaign(post.itemId, otherCampaignId);
+      const after = await state(post.itemId);
+      expect(after.item.campaignId).toBe(otherCampaignId);
+      expect(after.item.status).toBe(status);
+    },
+  );
 });

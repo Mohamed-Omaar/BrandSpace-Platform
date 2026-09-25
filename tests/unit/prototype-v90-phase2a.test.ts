@@ -517,3 +517,56 @@ describe('B3 / Q8 · an edit by someone without content.schedule unschedules the
     both('editor.scheduledWarning.scheduler');
   });
 });
+
+describe('F1 · every edit path, the campaign included, obeys the edit rules', () => {
+  /** The body of the method that starts at `signature`, up to the next method. */
+  const method = (source: string, signature: string) => {
+    const start = source.indexOf(signature);
+    expect(start, signature).toBeGreaterThan(-1);
+    const next = source.indexOf('\n  async ', start + signature.length);
+    return source.slice(start, next === -1 ? undefined : next);
+  };
+
+  it('no new write path changes a variant without the guards', () => {
+    const files = readdirSync(path.join(root, 'packages/content/src')).filter((f) =>
+      f.endsWith('.ts'),
+    );
+    const writers = files.flatMap((f) =>
+      (read(`packages/content/src/${f}`).match(/contentVariant\.update\(/g) ?? []).map(() => f),
+    );
+    // editVariant (library) and applyTool (studio). A third needs these guards too.
+    expect(writers.sort()).toEqual(['library.ts', 'studio.ts']);
+    const library = read('packages/content/src/library.ts');
+    const edit = method(library, 'async editVariant(');
+    expect(edit).toContain('await this.assertEditable(variant.contentItemId);');
+    expect(edit).toContain('await this.revokeApprovalOnEdit(');
+    const studio = read('packages/content/src/studio.ts');
+    expect(method(studio, 'async applyTool(')).toContain('await this.revokeApprovalOnEdit(');
+    expect(studio).toMatch(/async #toolRequest[\s\S]*?await this\.assertEditable\(/);
+  });
+
+  it('a campaign change refuses a published post and withdraws a review, after the no-op', () => {
+    const campaigns = read('packages/content/src/campaigns.ts');
+    const set = method(campaigns, 'async setContentCampaign(');
+    const noop = set.indexOf('if (input.campaignId === item.campaignId) return;');
+    const readOnly = set.indexOf('READ_ONLY_CONTENT_STATUSES.includes(item.status)');
+    const withdraw = set.indexOf('this.#reviewWithdrawal.withdrawForEdit(');
+    expect(noop).toBeGreaterThan(-1);
+    expect(readOnly).toBeGreaterThan(noop);
+    expect(withdraw).toBeGreaterThan(readOnly);
+    expect(read('apps/dashboard/src/server/content-context.ts')).toContain(
+      'withdrawForEdit: async (input) => (await approvals()).withdrawForEdit(input)',
+    );
+  });
+
+  it('the composer hides the campaign control on a published post, and offers "Make a new copy"', () => {
+    const compose = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(compose).toMatch(
+      /manageCampaigns:\s*workspace\.permissionKeys\.includes\('campaigns\.manage'\) && !composerDraft\?\.readOnly/,
+    );
+    expect((messages.en as Record<string, string>)['content.action.duplicate']).toBe(
+      'Make a new copy',
+    );
+    both('content.action.duplicate');
+  });
+});

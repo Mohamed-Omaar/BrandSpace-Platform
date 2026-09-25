@@ -179,7 +179,15 @@ export async function inContentStudio<T>(
       ...scoped,
       policy,
       approvals,
-      campaigns: () => new CampaignService({ db: scoped.db, workspaceId }),
+      campaigns: () =>
+        new CampaignService({
+          db: scoped.db,
+          workspaceId,
+          // F1 — changing a post-in-review's campaign withdraws the review.
+          reviewWithdrawal: {
+            withdrawForEdit: async (input) => (await approvals()).withdrawForEdit(input),
+          },
+        }),
       suggestions: async () =>
         new MemberSuggestionService({ db: scoped.db, workspaceId, policy: await policy() }),
       library: async () =>

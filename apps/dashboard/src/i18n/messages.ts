@@ -823,7 +823,7 @@ export const messages = {
     'content.action.open': 'فتح',
     'content.action.requestApproval': 'طلب الموافقة',
     'content.action.schedule': 'جدولة',
-    'content.action.duplicate': 'نسخ',
+    'content.action.duplicate': 'إنشاء نسخة جديدة',
     'content.openNotes': '{count} ملاحظات مفتوحة',
     'content.mediaCount': '{count} وسائط',
     'content.textOnly': 'منشور نصي',
@@ -1031,7 +1031,7 @@ export const messages = {
     'editor.insufficientBody':
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
-    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. انسخه لإنشاء نسخة جديدة.',
+    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. أنشئ نسخة جديدة منه لتعديلها.',
     'editor.inReviewWarning':
       'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
@@ -3428,7 +3428,7 @@ export const messages = {
     'content.action.open': 'Open',
     'content.action.requestApproval': 'Request approval',
     'content.action.schedule': 'Schedule',
-    'content.action.duplicate': 'Duplicate',
+    'content.action.duplicate': 'Make a new copy',
     'content.openNotes': '{count} open notes',
     'content.mediaCount': '{count} media',
     'content.textOnly': 'Text post',
@@ -3648,7 +3648,7 @@ export const messages = {
       'BrandSpace needs more information before it can make a grounded draft about this topic.',
     'editor.insufficient.add': 'Add knowledge',
     'editor.published.readOnly':
-      'This post has been published and can no longer be edited. Duplicate it to make a new version.',
+      'This post has been published and can no longer be edited. Make a new copy to change it.',
     'editor.inReviewWarning':
       'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
