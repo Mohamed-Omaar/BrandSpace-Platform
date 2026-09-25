@@ -59,6 +59,7 @@ These items contradict recorded decisions or change security rules. Claude Code 
 - **B-4 fixed.** `ContentCalendarService.reschedule` moves only `PLANNED`/`SCHEDULED` slots (`RESCHEDULABLE_SLOT_STATUSES`), with the status in the update's `WHERE` so a slot the publisher claims mid-request is not moved; others get `CONFLICT` and nothing changes. The calendar drawer hides the reschedule form for such slots.
 - **B-5 fixed.** `MembershipService.changeRole` and `changeBrandAccess` refuse (`FORBIDDEN`) when the actor is the member being changed, before anything else is checked or written. The team screen no longer offers role or brand-access controls on the reader's own row (desktop and phone). Existing isolation tests that used a self-change to reach another rule now reach it through a different person; each rule's assertion is unchanged.
 - **B-6 fixed.** The Content Library shows **Schedule** only to members holding `content.schedule`, the permission every calendar action requires.
+- **B-7 fixed.** `ContentLibraryService.transition` now takes the actor's permissions and decides from the item's real status: archiving and restoring out of `ARCHIVED` need `content.archive`; returning a `CHANGES_REQUESTED` post to draft stays `content.edit`. The composer's **Restore** button is gated on `content.archive` (it was `content.submit`).
 
 ---
 

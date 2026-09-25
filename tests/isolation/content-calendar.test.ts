@@ -700,7 +700,12 @@ describe('the library and the calendar agree about a scheduled item', () => {
             db,
             workspaceId: fixtures.a.workspaceId,
             policy: CONTENT_POLICY,
-          }).transition({ itemId: contentItemId, to: 'ARCHIVED', ...actor() }),
+          }).transition({
+            itemId: contentItemId,
+            to: 'ARCHIVED',
+            ...actor(),
+            actorPermissionKeys: ['content.edit', 'content.archive'],
+          }),
         { prisma: app },
       ),
     ).rejects.toMatchObject({ code: 'CONFLICT' });

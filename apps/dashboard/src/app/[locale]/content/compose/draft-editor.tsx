@@ -803,7 +803,8 @@ export function DraftEditor({
             ) : null}
 
             <div className="cs-form-actions">
-              {can.submit && draft.status === 'ARCHIVED' ? (
+              {/* B-7 — restore is the other half of archive: `content.archive`. */}
+              {can.archive && draft.status === 'ARCHIVED' ? (
                 <form action={actions.transition}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />

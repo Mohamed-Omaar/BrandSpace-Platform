@@ -106,3 +106,14 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
     expect(calendarActions).toContain("requireWorkspace(locale, 'content.schedule')");
   });
 });
+
+describe('B-7 · Restore is offered with the permission the server asks for', () => {
+  const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+  const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+
+  it('gates Restore on can.archive, and hands the service the real permissions', () => {
+    expect(editor).toContain("can.archive && draft.status === 'ARCHIVED' ? (");
+    expect(editor).not.toContain("can.submit && draft.status === 'ARCHIVED'");
+    expect(actions).toContain('actorPermissionKeys: session.workspace.permissionKeys');
+  });
+});

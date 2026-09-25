@@ -841,12 +841,29 @@ export class ContentLibraryService {
     to: 'DRAFT' | 'ARCHIVED';
     actorUserId: string;
     actorBrandScope: readonly string[];
+    /** B-7 — the actor's permissions; the service decides which one applies. */
+    actorPermissionKeys: readonly string[];
   }): Promise<ContentItem> {
     // D-132, as in `editVariant` above.
     const item = await this.db.contentItem.findFirst({
       where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
+
+    /*
+     * B-7 — ARCHIVE AND RESTORE ARE ONE PERMISSION. Shelving a post and
+     * bringing it back off the shelf are the same decision in two directions,
+     * so both need `content.archive`. The screen used to offer Restore to
+     * anyone with `content.submit` while the server asked for `content.edit`,
+     * so the button and the refusal disagreed. Returning a post with changes
+     * requested to a plain draft is editing, and stays `content.edit`. Decided
+     * HERE, from the item's real status, not from what the form claimed.
+     */
+    const needed =
+      input.to === 'ARCHIVED' || item.status === 'ARCHIVED' ? 'content.archive' : 'content.edit';
+    if (!input.actorPermissionKeys.includes(needed)) {
+      throw new AppError('FORBIDDEN', `Moving this content requires ${needed}.`);
+    }
 
     const allowed: Record<string, readonly string[]> = {
       DRAFT: ['ARCHIVED'],

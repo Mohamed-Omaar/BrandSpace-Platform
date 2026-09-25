@@ -342,3 +342,55 @@ describe('B-3 · editing a post in review withdraws the review', () => {
     expect(again.cycle).toBe(2);
   });
 });
+
+describe('B-7 · archive and restore are one permission: content.archive', () => {
+  const move = (itemId: string, to: 'DRAFT' | 'ARCHIVED', permissions: readonly string[]) =>
+    inA((db) =>
+      library(db).transition({
+        itemId,
+        to,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        actorPermissionKeys: permissions,
+      }),
+    );
+  const statusOf = (itemId: string) =>
+    inA(async (db) => (await db.contentItem.findUniqueOrThrow({ where: { id: itemId } })).status);
+
+  it('archiving needs content.archive, not content.edit', async () => {
+    const post = await freshPost();
+    await expect(move(post.itemId, 'ARCHIVED', ['content.edit'])).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(await statusOf(post.itemId)).toBe('DRAFT');
+    await move(post.itemId, 'ARCHIVED', ['content.archive']);
+    expect(await statusOf(post.itemId)).toBe('ARCHIVED');
+  });
+
+  it('restoring needs content.archive too — the permission the screen now asks for', async () => {
+    const post = await freshPost();
+    await move(post.itemId, 'ARCHIVED', ['content.archive']);
+    for (const permissions of [
+      ['content.edit'],
+      ['content.submit'],
+      ['content.edit', 'content.submit'],
+    ]) {
+      await expect(move(post.itemId, 'DRAFT', permissions)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+    }
+    expect(await statusOf(post.itemId)).toBe('ARCHIVED');
+    await move(post.itemId, 'DRAFT', ['content.archive']);
+    expect(await statusOf(post.itemId)).toBe('DRAFT');
+  });
+
+  it('back to draft after changes were requested is editing: content.edit', async () => {
+    const post = await freshPost();
+    await setStatus(post.itemId, 'CHANGES_REQUESTED');
+    await expect(move(post.itemId, 'DRAFT', ['content.archive'])).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await move(post.itemId, 'DRAFT', ['content.edit']);
+    expect(await statusOf(post.itemId)).toBe('DRAFT');
+  });
+});
