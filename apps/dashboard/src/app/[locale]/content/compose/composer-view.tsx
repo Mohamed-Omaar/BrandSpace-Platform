@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { PlatformIcon, type SocialPlatform } from '@brandspace/ui';
 import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { DraftEditor } from './draft-editor';
@@ -36,6 +37,20 @@ import { formatCredits } from '../../../../server/composer-editor';
  */
 
 export type ContentLocale = 'AR' | 'EN';
+
+
+/** Official social marks used by the live composer. Unknown/custom providers keep their label only. */
+const SOCIAL_PLATFORM_ICON_KEYS: Readonly<Record<string, SocialPlatform>> = {
+  instagram: 'instagram',
+  facebook: 'facebook',
+  linkedin: 'linkedin',
+  x: 'x',
+  tiktok: 'tiktok',
+};
+
+function socialPlatformIconKey(key: string): SocialPlatform | null {
+  return SOCIAL_PLATFORM_ICON_KEYS[key.toLowerCase()] ?? null;
+}
 
 export interface ComposerPlatform {
   readonly key: string;
@@ -730,6 +745,7 @@ export function ComposerView({
                 {platforms.map((platform) => {
                   const on = selected.includes(platform.key);
                   const able = carries(contentType, platform.key);
+                  const iconPlatform = socialPlatformIconKey(platform.key);
                   return (
                     <button
                       key={platform.key}
@@ -742,7 +758,14 @@ export function ComposerView({
                       data-platform={platform.key}
                       onClick={() => toggle(platform.key)}
                     >
-                      {platform.label}
+                      {iconPlatform ? (
+                        <PlatformIcon
+                          platform={iconPlatform}
+                          size={14}
+                          tone={on ? 'brand' : 'ink'}
+                        />
+                      ) : null}
+                      <span>{platform.label}</span>
                     </button>
                   );
                 })}
