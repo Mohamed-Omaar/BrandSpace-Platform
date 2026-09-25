@@ -479,6 +479,59 @@ describe('AC-14.8 and AC-14.9 — moving, cancelling, and the audit trail', () =
     expect(after?.['toLocalTime']).toBe(second);
   });
 
+  it.each(['PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'] as const)(
+    'B-4 — a %s slot cannot be moved, and nothing about it changes',
+    async (status) => {
+      const contentItemId = await makeDraft(`Already going out (${status})`);
+      const first = futureLocal(9);
+      const { slot } = await inA((calendar) =>
+        calendar.schedule({ contentItemId, localTime: first, ...actor() }),
+      );
+      await withWorkspace(
+        fixtures.a.workspaceId,
+        (db) => db.calendarSlot.update({ where: { id: slot.id }, data: { status } }),
+        { prisma: app },
+      );
+
+      await expect(
+        inA((calendar) =>
+          calendar.reschedule({ slotId: slot.id, localTime: futureLocal(17), ...actor() }),
+        ),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+      const after = await withWorkspace(
+        fixtures.a.workspaceId,
+        async (db) => ({
+          slot: await db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } }),
+          moves: await db.auditEvent.count({
+            where: { resourceId: slot.id, action: 'content.rescheduled' },
+          }),
+        }),
+        { prisma: app },
+      );
+      expect(after.slot.scheduledLocalTime).toBe(first);
+      expect(after.slot.status).toBe(status);
+      expect(after.moves).toBe(0);
+    },
+  );
+
+  it('B-4 — a PLANNED slot can still be moved', async () => {
+    const contentItemId = await makeDraft('Still only planned');
+    const { slot } = await inA((calendar) =>
+      calendar.schedule({ contentItemId, localTime: futureLocal(9), ...actor() }),
+    );
+    await withWorkspace(
+      fixtures.a.workspaceId,
+      (db) => db.calendarSlot.update({ where: { id: slot.id }, data: { status: 'PLANNED' } }),
+      { prisma: app },
+    );
+    const target = futureLocal(15);
+    const moved = await inA((calendar) =>
+      calendar.reschedule({ slotId: slot.id, localTime: target, ...actor() }),
+    );
+    expect(moved.slot.scheduledLocalTime).toBe(target);
+  });
+
   it('cancelling takes it off the calendar and returns the item to DRAFT', async () => {
     const contentItemId = await makeDraft('Called off');
     const { slot } = await inA((calendar) =>
@@ -647,7 +700,12 @@ describe('the library and the calendar agree about a scheduled item', () => {
             db,
             workspaceId: fixtures.a.workspaceId,
             policy: CONTENT_POLICY,
-          }).transition({ itemId: contentItemId, to: 'ARCHIVED', ...actor() }),
+          }).transition({
+            itemId: contentItemId,
+            to: 'ARCHIVED',
+            ...actor(),
+            actorPermissionKeys: ['content.edit', 'content.archive'],
+          }),
         { prisma: app },
       ),
     ).rejects.toMatchObject({ code: 'CONFLICT' });

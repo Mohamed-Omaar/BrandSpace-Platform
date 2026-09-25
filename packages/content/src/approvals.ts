@@ -27,6 +27,7 @@ import {
   reviewCycleLimitReached,
   selfApprovalNotPermitted,
 } from './errors';
+import { NotificationService } from '@brandspace/notifications';
 import type { ContentPolicy } from './policy';
 
 /**
@@ -806,6 +807,92 @@ export class ContentApprovalService {
       after: { approvalStatus: 'CANCELLED', cycle: approval.cycle },
     });
     return cancelled;
+  }
+
+  /**
+   * B-3 — AN EDIT WITHDRAWS THE OPEN REVIEW.
+   *
+   * A reviewer is asked to judge one version of a post. Editing it while the
+   * review is open used to leave the review open, so a reviewer could approve
+   * text that had changed underneath them. Now the edit, the withdrawal and
+   * the item's return to DRAFT happen in ONE transaction (the caller's
+   * `withWorkspace`), and the reviewers who were asked are told.
+   *
+   * SYSTEM-INITIATED, SO NO CANCEL PERMISSION IS ASKED FOR. `cancel()` requires
+   * the requester or an approver; here the author of the change already passed
+   * the edit's own authorization, and refusing the withdrawal would either
+   * refuse the edit or leave the stale review open — the bug itself.
+   *
+   * THE SAME ROW LOCK `decide()` and `cancel()` take, so an edit racing a
+   * verdict has one winner: either the verdict lands first and there is no
+   * PENDING cycle left to withdraw, or the withdrawal does and the verdict
+   * finds the cycle already closed.
+   *
+   * THE NOTIFICATION IS WRITTEN HERE, not through the optional notifier: an
+   * edit can come from the dashboard, the studio's AI tools in the API, the
+   * Copilot or an automation, and the reviewer must hear from all of them.
+   * The notification is a pointer — the post's title and a link — like every
+   * other approval notification.
+   */
+  async withdrawForEdit(input: { itemId: string; actorUserId: string }): Promise<Approval | null> {
+    const locked = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "approval"
+      WHERE "workspaceId" = ${this.#workspaceId}::uuid
+        AND "contentItemId" = ${input.itemId}::uuid
+        AND "status" = 'PENDING'
+      FOR UPDATE
+    `;
+    const approvalId = locked[0]?.id;
+    if (!approvalId) return null;
+
+    const withdrawn = await this.#db.approval.updateMany({
+      where: { id: approvalId, workspaceId: this.#workspaceId, status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
+    if (withdrawn.count === 0) return null;
+    const approval = await this.#db.approval.findUniqueOrThrow({ where: { id: approvalId } });
+
+    const item = await this.#db.contentItem.findUnique({
+      where: { id: input.itemId },
+      select: { id: true, title: true, status: true },
+    });
+    if (item?.status === 'IN_REVIEW') {
+      await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
+    }
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'content.review_cancelled',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'Approval',
+      resourceId: approval.id,
+      brandId: approval.brandId,
+      severity: 'NOTICE',
+      reason: 'edited_during_review',
+      before: { approvalStatus: 'PENDING', itemStatus: 'IN_REVIEW' },
+      after: { approvalStatus: 'CANCELLED', itemStatus: 'DRAFT', cycle: approval.cycle },
+    });
+
+    // The people who were asked — the assignee, or everyone who could have
+    // picked it up — never the person who just made the edit.
+    const asked = approval.assignedToUserId
+      ? [approval.assignedToUserId]
+      : await this.eligibleReviewers({
+          brandId: approval.brandId,
+          excludeUserId: approval.requestedByUserId,
+        });
+    await new NotificationService({ db: this.#db, workspaceId: this.#workspaceId }).create({
+      userIds: asked.filter((userId) => userId !== input.actorUserId),
+      templateKey: 'approval.withdrawn_after_edit',
+      payload: { itemTitle: item?.title ?? '' },
+      linkPath: `/content/compose?item=${input.itemId}`,
+      brandId: approval.brandId,
+      resourceType: 'Approval',
+      resourceId: approval.id,
+      idempotencyKey: `approval.withdrawn_after_edit:${approval.id}`,
+    });
+
+    return approval;
   }
 
   /**

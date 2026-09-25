@@ -22,6 +22,12 @@ export const NOTIFICATION_TEMPLATES = {
   'approval.changes_requested': { severity: 'warning' },
   /** A reviewer turned it down. Goes to whoever asked. */
   'approval.rejected': { severity: 'warning' },
+  /**
+   * B-3 — the post was edited while it waited, so the open review was
+   * withdrawn: what the reviewer was asked to judge no longer exists. Goes to
+   * the reviewers who were asked. The author sends it again when ready.
+   */
+  'approval.withdrawn_after_edit': { severity: 'info' },
 
   /*
    * Phase 6 — Social Publishing.

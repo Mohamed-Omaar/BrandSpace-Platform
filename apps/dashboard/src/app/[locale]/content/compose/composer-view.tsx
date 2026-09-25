@@ -81,6 +81,11 @@ export interface ComposerDraft {
   readonly insufficientKnowledge: boolean;
   readonly citations: readonly { readonly label: string }[];
   readonly variants: readonly ComposerVariant[];
+  /**
+   * B-2 — publishing or published: a record of what was sent. Opened
+   * read-only, with "Duplicate" as the way to a new version.
+   */
+  readonly readOnly?: boolean;
 }
 
 export interface ComposerViewProps {
@@ -196,6 +201,8 @@ export interface ComposerViewProps {
     uploadMedia(formData: FormData): Promise<void>;
     /** D-288 — answer the reviewer, resolve their thread, and resubmit. */
     resubmit(formData: FormData): Promise<void>;
+    /** B-2 — a new draft from a published post, which cannot be edited. */
+    duplicate?(formData: FormData): Promise<void>;
     /**
      * WRITE THE POST YOURSELF — no model, no credits (D-224).
      *

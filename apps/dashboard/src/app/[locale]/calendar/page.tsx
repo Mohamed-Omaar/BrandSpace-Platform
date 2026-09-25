@@ -1,4 +1,4 @@
-import { formatLocalTime, partsInZone } from '@brandspace/content';
+import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime, partsInZone } from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type {
@@ -501,6 +501,7 @@ export default async function CalendarPage({
       mediaCount: mediaIds.length,
       // D-290 — what the drawer previews: the first version's words and cover.
       itemStatus: view.item.status,
+      reschedulable: RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status),
       previewPlatform: view.variants[0]?.platformKey ?? null,
       previewBody: view.variants[0]?.body ?? '',
       previewMedia: cover

@@ -18,6 +18,7 @@ import {
 
 import type { BrandKnowledgeArea } from '@brandspace/database';
 import { assertBrandInScope, brandInScope, brandScopeFilter } from '@brandspace/shared';
+import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
 
 /**
@@ -110,6 +111,12 @@ export async function inBrandBrain<T>(
           workspaceId,
           store: objectStore(),
           policy: resolved.ingestion,
+          // B-8 — the same storage quota the asset library charges, resolved
+          // through the entitlements engine (D-10), metered in bytes (B-1).
+          storage: {
+            usage: scoped.usage,
+            limitGb: await scoped.entitlements.limit(workspaceId, QUOTA_FEATURES.storageGb),
+          },
           // Built per call, because the extractors carry the configured limits
           // and those change when an owner activates a new version. pdf.js is
           // imported lazily inside `defaultExtractors`, so a request that never

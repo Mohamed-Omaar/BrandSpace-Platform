@@ -87,6 +87,8 @@ export interface SlotDetail {
   readonly readiness: SlotReadinessDetail | null;
   /** D-290 — the drawer's preview and facts. */
   readonly itemStatus?: string;
+  /** B-4 — whether this plan can still move (PLANNED or SCHEDULED only). */
+  readonly reschedulable?: boolean;
   readonly previewPlatform?: string | null;
   readonly previewBody?: string;
   readonly previewMedia?: readonly {
@@ -720,7 +722,7 @@ export function CalendarView({
               </Banner>
             ) : null}
 
-            {canSchedule ? (
+            {canSchedule && openSlot.reschedulable !== false ? (
               <form action={actions.reschedule} style={{ display: 'grid', gap: spacingTokens.md }}>
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="month" value={month} />

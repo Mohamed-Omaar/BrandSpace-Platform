@@ -9,10 +9,12 @@ import {
 import { AppError, brandIdQueryFilter } from '@brandspace/shared';
 import {
   contentItemNotFound,
+  contentNotEditable,
   draftLimitReached,
   transitionNotAllowed,
   unsupportedPlatform,
 } from './errors';
+import { ContentApprovalService } from './approvals';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
@@ -39,6 +41,17 @@ import { validateVariant } from './validation';
  * editing tools and the quote live in `ContentStudioService`, which extends
  * this one and runs only where a gateway legitimately exists (`apps/api`).
  */
+/**
+ * B-2 — the statuses in which a post's words and media are a RECORD of what was
+ * sent and no longer change. The composer reads the same list to open such a
+ * post read-only with "Duplicate" instead of a Save that would be refused.
+ */
+export const READ_ONLY_CONTENT_STATUSES: readonly ContentItem['status'][] = [
+  'PUBLISHING',
+  'PUBLISHED',
+  'PARTIALLY_PUBLISHED',
+];
+
 export interface ContentLibraryOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -589,6 +602,8 @@ export class ContentLibraryService {
       where: { id: input.variantId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
     });
     if (!variant) throw contentItemNotFound();
+    // B-2 — before anything is resolved or written.
+    await this.assertEditable(variant.contentItemId);
 
     const platform = findPlatform(this.policy, variant.platformKey);
     if (!platform) throw unsupportedPlatform();
@@ -703,6 +718,22 @@ export class ContentLibraryService {
   }
 
   /**
+   * B-2 — PUBLISHED IS READ-ONLY. A post that is being sent, or was sent,
+   * describes what the audience received; editing it afterwards would make the
+   * record disagree with the channel, and its approval would cover words nobody
+   * approved. Checked by every path that changes a variant's content — the
+   * manual editor and the studio's AI tools, which check BEFORE the model is
+   * called so a refused edit never costs a credit. The way on is "Duplicate".
+   */
+  protected async assertEditable(contentItemId: string): Promise<void> {
+    const item = await this.db.contentItem.findUnique({
+      where: { id: contentItemId },
+      select: { status: true },
+    });
+    if (item && READ_ONLY_CONTENT_STATUSES.includes(item.status)) throw contentNotEditable();
+  }
+
+  /**
    * See `editVariant`. Separate so the reason has somewhere to live, and
    * PROTECTED so the studio's AI edits obey the same rule (D-284): a caption an
    * inline tool rewrote is as changed as one a person retyped.
@@ -744,6 +775,25 @@ export class ContentLibraryService {
         reason: 'edited_after_scheduling',
         after: { status: 'SCHEDULED', approvalStillCovers: false },
       });
+      return;
+    }
+
+    /*
+     * B-3 — AN EDIT IN REVIEW WITHDRAWS THE REVIEW. The reviewer was asked to
+     * judge the version that was sent; leaving the review open let them
+     * approve words that had changed underneath them. The withdrawal, the
+     * return to DRAFT, the audit event and the reviewers' notification happen
+     * here, in the edit's own transaction. The author sends it again.
+     *
+     * CHANGES_REQUESTED is left alone: its cycle is already decided, and
+     * editing is exactly what the reviewer asked for.
+     */
+    if (item.status === 'IN_REVIEW') {
+      await new ContentApprovalService({
+        db: this.db,
+        workspaceId: this.workspaceId,
+        policy: this.policy,
+      }).withdrawForEdit({ itemId: item.id, actorUserId });
       return;
     }
 
@@ -791,12 +841,29 @@ export class ContentLibraryService {
     to: 'DRAFT' | 'ARCHIVED';
     actorUserId: string;
     actorBrandScope: readonly string[];
+    /** B-7 — the actor's permissions; the service decides which one applies. */
+    actorPermissionKeys: readonly string[];
   }): Promise<ContentItem> {
     // D-132, as in `editVariant` above.
     const item = await this.db.contentItem.findFirst({
       where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actorBrandScope }) },
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
+
+    /*
+     * B-7 — ARCHIVE AND RESTORE ARE ONE PERMISSION. Shelving a post and
+     * bringing it back off the shelf are the same decision in two directions,
+     * so both need `content.archive`. The screen used to offer Restore to
+     * anyone with `content.submit` while the server asked for `content.edit`,
+     * so the button and the refusal disagreed. Returning a post with changes
+     * requested to a plain draft is editing, and stays `content.edit`. Decided
+     * HERE, from the item's real status, not from what the form claimed.
+     */
+    const needed =
+      input.to === 'ARCHIVED' || item.status === 'ARCHIVED' ? 'content.archive' : 'content.edit';
+    if (!input.actorPermissionKeys.includes(needed)) {
+      throw new AppError('FORBIDDEN', `Moving this content requires ${needed}.`);
+    }
 
     const allowed: Record<string, readonly string[]> = {
       DRAFT: ['ARCHIVED'],

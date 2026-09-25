@@ -110,7 +110,12 @@ export function ContentLibrary({
   };
   readonly view: 'grid' | 'list';
   readonly ideas: readonly LibraryIdea[];
-  readonly can: { readonly create: boolean; readonly submit: boolean };
+  readonly can: {
+    readonly create: boolean;
+    readonly submit: boolean;
+    /** B-6 — may put a post on the calendar (`content.schedule`). */
+    readonly schedule: boolean;
+  };
   /** A per-render key so a double-clicked Duplicate makes one copy. */
   readonly duplicateToken: string;
   /** D-305 — which page of the library this is, and whether another follows. */
@@ -177,7 +182,8 @@ export function ContentLibrary({
           </button>
         </form>
       ) : null}
-      {card.status === 'APPROVED' || card.status === 'DRAFT' ? (
+      {/* B-6 — only for a member the calendar would let schedule it. */}
+      {can.schedule && (card.status === 'APPROVED' || card.status === 'DRAFT') ? (
         <Link
           href={`/${locale}/calendar?item=${card.id}`}
           className={buttonClass('ghost')}

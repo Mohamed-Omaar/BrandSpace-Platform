@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
 import { withWorkspace } from '@brandspace/database';
+import { UsageService } from '@brandspace/entitlements';
 import {
   BrandIngestionService,
   ExtractorRegistry,
@@ -94,6 +95,11 @@ async function inA<T>(
         new BrandIngestionService({
           db,
           workspaceId: fixtures.a.workspaceId,
+          // B-8 — uploads charge the workspace storage quota; unlimited here.
+          storage: {
+            usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+            limitGb: null,
+          },
           store,
           policy: POLICY,
           extractors: new ExtractorRegistry([new PlainTextExtractor(LIMITS)]),
@@ -526,6 +532,11 @@ async function inAWithRealExtractors<T>(
         new BrandIngestionService({
           db,
           workspaceId: fixtures.a.workspaceId,
+          // B-8 — uploads charge the workspace storage quota; unlimited here.
+          storage: {
+            usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+            limitGb: null,
+          },
           store,
           policy: WIDE_POLICY,
           extractors,

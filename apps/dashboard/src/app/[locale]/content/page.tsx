@@ -377,7 +377,11 @@ export default async function ContentPage({
         ideas={ideas}
         duplicateToken={randomUUID()}
         paging={{ page: pageNumber, hasMore }}
-        can={{ create: may('content.create'), submit: may('content.submit') }}
+        can={{
+          create: may('content.create'),
+          submit: may('content.submit'),
+          schedule: may('content.schedule'),
+        }}
         options={{
           brands:
             brands.length > 1

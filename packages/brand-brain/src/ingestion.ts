@@ -6,7 +6,8 @@ import {
   type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import { QUOTA_FEATURES, QuotaExceededError, type UsageService } from '@brandspace/entitlements';
+import { AppError, assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
 import type { ExtractorRegistry } from './extraction';
 import {
   chunkText,
@@ -67,6 +68,17 @@ export interface IngestionServiceOptions {
    */
   readonly extractors: ExtractorRegistry;
   readonly factExtractor?: FactExtractor;
+  /**
+   * B-8 — the workspace's storage quota, the SAME one the asset library
+   * charges (`limit.storage_gb`, metered in exact bytes since B-1). Required
+   * by `upload()`, which refuses to run without it rather than store bytes
+   * nobody counted; a worker that only PROCESSES documents does not need it.
+   */
+  readonly storage?: {
+    readonly usage: UsageService;
+    /** The plan's limit in gigabytes, from the entitlements engine; null is unlimited. */
+    readonly limitGb: number | null;
+  };
   readonly clock?: Clock;
 }
 
@@ -116,6 +128,7 @@ export class BrandIngestionService {
   readonly #policy: IngestionPolicy;
   readonly #extractors: ExtractorRegistry;
   readonly #facts: FactExtractor;
+  readonly #storage: IngestionServiceOptions['storage'];
   readonly #clock: Clock;
 
   constructor(options: IngestionServiceOptions) {
@@ -125,6 +138,7 @@ export class BrandIngestionService {
     this.#policy = options.policy;
     this.#extractors = options.extractors;
     this.#facts = options.factExtractor ?? new KeywordFactExtractor();
+    this.#storage = options.storage;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -191,6 +205,19 @@ export class BrandIngestionService {
     });
     if (liveCount >= this.#policy.maxDocumentsPerBrand) throw storageLimitReached();
 
+    /*
+     * B-8 — A SOURCE DOCUMENT IS STORAGE, AND IT IS COUNTED LIKE ANY FILE.
+     *
+     * Brand Brain uploads went to the object store without touching the
+     * workspace's storage quota, so a plan's storage limit could be exceeded
+     * without limit through this door. The exact bytes are charged here,
+     * AFTER every refusal that needs no bytes and BEFORE anything is written,
+     * so a refused upload costs nothing and stores nothing. The key names this
+     * workspace and this upload, so a retried request is charged once; the
+     * replay above returns before reaching it.
+     */
+    await this.#chargeStorage(input.bytes.byteLength, input.idempotencyKey);
+
     const now = this.#clock.now();
 
     const document = await this.#db.brandSourceDocument.create({
@@ -250,6 +277,26 @@ export class BrandIngestionService {
     });
 
     return { document: stored, job };
+  }
+
+  async #chargeStorage(bytes: number, idempotencyKey: string): Promise<void> {
+    if (!this.#storage) {
+      throw new AppError('INTERNAL', 'Uploading a source document requires the storage quota.');
+    }
+    try {
+      await this.#storage.usage.consumeBytes({
+        workspaceId: this.#workspaceId,
+        featureKey: QUOTA_FEATURES.storageGb,
+        limitGb: this.#storage.limitGb,
+        bytes,
+        idempotencyKey: `brand-source-upload:${this.#workspaceId}:${idempotencyKey}`,
+      });
+    } catch (error) {
+      // The engine's refusal names an internal feature key; the customer is
+      // told the same thing the asset library tells them.
+      if (error instanceof QuotaExceededError) throw storageLimitReached();
+      throw error;
+    }
   }
 
   /**

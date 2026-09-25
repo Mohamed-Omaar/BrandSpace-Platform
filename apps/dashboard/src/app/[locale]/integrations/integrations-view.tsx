@@ -293,18 +293,36 @@ export function IntegrationsView({
                       {t('integrations.check')}
                     </button>
                   </form>
+                  {/*
+                    B-9 — DISCONNECTING IS TWO STEPS (CLAUDE.md §2.5). The first
+                    click only opens the explanation; the second, a separate
+                    danger button, submits. The same `<details>` pattern the
+                    automations screen uses for delete: no client JavaScript, so
+                    it works with scripting off. The action also refuses a post
+                    that did not come through the confirming button.
+                  */}
                   {mayManage ? (
-                    <form action={actions.disconnect} style={formStyle}>
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="connectionId" value={row.id} />
-                      <button
-                        type="submit"
-                        style={buttonStyle('neutral')}
+                    <details style={formStyle}>
+                      <summary
+                        style={{ ...buttonStyle('neutral'), listStyle: 'none' }}
                         data-testid={`disconnect-${row.id}`}
                       >
                         {t('integrations.disconnect')}
-                      </button>
-                    </form>
+                      </summary>
+                      <form action={actions.disconnect} style={formStyle}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="connectionId" value={row.id} />
+                        <input type="hidden" name="intent" value="DISCONNECT" />
+                        <p style={noticeStyle}>{t('integrations.disconnectConfirmBody')}</p>
+                        <button
+                          type="submit"
+                          style={buttonStyle('danger')}
+                          data-testid={`disconnect-confirm-${row.id}`}
+                        >
+                          {t('integrations.disconnectConfirmSubmit')}
+                        </button>
+                      </form>
+                    </details>
                   ) : null}
                 </div>
               </li>

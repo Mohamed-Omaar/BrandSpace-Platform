@@ -483,11 +483,21 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     if (!to) throw new Error('unsupported transition');
-    const permission = to === 'ARCHIVED' ? 'content.archive' : 'content.edit';
-    const session = await requireWorkspace(locale, permission);
+    // B-7 — archiving always needs `content.archive`. A move back to DRAFT may
+    // be a restore (`content.archive`) or an editorial step (`content.edit`),
+    // which only the item's own status can tell, so the service decides.
+    const session =
+      to === 'ARCHIVED'
+        ? await requireWorkspace(locale, 'content.archive')
+        : await requireWorkspace(locale);
 
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
-      (await library()).transition({ itemId, to, ...actorOf(session) }),
+      (await library()).transition({
+        itemId,
+        to,
+        ...actorOf(session),
+        actorPermissionKeys: session.workspace.permissionKeys,
+      }),
     );
     destination =
       to === 'ARCHIVED'

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace } from '@brandspace/database';
+import { UsageService } from '@brandspace/entitlements';
 import { assertBrandInScope, brandInScope, brandScopeFilter } from '@brandspace/shared';
 import {
   BrandIngestionService,
@@ -263,6 +264,11 @@ describe('uploads respect the scope', () => {
         new BrandIngestionService({
           db,
           workspaceId: fixtures.a.workspaceId,
+          // B-8 — uploads charge the workspace storage quota; unlimited here.
+          storage: {
+            usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+            limitGb: null,
+          },
           store,
           policy: UPLOAD_POLICY,
           extractors: new ExtractorRegistry([new PlainTextExtractor(LIMITS)]),
@@ -293,6 +299,11 @@ describe('uploads respect the scope', () => {
       new BrandIngestionService({
         db,
         workspaceId: fixtures.a.workspaceId,
+        // B-8 — uploads charge the workspace storage quota; unlimited here.
+        storage: {
+          usage: new UsageService({ prisma: db as unknown as PrismaClient }),
+          limitGb: null,
+        },
         store,
         policy: UPLOAD_POLICY,
         extractors: new ExtractorRegistry([new PlainTextExtractor(LIMITS)]),

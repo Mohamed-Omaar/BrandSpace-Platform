@@ -244,6 +244,9 @@ export default async function MembersPage({
     optionalMessage(locale, `members.${kind}.${status}`) ?? status;
 
   const may = (key: string) => workspace.permissionKeys.includes(key);
+  // B-5 — nobody is offered a change to their own role or brand access; the
+  // service refuses it anyway.
+  const isSelf = (member: { userId: string }) => member.userId === session.customer.userId;
   const mayManage = may('member.assign_role') || may('member.remove');
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
@@ -452,10 +455,11 @@ export default async function MembersPage({
                     {mayManage ? (
                       <Cell>
                         <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
-                          {may('member.assign_role') && assignableRoles.length > 0
+                          {may('member.assign_role') && !isSelf(m) && assignableRoles.length > 0
                             ? roleForm(m.membershipId, m.email)
                             : null}
                           {may('member.assign_role') &&
+                          !isSelf(m) &&
                           !m.isWorkspaceOwner &&
                           assignable.includes(m.roleKey)
                             ? accessForm(m.membershipId, m.brandScope, m.email)
@@ -509,10 +513,11 @@ export default async function MembersPage({
                   ],
                   actions: mayManage ? (
                     <>
-                      {may('member.assign_role') && assignableRoles.length > 0
+                      {may('member.assign_role') && !isSelf(m) && assignableRoles.length > 0
                         ? roleForm(`${m.membershipId}-m`, `${m.email}-mobile`)
                         : null}
                       {may('member.assign_role') &&
+                      !isSelf(m) &&
                       !m.isWorkspaceOwner &&
                       assignable.includes(m.roleKey)
                         ? accessForm(m.membershipId, m.brandScope, `${m.email}-mobile`)

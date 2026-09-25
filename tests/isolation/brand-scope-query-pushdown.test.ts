@@ -508,6 +508,7 @@ describe('the mutation paths carry BrandScope in the query, not after it', () =>
         to: 'ARCHIVED',
         actorUserId: fixtures.a.userId,
         actorBrandScope: elsewhere(),
+        actorPermissionKeys: ['content.edit', 'content.archive'],
       }),
     );
     await expect(done).rejects.toThrow(/not found/i);
@@ -594,6 +595,7 @@ describe('the mutation paths carry BrandScope in the query, not after it', () =>
             to: 'ARCHIVED',
             actorUserId: fixtures.a.userId,
             actorBrandScope: elsewhere(),
+            actorPermissionKeys: ['content.edit', 'content.archive'],
           }),
         ).done;
       } catch (error) {

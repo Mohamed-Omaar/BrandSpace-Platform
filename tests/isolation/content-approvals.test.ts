@@ -280,6 +280,7 @@ describe('submitting for review', () => {
         to: 'ARCHIVED',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.archive'],
       }),
     );
     await expect(

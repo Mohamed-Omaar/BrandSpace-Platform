@@ -359,6 +359,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                       label={t('billing.packBuy')}
                       busyLabel={t('billing.checkoutOpening')}
                       failedLabel={t('billing.checkoutFailed')}
+                      confirm={{
+                        title: t('billing.packConfirmTitle'),
+                        body: fill('billing.packConfirmBody', {
+                          credits: String(offer.pack.credits),
+                          price: show(offer.price),
+                        }),
+                        submitLabel: t('billing.packConfirmSubmit'),
+                        cancelLabel: t('billing.packConfirmCancel'),
+                        closeLabel: t('common.close'),
+                      }}
                       testId={`pack-buy-${offer.pack.key}`}
                     />
                   ) : null}

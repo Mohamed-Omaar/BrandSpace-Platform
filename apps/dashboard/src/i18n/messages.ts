@@ -1021,6 +1021,9 @@ export const messages = {
     'editor.insufficientBody':
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
+    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. انسخه لإنشاء نسخة جديدة.',
+    'editor.inReviewWarning':
+      'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
       'تمت الموافقة على هذا المنشور. تعديل محتواه أو وسائطه سيعيده إلى مسودة ويتطلب مراجعة جديدة.',
     'editor.variants.label': 'نسخ المنصات',
@@ -1260,6 +1263,9 @@ export const messages = {
     'integrations.connectBody': 'سننقلك إلى المنصة لتمنح الإذن. لا نطلب كلمة المرور أبدًا.',
     'integrations.connect': 'ربط الحساب',
     'integrations.disconnect': 'فصل الحساب',
+    'integrations.disconnectConfirmBody':
+      'لن تُنشر المنشورات المجدولة لهذا الحساب ما دام مفصولًا. هل تريد فصله؟',
+    'integrations.disconnectConfirmSubmit': 'نعم، افصل الحساب',
     'integrations.check': 'فحص الاتصال',
     'integrations.provider': 'المنصة',
     'integrations.brand': 'العلامة التجارية',
@@ -1481,6 +1487,7 @@ export const messages = {
     'activity.action.strategy.rejected': 'رُفضت استراتيجية',
     'activity.action.creative.image.generated': 'أُنشئت صورة',
     'activity.action.assets.uploaded': 'رُفع ملف',
+    'activity.action.usage.storage_recomputed': 'أُعيد احتساب مساحة التخزين المستخدمة',
     'activity.action.assets.archived': 'أُرشف ملف',
     'activity.action.assets.deleted': 'حُذف ملف',
     'activity.action.assets.restored': 'استُعيد ملف',
@@ -1585,6 +1592,8 @@ export const messages = {
     'notifications.template.approval.approved': 'تم اعتماد منشورك',
     'notifications.template.approval.changes_requested': 'طُلبت تعديلات على منشورك',
     'notifications.template.approval.rejected': 'رُفض منشورك',
+    'notifications.template.approval.withdrawn_after_edit':
+      'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
     'notifications.template.publishing.connection_needs_reauth': 'حساب متصل يحتاج إعادة ربط',
@@ -2238,6 +2247,10 @@ export const messages = {
     'billing.packCredits': '{credits} رصيد',
     'billing.packExpiry': 'تنتهي صلاحيتها بعد {days} يومًا',
     'billing.packBuy': 'شراء',
+    'billing.packConfirmTitle': 'شراء حزمة الرصيد هذه؟',
+    'billing.packConfirmBody': '{credits} رصيد مقابل {price}. ستدفع في الصفحة التالية.',
+    'billing.packConfirmSubmit': 'المتابعة إلى الدفع',
+    'billing.packConfirmCancel': 'إلغاء',
     'billing.packsEmpty': 'لا توجد حزم معروضة في بلدك وعملتك حاليًا.',
     'billing.checkoutOpening': 'جارٍ تجهيز صفحة الدفع…',
     'billing.checkoutRedirect':
@@ -3592,6 +3605,10 @@ export const messages = {
     'editor.insufficientBody':
       'BrandSpace needs more information before it can make a grounded draft about this topic.',
     'editor.insufficient.add': 'Add knowledge',
+    'editor.published.readOnly':
+      'This post has been published and can no longer be edited. Duplicate it to make a new version.',
+    'editor.inReviewWarning':
+      'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
       'This post was approved. Editing its content or media will return it to Draft and require review again.',
     'editor.variants.label': 'Platform versions',
@@ -3838,6 +3855,9 @@ export const messages = {
       'We send you to the platform to grant access. We never ask for your password.',
     'integrations.connect': 'Connect account',
     'integrations.disconnect': 'Disconnect',
+    'integrations.disconnectConfirmBody':
+      'Posts scheduled for this account will not be published while it is disconnected. Disconnect it?',
+    'integrations.disconnectConfirmSubmit': 'Yes, disconnect',
     'integrations.check': 'Check connection',
     'integrations.provider': 'Platform',
     'integrations.brand': 'Brand',
@@ -4069,6 +4089,7 @@ export const messages = {
     'activity.action.strategy.rejected': 'A strategy was rejected',
     'activity.action.creative.image.generated': 'An image was generated',
     'activity.action.assets.uploaded': 'A file was uploaded',
+    'activity.action.usage.storage_recomputed': 'Storage usage was recalculated',
     'activity.action.assets.archived': 'A file was archived',
     'activity.action.assets.deleted': 'A file was deleted',
     'activity.action.assets.restored': 'A file was restored',
@@ -4173,6 +4194,8 @@ export const messages = {
     'notifications.template.approval.approved': 'Your post was approved',
     'notifications.template.approval.changes_requested': 'Changes were requested on your post',
     'notifications.template.approval.rejected': 'Your post was turned down',
+    'notifications.template.approval.withdrawn_after_edit':
+      'A post waiting for your review was edited, so the review was withdrawn',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
     'notifications.template.publishing.connection_needs_reauth':
@@ -4866,6 +4889,10 @@ export const messages = {
     'billing.packCredits': '{credits} credits',
     'billing.packExpiry': 'Expires after {days} days',
     'billing.packBuy': 'Buy',
+    'billing.packConfirmTitle': 'Buy this credit pack?',
+    'billing.packConfirmBody': '{credits} credits for {price}. You will pay on the next screen.',
+    'billing.packConfirmSubmit': 'Continue to payment',
+    'billing.packConfirmCancel': 'Cancel',
     'billing.packsEmpty': 'No packs are on sale in your country and currency right now.',
     'billing.checkoutOpening': 'Preparing the payment page…',
     'billing.checkoutRedirect':
@@ -5377,6 +5404,15 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   CONCURRENT_EDIT: {
     en: 'Someone else changed this. Reload before saving.',
     ar: 'عدّل شخص آخر هذا. أعد التحميل قبل الحفظ.',
+  },
+  /*
+   * B-1 — a version upload that lost a race to another upload or a restore.
+   * Nothing of it was kept (its object deleted, its storage given back), so
+   * the honest instruction is simply to try again.
+   */
+  ASSET_VERSION_CONFLICT: {
+    en: 'This asset changed while your version was being uploaded. Please try again.',
+    ar: 'تم تحديث هذا الملف أثناء رفع النسخة. حاول مرة أخرى.',
   },
   RATE_LIMITED: {
     en: 'Too many attempts. Wait a moment and try again.',

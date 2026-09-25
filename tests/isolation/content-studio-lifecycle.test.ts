@@ -972,7 +972,13 @@ describe('the lifecycle this phase owns, and the transitions it refuses', () => 
     const itemId = generated.item.id;
     const move = (to: 'DRAFT' | 'ARCHIVED') =>
       inA((studio) =>
-        studio.transition({ itemId, to, actorUserId: fixtures.a.userId, actorBrandScope: [] }),
+        studio.transition({
+          itemId,
+          to,
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.archive'],
+        }),
       );
 
     expect((await move('ARCHIVED')).status).toBe('ARCHIVED');
@@ -1000,6 +1006,7 @@ describe('the lifecycle this phase owns, and the transitions it refuses', () => 
           to: 'IN_REVIEW' as never,
           actorUserId: fixtures.a.userId,
           actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.archive'],
         }),
       ),
     ).rejects.toThrow();
@@ -1025,6 +1032,7 @@ describe('the lifecycle this phase owns, and the transitions it refuses', () => 
           to: 'SCHEDULED' as never,
           actorUserId: fixtures.a.userId,
           actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.archive'],
         }),
       ),
     ).rejects.toThrow();

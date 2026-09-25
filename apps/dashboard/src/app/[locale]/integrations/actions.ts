@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
 import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
 import { callSocialApi, inSocial } from '../../../server/social-context';
 
@@ -142,6 +142,11 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
   let destination: string;
   try {
     await requireWorkspace(locale, 'integrations.manage');
+    // B-9 — only the confirming button carries this. A post without it (a
+    // replayed or scripted single click) is refused before anything is sent.
+    if (formData.get('intent') !== 'DISCONNECT') {
+      throw new AppError('VALIDATION_FAILED', 'Disconnecting needs to be confirmed.');
+    }
     const connectionId = String(formData.get('connectionId') ?? '');
     const result = await callSocialApi(
       `/v1/social/connections/${encodeURIComponent(connectionId)}/disconnect`,

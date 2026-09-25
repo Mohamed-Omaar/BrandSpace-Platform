@@ -1415,6 +1415,12 @@ model UsageCounter {
   periodEnd   DateTime @db.Timestamptz(6)
 
   usedValue Int @default(0)
+  /// EXACT bytes, for a quota measured in storage (B-1). Only the
+  /// `limit.storage_gb` counter moves it; every other counter leaves it at 0.
+  /// On that counter `usedValue` is DERIVED from it — the gigabytes the total
+  /// occupies, rounded up once — rather than a sum of per-file roundings.
+  /// BIGINT because a workspace holds more than the 2 GiB an Int can count.
+  usedBytes BigInt @default(0)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -1441,6 +1447,9 @@ model UsageEvent {
   featureKey     String
   idempotencyKey String @unique
   amount         Int
+  /// SIGNED bytes a storage movement moved (B-1); null for every unit quota.
+  /// A byte movement records `amount` 0 — it is not a whole unit of anything.
+  bytes          BigInt?
 
   counterId  String   @db.Uuid
   occurredAt DateTime @default(now()) @db.Timestamptz(6)
