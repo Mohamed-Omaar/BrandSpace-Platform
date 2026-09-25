@@ -17,6 +17,11 @@ function sourceFiles(dir: string): readonly string[] {
   const out: string[] = [];
   const walk = (current: string): void => {
     for (const entry of readdirSync(current)) {
+      // `module-boundaries.test.ts` writes a `__boundary_probe.ts` here and
+      // deletes it again; the suites run together, so a scan could list it and
+      // then find it gone (ENOENT). It is that suite's artifact, not source —
+      // the same race `design-system.test.ts` already guards against.
+      if (entry.startsWith('__boundary_probe')) continue;
       const full = resolve(current, entry);
       if (statSync(full).isDirectory()) walk(full);
       else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) out.push(full);
