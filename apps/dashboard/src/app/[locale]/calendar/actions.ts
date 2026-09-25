@@ -34,6 +34,18 @@ function pageUrl(locale: string, params: Record<string, string> = {}): string {
   return `/${locale}/calendar${search ? `?${search}` : ''}`;
 }
 
+/**
+ * B8 — where a Posts-menu action comes back to. A closed set: the library, or
+ * the calendar (the default).
+ */
+function landing(locale: string, formData: FormData, params: Record<string, string>): string {
+  if (formData.get('returnTo') === '/content') {
+    const search = new URLSearchParams(params).toString();
+    return `/${locale === 'ar' ? 'ar' : 'en'}/content${search ? `?${search}` : ''}`;
+  }
+  return pageUrl(locale, params);
+}
+
 /** Carry the month the customer was looking at through the redirect. */
 function periodOf(formData: FormData): Record<string, string> {
   const month = String(formData.get('month') ?? '').trim();
@@ -122,11 +134,19 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
         ...actorOf(session),
       }),
     );
-    destination = pageUrl(locale, { ...period, ok: 'CONTENT_RESCHEDULED' });
+    destination = landing(locale, formData, { ...period, ok: 'CONTENT_RESCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'reschedule', period);
+    if (formData.get('returnTo') === '/content') {
+      const failed = new URL(destination, 'http://x').searchParams;
+      destination = landing(locale, formData, {
+        error: failed.get('error') ?? '',
+        ref: failed.get('ref') ?? '',
+      });
+    }
   }
   revalidatePath(`/${locale}/calendar`);
+  revalidatePath(`/${locale}/content`);
   redirect(destination);
 }
 
@@ -142,9 +162,16 @@ export async function cancelScheduleAction(formData: FormData): Promise<void> {
     await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
       (await calendar()).cancel({ slotId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ...period, ok: 'CONTENT_UNSCHEDULED' });
+    destination = landing(locale, formData, { ...period, ok: 'CONTENT_UNSCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'cancel', period);
+    if (formData.get('returnTo') === '/content') {
+      const failed = new URL(destination, 'http://x').searchParams;
+      destination = landing(locale, formData, {
+        error: failed.get('error') ?? '',
+        ref: failed.get('ref') ?? '',
+      });
+    }
   }
   revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/content`);

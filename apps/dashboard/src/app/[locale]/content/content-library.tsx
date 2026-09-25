@@ -17,7 +17,14 @@ import {
   statusTone,
   typographyTokens,
 } from '@brandspace/ui';
-import { duplicateContentAction, submitForReviewAction } from './actions';
+import {
+  duplicateContentAction,
+  setContentCampaignAction,
+  submitForReviewAction,
+  transitionItemAction,
+} from './actions';
+import { cancelScheduleAction, rescheduleContentAction } from '../calendar/actions';
+import { PostMenu } from './post-menu';
 
 /**
  * THE CONTENT LIBRARY (Phase 6 final, D-277 §15, D-282) — media-first.
@@ -66,6 +73,25 @@ export interface LibraryCard {
     | { readonly kind: 'none' };
   /** The caption, for a text-only card. */
   readonly excerpt: string;
+  /** B8 — what the Posts menu needs: the brand, the campaign, the live plan, the links. */
+  readonly brandId?: string;
+  readonly campaignId?: string | null;
+  readonly slot?: { readonly id: string; readonly date: string; readonly time: string } | null;
+  readonly links?: readonly { readonly label: string; readonly url: string }[];
+}
+
+/** B8 — the Posts menu's permissions, options and words, for every card. */
+export interface LibraryMenu {
+  readonly can: {
+    readonly schedule: boolean;
+    readonly archive: boolean;
+    readonly attachCampaign: boolean;
+    readonly changeCampaign: boolean;
+  };
+  /** Each brand's campaigns the reader may file a post under. */
+  readonly campaignsByBrand: Readonly<Record<string, readonly { id: string; name: string }[]>>;
+  readonly today: string;
+  readonly labels: Readonly<Record<string, string>>;
 }
 
 export interface LibraryIdea {
@@ -94,6 +120,7 @@ export function ContentLibrary({
   can,
   duplicateToken,
   paging,
+  menu,
 }: {
   readonly locale: string;
   readonly t: (key: string) => string;
@@ -120,6 +147,7 @@ export function ContentLibrary({
   readonly duplicateToken: string;
   /** D-305 — which page of the library this is, and whether another follows. */
   readonly paging?: { readonly page: number; readonly hasMore: boolean } | undefined;
+  readonly menu?: LibraryMenu | undefined;
 }) {
   const pageHref = (page: number) => {
     const params = new URLSearchParams({ ...filters, ...(page > 1 ? { page: String(page) } : {}) });
@@ -207,6 +235,26 @@ export function ContentLibrary({
             {t('content.action.duplicate')}
           </button>
         </form>
+      ) : null}
+      {menu ? (
+        <PostMenu
+          locale={locale}
+          itemId={card.id}
+          status={card.status}
+          campaignId={card.campaignId ?? null}
+          campaigns={card.brandId ? (menu.campaignsByBrand[card.brandId] ?? []) : []}
+          slot={card.slot ?? null}
+          links={card.links ?? []}
+          today={menu.today}
+          can={menu.can}
+          labels={menu.labels}
+          actions={{
+            reschedule: rescheduleContentAction,
+            cancel: cancelScheduleAction,
+            transition: transitionItemAction,
+            setCampaign: setContentCampaignAction,
+          }}
+        />
       ) : null}
     </div>
   );

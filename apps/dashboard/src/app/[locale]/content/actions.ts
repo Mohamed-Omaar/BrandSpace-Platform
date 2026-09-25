@@ -87,23 +87,19 @@ function approvalActorOf(session: WorkspaceSession) {
 }
 
 /**
- * THE PERMISSION THAT LETS CONTENT BE FILED UNDER A CAMPAIGN.
+ * WHO MAY FILE A POST UNDER A CAMPAIGN (Q21, D-318; supersedes D-232 here).
  *
- * `setContentCampaignAction` has required `campaigns.manage` since Phase 8, so
- * that is the EXISTING contract for associating a content item with a campaign
- * and manual creation aligns with it rather than inventing a second rule. The
- * alternative reading — that `campaigns.read` should be enough, because filing
- * a post does not edit the campaign — is a real product question, and changing
- * it here would silently widen RBAC for a path nobody reviewed: `campaigns.read`
- * is held by three more roles than `campaigns.manage`, so it would hand
- * `content_creator`, `approver` and `analyst` an authority the screen that
- * already does this refuses them.
- *
- * A NAMED CONSTANT, so the UI gate, the create path and the option list cannot
- * drift apart — the defect this correction exists for was exactly that kind of
- * gap between a control and its server check.
+ * ATTACHING a campaign to a post that has none is part of making the post, so
+ * `content.create` is enough (`campaigns.manage` too). MOVING a post to another
+ * campaign, or REMOVING it, reorganises a campaign and needs `campaigns.manage`
+ * — decided inside `CampaignService.setContentCampaign`, which reads the post's
+ * current campaign. This helper only says whether ANY campaign choice may be
+ * offered for a new or campaign-less post: the option list, a new draft and a
+ * copy.
  */
-const CAMPAIGN_ASSOCIATION_PERMISSION = 'campaigns.manage';
+function mayAttachCampaign(permissionKeys: readonly string[]): boolean {
+  return permissionKeys.includes('content.create') || permissionKeys.includes('campaigns.manage');
+}
 
 /**
  * The campaigns a NEW post could be filed under, for one brand.
@@ -133,7 +129,9 @@ export async function listCampaignOptionsAction(
   brandId: string,
 ): Promise<readonly { id: string; name: string }[]> {
   if (brandId.trim() === '') return [];
-  const session = await requireWorkspace(locale, CAMPAIGN_ASSOCIATION_PERMISSION);
+  const session = await requireWorkspace(locale);
+  // Q21 — the same authority that lets the option be used; otherwise a miss.
+  if (!mayAttachCampaign(session.workspace.permissionKeys)) notFound();
   const campaigns = await inContentStudio(session.workspace.workspaceId, async (services) =>
     services.campaigns().list({
       brandId,
@@ -188,35 +186,11 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
     const campaignId = String(formData.get('campaignId') ?? '') || null;
     /*
-     * FILING A NEW POST UNDER A CAMPAIGN NEEDS THE SAME AUTHORITY AS REFILING
-     * AN EXISTING ONE.
-     *
-     * `content.create` alone reached this action, and it accepted a
-     * `campaignId` — so a member who may write a draft but not manage campaigns
-     * could establish an association that `setContentCampaignAction` would then
-     * refuse to CHANGE. A right to create a link that cannot be edited is a
-     * worse grant than either half of it, and it was reachable by a crafted
-     * POST whether or not the selector was on the screen.
-     *
-     * CHECKED ONLY WHEN THERE IS A CAMPAIGN. A member without the permission
-     * keeps the whole authoring path; they simply cannot file the post, which
-     * is exactly the authority they hold elsewhere.
-     *
-     * SHAPED LIKE A MISS, AND THROWN AS A TYPED ERROR rather than `notFound()`.
-     * An unauthorized association must not announce that a campaign by that id
-     * exists, which is why the code is `NOT_FOUND` — the same refusal
-     * `#resolveCampaign` gives for a campaign in another brand. It is thrown as
-     * an `AppError` because this action's `catch` maps a typed error to a public
-     * code the screen can name; `notFound()` throws a framework control-flow
-     * error that the same `catch` would swallow into "something went wrong",
-     * which tells the customer nothing and tells a reader of the log less.
+     * Q21 (D-318) — filing a NEW post under a campaign is part of creating it,
+     * so the `content.create` this action already requires is the authority.
+     * The campaign itself is still checked by the library: same brand, in the
+     * member's scope, or a miss.
      */
-    if (
-      campaignId !== null &&
-      !session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION)
-    ) {
-      throw new AppError('NOT_FOUND', 'Campaign not found.');
-    }
     const hashtags = String(formData.get('hashtags') ?? '')
       .split(/[\s,]+/)
       .map((tag) => tag.replace(/^#/, '').trim())
@@ -363,9 +337,17 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
 export async function setContentCampaignAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
+  // B8 — the Posts menu comes back to the library (a closed set).
+  const fromLibrary = formData.get('returnTo') === '/content';
   let destination: string;
   try {
-    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
+    /*
+     * Q21 (D-318) — membership in the content surfaces at the door; WHICH
+     * permission the change needs (attach: `content.create`; move or remove:
+     * `campaigns.manage`) depends on the post's current campaign, so the
+     * service decides it, from the session's keys.
+     */
+    const session = await requireWorkspaceAction(locale, 'content.read');
     const raw = formData.get('campaignId');
     if (raw === null) notFound();
     const campaignId = String(raw).trim();
@@ -378,16 +360,21 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
           userId: session.customer.userId,
           brandScope: session.workspace.brandScope,
         },
+        actorPermissionKeys: session.workspace.permissionKeys,
       }),
     );
-    destination = pageUrl(locale, '/compose', {
-      item: itemId,
-      ok: 'CAMPAIGN_LINKED',
-      ...attachParam(formData),
-    });
+    destination = fromLibrary
+      ? pageUrl(locale, '', { ok: 'CAMPAIGN_LINKED' })
+      : pageUrl(locale, '/compose', {
+          item: itemId,
+          ok: 'CAMPAIGN_LINKED',
+          ...attachParam(formData),
+        });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
-    destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
+    destination = fromLibrary
+      ? failure(locale, error, 'setContentCampaign', '')
+      : failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
@@ -486,10 +473,20 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get('itemId') ?? '');
   const raw = String(formData.get('to') ?? '');
   const to = raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
+  // B8 — the Posts menu comes back to the library (a closed set).
+  const fromLibrary = formData.get('returnTo') === '/content';
 
   let destination: string;
   try {
     if (!to) throw new Error('unsupported transition');
+    /*
+     * B8 — ARCHIVING IS TWO STEPS: the screen asks, then this confirms. The
+     * second step is the `intent` its confirmation carries; a single-click
+     * form (or a crafted POST) without it archives nothing.
+     */
+    if (to === 'ARCHIVED' && formData.get('intent') !== 'ARCHIVE') {
+      throw new AppError('VALIDATION_FAILED', 'Archiving needs a confirmation.');
+    }
     // B-7 — archiving always needs `content.archive`. A move back to DRAFT may
     // be a restore (`content.archive`) or an editorial step (`content.edit`),
     // which only the item's own status can tell, so the service decides.
@@ -507,11 +504,13 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
       }),
     );
     destination =
-      to === 'ARCHIVED'
+      to === 'ARCHIVED' || fromLibrary
         ? pageUrl(locale, '', { ok: 'SAVED' })
         : pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'transitionItem', '/compose', { item: itemId });
+    destination = fromLibrary
+      ? failure(locale, error, 'transitionItem', '')
+      : failure(locale, error, 'transitionItem', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
@@ -745,7 +744,8 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'content.create');
-    const mayFile = session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION);
+    // Q21 — a copy is a new post; filing it where the original was is attaching.
+    const mayFile = mayAttachCampaign(session.workspace.permissionKeys);
     const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
       const source = await library.getItem(itemId, session.workspace.brandScope);

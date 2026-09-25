@@ -159,8 +159,7 @@ describe('A5 + E6 · a refusal names the permission and who can change it', () =
       // Files that report failures through `actionErrorCode` must gate through
       // the action variant, or the refusal is caught and shown as INTERNAL.
       const plain = source.match(/await requireWorkspace\(locale, [^)]+\)/g) ?? [];
-      const allowed = plain.filter((call) => call.includes('CAMPAIGN_ASSOCIATION_PERMISSION'));
-      if (plain.length !== allowed.length) offenders.push(path.relative(root, file));
+      if (plain.length > 0) offenders.push(path.relative(root, file));
       if (/toPublicErrorCode\(error\)/.test(source)) offenders.push(`${file}: toPublicErrorCode`);
     }
     expect(offenders).toEqual([]);
@@ -771,5 +770,131 @@ describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
     expect(view).toMatch(/className="bs-narrow-only"\s*data-testid="calendar-move-note"/);
     both('calendar.moveFromPost');
+  });
+});
+
+describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a campaign', () => {
+  const menu = () => read('apps/dashboard/src/app/[locale]/content/post-menu.tsx');
+
+  it('offers each item only when the permission AND the post allow it', () => {
+    const source = menu();
+    expect(source).toContain('const mayMove = can.schedule && slot !== null;');
+    expect(source).toContain('const mayArchive = can.archive && ARCHIVABLE.has(status);');
+    expect(source).toContain("const mayRestore = can.archive && status === 'ARCHIVED';");
+    expect(source).toContain(
+      "const ARCHIVABLE = new Set(['DRAFT', 'CHANGES_REQUESTED', 'APPROVED']);",
+    );
+    expect(source).toContain('(campaignId === null ? can.attachCampaign : can.changeCampaign);');
+    // Nothing to offer → no trigger at all, rather than an empty menu.
+    expect(source).toMatch(/channelLinks\.length === 0\) \{\s*return null;/);
+    const page = read('apps/dashboard/src/app/[locale]/content/page.tsx');
+    expect(page).toContain("schedule: may('content.schedule'),");
+    expect(page).toContain("archive: may('content.archive'),");
+    expect(page).toContain("changeCampaign: may('campaigns.manage'),");
+  });
+
+  it('every item posts to an action that already exists — no second way to change a post', () => {
+    const library = read('apps/dashboard/src/app/[locale]/content/content-library.tsx');
+    expect(library).toContain('transition: transitionItemAction,');
+    for (const action of [
+      'actions.reschedule',
+      'actions.cancel',
+      'actions.transition',
+      'actions.setCampaign',
+    ]) {
+      expect(menu()).toContain(`action={${action}}`);
+    }
+    expect(menu()).not.toMatch(/'use server'/);
+  });
+
+  it('"View on" opens only an https link, in a new tab that cannot reach back', () => {
+    expect(menu()).toContain("links.filter((link) => link.url.startsWith('https://'))");
+    expect(menu()).toContain('rel="noopener noreferrer"');
+    const page = read('apps/dashboard/src/app/[locale]/content/page.tsx');
+    expect(page).toContain("!job.externalPostUrl.startsWith('https://')");
+  });
+
+  it('archiving is two steps everywhere: the server refuses an archive without the confirmation', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    expect(actions).toMatch(
+      /if \(to === 'ARCHIVED' && formData\.get\('intent'\) !== 'ARCHIVE'\) \{\s*throw new AppError\('VALIDATION_FAILED'/,
+    );
+    expect(menu()).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
+    expect(menu()).toContain('<ConfirmDialog');
+    const studio = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(studio).toContain('<details data-testid="archive-disclosure">');
+    expect(studio).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
+  });
+
+  it('the menu returns to the library only for the one known path', () => {
+    for (const file of [
+      'apps/dashboard/src/app/[locale]/content/actions.ts',
+      'apps/dashboard/src/app/[locale]/calendar/actions.ts',
+    ]) {
+      const source = read(file);
+      expect(source).toContain("formData.get('returnTo') === '/content'");
+      // Only ever compared with a literal — never followed as a URL.
+      const uses = source.match(/formData\.get\('returnTo'\)[^\n]*/g) ?? [];
+      for (const use of uses) expect(use, file).toMatch(/^formData\.get\('returnTo'\) === '\/\w+'/);
+    }
+  });
+
+  it('the service decides Q21: attach with content.create, move or remove with campaigns.manage', () => {
+    const service = read('packages/content/src/campaigns.ts');
+    expect(service).toContain(
+      'const attaching = item.campaignId === null && input.campaignId !== null;',
+    );
+    expect(service).toContain(
+      "attaching ? !held('content.create') && !held('campaigns.manage') : !held('campaigns.manage')",
+    );
+    expect(service).toContain("permission: attaching ? 'content.create' : 'campaigns.manage',");
+    // The no-op comes first: saving the same campaign asks for nothing.
+    expect(service.indexOf('if (input.campaignId === item.campaignId) return;')).toBeLessThan(
+      service.indexOf('const attaching ='),
+    );
+    // Every caller hands the session's permissions to the rule.
+    expect(read('apps/dashboard/src/app/[locale]/content/actions.ts')).toContain(
+      'actorPermissionKeys: session.workspace.permissionKeys,',
+    );
+    expect(read('packages/copilot/src/executors.ts')).toContain(
+      'actorPermissionKeys: context.authorization.permissionKeys',
+    );
+  });
+
+  it('the composer offers a campaign to a creator only while the post has none', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain(
+      '{can.manageCampaigns || (can.attachCampaign && draft.campaignId === null) ? (',
+    );
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    expect(actions).toContain(
+      "return permissionKeys.includes('content.create') || permissionKeys.includes('campaigns.manage');",
+    );
+    expect(actions).not.toContain('CAMPAIGN_ASSOCIATION_PERMISSION');
+  });
+
+  it('the trigger is named, and every word is in both languages', () => {
+    expect(menu()).toContain(
+      "<span style={visuallyHiddenStyle()}>{l('content.menu.label')}</span>",
+    );
+    for (const key of [
+      'content.menu.label',
+      'content.menu.move',
+      'content.menu.unschedule',
+      'content.menu.archive',
+      'content.menu.restore',
+      'content.menu.campaign',
+      'content.menu.viewOn',
+      'content.move.title',
+      'content.move.submit',
+      'content.campaign.title',
+      'content.campaign.none',
+      'content.archive.title',
+      'content.archive.confirm',
+      'content.archive.confirmBody',
+      'common.cancel',
+    ]) {
+      both(key);
+    }
   });
 });

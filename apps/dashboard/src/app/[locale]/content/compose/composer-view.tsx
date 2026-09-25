@@ -144,6 +144,8 @@ export interface ComposerViewProps {
     submit: boolean;
     archive: boolean;
     manageCampaigns: boolean;
+    /** Q21 — may file a post that has no campaign (`content.create` or `campaigns.manage`). */
+    attachCampaign?: boolean;
     uploadMedia: boolean;
     /** D-288 — may put this post on the calendar (`content.schedule`). */
     schedule?: boolean;
@@ -367,7 +369,7 @@ export function ComposerView({
   useEffect(() => {
     // Only the pre-draft form owns this; an existing draft has its own campaign
     // control, with its own action and its own list.
-    if (draft !== null || !can.manageCampaigns) return;
+    if (draft !== null || !can.attachCampaign) return;
     if (brandId === '') {
       setCampaignId('');
       setCampaignOptions([]);
@@ -398,7 +400,7 @@ export function ComposerView({
     return () => {
       current = false;
     };
-  }, [brandId, defaultBrandId, draft, can.manageCampaigns, campaigns, actions, locale]);
+  }, [brandId, defaultBrandId, draft, can.attachCampaign, campaigns, actions, locale]);
   const [busy, setBusy] = useState<null | 'quote' | 'generate' | string>(null);
   const [quote, setQuote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -501,10 +503,10 @@ export function ComposerView({
        * THE CAMPAIGN THE READER CHOSE IS FILED THROUGH THE ONE ACTION THAT
        * FILES CAMPAIGNS (§19). Generation goes through the AI Gateway, which
        * neither takes nor stores a campaign; the association is a second,
-       * audited step under `campaigns.manage`, and its own redirect opens the
-       * new draft — with its own success or failure message.
+       * audited step — attaching needs `content.create` (Q21) — and its own
+       * redirect opens the new draft, with its own success or failure message.
        */
-      if (campaignId !== '' && can.manageCampaigns) {
+      if (campaignId !== '' && can.attachCampaign) {
         const form = new FormData();
         form.set('locale', locale);
         form.set('itemId', String(payload['itemId']));
@@ -993,19 +995,17 @@ export function ComposerView({
                 THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
                 ASSOCIATION, not merely on having campaigns to show.
 
-                `setContentCampaignAction` has required `campaigns.manage` since
-                Phase 8. Offering this selector to a member without it would
-                have let them establish a link they could never change
-                afterwards — and would have put campaign names on the screen for
-                a role that holds no campaign authority. The server enforces the
-                same permission on the submission, so hiding the control is
+                Q21 (D-318): filing a NEW post under a campaign is part of
+                making it, so `content.create` (or `campaigns.manage`) is the
+                authority; changing it later needs `campaigns.manage`. The
+                server enforces the same rule, so hiding the control is
                 courtesy rather than security.
 
                 CONTROLLED, because the idempotency key has to include the
                 choice: two posts identical but for the campaign are two
                 requests, not a retry of one.
               */}
-                {can.manageCampaigns && campaignOptions.length > 0 ? (
+                {can.attachCampaign && campaignOptions.length > 0 ? (
                   <div className="cs-field">
                     <label htmlFor={`${fieldId}-manual-campaign`}>
                       {t['campaigns.composerLabel']}

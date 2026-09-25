@@ -632,6 +632,7 @@ describe('F1 · changing a post’s campaign is an edit', () => {
         contentItemId: itemId,
         campaignId: id,
         actor: { userId: fixtures.a.userId, brandScope: [] },
+        actorPermissionKeys: ['content.create', 'campaigns.manage'],
       }),
     );
 

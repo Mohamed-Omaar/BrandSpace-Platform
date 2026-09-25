@@ -61,6 +61,8 @@ export interface DraftEditorProps {
     submit: boolean;
     archive: boolean;
     manageCampaigns: boolean;
+    /** Q21 — may file a post that has no campaign yet. */
+    attachCampaign?: boolean;
     uploadMedia: boolean;
     schedule?: boolean;
   };
@@ -444,7 +446,11 @@ export function DraftEditor({
           </div>
         ) : null}
 
-        {can.manageCampaigns ? (
+        {/*
+          Q21 — a post with no campaign may be filed by anyone who may create
+          posts; moving or removing a campaign needs campaigns.manage.
+        */}
+        {can.manageCampaigns || (can.attachCampaign && draft.campaignId === null) ? (
           <form
             action={actions.setCampaign}
             className="cs-field"
@@ -907,14 +913,26 @@ export function DraftEditor({
                 </form>
               ) : null}
               {can.archive && draft.status !== 'ARCHIVED' ? (
-                <form action={actions.transition}>
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="itemId" value={draft.id} />
-                  <input type="hidden" name="to" value="ARCHIVED" />
-                  <button type="submit" className="cs-ghost-button cs-compact">
+                /*
+                 * B8 — ARCHIVE ASKS FIRST, the same two steps as the Posts
+                 * menu: the disclosure opens the question, the button inside
+                 * answers it with the `intent` the server requires.
+                 */
+                <details data-testid="archive-disclosure">
+                  <summary className="cs-ghost-button cs-compact">
                     {t['content.composer.archive']}
-                  </button>
-                </form>
+                  </summary>
+                  <form action={actions.transition} className="cs-field">
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    <input type="hidden" name="to" value="ARCHIVED" />
+                    <input type="hidden" name="intent" value="ARCHIVE" />
+                    <p className="cs-hint">{t['content.archive.confirmBody']}</p>
+                    <button type="submit" className="cs-dark-button" data-testid="archive-confirm">
+                      {t['content.archive.confirm']}
+                    </button>
+                  </form>
+                </details>
               ) : null}
             </div>
 

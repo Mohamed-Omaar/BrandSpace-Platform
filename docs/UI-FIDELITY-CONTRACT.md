@@ -563,6 +563,17 @@ fill until hover — so an empty month does not become a wall of buttons. A day 
 `data-past` and refuses a drop with a warning `Banner`. On a phone (no drag) a `bs-narrow-only` line
 says a post is moved from its own drawer. Drag is never the only way (WCAG 2.5.7).
 
+### 6.3.30 Prototype v90 Phase 2A — the Posts "…" menu and a two-step archive (B8, Q21)
+
+Each library card that has anything to offer gains a `DropdownMenu` in the `control` trigger — the
+showcase's own "⋯" post menu, with the label as the trigger's visually hidden name. Items are
+`menuItemStyle()` buttons or links: Move… (a `Dialog` with the calendar drawer's date and time
+fields), Unschedule, Campaign… (a `Dialog` with one `select`), Archive…, Restore, and "View on
+{platform}" for an `https:` published link (new tab, `noopener noreferrer`). An item appears only
+when the role's permission and the post's state both allow it; a card with nothing to offer shows no
+trigger. Archive asks first — `ConfirmDialog` in the menu, a `details` disclosure in the Studio — and
+the server refuses an archive that does not carry the confirmation. No new component or treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

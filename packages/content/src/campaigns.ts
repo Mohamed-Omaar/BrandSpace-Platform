@@ -287,6 +287,12 @@ export class CampaignService {
     contentItemId: string;
     campaignId: string | null;
     actor: CampaignActor;
+    /**
+     * Q21 (D-318) — the actor's permissions, from the session. Which one the
+     * change needs depends on the post's CURRENT campaign, which only this
+     * service reads, so the rule lives here rather than at every caller.
+     */
+    actorPermissionKeys: readonly string[];
   }): Promise<void> {
     const item = await this.#db.contentItem.findFirst({
       where: {
@@ -311,6 +317,24 @@ export class CampaignService {
      * different id still goes through the full check below.
      */
     if (input.campaignId === item.campaignId) return;
+
+    /*
+     * Q21 (D-318, clarifying Q11 / D-232) — ATTACHING a campaign to a post
+     * that has none is part of making the post: `content.create` (or
+     * `campaigns.manage`). MOVING it to another campaign, or REMOVING it,
+     * reorganises a campaign: `campaigns.manage`. The same rule in the Posts
+     * menu, the Studio and the Copilot, because they all come here. Refused
+     * with FORBIDDEN naming the permission (E6): the member can see the post.
+     */
+    const attaching = item.campaignId === null && input.campaignId !== null;
+    const held = (key: string) => input.actorPermissionKeys.includes(key);
+    if (
+      attaching ? !held('content.create') && !held('campaigns.manage') : !held('campaigns.manage')
+    ) {
+      throw new AppError('FORBIDDEN', 'This campaign change needs another permission.', {
+        permission: attaching ? 'content.create' : 'campaigns.manage',
+      });
+    }
 
     /*
      * F1 — A CAMPAIGN CHANGE IS AN EDIT. A published post is a record of what

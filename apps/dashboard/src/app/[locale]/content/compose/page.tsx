@@ -158,7 +158,12 @@ export default async function ComposePage({
          * list stays empty.
          */
         const options =
-          composingBrandId === null || !workspace.permissionKeys.includes('campaigns.manage')
+          // Q21 — a new post may be filed by anyone who may create it.
+          composingBrandId === null ||
+          !(
+            workspace.permissionKeys.includes('content.create') ||
+            workspace.permissionKeys.includes('campaigns.manage')
+          )
             ? []
             : await services.campaigns().list({
                 brandId: composingBrandId,
@@ -815,6 +820,13 @@ export default async function ComposePage({
           // F1 — a published post's campaign is read-only like its words.
           manageCampaigns:
             workspace.permissionKeys.includes('campaigns.manage') && !composerDraft?.readOnly,
+          // Q21 (D-318) — attaching a campaign to a post that has none is part
+          // of making it: `content.create` is enough. Moving or removing one
+          // stays `manageCampaigns`.
+          attachCampaign:
+            (workspace.permissionKeys.includes('content.create') ||
+              workspace.permissionKeys.includes('campaigns.manage')) &&
+            !composerDraft?.readOnly,
           uploadMedia:
             workspace.permissionKeys.includes('assets.upload') && !composerDraft?.readOnly,
           schedule: workspace.permissionKeys.includes('content.schedule'),
@@ -955,6 +967,8 @@ const EDITOR_KEYS = [
   'editor.insufficient.add',
   'editor.approvedWarning',
   'editor.reviewer.label',
+  'content.archive.confirm',
+  'content.archive.confirmBody',
   'editor.reviewer.auto',
   'editor.scheduledWarning.scheduler',
   'editor.scheduledWarning.unschedules',
