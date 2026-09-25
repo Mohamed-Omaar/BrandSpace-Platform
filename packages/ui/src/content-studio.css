@@ -379,11 +379,49 @@
   background: var(--cs-soft);
   padding: 9px;
   font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.cs-channel:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(17, 17, 20, 0.08);
+}
+
+.cs-channel-icon {
+  inline-size: 20px;
+  block-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .cs-channel.selected {
   background: var(--cs-ink);
   color: #fff;
+}
+
+.cs-channel.selected .cs-channel-icon {
+  background: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-channel {
+    transition: none;
+  }
+
+  .cs-channel:not(:disabled):hover {
+    transform: none;
+  }
 }
 
 .cs-form-actions {
