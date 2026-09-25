@@ -11,7 +11,7 @@ import {
 import { StatusBadge, statusTone } from './data';
 import { CalendarIcon } from './icons';
 import type { ApprovalStatus, PostStatus, SocialPlatform } from './social-post-types';
-import { PLATFORM_ACCENT } from './social-post-types';
+import { PlatformIcon } from './platform-icons';
 
 /**
  * A post, as it appears in the Content Library and on the Calendar.
@@ -82,7 +82,6 @@ function PostArt({ post }: { readonly post: PostRecord }) {
     <AbstractMedia seed={post.mediaSeed} alt={post.mediaAlt} />
   );
 }
-
 function PostThumb({ post, size }: { readonly post: PostRecord; readonly size: string }) {
   return post.mediaSrc ? (
     <AssetThumb src={post.mediaSrc} alt={post.mediaAlt} size={size} />
@@ -161,21 +160,12 @@ function PlatformDots({
 }) {
   return (
     <span
-      style={{ display: 'inline-flex', alignItems: 'center', gap: spacingTokens['3xs'] }}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: spacingTokens.xs }}
       aria-label={platforms.map((p) => labels.platformNames[p]).join(', ')}
       role="img"
     >
       {platforms.map((platform) => (
-        <span
-          key={platform}
-          aria-hidden="true"
-          style={{
-            inlineSize: '0.5rem',
-            blockSize: '0.5rem',
-            borderRadius: radiusTokens.full,
-            background: PLATFORM_ACCENT[platform],
-          }}
-        />
+        <PlatformIcon key={platform} platform={platform} size={12} />
       ))}
     </span>
   );

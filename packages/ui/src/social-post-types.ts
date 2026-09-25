@@ -7,6 +7,8 @@
  * types belong on the shared side of the boundary (F-25).
  */
 
+import { platformBrandTokens } from './tokens';
+
 export type SocialPlatform = 'instagram' | 'facebook' | 'linkedin' | 'x' | 'tiktok';
 
 /**
@@ -173,18 +175,13 @@ export const CAPTION_CLAMP: Record<SocialPlatform, number> = {
 };
 
 /**
- * A platform's identity colour, used ONLY for a small badge.
+ * A platform's identity colour, used ONLY for a small badge. Now the platforms'
+ * official colours, from `platformBrandTokens`.
  *
  * Not for a themed card: the preview is a BrandSpace surface showing what a
  * post will look like, not an imitation of the platform's own interface.
  */
-export const PLATFORM_ACCENT: Record<SocialPlatform, string> = {
-  instagram: '#C13584',
-  facebook: '#1877F2',
-  linkedin: '#0A66C2',
-  x: '#0F172A',
-  tiktok: '#111827',
-};
+export const PLATFORM_ACCENT: Record<SocialPlatform, string> = { ...platformBrandTokens };
 
 /** Resolve the format a preview should use when the caller did not choose. */
 export function defaultFormat(platform: SocialPlatform): SocialFormat {
