@@ -1204,7 +1204,6 @@ select option {
   }
 }
 
-
 /* BRANDSPACE STAGING VISUAL ROLLOUT — 2026-09-25 */
 /*
  * Owner-approved polish for the live product. This does not change page
@@ -1214,13 +1213,12 @@ select option {
  * request it.
  */
 .bs-panel {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(121, 53, 254, 0.028) 0%,
-      rgba(255, 221, 21, 0.018) 7rem,
-      rgba(255, 255, 255, 0) 15rem
-    );
+  background: linear-gradient(
+    180deg,
+    rgba(121, 53, 254, 0.028) 0%,
+    rgba(255, 221, 21, 0.018) 7rem,
+    rgba(255, 255, 255, 0) 15rem
+  );
 }
 
 @keyframes bs-page-enter {
