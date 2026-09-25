@@ -178,18 +178,31 @@ describe('P6-13 · changing a member’s brand access', () => {
     const ownerMembership = await platform.membership.findFirstOrThrow({
       where: { workspaceId: fixtures.a.workspaceId, userId: fixtures.a.userId },
     });
+    // Another person with owner authority still cannot narrow the owner...
+    expect(
+      await refusal(
+        memberships.changeBrandAccess(
+          fixtures.a.workspaceId,
+          { ...owner(), userId: randomUUID() },
+          ownerMembership.id,
+          [fixtures.a.brandId],
+        ),
+      ),
+    ).toBe('VALIDATION_FAILED');
+    // ...the owner cannot narrow themselves (B-5)...
     expect(
       await refusal(
         memberships.changeBrandAccess(fixtures.a.workspaceId, owner(), ownerMembership.id, [
           fixtures.a.brandId,
         ]),
       ),
-    ).toBe('VALIDATION_FAILED');
+    ).toBe('FORBIDDEN');
+    // ...and an admin — a different person — cannot touch the owner at all.
     expect(
       await refusal(
         memberships.changeBrandAccess(
           fixtures.a.workspaceId,
-          { ...owner(), roleKey: 'workspace_admin' },
+          { ...owner(), userId: randomUUID(), roleKey: 'workspace_admin' },
           ownerMembership.id,
           [],
         ),
@@ -299,5 +312,94 @@ describe('P6-13 · an invitation carries brand access, bounded by its inviter', 
     expect(code).toBe('FORBIDDEN');
     const row = await platform.invitation.findUniqueOrThrow({ where: { id: issued.invitationId } });
     expect(row.status).toBe('PENDING');
+  });
+});
+
+describe('B-5 · nobody changes their own role or brand access', () => {
+  /** The colleague, acting as a workspace admin on their OWN membership. */
+  const admin = () => ({
+    userId: colleagueUserId,
+    roleKey: 'workspace_admin',
+    permissionKeys: OWNER_PERMISSIONS,
+    brandScope: [] as string[],
+  });
+
+  async function ownMembershipId(userId: string): Promise<string> {
+    const row = await platform.membership.findFirstOrThrow({
+      where: { workspaceId: fixtures.a.workspaceId, userId },
+    });
+    return row.id;
+  }
+
+  async function auditCount(membershipId: string): Promise<number> {
+    return platform.auditEvent.count({
+      where: {
+        workspaceId: fixtures.a.workspaceId,
+        resourceId: membershipId,
+        action: {
+          in: ['workspace.member.role_changed', 'workspace.member.brand_access_changed'],
+        },
+      },
+    });
+  }
+
+  it('the owner cannot change their own role, and nothing is written', async () => {
+    const mine = await ownMembershipId(fixtures.a.userId);
+    const before = await platform.membership.findUniqueOrThrow({ where: { id: mine } });
+    const audits = await auditCount(mine);
+
+    expect(
+      await refusal(memberships.changeRole(fixtures.a.workspaceId, owner(), mine, analystRoleId)),
+    ).toBe('FORBIDDEN');
+
+    const after = await platform.membership.findUniqueOrThrow({ where: { id: mine } });
+    expect(after.roleId).toBe(before.roleId);
+    expect(await auditCount(mine)).toBe(audits);
+  });
+
+  it('an admin cannot raise or change their own role', async () => {
+    const ownerRoleId = (
+      await platform.role.findFirstOrThrow({ where: { key: 'workspace_owner', workspaceId: null } })
+    ).id;
+    expect(
+      await refusal(
+        memberships.changeRole(fixtures.a.workspaceId, admin(), colleagueMembershipId, ownerRoleId),
+      ),
+    ).toBe('FORBIDDEN');
+    expect(
+      await refusal(
+        memberships.changeRole(
+          fixtures.a.workspaceId,
+          admin(),
+          colleagueMembershipId,
+          analystRoleId,
+        ),
+      ),
+    ).toBe('FORBIDDEN');
+  });
+
+  it('nobody can change their own brand access, however they would change it', async () => {
+    const audits = await auditCount(colleagueMembershipId);
+    for (const scope of [[fixtures.a.brandId], [], [brandTwo]]) {
+      expect(
+        await refusal(
+          memberships.changeBrandAccess(
+            fixtures.a.workspaceId,
+            admin(),
+            colleagueMembershipId,
+            scope,
+          ),
+        ),
+      ).toBe('FORBIDDEN');
+    }
+    expect(await auditCount(colleagueMembershipId)).toBe(audits);
+  });
+
+  it('changing SOMEBODY ELSE is unaffected', async () => {
+    await memberships.changeBrandAccess(fixtures.a.workspaceId, owner(), colleagueMembershipId, [
+      fixtures.a.brandId,
+    ]);
+    expect(await scopeOf(colleagueMembershipId)).toEqual([fixtures.a.brandId]);
+    await memberships.changeBrandAccess(fixtures.a.workspaceId, owner(), colleagueMembershipId, []);
   });
 });

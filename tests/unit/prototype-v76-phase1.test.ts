@@ -79,3 +79,15 @@ describe('B-4 · the calendar only offers to move a plan that can move', () => {
     expect(view).toContain('canSchedule && openSlot.reschedulable !== false ? (');
   });
 });
+
+describe('B-5 · the team screen offers no change to your own authority', () => {
+  const page = read('apps/dashboard/src/app/[locale]/members/page.tsx');
+
+  it('hides role and brand-access controls on the reader’s own row, desktop and phone', () => {
+    expect(page).toContain('const isSelf = (member: { userId: string }) =>');
+    expect(
+      page.match(/may\('member\.assign_role'\) && !isSelf\(m\) && assignableRoles/g),
+    ).toHaveLength(2);
+    expect(page.match(/!isSelf\(m\) &&\s*!m\.isWorkspaceOwner/g)).toHaveLength(2);
+  });
+});

@@ -965,10 +965,21 @@ describe('membership rules', () => {
   });
 
   it('refuses to demote the LAST active Workspace Owner', async () => {
+    // B-5 — the owner cannot do it to themselves at all...
     await expect(
       memberships.changeRole(
         fixtures.a.workspaceId,
         owner(fixtures.a.userId),
+        fixtures.a.membershipId,
+        analystRoleId,
+      ),
+    ).rejects.toThrow(/cannot change your own role/i);
+    // ...and the owner invariant still holds against anybody else holding
+    // owner authority, which is the rule this test is about.
+    await expect(
+      memberships.changeRole(
+        fixtures.a.workspaceId,
+        owner(randomUUID()),
         fixtures.a.membershipId,
         analystRoleId,
       ),
@@ -994,11 +1005,19 @@ describe('membership rules', () => {
    * tests above cannot see this, and neither could any amount of reading.
    */
   describe('two owners cannot be removed at once', () => {
-    /** A workspace with `count` owners, returning their membership ids. */
+    /**
+     * A workspace with `count` owners, returning their membership ids.
+     *
+     * B-5: nobody may change their OWN role, so each demotion below is made by
+     * ANOTHER owner — `otherOwner(i)` — which is also the realistic race: two
+     * owners demoting each other at the same moment.
+     */
     async function workspaceWithOwners(count: number): Promise<{
       workspaceId: string;
       ownerUserId: string;
       membershipIds: string[];
+      /** The owner behind each membership, in the same order. */
+      userIds: string[];
     }> {
       const suffix = randomUUID();
       const founder = await platform.user.create({
@@ -1020,6 +1039,7 @@ describe('membership rules', () => {
       });
 
       const membershipIds: string[] = [];
+      const userIds: string[] = [];
       for (let i = 0; i < count; i += 1) {
         const user =
           i === 0
@@ -1042,8 +1062,9 @@ describe('membership rules', () => {
           },
         });
         membershipIds.push(membership.id);
+        userIds.push(user.id);
       }
-      return { workspaceId: workspace.id, ownerUserId: founder.id, membershipIds };
+      return { workspaceId: workspace.id, ownerUserId: founder.id, membershipIds, userIds };
     }
 
     async function activeOwners(workspaceId: string): Promise<number> {
@@ -1053,12 +1074,17 @@ describe('membership rules', () => {
     }
 
     it('parallel DEMOTIONS of the two remaining owners leave one standing', async () => {
-      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(2);
+      const { workspaceId, membershipIds, userIds } = await workspaceWithOwners(2);
       expect(await activeOwners(workspaceId)).toBe(2);
 
       const results = await Promise.allSettled(
-        membershipIds.map((id) =>
-          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        membershipIds.map((id, i) =>
+          memberships.changeRole(
+            workspaceId,
+            owner(userIds[(i + 1) % userIds.length]!),
+            id,
+            analystRoleId,
+          ),
         ),
       );
 
@@ -1107,12 +1133,17 @@ describe('membership rules', () => {
 
     it('four owners demoted at once leave exactly one', async () => {
       // More than two, so a fix that merely serialises PAIRS is not enough.
-      const { workspaceId, ownerUserId, membershipIds } = await workspaceWithOwners(4);
+      const { workspaceId, membershipIds, userIds } = await workspaceWithOwners(4);
       expect(await activeOwners(workspaceId)).toBe(4);
 
       const results = await Promise.allSettled(
-        membershipIds.map((id) =>
-          memberships.changeRole(workspaceId, owner(ownerUserId), id, analystRoleId),
+        membershipIds.map((id, i) =>
+          memberships.changeRole(
+            workspaceId,
+            owner(userIds[(i + 1) % userIds.length]!),
+            id,
+            analystRoleId,
+          ),
         ),
       );
 
@@ -1130,13 +1161,13 @@ describe('membership rules', () => {
       const results = await Promise.allSettled([
         memberships.changeRole(
           first.workspaceId,
-          owner(first.ownerUserId),
+          owner(first.userIds[1]!),
           first.membershipIds[0]!,
           analystRoleId,
         ),
         memberships.changeRole(
           second.workspaceId,
-          owner(second.ownerUserId),
+          owner(second.userIds[1]!),
           second.membershipIds[0]!,
           analystRoleId,
         ),
@@ -1188,11 +1219,12 @@ describe('membership rules', () => {
     // Deliberately a role the admin CAN assign, so the only thing that can
     // refuse this is the TARGET check — "you may not edit somebody who
     // outranks what you may assign". Using an unassignable target role would
-    // pass on the other guard and prove nothing about this one.
+    // pass on the other guard and prove nothing about this one. The admin is
+    // a DIFFERENT person from the owner (B-5 refuses self-changes first).
     await expect(
       memberships.changeRole(
         fixtures.a.workspaceId,
-        admin(fixtures.a.userId),
+        admin(randomUUID()),
         fixtures.a.membershipId,
         analystRoleId,
       ),

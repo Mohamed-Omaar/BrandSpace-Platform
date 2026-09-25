@@ -78,6 +78,28 @@ export interface MembershipServiceOptions {
   readonly clock?: Clock;
 }
 
+/**
+ * B-5 — NOBODY CHANGES THEIR OWN AUTHORITY.
+ *
+ * A member editing their own role or brand access is either raising
+ * themselves (an admin granting themselves a role they were not given) or
+ * stranding the workspace (an owner demoting the last owner, a lone admin
+ * narrowing themselves out of a brand nobody else can reach). Both are
+ * decided by SOMEBODY ELSE. The owner check below still guards the second
+ * case for changes made by others; this one removes the self path entirely.
+ *
+ * FORBIDDEN rather than NOT_FOUND: the actor can see their own membership, so
+ * there is nothing to hide, and the message tells them what to do instead.
+ */
+function assertNotSelf(actor: MembershipActor, memberUserId: string, what: string): void {
+  if (actor.userId === memberUserId) {
+    throw new AppError(
+      'FORBIDDEN',
+      `You cannot change your own ${what}. Ask another member who manages the team.`,
+    );
+  }
+}
+
 export class MembershipService {
   readonly #prisma: PrismaClient;
   readonly #clock: Clock;
@@ -154,6 +176,8 @@ export class MembershipService {
         include: { role: true },
       });
       if (!membership) throw new AppError('NOT_FOUND', 'Member not found.');
+      // B-5 — before anything about the new role is even looked at.
+      assertNotSelf(actor, membership.userId, 'role');
 
       const newRole = await tx.role.findUnique({ where: { id: newRoleId } });
       if (!newRole || newRole.realm !== 'WORKSPACE') {
@@ -228,6 +252,7 @@ export class MembershipService {
         include: { role: true },
       });
       if (!membership) throw new AppError('NOT_FOUND', 'Member not found.');
+      assertNotSelf(actor, membership.userId, 'brand access');
 
       if (!rolesAssignableBy(actor.roleKey).includes(membership.role.key)) {
         throw new AppError('FORBIDDEN', 'Your role may not change that member.');
