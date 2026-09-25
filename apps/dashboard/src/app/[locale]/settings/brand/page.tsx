@@ -11,7 +11,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { requireWorkspace, inWorkspace } from '../../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
 import { paletteFrom, typographyFrom } from '../../../../server/brand-profile';
 import { settingsNavItems } from '../../../../server/settings-nav';
@@ -55,7 +56,9 @@ export default async function BrandProfilePage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'brand.read');
+  const access = await requireWorkspacePage(locale, '/settings/brand');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;

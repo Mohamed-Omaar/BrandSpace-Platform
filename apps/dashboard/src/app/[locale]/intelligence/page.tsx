@@ -13,7 +13,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import {
@@ -85,7 +86,9 @@ export default async function IntelligencePage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'strategy.read');
+  const access = await requireWorkspacePage(locale, '/intelligence');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;

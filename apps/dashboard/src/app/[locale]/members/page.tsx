@@ -23,7 +23,12 @@ import {
   type MediaSeed,
 } from '@brandspace/ui';
 import { brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, memberDisplayName, requireWorkspace } from '../../../server/customer-context';
+import {
+  inWorkspace,
+  memberDisplayName,
+  requireWorkspacePage,
+} from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { PermissionNotice } from '../../../components/permission-notice';
 import { brandContextFor } from '../../../server/brand-context';
 import {
@@ -91,7 +96,9 @@ export default async function MembersPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'member.read');
+  const access = await requireWorkspacePage(locale, '/members');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   // Every read runs inside the tenant context, so RLS — not a `where` clause

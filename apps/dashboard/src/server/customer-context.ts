@@ -29,6 +29,7 @@ import {
 } from '@brandspace/entitlements';
 import { currentEnvironment, isProduction, requestContext } from '@brandspace/shared';
 import { permissionDenied } from './denial';
+import { KNOWN_PAGE_PERMISSIONS, type KnownPage } from './known-routes';
 
 /**
  * Server-only customer context.
@@ -281,6 +282,32 @@ export async function requireWorkspace(
 
   if (permissionKey && !holdsPermission(workspace, permissionKey)) notFound();
   return { customer, workspace, token };
+}
+
+/**
+ * A page on the known navigation list, as this member may see it (E2, Q5).
+ *
+ * `allowed: false` is not an error: the page renders `NoAccessPage` — "No
+ * access to this page" inside the normal shell, answered 200 — because the
+ * route is one the member already knows exists. Only routes in
+ * `KNOWN_PAGE_PERMISSIONS` can be asked for; everything else, and every
+ * record inside these pages, keeps the 404 `requireWorkspace` gives.
+ */
+export type PageAccess =
+  | { readonly allowed: true; readonly session: WorkspaceSession }
+  | {
+      readonly allowed: false;
+      readonly session: WorkspaceSession;
+      readonly route: KnownPage;
+      readonly permissionKey: string;
+    };
+
+export async function requireWorkspacePage(locale: string, route: KnownPage): Promise<PageAccess> {
+  const session = await requireWorkspace(locale);
+  const permissionKey = KNOWN_PAGE_PERMISSIONS[route];
+  return holdsPermission(session.workspace, permissionKey)
+    ? { allowed: true, session }
+    : { allowed: false, session, route, permissionKey };
 }
 
 /**

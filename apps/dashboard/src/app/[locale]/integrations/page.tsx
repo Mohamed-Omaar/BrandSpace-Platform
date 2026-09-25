@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { brandScopeFilter } from '@brandspace/shared';
 import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
@@ -62,7 +63,9 @@ export default async function IntegrationsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'integrations.read');
+  const access = await requireWorkspacePage(locale, '/integrations');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   const ok = typeof query.ok === 'string' ? query.ok : null;

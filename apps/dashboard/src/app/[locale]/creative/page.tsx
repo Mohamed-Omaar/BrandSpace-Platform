@@ -9,7 +9,8 @@ import {
 } from '@brandspace/ui';
 import { CREATIVE_FORMATS, brandTypography } from '@brandspace/creative';
 import '@brandspace/ui/content-studio.css';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -54,7 +55,9 @@ export default async function CreativeStudioPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'assets.upload');
+  const access = await requireWorkspacePage(locale, '/creative');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const single = (key: string): string | undefined => {
     const value = query[key];

@@ -10,7 +10,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor } from '../../../../server/brand-context';
 import { settingsNavItems } from '../../../../server/settings-nav';
 import { translator, type MessageKey } from '../../../../i18n/messages';
@@ -44,7 +45,9 @@ export default async function DataControlsPage({
 }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'workspace.update');
+  const access = await requireWorkspacePage(locale, '/settings/data');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const retentionDays = await inWorkspace(workspace.workspaceId, async ({ db }) => {

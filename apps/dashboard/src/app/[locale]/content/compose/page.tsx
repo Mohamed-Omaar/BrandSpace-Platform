@@ -4,7 +4,8 @@ import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
-import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
@@ -80,7 +81,9 @@ export default async function ComposePage({
   const { locale } = await params;
   const query = await searchParams;
   const translate = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/content/compose');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const single = (key: string): string | undefined => {
     const value = query[key];

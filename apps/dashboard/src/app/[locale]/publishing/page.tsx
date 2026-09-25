@@ -13,7 +13,8 @@ import {
   typographyTokens,
   type BadgeTone,
 } from '@brandspace/ui';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inSocial } from '../../../server/social-context';
 import { mediaForVariants } from '../../../server/media-picker';
@@ -105,7 +106,9 @@ export default async function PublishingPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'publishing.read');
+  const access = await requireWorkspacePage(locale, '/publishing');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
 

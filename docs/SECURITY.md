@@ -1089,7 +1089,10 @@ to have checked:
 
 Enforcement is at four layers — navigation, page loader, server action, and **service**. The service is
 the one that matters; the rest are convenience. A missing permission on a page is a `404`, not a `403`:
-which pages exist but are closed is itself information.
+which pages exist but are closed is itself information. **One exception (D-322, Q5):** a page on the
+known navigation list (`KNOWN_PAGE_PERMISSIONS` — the sidebar, the Settings list and the top bar, which
+every member already sees) answers "No access to this page" inside the shell with a 200. Records inside
+those pages, and every other URL, keep the identical 404.
 
 **Refusals are explained, not disguised (prototype v90 A5/E6).** A server action is posted from a
 screen the member can already see, so its permission refusal is a `FORBIDDEN` that names the

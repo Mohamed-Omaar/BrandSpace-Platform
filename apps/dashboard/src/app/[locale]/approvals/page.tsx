@@ -4,7 +4,8 @@ import {
   type ResolvedApprovalPolicy,
 } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
@@ -58,7 +59,9 @@ export default async function ApprovalsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/approvals');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;

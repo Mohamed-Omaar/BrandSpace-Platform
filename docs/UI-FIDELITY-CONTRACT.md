@@ -536,6 +536,15 @@ icon in `icons.tsx`) and a `label`-scale name. The text-only content card uses `
 in `brandPurplePressed`, and the post's words in `bodySm` / `textPrimary`. `MediaImage` is the
 existing `<img>` that removes itself on error so the tile's own neutral bed shows.
 
+### 6.3.27 Prototype v90 Phase 2A — denial notices and "No access to this page" (A5, E6, E2, D-322)
+
+Both are the existing `StateMessage` `forbidden` state (lock glyph, muted fill), with no new
+treatment. `PermissionNotice` stands where a control the role does not offer would be — the invite
+form on Team, the plan controls on Billing — and says who lacks which permission and who can change
+the role. `NoAccessPage` is the same state inside the normal `WorkspaceShell` (the shell owns the
+`h1`), with the not-found screen's Home button. The Permissions table adds a `label`-scale
+`textSecondary` "From the role" line under each state.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

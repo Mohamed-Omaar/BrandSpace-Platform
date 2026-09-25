@@ -15,6 +15,10 @@ import {
   copilotSurfaceForPath,
 } from '../../apps/dashboard/src/server/copilot-surface';
 import { ROUTE_SCOPES } from '../../apps/dashboard/src/server/route-scope';
+import {
+  KNOWN_PAGE_PERMISSIONS,
+  type KnownPage,
+} from '../../apps/dashboard/src/server/known-routes';
 
 /**
  * PHASE 6 · P6-16 — THE CUSTOMER TOP BAR LEADS TO REAL DOMAINS.
@@ -152,6 +156,12 @@ describe('P6-16 · every destination is a real route, gated as the top bar says'
     const file = path.join(PAGES, route, 'page.tsx');
     expect(existsSync(file), `${route} has no page`).toBe(true);
     const source = readFileSync(file, 'utf8');
+    // E2/Q5 — a known page gates through `requireWorkspacePage(locale, '<route>')`.
+    const known = source.match(/requireWorkspacePage\(\s*locale,\s*'([^']+)'\s*\)/);
+    if (known) {
+      expect(known[1]).toBe(`/${route}`);
+      return KNOWN_PAGE_PERMISSIONS[known[1] as KnownPage];
+    }
     const match = source.match(/requireWorkspace\(\s*locale,\s*('([^']+)'|NOTE_PERMISSION)\s*\)/);
     if (!match) return null;
     return match[2] ?? NOTE_PERMISSION;

@@ -7,7 +7,14 @@ import {
   ROLE_DEFINITIONS,
   isOwnerOnlyPermission,
 } from '@brandspace/shared';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { messages, statusMessage } from '../../apps/dashboard/src/i18n/messages';
+import {
+  KNOWN_PAGE_PERMISSIONS,
+  type KnownPage,
+} from '../../apps/dashboard/src/server/known-routes';
+import { SETTINGS_NAV_ROUTES } from '../../apps/dashboard/src/server/settings-nav';
+import { TOPBAR_CREATE_FLOWS, TOPBAR_PERMISSIONS } from '../../apps/dashboard/src/server/topbar';
 import {
   actionErrorCode,
   deniedPermission,
@@ -165,5 +172,70 @@ describe('A5 + E6 · a refusal names the permission and who can change it', () =
     expect(billing).toMatch(/mayManage \? null : \(\s*<PermissionNotice/);
     const permissions = read('apps/dashboard/src/app/[locale]/permissions/page.tsx');
     expect(permissions).toContain("t('perms.fromRole')");
+  });
+});
+
+describe('E2 / Q5 · "No access to this page" for the known navigation list only', () => {
+  const known = Object.keys(KNOWN_PAGE_PERMISSIONS) as KnownPage[];
+  const pageFile = (route: string) => `apps/dashboard/src/app/[locale]${route}/page.tsx`;
+
+  it('has its title in both languages', () => {
+    both('errors.noAccess.title');
+  });
+
+  it.each(known)('%s gates through the known-route table and renders NoAccessPage', (route) => {
+    const source = read(pageFile(route));
+    expect(source).toContain(`await requireWorkspacePage(locale, '${route}')`);
+    expect(source).toMatch(
+      /if \(!access\.allowed\) return <NoAccessPage locale=\{locale\} access=\{access\} \/>;/,
+    );
+    // The page no longer carries a second, drifting copy of its permission.
+    expect(source).not.toMatch(/requireWorkspace\(locale, '[^']+'\)/);
+  });
+
+  it('the sidebar, the Settings list and the top bar advertise the gate the page applies', () => {
+    const shell = read('apps/dashboard/src/components/workspace-shell.tsx');
+    const nav = [
+      ...shell.matchAll(/href: '(\/[^']+)',\s*key: '[^']+',\s*permission: (?:'([^']+)'|null)/g),
+    ];
+    expect(nav.length).toBeGreaterThan(10);
+    for (const [, href, permission] of nav) {
+      if (!permission) continue;
+      expect(KNOWN_PAGE_PERMISSIONS[href as KnownPage], href).toBe(permission);
+    }
+    for (const route of SETTINGS_NAV_ROUTES) {
+      if (!route.permission) continue;
+      expect(KNOWN_PAGE_PERMISSIONS[route.path as KnownPage], route.path).toBe(route.permission);
+    }
+    expect(KNOWN_PAGE_PERMISSIONS['/approvals']).toBe(TOPBAR_PERMISSIONS.review);
+    expect(KNOWN_PAGE_PERMISSIONS['/notes']).toBe(TOPBAR_PERMISSIONS.notes);
+    expect(KNOWN_PAGE_PERMISSIONS['/notes']).toBe(NOTE_PERMISSION);
+    expect(KNOWN_PAGE_PERMISSIONS['/copilot']).toBe(TOPBAR_PERMISSIONS.copilot);
+    for (const flow of TOPBAR_CREATE_FLOWS) {
+      const route = flow.path.split('?')[0] as KnownPage;
+      expect(flow.requires, route).toContain(KNOWN_PAGE_PERMISSIONS[route]);
+    }
+  });
+
+  it('records keep the identical 404: resource routes are NOT on the list', () => {
+    for (const route of [
+      '/campaigns/[campaignId]',
+      '/billing/invoices/[invoiceId]',
+      '/billing/checkout/[outcome]',
+    ]) {
+      expect(known).not.toContain(route);
+      expect(read(pageFile(route))).toMatch(/requireWorkspace\(locale, '[^']+'\)/);
+    }
+    const context = read('apps/dashboard/src/server/customer-context.ts');
+    // `requireWorkspace` itself still answers a missing permission with 404.
+    expect(context).toMatch(/!holdsPermission\(workspace, permissionKey\)\) notFound\(\)/);
+  });
+
+  it('the screen sits inside the shell and carries the E6 denial', () => {
+    const screen = read('apps/dashboard/src/components/no-access-page.tsx');
+    expect(screen).toContain('<WorkspaceShell');
+    expect(screen).toContain('kind="forbidden"');
+    expect(screen).toContain('denialText(locale');
+    expect(screen).toContain('testId="route-no-access"');
   });
 });

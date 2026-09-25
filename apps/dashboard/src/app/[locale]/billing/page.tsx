@@ -12,9 +12,10 @@ import {
 import {
   inWorkspace,
   memberDisplayName,
-  requireWorkspace,
   workspaceOwnerName,
+  requireWorkspacePage,
 } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { PermissionNotice } from '../../../components/permission-notice';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -59,7 +60,9 @@ export const dynamic = 'force-dynamic';
 export default async function BillingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
+  const access = await requireWorkspacePage(locale, '/billing');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
   const mayManage = workspace.permissionKeys.includes('billing.manage');
   const mayReadCredits = workspace.permissionKeys.includes('credits.read');
 
