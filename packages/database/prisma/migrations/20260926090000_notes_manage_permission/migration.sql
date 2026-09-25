@@ -9,7 +9,8 @@
 --
 -- DATA ONLY, ADDITIVE, IDEMPOTENT.
 --   - It inserts rows and never updates or deletes one. `ON CONFLICT DO
---     NOTHING` on both statements, so re-running it changes nothing.
+--     NOTHING` on both statements, so re-running it changes nothing. On an
+--     empty database (no catalogue yet) it inserts nothing.
 --   - SAFE WHILE THE PREVIOUS RELEASE IS LIVE. The previous code never asks for
 --     `notes.manage`, so an extra grant is invisible to it; nothing it reads
 --     changes shape.
@@ -28,8 +29,12 @@
 
 BEGIN;
 
+-- Only into a catalogue that already exists. A freshly migrated database has
+-- no permission rows at all — the seed or the bootstrap writes the whole
+-- catalogue, `notes.manage` included — and a migration must leave it empty
+-- (`tests/isolation/bootstrap-production-owner.test.ts`).
 INSERT INTO "permission" ("id", "key", "resource", "action", "minScope", "description", "createdAt")
-VALUES (
+SELECT
   gen_random_uuid(),
   'notes.manage',
   'notes',
@@ -37,7 +42,7 @@ VALUES (
   'workspace',
   'Resolve, assign and triage note threads',
   now()
-)
+ WHERE EXISTS (SELECT 1 FROM "permission" WHERE "key" = 'content.read')
 ON CONFLICT ("key") DO NOTHING;
 
 INSERT INTO "role_permission" ("roleId", "permissionId")
