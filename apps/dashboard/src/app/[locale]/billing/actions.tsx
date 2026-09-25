@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { Button, Dialog, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import {
   customerButtonStyle,
   customerInputStyle,
@@ -122,12 +122,21 @@ export function BuyPlanButton({
   );
 }
 
+/**
+ * B-10 — BUYING CREDITS IS CONFIRMED IN THE APP FIRST (CLAUDE.md §2.5: paying
+ * is a high-impact action). The first click opens a dialog that states exactly
+ * what will be bought — the credits and the price, both resolved by the server
+ * from the activated catalogue — and only "Continue to payment" asks for a
+ * checkout. Cancel is first, so focus lands on it and a stray Enter cannot
+ * start a purchase. Still no amount is SENT: the pack key is all that travels.
+ */
 export function BuyPackButton({
   locale,
   packKey,
   label,
   busyLabel,
   failedLabel,
+  confirm,
   testId,
 }: {
   locale: string;
@@ -135,9 +144,33 @@ export function BuyPackButton({
   label: string;
   busyLabel: string;
   failedLabel: string;
+  confirm: {
+    readonly title: string;
+    /** Already filled on the server: the pack's credits and its price. */
+    readonly body: string;
+    readonly submitLabel: string;
+    readonly cancelLabel: string;
+    readonly closeLabel: string;
+  };
   testId?: string;
 }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [state, setState] = useState<'idle' | 'confirming' | 'busy' | 'failed'>('idle');
+  const buy = async () => {
+    setState('busy');
+    const response = await post('/api/commerce/checkout/pack', {
+      packKey,
+      idempotencyKey: idempotencyKey(),
+      locale: locale === 'ar' ? 'ar' : 'en',
+    }).catch(() => null);
+    const payload = (await response?.json().catch(() => null)) as {
+      redirectUrl?: string;
+    } | null;
+    if (!response?.ok || !payload?.redirectUrl) {
+      setState('failed');
+      return;
+    }
+    globalThis.location.assign(payload.redirectUrl);
+  };
   return (
     <>
       <button
@@ -145,25 +178,36 @@ export function BuyPackButton({
         data-testid={testId}
         disabled={state === 'busy'}
         style={customerButtonStyle()}
-        onClick={async () => {
-          setState('busy');
-          const response = await post('/api/commerce/checkout/pack', {
-            packKey,
-            idempotencyKey: idempotencyKey(),
-            locale: locale === 'ar' ? 'ar' : 'en',
-          }).catch(() => null);
-          const payload = (await response?.json().catch(() => null)) as {
-            redirectUrl?: string;
-          } | null;
-          if (!response?.ok || !payload?.redirectUrl) {
-            setState('failed');
-            return;
-          }
-          globalThis.location.assign(payload.redirectUrl);
-        }}
+        onClick={() => setState('confirming')}
       >
         {state === 'busy' ? busyLabel : label}
       </button>
+      <Dialog
+        open={state === 'confirming'}
+        onClose={() => setState('idle')}
+        title={confirm.title}
+        description={confirm.body}
+        closeLabel={confirm.closeLabel}
+        testId={testId ? `${testId}-confirm` : 'pack-buy-confirm'}
+        footer={
+          <>
+            <Button
+              variant="neutral"
+              onClick={() => setState('idle')}
+              data-testid={testId ? `${testId}-cancel` : 'pack-buy-cancel'}
+            >
+              {confirm.cancelLabel}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void buy()}
+              data-testid={testId ? `${testId}-accept` : 'pack-buy-accept'}
+            >
+              {confirm.submitLabel}
+            </Button>
+          </>
+        }
+      />
       {state === 'failed' ? (
         <p role="alert" data-testid="checkout-failed" style={noticeStyle}>
           {failedLabel}

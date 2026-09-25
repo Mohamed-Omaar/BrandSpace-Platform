@@ -287,7 +287,10 @@ test.describe('a stranger becomes a paying customer', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
 
-    await buyAndFollow(page, 'pack-buy-fixture-pack-small');
+    // B-10 — the purchase is confirmed in the app before checkout opens.
+    await page.click('[data-testid="pack-buy-fixture-pack-small"]');
+    await expect(page.locator('[data-testid="pack-buy-fixture-pack-small-confirm"]')).toBeVisible();
+    await buyAndFollow(page, 'pack-buy-fixture-pack-small-accept');
     await page.click('[data-testid="dev-checkout-pay"]');
     await page.waitForURL(new RegExp(`${DASHBOARD_BASE_URL}/en/billing/checkout/success`), {
       timeout: 30_000,

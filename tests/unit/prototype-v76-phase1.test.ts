@@ -148,3 +148,41 @@ describe('B-9 · disconnecting an account takes two deliberate steps', () => {
     both('integrations.disconnectConfirmSubmit');
   });
 });
+
+describe('B-10 · buying credits is confirmed in the app, with credits and price', () => {
+  const button = read('apps/dashboard/src/app/[locale]/billing/actions.tsx');
+  const page = read('apps/dashboard/src/app/[locale]/billing/page.tsx');
+
+  it('the first click only opens the confirmation; checkout is requested from it', () => {
+    const component = button.slice(button.indexOf('export function BuyPackButton('));
+    const body = component.slice(0, component.indexOf('\nexport function', 10));
+    expect(body).toContain("onClick={() => setState('confirming')}");
+    expect(body).toContain("open={state === 'confirming'}");
+    expect(body).toContain('onClick={() => void buy()}');
+    // The checkout request lives only in `buy`, which only the dialog calls.
+    expect(body.match(/\/api\/commerce\/checkout\/pack/g)).toHaveLength(1);
+    expect(body.indexOf('const buy = async')).toBeLessThan(
+      body.indexOf('/api/commerce/checkout/pack'),
+    );
+    // Cancel comes first, so focus lands on it.
+    expect(body.indexOf('confirm.cancelLabel')).toBeLessThan(body.indexOf('confirm.submitLabel'));
+  });
+
+  it('states the credits and the price the server resolved', () => {
+    expect(page).toMatch(
+      /fill\('billing\.packConfirmBody', \{\s*credits: String\(offer\.pack\.credits\),\s*price: show\(offer\.price\),/,
+    );
+    for (const key of [
+      'billing.packConfirmTitle',
+      'billing.packConfirmBody',
+      'billing.packConfirmSubmit',
+      'billing.packConfirmCancel',
+    ]) {
+      both(key);
+    }
+    expect(messages.en['billing.packConfirmBody']).toContain('{credits}');
+    expect(messages.en['billing.packConfirmBody']).toContain('{price}');
+    expect(messages.ar['billing.packConfirmBody']).toContain('{credits}');
+    expect(messages.ar['billing.packConfirmBody']).toContain('{price}');
+  });
+});

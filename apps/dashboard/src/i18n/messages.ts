@@ -2247,6 +2247,10 @@ export const messages = {
     'billing.packCredits': '{credits} رصيد',
     'billing.packExpiry': 'تنتهي صلاحيتها بعد {days} يومًا',
     'billing.packBuy': 'شراء',
+    'billing.packConfirmTitle': 'شراء حزمة الرصيد هذه؟',
+    'billing.packConfirmBody': '{credits} رصيد مقابل {price}. ستدفع في الصفحة التالية.',
+    'billing.packConfirmSubmit': 'المتابعة إلى الدفع',
+    'billing.packConfirmCancel': 'إلغاء',
     'billing.packsEmpty': 'لا توجد حزم معروضة في بلدك وعملتك حاليًا.',
     'billing.checkoutOpening': 'جارٍ تجهيز صفحة الدفع…',
     'billing.checkoutRedirect':
@@ -4885,6 +4889,10 @@ export const messages = {
     'billing.packCredits': '{credits} credits',
     'billing.packExpiry': 'Expires after {days} days',
     'billing.packBuy': 'Buy',
+    'billing.packConfirmTitle': 'Buy this credit pack?',
+    'billing.packConfirmBody': '{credits} credits for {price}. You will pay on the next screen.',
+    'billing.packConfirmSubmit': 'Continue to payment',
+    'billing.packConfirmCancel': 'Cancel',
     'billing.packsEmpty': 'No packs are on sale in your country and currency right now.',
     'billing.checkoutOpening': 'Preparing the payment page…',
     'billing.checkoutRedirect':
