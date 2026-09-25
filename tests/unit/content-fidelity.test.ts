@@ -282,9 +282,11 @@ const PERMITTED_ADDITIONS: Record<string, readonly string[]> = {
     'gap:6px',
     'cursor:pointer',
     'transition:background-color140mscubic-bezier(0.16,1,0.3,1),box-shadow140mscubic-bezier(0.16,1,0.3,1),transform80mscubic-bezier(0.16,1,0.3,1)',
+    'transition-duration:0.01ms!important',
   ],
   '.cs-surface-card': [
     'transition:box-shadow200mscubic-bezier(0.16,1,0.3,1),transform200mscubic-bezier(0.16,1,0.3,1)',
+    'transition-duration:0.01ms!important',
   ],
 
   /*
