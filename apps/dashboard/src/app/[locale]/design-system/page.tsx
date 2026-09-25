@@ -28,7 +28,9 @@ export const dynamic = 'force-dynamic';
  * FOUR PROPERTIES that make this safe to have in the repository:
  *
  *   1. It is refused in production, unconditionally, and additionally requires
- *      `BRANDSPACE_DESIGN_SHOWCASE=1` anywhere else (`showcaseEnabled()`).
+ *      `BRANDSPACE_DESIGN_SHOWCASE=1` in development or staging
+ *      (`showcaseEnabled()`). Staging exposure is an explicit owner-review
+ *      surface, never an accidental side effect of a deploy.
  *   2. It reads NO database, resolves NO session and takes NO parameter that
  *      reaches a query. There is nothing here to authorise.
  *   3. It is linked from no navigation in either application.

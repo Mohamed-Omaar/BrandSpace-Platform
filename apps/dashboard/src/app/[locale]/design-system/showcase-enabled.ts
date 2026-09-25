@@ -6,10 +6,12 @@ import 'server-only';
  * TWO CONDITIONS, AND BOTH MUST HOLD:
  *
  *   1. it is opt-in configuration — `BRANDSPACE_DESIGN_SHOWCASE=1`; and
- *   2. the DEPLOYMENT environment is neither production nor staging.
+ *   2. the DEPLOYMENT environment is not production.
  *
- * So forgetting to unset a variable during a deploy cannot expose it, and
- * neither can setting it deliberately against a real environment.
+ * Production refuses the showcase even if the flag is set. Staging may expose
+ * it deliberately for owner review, but only while the explicit opt-in flag is
+ * present. The route contains fixed fixtures, reads no customer data and is
+ * linked from no product navigation.
  *
  * WHY `APP_ENV` AND NOT `NODE_ENV`. `next start` serves a production BUILD and
  * therefore always sets `NODE_ENV=production`, including on a developer's
@@ -28,7 +30,7 @@ import 'server-only';
  * The refusal is `notFound()` rather than a message, so a probe cannot tell a
  * disabled showcase from a route that was never built.
  */
-const PROTECTED_ENVIRONMENTS = new Set(['production', 'staging']);
+const PROTECTED_ENVIRONMENTS = new Set(['production']);
 
 export function showcaseEnabled(): boolean {
   const appEnv = process.env['APP_ENV'] ?? 'development';
