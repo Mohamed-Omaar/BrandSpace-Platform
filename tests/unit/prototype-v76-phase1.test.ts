@@ -91,3 +91,18 @@ describe('B-5 · the team screen offers no change to your own authority', () => 
     expect(page.match(/!isSelf\(m\) &&\s*!m\.isWorkspaceOwner/g)).toHaveLength(2);
   });
 });
+
+describe('B-6 · the library offers Schedule only to members who may schedule', () => {
+  const library = read('apps/dashboard/src/app/[locale]/content/content-library.tsx');
+  const page = read('apps/dashboard/src/app/[locale]/content/page.tsx');
+  const calendarActions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
+
+  it('gates the link on the same permission the calendar enforces', () => {
+    expect(library).toMatch(
+      /can\.schedule && \(card\.status === 'APPROVED' \|\| card\.status === 'DRAFT'\) \?/,
+    );
+    expect(page).toContain("schedule: may('content.schedule')");
+    // The server half the link leads to, so the two cannot drift apart.
+    expect(calendarActions).toContain("requireWorkspace(locale, 'content.schedule')");
+  });
+});

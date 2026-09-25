@@ -58,6 +58,7 @@ These items contradict recorded decisions or change security rules. Claude Code 
 - **B-3 fixed.** Any edit to a post `IN_REVIEW` (manual or AI) runs `ContentApprovalService.withdrawForEdit` in the edit's own transaction: the open cycle becomes `CANCELLED` under the same row lock `decide()` takes, the post returns to `DRAFT`, `content.review_cancelled` is audited with reason `edited_during_review`, and the reviewers who were asked get the new `approval.withdrawn_after_edit` notification (ar/en). `CHANGES_REQUESTED` is unchanged. The composer warns before such an edit.
 - **B-4 fixed.** `ContentCalendarService.reschedule` moves only `PLANNED`/`SCHEDULED` slots (`RESCHEDULABLE_SLOT_STATUSES`), with the status in the update's `WHERE` so a slot the publisher claims mid-request is not moved; others get `CONFLICT` and nothing changes. The calendar drawer hides the reschedule form for such slots.
 - **B-5 fixed.** `MembershipService.changeRole` and `changeBrandAccess` refuse (`FORBIDDEN`) when the actor is the member being changed, before anything else is checked or written. The team screen no longer offers role or brand-access controls on the reader's own row (desktop and phone). Existing isolation tests that used a self-change to reach another rule now reach it through a different person; each rule's assertion is unchanged.
+- **B-6 fixed.** The Content Library shows **Schedule** only to members holding `content.schedule`, the permission every calendar action requires.
 
 ---
 
