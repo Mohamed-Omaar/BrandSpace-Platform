@@ -16,7 +16,7 @@ import {
   TenantCatalogueSource,
   UsageService,
 } from '@brandspace/entitlements';
-import { brandInScope } from '@brandspace/shared';
+import { brandInScope, creditSpendingPermissions } from '@brandspace/shared';
 import { route } from '../route-contract';
 import {
   currentEnvironment,
@@ -183,12 +183,13 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: CREATE_PERMISSION,
+      spendsCredits: true,
       idempotent: true,
       rateLimit: 'ai.generate',
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const caller = await resolveCaller(req, reply, CREATE_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(CREATE_PERMISSION));
       if (!caller) return reply;
 
       const parsed = generateSchema.safeParse(req.body);

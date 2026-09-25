@@ -62,10 +62,12 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('brand.read', 'workspace', 'View brands'),
   def('brand.manage', 'workspace', 'Create and edit brands'),
   def('brand_brain.read', 'workspace', 'View Brand Brain knowledge and sources'),
-  def('brand_brain.edit', 'workspace', 'Add and edit brand knowledge'),
+  // E3 — archiving a fact is an edit of the brand's knowledge, so it moved here
+  // from `brand_brain.delete`, which keeps removing sources.
+  def('brand_brain.edit', 'workspace', 'Add, edit and archive brand knowledge'),
   def('brand_brain.upload', 'workspace', 'Upload source documents'),
   def('brand_brain.review', 'workspace', 'Approve or reject extracted knowledge'),
-  def('brand_brain.delete', 'workspace', 'Archive brand knowledge and remove sources'),
+  def('brand_brain.delete', 'workspace', 'Remove brand sources'),
   def('brand_brain.chat', 'workspace', 'Ask Brand Brain questions'),
 
   /*

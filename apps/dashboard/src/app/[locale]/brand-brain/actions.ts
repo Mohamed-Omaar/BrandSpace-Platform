@@ -206,7 +206,8 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
   const area = String(formData.get('area') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspaceAction(locale, 'brand_brain.delete');
+    // E3 — archiving a fact is an edit of the brand's knowledge (`brand_brain.edit`).
+    const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge }) => {
       await knowledge.archiveItem({
         itemId: String(formData.get('itemId') ?? ''),

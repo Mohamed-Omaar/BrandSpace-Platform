@@ -62,6 +62,8 @@ const ALL_PERMISSIONS = [
   'strategy.read',
   'campaigns.read',
   'credits.read',
+  // Q18 — the balance is shown to the people who spend it.
+  'copilot.use',
   'billing.read',
 ];
 
@@ -608,8 +610,8 @@ describe('P6-11 · credits projected to run out before they renew', () => {
     await expectBothLayers('credits-forecast', expectedDays);
   });
 
-  it('needs BOTH credits.read and billing.read', async () => {
-    for (const missing of ['credits.read', 'billing.read']) {
+  it('needs credits.read, billing.read AND copilot.use (Q18)', async () => {
+    for (const missing of ['credits.read', 'billing.read', 'copilot.use']) {
       const partial = sessionA({
         permissionKeys: ALL_PERMISSIONS.filter((key) => key !== missing),
       });

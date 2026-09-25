@@ -5,6 +5,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
+import { mayReadCreditBalance } from '@brandspace/shared';
 import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -65,7 +66,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
 
   // Inside the tenant context: the overrides and the wallet are tenant-owned,
   // and the catalogue comes through the allow-listed configuration function.
-  const mayReadCredits = workspace.permissionKeys.includes('credits.read');
+  // Q18 — the balance is shown to the people who spend it (`credits.read` + `copilot.use`).
+  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
   const mayReadBilling = workspace.permissionKeys.includes('billing.read');
 
   const { effective, features, wallet, grants, ledger, subscription, counters } = await inWorkspace(

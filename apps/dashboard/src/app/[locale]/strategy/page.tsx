@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
@@ -94,6 +95,8 @@ export default async function StrategyPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = may('strategy.manage');
+  // Q18 — proposing a strategy spends credits; reviewing one does not.
+  const mayGenerate = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
   const mayReview = may('brand_brain.review');
 
   const brandContext = await brandContextFor(
@@ -462,7 +465,7 @@ export default async function StrategyPage({
                 description={t('strategy.proposalNotice')}
               />
               <div style={{ display: 'grid', gap: spacingTokens.md }}>
-                {mayManage ? (
+                {mayGenerate ? (
                   <form
                     action={generateStrategyAction}
                     data-testid="strategy-form"

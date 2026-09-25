@@ -386,6 +386,9 @@ Short form of each item compared in §5 (the full prototype lives in the BrandSp
   - strategy, including the month plan → `strategy.manage`
   - weekly report → `analytics.export`
   - connect/disconnect → `integrations.manage`
+  - **Deviation (owner, Phase 2A approval):** logo, colours and fonts stay on `brand.manage`, so no
+    role gains brand-identity rights; only fact archiving moves (from `brand_brain.delete` to
+    `brand_brain.edit`). Voice and facts already used `brand_brain.edit`.
 - **E4. New permission `templates.manage`.** Given by default to owner, admin, marketing manager and designer. Anyone who can create posts can use templates; saving, deleting or changing the default template needs this permission.
 - **E5. Changing a post's campaign follows the same rule in the Posts menu and in the Studio (Q21):** attaching a campaign to a post that has none needs `content.create`; moving it to another campaign or removing it needs `campaigns.manage`.
 - **E6. Denial messages.**

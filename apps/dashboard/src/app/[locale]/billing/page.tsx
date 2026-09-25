@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { planDisplayName } from '../../../server/plan-usage';
-import { formatMoney, systemClock, type Money } from '@brandspace/shared';
+import { formatMoney, systemClock, type Money, mayReadCreditBalance } from '@brandspace/shared';
 import {
   buttonClass,
   buttonStyle,
@@ -64,7 +64,8 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const mayManage = workspace.permissionKeys.includes('billing.manage');
-  const mayReadCredits = workspace.permissionKeys.includes('credits.read');
+  // Q18 — the balance is shown to the people who spend it (`credits.read` + `copilot.use`).
+  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
 
   const snapshot = await commerceSnapshotFor(workspace.workspaceId);
   const overview = await billingOverviewFor(workspace.workspaceId, snapshot.currencyScale);

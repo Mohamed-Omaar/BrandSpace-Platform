@@ -3,7 +3,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AppError,
+  CREDIT_SPENDING_PERMISSION,
   OWNER_ONLY_PERMISSION_KEYS,
+  creditSpendingPermissions,
+  mayReadCreditBalance,
+  maySpendCredits,
   ROLE_DEFINITIONS,
   isOwnerOnlyPermission,
 } from '@brandspace/shared';
@@ -157,9 +161,8 @@ describe('A5 + E6 · a refusal names the permission and who can change it', () =
 
   it('the action gate is the same permission test as the page gate', () => {
     const context = read('apps/dashboard/src/server/customer-context.ts');
-    expect(context).toMatch(
-      /if \(permissionKey && !holdsPermission\(workspace, permissionKey\)\) notFound\(\);/,
-    );
+    expect(context).toMatch(/if \(!holdsEvery\(workspace, permissionKey\)\) notFound\(\);/);
+    expect(context).toMatch(/required\.every\(\(key\) => holdsPermission\(workspace, key\)\)/);
     expect(context).toMatch(
       /if \(!holdsPermission\(session\.workspace, permissionKey\)\) \{\s*throw permissionDenied\(permissionKey\);/,
     );
@@ -228,7 +231,7 @@ describe('E2 / Q5 · "No access to this page" for the known navigation list only
     }
     const context = read('apps/dashboard/src/server/customer-context.ts');
     // `requireWorkspace` itself still answers a missing permission with 404.
-    expect(context).toMatch(/!holdsPermission\(workspace, permissionKey\)\) notFound\(\)/);
+    expect(context).toMatch(/!holdsEvery\(workspace, permissionKey\)\) notFound\(\)/);
   });
 
   it('the screen sits inside the shell and carries the E6 denial', () => {
@@ -237,5 +240,152 @@ describe('E2 / Q5 · "No access to this page" for the known navigation list only
     expect(screen).toContain('kind="forbidden"');
     expect(screen).toContain('denialText(locale');
     expect(screen).toContain('testId="route-no-access"');
+  });
+});
+
+describe('E3 + Q18 · spending credits needs copilot.use as well as the feature key', () => {
+  const SPENDING_FEATURE_KEYS = [
+    'content.create',
+    'content.edit',
+    'assets.upload',
+    'brand_brain.chat',
+    'analytics.explain',
+    'strategy.manage',
+  ];
+
+  it('the rule is the feature key AND copilot.use', () => {
+    expect(CREDIT_SPENDING_PERMISSION).toBe('copilot.use');
+    expect(creditSpendingPermissions('content.create')).toEqual(['content.create', 'copilot.use']);
+    expect(creditSpendingPermissions('copilot.use')).toEqual(['copilot.use']);
+    expect(maySpendCredits(['content.create'], 'content.create')).toBe(false);
+    expect(maySpendCredits(['content.create', 'copilot.use'], 'content.create')).toBe(true);
+    expect(maySpendCredits(['copilot.use'], 'content.create')).toBe(false);
+    expect(mayReadCreditBalance(['credits.read'])).toBe(false);
+    expect(mayReadCreditBalance(['credits.read', 'copilot.use'])).toBe(true);
+  });
+
+  it('no role loses a spending capability: every holder of a spending key holds copilot.use', () => {
+    for (const role of ROLE_DEFINITIONS.filter((r) => r.realm === 'workspace')) {
+      const spends = SPENDING_FEATURE_KEYS.filter((k) => role.permissionKeys.includes(k));
+      if (spends.length === 0) continue;
+      expect(role.permissionKeys, role.key).toContain('copilot.use');
+    }
+  });
+
+  it('every API route marked spendsCredits gates on creditSpendingPermissions(<its permission>)', () => {
+    const files = ['content', 'creative', 'brand-brain', 'analytics'].map((f) =>
+      read(`apps/api/src/routes/${f}.ts`),
+    );
+    const marked: string[] = [];
+    for (const source of files) {
+      for (const block of source.split(/\n {2}route\(/).slice(1)) {
+        const url = /'(\/v1\/[^']+)'/.exec(block)?.[1] ?? '';
+        const permission = /permission: ([A-Z_]+|'[^']+'),/.exec(block)?.[1];
+        if (!block.includes('spendsCredits: true')) {
+          expect(block, url).not.toContain('creditSpendingPermissions(');
+          continue;
+        }
+        marked.push(url);
+        expect(block, url).toContain(
+          `await resolveCaller(req, reply, creditSpendingPermissions(${permission}))`,
+        );
+      }
+    }
+    expect(marked.sort()).toEqual([
+      '/v1/analytics/explain',
+      '/v1/brand-brain/chat',
+      '/v1/content/generate',
+      '/v1/content/tool',
+      '/v1/creative/generate',
+      '/v1/intelligence/content-gap',
+      '/v1/strategy/generate',
+    ]);
+  });
+
+  it('every copy of resolveCaller requires EVERY key it is given', () => {
+    for (const file of ['content', 'brand-brain', 'phase7-context']) {
+      const source = read(`apps/api/src/routes/${file}.ts`);
+      expect(source, file).toContain('permission: string | readonly string[],');
+      expect(source, file).toMatch(
+        /!required\.every\(\(key\) => workspace\.permissionKeys\.includes\(key\)\)/,
+      );
+    }
+  });
+
+  it('the dashboard offers no credit-spending button without copilot.use', () => {
+    const compose = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(compose).toContain(
+      "generate: maySpendCredits(workspace.permissionKeys, 'content.create')",
+    );
+    expect(compose).toMatch(
+      /tools=\{maySpendCredits\(workspace\.permissionKeys, 'content\.edit'\) \? CONTENT_TOOLS : \[\]\}/,
+    );
+    expect(compose).toMatch(
+      /generateMedia:\s*maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)/,
+    );
+    const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
+    expect(composer).toMatch(
+      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="cs-ghost-button"/,
+    );
+    // Writing it yourself spends nothing and stays available.
+    expect(composer).toContain('const canWrite = hasInputs && draft === null;');
+    const pages: Array<[string, RegExp]> = [
+      [
+        'analytics/page.tsx',
+        /mayExplain = maySpendCredits\(workspace\.permissionKeys, 'analytics\.explain'\)/,
+      ],
+      [
+        'strategy/page.tsx',
+        /mayGenerate = maySpendCredits\(workspace\.permissionKeys, 'strategy\.manage'\)/,
+      ],
+      [
+        'intelligence/page.tsx',
+        /mayAnalyse = maySpendCredits\(workspace\.permissionKeys, 'strategy\.manage'\)/,
+      ],
+      [
+        'brand-brain/page.tsx',
+        /chat: maySpendCredits\(workspace\.permissionKeys, 'brand_brain\.chat'\)/,
+      ],
+      [
+        'creative/page.tsx',
+        /if \(!maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)\)/,
+      ],
+      ['copilot/page.tsx', /maySeeCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+      ['plan/page.tsx', /mayReadCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+      ['billing/page.tsx', /mayReadCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+    ];
+    for (const [file, pattern] of pages) {
+      expect(read(`apps/dashboard/src/app/[locale]/${file}`), file).toMatch(pattern);
+    }
+    expect(read('apps/dashboard/src/server/command-center.ts')).toContain(
+      "permissions: ['credits.read', 'billing.read', 'copilot.use'], run: creditsRunningOut",
+    );
+    expect(TOPBAR_CREATE_FLOWS.find((f) => f.key === 'creative')?.requires).toContain(
+      'copilot.use',
+    );
+  });
+
+  it('the dashboard spending actions ask for the same keys the API does', () => {
+    for (const [file, key] of [
+      ['analytics/actions.ts', 'analytics.explain'],
+      ['strategy/actions.ts', 'strategy.manage'],
+      ['intelligence/actions.ts', 'strategy.manage'],
+    ] as const) {
+      expect(read(`apps/dashboard/src/app/[locale]/${file}`), file).toContain(
+        `requireWorkspace(locale, creditSpendingPermissions('${key}'))`,
+      );
+    }
+  });
+
+  it('E3 — archiving a fact needs brand_brain.edit; brand identity stays on brand.manage', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
+    const archive = actions.slice(actions.indexOf('export async function archiveKnowledgeAction'));
+    expect(archive).toContain("requireWorkspaceAction(locale, 'brand_brain.edit')");
+    expect(read('apps/dashboard/src/app/[locale]/brand-brain/page.tsx')).toContain(
+      "remove: can('brand_brain.edit')",
+    );
+    expect(read('apps/dashboard/src/app/[locale]/settings/brand/actions.ts')).toContain(
+      "requireWorkspaceAction(locale, 'brand.manage')",
+    );
   });
 });

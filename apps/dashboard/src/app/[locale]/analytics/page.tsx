@@ -19,7 +19,7 @@ import {
   type ChartLabels,
   type ChartPoint,
 } from '@brandspace/ui';
-import { systemClock } from '@brandspace/shared';
+import { systemClock, maySpendCredits } from '@brandspace/shared';
 import { detectAnomalies, type MetricAbsenceReason } from '@brandspace/analytics';
 import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -90,7 +90,8 @@ export default async function AnalyticsPage({
   const days = parseRange(query['range']);
   const compare = query['compare'] !== '0';
   const mayExport = workspace.permissionKeys.includes('analytics.export');
-  const mayExplain = workspace.permissionKeys.includes('analytics.explain');
+  // Q18 — explaining a period spends credits, so it also needs `copilot.use`.
+  const mayExplain = maySpendCredits(workspace.permissionKeys, 'analytics.explain');
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
 

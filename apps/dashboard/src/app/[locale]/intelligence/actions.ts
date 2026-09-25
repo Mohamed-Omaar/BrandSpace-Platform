@@ -1,5 +1,6 @@
 'use server';
 
+import { creditSpendingPermissions } from '@brandspace/shared';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireWorkspace } from '../../../server/customer-context';
@@ -45,7 +46,7 @@ function hash(value: string): string {
  */
 export async function analyseContentGapsAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
-  const session = await requireWorkspace(locale, 'strategy.manage');
+  const session = await requireWorkspace(locale, creditSpendingPermissions('strategy.manage'));
   const brandId = String(formData.get('brandId') ?? '');
   const objective = String(formData.get('objective') ?? '').slice(0, 400);
 

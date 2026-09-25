@@ -1,4 +1,5 @@
 import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
+import { mayReadCreditBalance } from '@brandspace/shared';
 import { copilotSurface } from '../../../server/copilot-surface';
 import { copilotLabels } from '../../../server/copilot-labels';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
@@ -57,7 +58,7 @@ export default async function CopilotPage({
   const session = access.session;
   const { workspace } = session;
 
-  const maySeeCredits = workspace.permissionKeys.includes('credits.read');
+  const maySeeCredits = mayReadCreditBalance(workspace.permissionKeys);
   const from = typeof query['from'] === 'string' ? query['from'] : null;
   const surface = copilotSurface(from);
 

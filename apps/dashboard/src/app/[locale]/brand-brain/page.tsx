@@ -1,4 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { maySpendCredits } from '@brandspace/shared';
 import {
   BRAND_MEMORY_LAYERS,
   ORB_AREAS,
@@ -552,8 +553,10 @@ export default async function BrandBrainPage({
           edit: can('brand_brain.edit'),
           upload: can('brand_brain.upload'),
           review: can('brand_brain.review'),
-          remove: can('brand_brain.delete'),
-          chat: can('brand_brain.chat'),
+          // E3 — archiving a fact needs `brand_brain.edit`, the same as the action.
+          remove: can('brand_brain.edit'),
+          // Q18 — a Brand Brain answer spends credits.
+          chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat'),
         }}
       />
 

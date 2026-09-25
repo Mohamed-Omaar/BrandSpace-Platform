@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
@@ -94,6 +95,8 @@ export default async function IntelligencePage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
+  // Q18 — a content-gap analysis spends credits; accepting a finding does not.
+  const mayAnalyse = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
   const mayReadBrain = workspace.permissionKeys.includes('brand_brain.read');
   /*
@@ -291,7 +294,7 @@ export default async function IntelligencePage({
           />
         ) : (
           <>
-            {mayManage ? (
+            {mayAnalyse ? (
               <Card title={t('intelligence.analyse')}>
                 <form action={analyseContentGapsAction} data-testid="content-gap-form">
                   <input type="hidden" name="locale" value={locale} />

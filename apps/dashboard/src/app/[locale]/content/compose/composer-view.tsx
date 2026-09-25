@@ -144,6 +144,12 @@ export interface ComposerViewProps {
     schedule?: boolean;
     /** Creative generation from the media drawer (`assets.upload`, AI credits). */
     generateMedia?: boolean;
+    /**
+     * Q18 — may spend credits writing a post (`content.create` AND
+     * `copilot.use`). Without it the estimate and generate buttons are not
+     * offered; writing it yourself still is.
+     */
+    generate?: boolean;
   };
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
@@ -530,8 +536,9 @@ export function ComposerView({
   };
 
   const briefTooLong = generationBrief.length > maxBriefChars;
-  const canGenerate =
+  const hasInputs =
     can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
+  const canGenerate = hasInputs && can.generate === true;
   /*
    * THE SAME THREE ANSWERS, USED LITERALLY RATHER THAN AS A BRIEF.
    *
@@ -545,7 +552,7 @@ export function ComposerView({
    * words on screen are the VARIANTS' and each has its own save form; making a
    * second item out of the brief field at that point would be a surprise.
    */
-  const canWrite = canGenerate && draft === null;
+  const canWrite = hasInputs && draft === null;
   const manualFormId = `${fieldId}-manual`;
 
   return (
@@ -873,15 +880,17 @@ export function ComposerView({
             ) : null}
 
             <div className="cs-form-actions">
-              <button
-                type="button"
-                className="cs-ghost-button"
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-estimate"
-                onClick={runQuote}
-              >
-                {t['content.composer.estimate']}
-              </button>
+              {can.generate ? (
+                <button
+                  type="button"
+                  className="cs-ghost-button"
+                  disabled={!canGenerate || busy !== null}
+                  data-testid="content-estimate"
+                  onClick={runQuote}
+                >
+                  {t['content.composer.estimate']}
+                </button>
+              ) : null}
               <button
                 type="submit"
                 form={manualFormId}
@@ -891,27 +900,29 @@ export function ComposerView({
               >
                 {t['content.composer.write']}
               </button>
-              <button
-                type="button"
-                className={mode === 'write' ? 'cs-ghost-button' : 'cs-dark-button'}
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-generate"
-                /*
-                THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
-                It is the only way a browser test can see WHICH of the two keys
-                the composer wired to generation — the defect being that the
-                manual key, which moves with the campaign, was reaching an
-                endpoint that neither sends nor stores one. It discloses
-                nothing: a hash of the customer's own inputs, already present in
-                this form as the manual submission's hidden field.
-              */
-                data-generation-key={generationIdempotencyKey}
-                onClick={runGenerate}
-              >
-                {busy === 'generate'
-                  ? t['content.composer.generating']
-                  : t['content.composer.generate']}
-              </button>
+              {can.generate ? (
+                <button
+                  type="button"
+                  className={mode === 'write' ? 'cs-ghost-button' : 'cs-dark-button'}
+                  disabled={!canGenerate || busy !== null}
+                  data-testid="content-generate"
+                  /*
+                  THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
+                  It is the only way a browser test can see WHICH of the two keys
+                  the composer wired to generation — the defect being that the
+                  manual key, which moves with the campaign, was reaching an
+                  endpoint that neither sends nor stores one. It discloses
+                  nothing: a hash of the customer's own inputs, already present in
+                  this form as the manual submission's hidden field.
+                */
+                  data-generation-key={generationIdempotencyKey}
+                  onClick={runGenerate}
+                >
+                  {busy === 'generate'
+                    ? t['content.composer.generating']
+                    : t['content.composer.generate']}
+                </button>
+              ) : null}
             </div>
 
             {/*

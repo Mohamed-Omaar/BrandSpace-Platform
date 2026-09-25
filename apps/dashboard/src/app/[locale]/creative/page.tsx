@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CREDIT_SPENDING_PERMISSION, maySpendCredits } from '@brandspace/shared';
 import {
   Card,
   StateMessage,
@@ -58,6 +59,22 @@ export default async function CreativeStudioPage({
   const access = await requireWorkspacePage(locale, '/creative');
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // Q18 — the Studio exists to spend credits on images, so it also needs
+  // `copilot.use`; without it the member gets the same no-access screen,
+  // naming that permission.
+  if (!maySpendCredits(workspace.permissionKeys, 'assets.upload')) {
+    return (
+      <NoAccessPage
+        locale={locale}
+        access={{
+          allowed: false,
+          session: access.session,
+          route: '/creative',
+          permissionKey: CREDIT_SPENDING_PERMISSION,
+        }}
+      />
+    );
+  }
 
   const single = (key: string): string | undefined => {
     const value = query[key];

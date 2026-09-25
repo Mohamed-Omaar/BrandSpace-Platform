@@ -2,7 +2,12 @@ import type React from 'react';
 import { notFound } from 'next/navigation';
 import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
-import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  brandIdQueryFilter,
+  brandScopeFilter,
+  maySpendCredits,
+  systemClock,
+} from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
@@ -748,7 +753,8 @@ export default async function ComposePage({
         campaigns={campaigns}
         mediaOptions={allMedia}
         carriedMedia={carried}
-        tools={CONTENT_TOOLS}
+        // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
+        tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}
         review={reviewFacts}
         mode={mode === 'write' ? 'write' : 'ai'}
@@ -778,9 +784,11 @@ export default async function ComposePage({
           // The Creative route's own gate (`assets.upload`), and generation
           // needs content editing here because it changes this post.
           generateMedia:
-            workspace.permissionKeys.includes('assets.upload') &&
+            maySpendCredits(workspace.permissionKeys, 'assets.upload') &&
             workspace.permissionKeys.includes('content.edit') &&
             !composerDraft?.readOnly,
+          // Q18 — spending credits also needs `copilot.use`.
+          generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
         }}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,

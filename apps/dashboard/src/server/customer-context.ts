@@ -258,7 +258,11 @@ export interface WorkspaceSession {
  */
 export async function requireWorkspace(
   locale: string,
-  permissionKey?: string,
+  /**
+   * One key, or every key of a list — a credit-spending action passes
+   * `creditSpendingPermissions(<feature key>)` (Q18).
+   */
+  permissionKey?: string | readonly string[],
 ): Promise<WorkspaceSession> {
   const customer = await requireCustomer(locale);
   const token = (await getSessionToken()) ?? '';
@@ -280,7 +284,7 @@ export async function requireWorkspace(
     : undefined;
   if (!workspace) redirect(`/${locale}/workspaces`);
 
-  if (permissionKey && !holdsPermission(workspace, permissionKey)) notFound();
+  if (!holdsEvery(workspace, permissionKey)) notFound();
   return { customer, workspace, token };
 }
 
@@ -320,6 +324,15 @@ export function holdsPermission(
   permissionKey: string,
 ): boolean {
   return workspace.permissionKeys.includes(permissionKey);
+}
+
+/** `holdsPermission` for each key given; no key at all means "any member". */
+function holdsEvery(
+  workspace: Pick<CustomerWorkspaceContext, 'permissionKeys'>,
+  permissionKey: string | readonly string[] | undefined,
+): boolean {
+  const required = permissionKey === undefined ? [] : [permissionKey].flat();
+  return required.every((key) => holdsPermission(workspace, key));
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { systemClock } from '@brandspace/shared';
+import { systemClock, creditSpendingPermissions } from '@brandspace/shared';
 import { requireWorkspace } from '../../../server/customer-context';
 import { callPhase7Api } from '../../../server/analytics-context';
 
@@ -30,7 +30,7 @@ import { callPhase7Api } from '../../../server/analytics-context';
  */
 export async function explainPeriodAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
-  const session = await requireWorkspace(locale, 'analytics.explain');
+  const session = await requireWorkspace(locale, creditSpendingPermissions('analytics.explain'));
   const brandId = String(formData.get('brandId') ?? '');
   const days = Number(formData.get('range') ?? 28);
   const periodDays = [7, 28, 90].includes(days) ? days : 28;

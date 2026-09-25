@@ -100,8 +100,11 @@ describe('P6-16 · what the top bar offers, and to whom', () => {
     expect(only(['content.read', 'content.create'])).toEqual(['content']);
     expect(only(['content.create'])).toEqual([]); // the composer would answer 404
     expect(only(['campaigns.manage'])).toEqual(['campaign']);
-    expect(only(['assets.upload'])).toEqual(['creative']);
-    expect(only(['assets.read', 'assets.upload'])).toEqual(['creative', 'asset']);
+    // Q18 — the Creative Studio spends credits, so it also needs `copilot.use`.
+    expect(only(['assets.upload'])).toEqual([]);
+    expect(only(['assets.upload', 'copilot.use'])).toEqual(['creative']);
+    expect(only(['assets.read', 'assets.upload'])).toEqual(['asset']);
+    expect(only(['assets.read', 'assets.upload', 'copilot.use'])).toEqual(['creative', 'asset']);
   });
 
   it('marks the destination the reader is already on', () => {

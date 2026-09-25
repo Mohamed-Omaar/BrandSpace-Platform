@@ -17,6 +17,7 @@ import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
+  creditSpendingPermissions,
   brandInScope,
   createLogger,
   currentEnvironment,
@@ -138,7 +139,7 @@ interface Caller {
 async function resolveCaller(
   req: FastifyRequest,
   reply: FastifyReply,
-  permission: string,
+  permission: string | readonly string[],
 ): Promise<Caller | null> {
   const token = sessionTokenFrom(req);
   if (!token) {
@@ -155,7 +156,10 @@ async function resolveCaller(
 
   const workspaces = await auth.listWorkspaces(token).catch(() => null);
   const workspace = workspaces?.find((w) => w.workspaceId === customer.activeWorkspaceId);
-  if (!workspace || !workspace.permissionKeys.includes(permission)) {
+  // Q18 — a credit-spending route passes its feature key AND `copilot.use`;
+  // every key must be held, and a miss is the same 404 as any other.
+  const required = typeof permission === 'string' ? [permission] : permission;
+  if (!workspace || !required.every((key) => workspace.permissionKeys.includes(key))) {
     await reply.code(404).send({ error: { code: 'NOT_FOUND' } });
     return null;
   }
@@ -296,6 +300,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: CREATE_PERMISSION,
+      spendsCredits: true,
       // A generation spends credits, so a retry must never bill twice. The
       // client key is required by the schema, not optional here.
       idempotent: true,
@@ -303,7 +308,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const caller = await resolveCaller(req, reply, CREATE_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(CREATE_PERMISSION));
       if (!caller) return reply;
 
       const parsed = contentGenerateRequestSchema.safeParse(req.body);
@@ -408,12 +413,13 @@ export function registerContentRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: EDIT_PERMISSION,
+      spendsCredits: true,
       idempotent: true,
       rateLimit: 'ai.generate',
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const caller = await resolveCaller(req, reply, EDIT_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(EDIT_PERMISSION));
       if (!caller) return reply;
 
       const parsed = contentToolRequestSchema.safeParse(req.body);
