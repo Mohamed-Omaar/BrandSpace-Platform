@@ -755,16 +755,35 @@ export function ComposerView({
                       data-platform={platform.key}
                       onClick={() => toggle(platform.key)}
                     >
-                      {socialPlatformOf(platform.key) ? (
-                        <span className="cs-channel-icon" aria-hidden="true">
-                          <PlatformIcon
-                            platform={socialPlatformOf(platform.key) as SocialPlatform}
-                            size={14}
-                            tone="brand"
-                          />
-                        </span>
-                      ) : null}
-                      <span>{platform.label}</span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4375rem',
+                        }}
+                      >
+                        {socialPlatformOf(platform.key) ? (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              inlineSize: '1.25rem',
+                              blockSize: '1.25rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '0.4375rem',
+                              background: 'rgba(255, 255, 255, 0.92)',
+                            }}
+                          >
+                            <PlatformIcon
+                              platform={socialPlatformOf(platform.key) as SocialPlatform}
+                              size={14}
+                              tone="brand"
+                            />
+                          </span>
+                        ) : null}
+                        <span>{platform.label}</span>
+                      </span>
                     </button>
                   );
                 })}
