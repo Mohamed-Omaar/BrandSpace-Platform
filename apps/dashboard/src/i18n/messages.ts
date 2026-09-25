@@ -1036,6 +1036,10 @@ export const messages = {
       'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
       'تمت الموافقة على هذا المنشور. تعديل محتواه أو وسائطه سيعيده إلى مسودة ويتطلب مراجعة جديدة.',
+    'editor.scheduledWarning.unschedules':
+      'هذا المنشور مجدول. حفظ أي تعديل يُزيله من التقويم ويعيده مسودة، وسيحتاج إلى موافقة وجدولة من جديد.',
+    'editor.scheduledWarning.scheduler':
+      'هذا المنشور مجدول. إذا كانت علامتك تتطلب الموافقة، فلن تغطي الموافقة الحالية ما تغيّره.',
     'editor.variants.label': 'نسخ المنصات',
     'editor.caption': 'النص',
     'editor.unsaved': 'تغييرات غير محفوظة',
@@ -3649,6 +3653,10 @@ export const messages = {
       'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
       'This post was approved. Editing its content or media will return it to Draft and require review again.',
+    'editor.scheduledWarning.unschedules':
+      'This post is scheduled. Saving a change takes it off the calendar and returns it to Draft; it will need approval and scheduling again.',
+    'editor.scheduledWarning.scheduler':
+      'This post is scheduled. If your brand requires approval, the current approval will not cover what you change.',
     'editor.variants.label': 'Platform versions',
     'editor.caption': 'Caption',
     'editor.unsaved': 'Unsaved changes',

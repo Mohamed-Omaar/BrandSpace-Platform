@@ -1266,6 +1266,7 @@ describe('AN APPROVAL AUTHORIZES THE WORDS IT WAS GRANTED OVER (PHASE 2, D-223)'
           body: 'Completely different words that nobody reviewed.',
           actorUserId: fixtures.a.userId,
           actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.schedule'],
         });
       },
       { prisma: app },

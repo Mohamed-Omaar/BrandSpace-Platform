@@ -659,6 +659,7 @@ describe('an edit revokes an approval', () => {
         body: 'Rewritten after approval.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(await statusOf()).toBe('DRAFT');

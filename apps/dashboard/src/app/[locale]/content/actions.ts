@@ -332,6 +332,8 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
         ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
+        // Q8 — taken from the session, never the form.
+        actorPermissionKeys: session.workspace.permissionKeys,
       }),
     );
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });

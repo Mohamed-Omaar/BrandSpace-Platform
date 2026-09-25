@@ -806,6 +806,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -834,6 +835,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(variant.validationState).toBe('VALID');
@@ -898,6 +900,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(variant.body).toBe('Keep these exact words.');
@@ -923,6 +926,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -953,6 +957,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         body: 'Rewritten by a person.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -1236,6 +1241,7 @@ describe('a customer can write a post without a model (PHASE 2)', () => {
         body: 'Second words.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 

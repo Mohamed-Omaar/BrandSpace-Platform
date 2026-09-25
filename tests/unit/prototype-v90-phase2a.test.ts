@@ -487,3 +487,33 @@ describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () 
     }
   });
 });
+
+describe('B3 / Q8 · an edit by someone without content.schedule unschedules the post', () => {
+  it('both edit paths hand the editor’s session permissions to the rule', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const save = actions.slice(actions.indexOf('export async function saveVariantAction'));
+    expect(save.slice(0, save.indexOf('\n}\n'))).toContain(
+      'actorPermissionKeys: session.workspace.permissionKeys',
+    );
+    const api = read('apps/api/src/routes/content.ts');
+    expect(api).toContain('permissionKeys: workspace.permissionKeys,');
+    expect(api).toContain('actorPermissionKeys: caller.permissionKeys,');
+  });
+
+  it('the library gets the calendar as its scheduling port, in the dashboard and the API', () => {
+    expect(read('apps/dashboard/src/server/content-context.ts')).toContain(
+      'scheduling: await calendar(),',
+    );
+    const api = read('apps/api/src/routes/content.ts');
+    expect(api).toMatch(
+      /scheduling: new ContentCalendarService\(\{[\s\S]*?quota: scheduleQuota\(db, caller\.workspaceId\)/,
+    );
+  });
+
+  it('the composer says what saving will do, in both languages', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain("draft.status === 'SCHEDULED' && can.edit");
+    both('editor.scheduledWarning.unschedules');
+    both('editor.scheduledWarning.scheduler');
+  });
+});

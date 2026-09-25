@@ -69,7 +69,12 @@ export interface ComposerVariant {
 export interface ComposerDraft {
   readonly id: string;
   readonly title: string;
-  readonly status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'ARCHIVED';
+  /*
+   * Q8 — SCHEDULED is here because the composer opens a scheduled post and
+   * says what saving it will do; the read-only statuses arrive as `readOnly`.
+   */
+  readonly status:
+    'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'SCHEDULED' | 'ARCHIVED';
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;

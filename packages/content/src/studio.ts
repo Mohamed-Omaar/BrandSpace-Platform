@@ -376,6 +376,8 @@ export class ContentStudioService extends ContentLibraryService {
     actorUserId: string;
     planKey: string | null;
     actorBrandScope: readonly string[];
+    /** Q8 — whether this editor may schedule decides what the edit does to a scheduled post. */
+    actorPermissionKeys: readonly string[];
   }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
     const { variant, platform, dialect, targetLocale, request } = await this.#toolRequest(input);
 
@@ -458,7 +460,12 @@ export class ContentStudioService extends ContentLibraryService {
     // PHASE 6 FINAL (D-284) — an AI edit is an edit. Before this, an inline
     // tool could rewrite an APPROVED caption and leave the item saying
     // "Approved" over words nobody had reviewed.
-    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
+    await this.revokeApprovalOnEdit(
+      input.actorUserId,
+      variant.contentItemId,
+      variant.brandId,
+      input.actorPermissionKeys,
+    );
 
     return {
       variant: updated,

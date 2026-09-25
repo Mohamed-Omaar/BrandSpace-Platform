@@ -489,6 +489,15 @@ export function DraftEditor({
           </div>
         ) : null}
 
+        {/* Q8 — what saving does to a scheduled post depends on who saves it. */}
+        {draft.status === 'SCHEDULED' && can.edit ? (
+          <div className="cs-notice warning" role="note" data-testid="editor-scheduled-warning">
+            {can.schedule
+              ? t['editor.scheduledWarning.scheduler']
+              : t['editor.scheduledWarning.unschedules']}
+          </div>
+        ) : null}
+
         {draft.variants.length === 0 ? (
           <p className="cs-empty">{t['content.composer.resultsEmpty']}</p>
         ) : (

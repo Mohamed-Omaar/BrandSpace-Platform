@@ -528,6 +528,7 @@ describe('the mutation paths carry BrandScope in the query, not after it', () =>
         body: 'Should never be written.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: elsewhere(),
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     await expect(done).rejects.toThrow(/not found/i);
@@ -625,6 +626,7 @@ describe('the mutation paths carry BrandScope in the query, not after it', () =>
         body: variant.body ?? '',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     await expect(unrestricted.done).resolves.toBeTruthy();
@@ -640,6 +642,7 @@ describe('the mutation paths carry BrandScope in the query, not after it', () =>
         body: variant.body ?? '',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [fixtures.a.brandId],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     await expect(inScope.done).resolves.toBeTruthy();

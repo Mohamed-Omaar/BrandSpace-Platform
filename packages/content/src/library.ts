@@ -56,6 +56,19 @@ export interface ContentLibraryOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
   readonly policy: ContentPolicy;
+  /**
+   * Q8 — the one calendar move an edit may cause: taking a SCHEDULED post off
+   * the calendar when the editor may not schedule. `ContentCalendarService`
+   * satisfies it. Optional so a library that never edits needs no calendar;
+   * an edit that needs it and finds it missing is refused rather than leaving
+   * a live slot behind.
+   */
+  readonly scheduling?: ScheduledEditPort;
+}
+
+/** Q8 — what an edit asks of the calendar, and nothing more. */
+export interface ScheduledEditPort {
+  unscheduleForEdit(input: { contentItemId: string; actorUserId: string }): Promise<void>;
 }
 
 export class ContentLibraryService {
@@ -68,11 +81,13 @@ export class ContentLibraryService {
   protected readonly db: TenantScopedClient;
   protected readonly workspaceId: string;
   protected readonly policy: ContentPolicy;
+  protected readonly scheduling: ScheduledEditPort | undefined;
 
   constructor(options: ContentLibraryOptions) {
     this.db = options.db;
     this.workspaceId = options.workspaceId;
     this.policy = options.policy;
+    this.scheduling = options.scheduling;
   }
 
   async listItems(input: {
@@ -594,6 +609,8 @@ export class ContentLibraryService {
     coverAssetId?: string | null | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
+    /** Q8 — whether this editor may schedule decides what an edit does to a scheduled post. */
+    actorPermissionKeys: readonly string[];
   }): Promise<ContentVariant> {
     // D-132: the scope is a predicate, so an out-of-scope variant is never
     // retrieved. Empty scope remains unrestricted; the refusal is the same
@@ -708,12 +725,14 @@ export class ContentLibraryService {
      * caption does. A reviewer who approved one photograph must not find a
      * different one published under their verdict.
      *
-     * A SCHEDULED item is not touched here, and cannot be: `transition()`
-     * refuses to move it and the calendar owns that edge. Editing the caption of
-     * something already planned is a Phase 6 question — there is a slot pointing
-     * at it — and this phase does not answer it by silently unscheduling.
+     * A SCHEDULED item follows Q8 (D-324): see `revokeApprovalOnEdit`.
      */
-    await this.revokeApprovalOnEdit(input.actorUserId, variant.contentItemId, variant.brandId);
+    await this.revokeApprovalOnEdit(
+      input.actorUserId,
+      variant.contentItemId,
+      variant.brandId,
+      input.actorPermissionKeys,
+    );
     return updated;
   }
 
@@ -742,6 +761,7 @@ export class ContentLibraryService {
     actorUserId: string,
     contentItemId: string,
     brandId: string,
+    actorPermissionKeys: readonly string[],
   ): Promise<void> {
     const item = await this.db.contentItem.findUnique({
       where: { id: contentItemId },
@@ -750,16 +770,43 @@ export class ContentLibraryService {
     if (!item) return;
 
     /*
-     * A SCHEDULED ITEM IS RECORDED, NOT MOVED (D-223).
+     * Q8 (D-324, superseding the D-223 rule for this case) — AN EDIT BY
+     * SOMEONE WHO MAY NOT SCHEDULE TAKES THE POST OFF THE CALENDAR.
      *
-     * The comment above says why this handler does not unschedule: the calendar
-     * owns that edge, and silently cancelling somebody's plan from inside an
-     * edit is a worse surprise than the one being prevented. What was missing
-     * is that it also said nothing — so a caption edited after scheduling left
-     * no trace, and the mismatch surfaced only when the publish failed.
+     * The slot is cancelled with its quota refunded and the post returns to
+     * DRAFT, so it needs approval again (where the brand requires it) and a
+     * scheduler to put it back. Leaving it planned let a member without
+     * `content.schedule` change what goes out at a time somebody else chose.
+     * The calendar does the writes, in this edit's transaction; without it the
+     * edit is refused rather than leaving a live slot behind.
+     */
+    if (item.status === 'SCHEDULED' && !actorPermissionKeys.includes('content.schedule')) {
+      if (!this.scheduling) {
+        throw new AppError('CONFLICT', 'Editing a scheduled post needs the calendar.');
+      }
+      await this.scheduling.unscheduleForEdit({ contentItemId: item.id, actorUserId });
+      await writeAuditEvent(this.db, this.workspaceId, {
+        action: 'content.scheduled_item_edited',
+        actorType: 'USER',
+        actorId: actorUserId,
+        resourceType: 'ContentItem',
+        resourceId: item.id,
+        brandId,
+        severity: 'WARNING',
+        reason: 'edited_without_schedule_permission',
+        before: { status: 'SCHEDULED' },
+        after: { status: 'DRAFT', unscheduled: true },
+      });
+      return;
+    }
+
+    /*
+     * A SCHEDULED ITEM EDITED BY A SCHEDULER IS RECORDED, NOT MOVED (D-223).
      *
-     * The fingerprint on the approval is what actually stops the send. This
-     * event is what makes it legible beforehand, at WARNING rather than NOTICE
+     * Somebody who may schedule keeps their plan: silently cancelling it from
+     * inside an edit would be a worse surprise than the one being prevented.
+     * The fingerprint on the approval is what stops the send when the brand
+     * requires approval; this event makes it legible beforehand, at WARNING
      * because a scheduled post that will now refuse to publish is something
      * somebody has to act on.
      */

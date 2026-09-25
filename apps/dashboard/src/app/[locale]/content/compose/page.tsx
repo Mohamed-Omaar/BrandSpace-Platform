@@ -917,6 +917,8 @@ const EDITOR_KEYS = [
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',
+  'editor.scheduledWarning.scheduler',
+  'editor.scheduledWarning.unschedules',
   'editor.inReviewWarning',
   'editor.published.readOnly',
   'content.action.duplicate',

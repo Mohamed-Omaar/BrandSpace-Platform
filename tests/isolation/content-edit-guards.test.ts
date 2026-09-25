@@ -5,6 +5,7 @@ import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import {
   ContentApprovalService,
+  ContentCalendarService,
   ContentLibraryService,
   ContentStudioService,
   type ContentPolicy,
@@ -170,6 +171,7 @@ describe('B-2 · a published post is read-only', () => {
             body: 'Rewritten after the fact.',
             actorUserId: fixtures.a.userId,
             actorBrandScope: [],
+            actorPermissionKeys: ['content.edit', 'content.schedule'],
           }),
         ),
       ).rejects.toMatchObject({ code: 'CONFLICT' });
@@ -202,6 +204,7 @@ describe('B-2 · a published post is read-only', () => {
           actorUserId: fixtures.a.userId,
           planKey: null,
           actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.schedule'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
@@ -219,6 +222,7 @@ describe('B-2 · a published post is read-only', () => {
           body: `Edited while ${status}.`,
           actorUserId: fixtures.a.userId,
           actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.schedule'],
         }),
       );
       expect(await bodyOf(post.variantId)).toBe(`Edited while ${status}.`);
@@ -265,6 +269,7 @@ describe('B-3 · editing a post in review withdraws the review', () => {
         body,
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -392,5 +397,187 @@ describe('B-7 · archive and restore are one permission: content.archive', () =>
     });
     await move(post.itemId, 'DRAFT', ['content.edit']);
     expect(await statusOf(post.itemId)).toBe('DRAFT');
+  });
+});
+
+describe('Q8 · editing a SCHEDULED post without content.schedule takes it off the calendar', () => {
+  /** A quota that records what it was asked, so the refund key can be read back. */
+  function recordingQuota() {
+    const consumed: string[] = [];
+    const refunded: string[] = [];
+    return {
+      consumed,
+      refunded,
+      quota: {
+        limit: async () => null,
+        consume: async (key: string) => {
+          consumed.push(key);
+          return true;
+        },
+        refund: async (key: string) => {
+          refunded.push(key);
+        },
+      },
+    };
+  }
+
+  function calendar(db: TenantScopedClient, quota: ReturnType<typeof recordingQuota>['quota']) {
+    return new ContentCalendarService({
+      db,
+      workspaceId: fixtures.a.workspaceId,
+      policy: CONTENT_POLICY,
+      timezone: 'UTC',
+      quota,
+    });
+  }
+
+  /** A post placed on the calendar three days out, and what its slot charged. */
+  async function scheduledPost() {
+    const post = await freshPost();
+    const recorder = recordingQuota();
+    const when = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const view = await inA((db) =>
+      calendar(db, recorder.quota).schedule({
+        contentItemId: post.itemId,
+        localTime: `${when}T10:00`,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+    return { ...post, slotId: view.slot.id, recorder };
+  }
+
+  const read = (itemId: string, slotId: string) =>
+    inA(async (db) => ({
+      item: await db.contentItem.findUniqueOrThrow({ where: { id: itemId } }),
+      slot: await db.calendarSlot.findUniqueOrThrow({ where: { id: slotId } }),
+    }));
+
+  it('cancels the slot, refunds its quota once, returns the post to DRAFT and audits it', async () => {
+    const post = await scheduledPost();
+    expect((await read(post.itemId, post.slotId)).item.status).toBe('SCHEDULED');
+
+    await inA((db) =>
+      new ContentLibraryService({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy: CONTENT_POLICY,
+        scheduling: calendar(db, post.recorder.quota),
+      }).editVariant({
+        variantId: post.variantId,
+        body: 'Changed by a copywriter.',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        actorPermissionKeys: ['content.read', 'content.edit'],
+      }),
+    );
+
+    const after = await read(post.itemId, post.slotId);
+    expect(after.slot.status).toBe('CANCELLED');
+    expect(after.slot.cancelledAt).not.toBeNull();
+    expect(after.item.status).toBe('DRAFT');
+    expect(await bodyOf(post.variantId)).toBe('Changed by a copywriter.');
+    // The refund uses the SAME derived key a manual cancel would, so the two
+    // can never both refund.
+    expect(post.recorder.refunded).toEqual([`${post.recorder.consumed[0]}:refund`]);
+
+    const actions = await inA((db) =>
+      db.auditEvent.findMany({
+        where: { resourceId: { in: [post.itemId, post.slotId] } },
+        select: { action: true, reason: true },
+      }),
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        { action: 'content.schedule_cancelled', reason: null },
+        { action: 'content.scheduled_item_edited', reason: 'edited_without_schedule_permission' },
+      ]),
+    );
+
+    // A later manual cancel of the same slot refunds nothing more.
+    await inA((db) =>
+      calendar(db, post.recorder.quota).cancel({
+        slotId: post.slotId,
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+      }),
+    );
+    expect(post.recorder.refunded).toHaveLength(1);
+  });
+
+  it('with content.schedule the post stays planned, and the edit is recorded', async () => {
+    const post = await scheduledPost();
+    await inA((db) =>
+      new ContentLibraryService({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy: CONTENT_POLICY,
+        scheduling: calendar(db, post.recorder.quota),
+      }).editVariant({
+        variantId: post.variantId,
+        body: 'Changed by a scheduler.',
+        actorUserId: fixtures.a.userId,
+        actorBrandScope: [],
+        actorPermissionKeys: ['content.read', 'content.edit', 'content.schedule'],
+      }),
+    );
+    const after = await read(post.itemId, post.slotId);
+    expect(after.item.status).toBe('SCHEDULED');
+    expect(after.slot.status).not.toBe('CANCELLED');
+    expect(post.recorder.refunded).toEqual([]);
+    const recorded = await inA((db) =>
+      db.auditEvent.count({
+        where: {
+          resourceId: post.itemId,
+          action: 'content.scheduled_item_edited',
+          reason: 'edited_after_scheduling',
+        },
+      }),
+    );
+    expect(recorded).toBe(1);
+  });
+
+  it('a slot that has started publishing refuses the edit, and nothing changes', async () => {
+    const post = await scheduledPost();
+    await inA((db) =>
+      db.calendarSlot.update({ where: { id: post.slotId }, data: { status: 'PUBLISHING' } }),
+    );
+    await expect(
+      inA((db) =>
+        new ContentLibraryService({
+          db,
+          workspaceId: fixtures.a.workspaceId,
+          policy: CONTENT_POLICY,
+          scheduling: calendar(db, post.recorder.quota),
+        }).editVariant({
+          variantId: post.variantId,
+          body: 'Too late.',
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          actorPermissionKeys: ['content.read', 'content.edit'],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const after = await read(post.itemId, post.slotId);
+    expect(after.slot.status).toBe('PUBLISHING');
+    expect(after.item.status).toBe('SCHEDULED');
+    expect(await bodyOf(post.variantId)).toBe('The words that went out.');
+    expect(post.recorder.refunded).toEqual([]);
+  });
+
+  it('without the calendar the edit is refused rather than leaving a live slot', async () => {
+    const post = await scheduledPost();
+    await expect(
+      inA((db) =>
+        library(db).editVariant({
+          variantId: post.variantId,
+          body: 'No calendar here.',
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          actorPermissionKeys: ['content.read', 'content.edit'],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect((await read(post.itemId, post.slotId)).slot.status).not.toBe('CANCELLED');
   });
 });

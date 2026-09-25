@@ -433,6 +433,47 @@ export class ContentCalendarService {
     return this.#viewOf(await this.#requireSlot(slotId, actorBrandScope));
   }
 
+  /**
+   * Q8 — AN EDIT BY SOMEONE WITHOUT `content.schedule` TAKES THE POST OFF THE
+   * CALENDAR (D-324).
+   *
+   * The slot is cancelled and its quota refunded, and the post goes back to
+   * DRAFT, so it has to be approved (where the brand requires it) and
+   * scheduled again by someone who may. The same writes `cancel()` makes, with
+   * the same derived refund key — so a later manual cancel of the same slot
+   * cannot refund twice — but reached from the library's edit path rather
+   * than a calendar action, which is why it takes no brand scope: the edit has
+   * already found the item inside the actor's scope.
+   *
+   * ONLY A SLOT THAT HAS NOT STARTED PUBLISHING. The cancel is a conditional
+   * update on `RESCHEDULABLE_SLOT_STATUSES`, so it cannot race the publisher;
+   * a slot that moved on refuses the edit (`SLOT_NOT_RESCHEDULABLE`), and the
+   * edit's transaction rolls back with it.
+   */
+  async unscheduleForEdit(input: { contentItemId: string; actorUserId: string }): Promise<void> {
+    const now = this.#clock.now();
+    const slot = await this.#liveSlotFor(input.contentItemId);
+    if (slot) {
+      const { count } = await this.#db.calendarSlot.updateMany({
+        where: { id: slot.id, status: { in: [...RESCHEDULABLE_SLOT_STATUSES] } },
+        data: { status: 'CANCELLED', cancelledAt: now },
+      });
+      if (count === 0) throw slotNotReschedulable();
+      if (slot.usageIdempotencyKey) {
+        await this.#quota.refund(`${slot.usageIdempotencyKey}:refund`);
+      }
+      await this.#audit('content.schedule_cancelled', slot, input.actorUserId, {
+        scheduledLocalTime: slot.scheduledLocalTime,
+        timezone: slot.timezone,
+        reason: 'edited_without_schedule_permission',
+      });
+    }
+    const item = await this.#db.contentItem.findUnique({ where: { id: input.contentItemId } });
+    if (item?.status === 'SCHEDULED') {
+      await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
+    }
+  }
+
   /** The live slot for an item, if it has one. */
   async slotForItem(contentItemId: string): Promise<CalendarSlot | null> {
     return this.#liveSlotFor(contentItemId);

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  ContentCalendarService,
   ContentStudioService,
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
@@ -25,6 +26,7 @@ import {
   isAppError,
 } from '@brandspace/shared';
 import { route } from '../route-contract';
+import { scheduleQuota } from './schedule-quota';
 
 /**
  * AI Content Studio — the customer-initiated generation surface.
@@ -126,6 +128,8 @@ interface Caller {
   readonly userId: string;
   readonly workspaceId: string;
   readonly brandScope: readonly string[];
+  /** Q8 — the session's grants, for the rules that depend on them. Never from a body. */
+  readonly permissionKeys: readonly string[];
 }
 
 /**
@@ -168,6 +172,7 @@ async function resolveCaller(
     userId: customer.userId,
     workspaceId: workspace.workspaceId,
     brandScope: workspace.brandScope,
+    permissionKeys: workspace.permissionKeys,
   };
 }
 
@@ -229,11 +234,28 @@ function fail(reply: FastifyReply, action: string, error: unknown) {
 }
 
 async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWorkspace>[1]>[0]) {
+  const policy = await resolveContentPolicy(configurationService(), currentEnvironment());
+  const workspace = await db.workspace.findUniqueOrThrow({
+    where: { id: caller.workspaceId },
+    select: { timezone: true },
+  });
   return new ContentStudioService({
     db,
     workspaceId: caller.workspaceId,
     gateway: gateway(),
-    policy: await resolveContentPolicy(configurationService(), currentEnvironment()),
+    policy,
+    /*
+     * Q8 — an AI edit by a member who may not schedule takes a scheduled post
+     * off the calendar, through the calendar, in the edit's transaction. The
+     * quota is the shared binding (P7-R6), so the refund is the real one.
+     */
+    scheduling: new ContentCalendarService({
+      db,
+      workspaceId: caller.workspaceId,
+      policy,
+      timezone: workspace.timezone,
+      quota: scheduleQuota(db, caller.workspaceId),
+    }),
   });
 }
 
@@ -439,6 +461,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
               actorUserId: caller.userId,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,
+              actorPermissionKeys: caller.permissionKeys,
             }),
           { prisma: getPrisma() },
         );
