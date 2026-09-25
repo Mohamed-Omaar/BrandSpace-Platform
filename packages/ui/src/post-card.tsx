@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { DragEvent, ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import {
   AbstractMedia,
@@ -413,12 +413,28 @@ export function CalendarPostChip({
   labels,
   onOpen,
   testId,
+  dragData,
 }: {
   readonly post: PostRecord;
   readonly labels: PostCardLabels;
   readonly onOpen?: (() => void) | undefined;
   readonly testId?: string | undefined;
+  /**
+   * B7 — when set, the chip can be dragged to another day, carrying this
+   * payload. Never the only way to move a post (WCAG 2.5.7): the post's own
+   * drawer has the date and time form.
+   */
+  readonly dragData?: string | undefined;
 }) {
+  const drag = dragData
+    ? {
+        draggable: true,
+        onDragStart: (event: DragEvent<HTMLElement>) => {
+          event.dataTransfer.setData('text/plain', dragData);
+          event.dataTransfer.effectAllowed = 'move';
+        },
+      }
+    : {};
   const body = (
     <>
       <PostThumb post={post} size="1.875rem" />
@@ -499,6 +515,7 @@ export function CalendarPostChip({
       aria-label={name}
       onClick={onOpen}
       style={style}
+      {...drag}
     >
       {body}
     </button>
@@ -509,6 +526,7 @@ export function CalendarPostChip({
       aria-label={name}
       role="group"
       style={style}
+      {...drag}
     >
       {body}
     </div>

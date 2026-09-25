@@ -764,6 +764,7 @@ const CALENDAR_KEYS = [
   'calendar.scheduleDraft',
   'calendar.scheduleDate',
   'calendar.pastDay',
+  'calendar.moveFromPost',
   'calendar.scheduleTime',
   'calendar.scheduleSubmit',
   'calendar.rescheduleTitle',

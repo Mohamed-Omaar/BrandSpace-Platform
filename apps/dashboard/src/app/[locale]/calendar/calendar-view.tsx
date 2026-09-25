@@ -244,6 +244,43 @@ export function CalendarView({
     setScheduling(true);
   };
 
+  /*
+   * B7 — A PLANNED POST DRAGGED TO ANOTHER DAY keeps its time: the same
+   * reschedule action the drawer's form posts, with the new date. Drag is
+   * never the only way (WCAG 2.5.7) — the drawer has the date and time form.
+   */
+  const moveSlotTo = (slotId: string, day: string) => {
+    const slot = slots.find((candidate) => candidate.slotId === slotId);
+    if (!slot || !canSchedule || slot.reschedulable === false) return;
+    if (today !== '' && day < today) {
+      setPastDayNotice(true);
+      return;
+    }
+    setPastDayNotice(false);
+    if (slot.date === day) return;
+    const form = new FormData();
+    form.set('locale', locale);
+    form.set('month', month);
+    form.set('slotId', slot.slotId);
+    form.set('date', day);
+    form.set('time', slot.time);
+    startTransition(() => {
+      void actions.reschedule(form);
+    });
+  };
+
+  const onDrop = (day: string, data: string) => {
+    if (data.startsWith('slot:')) moveSlotTo(data.slice('slot:'.length), day);
+    else openScheduleFor(data.startsWith('item:') ? data.slice('item:'.length) : data, day);
+  };
+
+  /** B7 — only a post that can still move is draggable, and only for a scheduler. */
+  const postDragData = (post: PostRecord): string | undefined => {
+    if (!canSchedule) return undefined;
+    const slot = slots.find((candidate) => candidate.slotId === post.id);
+    return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;
+  };
+
   const filterQuery = new URLSearchParams(
     Object.entries(filters).filter(([, value]) => value !== ''),
   ).toString();
@@ -320,7 +357,16 @@ export function CalendarView({
           ) : undefined
         }
         {...(canSchedule
-          ? { onDropDay: (day: string, data: string) => openScheduleFor(data, day) }
+          ? {
+              onDropDay: onDrop,
+              postDragData,
+              // B7 — "new post" on an empty day: the scheduling dialog, dated.
+              onCreateOnDay: (day: string) => {
+                setPastDayNotice(false);
+                setScheduleDate(day);
+                setScheduling(true);
+              },
+            }
           : {})}
         filters={
           <>
@@ -460,6 +506,14 @@ export function CalendarView({
               >
                 {t['calendar.tray.hint']}
               </p>
+              {/* B7 / M7 — a phone has no drag; moving is done from the post itself. */}
+              <p
+                className="bs-narrow-only"
+                data-testid="calendar-move-note"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+              >
+                {t['calendar.moveFromPost']}
+              </p>
               <ul
                 style={{
                   listStyle: 'none',
@@ -478,7 +532,8 @@ export function CalendarView({
                     draggable
                     data-testid={`calendar-tray-${draft.id}`}
                     onDragStart={(event) => {
-                      event.dataTransfer.setData('text/plain', draft.id);
+                      // B7 — `item:` says a tray draft; a post already planned carries `slot:`.
+                      event.dataTransfer.setData('text/plain', `item:${draft.id}`);
                       event.dataTransfer.effectAllowed = 'copy';
                     }}
                     style={{
@@ -821,7 +876,8 @@ export function CalendarView({
                   </button>
                 </form>
               ) : null}
-              {canSchedule ? (
+              {/* B7 — only a plan that has not started publishing can be taken off. */}
+              {canSchedule && openSlot.reschedulable !== false ? (
                 <form action={actions.cancel}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="month" value={month} />

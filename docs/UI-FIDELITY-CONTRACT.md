@@ -554,6 +554,15 @@ own `listStyle` / `rowStyle`, `quiet` empty lines, neutral `sm` buttons): "Waiti
 your feedback" (reads content, creates and approves nothing; links to the calendar). They sit between
 "What needs you" and "Recommended", so the owner's A → E order is unchanged.
 
+### 6.3.29 Prototype v90 Phase 2A — calendar drag, new post on a day, past days (B7, F2)
+
+The ported grid, cells and chips keep their geometry. A chip for a post that can still move is
+`draggable` for a scheduler; dropping it on another day reschedules it at the same time. An empty
+day that has not passed offers a quiet "+ Create post" control — `micro` type, `textSecondary`, no
+fill until hover — so an empty month does not become a wall of buttons. A day before today carries
+`data-past` and refuses a drop with a warning `Banner`. On a phone (no drag) a `bs-narrow-only` line
+says a post is moved from its own drawer. Drag is never the only way (WCAG 2.5.7).
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

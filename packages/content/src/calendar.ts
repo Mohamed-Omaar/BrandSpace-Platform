@@ -325,10 +325,19 @@ export class ContentCalendarService {
     const slot = await this.#requireSlot(input.slotId, input.actorBrandScope);
     if (slot.status === 'CANCELLED') return slot;
 
-    const cancelled = await this.#db.calendarSlot.update({
-      where: { id: slot.id },
+    /*
+     * B7 — ONLY A PLAN THAT HAS NOT STARTED CAN BE TAKEN OFF. Cancelling a
+     * slot that is publishing, published or failed refunded its quota and hid
+     * a post that had gone (or was going) out. The same conditional update
+     * `reschedule` uses, so it cannot race the publisher either.
+     */
+    if (!RESCHEDULABLE_SLOT_STATUSES.includes(slot.status)) throw slotNotReschedulable();
+    const claimed = await this.#db.calendarSlot.updateMany({
+      where: { id: slot.id, status: { in: [...RESCHEDULABLE_SLOT_STATUSES] } },
       data: { status: 'CANCELLED', cancelledAt: this.#clock.now() },
     });
+    if (claimed.count === 0) throw slotNotReschedulable();
+    const cancelled = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
 
     /*
      * THE ITEM GOES BACK TO BEING A DRAFT.

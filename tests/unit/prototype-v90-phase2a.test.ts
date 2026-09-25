@@ -734,3 +734,42 @@ describe('B5 · Approvals per person, and a reason for "request changes"', () =>
     expect(mine).toContain('assignedToLabel: row.assignedToUserId');
   });
 });
+
+describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once it goes out', () => {
+  it('a planned post is draggable for a scheduler, and a drop keeps its time', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain(
+      'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
+    );
+    expect(view).toContain("form.set('time', slot.time);");
+    expect(view).toMatch(/if \(today !== '' && day < today\) \{\s*setPastDayNotice\(true\);/);
+    expect(view).toContain("event.dataTransfer.setData('text/plain', `item:${draft.id}`);");
+    const chip = read('packages/ui/src/post-card.tsx');
+    expect(chip).toContain('draggable: true');
+    expect(chip).toContain("event.dataTransfer.setData('text/plain', dragData);");
+  });
+
+  it('"new post" is offered only on an empty day that has not passed', () => {
+    const grid = read('packages/ui/src/calendar.tsx');
+    expect(grid).toContain('{onCreateOnDay && !day.isPast && day.posts.length === 0 ? (');
+    expect(grid).toContain('aria-label={`${labels.createPost} — ${day.longLabel}`}');
+  });
+
+  it('Unschedule is offered, and accepted, only for a plan that has not started', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain(
+      '{canSchedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
+    );
+    const calendar = read('packages/content/src/calendar.ts');
+    const cancel = calendar.slice(calendar.indexOf('  async cancel('));
+    expect(cancel.slice(0, cancel.indexOf('\n  async '))).toContain(
+      'if (!RESCHEDULABLE_SLOT_STATUSES.includes(slot.status)) throw slotNotReschedulable();',
+    );
+  });
+
+  it('a phone is told how to move a post, in both languages', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toMatch(/className="bs-narrow-only"\s*data-testid="calendar-move-note"/);
+    both('calendar.moveFromPost');
+  });
+});
