@@ -422,14 +422,30 @@ export class ContentApprovalService {
      * of this workspace, or is scoped to this brand, would answer a question the
      * requester has not been granted (CLAUDE.md §2.1).
      */
-    const assignedToUserId = input.assignedToUserId ?? null;
-    if (assignedToUserId !== null) {
+    const chosen = input.assignedToUserId ?? null;
+    if (chosen !== null) {
       const eligible = await this.mayUserReview({
-        userId: assignedToUserId,
+        userId: chosen,
         brandId: item.brandId,
       });
       if (!eligible) throw assigneeNotEligible();
     }
+    /*
+     * Q10 (D-325) — NOBODY CHOSEN MEANS THE DEFAULT REVIEWER, not nobody: the
+     * first eligible approver for the brand who is not the author, members
+     * before the owner. Anyone else who may approve for the brand can still
+     * decide it (`decide()`); the assignment says who is asked first. With no
+     * eligible reviewer at all the review stays unassigned.
+     */
+    const assignedToUserId =
+      chosen ??
+      (
+        await this.eligibleReviewers({
+          brandId: item.brandId,
+          excludeUserId: input.actor.userId,
+        })
+      )[0] ??
+      null;
 
     /*
      * THE ROW AND THE ITEM'S STATUS MOVE TOGETHER, and they already do: every
@@ -447,7 +463,7 @@ export class ContentApprovalService {
         subjectType: 'CONTENT_ITEM',
         contentItemId: item.id,
         requestedByUserId: input.actor.userId,
-        assignedToUserId: input.assignedToUserId ?? null,
+        assignedToUserId,
         status: 'PENDING',
         requestNote: note,
         cycle: priorCycles + 1,
@@ -569,14 +585,13 @@ export class ContentApprovalService {
     }
 
     /*
-     * AN ASSIGNED REVIEW IS THAT PERSON'S TO DECIDE. Assignment was recorded
-     * and then ignored, which is a misleading half-behaviour: the screen said a
-     * review was assigned and anyone who could approve could still decide it.
+     * Q10 (D-325, amending D-127) — AN ASSIGNMENT SAYS WHO IS ASKED FIRST, NOT
+     * WHO ALONE MAY ANSWER. Every review is now assigned by default, so an
+     * assignee-only rule would stall a review whenever that one person is
+     * away. Anyone with `content.approve` for the brand may decide it, under
+     * the same rules as above (brand scope, self-approval, the cycle's
+     * snapshot); the queue puts a reviewer's own assignments first.
      */
-    if (approval.assignedToUserId && approval.assignedToUserId !== input.actor.userId) {
-      await this.#auditDenied(input.actor.userId, approval, 'assigned_to_another');
-      throw approvalNotPermitted();
-    }
 
     const item = approval.contentItemId
       ? await this.#db.contentItem.findUnique({ where: { id: approval.contentItemId } })
@@ -906,8 +921,35 @@ export class ContentApprovalService {
   async queue(input: {
     brandScope: readonly string[] | null | undefined;
     assignedToUserId?: string;
+    /** Q10 — this reviewer's own assignments first, then everyone else's. */
+    preferUserId?: string;
     take?: number;
   }): Promise<ApprovalWithItem[]> {
+    if (input.preferUserId && !input.assignedToUserId) {
+      const take = Math.min(input.take ?? 50, 200);
+      const mine = await this.queue({
+        brandScope: input.brandScope,
+        assignedToUserId: input.preferUserId,
+        take,
+      });
+      if (mine.length >= take) return mine;
+      const rest = await this.#db.approval.findMany({
+        where: {
+          workspaceId: this.#workspaceId,
+          status: 'PENDING',
+          ...brandIdScopeFilter(input.brandScope),
+          OR: [{ assignedToUserId: null }, { assignedToUserId: { not: input.preferUserId } }],
+        },
+        include: {
+          item: {
+            select: { id: true, title: true, status: true, brandId: true, createdByUserId: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: take - mine.length,
+      });
+      return [...mine, ...rest];
+    }
     return this.#db.approval.findMany({
       where: {
         workspaceId: this.#workspaceId,
@@ -1042,7 +1084,7 @@ export class ContentApprovalService {
       mayDecide:
         mayReview &&
         approval.status === 'PENDING' &&
-        !(approval.assignedToUserId && approval.assignedToUserId !== input.actor.userId) &&
+        // Q10 (D-325) — an assignment no longer limits who may decide.
         !(
           (approval.requestedByUserId === input.actor.userId ||
             item.createdByUserId === input.actor.userId) &&
@@ -1176,6 +1218,9 @@ export class ContentApprovalService {
    *   3. APPROVAL AUTHORITY: `content.approve` through the role. Under D-62
    *      that is the whole of it — no brand setting and no role key adds to it,
    *      which is why `mayApproveForBrand` no longer accepts either.
+   *
+   * IN A STABLE ORDER (Q10): members before the workspace owner, then by when
+   * they joined. The first entry is the default reviewer `submit()` assigns.
    */
   async eligibleReviewers(input: { brandId: string; excludeUserId?: string }): Promise<string[]> {
     const members = await this.#db.membership.findMany({
@@ -1185,8 +1230,15 @@ export class ContentApprovalService {
         brandScope: true,
         role: { select: { key: true, permissions: { select: { permission: true } } } },
       },
+      orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
     });
-    return members
+    const workspace = await this.#db.workspace.findUnique({
+      where: { id: this.#workspaceId },
+      select: { ownerUserId: true },
+    });
+    const ownerLast = (userId: string) => (userId === workspace?.ownerUserId ? 1 : 0);
+    return [...members]
+      .sort((a, b) => ownerLast(a.userId) - ownerLast(b.userId))
       .filter((m) => m.userId !== input.excludeUserId)
       .filter((m) => brandInScope(m.brandScope, input.brandId))
       .filter((m) =>

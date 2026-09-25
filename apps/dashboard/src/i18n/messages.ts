@@ -1032,6 +1032,8 @@ export const messages = {
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
     'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. أنشئ نسخة جديدة منه لتعديلها.',
+    'editor.reviewer.label': 'المراجِع',
+    'editor.reviewer.auto': 'تلقائي ({name})',
     'editor.inReviewWarning':
       'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
@@ -1397,7 +1399,8 @@ export const messages = {
     'approvals.status.REJECTED': 'مرفوض',
     'approvals.status.CANCELLED': 'مسحوب',
     'approvals.selfBlocked': 'لا يمكنك اعتماد محتوى أرسلته بنفسك.',
-    'approvals.assignedElsewhere': 'هذه المراجعة مُسندة إلى عضو آخر.',
+    'approvals.assignedTo': 'مُسندة إلى {name}',
+    'approvals.assignedToYou': 'مُسندة إليك',
     'approvals.policyTitle': 'سياسة الموافقات',
     'approvals.policyBody': 'تُطبَّق هذه القواعد على محتوى هذه العلامة وحدها.',
     'approvals.policyBrand': 'العلامة',
@@ -3650,6 +3653,8 @@ export const messages = {
     'editor.insufficient.add': 'Add knowledge',
     'editor.published.readOnly':
       'This post has been published and can no longer be edited. Make a new copy to change it.',
+    'editor.reviewer.label': 'Reviewer',
+    'editor.reviewer.auto': 'Automatic ({name})',
     'editor.inReviewWarning':
       'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
@@ -4030,7 +4035,8 @@ export const messages = {
     'approvals.status.REJECTED': 'Rejected',
     'approvals.status.CANCELLED': 'Withdrawn',
     'approvals.selfBlocked': 'You cannot approve content you sent for review yourself.',
-    'approvals.assignedElsewhere': 'This review is assigned to another member.',
+    'approvals.assignedTo': 'Assigned to {name}',
+    'approvals.assignedToYou': 'Assigned to you',
     'approvals.policyTitle': 'Approval policy',
     'approvals.policyBody': 'These rules apply to this brand\u2019s content only.',
     'approvals.policyBrand': 'Brand',

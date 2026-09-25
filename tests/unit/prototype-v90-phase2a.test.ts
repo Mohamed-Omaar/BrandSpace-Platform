@@ -649,3 +649,37 @@ describe('F5 · Home and Performance count published posts from the same live li
     );
   });
 });
+
+describe('B4 / Q10 · default reviewer; anyone who may approve can decide', () => {
+  it('the service assigns the default, and no longer refuses a non-assignee', () => {
+    const approvals = read('packages/content/src/approvals.ts');
+    expect(approvals).toMatch(/const assignedToUserId =\s*chosen \?\?/);
+    expect(approvals).not.toContain("'assigned_to_another'");
+    expect(approvals).not.toMatch(/approval\.assignedToUserId !== input\.actor\.userId/);
+    expect(approvals).toContain('preferUserId?: string;');
+  });
+
+  it('the Approvals screen offers the decision and says who it is assigned to', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    expect(page).toContain('mayDecide: mayApprove && !blocked,');
+    expect(page).toContain('preferUserId: customer.userId');
+    both('approvals.assignedTo');
+    both('approvals.assignedToYou');
+  });
+
+  it('the composer lets the author choose, or leave it automatic, on submit and resubmit', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain("{reviewerPicker('submit')}");
+    expect(editor).toContain("{reviewerPicker('resubmit')}");
+    expect(editor).toContain('name="assignedToUserId"');
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const resubmit = actions.slice(
+      actions.indexOf('export async function resubmitAfterChangesAction'),
+    );
+    expect(resubmit.slice(0, resubmit.indexOf('\n}\n'))).toContain(
+      'assignedToUserId: assignedTo.length > 0 ? assignedTo : null,',
+    );
+    both('editor.reviewer.label');
+    both('editor.reviewer.auto');
+  });
+});

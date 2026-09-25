@@ -67,6 +67,11 @@ export interface DraftEditorProps {
   /** D-288 — the approval policy and a changes request, when there is one. */
   readonly review?: {
     readonly requiresApproval: boolean;
+    /**
+     * Q10 — who may be asked to review, default first (members before the
+     * owner, never the author). Empty when the reader may not send for review.
+     */
+    readonly reviewers?: readonly { readonly userId: string; readonly name: string }[];
     readonly changes: {
       readonly note: string | null;
       readonly reviewer: string | null;
@@ -330,6 +335,33 @@ export function DraftEditor({
     };
   }, [canQuote, activeVariant, estimateKey, estimates]);
   const estimate = estimates[estimateKey];
+
+  /*
+   * Q10 — WHO TO ASK. "Automatic" sends the review to the default reviewer the
+   * service picks (the first name below); choosing a name asks that person.
+   * Either way anyone who may approve for the brand can decide it.
+   */
+  const reviewerPicker = (id: string) =>
+    review?.reviewers && review.reviewers.length > 0 ? (
+      <span className="cs-field">
+        <label htmlFor={`${fieldId}-${id}`}>{t['editor.reviewer.label']}</label>
+        <select
+          id={`${fieldId}-${id}`}
+          name="assignedToUserId"
+          defaultValue=""
+          data-testid={`${id}-reviewer`}
+        >
+          <option value="">
+            {fill(t['editor.reviewer.auto'] ?? '{name}', { name: review.reviewers[0]?.name ?? '' })}
+          </option>
+          {review.reviewers.map((reviewer) => (
+            <option key={reviewer.userId} value={reviewer.userId}>
+              {reviewer.name}
+            </option>
+          ))}
+        </select>
+      </span>
+    ) : null;
 
   return (
     <div className="cs-draft-layout" data-testid="draft-editor">
@@ -797,6 +829,7 @@ export function DraftEditor({
                       maxLength={2_000}
                       data-testid="resubmit-reply"
                     />
+                    {reviewerPicker('resubmit')}
                     <button
                       type="submit"
                       className="cs-dark-button"
@@ -833,6 +866,7 @@ export function DraftEditor({
                 <form action={actions.submitForReview}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
+                  {reviewerPicker('submit')}
                   <button
                     type="submit"
                     className={

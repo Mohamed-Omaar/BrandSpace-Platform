@@ -55,8 +55,8 @@ export interface ApprovalRow {
   readonly mayDecide: boolean;
   /** True when the reader submitted it and the brand forbids self-approval. */
   readonly blockedAsSelf: boolean;
-  /** True when the review is assigned to somebody else, who alone may decide it. */
-  readonly assignedElsewhere: boolean;
+  /** Q10 — "Assigned to you" / "Assigned to Sara", or null when nobody is. */
+  readonly assignedToLabel: string | null;
   readonly mayWithdraw: boolean;
   /**
    * Whether to offer the Studio link — a link that refuses the person who
@@ -253,6 +253,11 @@ export function ApprovalsView({
             {queue.map((row) => (
               <li key={row.id} style={rowStyle} data-testid={`approval-${row.itemId}`}>
                 <ApprovalSummary locale={locale} t={t} row={row} />
+                {row.assignedToLabel ? (
+                  <p style={noteStyle} data-testid={`assigned-to-${row.itemId}`}>
+                    {row.assignedToLabel}
+                  </p>
+                ) : null}
                 {row.mayDecide ? (
                   <DecisionForm
                     locale={locale}
@@ -261,10 +266,6 @@ export function ApprovalsView({
                     itemId={row.itemId}
                     action={actions.decide}
                   />
-                ) : row.assignedElsewhere ? (
-                  <p style={noteStyle} data-testid={`assigned-elsewhere-${row.itemId}`}>
-                    {t('approvals.assignedElsewhere')}
-                  </p>
                 ) : row.blockedAsSelf ? (
                   /*
                    * D-122. The reader submitted this and the brand forbids

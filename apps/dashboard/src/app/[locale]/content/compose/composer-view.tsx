@@ -165,6 +165,11 @@ export interface ComposerViewProps {
    */
   readonly review?: {
     readonly requiresApproval: boolean;
+    /**
+     * Q10 — who may be asked to review, default first (members before the
+     * owner, never the author). Empty when the reader may not send for review.
+     */
+    readonly reviewers?: readonly { readonly userId: string; readonly name: string }[];
     readonly changes: {
       readonly note: string | null;
       readonly reviewer: string | null;

@@ -247,8 +247,38 @@ export default async function ComposePage({
     ? await inContentStudio(workspace.workspaceId, async (services) => {
         const approvals = await services.approvals();
         const brandPolicy = await approvals.policyForBrand(draft.brandId);
+        /*
+         * Q10 — WHO MAY BE ASKED, default first: the same ordered list the
+         * service assigns from, so "Automatic" and the first name agree.
+         */
+        const reviewerIds =
+          workspace.permissionKeys.includes('content.submit') &&
+          (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED')
+            ? await approvals.eligibleReviewers({
+                brandId: draft.brandId,
+                excludeUserId: customer.userId,
+              })
+            : [];
+        const reviewerRows =
+          reviewerIds.length > 0
+            ? await services.db.membership.findMany({
+                where: { userId: { in: reviewerIds } },
+                select: { userId: true, user: { select: { name: true, email: true } } },
+              })
+            : [];
+        const reviewerName = new Map(
+          reviewerRows.map((row) => [row.userId, row.user.name ?? row.user.email] as const),
+        );
+        const reviewers = reviewerIds.map((userId) => ({
+          userId,
+          name: reviewerName.get(userId) ?? userId,
+        }));
         if (draft.status !== 'CHANGES_REQUESTED') {
-          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+          return {
+            requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+            reviewers,
+            changes: null,
+          };
         }
         const last = await services.db.approval.findFirst({
           where: { contentItemId: draft.id, status: 'CHANGES_REQUESTED' },
@@ -256,7 +286,11 @@ export default async function ComposePage({
           select: { decisionNote: true, decidedByUserId: true, decidedAt: true },
         });
         if (!last) {
-          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+          return {
+            requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+            reviewers,
+            changes: null,
+          };
         }
         const [reviewer, threads] = await Promise.all([
           last.decidedByUserId
@@ -282,6 +316,7 @@ export default async function ComposePage({
         ]);
         return {
           requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+          reviewers,
           changes: {
             note: last.decisionNote,
             reviewer: reviewer ? (reviewer.user.name ?? reviewer.user.email) : null,
@@ -919,6 +954,8 @@ const EDITOR_KEYS = [
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',
+  'editor.reviewer.label',
+  'editor.reviewer.auto',
   'editor.scheduledWarning.scheduler',
   'editor.scheduledWarning.unschedules',
   'editor.inReviewWarning',

@@ -123,7 +123,11 @@ export default async function ApprovalsPage({
        * to build first.
        */
       const queueScope = workspace.brandScope.length > 0 ? workspace.brandScope : undefined;
-      const pending = await service.queue({ brandScope: queueScope });
+      // Q10 — this reviewer's own assignments first.
+      const pending = await service.queue({
+        brandScope: queueScope,
+        preferUserId: customer.userId,
+      });
 
       /* "What you sent" is every cycle THIS member opened. */
       const own = await db.approval.findMany({
@@ -209,12 +213,15 @@ export default async function ApprovalsPage({
       row.requestedByUserId === customer.userId || row.item?.createdByUserId === customer.userId;
     const blocked = mayApprove && isSelf && policy?.allowSelfApproval === false;
     /*
-     * An ASSIGNED review is that person's to decide, and the service enforces
-     * it. The screen reflects it so a reviewer is not offered a button that
-     * will refuse them.
+     * Q10 (D-325) — WHO IT IS ASSIGNED TO, SAID; not who alone may decide it.
+     * Anyone who may approve for the brand is offered the decision.
      */
-    const assignedElsewhere =
-      row.assignedToUserId !== null && row.assignedToUserId !== customer.userId;
+    const assignedToLabel =
+      row.assignedToUserId === null
+        ? null
+        : row.assignedToUserId === customer.userId
+          ? t('approvals.assignedToYou')
+          : t('approvals.assignedTo').replace('{name}', nameOf(row.assignedToUserId));
     return {
       id: row.id,
       itemId: row.contentItemId ?? '',
@@ -225,9 +232,9 @@ export default async function ApprovalsPage({
       requestedAtLabel: dateFormat.format(row.createdAt),
       cycle: row.cycle,
       requestNote: row.requestNote,
-      mayDecide: mayApprove && !blocked && !assignedElsewhere,
+      mayDecide: mayApprove && !blocked,
       blockedAsSelf: Boolean(blocked),
-      assignedElsewhere,
+      assignedToLabel,
       mayWithdraw: false,
       mayOpenInStudio: maySeeContent,
     };
@@ -245,7 +252,7 @@ export default async function ApprovalsPage({
     requestNote: row.requestNote,
     mayDecide: false,
     blockedAsSelf: false,
-    assignedElsewhere: false,
+    assignedToLabel: null,
     mayWithdraw: row.status === 'PENDING',
     mayOpenInStudio: maySeeContent,
   }));

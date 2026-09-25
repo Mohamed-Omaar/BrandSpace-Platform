@@ -602,6 +602,7 @@ export async function resubmitAfterChangesAction(formData: FormData): Promise<vo
     .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
     .slice(0, 10);
 
+  const assignedTo = String(formData.get('assignedToUserId') ?? '');
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'content.submit');
@@ -622,7 +623,9 @@ export async function resubmitAfterChangesAction(formData: FormData): Promise<vo
       (await approvals()).submit({
         itemId,
         actor: approvalActorOf(session),
-        assignedToUserId: null,
+        // Q10 — the reviewer chosen in the form, or the default reviewer when
+        // "Automatic" (empty) is left selected. The service validates it.
+        assignedToUserId: assignedTo.length > 0 ? assignedTo : null,
         note: reply,
       }),
     );
