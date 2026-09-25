@@ -34,7 +34,6 @@ export interface AssetMaintenanceOptions {
 
 /** How many rows one sweep touches. A bound, not a target. */
 const SWEEP_BATCH = 100;
-const BYTES_PER_GB = 1024 * 1024 * 1024;
 
 export class AssetMaintenanceService {
   readonly #db: TenantScopedClient;
@@ -205,12 +204,11 @@ export class AssetMaintenanceService {
   }
 
   async #refundStorage(bytes: number, idempotencyKey: string): Promise<void> {
-    const gigabytes = Math.max(1, Math.ceil(bytes / BYTES_PER_GB));
-    await this.#usage.refund({
+    // Exact bytes (B-1): the counter re-derives its gigabytes from the total.
+    await this.#usage.refundBytes({
       workspaceId: this.#workspaceId,
       featureKey: QUOTA_FEATURES.storageGb,
-      period: 'total',
-      amount: gigabytes,
+      bytes,
       idempotencyKey,
     });
   }

@@ -16,4 +16,5 @@ export * from './precedence';
 export * from './schedule-quota';
 export * from './service';
 export * from './subscription';
+export * from './storage-recompute';
 export * from './usage';

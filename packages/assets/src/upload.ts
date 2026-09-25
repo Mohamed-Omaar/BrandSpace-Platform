@@ -104,9 +104,6 @@ export interface InitiatedUpload {
   readonly replayed: boolean;
 }
 
-/** A gigabyte, as the quota counts it. Binary, matching how storage is sold. */
-const BYTES_PER_GB = 1024 * 1024 * 1024;
-
 export class AssetUploadService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -476,20 +473,19 @@ export class AssetUploadService {
 
   async #consumeStorage(bytes: number, idempotencyKey: string): Promise<void> {
     /*
-     * THE QUOTA IS COUNTED IN GIGABYTES because that is how the plan states it
-     * (D-10: 5 / 50 / 250 GB), and a counter must be in the unit the limit is
-     * in or the comparison is meaningless. Rounding is UP: a workspace at
-     * 4.6 GB of a 5 GB plan has used 5, not 4, and rounding down would let the
-     * last fraction of every gigabyte be free.
+     * THE QUOTA IS METERED IN BYTES and compared against the plan's GIGABYTES
+     * (D-10: 5 / 50 / 250 GB) — B-1. This used to round EACH upload up to a
+     * whole gigabyte before counting it, so a 1 MB photo cost 1 GB and five of
+     * them filled a 5 GB plan. The rounding now happens once, on the total, in
+     * `UsageService.consumeBytes`: a workspace at 4.6 GB of a 5 GB plan has
+     * still used 5, and the last fraction of a gigabyte is still not free.
      */
-    const gigabytes = Math.max(1, Math.ceil(bytes / BYTES_PER_GB));
     try {
-      await this.#usage.consume({
+      await this.#usage.consumeBytes({
         workspaceId: this.#workspaceId,
         featureKey: QUOTA_FEATURES.storageGb,
-        limitValue: this.#storageLimitGb,
-        period: 'total',
-        amount: gigabytes,
+        limitGb: this.#storageLimitGb,
+        bytes,
         idempotencyKey,
       });
     } catch (error) {
@@ -501,12 +497,10 @@ export class AssetUploadService {
   }
 
   async #refundStorage(bytes: number, idempotencyKey: string): Promise<void> {
-    const gigabytes = Math.max(1, Math.ceil(bytes / BYTES_PER_GB));
-    await this.#usage.refund({
+    await this.#usage.refundBytes({
       workspaceId: this.#workspaceId,
       featureKey: QUOTA_FEATURES.storageGb,
-      period: 'total',
-      amount: gigabytes,
+      bytes,
       idempotencyKey,
     });
   }

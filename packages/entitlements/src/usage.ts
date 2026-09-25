@@ -179,6 +179,54 @@ function sameUsageRequest(stored: UsageEventIdentity, wanted: UsageEventIdentity
   );
 }
 
+/**
+ * A gigabyte, as the quota counts it. Binary, matching how storage is sold.
+ *
+ * MOVED HERE FROM `@brandspace/assets` UNCHANGED (B-1), so the asset library,
+ * its maintenance sweeps and Brand Brain uploads charge against ONE definition
+ * of what a plan's gigabyte is, rather than three copies that could drift.
+ */
+export const BYTES_PER_GB = 1024 * 1024 * 1024;
+const BYTES_PER_GB_BIG = BigInt(BYTES_PER_GB);
+
+/**
+ * The gigabytes `bytes` occupy, rounded UP once — the figure a storage counter
+ * shows. 0 bytes is 0 GB; one byte is 1 GB, because a started gigabyte is used.
+ */
+export function gigabytesFor(bytes: number | bigint): number {
+  const value = BigInt(bytes);
+  if (value <= 0n) return 0;
+  return Number((value + BYTES_PER_GB_BIG - 1n) / BYTES_PER_GB_BIG);
+}
+
+/** A byte movement is a positive, whole, safe number of bytes. */
+function assertByteAmount(bytes: number): number {
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+    throw new AppError(
+      'VALIDATION_FAILED',
+      'A storage movement is a positive whole number of bytes.',
+    );
+  }
+  return bytes;
+}
+
+/** Same rule as `UsageEventIdentity`, for a byte movement: bytes are SIGNED. */
+interface ByteEventIdentity {
+  readonly workspaceId: string;
+  readonly featureKey: string;
+  readonly bytes: bigint | null;
+}
+
+function sameByteRequest(stored: ByteEventIdentity, wanted: ByteEventIdentity): boolean {
+  return (
+    stored.workspaceId === wanted.workspaceId &&
+    stored.featureKey === wanted.featureKey &&
+    stored.bytes !== null &&
+    wanted.bytes !== null &&
+    stored.bytes === wanted.bytes
+  );
+}
+
 export interface UsageServiceOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -603,6 +651,233 @@ export class UsageService {
           throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
         }
       });
+  }
+
+  /**
+   * Consume STORAGE, in exact bytes, against a limit stated in gigabytes — B-1.
+   *
+   * WHY STORAGE IS NOT `consume`. `consume` counts whole units, and the old
+   * caller turned every upload into whole GIGABYTES first — rounded up per
+   * file — so a 1 MB photo cost 1 GB and five of them filled a 5 GB plan. The
+   * rounding has to happen ONCE, on the total, and that needs the total in
+   * bytes. An Int column cannot hold it (2 GiB is the ceiling), so the
+   * `limit.storage_gb` counter row carries `usedBytes` (BIGINT) beside
+   * `usedValue`, and `usedValue` is DERIVED from it in the same statement: the
+   * gigabytes the total occupies, rounded up. Every reader of the counter —
+   * the plan page, the library header, the plan-change impact preview — keeps
+   * reading gigabytes and now reads the right number.
+   *
+   * The check and the increment are ONE statement, exactly as in `consume`:
+   * the byte ceiling is in the WHERE, so two concurrent uploads cannot both
+   * pass a check only one of them should.
+   */
+  async consumeBytes(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    /** The plan's limit in GIGABYTES; `null` is unlimited. */
+    readonly limitGb: number | null;
+    readonly bytes: number;
+    readonly idempotencyKey: string;
+  }): Promise<QuotaConsumption> {
+    const bytes = assertByteAmount(input.bytes);
+    if (!input.idempotencyKey.trim()) {
+      throw new AppError('VALIDATION_FAILED', 'An idempotency key is required.');
+    }
+    const window = quotaWindow('total', this.#clock.now());
+    const wanted: ByteEventIdentity = {
+      workspaceId: input.workspaceId,
+      featureKey: input.featureKey,
+      bytes: BigInt(bytes),
+    };
+    const current = () =>
+      this.consumption({
+        workspaceId: input.workspaceId,
+        featureKey: input.featureKey,
+        limitValue: input.limitGb,
+        period: 'total',
+      });
+
+    const replay = await this.#recordedByteRequest(input.idempotencyKey);
+    if (replay) {
+      if (!sameByteRequest(replay, wanted)) {
+        throw new AppError(
+          'CONFLICT',
+          'That idempotency key was used for a different usage event.',
+        );
+      }
+      return current();
+    }
+
+    // Floored so a fractional override can never be rounded into extra bytes.
+    const limitBytes =
+      input.limitGb === null ? null : BigInt(Math.floor(Math.max(0, input.limitGb) * BYTES_PER_GB));
+    const moved = BigInt(bytes);
+
+    try {
+      await this.#prisma.$transaction(async (tx) => {
+        const rows =
+          limitBytes === null
+            ? await tx.$queryRaw<{ id: string; usedBytes: bigint }[]>`
+              INSERT INTO "usage_counter"
+                ("id", "workspaceId", "featureKey", "periodStart", "periodEnd",
+                 "usedValue", "usedBytes", "updatedAt")
+              VALUES
+                (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+                 ${window.start}, ${window.end},
+                 CEIL(${moved}::numeric / ${BYTES_PER_GB_BIG}::numeric)::int, ${moved}::bigint, now())
+              ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+              DO UPDATE SET
+                "usedBytes" = "usage_counter"."usedBytes" + ${moved}::bigint,
+                "usedValue" = CEIL(("usage_counter"."usedBytes" + ${moved}::bigint)::numeric
+                                   / ${BYTES_PER_GB_BIG}::numeric)::int,
+                "updatedAt" = now()
+              RETURNING "id", "usedBytes"`
+            : await tx.$queryRaw<{ id: string; usedBytes: bigint }[]>`
+              INSERT INTO "usage_counter"
+                ("id", "workspaceId", "featureKey", "periodStart", "periodEnd",
+                 "usedValue", "usedBytes", "updatedAt")
+              VALUES
+                (gen_random_uuid(), ${input.workspaceId}::uuid, ${input.featureKey},
+                 ${window.start}, ${window.end},
+                 CEIL(${moved}::numeric / ${BYTES_PER_GB_BIG}::numeric)::int, ${moved}::bigint, now())
+              ON CONFLICT ("workspaceId", "featureKey", "periodStart")
+              DO UPDATE SET
+                "usedBytes" = "usage_counter"."usedBytes" + ${moved}::bigint,
+                "usedValue" = CEIL(("usage_counter"."usedBytes" + ${moved}::bigint)::numeric
+                                   / ${BYTES_PER_GB_BIG}::numeric)::int,
+                "updatedAt" = now()
+              WHERE "usage_counter"."usedBytes" + ${moved}::bigint <= ${limitBytes}::bigint
+              RETURNING "id", "usedBytes"`;
+
+        const row = rows[0];
+        // No row: the WHERE refused. A fresh INSERT is not guarded by it, so
+        // "first upload already over the limit" is refused here instead and
+        // the transaction rolls the insert back.
+        if (!row || (limitBytes !== null && BigInt(row.usedBytes) > limitBytes)) {
+          const counter = await tx.usageCounter.findUnique({
+            where: {
+              workspaceId_featureKey_periodStart: {
+                workspaceId: input.workspaceId,
+                featureKey: input.featureKey,
+                periodStart: window.start,
+              },
+            },
+            select: { usedValue: true },
+          });
+          throw new QuotaExceededError(
+            input.featureKey,
+            input.limitGb ?? 0,
+            counter?.usedValue ?? 0,
+          );
+        }
+
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.idempotencyKey,
+            amount: 0,
+            bytes: moved,
+            counterId: row.id,
+          },
+        });
+      });
+    } catch (error) {
+      // The same two collision paths `consume` has, by the same rule: a key
+      // already recorded for THIS movement is a replay, a different movement
+      // wearing it is a conflict, and a genuine refusal stays a refusal.
+      if (!(error instanceof QuotaExceededError) && !isDuplicateIdempotencyKey(error)) throw error;
+      const recorded = await this.#recordedByteRequest(input.idempotencyKey);
+      if (!recorded) throw error;
+      if (!sameByteRequest(recorded, wanted)) {
+        throw new AppError(
+          'CONFLICT',
+          'That idempotency key was used for a different usage event.',
+        );
+      }
+    }
+
+    return current();
+  }
+
+  /**
+   * Give storage back, in exact bytes — the reverse of `consumeBytes`.
+   *
+   * Floors at zero like `refund`, re-derives the gigabytes from the new byte
+   * total in the same statement, and records a NEGATIVE byte event so a retried
+   * purge or a duplicated sweep gives the bytes back once.
+   */
+  async refundBytes(input: {
+    readonly workspaceId: string;
+    readonly featureKey: string;
+    readonly bytes: number;
+    readonly idempotencyKey: string;
+  }): Promise<void> {
+    const bytes = assertByteAmount(input.bytes);
+    if (!input.idempotencyKey.trim()) {
+      throw new AppError('VALIDATION_FAILED', 'An idempotency key is required.');
+    }
+    const window = quotaWindow('total', this.#clock.now());
+    const moved = BigInt(bytes);
+    const wanted: ByteEventIdentity = {
+      workspaceId: input.workspaceId,
+      featureKey: input.featureKey,
+      bytes: -moved,
+    };
+
+    const replay = await this.#recordedByteRequest(input.idempotencyKey);
+    if (replay) {
+      if (!sameByteRequest(replay, wanted)) {
+        throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
+      }
+      return;
+    }
+
+    await this.#prisma
+      .$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE "usage_counter"
+           SET "usedBytes" = GREATEST(0, "usedBytes" - ${moved}::bigint),
+               "usedValue" = CEIL(GREATEST(0, "usedBytes" - ${moved}::bigint)::numeric
+                                  / ${BYTES_PER_GB_BIG}::numeric)::int,
+               "updatedAt" = now()
+         WHERE "workspaceId" = ${input.workspaceId}::uuid
+           AND "featureKey"  = ${input.featureKey}
+           AND "periodStart" = ${window.start}
+        RETURNING "id"`;
+        const counterId = rows[0]?.id;
+        // Nothing recorded, nothing to give back — and no event, because
+        // `UsageEvent.counterId` must name a real counter.
+        if (!counterId) return;
+        await tx.usageEvent.create({
+          data: {
+            workspaceId: input.workspaceId,
+            featureKey: input.featureKey,
+            idempotencyKey: input.idempotencyKey,
+            amount: 0,
+            bytes: -moved,
+            counterId,
+          },
+        });
+      })
+      .catch(async (error: unknown) => {
+        if (!isDuplicateIdempotencyKey(error)) throw error;
+        const winner = await this.#recordedByteRequest(input.idempotencyKey);
+        if (!winner) throw error;
+        if (!sameByteRequest(winner, wanted)) {
+          throw new AppError('CONFLICT', 'That idempotency key was used for a different movement.');
+        }
+      });
+  }
+
+  async #recordedByteRequest(idempotencyKey: string): Promise<ByteEventIdentity | null> {
+    const row = await this.#prisma.usageEvent.findUnique({
+      where: { idempotencyKey },
+      select: { workspaceId: true, featureKey: true, bytes: true },
+    });
+    if (!row) return null;
+    // A unit event (null bytes) wearing this key is a different request.
+    return { workspaceId: row.workspaceId, featureKey: row.featureKey, bytes: row.bytes };
   }
 
   /**
