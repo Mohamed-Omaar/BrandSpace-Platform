@@ -348,6 +348,15 @@ width. Inside: a 12px-padded `34px | 1fr | auto` header with a 34px round avatar
 padding: 11px; font-size: 17px` with the fourth glyph pushed to the trailing edge; and
 `.social-caption` at `padding: 0 11px 15px; font-size: 9px; line-height: 1.5`.
 
+**Platforms are identified by their own marks.** `PlatformIcon` (`platform-icons.tsx`) renders
+Instagram, Facebook, X and TikTok from their official marks, copied unchanged from Simple Icons
+v16.32.0, never redrawn. It uses `ink` by default and the official colour
+(`platformBrandTokens`) where a mark identifies its platform on its own, as in the preview's
+platform badge. A mark always sits beside the platform's name or inside a control labelled
+with it. LinkedIn has no mark on file, because Simple Icons removed it at LinkedIn's request,
+and it keeps its accent dot until the official file from LinkedIn's brand guidelines is
+added. The owner authorised replacing the former accent dots with these marks.
+
 **Nothing that is not in the demo's post sits inside the post.** The platform badge and the
 status/approval/schedule row are real workspace state and are not dropped — they moved OUT of the
 article into the panel around it. A badge inside the post misrepresents what will be published.

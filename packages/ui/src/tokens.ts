@@ -847,3 +847,21 @@ export const brandBrainTokens = {
   /** A particle at full energy flares to white before decaying. */
   orbFlare: '#ffffff',
 } as const;
+
+/**
+ * The social platforms' OFFICIAL brand colours, for `PlatformIcon` and the
+ * platform accent. Each value is the one the platform publishes in its own
+ * brand resources (as recorded by Simple Icons v16.32.0): Instagram and
+ * Facebook from Meta's brand resources, X from the X brand toolkit, TikTok
+ * from TikTok's. LinkedIn is its published blue.
+ *
+ * These are identity colours for a small mark, never a theme: the interface
+ * around them stays black and white.
+ */
+export const platformBrandTokens = {
+  instagram: '#FF0069',
+  facebook: '#0866FF',
+  linkedin: '#0A66C2',
+  x: '#000000',
+  tiktok: '#000000',
+} as const;

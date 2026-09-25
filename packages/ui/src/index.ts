@@ -17,6 +17,7 @@ export * from './media-image';
 export * from './menu-style';
 export * from './overlays';
 export * from './overview-hero';
+export * from './platform-icons';
 export * from './post-card';
 export * from './post-detail-drawer';
 export * from './password-field';

@@ -17,6 +17,7 @@ import {
   ImageIcon,
   PlayIcon,
 } from './icons';
+import { PlatformIcon } from './platform-icons';
 import { StatusBadge, statusTone } from './data';
 import { Skeleton } from './feedback';
 import {
@@ -29,7 +30,6 @@ import {
 } from './media';
 import {
   CAPTION_CLAMP,
-  PLATFORM_ACCENT,
   PLATFORM_ASPECTS,
   PLATFORM_FORMATS,
   defaultFormat,
@@ -100,15 +100,7 @@ function PlatformBadge({
         whiteSpace: 'nowrap',
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          inlineSize: '0.5rem',
-          blockSize: '0.5rem',
-          borderRadius: radiusTokens.full,
-          background: PLATFORM_ACCENT[platform],
-        }}
-      />
+      <PlatformIcon platform={platform} size={12} tone="brand" />
       {labels.platformNames[platform]}
     </span>
   );
