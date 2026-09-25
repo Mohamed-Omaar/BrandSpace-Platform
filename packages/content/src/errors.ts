@@ -210,6 +210,19 @@ export function reviewCycleLimitReached(): AppError {
 }
 
 /** A note longer than the activated policy permits. */
+/**
+ * B5 — asking for changes without saying which. The author would be sent back
+ * to a draft with nothing to act on, so the reason is required; approving and
+ * rejecting still need none.
+ */
+export const DECISION_NOTE_REQUIRED_REASON = 'note_required';
+
+export function decisionNoteRequired(): AppError {
+  return new AppError('VALIDATION_FAILED', 'Say what should change.', {
+    reason: DECISION_NOTE_REQUIRED_REASON,
+  });
+}
+
 export function noteTooLong(): AppError {
   return new AppError('VALIDATION_FAILED', 'That note is too long.');
 }

@@ -329,6 +329,7 @@ describe('B-3 · editing a post in review withdraws the review', () => {
       approvals(db).decide({
         approvalId: post.approvalId,
         verdict: 'REQUEST_CHANGES',
+        note: 'Please change the opening line.',
         actor: reviewerActor(),
       }),
     );

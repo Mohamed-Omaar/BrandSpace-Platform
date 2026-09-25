@@ -16,6 +16,7 @@ import {
   type Clock,
 } from '@brandspace/shared';
 import {
+  decisionNoteRequired,
   alreadyInReview,
   approvalAlreadyDecided,
   approvalNotFound,
@@ -533,6 +534,8 @@ export class ContentApprovalService {
     note?: string | null;
   }): Promise<Approval> {
     const note = this.#checkNote(input.note);
+    // B5 — "request changes" must say which; a blank or whitespace note is none.
+    if (input.verdict === 'REQUEST_CHANGES' && note === null) throw decisionNoteRequired();
 
     /*
      * THE ROW IS LOCKED BEFORE IT IS READ (finding 5).

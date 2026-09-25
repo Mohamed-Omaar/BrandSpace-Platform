@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import type { ApprovalVerdict } from '@brandspace/content';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { DECISION_NOTE_REQUIRED_REASON, type ApprovalVerdict } from '@brandspace/content';
+import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
@@ -31,13 +31,29 @@ function approvalsUrl(locale: string, params: Record<string, string> = {}): stri
   return `/${locale}/approvals${search ? `?${search}` : ''}`;
 }
 
-function failure(locale: string, error: unknown, action: string): string {
+/** B5 — the tab the reader was on, carried back through the redirect (a closed set). */
+function tabOf(formData: FormData): Record<string, string> {
+  const tab = formData.get('tab');
+  return tab === 'sent' || tab === 'forMe' ? { tab } : {};
+}
+
+function failure(
+  locale: string,
+  error: unknown,
+  action: string,
+  extra: Record<string, string> = {},
+): string {
   const correlationId = randomUUID();
   // No note text and no caption either side of this line: a review note is
   // routinely candid, and the address bar, the browser history and the access
   // log are all places it must not appear (docs/SECURITY.md §11).
   log.warn('approvals action failed', { correlationId, action, ...internalErrorFields(error) });
-  return approvalsUrl(locale, { error: actionErrorCode(error), ref: correlationId });
+  // B5 — "request changes" without a reason gets its own words.
+  const code =
+    isAppError(error) && error.publicDetails['reason'] === DECISION_NOTE_REQUIRED_REASON
+      ? 'NOTE_REQUIRED'
+      : actionErrorCode(error);
+  return approvalsUrl(locale, { ...extra, error: code, ref: correlationId });
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -133,9 +149,9 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
       });
     }
 
-    destination = approvalsUrl(locale, { ok: 'SAVED' });
+    destination = approvalsUrl(locale, { ...tabOf(formData), ok: 'SAVED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'decideApproval');
+    destination = failure(locale, error, 'decideApproval', tabOf(formData));
   }
   revalidatePath(`/${locale}/approvals`);
   revalidatePath(`/${locale}/content`);
@@ -156,9 +172,9 @@ export async function withdrawApprovalAction(formData: FormData): Promise<void> 
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: actorOf(session) }),
     );
-    destination = approvalsUrl(locale, { ok: 'SAVED' });
+    destination = approvalsUrl(locale, { ...tabOf(formData), ok: 'SAVED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'withdrawApproval');
+    destination = failure(locale, error, 'withdrawApproval', tabOf(formData));
   }
   revalidatePath(`/${locale}/approvals`);
   revalidatePath(`/${locale}/content`);

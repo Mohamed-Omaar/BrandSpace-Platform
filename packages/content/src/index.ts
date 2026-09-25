@@ -96,7 +96,9 @@ export { purgeExpiredContent } from './purge';
 export type { ContentPurgeResult } from './purge';
 
 export {
+  DECISION_NOTE_REQUIRED_REASON,
   SCHEDULE_IN_PAST_REASON,
+  decisionNoteRequired,
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
   briefTooLong,

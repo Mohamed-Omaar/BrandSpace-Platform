@@ -67,6 +67,13 @@ export default async function ApprovalsPage({
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
   const reviewId = typeof query.review === 'string' ? query.review : null;
+  /*
+   * B5 — "For me" (what waits on this reader) and "Sent" (what they sent),
+   * opening on "Sent" for a member who may not approve anything.
+   */
+  const mayApprove = mayApproveForBrand({ permissionKeys: workspace.permissionKeys });
+  const tab: 'forMe' | 'sent' =
+    query.tab === 'sent' || query.tab === 'forMe' ? query.tab : mayApprove ? 'forMe' : 'sent';
 
   // Implied by the route gate above; kept as a named constant because the view
   // props read better for it, and because the gate is the thing that may change.
@@ -252,7 +259,14 @@ export default async function ApprovalsPage({
     requestNote: row.requestNote,
     mayDecide: false,
     blockedAsSelf: false,
-    assignedToLabel: null,
+    // B5 — what happened to it: who it went to, who decided, and why.
+    assignedToLabel: row.assignedToUserId
+      ? t('approvals.assignedTo').replace('{name}', nameOf(row.assignedToUserId))
+      : null,
+    decidedByLabel: row.decidedByUserId
+      ? t('approvals.decidedBy').replace('{name}', nameOf(row.decidedByUserId))
+      : null,
+    decisionNote: row.decisionNote,
     mayWithdraw: row.status === 'PENDING',
     mayOpenInStudio: maySeeContent,
   }));
@@ -359,7 +373,12 @@ export default async function ApprovalsPage({
         mine={mineRows}
         policies={policies}
         review={reviewView}
-        mayReview={mayApproveForBrand({ permissionKeys: workspace.permissionKeys })}
+        tab={tab}
+        tabs={[
+          { id: 'forMe', href: `/${locale}/approvals?tab=forMe`, label: t('approvals.tabs.forMe') },
+          { id: 'sent', href: `/${locale}/approvals?tab=sent`, label: t('approvals.tabs.sent') },
+        ]}
+        mayReview={mayApprove}
         mayReadContent={maySeeContent}
         mayManagePolicy={mayManagePolicy}
         actions={{

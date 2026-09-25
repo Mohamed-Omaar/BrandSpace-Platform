@@ -683,3 +683,54 @@ describe('B4 / Q10 · default reviewer; anyone who may approve can decide', () =
     both('editor.reviewer.auto');
   });
 });
+
+describe('B5 · Approvals per person, and a reason for "request changes"', () => {
+  it('the service refuses a blank reason for REQUEST_CHANGES only', () => {
+    const approvals = read('packages/content/src/approvals.ts');
+    expect(approvals).toContain(
+      "if (input.verdict === 'REQUEST_CHANGES' && note === null) throw decisionNoteRequired();",
+    );
+    const actions = read('apps/dashboard/src/app/[locale]/approvals/actions.ts');
+    expect(actions).toMatch(/DECISION_NOTE_REQUIRED_REASON\s*\?\s*'NOTE_REQUIRED'/);
+    expect(statusMessage('NOTE_REQUIRED', 'en')).toContain('before asking for changes');
+    expect(statusMessage('NOTE_REQUIRED', 'ar')).toBeTruthy();
+  });
+
+  it('the form requires the reason for "request changes", and Approve/Reject skip it', () => {
+    const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
+    const form = view.slice(view.indexOf('function DecisionForm('));
+    expect(form).toMatch(/name="note"\s*type="text"\s*required/);
+    expect(form.match(/^\s+formNoValidate$/gm)).toHaveLength(2);
+    const requestChanges = form.slice(form.indexOf('value="REQUEST_CHANGES"'));
+    expect(requestChanges.slice(0, requestChanges.indexOf('</button>'))).not.toContain(
+      'formNoValidate',
+    );
+  });
+
+  it('two tabs, "For me" by default for a reviewer and "Sent" otherwise, carried through actions', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    expect(page).toMatch(/: mayApprove \? 'forMe' : 'sent';/);
+    const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
+    expect(view).toContain("{tab === 'forMe' ? (");
+    expect(view).toContain("{tab === 'sent' && mayReadContent ? (");
+    expect(view.match(/name="tab" value=\{tab\}/g)).toHaveLength(2);
+    const actions = read('apps/dashboard/src/app/[locale]/approvals/actions.ts');
+    expect(actions).toContain("return tab === 'sent' || tab === 'forMe' ? { tab } : {};");
+    for (const key of [
+      'approvals.tabs.label',
+      'approvals.tabs.forMe',
+      'approvals.tabs.sent',
+      'approvals.decidedBy',
+    ]) {
+      both(key);
+    }
+  });
+
+  it('"Sent" says who it went to, who decided and why', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    const mine = page.slice(page.indexOf('const mineRows'));
+    expect(mine).toContain('decidedByLabel: row.decidedByUserId');
+    expect(mine).toContain('decisionNote: row.decisionNote,');
+    expect(mine).toContain('assignedToLabel: row.assignedToUserId');
+  });
+});
