@@ -266,6 +266,30 @@ const PERMITTED_ADDITIONS: Record<string, readonly string[]> = {
   '.cs-post-art > span': [],
 
   /*
+   * OWNER-APPROVED LIVE VISUAL ROLLOUT (2026-09-25).
+   *
+   * These additions are intentionally narrow. The channel keeps every demo
+   * declaration unchanged; flex alignment only lets the live control carry the
+   * official platform mark beside its existing label, while the transition
+   * adds the approved micro-motion without changing resting geometry. The
+   * surface-card transition likewise changes no resting pixel. Reduced-motion
+   * is still enforced globally and again in the Content Studio stylesheet.
+   */
+  '.cs-channel': [
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'gap:6px',
+    'cursor:pointer',
+    'transition:background-color140mscubic-bezier(0.16,1,0.3,1),box-shadow140mscubic-bezier(0.16,1,0.3,1),transform80mscubic-bezier(0.16,1,0.3,1)',
+    'transition-duration:0.01ms!important',
+  ],
+  '.cs-surface-card': [
+    'transition:box-shadow200mscubic-bezier(0.16,1,0.3,1),transform200mscubic-bezier(0.16,1,0.3,1)',
+    'transition-duration:0.01ms!important',
+  ],
+
+  /*
    * THE SELECT CHEVRON'S SIZE, on the two rules that render a select (P6-02).
    *
    * Not a visual change to the demo's control: the fill, radius, padding, type

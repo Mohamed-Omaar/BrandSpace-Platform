@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   Card,
+  PlatformIcon,
   CONTROL_CLASS,
   SectionHeader,
   Stack,
@@ -11,6 +12,7 @@ import {
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  socialPlatformFromKey,
   type BadgeTone,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
@@ -245,7 +247,23 @@ export function IntegrationsView({
             {connections.map((row) => (
               <li key={row.id} style={rowStyle} data-testid={`connection-${row.id}`}>
                 <div style={headerRowStyle}>
-                  <span style={titleStyle}>{row.displayName}</span>
+                  <span
+                    style={{
+                      ...titleStyle,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: spacingTokens.xs,
+                    }}
+                  >
+                    {socialPlatformFromKey(row.provider) ? (
+                      <PlatformIcon
+                        platform={socialPlatformFromKey(row.provider)!}
+                        size={18}
+                        tone="brand"
+                      />
+                    ) : null}
+                    {row.displayName}
+                  </span>
                   <StatusBadge
                     tone={CONNECTION_TONE[row.status]}
                     label={t(CONNECTION_STATUS_KEY[row.status])}
@@ -398,9 +416,26 @@ export function IntegrationsView({
               */}
               <ul style={capabilityListStyle} data-testid="provider-capabilities">
                 {connectable.map((option) => (
-                  <li key={option.provider} style={metaStyle}>
-                    {option.label}: {option.postKinds.join(', ')} ·{' '}
-                    {t('integrations.maxCharacters')} {option.maxBodyCharacters}
+                  <li
+                    key={option.provider}
+                    style={{
+                      ...metaStyle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: spacingTokens.xs,
+                    }}
+                  >
+                    {socialPlatformFromKey(option.provider) ? (
+                      <PlatformIcon
+                        platform={socialPlatformFromKey(option.provider)!}
+                        size={14}
+                        tone="brand"
+                      />
+                    ) : null}
+                    <span>
+                      {option.label}: {option.postKinds.join(', ')} ·{' '}
+                      {t('integrations.maxCharacters')} {option.maxBodyCharacters}
+                    </span>
                   </li>
                 ))}
               </ul>

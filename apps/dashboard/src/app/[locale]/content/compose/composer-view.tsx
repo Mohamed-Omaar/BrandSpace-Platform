@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { PlatformIcon, socialPlatformFromKey } from '@brandspace/ui';
 import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { DraftEditor } from './draft-editor';
@@ -737,6 +738,7 @@ export function ComposerView({
                 {platforms.map((platform) => {
                   const on = selected.includes(platform.key);
                   const able = carries(contentType, platform.key);
+                  const iconPlatform = socialPlatformFromKey(platform.key);
                   return (
                     <button
                       key={platform.key}
@@ -749,7 +751,14 @@ export function ComposerView({
                       data-platform={platform.key}
                       onClick={() => toggle(platform.key)}
                     >
-                      {platform.label}
+                      {iconPlatform ? (
+                        <PlatformIcon
+                          platform={iconPlatform}
+                          size={14}
+                          tone={on ? 'brand' : 'ink'}
+                        />
+                      ) : null}
+                      <span>{platform.label}</span>
                     </button>
                   );
                 })}
