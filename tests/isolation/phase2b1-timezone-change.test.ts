@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseConfigPayload } from '@brandspace/config';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
+import { NOTIFICATION_CATEGORIES, NotificationPreferenceService } from '@brandspace/notifications';
 import {
   ContentCalendarService,
   WorkspaceTimezoneService,
@@ -228,6 +229,41 @@ describe('G5 / Q22 · the local clock time is kept', () => {
     expect(
       await platform.calendarSlot.findUniqueOrThrow({ where: { id: going.slotId } }),
     ).toMatchObject({ status: 'PUBLISHING', timezone: 'UTC' });
+  });
+
+  it('review item 17 · its author is told even with every notification switch off', async () => {
+    const w = await world('UTC');
+    const soon = await slot(w, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    await inTenant(w.workspaceId, (db) =>
+      new NotificationPreferenceService({ db, workspaceId: w.workspaceId }).set(
+        w.authorId,
+        Object.fromEntries(NOTIFICATION_CATEGORIES.map((category) => [category, false])) as Record<
+          (typeof NOTIFICATION_CATEGORIES)[number],
+          boolean
+        >,
+      ),
+    );
+    await inTenant(w.workspaceId, (db) =>
+      new WorkspaceTimezoneService({
+        db,
+        workspaceId: w.workspaceId,
+        quota: { refund: async () => undefined },
+        clock,
+      }).change({
+        toZone: 'Asia/Tokyo',
+        actor: { type: 'USER', id: w.authorId },
+        minLeadMinutes: POLICY.calendar.minLeadMinutes,
+      }),
+    );
+    expect(
+      (await platform.calendarSlot.findUniqueOrThrow({ where: { id: soon.slotId } })).status,
+    ).toBe('PLANNED');
+    expect(
+      await platform.notification.findMany({
+        where: { workspaceId: w.workspaceId, userId: w.authorId },
+        select: { templateKey: true, resourceId: true },
+      }),
+    ).toEqual([{ templateKey: 'calendar.unplanned_by_timezone_change', resourceId: soon.slotId }]);
   });
 
   it('another workspace’s posts are never read or moved, and the same zone changes nothing', async () => {

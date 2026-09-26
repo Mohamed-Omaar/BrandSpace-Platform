@@ -45,8 +45,8 @@ describe('G5 / Q22 · one rule, both ways in', () => {
     expect(fields).toContain('data-testid="settings-timezone-unplanned"');
   });
 
-  it('a post sent back to planned tells its author, in a category they can mute', () => {
-    expect(categoryOf('calendar.unplanned_by_timezone_change')).toBe('publishing');
+  it('a post sent back to planned tells its author, always — it has no switch (review item 17)', () => {
+    expect(categoryOf('calendar.unplanned_by_timezone_change')).toBeNull();
     for (const key of [
       'notifications.template.calendar.unplanned_by_timezone_change',
       'settings.timezoneKept',

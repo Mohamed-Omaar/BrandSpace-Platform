@@ -514,12 +514,12 @@ export const messages = {
     'settings.ai': 'الذكاء الاصطناعي',
     'notificationPrefs.title': 'ما الذي يصلني إشعار به',
     'notificationPrefs.body':
-      'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك، وتصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها.',
+      'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك. تصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها، وبحساب يحتاج إلى إعادة الربط، وبمنشور مجدول أعاده تغيير المنطقة الزمنية إلى المخطط.',
     'notificationPrefs.approvals': 'الموافقات',
     'notificationPrefs.approvals.hint':
       'منشور ينتظر مراجعتي، أو تمت الموافقة على منشوري أو إعادته أو رفضه.',
     'notificationPrefs.publishing': 'النشر',
-    'notificationPrefs.publishing.hint': 'نُشر منشور أو فشل نشره، أو يحتاج حساب إلى إعادة الربط.',
+    'notificationPrefs.publishing.hint': 'نُشر منشور أو فشل نشره.',
     'notificationPrefs.automations': 'أتمتة تُعلمني أو تحتاج موافقتي',
     'notificationPrefs.automations.hint': 'إشعارات من الأتمتة، وتلك التي تنتظر تأكيدي.',
     'notificationPrefs.brand_brain_reviews': 'معلومات في عقل العلامة تنتظر مراجعتي',
@@ -3290,13 +3290,12 @@ export const messages = {
     'settings.ai': 'AI',
     'notificationPrefs.title': 'What notifies me',
     'notificationPrefs.body':
-      'Your own switches for the bell in this workspace. Nobody else sees them, and notices about the workspace itself always arrive.',
+      'Your own switches for the bell in this workspace. Nobody else sees them. Notices about the workspace itself, an account that needs reconnecting, and a scheduled post a time-zone change sent back to planned always arrive.',
     'notificationPrefs.approvals': 'Approvals',
     'notificationPrefs.approvals.hint':
       'A post waits for my review, or mine was approved, sent back or rejected.',
     'notificationPrefs.publishing': 'Publishing',
-    'notificationPrefs.publishing.hint':
-      'A post was published or failed, or an account needs reconnecting.',
+    'notificationPrefs.publishing.hint': 'A post was published or failed to publish.',
     'notificationPrefs.automations': 'An automation notifies me or needs my OK',
     'notificationPrefs.automations.hint':
       'Notices from automations, and the ones waiting for my confirmation.',

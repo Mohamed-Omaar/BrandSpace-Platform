@@ -133,6 +133,41 @@ describe('A10 / G2 · a switch filters one person’s bell, for one category', (
     expect(await inbox(workspaceId, owner)).toEqual(['workspace.deletion_requested']);
   });
 
+  it('review item 17 · Publishing off mutes published/failed, never "reconnect" or "sent back to planned"', async () => {
+    const quiet = await person('publishing-off');
+    const workspaceId = await workspaceOf(quiet, 'critical');
+    await inTenant(workspaceId, (db) =>
+      new NotificationPreferenceService({ db, workspaceId }).set(quiet, {
+        ...allOn,
+        publishing: false,
+      }),
+    );
+    const send = (
+      templateKey:
+        | 'publishing.published'
+        | 'publishing.failed'
+        | 'publishing.connection_needs_reauth'
+        | 'calendar.unplanned_by_timezone_change',
+    ) =>
+      inTenant(workspaceId, (db) =>
+        new NotificationService({ db, workspaceId }).create({
+          userIds: [quiet],
+          templateKey,
+          idempotencyKey: `np-critical-${templateKey}`,
+        }),
+      );
+    // The ordinary publishing news respects the switch…
+    expect(await send('publishing.published')).toBe(0);
+    expect(await send('publishing.failed')).toBe(0);
+    // …the two "this post will not go out unless you act" notices do not.
+    expect(await send('publishing.connection_needs_reauth')).toBe(1);
+    expect(await send('calendar.unplanned_by_timezone_change')).toBe(1);
+    expect(await inbox(workspaceId, quiet)).toEqual([
+      'publishing.connection_needs_reauth',
+      'calendar.unplanned_by_timezone_change',
+    ]);
+  });
+
   it('the same person’s switch in one workspace does not reach their other workspace', async () => {
     const member = await person('two-workspaces');
     const first = await workspaceOf(member, 'first');

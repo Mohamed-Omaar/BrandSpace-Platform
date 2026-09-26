@@ -17,7 +17,11 @@ import type { NotificationTemplateKey } from './templates';
  * NOT EVERYTHING IS SWITCHABLE. A notice about the workspace itself (its
  * deletion was requested or cancelled) and an analytics anomaly belong to no
  * category and always arrive: the first is a safety notice, the second has no
- * switch in the approved design.
+ * switch in the approved design. So do the two publishing notices that say a
+ * post will NOT go out unless someone acts — an account that needs
+ * reconnecting, and a scheduled post a time-zone change sent back to planned
+ * (PR #47 review item 17): switching off "Publishing" mutes the routine
+ * published/failed news, never these.
  */
 export const NOTIFICATION_CATEGORIES = [
   'approvals',
@@ -43,7 +47,8 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
   'approval.withdrawn_after_edit': 'approvals',
   'publishing.published': 'publishing',
   'publishing.failed': 'publishing',
-  'publishing.connection_needs_reauth': 'publishing',
+  /** Critical: nothing publishes on that account until someone acts (review item 17). */
+  'publishing.connection_needs_reauth': null,
   'automation.confirmation_required': 'automations',
   'automation.blocked': 'automations',
   'automation.notice': 'automations',
@@ -51,7 +56,8 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
   'analytics.anomaly_detected': null,
   'workspace.deletion_requested': null,
   'workspace.deletion_cancelled': null,
-  'calendar.unplanned_by_timezone_change': 'publishing',
+  /** Critical: a scheduled post will no longer go out unless someone acts (review item 17). */
+  'calendar.unplanned_by_timezone_change': null,
 };
 
 export function categoryOf(templateKey: NotificationTemplateKey): NotificationCategory | null {

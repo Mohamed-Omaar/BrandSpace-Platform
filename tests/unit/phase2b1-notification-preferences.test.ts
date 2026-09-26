@@ -33,7 +33,8 @@ describe('A10 · every notification is classified, and the workspace’s own not
     const covered = new Set(NOTIFICATION_TEMPLATE_KEYS.map((key) => categoryOf(key)));
     for (const category of NOTIFICATION_CATEGORIES) expect(covered.has(category)).toBe(true);
     expect(categoryOf('approval.requested')).toBe('approvals');
-    expect(categoryOf('publishing.connection_needs_reauth')).toBe('publishing');
+    expect(categoryOf('publishing.published')).toBe('publishing');
+    expect(categoryOf('publishing.failed')).toBe('publishing');
     expect(categoryOf('automation.confirmation_required')).toBe('automations');
     expect(categoryOf('automation.notice')).toBe('automations');
     expect(categoryOf('brand_brain.learning_proposed')).toBe('brand_brain_reviews');
@@ -42,6 +43,20 @@ describe('A10 · every notification is classified, and the workspace’s own not
   it('a notice about the workspace itself belongs to no category', () => {
     expect(categoryOf('workspace.deletion_requested')).toBeNull();
     expect(categoryOf('workspace.deletion_cancelled')).toBeNull();
+  });
+
+  it('review item 17 · the two "this post will not go out" notices belong to no category', () => {
+    expect(categoryOf('publishing.connection_needs_reauth')).toBeNull();
+    expect(categoryOf('calendar.unplanned_by_timezone_change')).toBeNull();
+    // The screen no longer promises the Publishing switch covers reconnecting,
+    // and says, in both languages, that these always arrive.
+    expect(optionalMessage('en', 'notificationPrefs.publishing.hint')).not.toMatch(/reconnect/i);
+    expect(optionalMessage('ar', 'notificationPrefs.publishing.hint')).not.toContain('إعادة الربط');
+    expect(optionalMessage('en', 'notificationPrefs.body')).toMatch(
+      /an account that needs reconnecting, and a scheduled post a time-zone change sent back to planned always arrive/,
+    );
+    expect(optionalMessage('ar', 'notificationPrefs.body')).toContain('إعادة الربط');
+    expect(optionalMessage('ar', 'notificationPrefs.body')).toContain('المنطقة الزمنية');
   });
 
   it('the database CHECK allows exactly these categories', () => {
