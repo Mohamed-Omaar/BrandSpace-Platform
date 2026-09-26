@@ -34,11 +34,14 @@ export function CreateEntry({
   locale,
   t,
   carry,
+  planned = null,
 }: {
   readonly locale: string;
   readonly t: (key: string) => string;
-  /** Query parameters that travel with every choice (campaign, brand). */
+  /** Query parameters that travel with every choice (campaign, brand, date). */
   readonly carry: Readonly<Record<string, string>>;
+  /** G6 (D-329): the ★ day the calendar opened the Studio for, said before the choice. */
+  readonly planned?: string | null;
 }) {
   const href = (mode: CreateMode) =>
     `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode }).toString()}`;
@@ -51,6 +54,11 @@ export function CreateEntry({
   return (
     <section data-testid="create-entry" style={{ display: 'grid', gap: spacingTokens.lg }}>
       <h2 style={{ margin: 0, ...typographyTokens.h2 }}>{t('create.entry.title')}</h2>
+      {planned ? (
+        <div className="cs-notice info" role="note" data-testid="composer-planned-date">
+          <b>{planned}</b>
+        </div>
+      ) : null}
       <ul
         style={{
           listStyle: 'none',

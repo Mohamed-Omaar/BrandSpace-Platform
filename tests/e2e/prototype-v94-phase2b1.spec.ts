@@ -261,5 +261,10 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     await chip.click();
     await page.waitForURL(new RegExp(`/en/content/compose\\?date=${day}$`));
     await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
+    // The day travels with the choice of how to start, like a campaign does.
+    await page.getByTestId('create-mode-write').click();
+    await page.waitForURL(/mode=write/);
+    expect(new URL(page.url()).searchParams.get('date')).toBe(day);
+    await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
   });
 });

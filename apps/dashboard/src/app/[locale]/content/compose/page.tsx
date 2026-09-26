@@ -128,8 +128,16 @@ export default async function ComposePage({
    */
   const mode = itemId ? null : createModeFrom(single('mode'));
   const tk = (key: string): string => optionalMessage(locale, key) ?? key;
+  /*
+   * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
+   * past for the workspace, and — when that day is one of the workspace's
+   * holidays or its brand's observances — what the day is, to say so. It
+   * travels with the choice below like a campaign does.
+   */
+  const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
+  const plannedFor = plannedDate?.label ?? null;
   const carry: Record<string, string> = Object.fromEntries(
-    Object.entries({ campaign: single('campaign') }).filter(
+    Object.entries({ campaign: single('campaign'), date: plannedDate?.date }).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
@@ -376,7 +384,20 @@ export default async function ComposePage({
 
   /* ------------------------------------------------ §17 — the entry */
   if (!itemId && mode === null) {
-    return shell(<CreateEntry locale={locale} t={tk} carry={carry} />);
+    return shell(
+      <CreateEntry
+        locale={locale}
+        t={tk}
+        carry={carry}
+        planned={
+          plannedDate
+            ? (plannedFor ? tk('create.plannedFor') : tk('create.plannedDate'))
+                .replace('{name}', plannedFor ?? '')
+                .replace('{date}', plannedDate.date)
+            : null
+        }
+      />,
+    );
   }
 
   const scope = brandIdQueryFilter({
@@ -759,13 +780,6 @@ export default async function ComposePage({
       ? [...mediaOptions, carried]
       : mediaOptions;
 
-  /*
-   * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
-   * past for the workspace, and — when that day is one of the workspace's
-   * holidays or its brand's observances — what the day is, to say so.
-   */
-  const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
-  const plannedFor = plannedDate?.label ?? null;
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
