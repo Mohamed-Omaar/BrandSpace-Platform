@@ -254,14 +254,16 @@ export default async function ComposePage({
         const brandPolicy = await approvals.policyForBrand(draft.brandId);
         /*
          * Q10 — WHO MAY BE ASKED, default first: the same ordered list the
-         * service assigns from, so "Automatic" and the first name agree.
+         * service assigns from, without the submitter OR the author (D-122
+         * bars both from deciding), so "Automatic" names exactly the person
+         * `submit()` will assign.
          */
         const reviewerIds =
           workspace.permissionKeys.includes('content.submit') &&
           (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED')
             ? await approvals.eligibleReviewers({
                 brandId: draft.brandId,
-                excludeUserId: customer.userId,
+                excludeUserIds: [customer.userId, draft.createdByUserId ?? null],
               })
             : [];
         const reviewerRows =

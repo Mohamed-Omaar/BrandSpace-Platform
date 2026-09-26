@@ -457,6 +457,41 @@ describe('Q10 — every review has a default reviewer', () => {
     expect(approval.assignedToUserId).toBe(approverBothBrands);
   });
 
+  it("submitting a colleague's post never assigns its author, and asks somebody who may decide", async () => {
+    // The author is the approver who would otherwise be first in line.
+    await platform.contentItem.update({
+      where: { id: fixtures.a.contentItemId },
+      data: { createdByUserId: approverBothBrands },
+    });
+    const { notifier, recipients } = capturing();
+    const approval = await run(
+      (s) => s.submit({ itemId: fixtures.a.contentItemId, actor: copywriterAuthor() }),
+      notifier,
+    );
+    // D-122 bars the author from deciding, so the default moves on — here to
+    // the owner, the only other approver for this brand.
+    expect(approval.assignedToUserId).not.toBe(approverBothBrands);
+    expect(approval.assignedToUserId).toBe(fixtures.a.userId);
+    expect(recipients).toEqual([fixtures.a.userId]);
+    // The composer's "Automatic (name)" preview asks the same question.
+    const preview = await run((s) =>
+      s.eligibleReviewers({
+        brandId: fixtures.a.brandId,
+        excludeUserIds: [copywriter, approverBothBrands],
+      }),
+    );
+    expect(preview[0]).toBe(approval.assignedToUserId);
+    expect(
+      await run((s) =>
+        s.defaultReviewer({
+          brandId: fixtures.a.brandId,
+          submitterUserId: copywriter,
+          authorUserId: approverBothBrands,
+        }),
+      ),
+    ).toBe(fixtures.a.userId);
+  });
+
   it('an explicit choice wins over the default', async () => {
     const approval = await run((s) =>
       s.submit({

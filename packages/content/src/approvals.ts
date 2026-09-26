@@ -440,13 +440,11 @@ export class ContentApprovalService {
      */
     const assignedToUserId =
       chosen ??
-      (
-        await this.eligibleReviewers({
-          brandId: item.brandId,
-          excludeUserId: input.actor.userId,
-        })
-      )[0] ??
-      null;
+      (await this.defaultReviewer({
+        brandId: item.brandId,
+        submitterUserId: input.actor.userId,
+        authorUserId: item.createdByUserId,
+      }));
 
     /*
      * THE ROW AND THE ITEM'S STATUS MOVE TOGETHER, and they already do: every
@@ -498,7 +496,7 @@ export class ContentApprovalService {
       ? [approval.assignedToUserId]
       : await this.eligibleReviewers({
           brandId: item.brandId,
-          excludeUserId: input.actor.userId,
+          excludeUserIds: [input.actor.userId, item.createdByUserId],
         });
 
     await this.#notifier?.approvalRequested({
@@ -872,7 +870,7 @@ export class ContentApprovalService {
 
     const item = await this.#db.contentItem.findUnique({
       where: { id: input.itemId },
-      select: { id: true, title: true, status: true },
+      select: { id: true, title: true, status: true, createdByUserId: true },
     });
     if (item?.status === 'IN_REVIEW') {
       await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
@@ -897,7 +895,7 @@ export class ContentApprovalService {
       ? [approval.assignedToUserId]
       : await this.eligibleReviewers({
           brandId: approval.brandId,
-          excludeUserId: approval.requestedByUserId,
+          excludeUserIds: [approval.requestedByUserId, item?.createdByUserId ?? null],
         });
     await new NotificationService({ db: this.#db, workspaceId: this.#workspaceId }).create({
       userIds: asked.filter((userId) => userId !== input.actorUserId),
@@ -1225,7 +1223,17 @@ export class ContentApprovalService {
    * IN A STABLE ORDER (Q10): members before the workspace owner, then by when
    * they joined. The first entry is the default reviewer `submit()` assigns.
    */
-  async eligibleReviewers(input: { brandId: string; excludeUserId?: string }): Promise<string[]> {
+  async eligibleReviewers(input: {
+    brandId: string;
+    excludeUserId?: string;
+    /** Several people at once — the submitter AND the author (D-122). */
+    excludeUserIds?: readonly (string | null)[];
+  }): Promise<string[]> {
+    const excluded = new Set<string>(
+      [input.excludeUserId, ...(input.excludeUserIds ?? [])].filter(
+        (id): id is string => typeof id === 'string',
+      ),
+    );
     const members = await this.#db.membership.findMany({
       where: { workspaceId: this.#workspaceId, status: 'ACTIVE' },
       select: {
@@ -1242,7 +1250,7 @@ export class ContentApprovalService {
     const ownerLast = (userId: string) => (userId === workspace?.ownerUserId ? 1 : 0);
     return [...members]
       .sort((a, b) => ownerLast(a.userId) - ownerLast(b.userId))
-      .filter((m) => m.userId !== input.excludeUserId)
+      .filter((m) => !excluded.has(m.userId))
       .filter((m) => brandInScope(m.brandScope, input.brandId))
       .filter((m) =>
         mayApproveForBrand({
@@ -1250,6 +1258,25 @@ export class ContentApprovalService {
         }),
       )
       .map((m) => m.userId);
+  }
+
+  /**
+   * Q10 (D-325) — THE DEFAULT REVIEWER: the first eligible approver who is
+   * neither the person submitting nor the post's author. D-122 bars BOTH from
+   * deciding, so assigning either would ask the one person who may not answer
+   * — and, since only the assignee is notified, ask nobody who can. The
+   * composer's "Automatic (name)" preview asks this same method.
+   */
+  async defaultReviewer(input: {
+    brandId: string;
+    submitterUserId: string;
+    authorUserId: string | null;
+  }): Promise<string | null> {
+    const eligible = await this.eligibleReviewers({
+      brandId: input.brandId,
+      excludeUserIds: [input.submitterUserId, input.authorUserId],
+    });
+    return eligible[0] ?? null;
   }
 
   /** Is this ONE member an eligible reviewer for this brand? Same three rules. */
