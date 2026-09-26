@@ -370,6 +370,53 @@ export function suggestedTimeZones(): Readonly<Record<string, string>> {
 }
 
 /**
+ * A9 / G8 (D-330) — EGYPT'S CITIES, as its 27 governorates (ISO 3166-2:EG).
+ *
+ * A standard code list like the country list above, not a product setting:
+ * the city is asked for an Egyptian business only, stored as the code, and
+ * named in the reader's language by the app's own messages (`geo.city.<code>`).
+ * The database refuses a city on a workspace outside Egypt.
+ */
+export const EGYPT_CITY_CODES = [
+  'EG-C',
+  'EG-GZ',
+  'EG-ALX',
+  'EG-KB',
+  'EG-PTS',
+  'EG-SUZ',
+  'EG-IS',
+  'EG-DT',
+  'EG-DK',
+  'EG-SHR',
+  'EG-GH',
+  'EG-MNF',
+  'EG-BH',
+  'EG-KFS',
+  'EG-FYM',
+  'EG-BNS',
+  'EG-MN',
+  'EG-AST',
+  'EG-SHG',
+  'EG-KN',
+  'EG-LX',
+  'EG-ASN',
+  'EG-BA',
+  'EG-WAD',
+  'EG-MT',
+  'EG-SIN',
+  'EG-JS',
+] as const;
+
+export type EgyptCityCode = (typeof EGYPT_CITY_CODES)[number];
+
+export function isEgyptCityCode(value: string): value is EgyptCityCode {
+  return (EGYPT_CITY_CODES as readonly string[]).includes(value);
+}
+
+/** The only country a city is asked for. */
+export const CITY_COUNTRY = 'EG' as const;
+
+/**
  * Customer-facing billing is intentionally simple for launch. The billing
  * engine remains multi-currency internally; onboarding does not expose that
  * complexity until a product decision enables it.

@@ -122,16 +122,19 @@ Lifecycle: `pending → active → suspended → deleted` (soft, then purge afte
 
 The isolation boundary.
 
-| Field                                                                   | Type                 | Notes                                                                 |
-| ----------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- |
-| `id`, `slug`                                                            | uuid / citext unique | slug used in URLs                                                     |
-| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency` |                      |                                                                       |
-| `type`                                                                  | enum                 | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise` |
-| `status`                                                                | enum                 | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted` |
-| `ownerUserId`                                                           | uuid                 | current Workspace Owner                                               |
-| `parentWorkspaceId`                                                     | uuid null            | reserved for agency grouping (no data access implication)             |
-| `dataRetentionDays`, `analyticsRetentionDays`                           | int                  | from plan, overridable                                                |
-| `suspendedAt`, `suspendedReason`, `trialEndsAt`                         |                      |                                                                       |
+| Field                                                                      | Type                         | Notes                                                                                    |
+| -------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `id`, `slug`                                                               | uuid / citext unique         | slug used in URLs                                                                        |
+| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency`    |                              |                                                                                          |
+| `type`                                                                     | enum                         | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise`                    |
+| `status`                                                                   | enum                         | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted`                    |
+| `ownerUserId`                                                              | uuid                         | current Workspace Owner                                                                  |
+| `parentWorkspaceId`                                                        | uuid null                    | reserved for agency grouping (no data access implication)                                |
+| `dataRetentionDays`, `analyticsRetentionDays`                              | int                          | from plan, overridable                                                                   |
+| `suspendedAt`, `suspendedReason`, `trialEndsAt`                            |                              |                                                                                          |
+| `deletionRequestedAt`, `deletionScheduledFor`, `deletionRequestedByUserId` | timestamptz null / uuid null | the owner's deletion request and its date (D-328); both or neither (CHECK)               |
+| `city`                                                                     | text null                    | an ISO 3166-2:EG governorate code, Egypt only (CHECK `workspace_city_egypt_only`, D-330) |
+| `weekStartsOn`                                                             | int null                     | 0 = Sunday … 6 = Saturday (CHECK); null follows `content.calendar.weekStartsOn` (D-330)  |
 
 Indexes: `unique(slug)`, `(status)`, `(ownerUserId)`.
 

@@ -598,6 +598,18 @@ one. The schedule dialog's configured posting times are neutral `sm` buttons aft
 "Suggested time" label, the chosen one filled; the Studio opened from a ★ day shows one `cs-notice
 info` line naming the day. No new component or treatment.
 
+### 6.3.33 Prototype v94 Phase 2B-1 — the Settings save bar and the General fields (A9, G1)
+
+The approved demo has no save bar, so it is built from what ships: a `sticky` strip at the foot of the
+form on the card surface (`surface`, `cardBorder` hairline, `shadowTokens.card`, `xl` radius), a
+`bodySm` status line — the check icon and muted "All changes saved" when clean, "Unsaved changes" in
+`textPrimary` weight 600 when dirty — and the existing `ghost` Cancel and `primary` Save buttons, Save
+dimmed and disabled while clean. The status is a polite live region. `DraftForm` (`packages/ui/src/save-bar.tsx`)
+wraps a server-action form and compares what it would post with what it posted on load; Cancel re-mounts
+the fields. The General fields reuse `Field` (its `hint` line says what each changes), `SearchableSelect`
+for country, time zone and city, the `bs-form-row` two-up grid and the native `bs-select`. Nothing new
+beyond the bar itself, and the bar is one component used by every draftable tab.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

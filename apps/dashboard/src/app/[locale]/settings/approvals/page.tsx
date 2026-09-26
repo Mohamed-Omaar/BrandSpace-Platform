@@ -1,8 +1,8 @@
 import {
   Card,
+  DraftForm,
   SectionHeader,
   SettingsSplit,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -16,6 +16,7 @@ import { inContentStudio } from '../../../../server/content-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { CheckboxRow } from '../../../../components/checkbox-row';
+import { saveBarLabels } from '../../../../server/save-bar-labels';
 import { saveApprovalPolicyAction } from '../../approvals/actions';
 
 export const dynamic = 'force-dynamic';
@@ -120,10 +121,15 @@ export default async function ApprovalSettingsPage({
             >
               {policies.map((policy) => (
                 <li key={policy.brandId}>
-                  <form
+                  {/* G1 (D-330): the save bar — keyed on the saved rules, so a save starts clean. */}
+                  <DraftForm
+                    key={`${policy.requireApprovalBeforeScheduling}-${policy.allowSelfApproval}`}
                     action={saveApprovalPolicyAction}
                     style={{ display: 'grid', gap: spacingTokens.sm }}
-                    data-testid={`policy-form-${policy.brandId}`}
+                    testId={`policy-form-${policy.brandId}`}
+                    barTestId={`policy-bar-${policy.brandId}`}
+                    saveTestId={`policy-save-${policy.brandId}`}
+                    labels={saveBarLabels(t)}
                   >
                     <input type="hidden" name="locale" value={locale} />
                     <input type="hidden" name="brandId" value={policy.brandId} />
@@ -142,16 +148,7 @@ export default async function ApprovalSettingsPage({
                       checked={policy.allowSelfApproval}
                       testId={`policy-self-${policy.brandId}`}
                     />
-                    <div>
-                      <button
-                        type="submit"
-                        style={buttonStyle('primary')}
-                        data-testid={`policy-save-${policy.brandId}`}
-                      >
-                        {t('approvals.policySave')}
-                      </button>
-                    </div>
-                  </form>
+                  </DraftForm>
                 </li>
               ))}
             </ul>

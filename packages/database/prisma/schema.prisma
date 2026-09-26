@@ -442,6 +442,16 @@ model Workspace {
   deletionRequestedByUserId String?   @db.Uuid
   deletionRequestedBy       User?     @relation("WorkspaceDeletionRequester", fields: [deletionRequestedByUserId], references: [id], onDelete: SetNull)
 
+  // --- Prototype v94 Phase 2B-1: General settings (A9) --------------------
+  /// The business's city, as an ISO 3166-2:EG subdivision code (`EG-C`). Egypt
+  /// only: CHECK `workspace_city_egypt_only` refuses it for any other country,
+  /// and the settings action clears it when the country changes.
+  city         String?
+  /// The first day of the calendar week, 0 = Sunday … 6 = Saturday (CHECK
+  /// `workspace_week_starts_on_range`). NULL follows the activated `content`
+  /// configuration's `calendar.weekStartsOn`.
+  weekStartsOn Int?
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)

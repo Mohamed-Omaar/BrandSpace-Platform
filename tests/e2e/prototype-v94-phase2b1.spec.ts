@@ -268,3 +268,128 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
   });
 });
+
+test.describe('A9 / G1 · Settings → General, under the save bar', () => {
+  test('clean until changed, Cancel restores, and a saved week start moves the calendar', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { customer } = credentials();
+    const slug = `e2e-general-${randomUUID().slice(0, 8)}`;
+    const name = `E2E General ${slug.slice(-8)}`;
+    // A workspace of its own with its one brand, so changing its country and
+    // week start touches nothing another suite reads.
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.findFirstOrThrow({
+        where: { email: customer.email },
+        select: { id: true },
+      });
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      const id = randomUUID();
+      await prisma.workspace.create({
+        data: {
+          id,
+          workspaceId: id,
+          slug,
+          name,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          // The country's usual zone, so choosing Egypt replaces it (Q7); a
+          // zone the owner picked themselves would be kept.
+          timezone: 'America/New_York',
+          currency: 'USD',
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId: id,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+      await prisma.brand.create({
+        data: { workspaceId: id, slug: `${slug}-brand`, name: `${name} Brand`, status: 'ACTIVE' },
+      });
+    });
+
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    const bar = page.getByTestId('settings-bar');
+    const save = page.getByTestId('settings-save');
+    // Clean: said, and nothing to save.
+    await expect(bar).toHaveAttribute('data-state', 'clean');
+    await expect(page.getByTestId('settings-bar-status')).toHaveText('All changes saved');
+    await expect(save).toBeDisabled();
+    await expect(page.getByTestId('settings-bar-cancel')).toHaveCount(0);
+
+    // Dirty, then Cancel puts the saved value back.
+    await page.fill('#name', 'Something else entirely');
+    await expect(bar).toHaveAttribute('data-state', 'dirty');
+    await expect(page.getByTestId('settings-bar-status')).toHaveText('Unsaved changes');
+    await expect(save).toBeEnabled();
+    await page.getByTestId('settings-bar-cancel').click();
+    await expect(page.locator('#name')).toHaveValue(name);
+    await expect(bar).toHaveAttribute('data-state', 'clean');
+    await expect(save).toBeDisabled();
+
+    // Egypt preselects its zone and asks for a city; Monday starts the week.
+    await expect(page.getByTestId('settings-city')).toHaveCount(0);
+    await page.getByTestId('settings-country').click();
+    await page.getByTestId('settings-country').fill('Egypt');
+    await page.getByRole('option', { name: 'Egypt' }).click();
+    await expect(page.locator('input[type="hidden"][name="timezone"]')).toHaveValue('Africa/Cairo');
+    await page.getByTestId('settings-city').click();
+    await page.getByTestId('settings-city').fill('Alexandria');
+    await page.getByRole('option', { name: 'Alexandria' }).click();
+    await page.getByTestId('settings-week-start').selectOption('1');
+    await page.getByTestId('settings-website').fill('https://general.example');
+    await expect(bar).toHaveAttribute('data-state', 'dirty');
+    await save.click();
+    await page.waitForURL(/ok=SETTINGS_SAVED/);
+
+    // Saved, and clean again.
+    await expect(page.getByTestId('settings-bar')).toHaveAttribute('data-state', 'clean');
+    await expect(page.locator('input[type="hidden"][name="country"]')).toHaveValue('EG');
+    await expect(page.locator('input[type="hidden"][name="city"]')).toHaveValue('EG-ALX');
+    await expect(page.getByTestId('settings-week-start')).toHaveValue('1');
+    await expect(page.getByTestId('settings-website')).toHaveValue('https://general.example');
+
+    // The calendar follows the workspace's own week start.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    const headers = await page
+      .getByTestId('calendar-month-grid')
+      .locator('[role="columnheader"]')
+      .allTextContents();
+    expect(headers[0]).toMatch(/mon/i);
+
+    // Approvals is a draftable tab too.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/approvals`);
+    const policyBar = page.locator('[data-testid^="policy-bar-"]').first();
+    await expect(policyBar).toHaveAttribute('data-state', 'clean');
+    const self = page.locator('[data-testid^="policy-self-"]').first();
+    const wasChecked = await self.isChecked();
+    await self.click();
+    await expect(policyBar).toHaveAttribute('data-state', 'dirty');
+    await policyBar.locator('[data-testid$="-cancel"]').click();
+    await expect(page.locator('[data-testid^="policy-self-"]').first()).toBeChecked({
+      checked: wasChecked,
+    });
+    await expect(policyBar).toHaveAttribute('data-state', 'clean');
+
+    // And in Arabic.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
+    await expect(page.getByTestId('settings-bar-status')).toHaveText('تم حفظ كل التغييرات');
+  });
+});

@@ -350,6 +350,12 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   never "best time", and measured times win. The industry list is `onboarding.industries` with each
   industry's Offers question set for Brand Brain v2 to read. The Egypt / Saudi Arabia / UAE draft is
   `docs/CALENDAR-OBSERVANCES-DRAFT.md` — UNVERIFIED, NOT ACTIVATED.
+- **A9 / G1 — General and the save bar (D-330).** General edits name, language, country, time zone
+  (validated), city (Egypt's governorates only; cleared elsewhere) and week start (the calendar
+  follows it), each with a line saying what it changes; the sole brand's industry (catalogue + "Something
+  else") and website are edited here while multi-brand is off, with `brand.manage`. A sticky save bar —
+  "All changes saved" / "Unsaved changes" with Cancel · Save — sits under General and Approvals.
+  Migration `20260929090000_workspace_general_fields`.
 
 ---
 

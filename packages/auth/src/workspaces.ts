@@ -434,7 +434,12 @@ export class WorkspaceAdminService {
     }
     if (input.defaultLocale !== undefined) data['defaultLocale'] = input.defaultLocale;
     if (input.timezone !== undefined) data['timezone'] = input.timezone.trim();
-    if (input.country !== undefined) data['country'] = input.country.trim().toUpperCase();
+    if (input.country !== undefined) {
+      data['country'] = input.country.trim().toUpperCase();
+      // A9 (D-330): a city is an Egyptian governorate, so it goes with Egypt
+      // (CHECK `workspace_city_egypt_only` would refuse it anyway).
+      if (data['country'] !== 'EG') data['city'] = null;
+    }
     if (input.currency !== undefined) data['currency'] = input.currency.trim().toUpperCase();
 
     try {

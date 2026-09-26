@@ -175,6 +175,16 @@ export default async function CalendarPage({
     const library = await services.library();
     const policy = await services.policy();
     const timezone = calendar.timezone;
+    /*
+     * A9 (D-330) — THE WORKSPACE'S OWN WEEK START, set in Settings → General;
+     * without one, the activated configuration's. The country is read here too
+     * for the ★ chips below.
+     */
+    const workspaceRow = await services.db.workspace.findUnique({
+      where: { id: workspace.workspaceId },
+      select: { country: true, weekStartsOn: true },
+    });
+    const weekStartsOn = workspaceRow?.weekStartsOn ?? policy.calendar.weekStartsOn;
     const now = systemClock.now();
     const { year, month } = requestedMonth(single('month'), timezone, now);
 
@@ -241,10 +251,7 @@ export default async function CalendarPage({
      * member's BrandScope (plus the brand filter); a cancelled slot is not a
      * post. The UTC range is padded a day each side and narrowed by LOCAL date.
      */
-    const gapRange = gapWindow(
-      formatLocalTime(now, timezone).slice(0, 10),
-      policy.calendar.weekStartsOn,
-    );
+    const gapRange = gapWindow(formatLocalTime(now, timezone).slice(0, 10), weekStartsOn);
     const gapSlots = await services.db.calendarSlot.findMany({
       where: {
         status: { not: 'CANCELLED' },
@@ -325,11 +332,7 @@ export default async function CalendarPage({
      * brand's catalogue KEY; free text maps to none), and the country's
      * suggested posting times. All three are operator configuration.
      */
-    const [workspaceRow, onboarding, brandIndustries] = await Promise.all([
-      services.db.workspace.findUnique({
-        where: { id: workspace.workspaceId },
-        select: { country: true },
-      }),
+    const [onboarding, brandIndustries] = await Promise.all([
       new TenantOnboardingPolicySource(services.db, currentEnvironment()).load(),
       services.db.brand.findMany({
         where: {
@@ -368,7 +371,7 @@ export default async function CalendarPage({
       ),
       quotaLimit,
       quotaUsed: counter?.usedValue ?? 0,
-      weekStartsOn: policy.calendar.weekStartsOn,
+      weekStartsOn,
       now,
       approvalStates,
       campaignNames: new Map(campaigns.map((campaign) => [campaign.id, campaign.name])),

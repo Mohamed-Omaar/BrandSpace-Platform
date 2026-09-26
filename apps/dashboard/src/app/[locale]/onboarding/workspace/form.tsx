@@ -79,6 +79,7 @@ export function CreateWorkspaceForm({
   };
 }) {
   const [country, setCountry] = useState('');
+  const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
   const [state, setState] = useState<{ busy: boolean; error: string | null }>({
     busy: false,
@@ -182,16 +183,20 @@ export function CreateWorkspaceForm({
           value={country}
           onChange={(next) => {
             // Q7 — the country PRESELECTS its usual zone; one the person
-            // picked themselves is never replaced (D-194 stands).
+            // picked themselves is never replaced (D-194 stands). Typing
+            // clears the choice before a new one is picked, so the zone is
+            // judged against the last country actually CHOSEN, not that blank.
+            setCountry(next);
+            if (next === '') return;
             setTimezone((current) =>
               timeZoneAfterCountryChange({
-                previousCountry: country,
+                previousCountry: lastCountry,
                 nextCountry: next,
                 currentZone: current,
                 suggestions: suggestedZones,
               }),
             );
-            setCountry(next);
+            setLastCountry(next);
           }}
           placeholder={labels.choose}
           noResultsLabel={labels.noResults}

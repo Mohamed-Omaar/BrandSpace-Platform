@@ -71,6 +71,25 @@ function optionalAssetId(formData: FormData, field: string): string | null {
   return value;
 }
 
+/** The brand's industry: a catalogue key or the person's own words (D-329). */
+export function industryFrom(formData: FormData): string | null {
+  return optionalText(formData, 'industry', 120);
+}
+
+/** The brand's website, http(s) only. Also read by General settings (A9, D-330). */
+export function websiteUrlFrom(formData: FormData): string | null {
+  const websiteUrl = optionalText(formData, 'websiteUrl', 2_048);
+  if (websiteUrl !== null && !/^https?:\/\/\S+$/i.test(websiteUrl)) {
+    /*
+     * HTTP(S) ONLY. A `javascript:` or `data:` URL stored here would be
+     * rendered as a link on a page somebody else in the workspace opens, which
+     * turns a profile field into a way to run script in a colleague's session.
+     */
+    throw new AppError('VALIDATION_FAILED', 'A website must be an http(s) address.');
+  }
+  return websiteUrl;
+}
+
 export function brandProfileFrom(formData: FormData): BrandProfileInput {
   const name = required(formData, 'name').trim();
   if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A brand name is required.');
@@ -95,15 +114,7 @@ export function brandProfileFrom(formData: FormData): BrandProfileInput {
   );
   supported.add(defaultLocale);
 
-  const websiteUrl = optionalText(formData, 'websiteUrl', 2_048);
-  if (websiteUrl !== null && !/^https?:\/\/\S+$/i.test(websiteUrl)) {
-    /*
-     * HTTP(S) ONLY. A `javascript:` or `data:` URL stored here would be
-     * rendered as a link on a page somebody else in the workspace opens, which
-     * turns a profile field into a way to run script in a colleague's session.
-     */
-    throw new AppError('VALIDATION_FAILED', 'A website must be an http(s) address.');
-  }
+  const websiteUrl = websiteUrlFrom(formData);
 
   const colorPalette = [
     ...new Set(
@@ -125,7 +136,7 @@ export function brandProfileFrom(formData: FormData): BrandProfileInput {
 
   return {
     name,
-    industry: optionalText(formData, 'industry', 120),
+    industry: industryFrom(formData),
     description: optionalText(formData, 'description', 2_000),
     websiteUrl,
     defaultLocale,
