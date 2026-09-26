@@ -79,13 +79,12 @@ export const businessSwitcherModel = cache(
       const effective = status !== null && TERMINAL.has(status) ? null : planKey;
       return planDisplayName(effective, plans, locale) ?? t('ws.noPlan');
     };
+    // "Role · Plan": two facts, each already in the reader's language.
     const caption = (business: (typeof businesses)[number]): string =>
-      t('ws.rolePlan')
-        .replace(
-          '{role}',
-          customerRoleName(locale === 'ar' ? business.roleNameAr : business.roleNameEn),
-        )
-        .replace('{plan}', planCaption(business.planKey, business.workspaceId));
+      [
+        customerRoleName(locale === 'ar' ? business.roleNameAr : business.roleNameEn),
+        planCaption(business.planKey, business.workspaceId),
+      ].join(' · ');
 
     const owned: OwnedWorkspaceFact[] = businesses
       .filter((business) => business.isOwner)
